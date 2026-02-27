@@ -1,0 +1,71 @@
+# Core Framework
+langchain>=0.1.0
+langchain-openai>=0.0.5
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# Web Navigation
+browser-use>=0.1.0
+playwright>=1.40.0
+
+# Windows Integration
+pywin32>=306; platform_system=="Windows"
+wmi>=1.5.2; platform_system=="Windows"
+
+# Research & Scientific
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+scipy>=1.10.0
+
+# Document Processing
+pypandoc>=1.11
+python-docx>=0.8.11
+openpyxl>=3.1.0
+
+# AI/ML
+openai>=1.0.0
+tiktoken>=0.5.0
+
+# Data Validation & Types
+marshmallow>=3.20.0
+cerberus>=1.3.4
+
+# HTTP & Networking
+aiohttp>=3.8.0
+requests>=2.31.0
+httpx>=0.25.0
+
+# Database & Storage
+sqlite3-python
+chromadb>=0.4.0
+
+# CLI & UI
+click>=8.0.0
+rich>=13.0.0
+prompt-toolkit>=3.0.0
+colorama>=0.4.6
+
+# Async
+aiofiles>=23.0.0
+anyio>=4.0.0
+
+# Utilities
+pyyaml>=6.0
+toml>=0.10.2
+python-dateutil>=2.8.0
+uuid-utils>=0.0.0
+
+# Optional: For Jupyter integration
+# ipywidgets>=8.0.0
+# IPython>=8.0.0
+
+# Optional: For Zotero integration
+# pyzotero>=1.5.0
+
+# Optional: For Obsidian integration
+# watchdog>=3.0.0
+
+# Security
+cryptography>=41.0.0
