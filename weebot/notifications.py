@@ -33,6 +33,7 @@ from typing import Optional, List, Dict
 from datetime import datetime
 
 from weebot.notifications_categorizer import NotificationCategorizer
+from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 
 class NotificationLevel(Enum):
@@ -130,9 +131,10 @@ class TelegramChannel:
         self.token = token
         self.chat_id = chat_id
         self.api_url = f"https://api.telegram.org/bot{token}"
+        self._retry = RetryWithBackoff(BackoffConfig(delays=[1, 2, 4]))
 
     async def send(self, notification: Notification) -> bool:
-        """Send message via Telegram."""
+        """Send message via Telegram with exponential backoff retry."""
         emoji_map = {
             NotificationLevel.INFO: "ℹ️",
             NotificationLevel.SUCCESS: "✅",
@@ -140,26 +142,31 @@ class TelegramChannel:
             NotificationLevel.ERROR: "❌",
             NotificationLevel.CRITICAL: "🚨"
         }
-        
+
         emoji = emoji_map.get(notification.level, "📌")
         text = f"{emoji} <b>{notification.title}</b>\n\n{notification.message}"
-        
+
         if notification.project_id:
             text += f"\n\nProject: <code>{notification.project_id}</code>"
-        
+
         payload = {
             "chat_id": self.chat_id,
             "text": text,
             "parse_mode": "HTML"
         }
-        
+
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{self.api_url}/sendMessage",
-                    json=payload
-                ) as response:
-                    return response.status == 200
+            async def _post():
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.api_url}/sendMessage",
+                        json=payload
+                    ) as response:
+                        if response.status != 200:
+                            raise OSError(f"Telegram API returned {response.status}")
+                        return True
+
+            return await self._retry.call(_post)
         except Exception as e:
             print(f"Telegram notification failed: {e}")
             return False
