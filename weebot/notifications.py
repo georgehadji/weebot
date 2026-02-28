@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from typing import Optional, List
 from datetime import datetime
 
+from weebot.notifications_categorizer import NotificationCategorizer
+
 
 class NotificationLevel(Enum):
     INFO = "info"
@@ -48,6 +50,7 @@ class Notification:
     timestamp: datetime
     project_id: Optional[str] = None
     metadata: Optional[dict] = None
+    category: str = "info"
 
 
 class NotificationManager:
@@ -65,9 +68,13 @@ class NotificationManager:
             self.channels.append(SlackChannel(self.slack_webhook))
 
         self.channels.append(LogChannel())  # Always log locally
+        self._categorizer = NotificationCategorizer()
 
     async def notify(self, notification: Notification) -> None:
         """Send notification to all configured channels."""
+        notification.category = self._categorizer.categorize(
+            notification.message, notification.metadata or {}
+        )
         tasks = [channel.send(notification) for channel in self.channels]
         await asyncio.gather(*tasks, return_exceptions=True)
 
