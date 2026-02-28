@@ -14,18 +14,14 @@ class AgentLogger:
         self.log_path = Path(log_path) if log_path else LOG_FILE
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.logger = logging.getLogger("WeebotAgent")
-
-        # When a custom path is given, always reconfigure handlers so that
-        # each test/call gets handlers pointing at the requested file.
-        # When using the default path, skip setup if handlers already exist
-        # to avoid duplicates in normal application usage.
         if log_path is not None:
-            # Remove existing handlers before adding new ones
-            for handler in self.logger.handlers[:]:
-                handler.close()
-                self.logger.removeHandler(handler)
-        elif self.logger.handlers:
+            # Use a unique logger name per custom path to avoid singleton interference
+            logger_name = f"WeebotAgent.{Path(log_path).name}"
+        else:
+            logger_name = "WeebotAgent"
+        self.logger = logging.getLogger(logger_name)
+
+        if self.logger.handlers:
             return
 
         self.logger.setLevel(logging.DEBUG)

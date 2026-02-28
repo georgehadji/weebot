@@ -24,6 +24,9 @@ class TestLogRotation:
         log_file = tmp_path / "subdir" / "custom.log"
         logger = AgentLogger(log_path=log_file)
         assert logger.log_path == log_file
+        # Verify directory was created and file is writable
+        logger.get_logger().info("custom path write test")
+        assert log_file.exists()
 
     def test_logger_default_path_unchanged(self):
         logger = AgentLogger()
