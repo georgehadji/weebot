@@ -76,3 +76,44 @@ class PowerShellTool(BaseTool):
     async def _arun(self, command: str) -> str:
         """Async execution."""
         return self._run(command)
+
+
+# --- weebot BaseTool wrapper -------------------------------------------------
+from pydantic import ConfigDict, PrivateAttr  # noqa: E402
+from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolResult  # noqa: E402
+
+
+class PowerShellBaseTool(_WeebotBaseTool):
+    """weebot BaseTool wrapper around PowerShellTool for use in the ReAct agent."""
+
+    name: str = "powershell"
+    description: str = (
+        "Execute a PowerShell command on Windows 11. "
+        "Workspace isolated to C:\\\\Users\\\\Public\\\\weebot_workspace. "
+        "Diagnostic shortcuts: system_info, processes, network_test, list_workspace."
+    )
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "PowerShell command or diagnostic shortcut to execute",
+            }
+        },
+        "required": ["command"],
+    }
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    _inner: PowerShellTool = PrivateAttr(default=None)
+
+    def model_post_init(self, __context) -> None:
+        self._inner = PowerShellTool()
+
+    async def execute(self, command: str, **_) -> _ToolResult:  # type: ignore[override]
+        try:
+            output = self._inner._run(command)
+            if output.startswith("Error:"):
+                return _ToolResult(output="", error=output)
+            return _ToolResult(output=output)
+        except Exception as e:
+            return _ToolResult(output="", error=str(e))

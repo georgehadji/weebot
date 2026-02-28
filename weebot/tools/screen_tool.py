@@ -75,3 +75,54 @@ class ScreenCaptureTool:
                 }
         except Exception as e:
             return {"success": False, "output": f"Capture error: {e}", "data": None}
+
+
+# --- weebot BaseTool wrapper -------------------------------------------------
+import base64  # noqa: E402
+from pydantic import ConfigDict, PrivateAttr  # noqa: E402
+from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolResult  # noqa: E402
+
+
+class ScreenCaptureBaseTool(_WeebotBaseTool):
+    """weebot BaseTool wrapper around ScreenCaptureTool for use in the ReAct agent."""
+
+    name: str = "screen_capture"
+    description: str = (
+        "Capture a screenshot of a connected monitor. "
+        "Returns the image as base64-encoded PNG. "
+        "Use monitor_index=0 for the primary monitor."
+    )
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "monitor_index": {
+                "type": "integer",
+                "description": "Monitor to capture (0 = primary). Defaults to 0.",
+                "default": 0,
+            },
+            "save_path": {
+                "type": "string",
+                "description": "Optional file path to also save the PNG file",
+            },
+        },
+        "required": [],
+    }
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    _inner: ScreenCaptureTool = PrivateAttr(default=None)
+
+    def model_post_init(self, __context) -> None:
+        self._inner = ScreenCaptureTool()
+
+    async def execute(  # type: ignore[override]
+        self,
+        monitor_index: int = 0,
+        save_path: str | None = None,
+        **_,
+    ) -> _ToolResult:
+        result = self._inner.capture(monitor_index=monitor_index, save_path=save_path)
+        if not result["success"]:
+            return _ToolResult(output="", error=result["output"])
+        png_bytes: bytes = result["data"]
+        b64 = base64.b64encode(png_bytes).decode()
+        return _ToolResult(output=result["output"], base64_image=b64)
