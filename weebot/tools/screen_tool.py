@@ -46,7 +46,7 @@ class ScreenCaptureTool:
         try:
             with mss() as sct:
                 monitors = sct.monitors
-                if monitor_index >= len(monitors):
+                if monitor_index < 0 or monitor_index >= len(monitors):
                     return {
                         "success": False,
                         "output": f"Invalid monitor index {monitor_index} (max {len(monitors)-1})",
