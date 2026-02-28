@@ -96,6 +96,13 @@ class SchedulingManager:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.scheduler = AsyncIOScheduler()
         self._callables: Dict[str, Callable] = {}
+        # Defence-in-depth: track currently executing job IDs so that
+        # the update_job() race window (remove_job → re-add) cannot cause
+        # double execution. APScheduler's max_instances=1 is the primary
+        # guard at the scheduler level; this set is the secondary guard
+        # inside _execute_job() for the edge case where a queued coroutine
+        # was already dispatched before remove_job() was called.
+        self._running_jobs: set = set()
         self._init_db()
 
     def _init_db(self) -> None:
@@ -305,13 +312,19 @@ class SchedulingManager:
         async def job_wrapper() -> None:
             await self._execute_job(job.job_id)
 
-        # Add to scheduler
+        # Add to scheduler.
+        # max_instances=1 is the primary guard: APScheduler will skip a new
+        # invocation if the previous one hasn't finished yet.
+        # coalesce=True merges missed executions (e.g. after sleep/suspend)
+        # into a single catch-up run rather than firing N times.
         self.scheduler.add_job(
             job_wrapper,
             trigger=trigger,
             id=job.job_id,
             name=job.name,
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
         )
 
         logger.info(f"Scheduled job: {job.job_id} with {job.trigger_type} trigger")
@@ -354,13 +367,24 @@ class SchedulingManager:
     async def _execute_job(self, job_id: str) -> None:
         """Execute a scheduled job.
 
+        Secondary concurrency guard: the _running_jobs set prevents double
+        execution in the update_job() race window (the primary guard is
+        max_instances=1 in APScheduler, set at add_job() time).
+
         Args:
             job_id: Job to execute
         """
+        # Secondary guard: if this job is already executing (e.g. a queued
+        # coroutine that survived a remove_job() + re-add() cycle), skip it.
+        if job_id in self._running_jobs:
+            logger.warning("Job %s already executing — skipping duplicate invocation", job_id)
+            return
+
         job = self.get_job(job_id)
         if not job or not job.enabled:
             return
 
+        self._running_jobs.add(job_id)
         try:
             # Update status
             job.status = JobStatus.RUNNING.value
@@ -374,7 +398,7 @@ class SchedulingManager:
                     result = func()
                     if hasattr(result, '__await__'):
                         await result
-                logger.info(f"Executed job: {job_id}")
+                logger.info("Executed job: %s", job_id)
 
             # Update success
             job.status = JobStatus.COMPLETED.value
@@ -382,12 +406,13 @@ class SchedulingManager:
             job.last_error = None
 
         except Exception as exc:
-            logger.error(f"Job execution failed: {job_id}: {exc}")
+            logger.error("Job execution failed: %s: %s", job_id, exc)
             job.status = JobStatus.FAILED.value
             job.error_count += 1
             job.last_error = str(exc)
 
         finally:
+            self._running_jobs.discard(job_id)
             self._save_job(job)
 
     def _save_job(self, job: ScheduledJob) -> None:
