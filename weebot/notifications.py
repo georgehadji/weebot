@@ -24,11 +24,12 @@
 - SLACK_WEBHOOK_URL: Incoming Webhook URL από Slack Apps
 """
 import os
+import sys
 import asyncio
 import aiohttp
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 from weebot.notifications_categorizer import NotificationCategorizer
@@ -68,6 +69,8 @@ class NotificationManager:
             self.channels.append(SlackChannel(self.slack_webhook))
 
         self.channels.append(LogChannel())  # Always log locally
+        if sys.platform == "win32":
+            self.channels.append(WindowsToastChannel())
         self._categorizer = NotificationCategorizer()
 
     async def notify(self, notification: Notification) -> None:
@@ -223,3 +226,45 @@ class LogChannel:
             f.write(json.dumps(entry) + "\n")
         
         return True
+
+class WindowsToastChannel:
+    """Windows 10/11 native toast notification channel via winotify."""
+
+    CATEGORY_ICONS: Dict[str, str] = {
+        "health":   "ms-appx:///Assets/StoreLogo.png",
+        "urgent":   "ms-appx:///Assets/StoreLogo.png",
+        "reminder": "ms-appx:///Assets/StoreLogo.png",
+        "email":    "ms-appx:///Assets/StoreLogo.png",
+        "calendar": "ms-appx:///Assets/StoreLogo.png",
+        "build":    "ms-appx:///Assets/StoreLogo.png",
+        "error":    "ms-appx:///Assets/StoreLogo.png",
+        "info":     "ms-appx:///Assets/StoreLogo.png",
+    }
+
+    def __init__(self, app_name: str = "weebot") -> None:
+        self.app_name = app_name
+
+    def _icon_for_category(self, category: str) -> str:
+        return self.CATEGORY_ICONS.get(category, self.CATEGORY_ICONS["info"])
+
+    async def send(self, notification: Notification) -> bool:
+        """Send a Windows toast notification."""
+        try:
+            import winotify
+        except (ImportError, TypeError):
+            return False
+
+        try:
+            toast = winotify.Notification(
+                app_id=self.app_name,
+                title=notification.title,
+                msg=notification.message,
+                icon=self._icon_for_category(getattr(notification, "category", "info")),
+            )
+            if getattr(notification, "category", "info") == "urgent":
+                toast.set_audio(winotify.audio.Default, loop=True)
+            toast.show()
+            return True
+        except Exception as e:
+            print(f"Windows toast failed: {e}")
+            return False

@@ -11,6 +11,7 @@ playwright>=1.40.0
 # Windows Integration
 pywin32>=306; platform_system=="Windows"
 wmi>=1.5.2; platform_system=="Windows"
+winotify>=1.1.0; platform_system=="Windows"
 
 # Research & Scientific
 numpy>=1.24.0
