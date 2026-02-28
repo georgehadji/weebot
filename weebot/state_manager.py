@@ -55,6 +55,26 @@ class ProjectStatus(Enum):
     FAILED = "failed"
 
 
+ACTIVITY_KINDS = {
+    "idle", "job", "exec", "read", "write", "edit",
+    "search", "browser", "message", "tool",
+}
+
+
+@dataclass
+class SubSession:
+    session_id: str
+    name: str
+    activity_kind: str
+    status: str = "running"     # running / completed / failed
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+
+    def __post_init__(self) -> None:
+        if self.started_at is None:
+            self.started_at = datetime.now()
+
+
 @dataclass
 class Checkpoint:
     id: str
@@ -78,7 +98,8 @@ class ProjectState:
     checkpoints: List[Checkpoint] = None
     error_log: List[str] = None
     metadata: Dict[str, Any] = None
-    
+    sub_sessions: List[SubSession] = None
+
     def __post_init__(self) -> None:
         if self.completed_tasks is None:
             self.completed_tasks = []
@@ -90,6 +111,8 @@ class ProjectState:
             self.error_log = []
         if self.metadata is None:
             self.metadata = {}
+        if self.sub_sessions is None:
+            self.sub_sessions = []
 
 
 class StateManager:
@@ -212,6 +235,34 @@ class StateManager:
             )
             conn.commit()
     
+    def start_sub_session(self, project_id: str, name: str,
+                          activity_kind: str = "job") -> str:
+        """Create and persist a new sub-session for a project."""
+        state = self.load_state(project_id)
+        if not state:
+            raise ValueError(f"Project {project_id} not found")
+        session_id = f"ss_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        state.sub_sessions.append(SubSession(
+            session_id=session_id,
+            name=name,
+            activity_kind=activity_kind,
+        ))
+        self.save_state(state)
+        return session_id
+
+    def end_sub_session(self, project_id: str, name: str,
+                        status: str = "completed") -> None:
+        """Mark the most recent open sub-session with the given name as ended."""
+        state = self.load_state(project_id)
+        if not state:
+            return
+        for ss in state.sub_sessions:
+            if ss.name == name and ss.ended_at is None:
+                ss.ended_at = datetime.now()
+                ss.status = status
+                break
+        self.save_state(state)
+
     def get_pending_checkpoints(self, project_id: str) -> List[Checkpoint]:
         """Get unresolved checkpoints for project"""
         with sqlite3.connect(self.db_path) as conn:
@@ -251,6 +302,7 @@ class ResumableTask:
         self.state.status = ProjectStatus.RUNNING
         self.state.current_task = self.task_name
         self.sm.save_state(self.state)
+        self.sm.start_sub_session(self.project_id, self.task_name, activity_kind="job")
 
         return self
 
@@ -262,11 +314,13 @@ class ResumableTask:
                 self.state.completed_tasks.append(self.task_name)
             self.state.current_task = None
             self.sm.save_state(self.state)
+            self.sm.end_sub_session(self.project_id, self.task_name, status="completed")
         else:
             # Failure - log error
             self.state.error_log.append(str(exc_val))
             self.state.status = ProjectStatus.FAILED
             self.sm.save_state(self.state)
+            self.sm.end_sub_session(self.project_id, self.task_name, status="failed")
     
     async def checkpoint(self, description: str, input_prompt: str) -> str:
         """Create checkpoint and wait for user input"""
