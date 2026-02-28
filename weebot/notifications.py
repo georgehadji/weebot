@@ -230,6 +230,7 @@ class LogChannel:
 class WindowsToastChannel:
     """Windows 10/11 native toast notification channel via winotify."""
 
+    # Placeholder icons — all map to StoreLogo until per-category assets are added
     CATEGORY_ICONS: Dict[str, str] = {
         "health":   "ms-appx:///Assets/StoreLogo.png",
         "urgent":   "ms-appx:///Assets/StoreLogo.png",
@@ -245,7 +246,7 @@ class WindowsToastChannel:
         self.app_name = app_name
 
     def _icon_for_category(self, category: str) -> str:
-        return self.CATEGORY_ICONS.get(category, self.CATEGORY_ICONS["info"])
+        return self.CATEGORY_ICONS.get(category, "ms-appx:///Assets/StoreLogo.png")
 
     async def send(self, notification: Notification) -> bool:
         """Send a Windows toast notification."""

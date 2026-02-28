@@ -24,9 +24,11 @@ class TestWindowsToastChannel:
             ch = WindowsToastChannel(app_name="weebot-test")
             result = await ch.send(self._make_notification())
         assert result is True
+        mock_toast.show.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_send_returns_false_when_winotify_missing(self):
+        # None sentinel causes ImportError on `import winotify` in CPython
         with patch.dict("sys.modules", {"winotify": None}):
             ch = WindowsToastChannel(app_name="weebot-test")
             result = await ch.send(self._make_notification())
@@ -41,10 +43,9 @@ class TestWindowsToastChannel:
         with patch.dict("sys.modules", {"winotify": mock_winotify}):
             ch = WindowsToastChannel(app_name="weebot-test")
             await ch.send(self._make_notification(category="urgent"))
-        mock_toast.set_audio.assert_called_once()
+        mock_toast.set_audio.assert_called_once_with(mock_winotify.audio.Default, loop=True)
 
     def test_category_to_icon_mapping(self):
         ch = WindowsToastChannel(app_name="weebot-test")
-        assert ch._icon_for_category("urgent") == "ms-appx:///Assets/StoreLogo.png" or \
-               isinstance(ch._icon_for_category("urgent"), str)
+        assert ch._icon_for_category("urgent") == "ms-appx:///Assets/StoreLogo.png"
         assert ch._icon_for_category("info") == ch._icon_for_category("unknown_cat")
