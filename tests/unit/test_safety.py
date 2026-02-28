@@ -61,7 +61,12 @@ class TestGeneratePlanB:
         assert result["original_action"] == action
 
     @pytest.mark.asyncio
-    async def test_proceed_flag_reflects_confirm_delete_setting(self, checker):
-        result = await checker.generate_plan_b("delete logs", "maintenance")
-        # CONFIRM_DELETE = True → proceed = False (requires confirmation)
+    async def test_proceed_flag_requires_confirmation_for_destructive(self, checker):
+        # Remove-Item matches ExecApprovalPolicy ALWAYS_ASK → proceed = False
+        result = await checker.generate_plan_b("Remove-Item old_logs", "maintenance")
         assert result["proceed"] is False
+
+    @pytest.mark.asyncio
+    async def test_proceed_flag_true_for_safe_commands(self, checker):
+        result = await checker.generate_plan_b("Get-ChildItem C:\\logs", "inspection")
+        assert result["proceed"] is True

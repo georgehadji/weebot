@@ -2,17 +2,17 @@
 from typing import Dict, Any, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
-
-CONFIRM_DELETE = True
+from weebot.core.approval_policy import ExecApprovalPolicy
 
 
 class SafetyChecker:
     """Implements Counterfactual Simulation for critical operations."""
-    
+
     CRITICAL_KEYWORDS = ["delete", "remove", "format", "kill", "stop-process", "rm", "del"]
-    
+
     def __init__(self):
         self.llm = ChatOpenAI(temperature=0)
+        self.approval_policy = ExecApprovalPolicy()
     
     def is_critical_operation(self, action: str, tool: str) -> bool:
         """Determine if action requires Counterfactual Simulation."""
@@ -54,10 +54,12 @@ class SafetyChecker:
             "context": context
         })
         
+        approval = self.approval_policy.evaluate(original_action)
         return {
             "simulation_result": self._parse_safety_response(result.content),
             "original_action": original_action,
-            "proceed": not CONFIRM_DELETE,
+            "proceed": not approval.requires_confirmation,
+            "undo_hint": approval.undo_hint,
         }
     
     def _parse_safety_response(self, content: str) -> Dict[str, str]:
