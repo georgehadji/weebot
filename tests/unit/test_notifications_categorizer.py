@@ -64,3 +64,16 @@ class TestUserRules:
     def test_metadata_wins_over_user_rules(self):
         result = self.cat.categorize("invoice due", {"category": "urgent"})
         assert result == "urgent"
+
+    def test_disabled_rule_is_skipped(self):
+        cat = NotificationCategorizer(user_rules=[
+            UserRule(pattern="invoice", is_regex=False, category="email", enabled=False),
+        ])
+        assert cat.categorize("invoice received", {}) == "info"
+
+    def test_metadata_intent_wins_over_user_rules(self):
+        cat = NotificationCategorizer(user_rules=[
+            UserRule(pattern="invoice", is_regex=False, category="email"),
+        ])
+        result = cat.categorize("invoice due", {"intent": "urgent"})
+        assert result == "urgent"

@@ -1,6 +1,6 @@
 """Smart notification categorization (ported from OpenClaw)."""
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 
@@ -34,14 +34,20 @@ class NotificationCategorizer:
 
     def __init__(self, user_rules: Optional[List[UserRule]] = None) -> None:
         self._user_rules = [r for r in (user_rules or []) if r.enabled]
-        self._compiled: List[Tuple[Optional[re.Pattern], UserRule]] = [
-            (re.compile(r.pattern, re.IGNORECASE) if r.is_regex else None, r)
-            for r in self._user_rules
-        ]
+
+        def _compile(r: UserRule):
+            if not r.is_regex:
+                return None, r
+            try:
+                return re.compile(r.pattern, re.IGNORECASE), r
+            except re.error as exc:
+                raise ValueError(f"Invalid regex in UserRule '{r.pattern}': {exc}") from exc
+
+        self._compiled: List[Tuple[Optional[re.Pattern], UserRule]] = [_compile(r) for r in self._user_rules]
 
     def categorize(self, message: str, metadata: Dict) -> str:
         """Return category string for the given message + metadata."""
-        # Tier 1: structured metadata
+        # Tier 1: structured metadata (empty string falls through intentionally)
         if metadata.get("category"):
             return metadata["category"]
         if metadata.get("intent"):
