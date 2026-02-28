@@ -284,23 +284,26 @@ class AdvancedBrowserTool(BaseTool):
     async def _close_browser(self) -> None:
         """Close browser and stop the Playwright subprocess.
 
-        Primary fix: _playwright_instance.stop() was previously missing,
-        leaving the Chromium browser-server process alive indefinitely.
+        Conservative fix: capture-and-zero all globals BEFORE any await so
+        that concurrent _close_browser() calls or a stop() exception can never
+        leave a non-None global that the atexit handler would double-stop.
+        Pattern: local_ref = global; global = None; await local_ref.close()
         """
         global _browser, _page, _context, _playwright_instance
 
-        if _page:
-            await _page.close()
-            _page = None
-        if _context:
-            await _context.close()
-            _context = None
-        if _browser:
-            await _browser.close()
-            _browser = None
-        if _playwright_instance:
-            await _playwright_instance.stop()
-            _playwright_instance = None
+        # Zero-out-first: snapshot locals, clear globals atomically before
+        # any await so no concurrent coroutine or atexit handler races us.
+        page, ctx, browser, pw = _page, _context, _browser, _playwright_instance
+        _page = _context = _browser = _playwright_instance = None
+
+        if page:
+            await page.close()
+        if ctx:
+            await ctx.close()
+        if browser:
+            await browser.close()
+        if pw:
+            await pw.stop()
 
 
 class WebScraperTool(BaseTool):
