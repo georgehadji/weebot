@@ -39,6 +39,12 @@ class WeebotSettings(BaseSettings):
     # Budget
     daily_ai_budget: float = 10.0
 
+    # Sandbox / code execution
+    bash_timeout: int = 30                  # env: BASH_TIMEOUT
+    python_timeout: int = 30               # env: PYTHON_TIMEOUT
+    sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
+    sandbox_allow_network: bool = False    # env: SANDBOX_ALLOW_NETWORK
+
     @field_validator("daily_ai_budget")
     @classmethod
     def validate_budget(cls, v: float) -> float:
