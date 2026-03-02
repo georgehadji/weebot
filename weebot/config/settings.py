@@ -23,7 +23,11 @@ POWERSHELL_PRIORITY_KEYWORDS = [
 class WeebotSettings(BaseSettings):
     """weebot configuration with validation."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # AI API Keys (at least one required)
     kimi_api_key: str | None = None
