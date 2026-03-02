@@ -26,7 +26,8 @@ from weebot.mcp.resources import (
 _SERVER_INSTRUCTIONS = (
     "weebot is an AI Agent Framework for Windows 11. "
     "Available tools: bash (PowerShell/WSL2), python_execute (sandboxed subprocess), "
-    "web_search (DuckDuckGo + Bing), file_editor (view/create/edit files). "
+    "web_search (DuckDuckGo + Bing), file_editor (view/create/edit files), "
+    "ping (health check — returns server status and UTC timestamp). "
     "Available resources: weebot://activity (recent events), "
     "weebot://state (agent state snapshot), weebot://schedule (scheduled jobs)."
 )
@@ -184,6 +185,25 @@ class WeebotMCPServer:
             if result.is_error:
                 raise ValueError(result.error)
             return result.output
+
+        @mcp.tool(
+            name="ping",
+            description=(
+                "Health check — returns server status and current UTC timestamp. "
+                "Use this to verify that the weebot MCP server is running and reachable."
+            ),
+        )
+        async def ping_tool() -> str:
+            import json as _json
+            from datetime import datetime, timezone
+
+            return _json.dumps(
+                {
+                    "status": "ok",
+                    "version": "1.0.0",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
     # ------------------------------------------------------------------
     # Resource registration
