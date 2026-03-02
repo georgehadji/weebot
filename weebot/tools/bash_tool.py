@@ -70,12 +70,14 @@ class BashTool(BaseTool):
 
     _executor: SandboxedExecutor = PrivateAttr(default=None)
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
+    _default_timeout: float = PrivateAttr(default=30.0)
 
     def model_post_init(self, __context: object) -> None:
         """Initialise the sandboxed executor and the approval policy."""
         from weebot.config.settings import WeebotSettings
 
         settings = WeebotSettings()
+        self._default_timeout = float(settings.bash_timeout)
         self._executor = SandboxedExecutor(
             max_output_bytes=settings.sandbox_max_output_bytes,
         )
@@ -84,7 +86,7 @@ class BashTool(BaseTool):
     async def execute(  # type: ignore[override]
         self,
         command: str,
-        timeout: float = 30.0,
+        timeout: Optional[float] = None,
         working_dir: Optional[str] = None,
         use_wsl: bool = False,
         **_: object,
@@ -100,6 +102,8 @@ class BashTool(BaseTool):
         Returns:
             ToolResult with combined output on success, or an error message.
         """
+        effective_timeout = timeout if timeout is not None else self._default_timeout
+
         # --- Safety gate (ExecApprovalPolicy) ---
         approval = self._policy.evaluate(command)
         if not approval.approved:
@@ -123,12 +127,12 @@ class BashTool(BaseTool):
             cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", command]
 
         # --- Run in sandbox ---
-        result = await self._executor.run(cmd, timeout=timeout, cwd=working_dir)
+        result = await self._executor.run(cmd, timeout=effective_timeout, cwd=working_dir)
 
         if result.timed_out:
             return ToolResult(
                 output="",
-                error=f"Command timed out after {timeout:.0f}s",
+                error=f"Command timed out after {effective_timeout:.0f}s",
             )
         if not result.success:
             return ToolResult(

@@ -53,12 +53,14 @@ class PythonExecuteTool(BaseTool):
 
     _executor: SandboxedExecutor = PrivateAttr(default=None)
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
+    _default_timeout: float = PrivateAttr(default=30.0)
 
     def model_post_init(self, __context: object) -> None:
         """Initialise the sandboxed executor and the approval policy."""
         from weebot.config.settings import WeebotSettings
 
         settings = WeebotSettings()
+        self._default_timeout = float(settings.python_timeout)
         self._executor = SandboxedExecutor(
             max_output_bytes=settings.sandbox_max_output_bytes,
         )
@@ -67,7 +69,7 @@ class PythonExecuteTool(BaseTool):
     async def execute(  # type: ignore[override]
         self,
         code: str,
-        timeout: float = 30.0,
+        timeout: Optional[float] = None,
         **_: object,
     ) -> ToolResult:
         """Run *code* in a child Python process and return its output.
@@ -80,6 +82,8 @@ class PythonExecuteTool(BaseTool):
             ToolResult with combined stdout/stderr on success, or an error
             message describing why execution failed.
         """
+        effective_timeout = timeout if timeout is not None else self._default_timeout
+
         # --- Safety gate (ExecApprovalPolicy) ---
         approval = self._policy.evaluate(code)
         if not approval.approved:
@@ -98,12 +102,12 @@ class PythonExecuteTool(BaseTool):
 
         # --- Run in isolated subprocess ---
         cmd = [sys.executable, "-c", code]
-        result = await self._executor.run(cmd, timeout=timeout)
+        result = await self._executor.run(cmd, timeout=effective_timeout)
 
         if result.timed_out:
             return ToolResult(
                 output="",
-                error=f"Python code timed out after {timeout:.0f}s",
+                error=f"Python code timed out after {effective_timeout:.0f}s",
             )
         if not result.success:
             return ToolResult(

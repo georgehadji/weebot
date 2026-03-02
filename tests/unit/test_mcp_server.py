@@ -193,3 +193,147 @@ class TestMCPResourceReads:
         data = json.loads(contents[0].content)
         assert "jobs" in data
         assert isinstance(data["jobs"], list)
+
+
+# ─── Fix 1: stub response when state_manager / scheduler omitted ──────────────
+
+
+class TestResourceStubNotes:
+    """Stubs include a helpful 'note' when managers are not provided."""
+
+    def test_state_stub_contains_note(self) -> None:
+        data = json.loads(build_state_json(state_manager=None))
+        assert "note" in data
+
+    def test_schedule_stub_contains_note(self) -> None:
+        data = json.loads(build_schedule_json(scheduler=None))
+        assert "note" in data
+
+
+# ─── Fix 2: settings-driven default timeout ───────────────────────────────────
+
+
+class TestSettingsTimeout:
+    """BashTool and PythonExecuteTool respect WeebotSettings timeouts."""
+
+    def test_bash_tool_stores_default_timeout_from_settings(self) -> None:
+        from unittest.mock import patch
+        from weebot.tools.bash_tool import BashTool
+
+        # WeebotSettings is imported locally inside model_post_init, so we patch
+        # the class in its home module (weebot.config.settings).
+        with patch(
+            "weebot.config.settings.WeebotSettings",
+            return_value=type(
+                "S",
+                (),
+                {"bash_timeout": 42, "sandbox_max_output_bytes": 65_536},
+            )(),
+        ):
+            tool = BashTool()
+        assert tool._default_timeout == 42.0
+
+    def test_python_tool_stores_default_timeout_from_settings(self) -> None:
+        from unittest.mock import patch
+        from weebot.tools.python_tool import PythonExecuteTool
+
+        with patch(
+            "weebot.config.settings.WeebotSettings",
+            return_value=type(
+                "S",
+                (),
+                {"python_timeout": 55, "sandbox_max_output_bytes": 65_536},
+            )(),
+        ):
+            tool = PythonExecuteTool()
+        assert tool._default_timeout == 55.0
+
+    @pytest.mark.asyncio
+    async def test_bash_execute_uses_explicit_timeout_over_default(self) -> None:
+        """Explicit timeout= kwarg overrides the settings default."""
+        from unittest.mock import AsyncMock, patch
+        from weebot.tools.bash_tool import BashTool
+        from weebot.sandbox.executor import ExecutionResult
+
+        captured: list[float] = []
+
+        async def fake_run(cmd, timeout=30.0, **kw):  # type: ignore[override]
+            captured.append(timeout)
+            return ExecutionResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
+
+        tool = BashTool()
+        with patch.object(tool._executor, "run", side_effect=fake_run):
+            await tool.execute(command="echo hi", timeout=99.0)
+
+        assert captured == [99.0]
+
+
+# ─── Fix 3: live data when managers are provided ──────────────────────────────
+
+
+class TestLiveResources:
+    """State and schedule resources return live data when managers provided."""
+
+    def test_state_json_with_state_manager_returns_projects(self) -> None:
+        mock_sm = type(
+            "SM",
+            (),
+            {
+                "list_projects": lambda self: [
+                    {"project_id": "p1", "status": "active"},
+                    {"project_id": "p2", "status": "completed"},
+                ]
+            },
+        )()
+        data = json.loads(build_state_json(state_manager=mock_sm))
+        assert data["total_projects"] == 2
+        assert data["active_projects"] == 1
+        assert data["status"] == "active"
+
+    def test_state_json_no_active_projects_reports_idle(self) -> None:
+        mock_sm = type(
+            "SM",
+            (),
+            {
+                "list_projects": lambda self: [
+                    {"project_id": "p1", "status": "completed"}
+                ]
+            },
+        )()
+        data = json.loads(build_state_json(state_manager=mock_sm))
+        assert data["status"] == "idle"
+
+    def test_schedule_json_with_scheduler_returns_jobs(self) -> None:
+        class FakeJob:
+            def to_dict(self):
+                return {"job_id": "j1", "name": "backup", "status": "active"}
+
+        mock_sched = type(
+            "Sched", (), {"list_jobs": lambda self: [FakeJob()]}
+        )()
+        data = json.loads(build_schedule_json(scheduler=mock_sched))
+        assert data["total"] == 1
+        assert data["jobs"][0]["job_id"] == "j1"
+
+    def test_schedule_json_error_in_scheduler_returns_empty_jobs(self) -> None:
+        mock_sched = type(
+            "Sched",
+            (),
+            {"list_jobs": lambda self: (_ for _ in ()).throw(RuntimeError("db error"))},
+        )()
+        data = json.loads(build_schedule_json(scheduler=mock_sched))
+        assert data["jobs"] == []
+        assert "error" in data
+
+    @pytest.mark.asyncio
+    async def test_server_passes_state_manager_to_resource(self) -> None:
+        mock_sm = type(
+            "SM",
+            (),
+            {"list_projects": lambda self: [{"project_id": "live", "status": "active"}]},
+        )()
+        server = WeebotMCPServer(state_manager=mock_sm)
+        contents = await server.mcp.read_resource("weebot://state")
+        data = json.loads(contents[0].content)
+        assert data["total_projects"] == 1
+        assert data["status"] == "active"

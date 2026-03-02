@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError as _mcp_err:
+    raise ImportError(
+        "weebot.mcp requires the 'mcp' package. "
+        "Install it with:  pip install 'mcp>=1.5'"
+    ) from _mcp_err
 
 from weebot.activity_stream import ActivityStream
 from weebot.mcp.resources import (
@@ -32,6 +38,12 @@ class WeebotMCPServer:
     Args:
         activity_stream: Optional shared ActivityStream for logging tool calls.
                          A new empty stream is created if not provided.
+        state_manager:   Optional :class:`~weebot.state_manager.StateManager`
+                         instance.  When provided ``weebot://state`` returns
+                         live project data instead of a static stub.
+        scheduler:       Optional :class:`~weebot.scheduling.scheduler.SchedulingManager`
+                         instance.  When provided ``weebot://schedule`` returns
+                         live job data instead of a static stub.
         host: Bind address for SSE/HTTP transport. Default: ``127.0.0.1``.
         port: Port for SSE/HTTP transport. Default: ``8765``.
     """
@@ -39,10 +51,14 @@ class WeebotMCPServer:
     def __init__(
         self,
         activity_stream: Optional[ActivityStream] = None,
+        state_manager: Optional[object] = None,
+        scheduler: Optional[object] = None,
         host: str = "127.0.0.1",
         port: int = 8765,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
+        self._state_manager = state_manager
+        self._scheduler = scheduler
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
@@ -176,6 +192,8 @@ class WeebotMCPServer:
     def _register_resources(self) -> None:
         mcp = self._mcp
         activity = self._activity
+        state_manager = self._state_manager
+        scheduler = self._scheduler
 
         @mcp.resource(
             "weebot://activity",
@@ -191,7 +209,7 @@ class WeebotMCPServer:
             description="Current weebot agent state snapshot.",
         )
         def state_resource() -> str:
-            return build_state_json()
+            return build_state_json(state_manager)
 
         @mcp.resource(
             "weebot://schedule",
@@ -199,4 +217,4 @@ class WeebotMCPServer:
             description="List of currently scheduled jobs.",
         )
         def schedule_resource() -> str:
-            return build_schedule_json()
+            return build_schedule_json(scheduler)
