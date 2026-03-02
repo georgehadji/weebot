@@ -1,5 +1,6 @@
 """ToolCallWeebotAgent — ReAct loop with OpenAI function calling."""
 from __future__ import annotations
+import asyncio
 import json
 import os
 from typing import Any
@@ -100,20 +101,22 @@ class ToolCallWeebotAgent:
         return bool(tool_calls)
 
     async def act(self) -> None:
-        """Execute tool calls from the last assistant message."""
+        """Execute tool calls from the last assistant message in parallel."""
         last = self.memory.messages[-1]
-        for tc in last.tool_calls:
+
+        async def _run_one(tc: ToolCallSpec) -> tuple[str, ToolResult]:
             try:
                 args = json.loads(tc.arguments)
             except json.JSONDecodeError:
                 args = {}
+            return tc.id, await self.tools.execute(tc.name, **args)
 
-            result: ToolResult = await self.tools.execute(tc.name, **args)
-
+        pairs = await asyncio.gather(*[_run_one(tc) for tc in last.tool_calls])
+        for tc_id, result in pairs:
             self.memory.add(Message(
                 role=Role.TOOL,
                 content=str(result),
-                tool_call_id=tc.id,
+                tool_call_id=tc_id,
             ))
 
     async def run(self, prompt: str) -> str:

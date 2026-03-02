@@ -23,6 +23,27 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def reset_settings_singletons():
+    """Reset module-level _SETTINGS caches before each test.
+
+    BashTool and PythonExecuteTool cache a WeebotSettings instance so that
+    .env is only parsed once per process.  Tests that patch WeebotSettings
+    need a clean slate each time so the mock takes effect.
+    """
+    import sys
+    for mod_name in ("weebot.tools.bash_tool", "weebot.tools.python_tool"):
+        mod = sys.modules.get(mod_name)
+        if mod is not None:
+            mod._SETTINGS = None
+    yield
+    # Reset again on teardown so later tests also start clean.
+    for mod_name in ("weebot.tools.bash_tool", "weebot.tools.python_tool"):
+        mod = sys.modules.get(mod_name)
+        if mod is not None:
+            mod._SETTINGS = None
+
+
 @pytest.fixture
 def with_openai_key(monkeypatch):
     """Provide a fake OpenAI key so settings validation passes."""

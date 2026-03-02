@@ -105,3 +105,60 @@ async def test_agent_handles_tool_error_gracefully():
 def test_agent_initial_state():
     agent = ToolCallWeebotAgent(tools=ToolCollection())
     assert agent.state == AgentState.IDLE
+
+
+def _make_two_tool_call_response(
+    tool1: str, args1: dict, id1: str,
+    tool2: str, args2: dict, id2: str,
+):
+    """OpenAI-like response with two tool calls (parallel)."""
+    def _tc(name, args, cid):
+        tc = MagicMock()
+        tc.id = cid
+        tc.function.name = name
+        tc.function.arguments = json.dumps(args)
+        return tc
+
+    msg = MagicMock()
+    msg.content = ""
+    msg.tool_calls = [_tc(tool1, args1, id1), _tc(tool2, args2, id2)]
+    choice = MagicMock()
+    choice.message = msg
+    resp = MagicMock()
+    resp.choices = [choice]
+    return resp
+
+
+@pytest.mark.asyncio
+async def test_act_executes_two_tool_calls_concurrently():
+    """Two tool calls in one response must both be executed and appended to memory."""
+    import asyncio
+
+    execution_order: list[str] = []
+
+    class SlowTool(BaseTool):
+        name: str = "slow"
+        description: str = "Slow tool"
+        parameters: dict = {"type": "object", "properties": {"tag": {"type": "string"}}, "required": ["tag"]}
+
+        async def execute(self, tag: str, **_) -> ToolResult:
+            await asyncio.sleep(0)   # yield to event loop
+            execution_order.append(tag)
+            return ToolResult(output=f"done-{tag}")
+
+    agent = ToolCallWeebotAgent(tools=ToolCollection(SlowTool()))
+
+    responses = [
+        _make_two_tool_call_response("slow", {"tag": "a"}, "c1", "slow", {"tag": "b"}, "c2"),
+        _make_finish_response("both done"),
+    ]
+    mock_create = AsyncMock(side_effect=responses)
+    with patch.object(agent._client.chat.completions, "create", mock_create):
+        await agent.run("run both")
+
+    # Both tool results must be in memory (as TOOL messages)
+    from weebot.domain.models import Role
+    tool_msgs = [m for m in agent.memory.messages if m.role == Role.TOOL]
+    assert len(tool_msgs) == 2
+    ids = {m.tool_call_id for m in tool_msgs}
+    assert ids == {"c1", "c2"}

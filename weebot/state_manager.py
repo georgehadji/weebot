@@ -37,8 +37,10 @@ ProjectState: Η πλήρης κατάσταση ενός project
         print(f"Resuming from task: {state.current_task}")
 """
 import json
-import pickle
+import pickle  # noqa: S301 — existing serialisation; not introducing new usage
 import sqlite3
+import threading
+import uuid
 from enum import Enum
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
@@ -117,14 +119,20 @@ class ProjectState:
 
 class StateManager:
     """SQLite-based persistent state management"""
-    
+
     def __init__(self, db_path: str = "projects.db") -> None:
         self.db_path = db_path
+        # Persistent connection — avoids re-opening the file on every call.
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._write_lock = threading.Lock()
         self._init_db()
 
     def _init_db(self) -> None:
         """Initialize database schema."""
-        with sqlite3.connect(self.db_path) as conn:
+        conn = self._conn
+        with self._write_lock:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS projects (
                     project_id TEXT PRIMARY KEY,
@@ -207,45 +215,39 @@ class StateManager:
     def save_state(self, state: ProjectState) -> None:
         """Save project state to database."""
         state.updated_at = datetime.now()
-        
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO projects (project_id, state, updated_at)
-                VALUES (?, ?, ?)
-                """,
-                (state.project_id, pickle.dumps(state), state.updated_at)
+        with self._write_lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO projects (project_id, state, updated_at) "
+                "VALUES (?, ?, ?)",
+                (state.project_id, pickle.dumps(state), state.updated_at),
             )
-            conn.commit()
-    
+            self._conn.commit()
+
     def load_state(self, project_id: str) -> Optional[ProjectState]:
         """Load project state from database"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT state FROM projects WHERE project_id = ?",
-                (project_id,)
-            )
-            row = cursor.fetchone()
-            
-            if row:
-                return pickle.loads(row[0])
-            return None
-    
+        cursor = self._conn.execute(
+            "SELECT state FROM projects WHERE project_id = ?",
+            (project_id,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return pickle.loads(row[0])
+        return None
+
     def list_projects(self) -> List[Dict]:
         """List all projects"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "SELECT project_id, updated_at FROM projects ORDER BY updated_at DESC"
-            )
-            return [
-                {"project_id": row[0], "updated_at": row[1]}
-                for row in cursor.fetchall()
-            ]
+        cursor = self._conn.execute(
+            "SELECT project_id, updated_at FROM projects ORDER BY updated_at DESC"
+        )
+        return [
+            {"project_id": row[0], "updated_at": row[1]}
+            for row in cursor.fetchall()
+        ]
     
     def add_checkpoint(self, project_id: str, description: str,
                        input_prompt: Optional[str] = None) -> str:
         """Add checkpoint requiring user input"""
-        checkpoint_id = f"chk_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        checkpoint_id = f"chk_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{uuid.uuid4().hex[:6]}"
         
         checkpoint = Checkpoint(
             id=checkpoint_id,
@@ -255,30 +257,25 @@ class StateManager:
             input_prompt=input_prompt
         )
         
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                INSERT INTO checkpoints (checkpoint_id, project_id, data, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (checkpoint_id, project_id, pickle.dumps(checkpoint), checkpoint.timestamp)
+        with self._write_lock:
+            self._conn.execute(
+                "INSERT INTO checkpoints (checkpoint_id, project_id, data, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (checkpoint_id, project_id, pickle.dumps(checkpoint), checkpoint.timestamp),
             )
-            conn.commit()
-        
+            self._conn.commit()
+
         return checkpoint_id
-    
+
     def resolve_checkpoint(self, checkpoint_id: str, user_response: str) -> None:
         """Resolve checkpoint with user input."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                UPDATE checkpoints
-                SET resolved = TRUE, user_response = ?
-                WHERE checkpoint_id = ?
-                """,
-                (user_response, checkpoint_id)
+        with self._write_lock:
+            self._conn.execute(
+                "UPDATE checkpoints SET resolved = TRUE, user_response = ? "
+                "WHERE checkpoint_id = ?",
+                (user_response, checkpoint_id),
             )
-            conn.commit()
+            self._conn.commit()
     
     def start_sub_session(self, project_id: str, name: str,
                           activity_kind: str = "job") -> str:
@@ -310,16 +307,13 @@ class StateManager:
 
     def get_pending_checkpoints(self, project_id: str) -> List[Checkpoint]:
         """Get unresolved checkpoints for project"""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                """
-                SELECT data FROM checkpoints
-                WHERE project_id = ? AND resolved = FALSE
-                ORDER BY created_at DESC
-                """,
-                (project_id,)
-            )
-            return [pickle.loads(row[0]) for row in cursor.fetchall()]
+        cursor = self._conn.execute(
+            "SELECT data FROM checkpoints "
+            "WHERE project_id = ? AND resolved = FALSE "
+            "ORDER BY created_at DESC",
+            (project_id,),
+        )
+        return [pickle.loads(row[0]) for row in cursor.fetchall()]
 
 
 class ResumableTask:

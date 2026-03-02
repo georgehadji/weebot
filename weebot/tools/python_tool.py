@@ -2,13 +2,27 @@
 from __future__ import annotations
 
 import sys
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pydantic import ConfigDict, PrivateAttr
 
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.sandbox.executor import SandboxedExecutor
 from weebot.tools.base import BaseTool, ToolResult
+
+if TYPE_CHECKING:
+    from weebot.config.settings import WeebotSettings
+
+# Module-level singleton — parsed once per process instead of per tool instance.
+_SETTINGS: Optional["WeebotSettings"] = None
+
+
+def _get_settings() -> "WeebotSettings":
+    global _SETTINGS
+    if _SETTINGS is None:
+        from weebot.config.settings import WeebotSettings
+        _SETTINGS = WeebotSettings()
+    return _SETTINGS
 
 
 class PythonExecuteTool(BaseTool):
@@ -57,9 +71,7 @@ class PythonExecuteTool(BaseTool):
 
     def model_post_init(self, __context: object) -> None:
         """Initialise the sandboxed executor and the approval policy."""
-        from weebot.config.settings import WeebotSettings
-
-        settings = WeebotSettings()
+        settings = _get_settings()
         self._default_timeout = float(settings.python_timeout)
         self._executor = SandboxedExecutor(
             max_output_bytes=settings.sandbox_max_output_bytes,

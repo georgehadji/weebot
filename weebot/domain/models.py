@@ -202,6 +202,11 @@ class Memory:
         self._trim()
 
     def _trim(self) -> None:
+        # Skip the O(n) scan until we're meaningfully over the limit.
+        # slack scales with max_messages so small values (e.g. 3) still trim promptly.
+        slack = max(1, self.max_messages // 10)
+        if len(self.messages) <= self.max_messages + slack:
+            return
         system = [m for m in self.messages if m.role == Role.SYSTEM]
         non_system = [m for m in self.messages if m.role != Role.SYSTEM]
         if len(non_system) > self.max_messages:

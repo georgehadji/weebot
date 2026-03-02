@@ -72,3 +72,66 @@ class TestRetryWithBackoff:
         retry = RetryWithBackoff(BackoffConfig(delays=[0.01]))
         result = await retry.call(adder, 3, 4)
         assert result == 7
+
+    @pytest.mark.asyncio
+    async def test_non_retryable_error_raises_immediately(self):
+        """A non-retryable exception should be re-raised on the first attempt."""
+        call_count = 0
+
+        async def fn():
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("not retryable")
+
+        cfg = BackoffConfig(
+            delays=[0.01, 0.01, 0.01],
+            retryable=lambda exc: not isinstance(exc, ValueError),
+        )
+        retry = RetryWithBackoff(cfg)
+        with pytest.raises(ValueError, match="not retryable"):
+            await retry.call(fn)
+        assert call_count == 1  # zero retries
+
+    @pytest.mark.asyncio
+    async def test_retryable_predicate_retries_matching_errors(self):
+        """A retryable exception should trigger the normal retry loop."""
+        call_count = 0
+
+        async def fn():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("retryable")
+            return "ok"
+
+        cfg = BackoffConfig(
+            delays=[0.01, 0.01, 0.01],
+            retryable=lambda exc: isinstance(exc, ConnectionError),
+        )
+        retry = RetryWithBackoff(cfg)
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            result = await retry.call(fn)
+        assert result == "ok"
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_jitter_delays_within_expected_range(self):
+        """Actual sleep delay must be in [base, base * (1 + jitter)]."""
+        slept: list[float] = []
+
+        async def capture_sleep(delay: float) -> None:
+            slept.append(delay)
+
+        cfg = BackoffConfig(delays=[1.0], jitter=0.5)
+        retry = RetryWithBackoff(cfg)
+
+        async def always_fails():
+            raise RuntimeError("fail")
+
+        with patch("asyncio.sleep", side_effect=capture_sleep):
+            with pytest.raises(RuntimeError):
+                await retry.call(always_fails)
+
+        assert slept, "sleep should have been called"
+        assert slept[0] >= 1.0
+        assert slept[0] <= 1.0 * (1 + 0.5)

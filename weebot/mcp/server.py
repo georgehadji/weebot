@@ -98,6 +98,17 @@ class WeebotMCPServer:
         mcp = self._mcp
         activity = self._activity
 
+        # Instantiate tools once — avoids re-parsing .env on every MCP call.
+        from weebot.tools.bash_tool import BashTool
+        from weebot.tools.python_tool import PythonExecuteTool
+        from weebot.tools.web_search import WebSearchTool
+        from weebot.tools.file_editor import StrReplaceEditorTool
+
+        _bash = BashTool()
+        _python = PythonExecuteTool()
+        _search = WebSearchTool()
+        _editor = StrReplaceEditorTool()
+
         @mcp.tool(
             name="bash",
             description=(
@@ -111,10 +122,7 @@ class WeebotMCPServer:
             working_dir: str | None = None,
             use_wsl: bool = False,
         ) -> str:
-            from weebot.tools.bash_tool import BashTool
-
-            tool = BashTool()
-            result = await tool.execute(
+            result = await _bash.execute(
                 command=command, timeout=timeout, working_dir=working_dir, use_wsl=use_wsl
             )
             activity.push("mcp", "tool", f"bash: {command[:60]}")
@@ -130,10 +138,7 @@ class WeebotMCPServer:
             ),
         )
         async def python_execute(code: str, timeout: float = 30.0) -> str:
-            from weebot.tools.python_tool import PythonExecuteTool
-
-            tool = PythonExecuteTool()
-            result = await tool.execute(code=code, timeout=timeout)
+            result = await _python.execute(code=code, timeout=timeout)
             activity.push("mcp", "tool", f"python_execute: {code[:60]}")
             if result.is_error:
                 raise ValueError(result.error)
@@ -147,10 +152,7 @@ class WeebotMCPServer:
             ),
         )
         async def web_search(query: str, num_results: int = 5) -> str:
-            from weebot.tools.web_search import WebSearchTool
-
-            tool = WebSearchTool()
-            result = await tool.execute(query=query, num_results=num_results)
+            result = await _search.execute(query=query, num_results=num_results)
             activity.push("mcp", "tool", f"web_search: {query[:60]}")
             if result.is_error:
                 raise ValueError(result.error)
@@ -172,9 +174,6 @@ class WeebotMCPServer:
             new_str: str | None = None,
             insert_line: int | None = None,
         ) -> str:
-            from weebot.tools.file_editor import StrReplaceEditorTool
-
-            tool = StrReplaceEditorTool()
             kwargs: dict = {}
             if file_text is not None:
                 kwargs["file_text"] = file_text
@@ -184,7 +183,7 @@ class WeebotMCPServer:
                 kwargs["new_str"] = new_str
             if insert_line is not None:
                 kwargs["insert_line"] = insert_line
-            result = await tool.execute(command=command, path=path, **kwargs)
+            result = await _editor.execute(command=command, path=path, **kwargs)
             activity.push("mcp", "tool", f"file_editor: {command} {path[:40]}")
             if result.is_error:
                 raise ValueError(result.error)
