@@ -126,6 +126,17 @@ class SandboxedExecutor:
             ExecutionResult with stdout, stderr, returncode, elapsed_ms, and
             boolean flags timed_out / memory_killed.
         """
+        # Guard: asyncio.wait_for raises ValueError (not TimeoutError) for
+        # timeout <= 0 in CPython 3.11+.  Return a clean error result so the
+        # caller gets predictable behaviour and no zombie subprocess is created.
+        if timeout <= 0:
+            return ExecutionResult(
+                stdout="",
+                stderr=f"Invalid timeout {timeout!r}: must be > 0 seconds.",
+                returncode=-1,
+                elapsed_ms=0.0,
+            )
+
         t_start = time.monotonic()
 
         proc = await asyncio.create_subprocess_exec(

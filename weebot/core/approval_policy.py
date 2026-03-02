@@ -1,9 +1,12 @@
 """Granular command execution approval policy (ported from OpenClaw)."""
 from __future__ import annotations
+import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 class ApprovalMode(Enum):
@@ -58,14 +61,32 @@ class ExecApprovalPolicy:
         # User rules first, then built-in defaults
         self._rules = (rules or []) + _DEFAULT_RULES
 
+        # Pre-compile regex patterns at init time so evaluate() never raises
+        # re.error at runtime.  Invalid patterns are logged and silently skipped
+        # (fail-open: the bad rule is ignored, all other rules still apply).
+        self._compiled: Dict[int, re.Pattern] = {}
+        for i, rule in enumerate(self._rules):
+            if rule.is_regex:
+                try:
+                    self._compiled[i] = re.compile(rule.pattern, re.IGNORECASE)
+                except re.error as exc:
+                    _log.error(
+                        "ExecApprovalPolicy: invalid regex pattern %r "
+                        "(rule index %d) will be SKIPPED — %s",
+                        rule.pattern, i, exc,
+                    )
+
     def evaluate(self, command: str) -> ApprovalResult:
         cmd_lower = command.lower()
 
         # Find all matching rules, pick the most specific (longest pattern match)
         matches: List[CommandRule] = []
-        for rule in self._rules:
+        for i, rule in enumerate(self._rules):
             if rule.is_regex:
-                if re.search(rule.pattern, command, re.IGNORECASE):
+                compiled = self._compiled.get(i)
+                if compiled is None:
+                    continue  # invalid pattern at init time — skip safely
+                if compiled.search(command):
                     matches.append(rule)
             else:
                 if rule.pattern.lower() in cmd_lower:

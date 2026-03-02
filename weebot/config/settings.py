@@ -56,6 +56,25 @@ class WeebotSettings(BaseSettings):
             raise ValueError("daily_ai_budget must be > 0")
         return v
 
+    @field_validator("bash_timeout", "python_timeout")
+    @classmethod
+    def validate_timeout(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError(
+                f"Timeout must be > 0 seconds (got {v}). "
+                "Set BASH_TIMEOUT and PYTHON_TIMEOUT to a positive integer."
+            )
+        return v
+
+    @field_validator("sandbox_max_output_bytes")
+    @classmethod
+    def validate_max_output(cls, v: int) -> int:
+        if v < 1024:
+            raise ValueError(
+                f"sandbox_max_output_bytes must be >= 1024 bytes (got {v})."
+            )
+        return v
+
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""
         keys = [self.kimi_api_key, self.deepseek_api_key,

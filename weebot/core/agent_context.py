@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 from weebot.activity_stream import ActivityStream
 from weebot.state_manager import StateManager
@@ -47,10 +50,18 @@ class EventBroker:
         )
         self._event_history.append(event)
 
-        # Notify all subscribers for this event type
-        if event_type in self._subscriptions:
-            for queue in self._subscriptions[event_type]:
-                await queue.put(event)
+        # Notify all subscribers for this event type.
+        # Snapshot the list first: a concurrent cancellation can call remove()
+        # at any await point, causing "list changed size during iteration".
+        queues = list(self._subscriptions.get(event_type, []))
+        for queue in queues:
+            try:
+                await asyncio.wait_for(queue.put(event), timeout=5.0)
+            except (asyncio.TimeoutError, asyncio.QueueFull):
+                _log.warning(
+                    "EventBroker: dropped %r event — subscriber queue full/slow",
+                    event_type,
+                )
 
     async def subscribe(
         self,
@@ -66,7 +77,9 @@ class EventBroker:
         Yields:
             ContextEvent matching the subscription criteria
         """
-        queue: asyncio.Queue[ContextEvent] = asyncio.Queue()
+        # Bounded queue: if the consumer falls 100 events behind, publish()
+        # will time out rather than accumulating events indefinitely.
+        queue: asyncio.Queue[ContextEvent] = asyncio.Queue(maxsize=100)
 
         # Register this queue
         if event_type not in self._subscriptions:
@@ -79,9 +92,14 @@ class EventBroker:
                 if agent_filter is None or event.agent_id == agent_filter:
                     yield event
         finally:
-            # Cleanup on exit
+            # Cleanup on exit. Wrap in try/except: a concurrent cancellation
+            # racing with another finally can remove the queue first, making
+            # this remove() raise ValueError.
             if event_type in self._subscriptions:
-                self._subscriptions[event_type].remove(queue)
+                try:
+                    self._subscriptions[event_type].remove(queue)
+                except ValueError:
+                    pass  # Already removed — harmless
 
     def get_event_history(self, event_type: Optional[str] = None) -> List[ContextEvent]:
         """Get all published events, optionally filtered by type."""

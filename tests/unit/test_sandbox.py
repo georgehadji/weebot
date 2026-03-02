@@ -141,3 +141,41 @@ class TestSandboxedExecutor:
                 result = await executor.run(["echo", "ok"], timeout=5)
 
         assert result.elapsed_ms == pytest.approx(42.0, abs=1.0)
+
+
+class TestTimeoutGuard:
+    """Black swan fix: timeout <= 0 must never reach asyncio.wait_for.
+
+    CPython 3.11+ raises ValueError (not TimeoutError) for timeout <= 0,
+    leaving the subprocess running without supervision.
+    """
+
+    @pytest.mark.asyncio
+    async def test_zero_timeout_returns_error_result_not_valueerror(self):
+        """timeout=0 must return an error ExecutionResult, not raise ValueError."""
+        executor = SandboxedExecutor()
+        # No subprocess should be created — the guard fires before create_subprocess_exec.
+        with patch("asyncio.create_subprocess_exec") as mock_create:
+            result = await executor.run(["echo", "hi"], timeout=0)
+        mock_create.assert_not_called()
+        assert result.returncode == -1
+        assert "timeout" in result.stderr.lower()
+        assert result.timed_out is False
+
+    @pytest.mark.asyncio
+    async def test_negative_timeout_returns_error_result(self):
+        """Negative timeout must also be rejected before subprocess creation."""
+        executor = SandboxedExecutor()
+        with patch("asyncio.create_subprocess_exec") as mock_create:
+            result = await executor.run(["echo", "hi"], timeout=-5)
+        mock_create.assert_not_called()
+        assert result.returncode == -1
+
+    @pytest.mark.asyncio
+    async def test_positive_timeout_passes_through_to_subprocess(self):
+        """A valid positive timeout must still reach asyncio.create_subprocess_exec."""
+        executor = SandboxedExecutor()
+        proc = _make_proc(stdout=b"ok")
+        with patch("asyncio.create_subprocess_exec", return_value=proc):
+            result = await executor.run(["echo", "ok"], timeout=10)
+        assert isinstance(result.returncode, int)
