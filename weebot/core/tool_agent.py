@@ -10,6 +10,7 @@ from weebot.tools.base import ToolCollection, ToolResult
 from weebot.domain.models import (
     AgentState, Memory, Message, Role, ToolCallSpec,
 )
+from weebot.utils.cost_ledger import CostLedger
 
 SYSTEM_PROMPT = """You are weebot, an autonomous AI agent for Windows 11.
 You have access to tools to help complete tasks. Use them when needed.
@@ -47,6 +48,8 @@ class ToolCallWeebotAgent:
         self.max_steps = max_steps
         self.memory = Memory()
         self.state = AgentState.IDLE
+        self._ledger = CostLedger()
+        self._step_count = 0
 
         if system_prompt:
             self.memory.add(Message.system(system_prompt))
@@ -65,7 +68,18 @@ class ToolCallWeebotAgent:
             kwargs["tools"] = tool_params
             kwargs["tool_choice"] = "auto"
 
+        self._step_count += 1
         response = await self._client.chat.completions.create(**kwargs)
+
+        # Capture exact token counts from the API response and display EUR cost.
+        if getattr(response, "usage", None) is not None:
+            cost = self._ledger.record(
+                step=f"step-{self._step_count}",
+                usage=response.usage,
+                model=self.model,
+            )
+            self._ledger.print_step(cost)
+
         msg = response.choices[0].message
 
         tool_calls: list[ToolCallSpec] = []
@@ -111,8 +125,15 @@ class ToolCallWeebotAgent:
             has_tool_calls = await self.think()
             if not has_tool_calls:
                 self.state = AgentState.FINISHED
+                self._ledger.print_report()
                 return self.memory.messages[-1].content or ""
             await self.act()
 
         self.state = AgentState.FINISHED
+        self._ledger.print_report()
         return "Max steps reached without a final answer."
+
+    @property
+    def ledger(self) -> CostLedger:
+        """Access the cost ledger after a run (e.g. to read total_cost_eur)."""
+        return self._ledger

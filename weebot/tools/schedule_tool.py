@@ -28,7 +28,7 @@ class ScheduleTool(BaseTool):
     description: str = (
         "Schedule jobs and manage automated task execution. "
         "Supports cron expressions, intervals, and one-time schedules. "
-        "Actions: create_job, list_jobs, get_job, delete_job, pause_job, resume_job, start_scheduler, stop_scheduler."
+        "See the 'action' parameter for available operations."
     )
     parameters: dict = {
         "type": "object",

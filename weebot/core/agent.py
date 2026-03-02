@@ -46,18 +46,11 @@ class RecursiveWeebotAgent:
     
     def _create_agent(self):
         """Create prompt template for the OEAR agent."""
-        system_prompt = """You are weebot, an autonomous AI agent for Windows 11.
-
-        You have access to:
-        1. powershell_executor: For local Windows operations, file management, system diagnostics
-        2. browser_navigator: For web-based tasks and browser automation
-
-        Follow the OEAR protocol:
-        - Observe: Analyze the current state and task
-        - Evaluate: Use heuristic_router to decide tool priority
-        - Act: Execute the chosen action
-        - Refine: If errors occur, analyze and retry with modifications
-        """
+        system_prompt = (
+            "You are weebot, an autonomous AI agent for Windows 11. "
+            "Use powershell_executor for local operations and browser_navigator for web tasks. "
+            "Follow OEAR: Observe, Evaluate, Act, Refine (retry with modifications on error)."
+        )
         return ChatPromptTemplate.from_messages([
             SystemMessage(content=system_prompt),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
