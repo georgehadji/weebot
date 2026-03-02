@@ -72,5 +72,8 @@ uuid-utils>=0.0.0
 # MCP Server
 mcp>=1.5
 
+# Video ingestion
+youtube-transcript-api>=0.6.0
+
 # Security
 cryptography>=41.0.0

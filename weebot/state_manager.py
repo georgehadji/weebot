@@ -174,6 +174,21 @@ class StateManager:
                 )
             """)
 
+            # Video ingestion — source tracking
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS video_sources (
+                    source_id   TEXT PRIMARY KEY,
+                    project_id  TEXT NOT NULL,
+                    url         TEXT NOT NULL,
+                    title       TEXT DEFAULT '',
+                    language    TEXT DEFAULT 'en',
+                    chunk_count INTEGER DEFAULT 0,
+                    status      TEXT DEFAULT 'done',
+                    error_msg   TEXT DEFAULT '',
+                    ingested_at TEXT NOT NULL
+                )
+            """)
+
             conn.commit()
     
     def create_project(self, project_id: str, description: str) -> ProjectState:
