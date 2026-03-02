@@ -307,20 +307,43 @@ class ResumableTask:
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit task context."""
-        if exc_type is None:
-            # Success - mark as completed
-            if self.task_name not in self.state.completed_tasks:
-                self.state.completed_tasks.append(self.task_name)
-            self.state.current_task = None
+        """Exit task context.
+
+        Uses try/finally to guarantee end_sub_session is always called, and
+        isolates save_state() failures so they never mask the original exception.
+        """
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+
+        status = "completed" if exc_type is None else "failed"
+        try:
+            if exc_type is None:
+                # Success — mark task completed
+                if self.task_name not in self.state.completed_tasks:
+                    self.state.completed_tasks.append(self.task_name)
+                self.state.current_task = None
+            else:
+                # Failure — record error, do not propagate save exceptions
+                self.state.error_log.append(str(exc_val))
+                self.state.status = ProjectStatus.FAILED
             self.sm.save_state(self.state)
-            self.sm.end_sub_session(self.project_id, self.task_name, status="completed")
-        else:
-            # Failure - log error
-            self.state.error_log.append(str(exc_val))
-            self.state.status = ProjectStatus.FAILED
-            self.sm.save_state(self.state)
-            self.sm.end_sub_session(self.project_id, self.task_name, status="failed")
+        except Exception as save_err:
+            # save_state() failed: log but do NOT re-raise.
+            # Re-raising here would replace the original exc_val with save_err,
+            # causing permanent RUNNING status stuck-state on restart.
+            _log.critical(
+                "ResumableTask.__aexit__: save_state failed for project=%s task=%s "
+                "original_exc=%r save_err=%r — state may be inconsistent",
+                self.project_id, self.task_name, exc_val, save_err,
+            )
+        finally:
+            # Always close the sub-session, even if save_state raised.
+            try:
+                self.sm.end_sub_session(self.project_id, self.task_name, status=status)
+            except Exception as sub_err:
+                _log.warning(
+                    "ResumableTask.__aexit__: end_sub_session failed: %r", sub_err
+                )
     
     async def checkpoint(self, description: str, input_prompt: str) -> str:
         """Create checkpoint and wait for user input"""

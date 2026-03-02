@@ -1,0 +1,55 @@
+{
+  "_instructions": [
+    "1. Copy the 'mcpServers' section (lines below) into your claude_desktop_config.json.",
+    "2. Replace the 'args' path with the absolute path to run_mcp.py on your machine.",
+    "3. Fill in at least one API key in 'env'.",
+    "4. Restart Claude Desktop.",
+    "5. Ask Claude: 'ping weebot' — you should get {\"status\": \"ok\", ...}"
+  ],
+  "_config_file_locations": {
+    "Windows":  "%APPDATA%\\Claude\\claude_desktop_config.json",
+    "macOS":    "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "Linux":    "~/.config/Claude/claude_desktop_config.json"
+  },
+  "_transports": {
+    "stdio": "Use the 'weebot' entry below — recommended for Claude Desktop.",
+    "sse":   "Use the 'weebot-sse' entry if you need HTTP/SSE (Claude IDE, remote clients)."
+  },
+
+  "mcpServers": {
+
+    "weebot": {
+      "_comment": "stdio transport — for Claude Desktop (recommended)",
+      "command": "python",
+      "args": [
+        "E:\\path\\to\\weebot\\run_mcp.py"
+      ],
+      "env": {
+        "OPENAI_API_KEY":             "sk-...",
+        "ANTHROPIC_API_KEY":          "sk-ant-...",
+        "KIMI_API_KEY":               "",
+        "DEEPSEEK_API_KEY":           "",
+        "BASH_TIMEOUT":               "30",
+        "PYTHON_TIMEOUT":             "30",
+        "SANDBOX_MAX_OUTPUT_BYTES":   "65536",
+        "SANDBOX_ALLOW_NETWORK":      "false",
+        "DAILY_AI_BUDGET":            "10.0"
+      }
+    },
+
+    "weebot-sse": {
+      "_comment": "SSE transport — for Claude IDE / web clients (optional)",
+      "command": "python",
+      "args": [
+        "E:\\path\\to\\weebot\\run_mcp.py",
+        "--transport", "sse",
+        "--host",      "127.0.0.1",
+        "--port",      "8765"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+
+  }
+}

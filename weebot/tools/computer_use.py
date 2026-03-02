@@ -102,34 +102,42 @@ class ComputerUseTool(BaseTool):
         modifiers: Optional[list[str]] = None,
         **_,
     ) -> ToolResult:
-        """Execute computer control action."""
+        """Execute computer control action.
+
+        All blocking pyautogui calls are offloaded to a thread via
+        asyncio.to_thread() so the event loop is never stalled. The 'type'
+        action also applies a dynamic timeout (2× expected typing time, min 10s)
+        to prevent runaway execution; fallback is a plain to_thread without timeout.
+        """
         try:
             modifiers = modifiers or []
 
             if action == "move_mouse":
                 if x is None or y is None:
                     return ToolResult(output="", error="x and y required for move_mouse")
-                pyautogui.moveTo(x, y, duration=0.25)
+                await asyncio.to_thread(pyautogui.moveTo, x, y, duration=0.25)
                 return ToolResult(output=f"Moved mouse to ({x}, {y})")
 
             elif action == "click":
                 if x is None or y is None:
                     return ToolResult(output="", error="x and y required for click")
-                pyautogui.click(x, y, button=button)
+                await asyncio.to_thread(pyautogui.click, x, y, button=button)
                 return ToolResult(output=f"Clicked at ({x}, {y}) with {button} button")
 
             elif action == "double_click":
                 if x is None or y is None:
                     return ToolResult(output="", error="x and y required for double_click")
-                pyautogui.doubleClick(x, y)
+                await asyncio.to_thread(pyautogui.doubleClick, x, y)
                 return ToolResult(output=f"Double-clicked at ({x}, {y})")
 
             elif action == "drag":
                 if x is None or y is None:
                     return ToolResult(output="", error="x and y required for drag")
-                # Get current position
                 start_x, start_y = pyautogui.position()
-                pyautogui.drag(x - start_x, y - start_y, duration=duration, button=button)
+                await asyncio.to_thread(
+                    pyautogui.drag, x - start_x, y - start_y,
+                    duration=duration, button=button
+                )
                 return ToolResult(
                     output=f"Dragged from ({start_x}, {start_y}) to ({x}, {y})"
                 )
@@ -137,7 +145,22 @@ class ComputerUseTool(BaseTool):
             elif action == "type":
                 if text is None:
                     return ToolResult(output="", error="text required for type")
-                pyautogui.write(text, interval=interval)
+                # Primary: non-blocking with dynamic timeout proportional to text length.
+                # Timeout = 2× expected typing time, at least 10 seconds.
+                # Fallback: if wait_for raises CancelledError (thread not cancellable),
+                # the thread completes in background; we surface a timeout error to caller.
+                timeout_secs = max(10.0, len(text) * interval * 2)
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(pyautogui.write, text, interval=interval),
+                        timeout=timeout_secs,
+                    )
+                except asyncio.TimeoutError:
+                    return ToolResult(
+                        output="",
+                        error=f"type action timed out after {timeout_secs:.0f}s "
+                              f"(typed {len(text)} chars at {interval}s interval)",
+                    )
                 return ToolResult(output=f"Typed: {text[:50]}...")
 
             elif action == "press_key":
@@ -146,12 +169,10 @@ class ComputerUseTool(BaseTool):
                 key_lower = key.lower()
                 if key_lower not in self.SAFE_KEYS:
                     return ToolResult(output="", error=f"Unsafe key: {key}")
-
-                # Handle modifiers
                 if modifiers:
-                    self._press_with_modifiers(key_lower, modifiers)
+                    await asyncio.to_thread(self._press_with_modifiers, key_lower, modifiers)
                 else:
-                    pyautogui.press(key_lower)
+                    await asyncio.to_thread(pyautogui.press, key_lower)
                 return ToolResult(output=f"Pressed key: {key}")
 
             elif action == "key_down":
@@ -160,7 +181,7 @@ class ComputerUseTool(BaseTool):
                 key_lower = key.lower()
                 if key_lower not in self.SAFE_KEYS:
                     return ToolResult(output="", error=f"Unsafe key: {key}")
-                pyautogui.keyDown(key_lower)
+                await asyncio.to_thread(pyautogui.keyDown, key_lower)
                 return ToolResult(output=f"Key down: {key}")
 
             elif action == "key_up":
@@ -169,7 +190,7 @@ class ComputerUseTool(BaseTool):
                 key_lower = key.lower()
                 if key_lower not in self.SAFE_KEYS:
                     return ToolResult(output="", error=f"Unsafe key: {key}")
-                pyautogui.keyUp(key_lower)
+                await asyncio.to_thread(pyautogui.keyUp, key_lower)
                 return ToolResult(output=f"Key up: {key}")
 
             elif action == "get_mouse_position":

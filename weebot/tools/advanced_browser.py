@@ -2,17 +2,46 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import base64
+import logging
 from io import BytesIO
 from typing import Optional
 
 from weebot.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 # Module-level browser state (persists across tool calls)
 _browser = None
 _page = None
 _context = None
 _playwright_instance = None
+
+
+def _atexit_cleanup_playwright() -> None:
+    """Fallback cleanup: terminate Playwright subprocess on process exit.
+
+    This handles cases where _close_browser() was never called (crashes,
+    SIGKILL, unhandled exceptions). Running async code in atexit requires
+    a fresh event loop since the main loop is likely closed at this point.
+    """
+    global _playwright_instance
+    if _playwright_instance is None:
+        return
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_playwright_instance.stop())
+            logger.debug("atexit: Playwright subprocess stopped")
+        finally:
+            loop.close()
+    except Exception as exc:
+        logger.warning("atexit: failed to stop Playwright subprocess: %r", exc)
+    _playwright_instance = None
+
+
+atexit.register(_atexit_cleanup_playwright)
 
 
 class AdvancedBrowserTool(BaseTool):
@@ -253,18 +282,28 @@ class AdvancedBrowserTool(BaseTool):
         _page = p
 
     async def _close_browser(self) -> None:
-        """Close browser."""
+        """Close browser and stop the Playwright subprocess.
+
+        Conservative fix: capture-and-zero all globals BEFORE any await so
+        that concurrent _close_browser() calls or a stop() exception can never
+        leave a non-None global that the atexit handler would double-stop.
+        Pattern: local_ref = global; global = None; await local_ref.close()
+        """
         global _browser, _page, _context, _playwright_instance
 
-        if _page:
-            await _page.close()
-            _page = None
-        if _context:
-            await _context.close()
-            _context = None
-        if _browser:
-            await _browser.close()
-            _browser = None
+        # Zero-out-first: snapshot locals, clear globals atomically before
+        # any await so no concurrent coroutine or atexit handler races us.
+        page, ctx, browser, pw = _page, _context, _browser, _playwright_instance
+        _page = _context = _browser = _playwright_instance = None
+
+        if page:
+            await page.close()
+        if ctx:
+            await ctx.close()
+        if browser:
+            await browser.close()
+        if pw:
+            await pw.stop()
 
 
 class WebScraperTool(BaseTool):

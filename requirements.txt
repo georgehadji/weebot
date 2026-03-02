@@ -69,5 +69,8 @@ uuid-utils>=0.0.0
 # Optional: For Obsidian integration
 # watchdog>=3.0.0
 
+# MCP Server
+mcp>=1.5
+
 # Security
 cryptography>=41.0.0
