@@ -114,6 +114,26 @@ class Project:
 
 
 # ---------------------------------------------------------------------------
+# Product management model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Requirement:
+    """A single product requirement / user story tracked in the backlog."""
+
+    req_id: str
+    project_id: str
+    title: str
+    description: str = ""
+    category: str = "feature"       # feature | bug | tech-debt | epic
+    priority: int = 3               # 1 (highest) – 5 (lowest)
+    status: str = "draft"           # draft | approved | in-progress | done | rejected
+    tags: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+
+
+# ---------------------------------------------------------------------------
 # OpenManus-style Message / Memory / AgentState (Task 2)
 # ---------------------------------------------------------------------------
 

@@ -87,11 +87,16 @@ class TestWeebotMCPServerConstruction:
         assert {"bash", "python_execute", "web_search", "file_editor"} <= names
 
     @pytest.mark.asyncio
-    async def test_exposes_three_resources(self) -> None:
+    async def test_exposes_four_resources(self) -> None:
         server = WeebotMCPServer()
         resources = await server.mcp.list_resources()
         uris = {str(r.uri) for r in resources}
-        assert uris == {"weebot://activity", "weebot://state", "weebot://schedule"}
+        assert uris == {
+            "weebot://activity",
+            "weebot://state",
+            "weebot://schedule",
+            "weebot://products",
+        }
 
 
 # ─── MCP tool call tests ──────────────────────────────────────────────────────

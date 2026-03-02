@@ -75,6 +75,55 @@ def build_state_json(state_manager: Optional[Any] = None) -> str:
         )
 
 
+def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
+    """Return all requirements grouped by category as a JSON string.
+
+    Args:
+        product_db_path: Path to the SQLite database that holds the
+                         ``requirements`` table.  When omitted a static
+                         stub is returned.
+    """
+    if product_db_path is None:
+        return json.dumps(
+            {
+                "requirements": [],
+                "note": "Pass product_db_path= to WeebotMCPServer for live data.",
+            },
+            indent=2,
+        )
+
+    try:
+        import sqlite3
+        import datetime as _dt
+
+        with sqlite3.connect(product_db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """SELECT req_id, project_id, title, category, priority, status, tags
+                   FROM requirements
+                   ORDER BY project_id, priority ASC"""
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+
+        # Group by project_id then category
+        projects: dict[str, Any] = {}
+        for req in rows:
+            pid = req["project_id"]
+            cat = req["category"]
+            projects.setdefault(pid, {}).setdefault(cat, []).append(req)
+
+        return json.dumps(
+            {
+                "total": len(rows),
+                "projects": projects,
+                "generated_at": _dt.datetime.now().isoformat(),
+            },
+            indent=2,
+        )
+    except Exception as exc:
+        return json.dumps({"requirements": [], "error": str(exc)}, indent=2)
+
+
 def build_schedule_json(scheduler: Optional[Any] = None) -> str:
     """Return the current schedule list as a JSON string.
 

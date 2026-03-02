@@ -19,6 +19,7 @@ except ImportError as _mcp_err:
 from weebot.activity_stream import ActivityStream
 from weebot.mcp.resources import (
     build_activity_json,
+    build_roadmap_json,
     build_schedule_json,
     build_state_json,
 )
@@ -29,7 +30,8 @@ _SERVER_INSTRUCTIONS = (
     "web_search (DuckDuckGo + Bing), file_editor (view/create/edit files), "
     "ping (health check — returns server status and UTC timestamp). "
     "Available resources: weebot://activity (recent events), "
-    "weebot://state (agent state snapshot), weebot://schedule (scheduled jobs)."
+    "weebot://state (agent state snapshot), weebot://schedule (scheduled jobs), "
+    "weebot://products (product requirements roadmap)."
 )
 
 
@@ -54,12 +56,14 @@ class WeebotMCPServer:
         activity_stream: Optional[ActivityStream] = None,
         state_manager: Optional[object] = None,
         scheduler: Optional[object] = None,
+        product_db_path: Optional[str] = None,
         host: str = "127.0.0.1",
         port: int = 8765,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
         self._scheduler = scheduler
+        self._product_db_path = product_db_path
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
@@ -214,6 +218,7 @@ class WeebotMCPServer:
         activity = self._activity
         state_manager = self._state_manager
         scheduler = self._scheduler
+        product_db_path = self._product_db_path
 
         @mcp.resource(
             "weebot://activity",
@@ -238,3 +243,11 @@ class WeebotMCPServer:
         )
         def schedule_resource() -> str:
             return build_schedule_json(scheduler)
+
+        @mcp.resource(
+            "weebot://products",
+            mime_type="application/json",
+            description="Product requirements roadmap grouped by project and category.",
+        )
+        def products_resource() -> str:
+            return build_roadmap_json(product_db_path)

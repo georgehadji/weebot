@@ -132,7 +132,7 @@ class StateManager:
                     updated_at TIMESTAMP
                 )
             """)
-            
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     checkpoint_id TEXT PRIMARY KEY,
@@ -144,6 +144,36 @@ class StateManager:
                     FOREIGN KEY (project_id) REFERENCES projects(project_id)
                 )
             """)
+
+            # Product management — requirements backlog
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS requirements (
+                    req_id     TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    title      TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    category   TEXT DEFAULT 'feature',
+                    priority   INTEGER DEFAULT 3,
+                    status     TEXT DEFAULT 'draft',
+                    tags       TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+
+            # Knowledge management — FTS5 full-text search notes
+            conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS kb_notes USING fts5(
+                    note_id    UNINDEXED,
+                    project_id UNINDEXED,
+                    created_at UNINDEXED,
+                    source     UNINDEXED,
+                    title,
+                    body,
+                    tags
+                )
+            """)
+
             conn.commit()
     
     def create_project(self, project_id: str, description: str) -> ProjectState:
