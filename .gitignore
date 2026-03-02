@@ -48,3 +48,10 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Claude Code
+.claude/
+
+# Word / Office temp & source files
+*.docx
+~$*.docx
