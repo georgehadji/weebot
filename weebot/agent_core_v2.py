@@ -159,3 +159,55 @@ class WeebotAgent:
             ),
             "cost_stats": self.router.cost_tracker.get_stats()
         }
+
+    async def spawn_child_agent(
+        self,
+        role: str,
+        description: Optional[str] = None,
+        context: Optional[Any] = None
+    ) -> "WeebotAgent":
+        """Spawn a specialized child agent in a multi-agent workflow.
+
+        Uses AgentFactory to create a new agent with role-based tool access.
+        Requires multi-agent context support (see AgentContext).
+
+        Args:
+            role: Role/specialization of child agent (researcher, analyst, etc.)
+            description: Optional description of the agent's purpose
+            context: Optional AgentContext for sharing data with sibling agents
+
+        Returns:
+            Spawned WeebotAgent instance with role-based configuration
+
+        Raises:
+            ImportError: If multi-agent support not available
+        """
+        try:
+            from weebot.core.agent_factory import AgentFactory
+            from weebot.core.agent_context import AgentContext
+        except ImportError as e:
+            raise ImportError(
+                "Multi-agent support requires agent_factory and agent_context modules"
+            ) from e
+
+        # Create root context if not provided
+        if context is None:
+            context = AgentContext.create_orchestrator(
+                activity_stream=None,
+                state_manager=self.state_manager
+            )
+
+        # Use factory to spawn child
+        factory = AgentFactory()
+        child_agent = await factory.spawn_agent(
+            parent_agent_id=self.config.project_id,
+            parent_context=context,
+            role=role,
+            description=description
+        )
+
+        logger.info(
+            f"Spawned child agent with role='{role}' from parent='{self.config.project_id}'"
+        )
+
+        return child_agent

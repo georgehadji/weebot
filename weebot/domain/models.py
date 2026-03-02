@@ -219,3 +219,21 @@ class Memory:
     def clear(self) -> None:
         system = [m for m in self.messages if m.role == Role.SYSTEM]
         self.messages = system
+
+
+# ---------------------------------------------------------------------------
+# Multi-Agent coordination (Phase 7)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AgentRelationship:
+    """Track parent-child relationships in multi-agent workflows."""
+
+    orchestrator_id: str  # Top-level agent that initiated the workflow
+    parent_agent_id: str  # Direct parent (None for root orchestrator)
+    child_agent_id: str   # Child agent spawned
+    role: str             # Child's role (researcher, analyst, etc.)
+    spawn_time: datetime = field(default_factory=datetime.now)
+    tools_assigned: list[str] = field(default_factory=list)
+    nesting_level: int = 1  # 1 (orchestrator) | 2 | 3
