@@ -83,10 +83,29 @@ class AgentFactory:
                 f"Agent {child_context.agent_id} (role={role}) assigned tools: {allowed_tools}"
             )
 
-        # Validate tools exist (basic check)
-        invalid_tools = [t for t in allowed_tools if not t]
-        if invalid_tools:
-            raise ValueError(f"Invalid tools: {invalid_tools}")
+        # FIX #3a: Rigorous tool name validation.
+        # Old check only caught "" and None — typos like "bash_tol" slipped through,
+        # causing confusing "Unknown tool" errors at runtime instead of spawn time.
+        if tools_subset is not None:
+            # Explicit caller-provided list: validate against known class map.
+            known_names = set(self.tool_registry._build_tool_class_map().keys())
+            empty_tools = [t for t in allowed_tools if not t or not str(t).strip()]
+            unknown_tools = [t for t in allowed_tools if t and t not in known_names]
+            if empty_tools:
+                raise ValueError(f"Empty/None tool names are not allowed: {empty_tools}")
+            if unknown_tools:
+                raise ValueError(
+                    f"Unknown tool names in tools_subset: {unknown_tools}. "
+                    f"Known tools: {sorted(known_names)}"
+                )
+        else:
+            # Role-based tools come from the registry — it is the authoritative source.
+            # Only guard against None/empty which would crash downstream.
+            invalid_tools = [t for t in allowed_tools if not t]
+            if invalid_tools:
+                raise ValueError(
+                    f"Registry returned invalid (empty) tool names for role '{role}': {invalid_tools}"
+                )
 
         # Create child config (inherited + overridden)
         # Note: In current codebase, we don't have parent agent reference,
@@ -169,7 +188,19 @@ class AgentFactory:
                 ]
             )
         """
-        spawned = {}
+        # FIX #3b: Detect duplicate roles before spawning any agents.
+        # Old code: `spawned[role] = agent` silently overwrote the first agent when
+        # the same role appeared twice — the first agent was orphaned with no cleanup.
+        roles_seen = [spec["role"] for spec in agent_specs]
+        duplicates = [r for r in roles_seen if roles_seen.count(r) > 1]
+        if duplicates:
+            raise ValueError(
+                f"Duplicate roles in agent_specs: {sorted(set(duplicates))}. "
+                "Each role must appear at most once. Use distinct role names or "
+                "set different descriptions to differentiate agents with similar tasks."
+            )
+
+        spawned: Dict[str, WeebotAgent] = {}
 
         for spec in agent_specs:
             role = spec["role"]

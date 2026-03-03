@@ -126,11 +126,11 @@ class TestAgentFactory:
         # Researcher should have web_search
         assert await factory.validate_tool_access(researcher, "web_search") is True
 
-        # Analyst should have python_tool
-        assert await factory.validate_tool_access(analyst, "python_tool") is True
+        # Analyst should have python_execute (tool name updated from legacy "python_tool")
+        assert await factory.validate_tool_access(analyst, "python_execute") is True
 
-        # Researcher should NOT have python_tool
-        assert await factory.validate_tool_access(researcher, "python_tool") is False
+        # Researcher should NOT have python_execute
+        assert await factory.validate_tool_access(researcher, "python_execute") is False
 
         # Analyst should NOT have web_search
         assert await factory.validate_tool_access(analyst, "web_search") is False
