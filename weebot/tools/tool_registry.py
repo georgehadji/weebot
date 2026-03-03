@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from weebot.tools.base import BaseTool, ToolCollection
 
 logger = logging.getLogger(__name__)
 
@@ -13,63 +16,70 @@ class RoleBasedToolRegistry:
 
     Controls which tools each agent role can access, enabling fine-grained
     access control in multi-agent workflows.
+
+    Tool names MUST match the ``name`` attribute on the corresponding
+    ``BaseTool`` subclass (e.g. ``"bash"`` not ``"bash_tool"``).
     """
 
-    # Define roles and their authorized tools
+    # Define roles and their authorized tools.
+    # Names match BaseTool.name on each concrete tool class.
     DEFAULT_ROLE_MAPPINGS = {
         "researcher": [
             "web_search",
             "advanced_browser",
             "file_editor",
-            "knowledge_tool",
-            "video_ingest_tool",
-            "screen_tool"
+            "knowledge",
+            "video_ingest",
+            "screen_capture",
         ],
         "analyst": [
-            "python_tool",
+            "python_execute",
             "file_editor",
-            "knowledge_tool",
-            "bash_tool"
+            "knowledge",
+            "bash",
         ],
         "automation": [
-            "bash_tool",
+            "bash",
             "computer_use",
-            "screen_tool",
-            "schedule_tool",
+            "screen_capture",
+            "schedule",
             "file_editor",
-            "python_tool"
+            "python_execute",
         ],
         "documentation": [
             "file_editor",
-            "knowledge_tool",
+            "knowledge",
             "web_search",
-            "product_tool"
+            "product",
         ],
         "product_manager": [
-            "product_tool",
+            "product",
             "file_editor",
-            "knowledge_tool",
-            "bash_tool"
+            "knowledge",
+            "bash",
         ],
         "admin": [
-            # Admin has access to all tools
             "web_search",
             "advanced_browser",
             "file_editor",
-            "knowledge_tool",
-            "video_ingest_tool",
-            "python_tool",
-            "bash_tool",
+            "knowledge",
+            "video_ingest",
+            "python_execute",
+            "bash",
             "computer_use",
-            "screen_tool",
-            "schedule_tool",
-            "product_tool",
-            "powershell_tool",
-            "control",
-            "ocr"
+            "screen_capture",
+            "schedule",
+            "product",
+            "powershell",
+            "terminate",
+            "ask_human",
+            "ocr",
         ],
-        "custom": []  # Custom roles have no default tools
+        "custom": [],  # Custom roles have no default tools
     }
+
+    # Lazy singleton: BaseTool.name -> tool class.
+    _TOOL_CLASS_MAP: Optional[Dict[str, type]] = None
 
     def __init__(self, role_mappings: Optional[Dict[str, List[str]]] = None) -> None:
         """Initialize the registry.
@@ -187,3 +197,89 @@ class RoleBasedToolRegistry:
             }
             for role, tools in self.role_mappings.items()
         }
+
+    # ------------------------------------------------------------------
+    # Tool instantiation (Phase 2)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _build_tool_class_map(cls) -> Dict[str, type]:
+        """Lazy-build a mapping from ``BaseTool.name`` -> tool class.
+
+        Imports are deferred to avoid circular imports at module load time.
+        The map is cached as a class-level singleton.
+        """
+        if cls._TOOL_CLASS_MAP is not None:
+            return cls._TOOL_CLASS_MAP
+
+        from weebot.tools.bash_tool import BashTool
+        from weebot.tools.python_tool import PythonExecuteTool
+        from weebot.tools.web_search import WebSearchTool
+        from weebot.tools.file_editor import StrReplaceEditorTool
+        from weebot.tools.advanced_browser import AdvancedBrowserTool
+        from weebot.tools.computer_use import ComputerUseTool
+        from weebot.tools.screen_tool import ScreenCaptureBaseTool
+        from weebot.tools.schedule_tool import ScheduleTool
+        from weebot.tools.knowledge_tool import KnowledgeTool
+        from weebot.tools.product_tool import ProductTool
+        from weebot.tools.video_ingest_tool import VideoIngestTool
+        from weebot.tools.powershell_tool import PowerShellBaseTool
+        from weebot.tools.ocr import OCRTool
+        from weebot.tools.control import TerminateTool, AskHumanTool
+
+        cls._TOOL_CLASS_MAP = {
+            "bash": BashTool,
+            "python_execute": PythonExecuteTool,
+            "web_search": WebSearchTool,
+            "file_editor": StrReplaceEditorTool,
+            "advanced_browser": AdvancedBrowserTool,
+            "computer_use": ComputerUseTool,
+            "screen_capture": ScreenCaptureBaseTool,
+            "schedule": ScheduleTool,
+            "knowledge": KnowledgeTool,
+            "product": ProductTool,
+            "video_ingest": VideoIngestTool,
+            "powershell": PowerShellBaseTool,
+            "ocr": OCRTool,
+            "terminate": TerminateTool,
+            "ask_human": AskHumanTool,
+        }
+        return cls._TOOL_CLASS_MAP
+
+    def create_tool_collection(self, role: str) -> "ToolCollection":
+        """Create a :class:`ToolCollection` with instantiated tools for *role*.
+
+        Args:
+            role: Agent role name (must exist in the registry).
+
+        Returns:
+            ToolCollection populated with ``BaseTool`` instances.
+        """
+        from weebot.tools.base import ToolCollection
+
+        tool_names = self.get_tools_for_role(role)
+        return self.create_tool_collection_from_names(tool_names)
+
+    def create_tool_collection_from_names(
+        self, tool_names: List[str],
+    ) -> "ToolCollection":
+        """Create a :class:`ToolCollection` from an explicit list of tool names.
+
+        Args:
+            tool_names: List of ``BaseTool.name`` strings.
+
+        Returns:
+            ToolCollection with matching ``BaseTool`` instances.
+            Unknown names are logged and silently skipped.
+        """
+        from weebot.tools.base import ToolCollection
+
+        class_map = self._build_tool_class_map()
+        tools: list = []
+        for name in tool_names:
+            tool_cls = class_map.get(name)
+            if tool_cls is not None:
+                tools.append(tool_cls())
+            else:
+                logger.warning("Tool %r not found in class map, skipping", name)
+        return ToolCollection(*tools)

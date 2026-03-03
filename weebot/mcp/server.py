@@ -23,6 +23,7 @@ from weebot.mcp.resources import (
     build_schedule_json,
     build_state_json,
 )
+from weebot.utils.rate_limiter import RateLimitExceeded, check_rate_limit
 
 _SERVER_INSTRUCTIONS = (
     "weebot is an AI Agent Framework for Windows 11. "
@@ -113,7 +114,8 @@ class WeebotMCPServer:
             name="bash",
             description=(
                 "Execute a shell command via PowerShell (Windows) or WSL2 bash. "
-                "Dangerous commands are blocked; destructive commands require confirmation."
+                "Dangerous commands are blocked; destructive commands require confirmation. "
+                "Rate limited: 10 burst, 2/second sustained."
             ),
         )
         async def bash(
@@ -122,6 +124,11 @@ class WeebotMCPServer:
             working_dir: str | None = None,
             use_wsl: bool = False,
         ) -> str:
+            # Rate limit check
+            allowed, retry_after = check_rate_limit("bash")
+            if not allowed:
+                raise RateLimitExceeded("bash", retry_after)
+            
             result = await _bash.execute(
                 command=command, timeout=timeout, working_dir=working_dir, use_wsl=use_wsl
             )
@@ -134,10 +141,16 @@ class WeebotMCPServer:
             name="python_execute",
             description=(
                 "Execute Python code in a sandboxed subprocess. "
-                "Returns combined stdout and stderr. Dangerous code is blocked by policy."
+                "Returns combined stdout and stderr. Dangerous code is blocked by policy. "
+                "Rate limited: 5 burst, 1/second sustained."
             ),
         )
         async def python_execute(code: str, timeout: float = 30.0) -> str:
+            # Rate limit check
+            allowed, retry_after = check_rate_limit("python_execute")
+            if not allowed:
+                raise RateLimitExceeded("python_execute", retry_after)
+            
             result = await _python.execute(code=code, timeout=timeout)
             activity.push("mcp", "tool", f"python_execute: {code[:60]}")
             if result.is_error:
@@ -148,10 +161,16 @@ class WeebotMCPServer:
             name="web_search",
             description=(
                 "Search the web using DuckDuckGo (Bing fallback). "
-                "Returns titles, URLs, and snippets for the top results."
+                "Returns titles, URLs, and snippets for the top results. "
+                "Rate limited: 5 burst, 0.5/second sustained."
             ),
         )
         async def web_search(query: str, num_results: int = 5) -> str:
+            # Rate limit check
+            allowed, retry_after = check_rate_limit("web_search")
+            if not allowed:
+                raise RateLimitExceeded("web_search", retry_after)
+            
             result = await _search.execute(query=query, num_results=num_results)
             activity.push("mcp", "tool", f"web_search: {query[:60]}")
             if result.is_error:
@@ -163,7 +182,8 @@ class WeebotMCPServer:
             description=(
                 "View, create, or edit files on the local filesystem. "
                 "Commands: view (read file or list dir), create (write new file), "
-                "str_replace (find-and-replace), insert (add lines at position)."
+                "str_replace (find-and-replace), insert (add lines at position). "
+                "Rate limited: 20 burst, 5/second sustained."
             ),
         )
         async def file_editor(
@@ -174,6 +194,11 @@ class WeebotMCPServer:
             new_str: str | None = None,
             insert_line: int | None = None,
         ) -> str:
+            # Rate limit check
+            allowed, retry_after = check_rate_limit("file_editor")
+            if not allowed:
+                raise RateLimitExceeded("file_editor", retry_after)
+            
             kwargs: dict = {}
             if file_text is not None:
                 kwargs["file_text"] = file_text

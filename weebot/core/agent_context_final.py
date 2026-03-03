@@ -1,16 +1,13 @@
 """Agent context - PRODUCTION READY with concurrency safety and retry logic.
 
 FIXED ISSUES:
-- Issue #1: Race condition in shared_data (asyncio.Lock protection + timeouts)
+- Issue #1: Race condition in shared_data (asyncio.Lock protection)
 - Issue #2: EventBroker silent dropping (retry with exponential backoff)
-- Issue #3: StateManager blocking (verified async methods - no changes needed)
+- Issue #3: StateManager blocking (verified async methods in use)
 
-DEV/ADVERSARY ITERATIONS: 3 rounds
-- Round 1: Lock sharing, log safety, documentation
-- Round 2: Serialization safety, bounded history, lock timeouts
-- Round 3: Confirmed marginal gains < cost for remaining optimizations
-
-MONITORING: See get_metrics() for operational visibility
+DEV/ADVERSARY ITERATIONS: 2 rounds completed
+- Round 1: Fixed lock sharing, removed value from logs, documented blocking behavior
+- Round 2: Verified StateManager async usage, added timeout handling
 """
 
 from __future__ import annotations
@@ -20,7 +17,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -45,10 +42,8 @@ class EventBroker:
     """
     In-memory pub/sub with retry backoff for reliable event delivery.
     
-    FIXES:
-    - Retry failed deliveries with exponential backoff
-    - Bounded event history to prevent memory exhaustion
-    - Metrics for operational monitoring
+    FIX: Retry failed deliveries with exponential backoff instead of silent drop.
+    FIX: Bounded event history to prevent memory exhaustion.
     """
 
     MAX_HISTORY_SIZE: int = 1000  # Prevent unbounded growth
@@ -170,14 +165,8 @@ class AgentContext:
     """
     Shared context with concurrency safety for multi-agent workflows.
     
-    FIXES:
-    - asyncio.Lock protects shared_data mutations
-    - Lock shared between parent and all children
-    - Timeout handling prevents indefinite blocking
-    - Lock excluded from serialization (not picklable)
-    
-    NOTE: Lock contention possible - slow operations block all agents.
-    For high-contention scenarios, consider sharding by key prefix.
+    FIX: Uses asyncio.Lock to protect shared_data mutations.
+    NOTE: Lock is shared between parent and all children.
     """
 
     orchestrator_id: str
@@ -191,7 +180,7 @@ class AgentContext:
     state_manager: Optional[StateManager] = None
     
     # CONCURRENCY FIX: Shared lock for shared_data protection
-    # NOTE: asyncio.Lock is NOT serializable - excluded from pickle/compare
+    # NOTE: asyncio.Lock is NOT serializable - excluded from pickle
     _data_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -260,15 +249,13 @@ class AgentContext:
         Store a result with lock protection and timeout.
         
         Args:
-            key: Key to store under (supports nested like "a.b.c")
+            key: Key to store under
             value: Value to store
-            tags: Optional tags for organization
+            tags: Optional tags
             lock_timeout: Max seconds to wait for lock
             
         Returns:
             True if stored successfully, False if timeout
-            
-        MONITORING: Log warnings on timeout
         """
         try:
             async with asyncio.timeout(lock_timeout):
@@ -281,7 +268,7 @@ class AgentContext:
                         current = current[k]
                     current[keys[-1]] = value
         except asyncio.TimeoutError:
-            _log.error("AgentContext: LOCK TIMEOUT storing %s after %.1fs", key, lock_timeout)
+            _log.error("AgentContext: LOCK TIMEOUT storing %s", key)
             return False
 
         # Log outside lock (don't include value to avoid side effects)
@@ -301,13 +288,11 @@ class AgentContext:
         Retrieve a result with lock protection and timeout.
         
         Args:
-            key: Key to retrieve (supports nested like "a.b.c")
+            key: Key to retrieve
             lock_timeout: Max seconds to wait for lock
             
         Returns:
             Value if found, None if not found or timeout
-            
-        MONITORING: Log warnings on timeout
         """
         try:
             async with asyncio.timeout(lock_timeout):
@@ -320,7 +305,7 @@ class AgentContext:
                         current = current[k]
                     return current
         except asyncio.TimeoutError:
-            _log.error("AgentContext: LOCK TIMEOUT reading %s after %.1fs", key, lock_timeout)
+            _log.error("AgentContext: LOCK TIMEOUT reading %s", key)
             return None
 
     async def get_sibling_output(self, agent_id: str) -> Optional[Any]:
@@ -377,17 +362,10 @@ class AgentContext:
         return [f"[{e.kind}] {e.message}" for e in events]
     
     def get_metrics(self) -> Dict[str, Any]:
-        """
-        Get context metrics for monitoring.
-        
-        TRIGGERS:
-        - dropped_events increasing: Event delivery failing
-        - lock timeouts in logs: Contention detected
-        - shared_data_keys growing: Memory usage
-        """
+        """Get context metrics for monitoring."""
         return {
             "agent_id": self.agent_id,
             "nesting_level": self.nesting_level,
-            "shared_data_keys": len(self.shared_data),
-            "event_broker": self.event_broker.get_metrics()
+            "event_broker": self.event_broker.get_metrics(),
+            "shared_data_keys": len(self.shared_data)
         }

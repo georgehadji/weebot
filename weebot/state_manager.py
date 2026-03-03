@@ -35,9 +35,16 @@ ProjectState: Η πλήρης κατάσταση ενός project
     if state.status == ProjectStatus.RUNNING:
         # Resume from last completed task
         print(f"Resuming from task: {state.current_task}")
+
+SECURITY NOTE:
+--------------
+This module now uses JSON serialization instead of pickle for security.
+Pickle allows arbitrary code execution on deserialization, which is a
+CRITICAL security vulnerability if the database is compromised.
 """
+import asyncio
+import concurrent.futures
 import json
-import pickle  # noqa: S301 — existing serialisation; not introducing new usage
 import sqlite3
 import threading
 import uuid
@@ -46,7 +53,6 @@ from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from datetime import datetime
-import asyncio
 
 
 class ProjectStatus(Enum):
@@ -117,16 +123,86 @@ class ProjectState:
             self.sub_sessions = []
 
 
-class StateManager:
-    """SQLite-based persistent state management"""
+# =============================================================================
+# JSON Serialization for Security (replaces pickle)
+# =============================================================================
 
-    def __init__(self, db_path: str = "projects.db") -> None:
+class _StateJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for ProjectState and related dataclasses."""
+    
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return {"__type__": "datetime", "value": obj.isoformat()}
+        elif isinstance(obj, Enum):
+            return {"__type__": "enum", "class": type(obj).__name__, "value": obj.value}
+        elif isinstance(obj, (SubSession, Checkpoint, ProjectState)):
+            data = asdict(obj)
+            data["__type__"] = type(obj).__name__
+            return data
+        elif isinstance(obj, Path):
+            return {"__type__": "Path", "value": str(obj)}
+        return super().default(obj)
+
+
+def _state_json_decode(obj):
+    """Custom JSON decoder for ProjectState and related dataclasses."""
+    if not isinstance(obj, dict):
+        return obj
+    
+    obj_type = obj.get("__type__")
+    
+    if obj_type == "datetime":
+        return datetime.fromisoformat(obj["value"])
+    elif obj_type == "enum":
+        # Reconstruct enum - currently only ProjectStatus is used
+        if obj["class"] == "ProjectStatus":
+            return ProjectStatus(obj["value"])
+        return obj["value"]
+    elif obj_type == "SubSession":
+        # Remove __type__ before creating dataclass
+        data = {k: v for k, v in obj.items() if k != "__type__"}
+        return SubSession(**data)
+    elif obj_type == "Checkpoint":
+        data = {k: v for k, v in obj.items() if k != "__type__"}
+        return Checkpoint(**data)
+    elif obj_type == "ProjectState":
+        data = {k: v for k, v in obj.items() if k != "__type__"}
+        # Reconstruct nested objects
+        if "status" in data and isinstance(data["status"], str):
+            data["status"] = ProjectStatus(data["status"])
+        if "sub_sessions" in data and data["sub_sessions"]:
+            data["sub_sessions"] = [_state_json_decode(ss) for ss in data["sub_sessions"]]
+        if "checkpoints" in data and data["checkpoints"]:
+            data["checkpoints"] = [_state_json_decode(chk) for chk in data["checkpoints"]]
+        return ProjectState(**data)
+    elif obj_type == "Path":
+        return Path(obj["value"])
+    
+    return obj
+
+
+class StateManager:
+    """
+    SQLite-based persistent state management with async support.
+    
+    Uses ThreadPoolExecutor to run synchronous SQLite operations in separate
+    threads, preventing blocking of the async event loop.
+    """
+
+    def __init__(self, db_path: str = "projects.db", max_workers: int = 4) -> None:
         self.db_path = db_path
         # Persistent connection — avoids re-opening the file on every call.
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._write_lock = threading.Lock()
+        
+        # Thread pool for async operations
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="statemanager_"
+        )
+        
         self._init_db()
 
     def _init_db(self) -> None:
@@ -212,26 +288,42 @@ class StateManager:
         self.save_state(state)
         return state
     
+    def _serialize_state(self, state: ProjectState) -> str:
+        """Serialize ProjectState to JSON string."""
+        return json.dumps(state, cls=_StateJSONEncoder)
+    
+    def _deserialize_state(self, data: str) -> ProjectState:
+        """Deserialize ProjectState from JSON string."""
+        return json.loads(data, object_hook=_state_json_decode)
+    
     def save_state(self, state: ProjectState) -> None:
-        """Save project state to database."""
+        """Save project state to database using JSON serialization (secure)."""
         state.updated_at = datetime.now()
+        serialized = self._serialize_state(state)
         with self._write_lock:
             self._conn.execute(
                 "INSERT OR REPLACE INTO projects (project_id, state, updated_at) "
                 "VALUES (?, ?, ?)",
-                (state.project_id, pickle.dumps(state), state.updated_at),
+                (state.project_id, serialized, state.updated_at),
             )
             self._conn.commit()
 
     def load_state(self, project_id: str) -> Optional[ProjectState]:
-        """Load project state from database"""
+        """Load project state from database using JSON deserialization (secure)."""
         cursor = self._conn.execute(
             "SELECT state FROM projects WHERE project_id = ?",
             (project_id,),
         )
         row = cursor.fetchone()
         if row:
-            return pickle.loads(row[0])
+            try:
+                return self._deserialize_state(row[0])
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                import logging
+                logging.getLogger(__name__).error(
+                    f"Failed to deserialize state for project {project_id}: {e}"
+                )
+                return None
         return None
 
     def list_projects(self) -> List[Dict]:
@@ -257,11 +349,13 @@ class StateManager:
             input_prompt=input_prompt
         )
         
+        # Serialize checkpoint to JSON (secure, no pickle)
+        checkpoint_data = json.dumps(checkpoint, cls=_StateJSONEncoder)
         with self._write_lock:
             self._conn.execute(
                 "INSERT INTO checkpoints (checkpoint_id, project_id, data, created_at) "
                 "VALUES (?, ?, ?, ?)",
-                (checkpoint_id, project_id, pickle.dumps(checkpoint), checkpoint.timestamp),
+                (checkpoint_id, project_id, checkpoint_data, checkpoint.timestamp),
             )
             self._conn.commit()
 
@@ -306,14 +400,94 @@ class StateManager:
         self.save_state(state)
 
     def get_pending_checkpoints(self, project_id: str) -> List[Checkpoint]:
-        """Get unresolved checkpoints for project"""
+        """Get unresolved checkpoints for project using JSON deserialization (secure)."""
         cursor = self._conn.execute(
             "SELECT data FROM checkpoints "
             "WHERE project_id = ? AND resolved = FALSE "
             "ORDER BY created_at DESC",
             (project_id,),
         )
-        return [pickle.loads(row[0]) for row in cursor.fetchall()]
+        checkpoints = []
+        for row in cursor.fetchall():
+            try:
+                checkpoint_data = json.loads(row[0], object_hook=_state_json_decode)
+                if isinstance(checkpoint_data, Checkpoint):
+                    checkpoints.append(checkpoint_data)
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to deserialize checkpoint for project {project_id}: {e}"
+                )
+        return checkpoints
+    
+    # =========================================================================
+    # Async Methods (Non-blocking)
+    # =========================================================================
+    # These methods run synchronous SQLite operations in a thread pool
+    # to prevent blocking the async event loop.
+    
+    async def save_state_async(self, state: ProjectState) -> None:
+        """Async version of save_state - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(self._executor, self.save_state, state)
+    
+    async def load_state_async(self, project_id: str) -> Optional[ProjectState]:
+        """Async version of load_state - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self.load_state, project_id)
+    
+    async def list_projects_async(self) -> List[Dict]:
+        """Async version of list_projects - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self.list_projects)
+    
+    async def add_checkpoint_async(self, project_id: str, description: str,
+                                    input_prompt: Optional[str] = None) -> str:
+        """Async version of add_checkpoint - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor, self.add_checkpoint, project_id, description, input_prompt
+        )
+    
+    async def resolve_checkpoint_async(self, checkpoint_id: str, user_response: str) -> None:
+        """Async version of resolve_checkpoint - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            self._executor, self.resolve_checkpoint, checkpoint_id, user_response
+        )
+    
+    async def start_sub_session_async(self, project_id: str, name: str,
+                                      activity_kind: str = "job") -> str:
+        """Async version of start_sub_session - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor, self.start_sub_session, project_id, name, activity_kind
+        )
+    
+    async def end_sub_session_async(self, project_id: str, name: str,
+                                    status: str = "completed") -> None:
+        """Async version of end_sub_session - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            self._executor, self.end_sub_session, project_id, name, status
+        )
+    
+    async def get_pending_checkpoints_async(self, project_id: str) -> List[Checkpoint]:
+        """Async version of get_pending_checkpoints - runs in thread pool."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self._executor, self.get_pending_checkpoints, project_id
+        )
+    
+    def close(self) -> None:
+        """Close the database connection and thread pool."""
+        self._executor.shutdown(wait=True)
+        self._conn.close()
+    
+    async def close_async(self) -> None:
+        """Async close - shuts down thread pool without blocking."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.close)
 
 
 class ResumableTask:
@@ -327,8 +501,8 @@ class ResumableTask:
         self.checkpoint_id = None
     
     async def __aenter__(self) -> Optional["ResumableTask"]:
-        """Enter task context."""
-        self.state = self.sm.load_state(self.project_id)
+        """Enter task context - uses async methods to avoid blocking."""
+        self.state = await self.sm.load_state_async(self.project_id)
 
         if not self.state:
             raise ValueError(f"Project {self.project_id} not found")
@@ -340,13 +514,13 @@ class ResumableTask:
         # Update status
         self.state.status = ProjectStatus.RUNNING
         self.state.current_task = self.task_name
-        self.sm.save_state(self.state)
-        self.sm.start_sub_session(self.project_id, self.task_name, activity_kind="job")
+        await self.sm.save_state_async(self.state)
+        await self.sm.start_sub_session_async(self.project_id, self.task_name, activity_kind="job")
 
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit task context.
+        """Exit task context - uses async methods to avoid blocking.
 
         Uses try/finally to guarantee end_sub_session is always called, and
         isolates save_state() failures so they never mask the original exception.
@@ -365,7 +539,7 @@ class ResumableTask:
                 # Failure — record error, do not propagate save exceptions
                 self.state.error_log.append(str(exc_val))
                 self.state.status = ProjectStatus.FAILED
-            self.sm.save_state(self.state)
+            await self.sm.save_state_async(self.state)
         except Exception as save_err:
             # save_state() failed: log but do NOT re-raise.
             # Re-raising here would replace the original exc_val with save_err,
@@ -378,19 +552,19 @@ class ResumableTask:
         finally:
             # Always close the sub-session, even if save_state raised.
             try:
-                self.sm.end_sub_session(self.project_id, self.task_name, status=status)
+                await self.sm.end_sub_session_async(self.project_id, self.task_name, status=status)
             except Exception as sub_err:
                 _log.warning(
                     "ResumableTask.__aexit__: end_sub_session failed: %r", sub_err
                 )
     
     async def checkpoint(self, description: str, input_prompt: str) -> str:
-        """Create checkpoint and wait for user input"""
-        self.checkpoint_id = self.sm.add_checkpoint(
+        """Create checkpoint and wait for user input - async version."""
+        self.checkpoint_id = await self.sm.add_checkpoint_async(
             self.project_id, description, input_prompt
         )
         
         self.state.status = ProjectStatus.PAUSED
-        self.sm.save_state(self.state)
+        await self.sm.save_state_async(self.state)
         
         return self.checkpoint_id

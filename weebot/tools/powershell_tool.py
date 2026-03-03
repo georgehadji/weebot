@@ -30,6 +30,24 @@ class PowerShellTool(BaseTool):
         "system_events": "Get-EventLog -LogName System -Newest 5 | Select-Object EntryType, Source, Message"
     }
     
+    # PowerShell dangerous cmdlets and patterns
+    DANGEROUS_PATTERNS: ClassVar[list] = [
+        r'\bformat-volume\b',
+        r'\bformat\s+[a-z]:',
+        r'\bInvoke-Expression\b|\biex\b',
+        r'\bInvoke-Command\b|\bicm\b',
+        r'\bStart-Process\b.*-Credential',
+        r'\bNew-LocalUser\b|\bSet-LocalUser\b',
+        r'\bAdd-WindowsCapability\b|\bRemove-WindowsFeature\b',
+    ]
+    
+    # Encoded command patterns (command injection vector)
+    ENCODED_COMMAND_PATTERNS: ClassVar[list] = [
+        r'-enc\s+\S+',  # -enc followed by base64
+        r'-EncodedCommand\s+\S+',  # Full parameter name
+        r'-e\s+[A-Za-z0-9+/]{100,}',  # Short form with base64-like content
+    ]
+    
     def _validate_path_safety(self, command: str) -> bool:
         """Ensure command doesn't escape sandbox."""
         dangerous_patterns = [
@@ -44,13 +62,64 @@ class PowerShellTool(BaseTool):
                 return False
         return True
     
+    def _validate_no_encoded_commands(self, command: str) -> tuple[bool, str]:
+        """
+        Check for encoded PowerShell commands which are a common injection vector.
+        
+        Returns:
+            (is_valid, error_message)
+        """
+        cmd_lower = command.lower()
+        
+        # Check for encoded command patterns
+        for pattern in self.ENCODED_COMMAND_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                return False, (
+                    "Security Error: Encoded PowerShell commands are not allowed. "
+                    "Use plain text commands only."
+                )
+        
+        # Check for base64-like strings that could be encoded commands
+        # Base64 encoding often has = padding and specific character set
+        base64_pattern = r'[A-Za-z0-9+/]{50,}={0,2}'
+        matches = re.findall(base64_pattern, command)
+        for match in matches:
+            # If it's long enough to be a script, block it
+            if len(match) > 100:
+                # Check if it decodes to PowerShell-like content
+                try:
+                    import base64
+                    decoded = base64.b64decode(match).decode('utf-16-le', errors='ignore')
+                    if any(keyword in decoded.lower() for keyword in ['powershell', 'invoke', 'iex', 'cmdlet']):
+                        return False, (
+                            "Security Error: Suspicious encoded content detected. "
+                            "Use plain text commands only."
+                        )
+                except Exception:
+                    pass
+        
+        # Check for dangerous cmdlets
+        for pattern in self.DANGEROUS_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                return False, (
+                    f"Security Error: Command contains restricted operation. "
+                    f"Pattern matched: {pattern}"
+                )
+        
+        return True, ""
+    
     def _run(self, command: str) -> str:
-        """Execute PowerShell command."""
+        """Execute PowerShell command with security validation."""
         # Check if it's a diagnostic shortcut
         if command in self.DIAGNOSTIC_COMMANDS:
             command = self.DIAGNOSTIC_COMMANDS[command]
         
-        # Security validation
+        # Security validation: encoded commands
+        is_valid, error_msg = self._validate_no_encoded_commands(command)
+        if not is_valid:
+            return f"Error: {error_msg}"
+        
+        # Security validation: path safety
         if not self._validate_path_safety(command):
             return "Error: Command violates sandbox constraints"
         
