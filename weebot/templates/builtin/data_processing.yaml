@@ -1,0 +1,103 @@
+name: "Data Processing Workflow"
+version: "1.0.0"
+description: |
+  Processes data files through cleaning, transformation, analysis,
+  and generates insights with optional visualization.
+author: "Weebot Team"
+
+parameters:
+  data_source:
+    type: string
+    description: "Path or URL to data source"
+    required: true
+  
+  data_format:
+    type: enum
+    description: "Format of input data"
+    values: ["csv", "json", "excel", "parquet", "database"]
+    required: true
+  
+  operations:
+    type: list
+    description: "List of processing operations to perform"
+    required: false
+    default: ["clean", "analyze"]
+  
+  output_format:
+    type: enum
+    description: "Output format for processed data"
+    values: ["csv", "json", "excel", "parquet", "report"]
+    default: "report"
+    required: false
+  
+  analysis_type:
+    type: enum
+    description: "Type of analysis to perform"
+    values: ["descriptive", "diagnostic", "predictive", "prescriptive"]
+    default: "descriptive"
+    required: false
+
+workflow:
+  data_ingestion:
+    agent_role: "data_engineer"
+    task: "Load data from {{data_source}} (format: {{data_format}})"
+    parameters:
+      validate_schema: true
+      sample_size: 1000
+  
+  data_cleaning:
+    agent_role: "data_engineer"
+    task: "Clean and preprocess data"
+    depends_on: [data_ingestion]
+    condition: "{% if 'clean' in operations %}true{% endif %}"
+    steps:
+      - "Remove duplicates"
+      - "Handle missing values"
+      - "Standardize formats"
+      - "Validate data types"
+  
+  data_transformation:
+    agent_role: "data_engineer"
+    task: "Transform data for analysis"
+    depends_on: [data_cleaning]
+    condition: "{% if 'transform' in operations %}true{% endif %}"
+    steps:
+      - "Feature engineering"
+      - "Aggregation"
+      - "Normalization"
+  
+  exploratory_analysis:
+    agent_role: "data_analyst"
+    task: "Perform exploratory data analysis"
+    depends_on: [data_cleaning]
+    condition: "{% if 'analyze' in operations %}true{% endif %}"
+    parameters:
+      analysis_type: "{{analysis_type}}"
+      generate_visualizations: true
+  
+  statistical_analysis:
+    agent_role: "data_scientist"
+    task: "Run statistical analysis and tests"
+    depends_on: [exploratory_analysis]
+    condition: "{% if 'analyze' in operations %}true{% endif %}"
+  
+  insight_generation:
+    agent_role: "data_analyst"
+    task: "Generate insights and recommendations from analysis"
+    depends_on: [statistical_analysis]
+  
+  report_generation:
+    agent_role: "report_writer"
+    task: "Generate {{output_format}} report with findings"
+    depends_on: [insight_generation]
+    parameters:
+      format: "{{output_format}}"
+      include_charts: true
+
+output:
+  format: "{{output_format}}"
+  artifacts:
+    - "processed_data"
+    - "analysis_report"
+    - "visualizations"
+    - "insights_summary"

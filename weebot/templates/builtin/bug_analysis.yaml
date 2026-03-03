@@ -1,0 +1,135 @@
+name: "Bug Analysis Workflow"
+version: "1.0.0"
+description: |
+  Systematic bug analysis workflow that investigates issues,
+  identifies root causes, and provides fixes with prevention strategies.
+author: "Weebot Team"
+
+parameters:
+  bug_description:
+    type: string
+    description: "Description of the bug/issue"
+    required: true
+  
+  affected_system:
+    type: string
+    description: "System, module, or component affected"
+    required: true
+  
+  severity:
+    type: enum
+    description: "Bug severity level"
+    values: ["critical", "high", "medium", "low"]
+    required: true
+  
+  error_logs:
+    type: string
+    description: "Error messages or logs (optional)"
+    required: false
+    default: ""
+  
+  reproduction_steps:
+    type: string
+    description: "Steps to reproduce the bug (optional)"
+    required: false
+    default: ""
+  
+  environment:
+    type: dict
+    description: "Environment details (OS, versions, etc.)"
+    required: false
+    default: {}
+  
+  programming_language:
+    type: enum
+    description: "Programming language"
+    values: ["python", "javascript", "typescript", "java", "go", "rust", "cpp", "csharp", "other"]
+    default: "other"
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Output format"
+    values: ["markdown", "json", "jira", "github"]
+    default: "markdown"
+    required: false
+
+workflow:
+  triage:
+    agent_role: "bug_triage_specialist"
+    task: "Triage bug report and validate information completeness"
+    parameters:
+      severity: "{{severity}}"
+      component: "{{affected_system}}"
+  
+  reproduce_issue:
+    agent_role: "qa_engineer"
+    task: "Attempt to reproduce the bug based on description"
+    depends_on: [triage]
+    parameters:
+      steps: "{{reproduction_steps}}"
+      environment: "{{environment}}"
+  
+  analyze_logs:
+    agent_role: "log_analyzer"
+    task: "Analyze error logs and stack traces"
+    depends_on: [triage]
+    condition: "{% if error_logs %}true{% endif %}"
+    parameters:
+      logs: "{{error_logs}}"
+  
+  code_investigation:
+    agent_role: "debug_engineer"
+    task: "Investigate {{affected_system}} codebase for root cause"
+    depends_on: [reproduce_issue, analyze_logs]
+    parameters:
+      language: "{{programming_language}}"
+  
+  root_cause_analysis:
+    agent_role: "senior_engineer"
+    task: "Determine root cause and contributing factors"
+    depends_on: [code_investigation]
+  
+  develop_fix:
+    agent_role: "software_engineer"
+    task: "Develop code fix for the identified root cause"
+    depends_on: [root_cause_analysis]
+    parameters:
+      language: "{{programming_language}}"
+  
+  impact_assessment:
+    agent_role: "system_architect"
+    task: "Assess impact of bug and proposed fix on system"
+    depends_on: [root_cause_analysis]
+  
+  regression_testing:
+    agent_role: "qa_engineer"
+    task: "Identify affected areas and regression test cases"
+    depends_on: [develop_fix, impact_assessment]
+  
+  prevention_strategy:
+    agent_role: "reliability_engineer"
+    task: "Develop strategy to prevent similar bugs"
+    depends_on: [root_cause_analysis]
+  
+  document_fix:
+    agent_role: "technical_writer"
+    task: "Document bug analysis, fix, and prevention in {{output_format}} format"
+    depends_on: [develop_fix, regression_testing, prevention_strategy]
+    parameters:
+      format: "{{output_format}}"
+      severity: "{{severity}}"
+
+output:
+  format: "{{output_format}}"
+  severity: "{{severity}}"
+  sections:
+    - "bug_summary"
+    - "reproduction_steps"
+    - "root_cause"
+    - "proposed_fix"
+    - "impact_assessment"
+    - "regression_tests"
+    - "prevention_strategy"
+  estimated_effort: "{{effort_hours}}"
+  priority: "{{calculated_priority}}"

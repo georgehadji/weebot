@@ -1,7 +1,8 @@
 # 🤖 Weebot — AI Agent Framework for Windows 11
 
-[![Tests](https://img.shields.io/badge/tests-94%2B%20passing-success)](docs/PHASE2_IMPLEMENTATION_CHECKLIST.md)
-[![Phase 2](https://img.shields.io/badge/Phase%202-Complete-blue)](docs/ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-100%2B%20passing-success)](docs/PHASE2_IMPLEMENTATION_CHECKLIST.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue)](CHANGELOG.md)
+[![Phase 3](https://img.shields.io/badge/Phase%203-Complete-blue)](PHASE3_FINAL_SUMMARY.md)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](.python-version)
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
@@ -19,6 +20,13 @@
 - 💾 **Persistent State** — SQLite-based resume capability
 - 🔔 **Notifications** — Telegram, Slack, Windows Toast
 - 🔌 **MCP Server** — Claude Desktop integration
+
+### Phase 3: Template Engine (NEW in v2.1.0 ✅)
+- **YAML Templates** — Define workflows without Python code
+- **8 Built-in Templates** — Research, Code Review, Documentation, Bug Analysis, etc.
+- **Parameter System** — Type validation & coercion (string, int, bool, enum, list, dict)
+- **Agent Integration** — Role-based agents with caching (researcher, analyst, developer, etc.)
+- **100+ Tests** — Full test coverage
 
 ### Phase 2: Multi-Agent Orchestration (COMPLETE ✅)
 - **CircuitBreaker** — Fault tolerance with CLOSED/OPEN/HALF_OPEN states (22 tests)
@@ -81,6 +89,31 @@ python run_mcp.py
 python run_mcp.py --transport sse --port 8765
 ```
 
+### Template Engine (v2.1.0)
+
+```python
+from weebot.templates import TemplateEngine
+
+# Create engine and load templates
+engine = TemplateEngine()
+engine.registry.load_builtin_templates()
+
+# Execute a template
+result = engine.execute(
+    "Research Analysis Workflow",
+    {
+        "topic": "Artificial Intelligence",
+        "depth": "comprehensive",
+        "output_format": "markdown"
+    }
+)
+
+print(f"Success: {result.success}")
+print(f"Output: {result.output}")
+```
+
+See [Template Engine Guide](PHASE3_FINAL_SUMMARY.md) for details.
+
 ---
 
 ## 📊 Architecture
@@ -93,6 +126,14 @@ weebot/
 │   ├── workflow_orchestrator.py  # Multi-agent execution (Phase 2 ✅)
 │   ├── agent_context.py     # Shared agent context (Phase 7 ✅)
 │   └── agent_factory.py     # Agent spawning (Phase 7 ✅)
+├── templates/               # YAML Template Engine (Phase 3 ✅)
+│   ├── parser.py            # YAML template parser
+│   ├── parameters.py        # Parameter validation
+│   ├── registry.py          # Template management
+│   ├── engine.py            # Template execution
+│   ├── integration.py       # System integration
+│   ├── agent_integration.py # Agent system connection
+│   └── builtin/             # 8 built-in templates
 ├── tools/                   # Tool implementations
 │   ├── bash_tool.py         # Secure shell execution
 │   ├── python_tool.py       # Sandboxed Python
@@ -118,12 +159,13 @@ pytest tests/unit/ -v
 pytest tests/unit/test_circuit_breaker.py -v
 pytest tests/unit/test_dependency_graph.py -v
 pytest tests/unit/test_workflow_orchestrator.py -v
+pytest tests/unit/test_templates/ -v          # Template Engine tests
 
 # Run with coverage
 pytest tests/unit/ --cov=weebot --cov-report=html
 ```
 
-**Test Coverage:** 94+ tests, all passing ✅
+**Test Coverage:** 100+ tests, all passing ✅
 
 ---
 
@@ -134,6 +176,8 @@ pytest tests/unit/ --cov=weebot --cov-report=html
 | Document | Description |
 |----------|-------------|
 | [ROADMAP.md](docs/ROADMAP.md) | Development roadmap & phases |
+| [PHASE3_FINAL_SUMMARY.md](PHASE3_FINAL_SUMMARY.md) | Phase 3: Template Engine |
+| [PHASE3_AGENT_INTEGRATION.md](PHASE3_AGENT_INTEGRATION.md) | Agent integration guide |
 | [PHASE2_IMPLEMENTATION_SUMMARY.md](docs/PHASE2_IMPLEMENTATION_SUMMARY.md) | Phase 2 deliverables |
 | [SYSTEM_KNOWLEDGE_MAP.md](docs/SYSTEM_KNOWLEDGE_MAP.md) | Architecture & data flows |
 | [BASH_SECURITY_FIX_SUMMARY.md](docs/BASH_SECURITY_FIX_SUMMARY.md) | Security implementation |
@@ -172,7 +216,7 @@ pytest tests/unit/ --cov=weebot --cov-report=html
 |-------|--------|-------------|
 | Phase 1 | ✅ Complete | Computer Use Tools |
 | Phase 2 | ✅ Complete | Multi-Agent Orchestration Engine |
-| Phase 3 | 🟡 Ready | Workflow Templates |
+| Phase 3 | ✅ Complete | Template Engine with 8 built-in templates |
 | Phase 4 | 🟢 Planned | Observability & Monitoring |
 
 See [ROADMAP.md](docs/ROADMAP.md) for details.

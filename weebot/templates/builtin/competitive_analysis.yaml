@@ -1,0 +1,101 @@
+name: "Competitive Analysis Workflow"
+version: "1.0.0"
+description: |
+  Analyzes competitors in a market space and generates
+  a competitive landscape report with SWOT analysis.
+author: "Weebot Team"
+
+parameters:
+  industry:
+    type: string
+    description: "Industry or market to analyze"
+    required: true
+  
+  competitors:
+    type: list
+    description: "List of competitor names to analyze"
+    required: false
+    default: []
+  
+  focus_areas:
+    type: enum
+    description: "Primary focus of analysis"
+    values: ["market_share", "product_features", "pricing", "marketing", "all"]
+    default: "all"
+    required: false
+  
+  depth:
+    type: enum
+    description: "Analysis depth"
+    values: ["brief", "standard", "comprehensive"]
+    default: "standard"
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Report format"
+    values: ["markdown", "html", "pdf"]
+    default: "markdown"
+    required: false
+
+workflow:
+  market_overview:
+    agent_role: "market_researcher"
+    task: "Research {{industry}} market overview including size, growth trends, and key players"
+    parameters:
+      depth: "{{depth}}"
+  
+  competitor_identification:
+    agent_role: "researcher"
+    task: |
+      {% if competitors %}
+      Analyze the following competitors in {{industry}}: {{competitors|join(', ')}}
+      {% else %}
+      Identify and list the top 5 competitors in the {{industry}} market
+      {% endif %}
+    depends_on: [market_overview]
+    parameters:
+      depth: "{{depth}}"
+  
+  individual_analysis:
+    agent_role: "analyst"
+    task: "Perform detailed analysis of each identified competitor"
+    depends_on: [competitor_identification]
+    parameters:
+      focus: "{{focus_areas}}"
+      depth: "{{depth}}"
+  
+  swot_analysis:
+    agent_role: "strategist"
+    task: "Create SWOT analysis for each competitor and overall market position"
+    depends_on: [individual_analysis]
+  
+  comparison_matrix:
+    agent_role: "analyst"
+    task: "Create comparison matrix of competitors across key dimensions"
+    depends_on: [individual_analysis]
+    parameters:
+      focus: "{{focus_areas}}"
+  
+  recommendations:
+    agent_role: "strategist"
+    task: "Generate strategic recommendations based on competitive analysis"
+    depends_on: [swot_analysis, comparison_matrix]
+  
+  final_report:
+    agent_role: "writer"
+    task: "Compile {{output_format}} competitive analysis report for {{industry}}"
+    depends_on: [recommendations]
+    parameters:
+      format: "{{output_format}}"
+
+output:
+  format: "{{output_format}}"
+  sections:
+    - "executive_summary"
+    - "market_overview"
+    - "competitor_profiles"
+    - "swot_analysis"
+    - "comparison_matrix"
+    - "strategic_recommendations"
+    - "appendix"

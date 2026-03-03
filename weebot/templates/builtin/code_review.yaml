@@ -1,0 +1,111 @@
+name: "Code Review Workflow"
+version: "1.0.0"
+description: |
+  Comprehensive code review workflow that analyzes code quality,
+  security, performance, and provides actionable feedback.
+author: "Weebot Team"
+
+parameters:
+  code_source:
+    type: string
+    description: "Path to code file or repository"
+    required: true
+  
+  language:
+    type: enum
+    description: "Programming language"
+    values: ["python", "javascript", "typescript", "java", "go", "rust", "cpp", "csharp", "other"]
+    required: true
+  
+  review_type:
+    type: enum
+    description: "Type of review to perform"
+    values: ["quick", "standard", "thorough"]
+    default: "standard"
+    required: false
+  
+  focus_areas:
+    type: list
+    description: "Areas to focus on"
+    required: false
+    default: ["security", "performance", "readability"]
+  
+  output_format:
+    type: enum
+    description: "Review output format"
+    values: ["markdown", "json", "html"]
+    default: "markdown"
+    required: false
+
+workflow:
+  initial_scan:
+    agent_role: "code_analyzer"
+    task: "Perform initial static analysis of {{code_source}} ({{language}})"
+    parameters:
+      scan_depth: "{{review_type}}"
+  
+  syntax_check:
+    agent_role: "syntax_reviewer"
+    task: "Check syntax and basic code structure"
+    depends_on: [initial_scan]
+  
+  security_review:
+    agent_role: "security_reviewer"
+    task: "Analyze code for security vulnerabilities"
+    depends_on: [syntax_check]
+    condition: "{% if 'security' in focus_areas %}true{% endif %}"
+    parameters:
+      check_types: ["injection", "xss", "secrets", "dependencies"]
+  
+  performance_review:
+    agent_role: "performance_reviewer"
+    task: "Identify performance bottlenecks and optimization opportunities"
+    depends_on: [syntax_check]
+    condition: "{% if 'performance' in focus_areas %}true{% endif %}"
+  
+  readability_review:
+    agent_role: "style_reviewer"
+    task: "Review code readability, naming conventions, and documentation"
+    depends_on: [syntax_check]
+    condition: "{% if 'readability' in focus_areas %}true{% endif %}"
+  
+  architecture_review:
+    agent_role: "architect"
+    task: "Evaluate code architecture and design patterns"
+    depends_on: [syntax_check]
+    condition: "{% if review_type == 'thorough' %}true{% endif %}"
+  
+  test_coverage_review:
+    agent_role: "qa_engineer"
+    task: "Review test coverage and suggest additional tests"
+    depends_on: [syntax_check]
+    condition: "{% if review_type == 'thorough' %}true{% endif %}"
+  
+  consolidate_findings:
+    agent_role: "senior_developer"
+    task: "Consolidate all review findings and prioritize issues"
+    depends_on: [security_review, performance_review, readability_review, architecture_review, test_coverage_review]
+  
+  generate_report:
+    agent_role: "technical_writer"
+    task: "Generate {{output_format}} code review report"
+    depends_on: [consolidate_findings]
+    parameters:
+      format: "{{output_format}}"
+      include_examples: true
+
+output:
+  format: "{{output_format}}"
+  sections:
+    - "executive_summary"
+    - "critical_issues"
+    - "warnings"
+    - "suggestions"
+    - "positive_findings"
+    - "action_items"
+  
+  severity_counts:
+    critical: "{{critical_count}}"
+    high: "{{high_count}}"
+    medium: "{{medium_count}}"
+    low: "{{low_count}}"

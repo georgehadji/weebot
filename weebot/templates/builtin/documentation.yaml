@@ -1,0 +1,146 @@
+name: "Documentation Generation Workflow"
+version: "1.0.0"
+description: |
+  Generates comprehensive documentation from code, APIs, or specifications.
+  Supports multiple output formats and documentation types.
+author: "Weebot Team"
+
+parameters:
+  source:
+    type: string
+    description: "Source code path, API spec, or description"
+    required: true
+  
+  doc_type:
+    type: enum
+    description: "Type of documentation to generate"
+    values: ["api_reference", "user_guide", "developer_guide", "readme", "architecture", "tutorial"]
+    required: true
+  
+  target_audience:
+    type: enum
+    description: "Who is this documentation for"
+    values: ["developers", "end_users", "administrators", "all"]
+    default: "developers"
+    required: false
+  
+  programming_language:
+    type: enum
+    description: "Programming language (for code docs)"
+    values: ["python", "javascript", "typescript", "java", "go", "rust", "cpp", "csharp", "other", "none"]
+    default: "none"
+    required: false
+  
+  include_examples:
+    type: bool
+    description: "Include code examples"
+    default: true
+    required: false
+  
+  include_diagrams:
+    type: bool
+    description: "Generate architecture diagrams"
+    default: false
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Documentation output format"
+    values: ["markdown", "html", "pdf", "restructuredtext"]
+    default: "markdown"
+    required: false
+  
+  style_guide:
+    type: enum
+    description: "Documentation style guide"
+    values: ["google", "microsoft", "diataxis", "plain"]
+    default: "plain"
+    required: false
+
+workflow:
+  analyze_source:
+    agent_role: "technical_analyst"
+    task: "Analyze {{source}} to understand structure and content"
+    parameters:
+      language: "{{programming_language}}"
+      doc_type: "{{doc_type}}"
+  
+  outline_structure:
+    agent_role: "information_architect"
+    task: "Create documentation outline based on {{style_guide}} style guide"
+    depends_on: [analyze_source]
+    parameters:
+      audience: "{{target_audience}}"
+  
+  extract_api_info:
+    agent_role: "api_documenter"
+    task: "Extract API endpoints, parameters, and responses"
+    depends_on: [analyze_source]
+    condition: "{% if doc_type == 'api_reference' %}true{% endif %}"
+  
+  write_overview:
+    agent_role: "technical_writer"
+    task: "Write overview and getting started sections"
+    depends_on: [outline_structure]
+    parameters:
+      style: "{{style_guide}}"
+      audience: "{{target_audience}}"
+  
+  write_main_content:
+    agent_role: "technical_writer"
+    task: "Write main {{doc_type}} content"
+    depends_on: [outline_structure, extract_api_info]
+    parameters:
+      include_examples: "{{include_examples}}"
+      style: "{{style_guide}}"
+  
+  create_code_examples:
+    agent_role: "developer_advocate"
+    task: "Create practical code examples"
+    depends_on: [write_main_content]
+    condition: "{% if include_examples %}true{% endif %}"
+    parameters:
+      language: "{{programming_language}}"
+  
+  generate_diagrams:
+    agent_role: "technical_illustrator"
+    task: "Generate architecture and flow diagrams"
+    depends_on: [analyze_source]
+    condition: "{% if include_diagrams %}true{% endif %}"
+  
+  write_troubleshooting:
+    agent_role: "support_engineer"
+    task: "Write troubleshooting and FAQ sections"
+    depends_on: [write_main_content]
+    condition: "{% if target_audience != 'developers' or doc_type == 'user_guide' %}true{% endif %}"
+  
+  review_accuracy:
+    agent_role: "technical_reviewer"
+    task: "Review technical accuracy of documentation"
+    depends_on: [write_main_content, create_code_examples]
+  
+  edit_style:
+    agent_role: "editor"
+    task: "Edit for clarity, grammar, and {{style_guide}} style compliance"
+    depends_on: [review_accuracy, write_troubleshooting]
+  
+  format_output:
+    agent_role: "document_formatter"
+    task: "Format documentation as {{output_format}}"
+    depends_on: [edit_style, generate_diagrams]
+    parameters:
+      format: "{{output_format}}"
+
+output:
+  format: "{{output_format}}"
+  document_type: "{{doc_type}}"
+  audience: "{{target_audience}}"
+  sections:
+    - "overview"
+    - "getting_started"
+    - "main_content"
+    - "examples"
+    - "troubleshooting"
+    - "reference"
+  includes_examples: "{{include_examples}}"
+  includes_diagrams: "{{include_diagrams}}"

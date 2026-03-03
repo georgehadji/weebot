@@ -1,0 +1,66 @@
+name: "Research Analysis Workflow"
+version: "1.0.0"
+description: |
+  A workflow that performs comprehensive research on a topic
+  and generates a structured analysis report.
+author: "Weebot Team"
+
+parameters:
+  topic:
+    type: string
+    description: "The topic to research"
+    required: true
+  
+  depth:
+    type: enum
+    description: "Research depth level"
+    values: ["brief", "comprehensive", "exhaustive"]
+    default: "comprehensive"
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Report output format"
+    values: ["markdown", "html", "json"]
+    default: "markdown"
+    required: false
+  
+  include_sources:
+    type: bool
+    description: "Include source citations"
+    default: true
+    required: false
+
+workflow:
+  initial_research:
+    agent_role: "researcher"
+    task: "Gather initial information on {{ topic }}"
+    parameters:
+      depth: "{{ depth }}"
+    
+  deep_analysis:
+    agent_role: "analyst"
+    task: "Analyze research findings for {{ topic }}"
+    depends_on: [initial_research]
+    parameters:
+      format: "{{ output_format }}"
+    
+  quality_check:
+    agent_role: "reviewer"
+    task: "Review analysis quality"
+    depends_on: [deep_analysis]
+    
+  final_report:
+    agent_role: "writer"
+    task: "Generate final {{ output_format }} report on {{ topic }}"
+    depends_on: [quality_check]
+    parameters:
+      include_citations: "{{ include_sources }}"
+
+output:
+  format: "{{ output_format }}"
+  sections:
+    - "executive_summary"
+    - "key_findings"
+    - "recommendations"
+    - "sources"  # Conditional on include_sources

@@ -1,0 +1,174 @@
+name: "Learning Path Creation Workflow"
+version: "1.0.0"
+description: |
+  Creates personalized learning paths for any topic, skill, or technology.
+  Includes resources, exercises, milestones, and assessment criteria.
+author: "Weebot Team"
+
+parameters:
+  topic:
+    type: string
+    description: "Topic or skill to learn"
+    required: true
+  
+  learner_level:
+    type: enum
+    description: "Current experience level"
+    values: ["beginner", "intermediate", "advanced", "expert"]
+    default: "beginner"
+    required: false
+  
+  target_level:
+    type: enum
+    description: "Desired proficiency level"
+    values: ["intermediate", "advanced", "expert", "mastery"]
+    default: "intermediate"
+    required: false
+  
+  time_available:
+    type: enum
+    description: "Time commitment per week"
+    values: ["minimal", "moderate", "intensive", "full_time"]
+    default: "moderate"
+    required: false
+  
+  duration_weeks:
+    type: int
+    description: "Target duration in weeks"
+    default: 12
+    required: false
+  
+  learning_style:
+    type: enum
+    description: "Preferred learning style"
+    values: ["visual", "reading", "hands_on", "mixed"]
+    default: "mixed"
+    required: false
+  
+  include_projects:
+    type: bool
+    description: "Include hands-on projects"
+    default: true
+    required: false
+  
+  include_certification:
+    type: bool
+    description: "Include certification preparation"
+    default: false
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Output format"
+    values: ["markdown", "pdf", "json", "notion"]
+    default: "markdown"
+    required: false
+
+workflow:
+  assess_prerequisites:
+    agent_role: "learning_specialist"
+    task: "Identify prerequisites for {{topic}} at {{learner_level}} level"
+    parameters:
+      current_level: "{{learner_level}}"
+      target_level: "{{target_level}}"
+  
+  define_learning_objectives:
+    agent_role: "instructional_designer"
+    task: "Define clear learning objectives and outcomes"
+    depends_on: [assess_prerequisites]
+    parameters:
+      topic: "{{topic}}"
+      from_level: "{{learner_level}}"
+      to_level: "{{target_level}}"
+  
+  design_curriculum:
+    agent_role: "curriculum_designer"
+    task: "Design structured curriculum with modules"
+    depends_on: [define_learning_objectives]
+    parameters:
+      duration_weeks: "{{duration_weeks}}"
+      time_commitment: "{{time_available}}"
+  
+  gather_resources:
+    agent_role: "resource_curator"
+    task: "Curate best learning resources for each module"
+    depends_on: [design_curriculum]
+    parameters:
+      learning_style: "{{learning_style}}"
+      level: "{{learner_level}}"
+  
+  create_study_schedule:
+    agent_role: "schedule_planner"
+    task: "Create weekly study schedule"
+    depends_on: [design_curriculum, gather_resources]
+    parameters:
+      weeks: "{{duration_weeks}}"
+      time_available: "{{time_available}}"
+  
+  design_exercises:
+    agent_role: "exercise_designer"
+    task: "Create practice exercises and quizzes for each module"
+    depends_on: [design_curriculum]
+    parameters:
+      style: "{{learning_style}}"
+      level: "{{learner_level}}"
+  
+  design_projects:
+    agent_role: "project_designer"
+    task: "Design capstone projects"
+    depends_on: [design_curriculum]
+    condition: "{% if include_projects %}true{% endif %}"
+    parameters:
+      topic: "{{topic}}"
+      complexity: "{{target_level}}"
+      count: 3
+  
+  create_assessments:
+    agent_role: "assessment_designer"
+    task: "Create self-assessment criteria and milestones"
+    depends_on: [design_exercises]
+  
+  prepare_certification:
+    agent_role: "certification_specialist"
+    task: "Add certification exam preparation if applicable"
+    depends_on: [design_curriculum]
+    condition: "{% if include_certification %}true{% endif %}"
+    parameters:
+      topic: "{{topic}}"
+  
+  add_community_resources:
+    agent_role: "community_manager"
+    task: "Identify communities, forums, and support resources"
+    depends_on: [gather_resources]
+  
+  compile_path:
+    agent_role: "learning_path_compiler"
+    task: "Compile complete learning path with all components"
+    depends_on: [create_study_schedule, design_exercises, design_projects, create_assessments, prepare_certification, add_community_resources]
+  
+  format_output:
+    agent_role: "document_formatter"
+    task: "Format learning path as {{output_format}}"
+    depends_on: [compile_path]
+    parameters:
+      format: "{{output_format}}"
+
+output:
+  format: "{{output_format}}"
+  topic: "{{topic}}"
+  duration_weeks: "{{duration_weeks}}"
+  sections:
+    - "overview"
+    - "prerequisites"
+    - "learning_objectives"
+    - "curriculum_modules"
+    - "study_schedule"
+    - "resources"
+    - "exercises"
+    - "projects"
+    - "assessment_criteria"
+    - "milestones"
+    - "community_resources"
+  has_projects: "{{include_projects}}"
+  has_certification_prep: "{{include_certification}}"
+  estimated_hours: "{{total_hours}}"

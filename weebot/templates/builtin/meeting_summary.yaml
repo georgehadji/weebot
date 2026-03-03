@@ -1,0 +1,143 @@
+name: "Meeting Summary Workflow"
+version: "1.0.0"
+description: |
+  Generates comprehensive meeting summaries from transcripts, notes,
+  or recordings. Extracts action items, decisions, and key points.
+author: "Weebot Team"
+
+parameters:
+  meeting_input:
+    type: string
+    description: "Meeting transcript, notes, or recording path"
+    required: true
+  
+  meeting_type:
+    type: enum
+    description: "Type of meeting"
+    values: ["standup", "planning", "review", "retrospective", "client_call", "brainstorming", "other"]
+    default: "other"
+    required: false
+  
+  participants:
+    type: list
+    description: "List of participants (optional)"
+    required: false
+    default: []
+  
+  extract_action_items:
+    type: bool
+    description: "Extract action items and assignees"
+    default: true
+    required: false
+  
+  extract_decisions:
+    type: bool
+    description: "Extract decisions made"
+    default: true
+    required: false
+  
+  extract_questions:
+    type: bool
+    description: "Extract open questions"
+    default: true
+    required: false
+  
+  summary_length:
+    type: enum
+    description: "Length of summary"
+    values: ["brief", "standard", "detailed"]
+    default: "standard"
+    required: false
+  
+  output_format:
+    type: enum
+    description: "Output format"
+    values: ["markdown", "email", "slack", "confluence", "notion"]
+    default: "markdown"
+    required: false
+  
+  language:
+    type: string
+    description: "Language of meeting and summary"
+    default: "english"
+    required: false
+
+workflow:
+  process_input:
+    agent_role: "transcription_processor"
+    task: "Process meeting input (transcribe if needed, clean text)"
+    parameters:
+      language: "{{language}}"
+  
+  identify_participants:
+    agent_role: "meeting_analyzer"
+    task: "Identify speakers and participants from meeting"
+    depends_on: [process_input]
+    condition: "{% if not participants %}true{% endif %}"
+  
+  extract_topics:
+    agent_role: "topic_extractor"
+    task: "Identify main topics and agenda items discussed"
+    depends_on: [process_input]
+  
+  extract_key_points:
+    agent_role: "summarizer"
+    task: "Extract key discussion points for each topic"
+    depends_on: [extract_topics]
+    parameters:
+      detail_level: "{{summary_length}}"
+  
+  identify_decisions:
+    agent_role: "decision_extractor"
+    task: "Identify decisions made during the meeting"
+    depends_on: [extract_key_points]
+    condition: "{% if extract_decisions %}true{% endif %}"
+  
+  extract_action_items:
+    agent_role: "action_item_extractor"
+    task: "Extract action items, deadlines, and assignees"
+    depends_on: [extract_key_points]
+    condition: "{% if extract_action_items %}true{% endif %}"
+  
+  identify_questions:
+    agent_role: "question_extractor"
+    task: "Extract open questions and follow-ups"
+    depends_on: [extract_key_points]
+    condition: "{% if extract_questions %}true{% endif %}"
+  
+  sentiment_analysis:
+    agent_role: "sentiment_analyzer"
+    task: "Analyze meeting sentiment and engagement"
+    depends_on: [process_input]
+    condition: "{% if meeting_type == 'retrospective' or meeting_type == 'client_call' %}true{% endif %}"
+  
+  generate_summary:
+    agent_role: "meeting_summarizer"
+    task: "Generate {{summary_length}} meeting summary"
+    depends_on: [extract_key_points, identify_decisions, extract_action_items, identify_questions]
+    parameters:
+      meeting_type: "{{meeting_type}}"
+      language: "{{language}}"
+  
+  format_output:
+    agent_role: "document_formatter"
+    task: "Format summary for {{output_format}}"
+    depends_on: [generate_summary, sentiment_analysis]
+    parameters:
+      format: "{{output_format}}"
+      include_action_items: "{{extract_action_items}}"
+
+output:
+  format: "{{output_format}}"
+  meeting_type: "{{meeting_type}}"
+  sections:
+    - "overview"
+    - "participants"
+    - "key_discussion_points"
+    - "decisions_made"
+    - "action_items"
+    - "open_questions"
+    - "next_steps"
+  action_items_count: "{{action_items_count}}"
+  decisions_count: "{{decisions_count}}"
+  follow_up_required: "{{has_follow_ups}}"
