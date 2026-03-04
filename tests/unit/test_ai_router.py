@@ -1,5 +1,6 @@
 """Unit tests for ModelRouter, CostTracker, and ResponseCache."""
 import pytest
+from datetime import date, timedelta
 from unittest.mock import patch
 from weebot.ai_router import ModelRouter, CostTracker, ResponseCache, TaskType
 
@@ -80,6 +81,17 @@ class TestCostTracker:
         tracker = CostTracker(daily_budget=10.0)
         tracker.record_call("nonexistent-model", input_tokens=100, output_tokens=50)
         assert tracker.call_count == 0  # No config found, nothing recorded
+
+    def test_resets_on_new_day(self):
+        tracker = CostTracker(daily_budget=10.0)
+        tracker.today_cost = 5.0
+        tracker.call_count = 2
+        tracker._current_day = date.today() - timedelta(days=1)
+
+        # Trigger reset
+        assert tracker.is_budget_exceeded() is False
+        assert tracker.today_cost == 0.0
+        assert tracker.call_count == 0
 
 
 class TestResponseCache:

@@ -4,6 +4,11 @@ Implements the standard CLOSED → OPEN → HALF_OPEN state machine with
 per-entity tracking, asyncio-safe locking, and optional EventBroker
 integration for publishing state-change events.
 
+HARDEN Mode Additions:
+- Jittered recovery to prevent thundering herd
+- Staggered HALF_OPEN probes
+- Recovery rate metrics
+
 The public API mirrors :class:`ExecApprovalPolicy` — call
 ``evaluate(entity_id)`` to get a typed :class:`BreakerResult`.
 """
@@ -11,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -70,11 +76,16 @@ class CircuitBreaker:
 
     Supports both model-level and agent-level failure isolation.
 
+    HARDEN Mode: Jittered recovery prevents thundering herd when services
+    recover from outages.
+
     Args:
         failure_threshold: Consecutive failures before CLOSED → OPEN.
         cooldown_seconds: Seconds before OPEN → HALF_OPEN transition.
         success_threshold: Consecutive successes in HALF_OPEN to close.
         event_broker: Optional :class:`EventBroker` for state-change events.
+        jitter_percent: Random variation in cooldown (0-1, default 0.2 = 20%).
+        enable_stagger: Add random delay before HALF_OPEN probe.
     """
 
     def __init__(
@@ -83,18 +94,30 @@ class CircuitBreaker:
         cooldown_seconds: float = 60.0,
         success_threshold: int = 1,
         event_broker: Optional[Any] = None,
+        jitter_percent: float = 0.2,
+        enable_stagger: bool = True,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError("failure_threshold must be >= 1")
         if cooldown_seconds <= 0:
             raise ValueError("cooldown_seconds must be > 0")
+        if not 0 <= jitter_percent <= 1:
+            raise ValueError("jitter_percent must be between 0 and 1")
 
         self._failure_threshold = failure_threshold
         self._cooldown_seconds = cooldown_seconds
         self._success_threshold = success_threshold
         self._event_broker = event_broker
+        self._jitter_percent = jitter_percent
+        self._enable_stagger = enable_stagger
+        
         self._breakers: Dict[str, _BreakerEntry] = {}
         self._lock = asyncio.Lock()
+        
+        # HARDEN: Metrics for monitoring
+        self._state_changes = 0
+        self._recovery_attempts = 0
+        self._successful_recoveries = 0
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -132,11 +155,26 @@ class CircuitBreaker:
     # Public API
     # ------------------------------------------------------------------
 
+    def _get_jittered_cooldown(self) -> float:
+        """HARDEN: Get cooldown with random jitter to prevent thundering herd."""
+        jitter = self._cooldown_seconds * self._jitter_percent
+        return self._cooldown_seconds + random.uniform(-jitter, jitter)
+    
+    async def _maybe_stagger_probe(self) -> None:
+        """HARDEN: Add random delay before HALF_OPEN probe."""
+        if self._enable_stagger:
+            # Random delay between 0-500ms
+            delay = random.uniform(0, 0.5)
+            await asyncio.sleep(delay)
+
     async def evaluate(self, entity_id: str) -> BreakerResult:
         """Evaluate whether a request to *entity_id* should proceed.
 
         Handles the automatic OPEN → HALF_OPEN transition when the
         cooldown period has elapsed.
+
+        HARDEN: Uses jittered cooldown and staggered probes to prevent
+        thundering herd during recovery.
 
         Returns:
             :class:`BreakerResult` with ``allowed=True/False``.
@@ -154,13 +192,22 @@ class CircuitBreaker:
                 )
 
             if entry.state == BreakerState.OPEN:
+                # HARDEN: Use jittered cooldown
+                effective_cooldown = self._get_jittered_cooldown()
                 elapsed = now - entry.last_state_change
-                if elapsed >= self._cooldown_seconds:
+                
+                if elapsed >= effective_cooldown:
+                    # HARDEN: Stagger probe requests
+                    await self._maybe_stagger_probe()
+                    
                     # Transition to HALF_OPEN
                     old = entry.state
                     entry.state = BreakerState.HALF_OPEN
                     entry.success_count = 0
-                    entry.last_state_change = now
+                    entry.last_state_change = time.monotonic()  # Reset after stagger
+                    self._state_changes += 1
+                    self._recovery_attempts += 1
+                    
                     await self._publish_state_change(
                         entity_id, old, BreakerState.HALF_OPEN
                     )
@@ -171,7 +218,7 @@ class CircuitBreaker:
                         reason="Probing after cooldown",
                         failure_count=entry.failure_count,
                     )
-                remaining = self._cooldown_seconds - elapsed
+                remaining = effective_cooldown - elapsed
                 return BreakerResult(
                     entity_id=entity_id,
                     allowed=False,
@@ -203,6 +250,8 @@ class CircuitBreaker:
                     entry.failure_count = 0
                     entry.success_count = 0
                     entry.last_state_change = time.monotonic()
+                    self._state_changes += 1
+                    self._successful_recoveries += 1  # HARDEN: Track recovery
                     await self._publish_state_change(
                         entity_id, old, BreakerState.CLOSED
                     )
@@ -223,6 +272,7 @@ class CircuitBreaker:
                 old = entry.state
                 entry.state = BreakerState.OPEN
                 entry.last_state_change = now
+                self._state_changes += 1  # HARDEN: Track state change
                 await self._publish_state_change(
                     entity_id, old, BreakerState.OPEN
                 )
@@ -231,6 +281,7 @@ class CircuitBreaker:
                     old = entry.state
                     entry.state = BreakerState.OPEN
                     entry.last_state_change = now
+                    self._state_changes += 1  # HARDEN: Track state change
                     await self._publish_state_change(
                         entity_id, old, BreakerState.OPEN
                     )
@@ -258,3 +309,36 @@ class CircuitBreaker:
                     await self._publish_state_change(
                         entity_id, old, BreakerState.CLOSED
                     )
+
+    # ------------------------------------------------------------------
+    # HARDEN: Metrics
+    # ------------------------------------------------------------------
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """
+        Get circuit breaker metrics for monitoring.
+        
+        Returns:
+            Dict with recovery statistics and current state counts.
+        """
+        state_counts = {"CLOSED": 0, "OPEN": 0, "HALF_OPEN": 0}
+        for entry in self._breakers.values():
+            state_counts[entry.state.value] += 1
+        
+        recovery_rate = (
+            self._successful_recoveries / self._recovery_attempts
+            if self._recovery_attempts > 0 else 1.0
+        )
+        
+        return {
+            "tracked_entities": len(self._breakers),
+            "state_counts": state_counts,
+            "state_changes_total": self._state_changes,
+            "recovery_attempts": self._recovery_attempts,
+            "successful_recoveries": self._successful_recoveries,
+            "recovery_rate": recovery_rate,
+            "jitter_enabled": self._jitter_percent > 0,
+            "jitter_percent": self._jitter_percent,
+            "stagger_enabled": self._enable_stagger,
+            "cooldown_seconds": self._cooldown_seconds,
+        }

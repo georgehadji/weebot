@@ -88,7 +88,7 @@ class RecursiveWeebotAgent:
                     result = self.ps_tool._run(task)
                     tool_used = "powershell"
                 else:
-                    result = self.browser_tool._run(task)
+                    result = await self.browser_tool._arun(task)
                     tool_used = "browser"
                 
                 # Check for errors

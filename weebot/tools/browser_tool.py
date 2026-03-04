@@ -56,13 +56,15 @@ class BrowserTool(BaseTool):
         """Synchronous wrapper for browser operations."""
         try:
             # Run async code in sync context
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import nest_asyncio
-                nest_asyncio.apply()
-            
-            result = asyncio.run(self._run_browser_task(task))
-            return result
+            try:
+                asyncio.get_running_loop()
+                # If we're already in an event loop, avoid asyncio.run()
+                # and return a clear error for sync callers.
+                return "Error: BrowserTool._run cannot be used inside a running event loop; use _arun instead."
+            except RuntimeError:
+                # No running loop in this thread
+                result = asyncio.run(self._run_browser_task(task))
+                return result
             
         except Exception as e:
             return f"Error: {str(e)}"

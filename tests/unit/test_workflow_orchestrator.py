@@ -120,6 +120,32 @@ class TestWorkflowOrchestratorExecution:
         
         assert max_running <= 2
 
+    @pytest.mark.asyncio
+    async def test_running_tasks_not_cancelled_on_first_completion(self):
+        """Running tasks should not be cancelled when one task completes."""
+        cancelled = set()
+
+        async def slow_handler(task_id, config, ctx):
+            try:
+                await asyncio.sleep(0.05 if task_id == "fast" else 0.2)
+                return "done"
+            except asyncio.CancelledError:
+                cancelled.add(task_id)
+                raise
+
+        orch = WorkflowOrchestrator(
+            max_parallel_agents=2,
+            task_handler=slow_handler
+        )
+
+        result = await orch.execute({
+            "fast": {"deps": []},
+            "slow": {"deps": []},
+        })
+
+        assert result.success is True
+        assert cancelled == set()
+
 
 class TestWorkflowOrchestratorFailures:
     """Failure handling tests."""

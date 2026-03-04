@@ -1,0 +1,376 @@
+# HARDEN Mode Alerting Rules
+#
+# Prometheus AlertManager compatible alerting rules for the
+# HARDEN mode hardening measures.
+#
+# Severity Levels:
+# - critical: Immediate action required, page on-call
+# - warning:  Attention needed, notify team
+# - info:     Awareness, log for review
+
+groups:
+  # ============================================================================
+  # GROUP 1: Privacy & Compliance Alerts
+  # ============================================================================
+  - name: privacy_alerts
+    interval: 30s
+    rules:
+      # CRITICAL: Privacy violation threshold exceeded
+      - alert: PrivacyViolationThresholdExceeded
+        expr: increase(weebot_privacy_violations_total[1h]) >= 3
+        for: 5m
+        labels:
+          severity: critical
+          category: privacy
+          trigger: T1
+        annotations:
+          summary: "Privacy violation threshold exceeded"
+          description: "{{ $value }} privacy violations in last hour"
+          runbook_url: "https://wiki.internal/weebot/privacy-violations"
+          action: |
+            1. Check privacy audit logs: audit.get_audit_trail()
+            2. If violations continue, disable collaborative filtering:
+               engine.adaptive_engine.enable_collaborative = False
+            3. Notify security team and data protection officer
+      
+      # WARNING: Compliance score dropping
+      - alert: PrivacyComplianceScoreLow
+        expr: weebot_privacy_compliance_score < 0.95
+        for: 10m
+        labels:
+          severity: warning
+          category: privacy
+        annotations:
+          summary: "Privacy compliance score below 95%"
+          description: "Current score: {{ $value | humanizePercentage }}"
+          action: "Review recent violations and adjust thresholds if needed"
+      
+      # INFO: Privacy operations blocked
+      - alert: PrivacyOperationsBlocked
+        expr: rate(weebot_privacy_blocked_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+          category: privacy
+        annotations:
+          summary: "Privacy middleware blocking operations"
+          description: "{{ $value | humanize }}/sec operations blocked"
+          action: "Normal - indicates privacy protection is active"
+
+  # ============================================================================
+  # GROUP 2: Rate Limiting & Resource Alerts
+  # ============================================================================
+  - name: rate_limiter_alerts
+    interval: 15s
+    rules:
+      # WARNING: Rate limiter approaching capacity
+      - alert: RateLimiterHighUtilization
+        expr: |
+          weebot_ratelimiter_active_buckets / weebot_ratelimiter_max_buckets > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Rate limiter at {{ $value | humanizePercentage }} capacity"
+          description: |
+            Active buckets: {{ $labels.active_buckets }}
+            Max buckets: {{ $labels.max_buckets }}
+          action: |
+            1. Check for high-cardinality user IDs
+            2. Consider increasing MAX_BUCKETS or reducing TTL
+            3. Monitor for eviction rate increase
+      
+      # WARNING: High bucket eviction rate
+      - alert: RateLimiterHighEvictionRate
+        expr: rate(weebot_ratelimiter_evictions_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High rate limiter bucket eviction rate"
+          description: "{{ $value | humanize }}/sec buckets being evicted"
+          action: |
+            1. Indicates churn - many unique users
+            2. Consider increasing MAX_BUCKETS
+            3. Review if LRU is appropriate or need different strategy
+      
+      # INFO: Rate limiting rejections
+      - alert: RateLimiterRejections
+        expr: rate(weebot_ratelimiter_rejections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+          category: resources
+        annotations:
+          summary: "Rate limiter rejecting requests at capacity"
+          description: "{{ $value | humanize }}/sec requests rejected"
+          action: "Expected during traffic spikes - monitor for sustained rejections"
+
+  # ============================================================================
+  # GROUP 3: YAML Security Alerts
+  # ============================================================================
+  - name: yaml_security_alerts
+    interval: 30s
+    rules:
+      # WARNING: YAML security violations detected
+      - alert: YamlSecurityViolation
+        expr: rate(weebot_yaml_security_blocks_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "YAML security violations detected"
+          description: "{{ $value | humanize }}/sec templates blocked"
+          action: |
+            1. Review blocked template sources
+            2. Check for attack attempts or user errors
+            3. May indicate need for user education
+      
+      # CRITICAL: Potential DoS attack
+      - alert: YamlDoSAttackDetected
+        expr: |
+          rate(weebot_yaml_security_blocks_total[1m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Possible YAML bomb DoS attack"
+          description: "High rate of blocked templates - possible attack"
+          action: |
+            1. Check source IP patterns
+            2. Consider rate limiting template uploads
+            3. Notify security team
+
+  # ============================================================================
+  # GROUP 4: Circuit Breaker Alerts
+  # ============================================================================
+  - name: circuit_breaker_alerts
+    interval: 15s
+    rules:
+      # WARNING: Low recovery success rate
+      - alert: CircuitBreakerLowRecoveryRate
+        expr: weebot_circuitbreaker_recovery_rate < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          category: resilience
+        annotations:
+          summary: "Circuit breaker recovery rate low"
+          description: "Only {{ $value | humanizePercentage }} recoveries successful"
+          action: |
+            1. Service may be experiencing sustained issues
+            2. Check downstream service health
+            3. Consider increasing cooldown or failure threshold
+      
+      # WARNING: Circuit breaker flapping
+      - alert: CircuitBreakerFlapping
+        expr: rate(weebot_circuitbreaker_state_changes_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: resilience
+        annotations:
+          summary: "Circuit breaker state flapping detected"
+          description: "{{ $value | humanize }}/min state changes"
+          action: |
+            1. Indicates unstable service
+            2. Increase cooldown_seconds to stabilize
+            3. Check for intermittent network issues
+      
+      # CRITICAL: Many circuits open
+      - alert: ManyCircuitsOpen
+        expr: |
+          weebot_circuitbreaker_entities{state="open"} > 10
+        for: 5m
+        labels:
+          severity: critical
+          category: resilience
+        annotations:
+          summary: "{{ $value }} circuit breakers open"
+          description: "Multiple services failing - possible cascade"
+          action: |
+            1. Check infrastructure health
+            2. May need circuit breaker reset after issue resolved
+            3. Consider emergency maintenance window
+
+  # ============================================================================
+  # GROUP 5: Database Pool Alerts
+  # ============================================================================
+  - name: db_pool_alerts
+    interval: 15s
+    rules:
+      # CRITICAL: Pool saturation
+      - alert: DatabasePoolSaturation
+        expr: weebot_dbpool_saturation > 0.8
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Database pool saturated ({{ $value | humanizePercentage }})"
+          description: "Connection pool at capacity - requests may fail"
+          action: |
+            1. Check for connection leaks (slow acquisitions)
+            2. Increase pool_size if appropriate
+            3. Check for long-running queries
+      
+      # WARNING: High connection acquisition time
+      - alert: DatabaseSlowAcquisition
+        expr: |
+          histogram_quantile(0.95, 
+            rate(weebot_dbpool_acquisition_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Slow database connection acquisition"
+          description: "p95 acquisition time > 1 second"
+          action: |
+            1. Indicates pool contention
+            2. Check for connection leaks
+            3. Consider increasing pool size
+      
+      # INFO: Pool saturation alert fired
+      - alert: DatabasePoolSaturationAlert
+        expr: increase(weebot_dbpool_saturation_alerts_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: info
+          category: database
+        annotations:
+          summary: "Pool saturation alert triggered"
+          description: "Pool has exceeded 80% saturation threshold"
+          action: "Review pool sizing and query patterns"
+
+  # ============================================================================
+  # GROUP 6: System Health Composite
+  # ============================================================================
+  - name: system_health_alerts
+    interval: 30s
+    rules:
+      # CRITICAL: Overall system health degraded
+      - alert: HardenModeSystemHealthCritical
+        expr: |
+          (
+            weebot_privacy_compliance_score * 25 +
+            (1 - weebot_ratelimiter_utilization) * 25 +
+            weebot_circuitbreaker_recovery_rate * 25 +
+            (1 - weebot_dbpool_saturation) * 25
+          ) < 50
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "HARDEN mode system health CRITICAL"
+          description: "Composite health score below 50/100"
+          action: |
+            1. Review all hardening component metrics
+            2. Consider activating Fallback A (defensive simplify)
+            3. Page on-call engineer
+      
+      # WARNING: Overall system health degraded
+      - alert: HardenModeSystemHealthWarning
+        expr: |
+          (
+            weebot_privacy_compliance_score * 25 +
+            (1 - weebot_ratelimiter_utilization) * 25 +
+            weebot_circuitbreaker_recovery_rate * 25 +
+            (1 - weebot_dbpool_saturation) * 25
+          ) < 70
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "HARDEN mode system health degraded"
+          description: "Composite health score below 70/100"
+          action: "Review component metrics and address issues"
+
+# ==============================================================================
+# Alert Routing Configuration
+# ==============================================================================
+route:
+  group_by: ['alertname', 'category']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  
+  routes:
+    # Critical alerts go to PagerDuty immediately
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      group_wait: 0s
+      repeat_interval: 15m
+    
+    # Privacy alerts to security team
+    - match:
+        category: privacy
+      receiver: 'security-team'
+      group_wait: 1m
+    
+    # Database alerts to DBA team
+    - match:
+        category: database
+      receiver: 'dba-team'
+      group_wait: 1m
+
+receivers:
+  - name: 'default'
+    slack_configs:
+      - channel: '#weebot-alerts'
+        send_resolved: true
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+  
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '<PAGERDUTY_SERVICE_KEY>'
+        severity: critical
+        description: '{{ .GroupLabels.alertname }}'
+  
+  - name: 'security-team'
+    slack_configs:
+      - channel: '#security-alerts'
+        send_resolved: true
+        title: '🔒 Privacy Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          Action: {{ .Annotations.action }}
+          {{ end }}
+  
+  - name: 'dba-team'
+    email_configs:
+      - to: 'dba-team@company.com'
+        subject: 'Weebot DB Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+
+# ==============================================================================
+# Inhibition Rules (prevent alert storms)
+# ==============================================================================
+inhibit_rules:
+  # If system health is critical, suppress component warnings
+  - source_match:
+      alertname: HardenModeSystemHealthCritical
+    target_match:
+      severity: warning
+    equal: ['category']
+  
+  # If pool is saturated, suppress slow acquisition (same root cause)
+  - source_match:
+      alertname: DatabasePoolSaturation
+    target_match:
+      alertname: DatabaseSlowAcquisition

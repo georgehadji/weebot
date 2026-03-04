@@ -1,0 +1,178 @@
+# HARDEN Mode Monitoring Dashboard Configuration
+# 
+# This file defines metrics, dashboards, and visualization for the
+# HARDEN mode hardening measures. Import into your monitoring system
+# (Grafana, Datadog, Prometheus, etc.)
+
+dashboard:
+  title: "Weebot HARDEN Mode - Security & Resilience"
+  refresh: 30s
+  timezone: utc
+  
+  rows:
+    # ============================================================================
+    # ROW 1: Privacy & Compliance
+    # ============================================================================
+    - title: "🔒 Privacy & Compliance"
+      panels:
+        - title: "Privacy Compliance Score"
+          type: gauge
+          description: "Percentage of privacy-compliant operations (target: >95%)"
+          targets:
+            - metric: privacy_compliance_score
+              expr: "weebot_privacy_compliance_score"
+          thresholds:
+            - { color: red, value: 0 }
+            - { color: yellow, value: 0.8 }
+            - { color: green, value: 0.95 }
+          
+        - title: "Privacy Violations (1h)"
+          type: stat
+          description: "Count of privacy policy violations"
+          targets:
+            - metric: privacy_violations_1h
+              expr: "increase(weebot_privacy_violations_total[1h])"
+          thresholds:
+            - { color: green, value: 0 }
+            - { color: red, value: 1 }
+              
+        - title: "Blocked Operations"
+          type: graph
+          description: "Operations blocked by privacy middleware"
+          targets:
+            - metric: privacy_blocked_rate
+              expr: "rate(weebot_privacy_blocked_total[5m])"
+
+    # ============================================================================
+    # ROW 2: Rate Limiting
+    # ============================================================================
+    - title: "⚡ Rate Limiting"
+      panels:
+        - title: "Rate Limiter Utilization"
+          type: gauge
+          description: "Active buckets / max capacity (target: <80%)"
+          targets:
+            - metric: ratelimiter_utilization
+              expr: "weebot_ratelimiter_active_buckets / weebot_ratelimiter_max_buckets"
+          thresholds:
+            - { color: green, value: 0 }
+            - { color: yellow, value: 0.7 }
+            - { color: red, value: 0.8 }
+                
+        - title: "Bucket Evictions"
+          type: graph
+          description: "LRU bucket evictions"
+          targets:
+            - metric: ratelimiter_evictions
+              expr: "rate(weebot_ratelimiter_evictions_total[5m])"
+          alert_threshold: 10
+
+    # ============================================================================
+    # ROW 3: Circuit Breaker
+    # ============================================================================
+    - title: "🔌 Circuit Breaker"
+      panels:
+        - title: "Recovery Success Rate"
+          type: gauge
+          description: "Successful circuit breaker recoveries"
+          targets:
+            - metric: cb_recovery_rate
+              expr: "weebot_circuitbreaker_recovery_rate"
+          thresholds:
+            - { color: red, value: 0 }
+            - { color: yellow, value: 0.7 }
+            - { color: green, value: 0.9 }
+              
+        - title: "State Changes / min"
+          type: graph
+          description: "Rate of state transitions"
+          targets:
+            - metric: cb_state_changes
+              expr: "rate(weebot_circuitbreaker_state_changes_total[1m])"
+          alert_threshold: 50
+
+    # ============================================================================
+    # ROW 4: Database Pool
+    # ============================================================================
+    - title: "🗄️ Database Pool"
+      panels:
+        - title: "Pool Saturation %"
+          type: gauge
+          description: "Pool capacity in use (alert if >80%)"
+          targets:
+            - metric: dbpool_saturation
+              expr: "weebot_dbpool_saturation"
+          thresholds:
+            - { color: green, value: 0 }
+            - { color: yellow, value: 0.7 }
+            - { color: red, value: 0.8 }
+              
+        - title: "Connection Acquisition Time (p95)"
+          type: graph
+          description: "Time to acquire DB connection"
+          targets:
+            - metric: dbpool_acquisition_p95
+              expr: "histogram_quantile(0.95, rate(weebot_dbpool_acquisition_duration_seconds_bucket[5m]))"
+          unit: seconds
+          alert_threshold: 1.0
+
+# ==============================================================================
+# Prometheus Metrics Reference
+# ==============================================================================
+prometheus_metrics:
+  # Privacy Audit
+  - name: weebot_privacy_compliance_score
+    type: gauge
+    help: "Privacy compliance score (0-1)"
+    
+  - name: weebot_privacy_violations_total
+    type: counter
+    labels: [violation_type]
+    help: "Total privacy violations"
+    
+  - name: weebot_privacy_blocked_total
+    type: counter
+    help: "Operations blocked by privacy middleware"
+
+  # Rate Limiter
+  - name: weebot_ratelimiter_active_buckets
+    type: gauge
+    help: "Current active rate limit buckets"
+    
+  - name: weebot_ratelimiter_max_buckets
+    type: gauge
+    help: "Maximum allowed buckets"
+    
+  - name: weebot_ratelimiter_evictions_total
+    type: counter
+    help: "Total LRU bucket evictions"
+    
+  - name: weebot_ratelimiter_rejections_total
+    type: counter
+    help: "Requests rejected at capacity"
+
+  # Circuit Breaker
+  - name: weebot_circuitbreaker_recovery_rate
+    type: gauge
+    help: "Successful recovery rate (0-1)"
+    
+  - name: weebot_circuitbreaker_state_changes_total
+    type: counter
+    help: "Total state changes"
+    
+  - name: weebot_circuitbreaker_recovery_attempts_total
+    type: counter
+    help: "Total recovery attempts"
+
+  # DB Pool
+  - name: weebot_dbpool_saturation
+    type: gauge
+    help: "Pool saturation (0-1)"
+    
+  - name: weebot_dbpool_active_connections
+    type: gauge
+    help: "Currently checked-out connections"
+    
+  - name: weebot_dbpool_saturation_alerts_total
+    type: counter
+    help: "Saturation alert count"

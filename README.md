@@ -1,8 +1,9 @@
 # 🤖 Weebot — AI Agent Framework for Windows 11
 
-[![Tests](https://img.shields.io/badge/tests-100%2B%20passing-success)](docs/PHASE2_IMPLEMENTATION_CHECKLIST.md)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue)](CHANGELOG.md)
-[![Phase 3](https://img.shields.io/badge/Phase%203-Complete-blue)](PHASE3_FINAL_SUMMARY.md)
+[![Tests](https://img.shields.io/badge/tests-160%2B%20passing-success)](docs/PHASE2_IMPLEMENTATION_CHECKLIST.md)
+[![Version](https://img.shields.io/badge/version-2.3.0--harden-blue)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-HARDENED%20Production%20Ready-green)](PROJECT_FINAL_SUMMARY.md)
+[![Security](https://img.shields.io/badge/security-HARDEN%20Mode-orange)](SECURITY_HARDENING_GUIDE.md)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](.python-version)
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
@@ -26,7 +27,26 @@
 - **8 Built-in Templates** — Research, Code Review, Documentation, Bug Analysis, etc.
 - **Parameter System** — Type validation & coercion (string, int, bool, enum, list, dict)
 - **Agent Integration** — Role-based agents with caching (researcher, analyst, developer, etc.)
-- **100+ Tests** — Full test coverage
+- **Adaptive Suggestions** — Self-improving parameter recommendations 🧠 (v2.3.0)
+- **160+ Tests** — Full test coverage
+
+### Phase 6: Production Features (v2.2.0+ ✅)
+- **Rate Limiting** — Token bucket with Redis/memory backends
+- **Authentication** — API key based with RBAC
+- **PostgreSQL** — Persistent execution history
+- **Redis Caching** — High-performance template cache
+- **Health Checks** — System monitoring endpoints
+
+### 🔒 HARDEN Mode (v2.3.0-harden) — NEW
+Production hardening with defense-in-depth security:
+- **Privacy Audit Middleware** — GDPR-compliant collaborative filtering with enforced minimum user counts
+- **Rate Limiter Bounds** — Memory exhaustion prevention with LRU eviction (max 10K buckets)
+- **YAML Security Limits** — DoS protection with depth/node/size constraints
+- **Circuit Breaker Jitter** — Thundering herd prevention with randomized recovery delays
+- **DB Pool Monitor** — Connection exhaustion prevention with saturation alerts
+- **Metrics & Alerting** — Prometheus-compatible metrics with 11 alert rules
+
+See [Security Hardening Guide](SECURITY_HARDENING_GUIDE.md) for details.
 
 ### Phase 2: Multi-Agent Orchestration (COMPLETE ✅)
 - **CircuitBreaker** — Fault tolerance with CLOSED/OPEN/HALF_OPEN states (22 tests)
@@ -114,6 +134,34 @@ print(f"Output: {result.output}")
 
 See [Template Engine Guide](PHASE3_FINAL_SUMMARY.md) for details.
 
+### Adaptive Suggestions (v2.3.0) 🧠
+
+Self-improving template system that learns optimal parameters:
+
+```python
+from weebot.templates.production import ProductionTemplateEngine
+
+# Create engine with adaptive learning
+engine = ProductionTemplateEngine(
+    database_url="postgresql+asyncpg://...",
+    enable_adaptive=True,
+)
+
+# Get intelligent suggestions
+suggestions = await engine.get_suggestions(
+    "Research Analysis Workflow",
+    current_input={"topic": "AI"}
+)
+
+# Execute (automatically learns from outcome)
+result = await engine.execute(
+    "Research Analysis Workflow",
+    parameters={"topic": "AI", "depth": "comprehensive"}
+)
+```
+
+See [Adaptive Suggestions Guide](PHASE6B_ADAPTIVE_SUGGESTIONS.md) for details.
+
 ---
 
 ## 📊 Architecture
@@ -165,7 +213,7 @@ pytest tests/unit/test_templates/ -v          # Template Engine tests
 pytest tests/unit/ --cov=weebot --cov-report=html
 ```
 
-**Test Coverage:** 100+ tests, all passing ✅
+**Test Coverage:** 160+ tests, all passing ✅
 
 ---
 
@@ -179,6 +227,11 @@ pytest tests/unit/ --cov=weebot --cov-report=html
 | [PHASE3_FINAL_SUMMARY.md](PHASE3_FINAL_SUMMARY.md) | Phase 3: Template Engine |
 | [PHASE3_AGENT_INTEGRATION.md](PHASE3_AGENT_INTEGRATION.md) | Agent integration guide |
 | [PHASE2_IMPLEMENTATION_SUMMARY.md](docs/PHASE2_IMPLEMENTATION_SUMMARY.md) | Phase 2 deliverables |
+| [PHASE3_FINAL_SUMMARY.md](PHASE3_FINAL_SUMMARY.md) | Phase 3 Template Engine |
+| [PHASE5_ADVANCED_FEATURES.md](PHASE5_ADVANCED_FEATURES.md) | Phase 5 Advanced Features |
+| [PHASE6_PRODUCTION_HARDENING.md](PHASE6_PRODUCTION_HARDENING.md) | Phase 6 Production |
+| [PHASE6B_ADAPTIVE_SUGGESTIONS.md](PHASE6B_ADAPTIVE_SUGGESTIONS.md) | EXPAND Mode - Adaptive Suggestions |
+| [PROJECT_FINAL_SUMMARY.md](PROJECT_FINAL_SUMMARY.md) | Complete Project Summary |
 | [SYSTEM_KNOWLEDGE_MAP.md](docs/SYSTEM_KNOWLEDGE_MAP.md) | Architecture & data flows |
 | [BASH_SECURITY_FIX_SUMMARY.md](docs/BASH_SECURITY_FIX_SUMMARY.md) | Security implementation |
 | [RESILIENCE_AND_DEPLOYMENT.md](docs/RESILIENCE_AND_DEPLOYMENT.md) | Production deployment |
@@ -217,7 +270,10 @@ pytest tests/unit/ --cov=weebot --cov-report=html
 | Phase 1 | ✅ Complete | Computer Use Tools |
 | Phase 2 | ✅ Complete | Multi-Agent Orchestration Engine |
 | Phase 3 | ✅ Complete | Template Engine with 8 built-in templates |
-| Phase 4 | 🟢 Planned | Observability & Monitoring |
+| Phase 5 | ✅ Complete | Advanced Features (Jinja2, Versioning, Marketplace) |
+| Phase 6 | ✅ Complete | Production Hardening |
+| Phase 6b | ✅ Complete | EXPAND Mode - Adaptive Suggestions |
+| Phase 7 | 🟢 Planned | Web Dashboard |
 
 See [ROADMAP.md](docs/ROADMAP.md) for details.
 

@@ -51,8 +51,8 @@ workflow:
 8. ✅ Learning Path Creation (NEW)
 
 ### Tests
-- **Total:** 100+ tests
-- **Status:** All passing ✅
+- **Total:** 100+ tests  
+- **Status:** 90+ passing ✅ (2 tests need mock configuration for CI)
 - **Coverage:** 100% on new code
 
 ### Documentation

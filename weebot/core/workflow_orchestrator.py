@@ -159,6 +159,7 @@ class WorkflowOrchestrator:
         task_results: Dict[str, TaskResult] = {}
         completed: Set[str] = set()
         failed: Set[str] = set()
+        running_tasks: Dict[asyncio.Task, str] = {}
         
         # Shared context for all agents
         context = AgentContext(
@@ -177,27 +178,26 @@ class WorkflowOrchestrator:
         # Execute tasks
         try:
             while len(completed) + len(failed) < len(task_graph) and not self._cancelled:
+                # Clean up finished tasks (safety net)
+                for task in list(running_tasks.keys()):
+                    if task.done():
+                        running_tasks.pop(task, None)
+
                 # Get tasks ready to run
                 ready = graph.get_ready_tasks(completed | failed) - completed - failed
-                
-                if not ready and not any(s == TaskStatus.RUNNING for s in task_status.values()):
+                # Avoid re-scheduling tasks already running
+                ready = {tid for tid in ready if task_status.get(tid) != TaskStatus.RUNNING}
+
+                if not ready and not running_tasks:
                     # Deadlock or all remaining tasks depend on failed tasks
                     break
-                
-                if not ready:
-                    # Wait for running tasks to complete
-                    await asyncio.sleep(0.1)
-                    continue
-                
+
                 # Start ready tasks (up to max parallel)
-                tasks_to_run: List[asyncio.Task] = []
-                for task_id in ready:
-                    if len(tasks_to_run) >= self._max_parallel:
-                        break
-                    
+                while ready and len(running_tasks) < self._max_parallel:
+                    task_id = ready.pop()
                     task_config = task_graph[task_id]
                     task_status[task_id] = TaskStatus.RUNNING
-                    
+
                     coro = self._execute_task(
                         task_id=task_id,
                         task_config=task_config,
@@ -207,29 +207,34 @@ class WorkflowOrchestrator:
                         completed=completed,
                         failed=failed
                     )
-                    tasks_to_run.append(asyncio.create_task(coro))
-                
+                    task = asyncio.create_task(coro)
+                    running_tasks[task] = task_id
+
                 # Wait for at least one task to complete
-                if tasks_to_run:
-                    done, pending = await asyncio.wait(
-                        tasks_to_run,
+                if running_tasks:
+                    done, _pending = await asyncio.wait(
+                        running_tasks.keys(),
                         return_when=asyncio.FIRST_COMPLETED
                     )
-                    
-                    # Cancel remaining pending tasks in this batch
-                    for task in pending:
-                        task.cancel()
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass
-        
+                    for task in done:
+                        running_tasks.pop(task, None)
+                else:
+                    await asyncio.sleep(0.1)
+
         except asyncio.CancelledError:
             # Handle orchestration cancellation
             for tid, status in task_status.items():
                 if status == TaskStatus.RUNNING:
                     task_status[tid] = TaskStatus.CANCELLED
             raise
+        finally:
+            if self._cancelled and running_tasks:
+                for task, task_id in list(running_tasks.items()):
+                    task.cancel()
+                    task_status[task_id] = TaskStatus.CANCELLED
+                    failed.add(task_id)
+                await asyncio.gather(*running_tasks.keys(), return_exceptions=True)
+                running_tasks.clear()
         
         # Build final result
         execution_time = (time.time() - start_time) * 1000

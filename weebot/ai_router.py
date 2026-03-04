@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import asyncio
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -310,9 +311,19 @@ class CostTracker:
         self.daily_budget = daily_budget
         self.today_cost = 0.0
         self.call_count = 0
+        self._current_day = date.today()
+
+    def _ensure_today(self) -> None:
+        """Reset counters when the calendar day changes."""
+        today = date.today()
+        if today != self._current_day:
+            self._current_day = today
+            self.today_cost = 0.0
+            self.call_count = 0
         
     def record_call(self, model_id: str, input_tokens: int, output_tokens: int) -> None:
         """Record a model call cost."""
+        self._ensure_today()
         config = ModelRouter.MODELS.get(model_id)
         if config:
             cost = config.estimate_cost(input_tokens, output_tokens)
@@ -320,6 +331,7 @@ class CostTracker:
             self.call_count += 1
             
     def get_stats(self) -> Dict[str, Any]:
+        self._ensure_today()
         return {
             "today": self.today_cost,
             "budget": self.daily_budget,
@@ -328,6 +340,7 @@ class CostTracker:
         }
         
     def is_budget_exceeded(self) -> bool:
+        self._ensure_today()
         return self.today_cost >= self.daily_budget
 
 
