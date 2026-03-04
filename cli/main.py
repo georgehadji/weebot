@@ -16,6 +16,7 @@ monitor     Real-time monitoring
 """
 import click
 import asyncio
+import json
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -24,6 +25,15 @@ from rich.progress import Progress
 
 from weebot.agent_core_v2 import WeebotAgent, AgentConfig
 from weebot.state_manager import StateManager, ProjectStatus
+from weebot.cli_support import (
+    init_project,
+    init_hooks,
+    install_hooks,
+    run_doctor,
+    build_plan_from_spec,
+    check_template_updates,
+    upgrade_templates,
+)
 
 console = Console()
 
@@ -192,6 +202,181 @@ def costs(days: int) -> None:
 def research() -> None:
     """Scientific research commands."""
     pass
+
+
+# ---------------------------------------------------------------------------
+# Ops: init / doctor / hooks / upgrades / implement
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option("--platform", default=None, help="Override detected platform")
+@click.option("--tier", type=click.Choice(["full", "instructions-only"]), default=None)
+@click.option("--force", is_flag=True, help="Overwrite existing config")
+@click.option("--no-env", is_flag=True, help="Do not create .env from .env.example")
+@click.option("--with-hooks/--no-hooks", default=True, help="Initialize hooks directory")
+def init(platform: str | None, tier: str | None, force: bool, no_env: bool, with_hooks: bool) -> None:
+    """Initialize a weebot project in the current directory."""
+    root = Path.cwd()
+    config_path = init_project(
+        root,
+        platform=platform,
+        tier=tier,
+        force=force,
+        create_env=not no_env,
+    )
+    console.print(Panel(f"Initialized config: {config_path}", style="green"))
+
+    if with_hooks:
+        created = init_hooks(root)
+        if created:
+            console.print(f"[green]Hooks initialized: {len(created)} file(s)[/green]")
+        else:
+            console.print("[yellow]Hooks already initialized[/yellow]")
+
+
+@cli.command()
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def doctor(json_output: bool) -> None:
+    """Run diagnostics and environment checks."""
+    report = run_doctor(Path.cwd())
+    if json_output:
+        console.print_json(json.dumps(report.as_dict()))
+        return
+
+    table = Table(title="weebot Doctor")
+    table.add_column("Check", style="cyan")
+    table.add_column("Status", style="magenta")
+    table.add_column("Details", style="green")
+
+    for check in report.checks:
+        table.add_row(check.name, check.status, check.details)
+
+    console.print(table)
+    console.print(
+        Panel(
+            f"Summary: ok={report.summary['ok']} warn={report.summary['warn']} error={report.summary['error']}",
+            style="green" if report.ok else "yellow",
+        )
+    )
+
+
+@cli.group()
+def hooks() -> None:
+    """Manage platform hooks."""
+    pass
+
+
+@hooks.command("init")
+def hooks_init() -> None:
+    """Initialize hooks directory."""
+    created = init_hooks(Path.cwd())
+    if created:
+        console.print(f"[green]Hooks initialized: {len(created)} file(s)[/green]")
+    else:
+        console.print("[yellow]Hooks already initialized[/yellow]")
+
+
+@hooks.command("install")
+@click.option("--target", default=".weebot/hooks-installed", help="Target directory for hooks")
+@click.option("--force", is_flag=True, help="Overwrite existing files")
+@click.option("--allow-outside", is_flag=True, help="Allow installing outside project root")
+def hooks_install(target: str, force: bool, allow_outside: bool) -> None:
+    """Install hooks into a target directory."""
+    try:
+        installed = install_hooks(
+            Path.cwd(),
+            Path(target),
+            force=force,
+            allow_outside=allow_outside,
+        )
+        if installed:
+            console.print(f"[green]Installed {len(installed)} hook file(s)[/green]")
+        else:
+            console.print("[yellow]No hooks installed (files exist)[/yellow]")
+    except Exception as exc:
+        console.print(f"[red]Hook install failed: {exc}[/red]")
+
+
+@cli.command("check-updates")
+@click.option("--template", "template_filter", default=None, help="Filter by template name/id")
+@click.option("--marketplace-url", default=None, help="Marketplace URL override")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def check_updates(template_filter: str | None, marketplace_url: str | None, json_output: bool) -> None:
+    """Check for template updates from the marketplace."""
+    result = check_template_updates(Path.cwd(), marketplace_url, template_filter)
+    if json_output:
+        console.print_json(json.dumps(result))
+        return
+
+    if result["status"] != "online":
+        console.print("[yellow]Marketplace offline — cannot check updates[/yellow]")
+        return
+
+    table = Table(title="Template Updates")
+    table.add_column("Template", style="cyan")
+    table.add_column("Local", style="magenta")
+    table.add_column("Remote", style="green")
+
+    for item in result["updates"]:
+        table.add_row(item["name"], item["local_version"], item["remote_version"])
+
+    if not result["updates"]:
+        console.print("[green]All templates are up to date[/green]")
+    else:
+        console.print(table)
+
+
+@cli.command()
+@click.option("--template", "template_filter", default=None, help="Filter by template name/id")
+@click.option("--marketplace-url", default=None, help="Marketplace URL override")
+@click.option("--dry-run", is_flag=True, help="Show updates without downloading")
+def upgrade(template_filter: str | None, marketplace_url: str | None, dry_run: bool) -> None:
+    """Upgrade templates from the marketplace."""
+    result = upgrade_templates(Path.cwd(), marketplace_url, template_filter, dry_run=dry_run)
+    if result["status"] != "online":
+        console.print("[yellow]Marketplace offline — cannot upgrade[/yellow]")
+        return
+
+    if not result["updates"]:
+        console.print("[green]All templates are up to date[/green]")
+        return
+
+    if dry_run:
+        console.print("[yellow]Dry run — no files downloaded[/yellow]")
+
+    upgraded = result.get("upgraded", [])
+    failed = result.get("failed", [])
+    console.print(f"[green]Upgraded: {len(upgraded)}[/green]")
+    if failed:
+        console.print(f"[red]Failed: {len(failed)}[/red]")
+
+
+@cli.command()
+@click.argument("spec_file", type=click.Path(exists=True))
+@click.option("--output", "-o", default="plan.json", help="Output plan JSON file")
+@click.option("--project-id", default=None, help="Project ID to execute under")
+@click.option("--execute", is_flag=True, help="Execute plan after generation")
+def implement(spec_file: str, output: str, project_id: str | None, execute: bool) -> None:
+    """Generate a task plan from a spec and optionally execute it."""
+    spec_path = Path(spec_file)
+    plan = build_plan_from_spec(spec_path.read_text(encoding="utf-8"))
+
+    Path(output).write_text(json.dumps(plan, indent=2), encoding="utf-8")
+    console.print(f"[green]Plan generated: {output} ({len(plan)} tasks)[/green]")
+
+    if execute:
+        if not project_id:
+            project_id = spec_path.stem
+        config = AgentConfig(project_id=project_id, description=f"Implementing {spec_path.name}")
+        agent = WeebotAgent(config)
+
+        async def run_plan():
+            for item in plan:
+                await agent.run([item])
+
+        asyncio.run(run_plan())
+        console.print("[green]Plan execution complete[/green]")
 
 
 @research.command()

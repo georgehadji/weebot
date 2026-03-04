@@ -89,6 +89,12 @@ python run.py --interactive
 ### CLI Usage
 
 ```bash
+# Initialize project + hooks
+python -m cli.main init
+
+# Run diagnostics
+python -m cli.main doctor
+
 # Create project
 python -m cli.main create my_project "Data analysis task"
 
@@ -97,6 +103,17 @@ python -m cli.main status my_project
 
 # Run workflow
 python -m cli.main run my_project workflow.json
+
+# Generate a plan from a spec (and optionally execute)
+python -m cli.main implement specs.md -o plan.json
+
+# Template updates
+python -m cli.main check-updates
+python -m cli.main upgrade --dry-run
+
+# Hooks (install into a project-local target)
+python -m cli.main hooks init
+python -m cli.main hooks install --target .weebot/hooks-installed
 ```
 
 ### MCP Server (Claude Desktop)
