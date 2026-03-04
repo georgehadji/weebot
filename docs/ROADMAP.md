@@ -1,8 +1,8 @@
 # 📊 Weebot Development Roadmap
 
 **Last Updated:** 2026-03-04
-**Status:** Phases 1-7 Complete | EXPAND Complete ✅ | HARDEN Complete ✅ | Phase 4 Ready
-**Last Commit:** `HARDEN_MODE_COMPLETE` — Defense-in-depth security hardening + Phase 4 ready
+**Status:** Phases 1-7 Complete | Phase 2 Complete | Phase 3 Complete | Phase 4 Implemented ✅ | Stabilization Backlog Active 🟡
+**Last Verified Snapshot:** 2026-03-04 (local code + targeted tests)
 
 ---
 
@@ -13,12 +13,34 @@ The weebot project is a sophisticated AI Agent Framework for Windows 11 with cle
 | Metric | Value |
 |--------|-------|
 | **Committed Phases** | 1-7 (100%) |
-| **Committed Tests** | 428 passing ✅ |
-| **Total Tests (incl. draft files)** | 558 passing |
-| **Test Failures** | 32 (pre-existing or in draft files — not regressions) |
+| **Committed Tests** | Historical release baseline |
+| **Total Tests (incl. draft files)** | Re-baselining in progress |
+| **Test Failures** | See "Current Test Posture (2026-03-04)" |
 | **Known Critical Issues** | 0 — 3 bugs found & fixed in `a34110f` |
 | **Phase 2 Components** | 4 core + 4 test files committed ✅ |
 | **Architecture Style** | Clean/Hexagonal (Ports & Adapters) |
+
+---
+
+## 🔎 Reality Check (2026-03-04)
+
+The roadmap previously mixed historical release claims with older "draft/in-progress" notes.
+This section supersedes conflicting older statements below.
+
+- Phase 2 orchestration modules are present and actively used:
+  - `weebot/core/workflow_orchestrator.py`
+  - `weebot/core/circuit_breaker.py`
+  - `weebot/core/dependency_graph.py`
+- Phase 3 template stack is present:
+  - parser / engine / registry / jinja / versioning / adaptive / production / marketplace
+- Phase 4 observability modules are present:
+  - `weebot/structured_logger.py`
+  - `weebot/core/workflow_tracer.py`
+  - `weebot/core/dashboard.py`
+- Targeted validation evidence:
+  - `pytest tests/unit/test_phase4_observability.py -q` -> passed
+  - `pytest tests/unit/test_run_mcp.py tests/unit/test_mcp_server.py tests/unit/test_dashboard_security.py tests/unit/test_template_versioning_security.py -q` -> passed
+- Full `tests/unit` currently does not run fully green in this environment and should not be described as fully passing until stabilization is complete.
 
 ---
 
@@ -152,14 +174,14 @@ Three critical bugs were discovered via epistemic decomposition + Chain of Verif
 **Dependencies:** All completed ✅
 **Prerequisites:** All Phase 1-7 features stable ✅
 
-> **Note (2026-03-03 codebase audit):** All Phase 2 components already exist as untracked draft files in `weebot/core/`. The work is to finalize, integrate, and commit them with passing tests — not to create them from scratch.
+> **Historical note:** Older roadmap text referred to "untracked drafts". Current repository already contains these Phase 2 modules and tests.
 
 ---
 
 ### 2.1 WorkflowOrchestrator — ✅ COMPLETE
 
-**File:** `weebot/core/workflow_orchestrator.py` — untracked draft
-**Test:** `tests/unit/test_workflow_orchestrator.py` — untracked draft
+**File:** `weebot/core/workflow_orchestrator.py` — implemented
+**Test:** `tests/unit/test_workflow_orchestrator.py` — present
 
 **Purpose:** Coordinate multiple agents, manage task graphs, enable parallel execution
 
@@ -186,11 +208,7 @@ Three critical bugs were discovered via epistemic decomposition + Chain of Verif
 | Memory leaks | Proper cleanup in finally blocks |
 | Concurrent budget exhaustion | `threading.Lock` on CostTracker (see RESILIENCE doc) |
 
-**Action to finalize:**
-1. Review draft, run `pytest tests/unit/test_workflow_orchestrator.py -v`
-2. Fix failing tests; add missing coverage
-3. Integrate with AgentFactory and EventBroker
-4. Commit when 12+ tests pass
+**Current status:** Implemented and integrated. Continue stabilization via unit and integration coverage.
 
 ```python
 from weebot.core.workflow_orchestrator import WorkflowOrchestrator
@@ -206,8 +224,8 @@ result = await orchestrator.execute(task_graph)
 
 ### 2.2 CircuitBreaker Pattern — ✅ COMPLETE (22 tests)
 
-**File:** `weebot/core/circuit_breaker.py` — untracked draft
-**Test:** `tests/unit/test_circuit_breaker.py` — untracked draft (7 failing)
+**File:** `weebot/core/circuit_breaker.py` — implemented
+**Test:** `tests/unit/test_circuit_breaker.py` — present
 
 **Purpose:** Prevent cascading failures, enable graceful degradation
 
@@ -227,10 +245,7 @@ CLOSED ──[failures ≥ threshold]──> OPEN
 - Fallback strategies
 - Metrics collection
 
-**Action to finalize:**
-1. `pytest tests/unit/test_circuit_breaker.py -v` — see which 7 tests fail
-2. Fix implementation gaps; target 10+ passing tests
-3. Integrate with `generate_with_fallback()` (Phase 4 observability gate)
+**Current status:** Implemented. Keep circuit-breaker behavior under regression coverage while stabilizing full suite.
 
 ```python
 from weebot.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
@@ -248,10 +263,10 @@ async with breaker:
 
 ### 2.3 ToolResult Enhancement — ✅ COMPLETE (15 tests)
 
-**File:** `weebot/tools/base.py` — modified (uncommitted changes)
-**Test:** `tests/unit/test_tool_result_enhanced.py` — untracked draft
+**File:** `weebot/tools/base.py` — implemented
+**Test:** `tests/unit/test_tool_result_enhanced.py` — present
 
-> **Codebase audit finding:** `weebot/tools/base.py` already contains the enhanced `ToolResult` structure with `success`, `data`, `error_type`, `metadata` (including `execution_time_ms`, `tool_name`, `retry_count`, `timestamp`). This task is complete — needs only to be committed.
+> `weebot/tools/base.py` contains the enhanced `ToolResult` structure with `success`, `data`, `error_type`, and `metadata`.
 
 **Current Structure (already implemented):**
 ```python
@@ -263,16 +278,14 @@ class ToolResult(BaseModel):
     metadata: Dict[str, Any] = {}  # execution_time_ms, tool_name, timestamp, retry_count
 ```
 
-**Action to finalize:**
-1. Run `pytest tests/unit/test_tool_result_enhanced.py -v` — verify tests pass
-2. Include `weebot/tools/base.py` in the Phase 2 commit
+**Current status:** Implemented and in-use.
 
 ---
 
 ### 2.4 Dependency Graph Engine — ✅ COMPLETE (17+ tests)
 
-**File:** `weebot/core/dependency_graph.py` — untracked draft
-**Test:** `tests/unit/test_dependency_graph.py` — untracked draft
+**File:** `weebot/core/dependency_graph.py` — implemented
+**Test:** `tests/unit/test_dependency_graph.py` — present
 
 **Purpose:** Resolve task dependencies, detect cycles, plan execution order
 
@@ -283,9 +296,7 @@ class ToolResult(BaseModel):
 - Critical path analysis
 - Visualization (Mermaid/Graphviz)
 
-**Action to finalize:**
-1. `pytest tests/unit/test_dependency_graph.py -v` — see current pass rate
-2. Fix gaps; target 8+ passing tests
+**Current status:** Implemented. Continue validating cycle/missing-dependency edge cases under tests.
 
 ```python
 from weebot.core.dependency_graph import DependencyGraph
@@ -316,7 +327,7 @@ mermaid = graph.to_mermaid()
 **Phase 2 Complete ✅**
 - [x] All 4 components committed and tracked
 - [x] 69+ tests passing for Phase 2 components
-- [x] `pytest tests/unit/ -q` shows 0 new failures
+- [ ] Full `pytest tests/unit/ -q` stabilization in current environment
 - [x] Security fixes integrated (BashTool multi-layer defense)
 
 ---
@@ -438,33 +449,12 @@ mermaid = graph.to_mermaid()
 | Workflow Tracing | ✅ Complete | 9+ | Execution timeline |
 | Internal Dashboard | ✅ Complete | 6+ | Built-in web UI |
 
-### 4.1 Structured Logging
-**File:** `weebot/structured_logger.py` (untracked draft exists)
-- JSON-formatted logs
-- Correlation IDs across agents
-- Performance tracking per tool
-- Error categorization & stacks
+### 4.x Legacy Planning Notes (Archived)
 
-### 4.2 Workflow Tracing
-**File:** `weebot/core/workflow_tracer.py` (NEW)
-- Agent execution timeline
-- Tool call tracing with timing
-- Decision point logging
-- Error propagation tracking
-
-### 4.3 Metrics Dashboard
-**File:** `weebot/core/dashboard.py` (NEW)
-- Agent performance metrics
-- Tool usage statistics
-- Success/failure rates
-- Response time analytics (p99 latency thresholds: warn >10s, critical >30s)
-- Resource utilization
-
-### 4.4 Alert System
-**File:** `weebot/core/alerting.py` (NEW)
-- Threshold-based alerts (see runtime monitor parameters in `docs/RESILIENCE_AND_DEPLOYMENT.md`)
-- Performance degradation detection
-- Error spike detection
+Older roadmap revisions described the observability modules above as "draft/new".
+Those notes are now archived. Current status is captured in:
+- `Phase 4 Summary` (implemented components)
+- `Remaining Engineering Items` (what is still open)
 
 ---
 
@@ -485,14 +475,17 @@ mermaid = graph.to_mermaid()
 | `weebot/templates/parser.py` | YAML/JSON parsing | ✅ Complete (w/ Security) | Phase 3 + HARDEN |
 | `weebot/templates/production.py` | Production features | ✅ Complete (w/ Bounds) | Phase 6 + HARDEN |
 
-### 🟡 In Progress / Draft Files
+### 🟡 Remaining Engineering Items
 
-| File | Purpose | Status | Target Phase |
-|------|---------|--------|-------------|
-| `weebot/structured_logger.py` | JSON logging | 📄 Draft | Phase 4 |
-| `weebot/core/workflow_tracer.py` | Execution tracing | ❌ NEW | Phase 4 |
-| `weebot/core/dashboard.py` | Internal dashboard | ❌ NEW | Phase 4 |
-| `weebot/core/agent_profile.py` | Agent analytics | 📄 Draft | Phase 4 |
+| Item | Status | Priority | Notes |
+|------|--------|----------|-------|
+| `weebot/core/alerting.py` module | Not implemented | P2 | External alerting exists via `docs/alerting_rules.yaml`; native runtime alert module still optional backlog |
+| Full `tests/unit` stability | Not green in this env | P1 | Resolve failing/erroring suites and environment permission issues |
+| `datetime.utcnow()` deprecation cleanup | Open | P2 | Replace with timezone-aware UTC datetimes |
+| `ResponseCache` atomic file writes | Open | P2 | Mitigate partial writes on Windows |
+| CostTracker concurrency lock | Open | P2 | Add lock around budget updates/checks under concurrent calls |
+| ActivityStream empty project_id guard | Open | P3 | Enforce non-empty project IDs |
+| `StateManager` async timeout guards | Open | P2 | Add timeout wrappers around executor calls where needed |
 
 ---
 
@@ -539,11 +532,11 @@ Phase 3* ✅ Workflow Templates
 ├─ Template Engine ✅
 └─ 8 Built-in Templates ✅
     ↓
-Phase 4* 🟡 Observability (IN PROGRESS)
-├─ Structured Logging 🟡
-├─ Workflow Tracing 🟡
-└─ Internal Dashboard 🟡
-    (Metrics & Alerting ✅ via HARDEN)
+Phase 4* ✅ Observability Implemented
+├─ Structured Logging ✅
+├─ Workflow Tracing ✅
+├─ Internal Dashboard ✅
+└─ External Alerting ✅ (AlertManager rules)
 ```
 
 ---
@@ -556,15 +549,10 @@ Phase 4* 🟡 Observability (IN PROGRESS)
 - ✅ Tool name typos pass validation → **FIXED** (`a34110f`)
 - ✅ Duplicate roles silently overwrite → **FIXED** (`a34110f`)
 
-### Pre-existing Failures (not regressions, not blocking Phase 2)
-| Test File | Count | Reason |
-|-----------|-------|--------|
-| `test_circuit_breaker.py` | 7 | Draft implementation gaps |
-| `test_file_editor.py` | 8 | Known pre-existing failures |
-| `test_settings.py` | 2 | Missing API keys in test env |
-| `test_event_broker_resilience.py` | 1 | Draft/stress test |
-| `test_tool_registry.py` | 1 | Registry mismatch |
-| Others | ~13 | Various draft test files |
+### Current Test Posture (2026-03-04)
+- Targeted suites for observability and recent security hardening pass.
+- Full `pytest tests/unit -q` in this environment returns failures/errors and temp-permission cleanup issues.
+- Do not treat "all unit tests green" as current truth until P1 stabilization is complete.
 
 ### Residual Known Risks
 | ID | Risk | Severity | Mitigation |
@@ -576,83 +564,12 @@ Phase 4* 🟡 Observability (IN PROGRESS)
 
 **Rollback Threshold:** Any critical metric sustained > 2 minutes, OR deployment doubles error rate within 5 minutes. See `docs/RESILIENCE_AND_DEPLOYMENT.md` for full recovery plans.
 
-### Critical Path
-1. **Phase 2 CircuitBreaker** → Blocks Orchestrator stability
-2. **Phase 2 Orchestrator** → Blocks Phase 3 templates
-3. **Phase 3 Templates** → Blocks Phase 4 observability
-
----
-
-## 📅 Timeline (Dependency-Based)
-
-**Phase 2:** Now — draft files exist, need finalization and passing tests
-**Phase 3:** After Phase 2 Orchestrator is tested and committed
-**Phase 4:** After Phase 3 examples work
-
----
-
-## 🚀 Getting Started with Phase 2
-
-### Prerequisites
-- [x] All Phase 1-7 tests passing (428 committed ✅)
-- [x] Bug fixes committed (`a34110f` ✅)
-- [x] Draft files already exist (no need to create from scratch)
-
-### Step-by-Step Execution
-
-**Step 1: Assess draft files**
-```bash
-# Run all Phase 2 draft tests to see current state
-pytest tests/unit/test_workflow_orchestrator.py -v
-pytest tests/unit/test_circuit_breaker.py -v
-pytest tests/unit/test_dependency_graph.py -v
-pytest tests/unit/test_tool_result_enhanced.py -v
-```
-
-**Step 2: Fix CircuitBreaker (7 failing tests)**
-```bash
-# Inspect failures
-pytest tests/unit/test_circuit_breaker.py -v --tb=short
-# Edit draft
-code weebot/core/circuit_breaker.py
-# Re-run until green
-pytest tests/unit/test_circuit_breaker.py -v
-```
-
-**Step 3: Finalize WorkflowOrchestrator**
-```bash
-code weebot/core/workflow_orchestrator.py
-pytest tests/unit/test_workflow_orchestrator.py -v
-# Target: 12+ tests passing
-```
-
-**Step 4: Finalize DependencyGraph**
-```bash
-code weebot/core/dependency_graph.py
-pytest tests/unit/test_dependency_graph.py -v
-# Target: 8+ tests passing
-```
-
-**Step 5: Commit Phase 2**
-```bash
-git add weebot/core/workflow_orchestrator.py \
-        weebot/core/circuit_breaker.py \
-        weebot/core/dependency_graph.py \
-        weebot/tools/base.py \
-        tests/unit/test_workflow_orchestrator.py \
-        tests/unit/test_circuit_breaker.py \
-        tests/unit/test_dependency_graph.py \
-        tests/unit/test_tool_result_enhanced.py \
-        examples/06_orchestration_demo.py
-pytest tests/unit/ -q  # Verify no new failures
-git commit -m "feat: Phase 2 — Multi-Agent Orchestration Engine"
-```
-
-**Step 6: Verify Completion**
-```bash
-pytest tests/unit/ -v  # Should have 470+ tests passing
-git log --oneline | head -5
-```
+### Priority Backlog (Actionable)
+1. **P1** Stabilize full unit suite and remove environment-specific permission failures.
+2. **P1** Re-baseline test counts in docs from live CI output, not historical snapshots.
+3. **P2** Implement or explicitly de-scope `weebot/core/alerting.py` in roadmap text.
+4. **P2** Address technical debt risks (atomic cache writes, budget lock, executor timeouts, UTC datetime updates).
+5. **P3** Documentation cleanup pass for all status files to maintain one source of truth.
 
 ---
 
@@ -671,6 +588,6 @@ git log --oneline | head -5
 ---
 
 **Document Status:** ✅ Active
-**Last Review:** 2026-03-03 — full codebase audit vs roadmap
-**Next Review:** Upon Phase 2 completion
+**Last Review:** 2026-03-04 — consistency and implementation reality check
+**Next Review:** After P1 stabilization backlog is complete
 **Maintainer:** Weebot Development Team
