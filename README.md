@@ -114,6 +114,13 @@ python -m cli.main upgrade --dry-run
 # Hooks (install into a project-local target)
 python -m cli.main hooks init
 python -m cli.main hooks install --target .weebot/hooks-installed
+
+# Agent personas
+python -m cli.main agents import path\to\agency-agents
+python -m cli.main agents list
+python -m cli.main agents route "Improve frontend performance"
+python -m cli.main agents pack apply engineering --execute
+python -m cli.main agents sync-claude
 ```
 
 ### MCP Server (Claude Desktop)
