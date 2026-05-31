@@ -296,6 +296,13 @@ class Container:
         """Construct a ready-to-use SkillOptFlow."""
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
 
+        mediator = self.get(Mediator)
+        # Wire the validation gate into the mediator's pipeline so that
+        # ApplySkillEditsCommand actually runs held-out validation tasks.
+        gate = self._maybe_get_str("validation_gate")
+        if gate is not None:
+            mediator.add_pipeline_behavior(gate)
+
         return SkillOptFlow(
             skill_name=skill_name,
             target_flow_factory=self._create_target_flow_factory(),

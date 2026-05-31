@@ -134,7 +134,9 @@ class ValidationRunner:
             try:
                 async for _ in flow.run(task_id):
                     pass
-                return await self._scoring_fn(session)
+                # PlanActFlow updates its own _session immutably — score that.
+                completed = getattr(flow, "_session", session)
+                return await self._scoring_fn(completed)
             except Exception as exc:
                 logger.warning("Validation task '%s' failed: %s", task_id, exc)
                 return 0.0

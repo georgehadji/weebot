@@ -106,13 +106,16 @@ class BenchmarkRunner:
                 error=str(exc),
             )
 
+        # PlanActFlow updates its own _session immutably — use that for scoring.
+        completed_session = getattr(flow, "_session", session)
+
         try:
-            score = await self._scorer.score(session, task, sample_idx)
+            score = await self._scorer.score(completed_session, task, sample_idx)
         except Exception as exc:
             logger.warning("Scoring failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
             score = 0.0
 
-        answer = TaskScorer._extract_answer(session)
+        answer = TaskScorer._extract_answer(completed_session)
         return BenchmarkResult(
             task_id=task.task_id,
             sample_idx=sample_idx,
