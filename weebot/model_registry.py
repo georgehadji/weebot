@@ -1,0 +1,832 @@
+"""
+Model Registry for Weebot - AI Model Characteristics & Pricing Information
+
+This module provides a registry of AI models with their characteristics, 
+pricing information, and capabilities for intelligent model selection.
+"""
+import json
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional
+from pathlib import Path
+
+
+class ModelProvider(Enum):
+    """Supported AI model providers."""
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    AZURE = "azure"
+    AWS_BEDROCK = "bedrock"
+    COHERE = "cohere"
+    ANYSCALE = "anyscale"
+    PERPLEXITY = "perplexity"
+    MISTRAL = "mistral"
+    GROQ = "groq"
+    TOGETHER_AI = "together_ai"
+    OLLAMA = "ollama"
+    HUGGINGFACE = "huggingface"
+    DEEPSEEK = "deepseek"
+    MOONSHOT = "moonshot"
+    XAI = "xai"
+    NVIDIA = "nvidia_nim"
+    FIREWORKS_AI = "fireworks_ai"
+    LEONARDO_AI = "leonardo_ai"
+    REPLICATE = "replicate"
+    VERTEX_AI = "vertex_ai"
+    GEMINI = "gemini"
+    OPENROUTER = "openrouter"
+    LM_STUDIO = "lm_studio"
+    VLLM = "vllm"
+    CUSTOM_OPENAI = "custom_openai"
+
+
+@dataclass
+class ModelInfo:
+    """Information about a specific AI model."""
+    model_name: str
+    provider: ModelProvider
+    input_cost_per_token: float
+    output_cost_per_token: float
+    max_input_tokens: int
+    max_output_tokens: int
+    supports_function_calling: bool = False
+    supports_vision: bool = False
+    supports_audio_input: bool = False
+    supports_audio_output: bool = False
+    supports_system_messages: bool = True
+    supports_response_schema: bool = False
+    supports_prompt_caching: bool = False
+    description: str = ""
+    
+    def calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Calculate the cost for a specific usage."""
+        return (input_tokens * self.input_cost_per_token) + (output_tokens * self.output_cost_per_token)
+
+    def calculate_cost_per_1k_tokens(self) -> float:
+        """Get the average cost per 1k tokens (assuming equal input/output)."""
+        return (self.input_cost_per_token + self.output_cost_per_token) * 1000
+
+
+def _load_model_registry() -> Dict[str, ModelInfo]:
+    """Load model registry from built-in defaults."""
+    return _get_default_model_registry()
+
+
+def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
+    """Infer provider from model name pattern."""
+    if model_name.startswith("gpt-"):
+        return ModelProvider.OPENAI
+    elif model_name.startswith("claude-"):
+        return ModelProvider.ANTHROPIC
+    elif model_name.startswith("gemini/") or model_name.startswith("google/"):
+        return ModelProvider.GOOGLE
+    elif model_name.startswith("azure/"):
+        return ModelProvider.AZURE
+    elif model_name.startswith("bedrock/"):
+        return ModelProvider.AWS_BEDROCK
+    elif model_name.startswith("ollama/"):
+        return ModelProvider.OLLAMA
+    elif model_name.startswith("mistral/"):
+        return ModelProvider.MISTRAL
+    elif model_name.startswith("groq/"):
+        return ModelProvider.GROQ
+    elif model_name.startswith("together_ai/"):
+        return ModelProvider.TOGETHER_AI
+    elif model_name.startswith("deepseek/"):
+        return ModelProvider.DEEPSEEK
+    elif model_name.startswith("moonshot/"):
+        return ModelProvider.MOONSHOT
+    elif model_name.startswith("xai/"):
+        return ModelProvider.XAI
+    elif model_name.startswith("nvidia/"):
+        return ModelProvider.NVIDIA
+    elif model_name.startswith("fireworks/"):
+        return ModelProvider.FIREWORKS_AI
+    elif model_name.startswith("replicate/"):
+        return ModelProvider.REPLICATE
+    elif model_name.startswith("openrouter/"):
+        return ModelProvider.OPENROUTER
+    else:
+        # Default to OpenAI for unknown models
+        return ModelProvider.OPENAI
+
+
+def _get_default_model_registry() -> Dict[str, ModelInfo]:
+    """Get a default model registry with common models."""
+    return {
+        # Frontier/Reasoning Models
+        "claude-4.6-opus": ModelInfo(
+            model_name="claude-4.6-opus",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=5e-06,  # $5.0 per 1M tokens
+            output_cost_per_token=2.5e-05,  # $25.0 per 1M tokens
+            max_input_tokens=1000000,  # 1M context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic's Claude Opus 4.6 - Frontier model for deep reasoning, agent teams, and long-horizon tasks. Native multi-agent collaboration with 14.5h autonomous task horizon."
+        ),
+        "gpt-5.2": ModelInfo(
+            model_name="gpt-5.2",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=1.75e-06,  # $1.75 per 1M tokens
+            output_cost_per_token=3e-05,  # $30.0 per 1M tokens
+            max_input_tokens=400000,  # 400K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI's GPT-5.2 - Frontier model for multi-step reasoning, math, and multimodal tasks. Strong decomposition stability but high output cost."
+        ),
+        "gemini-3-pro": ModelInfo(
+            model_name="gemini-3-pro",
+            provider=ModelProvider.GOOGLE,
+            input_cost_per_token=1.25e-06,  # $1.25 per 1M tokens
+            output_cost_per_token=1e-05,  # $10.0 per 1M tokens
+            max_input_tokens=1000000,  # 1M context
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google's Gemini 3 Pro - Frontier model with 1M native context, strong in math reasoning (100% AIME 2025 with code exec). Charges for thinking tokens."
+        ),
+        "grok-4.1": ModelInfo(
+            model_name="grok-4.1",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=3e-06,  # $3.0 per 1M tokens
+            output_cost_per_token=1.5e-05,  # $15.0 per 1M tokens
+            max_input_tokens=2000000,  # 2M context
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="xAI's Grok 4.1 - Frontier model for pure reasoning with 2M context window and ~4% hallucination rate. #1 LMArena Elo (1483)."
+        ),
+        
+        # Performance/Best Value Models
+        "claude-4.6-sonnet": ModelInfo(
+            model_name="claude-4.6-sonnet",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=3e-06,  # $3.0 per 1M tokens
+            output_cost_per_token=1.5e-05,  # $15.0 per 1M tokens
+            max_input_tokens=200000,  # 200K context (1M beta)
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic's Claude Sonnet 4.6 - Best value for coding agents and production use. 72.5% OSWorld (near Opus), 79.6% SWE-bench, 94% on real insurance workflows."
+        ),
+        "gpt-5.1": ModelInfo(
+            model_name="gpt-5.1",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=1.25e-06,  # $1.25 per 1M tokens
+            output_cost_per_token=1e-05,  # $10.0 per 1M tokens
+            max_input_tokens=400000,  # 400K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI's GPT-5.1 - Configurable reasoning effort with good balance of speed/quality. Perfect for agentic workflows."
+        ),
+        "deepseek-r1": ModelInfo(
+            model_name="deepseek-r1",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=5.5e-07,  # $0.55 per 1M tokens
+            output_cost_per_token=2.19e-06,  # $2.19 per 1M tokens
+            max_input_tokens=128000,  # 128K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="DeepSeek's R1 - Strong reasoning at fraction of cost with 87.5% AIME score. Good for specialized reasoning agents."
+        ),
+        
+        # Budget/High-Volume Models
+        "claude-4.5-haiku": ModelInfo(
+            model_name="claude-4.5-haiku",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=1e-06,  # $1.0 per 1M tokens
+            output_cost_per_token=5e-06,  # $5.0 per 1M tokens
+            max_input_tokens=200000,  # 200K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic's Claude Haiku 4.5 - Fast classification for agent orchestration. Ideal as router model in multi-agent systems."
+        ),
+        "gpt-5-mini": ModelInfo(
+            model_name="gpt-5-mini",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=2.5e-07,  # $0.25 per 1M tokens
+            output_cost_per_token=2e-06,  # $2.0 per 1M tokens
+            max_input_tokens=128000,  # 128K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="OpenAI's GPT-5 Mini - Budget option for simple agent tasks and inner-loop routing decisions."
+        ),
+        "gemini-2.5-flash": ModelInfo(
+            model_name="gemini-2.5-flash",
+            provider=ModelProvider.GEMINI,
+            input_cost_per_token=1.5e-07,  # $0.15 per 1M tokens
+            output_cost_per_token=6e-07,  # $0.60 per 1M tokens
+            max_input_tokens=1000000,  # 1M context
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google's Gemini 2.5 Flash - Cheapest option with 1M context. Great for summarization sub-agents and ultra-cheap operations."
+        ),
+        "deepseek-v3.2": ModelInfo(
+            model_name="deepseek-v3.2",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=1.4e-07,  # $0.14 per 1M tokens
+            output_cost_per_token=2.8e-07,  # $0.28 per 1M tokens
+            max_input_tokens=128000,  # 128K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="DeepSeek's V3.2 - Ultra-budget model (~100x cheaper than GPT-5.2 output) with quality score 79/100. Best $/quality ratio."
+        ),
+        
+        # Open Source Models
+        "k2": ModelInfo(
+            model_name="k2",
+            provider=ModelProvider.HUGGINGFACE,  # Assuming this is hosted on HuggingFace
+            input_cost_per_token=0.0,  # Free for open source
+            output_cost_per_token=0.0,
+            max_input_tokens=128000,  # 128K context
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="K2 Open Source model - Community model with strong agent capabilities (82) and good reasoning (78)."
+        ),
+        
+        # Legacy models for backward compatibility
+        "gpt-4o": ModelInfo(
+            model_name="gpt-4o",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=128000,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI's most advanced multimodal model"
+        ),
+        "gpt-4o-mini": ModelInfo(
+            model_name="gpt-4o-mini",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=1.5e-07,
+            output_cost_per_token=6e-07,
+            max_input_tokens=128000,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI's affordable multimodal model"
+        ),
+        "gpt-3.5-turbo": ModelInfo(
+            model_name="gpt-3.5-turbo",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=5e-07,
+            output_cost_per_token=1.5e-06,
+            max_input_tokens=16385,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="OpenAI's efficient chat model"
+        ),
+        
+        # Anthropic Models
+        "claude-3-5-sonnet-20241022": ModelInfo(
+            model_name="claude-3-5-sonnet-20241022",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=3e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=200000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            description="Anthropic's most intelligent model"
+        ),
+        "claude-3-opus-20240229": ModelInfo(
+            model_name="claude-3-opus-20240229",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=1.5e-05,
+            output_cost_per_token=7.5e-05,
+            max_input_tokens=200000,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            description="Anthropic's most powerful model"
+        ),
+        "claude-3-haiku-20240307": ModelInfo(
+            model_name="claude-3-haiku-20240307",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=2.5e-07,
+            output_cost_per_token=1.25e-06,
+            max_input_tokens=200000,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            description="Anthropic's fastest model"
+        ),
+        
+        # Google Models
+        "gemini/gemini-1.5-pro": ModelInfo(
+            model_name="gemini/gemini-1.5-pro",
+            provider=ModelProvider.GEMINI,
+            input_cost_per_token=1.25e-06,
+            output_cost_per_token=5e-06,
+            max_input_tokens=2000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google's most capable multimodal model"
+        ),
+        "gemini/gemini-1.5-flash": ModelInfo(
+            model_name="gemini/gemini-1.5-flash",
+            provider=ModelProvider.GEMINI,
+            input_cost_per_token=7.5e-08,
+            output_cost_per_token=3e-07,
+            max_input_tokens=1000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google's fast and efficient multimodal model"
+        ),
+        
+        # Mistral Models
+        "mistral-large-latest": ModelInfo(
+            model_name="mistral-large-latest",
+            provider=ModelProvider.MISTRAL,
+            input_cost_per_token=2e-06,
+            output_cost_per_token=6e-06,
+            max_input_tokens=32768,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Mistral's most capable model"
+        ),
+        "mistral-medium-latest": ModelInfo(
+            model_name="mistral-medium-latest",
+            provider=ModelProvider.MISTRAL,
+            input_cost_per_token=2.7e-07,
+            output_cost_per_token=8.1e-07,
+            max_input_tokens=32768,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Mistral's balanced performance model"
+        ),
+        
+        # Groq Models
+        "groq/llama3-70b-8192": ModelInfo(
+            model_name="groq/llama3-70b-8192",
+            provider=ModelProvider.GROQ,
+            input_cost_per_token=5.9e-07,
+            output_cost_per_token=7.9e-07,
+            max_input_tokens=8192,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Groq's fast Llama 3 70B model"
+        ),
+        "groq/llama-3.1-8b-instant": ModelInfo(
+            model_name="groq/llama-3.1-8b-instant",
+            provider=ModelProvider.GROQ,
+            input_cost_per_token=5e-08,
+            output_cost_per_token=8e-08,
+            max_input_tokens=8192,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Groq's instant Llama 3.1 8B model"
+        ),
+        
+        # Ollama Models (Local)
+        "llama3": ModelInfo(
+            model_name="llama3",
+            provider=ModelProvider.OLLAMA,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=8192,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Meta's Llama 3 model (local)"
+        ),
+        "phi3": ModelInfo(
+            model_name="phi3",
+            provider=ModelProvider.OLLAMA,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Microsoft's Phi-3 model (local)"
+        ),
+        
+        # DeepSeek Models
+        "deepseek-chat": ModelInfo(
+            model_name="deepseek-chat",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=1.4e-07,
+            output_cost_per_token=2.8e-07,
+            max_input_tokens=128000,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="DeepSeek's efficient chat model"
+        ),
+        "deepseek-coder": ModelInfo(
+            model_name="deepseek-coder",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=1.4e-07,
+            output_cost_per_token=2.8e-07,
+            max_input_tokens=128000,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="DeepSeek's code generation model"
+        ),
+        
+        # Moonshot Models
+        "moonshot-v1-8k": ModelInfo(
+            model_name="moonshot-v1-8k",
+            provider=ModelProvider.MOONSHOT,
+            input_cost_per_token=1.2e-06,
+            output_cost_per_token=1.2e-06,
+            max_input_tokens=8192,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Moonshot's 8K context model"
+        ),
+        "moonshot-v1-32k": ModelInfo(
+            model_name="moonshot-v1-32k",
+            provider=ModelProvider.MOONSHOT,
+            input_cost_per_token=2.4e-06,
+            output_cost_per_token=2.4e-06,
+            max_input_tokens=32768,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Moonshot's 32K context model"
+        ),
+        
+        # XAI Models
+        "grok/grok-2-1212": ModelInfo(
+            model_name="grok/grok-2-1212",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=5e-07,
+            output_cost_per_token=1.5e-06,
+            max_input_tokens=8192,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="XAI's Grok 2 model"
+        ),
+        
+        # OpenRouter Models
+        "openrouter/google/gemini-2.5-flash": ModelInfo(
+            model_name="openrouter/google/gemini-2.5-flash",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=7.5e-08,
+            output_cost_per_token=3e-07,
+            max_input_tokens=1000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google Gemini 2.5 Flash via OpenRouter"
+        ),
+        "openrouter/anthropic/claude-3.5-sonnet": ModelInfo(
+            model_name="openrouter/anthropic/claude-3.5-sonnet",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=3e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=200000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic Claude 3.5 Sonnet via OpenRouter"
+        ),
+        "openrouter/openai/gpt-4o-mini": ModelInfo(
+            model_name="openrouter/openai/gpt-4o-mini",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1.5e-07,
+            output_cost_per_token=6e-07,
+            max_input_tokens=128000,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI GPT-4o Mini via OpenRouter"
+        ),
+        "openrouter/auto": ModelInfo(
+            model_name="openrouter/auto",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=2000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenRouter Auto - automatically selects the best model via NotDiamond"
+        ),
+        "openrouter/openai/gpt-4.1": ModelInfo(
+            model_name="openrouter/openai/gpt-4.1",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=2e-06,
+            output_cost_per_token=8e-06,
+            max_input_tokens=1047576,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI GPT-4.1 via OpenRouter"
+        ),
+        "openrouter/openai/gpt-4.1-mini": ModelInfo(
+            model_name="openrouter/openai/gpt-4.1-mini",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=4e-07,
+            output_cost_per_token=1.6e-06,
+            max_input_tokens=1047576,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI GPT-4.1 Mini via OpenRouter"
+        ),
+        "openrouter/anthropic/claude-3.7-sonnet": ModelInfo(
+            model_name="openrouter/anthropic/claude-3.7-sonnet",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=3e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=200000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic Claude 3.7 Sonnet via OpenRouter"
+        ),
+        "openrouter/anthropic/claude-opus-4.6": ModelInfo(
+            model_name="openrouter/anthropic/claude-opus-4.6",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=3e-05,
+            output_cost_per_token=7.5e-05,
+            max_input_tokens=1000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic Claude Opus 4.6 via OpenRouter"
+        ),
+        "openrouter/google/gemini-2.5-pro": ModelInfo(
+            model_name="openrouter/google/gemini-2.5-pro",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=2.5e-06,
+            output_cost_per_token=1e-05,
+            max_input_tokens=1000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Google Gemini 2.5 Pro via OpenRouter"
+        ),
+        "openrouter/deepseek/deepseek-chat-v3.1": ModelInfo(
+            model_name="openrouter/deepseek/deepseek-chat-v3.1",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1.5e-07,
+            output_cost_per_token=7.5e-07,
+            max_input_tokens=32768,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="DeepSeek Chat V3.1 via OpenRouter"
+        ),
+        "openrouter/deepseek/deepseek-r1-0528": ModelInfo(
+            model_name="openrouter/deepseek/deepseek-r1-0528",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=5.5e-07,
+            output_cost_per_token=2.19e-06,
+            max_input_tokens=163840,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="DeepSeek R1 reasoning model via OpenRouter"
+        ),
+        "openrouter/x-ai/grok-4.1-fast": ModelInfo(
+            model_name="openrouter/x-ai/grok-4.1-fast",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=2e-07,
+            output_cost_per_token=5e-07,
+            max_input_tokens=2000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="xAI Grok 4.1 Fast via OpenRouter"
+        ),
+        "openrouter/meta-llama/llama-4-maverick": ModelInfo(
+            model_name="openrouter/meta-llama/llama-4-maverick",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1.5e-07,
+            output_cost_per_token=6e-07,
+            max_input_tokens=1048576,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            description="Meta Llama 4 Maverick via OpenRouter"
+        ),
+        "openrouter/moonshotai/kimi-k2.5": ModelInfo(
+            model_name="openrouter/moonshotai/kimi-k2.5",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=2.5e-06,
+            output_cost_per_token=1e-05,
+            max_input_tokens=262144,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Moonshot Kimi K2.5 via OpenRouter"
+        ),
+    }
+
+
+# Global model registry
+MODEL_REGISTRY: Dict[str, ModelInfo] = _load_model_registry()
+
+
+def get_model_info(model_name: str) -> Optional[ModelInfo]:
+    """
+    Get information about a specific model.
+    
+    Args:
+        model_name: Name of the model to look up
+        
+    Returns:
+        ModelInfo object if found, None otherwise
+    """
+    return MODEL_REGISTRY.get(model_name)
+
+
+def get_models_by_provider(provider: ModelProvider) -> List[ModelInfo]:
+    """
+    Get all models for a specific provider.
+    
+    Args:
+        provider: Provider to filter models by
+        
+    Returns:
+        List of ModelInfo objects for the provider
+    """
+    return [model for model in MODEL_REGISTRY.values() if model.provider == provider]
+
+
+def get_cheapest_model_for_task(
+    input_tokens: int,
+    output_tokens: int,
+    providers: Optional[List[ModelProvider]] = None,
+    required_capabilities: Optional[List[str]] = None
+) -> Optional[ModelInfo]:
+    """
+    Find the cheapest model that meets the requirements for a specific task.
+    
+    Args:
+        input_tokens: Expected number of input tokens
+        output_tokens: Expected number of output tokens
+        providers: Optional list of providers to consider
+        required_capabilities: Optional list of required capabilities (function_calling, vision, etc.)
+        
+    Returns:
+        Cheapest ModelInfo that meets requirements, or None if no model found
+    """
+    candidates = []
+    
+    for model in MODEL_REGISTRY.values():
+        # Filter by provider if specified
+        if providers and model.provider not in providers:
+            continue
+            
+        # Check if model has required capabilities
+        if required_capabilities:
+            has_all_caps = True
+            for cap in required_capabilities:
+                if cap == "function_calling" and not model.supports_function_calling:
+                    has_all_caps = False
+                    break
+                elif cap == "vision" and not model.supports_vision:
+                    has_all_caps = False
+                    break
+                elif cap == "system_messages" and not model.supports_system_messages:
+                    has_all_caps = False
+                    break
+                elif cap == "response_schema" and not model.supports_response_schema:
+                    has_all_caps = False
+                    break
+                elif cap == "prompt_caching" and not model.supports_prompt_caching:
+                    has_all_caps = False
+                    break
+            if not has_all_caps:
+                continue
+        
+        # Check if model supports required token counts
+        if input_tokens > model.max_input_tokens or output_tokens > model.max_output_tokens:
+            continue
+            
+        # Calculate cost for this task
+        cost = model.calculate_cost(input_tokens, output_tokens)
+        candidates.append((model, cost))
+    
+    if not candidates:
+        return None
+    
+    # Return the model with the lowest cost
+    candidates.sort(key=lambda x: x[1])
+    return candidates[0][0]
+
+
+def get_model_cost_info(model_name: str) -> Dict[str, float]:
+    """
+    Get cost information for a specific model.
+    
+    Args:
+        model_name: Name of the model to look up
+        
+    Returns:
+        Dictionary with input_cost_per_1k_tokens and output_cost_per_1k_tokens
+    """
+    model_info = get_model_info(model_name)
+    if model_info:
+        return {
+            "input_cost_per_1k_tokens": model_info.input_cost_per_token * 1000,
+            "output_cost_per_1k_tokens": model_info.output_cost_per_token * 1000
+        }
+    
+    # Default values if model not found
+    return {
+        "input_cost_per_1k_tokens": 0.01,
+        "output_cost_per_1k_tokens": 0.03
+    }
+
+
+def list_all_models() -> List[str]:
+    """
+    Get a list of all available model names.
+    
+    Returns:
+        List of model names
+    """
+    return list(MODEL_REGISTRY.keys())
+
+
+def list_all_providers() -> List[ModelProvider]:
+    """
+    Get a list of all supported providers.
+    
+    Returns:
+        List of ModelProvider enums
+    """
+    return list(set(model.provider for model in MODEL_REGISTRY.values()))

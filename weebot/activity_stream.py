@@ -29,6 +29,9 @@ class ActivityStream:
 
     def push(self, project_id: str, kind: str, message: str) -> None:
         """Add a new event. Newest events appear first in recent()."""
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise ValueError("project_id must be a non-empty string")
+
         # When the main buffer is full, appendleft evicts the rightmost (oldest) event.
         # We need to remove it from the per-project index too.
         if len(self._buffer) == self._max_size:

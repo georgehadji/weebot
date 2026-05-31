@@ -5,7 +5,7 @@ Tests Structured Logging, Workflow Tracing, and Internal Dashboard.
 import asyncio
 import json
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class TestStructuredLogger:
@@ -111,7 +111,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.WORKFLOW,
             name="Test Workflow",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         
         assert span.span_id == "span-123"
@@ -127,7 +127,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.AGENT,
             name="Test Agent",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         
         span.add_decision("Selected source A", confidence=0.95)
@@ -146,7 +146,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.TOOL_CALL,
             name="web_search",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         
         span.finish(SpanStatus.SUCCESS)
@@ -164,7 +164,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.AGENT,
             name="Test Agent",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         span.finish()
         
@@ -185,7 +185,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.WORKFLOW,
             name="workflow",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         
         child = TraceSpan(
@@ -193,7 +193,7 @@ class TestWorkflowTracer:
             parent_id="parent",
             span_type=SpanType.AGENT,
             name="agent",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         child.status = SpanStatus.ERROR
         child.error_info = {"type": "ValueError", "message": "test"}
@@ -212,7 +212,7 @@ class TestWorkflowTracer:
             parent_id=None,
             span_type=SpanType.WORKFLOW,
             name="workflow",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         root.duration_ms = 1000
         
@@ -221,7 +221,7 @@ class TestWorkflowTracer:
             parent_id="root",
             span_type=SpanType.AGENT,
             name="agent",
-            start_time=datetime.utcnow(),
+            start_time=datetime.now(timezone.utc),
         )
         child.duration_ms = 500
         root.children.append(child)

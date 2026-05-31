@@ -60,11 +60,13 @@ class WeebotMCPServer:
         product_db_path: Optional[str] = None,
         host: str = "127.0.0.1",
         port: int = 8765,
+        dynamic_tools: Optional[list] = None,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
         self._scheduler = scheduler
         self._product_db_path = product_db_path
+        self._dynamic_tools = dynamic_tools or []
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
@@ -72,6 +74,7 @@ class WeebotMCPServer:
             port=port,
         )
         self._register_tools()
+        self._register_dynamic_tools()
         self._register_resources()
 
     # ------------------------------------------------------------------
@@ -94,6 +97,26 @@ class WeebotMCPServer:
     # ------------------------------------------------------------------
     # Tool registration
     # ------------------------------------------------------------------
+
+    def _register_dynamic_tools(self) -> None:
+        """Register tools supplied via MCPToolkitAdapter or other dynamic sources."""
+        for tool in self._dynamic_tools:
+            wrapper = self._wrap_base_tool(tool)
+            self._mcp.add_tool(
+                wrapper,
+                name=tool.name,
+                description=tool.description,
+            )
+
+    @staticmethod
+    def _wrap_base_tool(tool):
+        """Wrap a weebot BaseTool so it can be registered with FastMCP."""
+        async def wrapper(**kwargs):
+            result = await tool.execute(**kwargs)
+            if result.is_error:
+                raise ValueError(result.error)
+            return result.output
+        return wrapper
 
     def _register_tools(self) -> None:
         mcp = self._mcp

@@ -13,10 +13,21 @@ from weebot.tools.base import BaseTool, ToolResult
 
 # NEW: Multi-layer security analyzer
 from weebot.tools.bash_security import (
-    CommandSecurityAnalyzer, 
+    CommandSecurityAnalyzer,
     RiskLevel,
     get_security_analyzer
 )
+
+# NEW: StateVerifier for false confidence detection (arXiv:2602.20021)
+from weebot.security.state_verifier import (
+    StateVerifier,
+    CommandExecutionClaim,
+    get_state_verifier,
+    VerificationStatus,
+)
+
+# RTK Integration for token economy
+from weebot.rtk_integration import execute_with_rtk_fallback, RTK_ENABLED, get_rtk_status
 
 if TYPE_CHECKING:
     from weebot.config.settings import WeebotSettings
@@ -103,8 +114,10 @@ class BashTool(BaseTool):
     _executor: SandboxedExecutor = PrivateAttr(default=None)
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
     _security_analyzer: CommandSecurityAnalyzer = PrivateAttr(default=None)
+    _state_verifier: StateVerifier = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
     _security_enabled: bool = PrivateAttr(default=True)
+    _verification_enabled: bool = PrivateAttr(default=True)
 
     def model_post_init(self, __context: object) -> None:
         """Initialise the sandboxed executor, approval policy, and security analyzer."""
@@ -114,13 +127,13 @@ class BashTool(BaseTool):
             max_output_bytes=settings.sandbox_max_output_bytes,
         )
         self._policy = ExecApprovalPolicy()
-        
+
         # NEW: Initialize multi-layer security analyzer
         try:
             self._security_analyzer = get_security_analyzer()
             self._security_enabled = True
         except Exception as e:
-            # FALLBACK: If security analyzer fails to initialize, 
+            # FALLBACK: If security analyzer fails to initialize,
             # fall back to legacy mode but log the issue
             import logging
             logging.getLogger(__name__).warning(
@@ -129,6 +142,19 @@ class BashTool(BaseTool):
             )
             self._security_analyzer = None
             self._security_enabled = False
+
+        # NEW: Initialize StateVerifier for false confidence detection
+        try:
+            self._state_verifier = get_state_verifier()
+            self._verification_enabled = True
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"StateVerifier initialization failed: {e}. "
+                "Disabling post-execution verification."
+            )
+            self._state_verifier = None
+            self._verification_enabled = False
 
     # LEGACY: Patterns for detecting encoded/obfuscated commands (fallback)
     _ENCODED_COMMAND_PATTERNS = [
@@ -141,6 +167,11 @@ class BashTool(BaseTool):
         r'echo\s+[A-Za-z0-9+/]{40,}.*\|',  # echo base64 to pipe
         r'\b(echo|printf)\s+.*\|\s*(bash|sh|zsh)',  # piping encoded content to shell
         r'<\(.*\)',  # process substitution
+        r'curl\s+.*\|\s*(bash|sh|zsh)',  # pipe curl to shell
+        r'wget\s+.*-O\s+-\s*\|\s*(bash|sh|zsh)',  # pipe wget to shell
+        r'nc\s+.*-e\s+.*',  # netcat reverse shell
+        r'/dev/tcp/.*',  # bash reverse shell
+        r'\$\{.*\}',  # bash variable expansion obfuscation
     ]
     
     def _legacy_validate_no_encoded_commands(self, command: str) -> tuple[bool, str]:
@@ -186,7 +217,7 @@ class BashTool(BaseTool):
         
         return True, ""
 
-    def _validate_security(self, command: str, security_override: Optional[str] = None) -> tuple[bool, str]:
+    async def _validate_security(self, command: str, security_override: Optional[str] = None) -> tuple[bool, str]:
         """
         Multi-layer security validation with fallback.
         
@@ -242,7 +273,7 @@ class BashTool(BaseTool):
     def _verify_override_token(self, command: str, token: str) -> bool:
         """
         Verify security override token.
-        
+
         NOTE: This is a placeholder. In production, implement:
         - HMAC verification
         - Token expiration checking
@@ -252,6 +283,63 @@ class BashTool(BaseTool):
         # PLACEHOLDER: Always reject in default implementation
         # Subclasses can override with proper implementation
         return False
+
+    async def _verify_command_execution(
+        self,
+        command: str,
+        returncode: int,
+        output: str,
+    ) -> Optional[Any]:
+        """
+        Verify command execution result to prevent false confidence.
+
+        Uses StateVerifier to check if the claimed execution result
+        matches the actual system state.
+
+        Args:
+            command: The command that was executed
+            returncode: The return code from execution
+            output: The output from execution
+
+        Returns:
+            VerificationResult if verification was performed, None otherwise
+        """
+        if not self._state_verifier:
+            return None
+
+        # Only verify critical commands
+        critical_patterns = [
+            r'delete', r'remove', r'rm\s',
+            r'mkdir', r'create', r'new-file',
+            r'download', r'curl', r'wget',
+            r'install', r'pip\s+install', r'npm\s+install',
+        ]
+
+        import re
+        is_critical = any(
+            re.search(pattern, command, re.IGNORECASE)
+            for pattern in critical_patterns
+        )
+
+        if not is_critical:
+            return None
+
+        # Create claim and verify
+        claim = CommandExecutionClaim(
+            command=command,
+            claimed_returncode=returncode,
+            claimed_output=output,
+        )
+
+        try:
+            result = await self._state_verifier.verify_command_execution(claim)
+            return result
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(
+                f"Command verification failed: {e}"
+            )
+            return None
 
     async def execute(  # type: ignore[override]
         self,
@@ -277,7 +365,7 @@ class BashTool(BaseTool):
         effective_timeout = timeout if timeout is not None else self._default_timeout
 
         # --- Security check: multi-layer analysis (NEW) ---
-        is_valid, error_msg = self._validate_security(command, security_override)
+        is_valid, error_msg = await self._validate_security(command, security_override)
         if not is_valid:
             return ToolResult(output="", error=error_msg)
 
@@ -297,23 +385,72 @@ class BashTool(BaseTool):
                 ),
             )
 
-        # --- Build the subprocess command list ---
-        if use_wsl and _wsl_available():
-            cmd = ["wsl", "bash", "-c", command]
+        # --- RTK Integration for token economy ---
+        if RTK_ENABLED:
+            # Execute command through RTK if available and beneficial
+            stdout, stderr, returncode = await execute_with_rtk_fallback(
+                command, effective_timeout
+            )
+            
+            # Create result based on RTK execution
+            if returncode == -1 and "timed out" in stderr.lower():
+                return ToolResult(
+                    output="",
+                    error=stderr,
+                )
+            elif returncode != 0 and stderr:
+                return ToolResult(
+                    output=stdout,
+                    error=stderr or f"Exit code {returncode}",
+                )
+            else:
+                return ToolResult(output=stdout)
         else:
-            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", command]
+            # --- Build the subprocess command list ---
+            if use_wsl and _wsl_available():
+                cmd = ["wsl", "bash", "-c", command]
+            else:
+                # Use PowerShell with proper escaping for Windows
+                # Using the full path to PowerShell to avoid file not found errors
+                import os
+                system_root = os.environ.get('SystemRoot', 'C:\\Windows')
+                powershell_path = os.path.join(system_root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 
-        # --- Run in sandbox ---
-        result = await self._executor.run(cmd, timeout=effective_timeout, cwd=working_dir)
+                # Check if the path exists, otherwise try common locations
+                if not os.path.exists(powershell_path):
+                    import shutil
+                    powershell_path = shutil.which("powershell.exe") or "powershell.exe"
 
-        if result.timed_out:
-            return ToolResult(
-                output="",
-                error=f"Command timed out after {effective_timeout:.0f}s",
-            )
-        if not result.success:
-            return ToolResult(
-                output=result.stdout,
-                error=result.stderr or f"Exit code {result.returncode}",
-            )
-        return ToolResult(output=result.combined_output)
+                cmd = [powershell_path, "-NoProfile", "-NonInteractive", "-Command", command]
+
+            # --- Run in sandbox ---
+            result = await self._executor.run(cmd, timeout=effective_timeout, cwd=working_dir)
+
+            if result.timed_out:
+                return ToolResult(
+                    output="",
+                    error=f"Command timed out after {effective_timeout:.0f}s",
+                )
+            if not result.success:
+                return ToolResult(
+                    output=result.stdout,
+                    error=result.stderr or f"Exit code {result.returncode}",
+                )
+
+            # NEW: Post-execution verification for false confidence detection
+            if self._verification_enabled and self._state_verifier:
+                verification_result = await self._verify_command_execution(
+                    command=command,
+                    returncode=result.returncode,
+                    output=result.combined_output,
+                )
+                if verification_result and not verification_result.is_trusted:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Command execution verification failed: {verification_result.discrepancies}"
+                    )
+                    # Add warning to output but don't block
+                    warning_msg = f"\n[WARNING: Execution verification confidence {verification_result.confidence_score:.2f}]"
+                    return ToolResult(output=result.combined_output + warning_msg)
+
+            return ToolResult(output=result.combined_output)

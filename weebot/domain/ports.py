@@ -52,3 +52,30 @@ class ITool(Protocol):
     def name(self) -> str: ...
 
     async def execute(self, command: str) -> dict[str, Any]: ...
+
+
+# ---------------------------------------------------------------------------
+# Domain Event Publisher — lightweight protocol so domain services can emit
+# events without depending on any outer-layer event bus implementation.
+# ---------------------------------------------------------------------------
+
+class EventPublisher(Protocol):
+    """Protocol for publishing domain events.
+
+    Domain services (e.g. WorkingMemory) depend on this protocol, not on
+    any concrete bus (EventBroker, AsyncEventBus, etc.).  The application
+    or infrastructure layer injects the actual implementation.
+    """
+
+    async def publish(
+        self,
+        event_type: str,
+        agent_id: str,
+        data: dict[str, Any] | None = None,
+    ) -> bool:
+        """Publish a domain event.
+
+        Returns:
+            True if delivery succeeded, False otherwise.
+        """
+        ...

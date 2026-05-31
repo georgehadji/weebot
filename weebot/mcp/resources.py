@@ -10,9 +10,13 @@ get real runtime snapshots; omit them to get stub payloads.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Optional
 
 from weebot.activity_stream import ActivityStream
+
+_log = logging.getLogger(__name__)
+_INTERNAL_ERROR = "internal_error"
 
 if TYPE_CHECKING:
     # Import only for type hints — avoids circular imports at runtime.
@@ -69,8 +73,9 @@ def build_state_json(state_manager: Optional[Any] = None) -> str:
             indent=2,
         )
     except Exception as exc:
+        _log.exception("Failed to build state resource payload: %s", exc)
         return json.dumps(
-            {"status": "error", "error": str(exc)},
+            {"status": "error", "error": _INTERNAL_ERROR},
             indent=2,
         )
 
@@ -121,7 +126,8 @@ def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
             indent=2,
         )
     except Exception as exc:
-        return json.dumps({"requirements": [], "error": str(exc)}, indent=2)
+        _log.exception("Failed to build roadmap resource payload: %s", exc)
+        return json.dumps({"requirements": [], "error": _INTERNAL_ERROR}, indent=2)
 
 
 def build_schedule_json(scheduler: Optional[Any] = None) -> str:
@@ -157,7 +163,8 @@ def build_schedule_json(scheduler: Optional[Any] = None) -> str:
             serialised.append(entry)
         return json.dumps({"jobs": serialised, "total": len(serialised)}, indent=2)
     except Exception as exc:
+        _log.exception("Failed to build schedule resource payload: %s", exc)
         return json.dumps(
-            {"jobs": [], "error": str(exc)},
+            {"jobs": [], "error": _INTERNAL_ERROR},
             indent=2,
         )

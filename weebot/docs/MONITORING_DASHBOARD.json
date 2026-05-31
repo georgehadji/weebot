@@ -1,0 +1,181 @@
+{
+  "title": "Weebot Drift Monitoring Dashboard",
+  "version": "1.0",
+  "panels": [
+    {
+      "title": "Performance Drift - Latency p95",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "weebot_agent_p95_latency_seconds",
+          "legendFormat": "Current p95"
+        },
+        {
+          "expr": "weebot_agent_p95_latency_seconds_baseline",
+          "legendFormat": "Baseline (7-day)"
+        },
+        {
+          "expr": "weebot_agent_p95_latency_seconds * 1.2",
+          "legendFormat": "Warning Threshold (1.2x)"
+        },
+        {
+          "expr": "weebot_agent_p95_latency_seconds * 1.5",
+          "legendFormat": "Critical Threshold (1.5x)"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"value": 0, "color": "green"},
+          {"value": 30, "color": "yellow"},
+          {"value": 45, "color": "orange"},
+          {"value": 60, "color": "red"}
+        ]
+      }
+    },
+    {
+      "title": "Error Pattern Drift",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "weebot_error_rate_total / weebot_requests_total * 100",
+          "legendFormat": "Error Rate %"
+        },
+        {
+          "expr": "weebot_error_rate_baseline * 2",
+          "legendFormat": "Warning (2x baseline)"
+        },
+        {
+          "expr": "weebot_error_rate_baseline * 5",
+          "legendFormat": "Critical (5x baseline)"
+        }
+      ]
+    },
+    {
+      "title": "Data Distribution Drift (KL Divergence)",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "weebot_input_kl_divergence",
+          "legendFormat": "Input KL Divergence"
+        },
+        {
+          "expr": "weebot_parameter_kl_divergence",
+          "legendFormat": "Parameter KL Divergence"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"value": 0, "color": "green"},
+          {"value": 0.5, "color": "yellow"},
+          {"value": 1.0, "color": "red"}
+        ]
+      }
+    },
+    {
+      "title": "Memory Drift",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "weebot_memory_bytes / weebot_requests_total / 1024 / 1024",
+          "legendFormat": "MB per Request"
+        },
+        {
+          "expr": "weebot_memory_baseline_per_request * 1.3",
+          "legendFormat": "Warning (1.3x)"
+        },
+        {
+          "expr": "weebot_memory_baseline_per_request * 1.5",
+          "legendFormat": "Critical (1.5x)"
+        }
+      ]
+    },
+    {
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 16, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "weebot_circuit_breaker_state",
+          "legendFormat": "State"
+        }
+      ],
+      "mapping": {
+        "0": {"text": "CLOSED", "color": "green"},
+        "1": {"text": "OPEN", "color": "red"},
+        "2": {"text": "HALF_OPEN", "color": "yellow"}
+      }
+    },
+    {
+      "title": "Active Alerts",
+      "type": "table",
+      "gridPos": {"x": 6, "y": 16, "w": 18, "h": 4},
+      "targets": [
+        {
+          "expr": "weebot_active_alerts",
+          "format": "table"
+        }
+      ],
+      "columns": [
+        {"field": "alert_name", "header": "Alert"},
+        {"field": "severity", "header": "Severity"},
+        {"field": "triggered_at", "header": "Triggered"},
+        {"field": "duration_minutes", "header": "Duration"}
+      ]
+    },
+    {
+      "title": "Drift Detection Summary",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 4},
+      "targets": [
+        {
+          "expr": "weebot_drift_signals_total",
+          "legendFormat": "Total Drift Signals"
+        },
+        {
+          "expr": "weebot_drift_signals_severe",
+          "legendFormat": "Severe"
+        },
+        {
+          "expr": "weebot_drift_signals_warning",
+          "legendFormat": "Warning"
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "interval",
+      "type": "interval",
+      "values": ["5m", "15m", "1h", "6h", "24h"],
+      "current": "5m"
+    },
+    {
+      "name": "component",
+      "type": "query",
+      "query": "weebot_components",
+      "allValue": "*"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployments",
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "enable": true,
+        "icon": "cloud-upload"
+      },
+      {
+        "name": "Incidents",
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "enable": true,
+        "icon": "fire"
+      }
+    ]
+  }
+}

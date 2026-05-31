@@ -18,8 +18,8 @@ def clean_env(monkeypatch):
     Tests that need a key must set it explicitly via monkeypatch.
     """
     for var in ("KIMI_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
-                "OPENAI_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID",
-                "SLACK_WEBHOOK_URL"):
+                "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TELEGRAM_BOT_TOKEN",
+                "TELEGRAM_CHAT_ID", "SLACK_WEBHOOK_URL"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -75,6 +75,33 @@ def tmp_cache(tmp_path) -> Path:
     cache = tmp_path / "cache"
     cache.mkdir()
     return cache
+
+
+@pytest.fixture
+def workspace_path(tmp_path) -> Path:
+    """Create a temporary workspace directory for file operations tests."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    return workspace
+
+
+@pytest.fixture
+def workspace_editor(workspace_path, monkeypatch):
+    """Configure StrReplaceEditorTool to use temporary workspace."""
+    # Patch the settings module before importing the editor
+    import weebot.config.settings as settings_module
+    monkeypatch.setattr(settings_module, "WORKSPACE_ROOT", workspace_path)
+    monkeypatch.setattr(settings_module, "REQUIRED_PATH_PREFIX", str(workspace_path))
+
+    # Clear any cached imports
+    import sys
+    # Remove cached file_editor to force re-import with new settings
+    if "weebot.tools.file_editor" in sys.modules:
+        del sys.modules["weebot.tools.file_editor"]
+    if "weebot.security_validators" in sys.modules:
+        del sys.modules["weebot.security_validators"]
+
+    return workspace_path
 
 
 # ---------------------------------------------------------------------------

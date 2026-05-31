@@ -1,0 +1,6 @@
+[
+  {"prompt": "What is 17 multiplied by 23? Respond with only the number.", "expected_answer": "391"},
+  {"prompt": "What is 12 multiplied by 15? Respond with only the number.", "expected_answer": "180"},
+  {"prompt": "What is 9 multiplied by 11? Respond with only the number.", "expected_answer": "99"},
+  {"prompt": "What is 6 multiplied by 7? Respond with only the number.", "expected_answer": "42"}
+]

@@ -356,18 +356,30 @@ class ElementDetectorTool(BaseTool):
             details = pytesseract.image_to_data(img, output_type="dict")
 
             elements = []
+            conf_list = details.get("conf", [])
+            left_list = details.get("left", [])
+            top_list = details.get("top", [])
+            width_list = details.get("width", [])
+            height_list = details.get("height", [])
+            
             for i, text in enumerate(details.get("text", [])):
                 if not text.strip():
                     continue
 
-                confidence = int(details.get("conf", [0])[i])
+                # Guard against mismatched list lengths from OCR
+                if i >= len(conf_list):
+                    continue
+                confidence = int(conf_list[i])
                 if confidence < 50:
                     continue
 
-                x = details["left"][i]
-                y = details["top"][i]
-                w = details["width"][i]
-                h = details["height"][i]
+                # Guard against mismatched position data
+                if i >= len(left_list) or i >= len(top_list) or i >= len(width_list) or i >= len(height_list):
+                    continue
+                x = left_list[i]
+                y = top_list[i]
+                w = width_list[i]
+                h = height_list[i]
 
                 # Heuristic: likely clickable if it looks like button text
                 is_button = any(

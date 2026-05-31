@@ -18,6 +18,8 @@ _log = logging.getLogger(__name__)
 
 from weebot.activity_stream import ActivityStream
 from weebot.state_manager import StateManager
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.ports import EventPublisher
 
 
 @dataclass
@@ -31,6 +33,8 @@ class ContextEvent:
 
 class EventBroker:
     """In-memory pub/sub for agent-to-agent signaling WITH RETRY BACKOFF (Issue #2 Fix)."""
+
+    MAX_HISTORY_SIZE: int = 1000
 
     def __init__(self, max_retries: int = 3, base_delay: float = 1.0) -> None:
         self._subscriptions: Dict[str, List[asyncio.Queue]] = {}
@@ -50,6 +54,9 @@ class EventBroker:
             agent_id=agent_id,
             data=data or {}
         )
+        # Evict oldest event when history is full
+        if len(self._event_history) >= self.MAX_HISTORY_SIZE:
+            self._event_history.pop(0)
         self._event_history.append(event)
 
         queues = list(self._subscriptions.get(event_type, []))
@@ -117,6 +124,8 @@ class AgentContext:
     event_broker: EventBroker = field(default_factory=EventBroker)
     activity_stream: ActivityStream = field(default_factory=ActivityStream)
     state_manager: Optional[StateManager] = None
+    state_repository: Optional[StateRepositoryPort] = None
+    event_publisher: Optional[EventPublisher] = None
     
     # CONCURRENCY FIX: Lock for shared_data mutations
     # NOTE: This lock is SHARED between parent and all children to protect
@@ -139,7 +148,9 @@ class AgentContext:
     def create_orchestrator(
         cls,
         activity_stream: Optional[ActivityStream] = None,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        state_repository: Optional[StateRepositoryPort] = None,
+        event_publisher: Optional[EventPublisher] = None,
     ) -> AgentContext:
         """Create a root orchestrator context."""
         agent_id = f"orchestrator_{uuid.uuid4().hex[:8]}"
@@ -175,6 +186,8 @@ class AgentContext:
             event_broker=parent_context.event_broker,
             activity_stream=parent_context.activity_stream,
             state_manager=parent_context.state_manager,
+            state_repository=parent_context.state_repository,
+            event_publisher=parent_context.event_publisher,
             # CRITICAL: Share the same lock to protect shared_data
             _data_lock=parent_context._data_lock
         )
@@ -261,7 +274,7 @@ class AgentContext:
             f"{self.agent_id}: {message}"
         )
 
-        if requires_approval and self.state_manager:
+        if requires_approval and (self.state_manager or self.state_repository):
             pass  # Future: integrate with StateManager
 
         return True

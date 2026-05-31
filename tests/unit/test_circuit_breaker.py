@@ -334,6 +334,56 @@ class TestCircuitBreakerEventBroker:
         assert events[0]["data"]["new_state"] == "open"
 
 
+class TestCircuitBreakerMetrics:
+    """Metrics snapshot tests."""
+
+    @pytest.mark.asyncio
+    async def test_metrics_counts_closed_state_without_error(self):
+        """Metrics should include CLOSED count after first evaluation."""
+        cb = CircuitBreaker()
+
+        await cb.evaluate("entity_closed")
+        metrics = cb.get_metrics()
+
+        assert metrics["tracked_entities"] == 1
+        assert metrics["state_counts"]["CLOSED"] == 1
+        assert metrics["state_counts"]["OPEN"] == 0
+        assert metrics["state_counts"]["HALF_OPEN"] == 0
+
+    def test_metrics_empty_breaker_edge_case(self):
+        """Metrics should be stable when no entities are tracked."""
+        cb = CircuitBreaker()
+        metrics = cb.get_metrics()
+
+        assert metrics["tracked_entities"] == 0
+        assert metrics["state_counts"] == {"CLOSED": 0, "OPEN": 0, "HALF_OPEN": 0}
+        assert metrics["recovery_rate"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_metrics_failure_injection_recovery_path(self):
+        """Metrics should remain consistent across OPEN -> HALF_OPEN -> CLOSED."""
+        cb = CircuitBreaker(
+            failure_threshold=1,
+            cooldown_seconds=0.05,
+            success_threshold=1,
+            jitter_percent=0.0,
+            enable_stagger=False,
+        )
+
+        await cb.record_failure("entity_recovery")
+        await asyncio.sleep(0.06)
+        await cb.evaluate("entity_recovery")
+        await cb.record_success("entity_recovery")
+
+        metrics = cb.get_metrics()
+        assert metrics["state_counts"]["CLOSED"] == 1
+        assert metrics["state_counts"]["OPEN"] == 0
+        assert metrics["state_counts"]["HALF_OPEN"] == 0
+        assert metrics["recovery_attempts"] == 1
+        assert metrics["successful_recoveries"] == 1
+        assert metrics["recovery_rate"] == 1.0
+
+
 # Performance test
 @pytest.mark.asyncio
 async def test_circuit_breaker_performance():

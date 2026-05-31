@@ -1,6 +1,5 @@
 """Control tools: TerminateTool (task complete signal) and AskHumanTool (HITL)."""
 from __future__ import annotations
-import asyncio
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -9,8 +8,10 @@ class TerminateTool(BaseTool):
     """Signals the agent that the task is complete. The agent should stop looping."""
     name: str = "terminate"
     description: str = (
-        "Signal that the task is complete. Call this when you have a final answer "
-        "and no more steps are needed. Provide a clear reason/summary."
+        "Signal that the task is complete. Call this ONLY when: "
+        "(1) You have presented final results to the user, AND "
+        "(2) The user has confirmed they have no follow-up questions. "
+        "If unsure, use ask_human to check for follow-ups first."
     )
     parameters: dict = {
         "type": "object",
@@ -46,9 +47,9 @@ class AskHumanTool(BaseTool):
     }
 
     async def execute(self, question: str, **_) -> ToolResult:
-        # Run blocking input() in thread pool to avoid blocking the event loop
-        loop = asyncio.get_event_loop()
-        answer = await loop.run_in_executor(
-            None, input, f"\n[weebot asks] {question}\nYour answer: "
+        """Return a non-blocking HITL signal. The executor handles the pause."""
+        return ToolResult(
+            output="",
+            data={"awaiting_human": True, "question": question},
+            metadata={"question": question},
         )
-        return ToolResult(output=answer.strip())

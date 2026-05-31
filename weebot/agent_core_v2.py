@@ -10,15 +10,17 @@
 5. Advanced error recovery
 6. Cost optimization
 7. Web dashboard integration
+8. Enhanced natural language understanding
 """
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from weebot.ai_router import ModelRouter, TaskType
-from weebot.notifications import NotificationManager
-from weebot.state_manager import StateManager, ResumableTask, ProjectStatus
+from .ai_router import ModelRouter, TaskType
+from .notifications import NotificationManager
+from .state_manager import StateManager, ResumableTask, ProjectStatus
+from .nlp_understanding import NaturalLanguageProcessor, IntentRecognitionResult
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +50,18 @@ class WeebotAgent:
     """
     
     def __init__(self, config: AgentConfig) -> None:
+        import warnings
+        warnings.warn(
+            "WeebotAgent is deprecated; use AgentRunner from weebot.interfaces.cli.agent_runner",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self.router = ModelRouter(daily_budget=config.daily_budget)
         self.notifier = NotificationManager()
         self.state_manager = StateManager()
         self.tools = {}  # Registered tools
+        self.nlp_processor = NaturalLanguageProcessor()  # Enhanced NLP capabilities
 
         # Load existing state or create new
         self.state = self.state_manager.load_state(config.project_id)
@@ -159,6 +168,73 @@ class WeebotAgent:
             ),
             "cost_stats": self.router.cost_tracker.get_stats()
         }
+
+    def process_user_request(self, user_input: str) -> IntentRecognitionResult:
+        """
+        Process user request with enhanced natural language understanding.
+        
+        Args:
+            user_input: Raw user input text
+            
+        Returns:
+            Structured understanding of the user's request
+        """
+        return self.nlp_processor.process_user_request(user_input)
+
+    async def handle_user_request(self, user_input: str) -> Dict[str, Any]:
+        """
+        Handle a user request from start to finish with enhanced understanding.
+        
+        Args:
+            user_input: Natural language request from user
+            
+        Returns:
+            Dictionary with response and execution details
+        """
+        # Process the request with enhanced understanding
+        understanding = self.process_user_request(user_input)
+        
+        # Log the understanding for debugging
+        logger.info(f"User request understanding: {understanding.intent.value} "
+                   f"with confidence {understanding.confidence:.2f}")
+        
+        # Generate an appropriate response based on the intent
+        response = await self._generate_response_for_intent(understanding, user_input)
+        
+        return {
+            "understanding": understanding,
+            "response": response,
+            "success": True
+        }
+
+    async def _generate_response_for_intent(
+        self, 
+        understanding: IntentRecognitionResult, 
+        original_request: str
+    ) -> str:
+        """
+        Generate an appropriate response based on the understood intent.
+        
+        Args:
+            understanding: The processed understanding of the user's request
+            original_request: The original user request
+            
+        Returns:
+            Generated response string
+        """
+        # For now, return a basic response based on intent
+        # In a full implementation, this would connect to appropriate workflows
+        responses = {
+            "research": f"I understand you want me to research about {', '.join(understanding.entities.get('topic', ['this']))}. I'll create a research plan for you.",
+            "analysis": f"I'll help analyze the data or topic you mentioned. I detected these entities: {', '.join(understanding.entities.values())}.",
+            "task_execution": f"I'll execute the requested task. Keywords detected: {', '.join(understanding.keywords)}.",
+            "information_request": f"I can provide information about that. I detected intent: {understanding.intent.value}.",
+            "content_creation": f"I'll help create content based on your request. Detected action items: {', '.join(understanding.action_items)}.",
+            "automation": f"I can help automate processes. I detected these potential automations: {', '.join(understanding.action_items)}.",
+            "unknown": f"I received your request: '{original_request}'. I'm working on understanding it better."
+        }
+        
+        return responses.get(understanding.intent.value, responses["unknown"])
 
     async def spawn_child_agent(
         self,

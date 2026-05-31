@@ -1,0 +1,294 @@
+# Drift Monitoring Configuration for Weebot
+# Version: 1.0
+
+# This file defines drift detection thresholds, intervals, and alert rules
+# for production monitoring of the Weebot AI Agent Framework
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+
+monitoring:
+  # How often to run drift detection checks
+  interval_minutes: 5
+  
+  # Historical baseline window for comparison
+  baseline_window_days: 7
+  
+  # Minimum samples required for reliable drift detection
+  min_samples: 1000
+  
+  # Enable/disable drift monitoring
+  enabled: true
+
+# =============================================================================
+# PERFORMANCE DRIFT
+# =============================================================================
+
+performance:
+  # Agent execution latency drift
+  latency_p95:
+    metric_name: "weebot_agent_p95_latency_seconds"
+    baseline_window_days: 7
+    detection_window_hours: 24
+    
+    # Thresholds (multipliers of baseline)
+    thresholds:
+      warning: 1.20    # 20% increase from baseline
+      critical: 1.50   # 50% increase from baseline
+      severe: 2.00     # 100% increase (2x baseline)
+    
+    # Response settings
+    cooldown_minutes: 30
+    severity_tier: "P3"  # Default severity
+    
+    # Per-component thresholds
+    components:
+      bash_tool:
+        warning: 1.30
+        critical: 2.00
+      template_engine:
+        warning: 1.50
+        critical: 3.00
+      mcp_server:
+        warning: 1.20
+        critical: 1.50
+
+  # Memory usage drift
+  memory_per_request:
+    metric_name: "weebot_memory_bytes_per_request"
+    baseline_window_days: 7
+    detection_window_hours: 24
+    
+    thresholds:
+      warning: 1.30    # 30% increase
+      critical: 1.50   # 50% increase
+      severe: 2.00     # 100% increase
+    
+    cooldown_minutes: 30
+
+  # Throughput drift
+  throughput:
+    metric_name: "weebot_requests_per_second"
+    baseline_window_days: 7
+    detection_window_hours: 1
+    
+    # Negative drift (drop in throughput) is more concerning
+    thresholds:
+      warning: 0.70    # 30% drop
+      critical: 0.50   # 50% drop (half throughput)
+    
+    cooldown_minutes: 15
+
+# =============================================================================
+# ERROR PATTERN DRIFT
+# =============================================================================
+
+error_pattern:
+  # Overall error rate drift
+  error_rate:
+    metric_name: "weebot_error_rate"
+    baseline_window_days: 7
+    detection_window_hours: 1
+    
+    thresholds:
+      warning: 2.00    # 2x baseline error rate
+      critical: 5.00   # 5x baseline error rate
+      severe: 10.00   # 10x baseline
+    
+    cooldown_minutes: 15
+    
+    # Error categories that trigger different responses
+    error_categories:
+      AUTHENTICATION:
+        multiplier: 1.0  # Standard multiplier
+        severity: "P2"
+      VALIDATION:
+        multiplier: 1.5  # More sensitive
+        severity: "P3"
+      EXECUTION:
+        multiplier: 1.0
+        severity: "P2"
+      EXTERNAL:
+        multiplier: 2.0  # Less sensitive (expected failures)
+        severity: "P3"
+      SECURITY:
+        multiplier: 0.5  # Very sensitive
+        severity: "P1"
+
+  # New error types appearing
+  new_error_types:
+    baseline: 0
+    detection_window_hours: 1
+    
+    thresholds:
+      warning: 3     # 3 new error types
+      critical: 10    # 10 new error types
+    
+    cooldown_minutes: 30
+
+  # Error clustering (one component causing most errors)
+  error_clustering:
+    metric_name: "weebot_error_by_component"
+    detection_window_hours: 1
+    
+    thresholds:
+      warning: 0.30    # 30% of errors from one component
+      critical: 0.50   # 50% of errors from one component
+    
+    cooldown_minutes: 30
+
+# =============================================================================
+# DATA DISTRIBUTION DRIFT
+# =============================================================================
+
+data_distribution:
+  # Input distribution drift (KL Divergence)
+  input_kl_divergence:
+    metric_name: "weebot_input_kl_divergence"
+    baseline_window_days: 7
+    detection_window_hours: 1
+    
+    thresholds:
+      warning: 0.5
+      critical: 1.0
+      severe: 2.0
+    
+    cooldown_minutes: 60
+
+  # Parameter distribution drift (KS Test)
+  parameter_distribution:
+    metric_name: "weebot_parameter_ks_pvalue"
+    baseline_window_days: 7
+    detection_window_hours: 24
+    
+    # KS test p-value: lower = more drift
+    thresholds:
+      warning: 0.01    # p < 0.01 indicates drift
+      critical: 0.001   # p < 0.001 indicates significant drift
+    
+    cooldown_minutes: 60
+
+  # Output distribution drift
+  output_size:
+    metric_name: "weebot_output_size_bytes"
+    baseline_window_days: 7
+    detection_window_hours: 1
+    
+    thresholds:
+      warning: 1.50    # 50% change
+      critical: 2.00   # 100% change
+    
+    cooldown_minutes: 30
+
+# =============================================================================
+# ALERT SEVERITY TIERS
+# =============================================================================
+
+severity_tiers:
+  P1_CRITICAL:
+    response_time_minutes: 5
+    notification_channels: ["pagerduty", "sms", "slack"]
+    auto_actions: ["rollback", "circuit_break"]
+    
+  P2_HIGH:
+    response_time_minutes: 15
+    notification_channels: ["pagerduty", "slack"]
+    auto_actions: ["scale_up"]
+    
+  P3_MEDIUM:
+    response_time_minutes: 60
+    notification_channels: ["slack", "email"]
+    auto_actions: []
+    
+  P4_LOW:
+    response_time_minutes: 1440  # 24 hours
+    notification_channels: ["email"]
+    auto_actions: []
+
+# =============================================================================
+# MANUAL OVERRIDE SETTINGS
+# =============================================================================
+
+manual_overrides:
+  # Maximum duration for manual override
+  max_duration_minutes: 480  # 8 hours
+  
+  # Require approval for overrides
+  require_approval: true
+  
+  # Audit trail for all overrides
+  audit_trail: true
+  
+  # Override authority levels
+  authority_levels:
+    ENGINEER_ONCALL:
+      max_duration_minutes: 120
+      requires_ticket: true
+    ENGINEERING_LEAD:
+      max_duration_minutes: 480
+      requires_ticket: true
+    SECURITY_LEAD:
+      max_duration_minutes: 1440  # 24 hours
+      requires_ticket: false  # Security incidents
+    RELEASE_MANAGER:
+      max_duration_minutes: 480
+      requires_ticket: true
+
+# =============================================================================
+# ROLLBACK TRIGGERS
+# =============================================================================
+
+rollback_triggers:
+  # Format: (metric, condition, duration) -> action
+  
+  latency_spike:
+    metric: "weebot_agent_p95_latency_seconds"
+    condition: "> threshold * 2.0"
+    duration_minutes: 5
+    action: "pause_deployment"
+    
+  error_rate_explosion:
+    metric: "weebot_error_rate"
+    condition: "> threshold * 5.0"
+    duration_minutes: 2
+    action: "immediate_rollback"
+    
+  memory_leak:
+    metric: "weebot_memory_usage_bytes"
+    condition: "> baseline * 1.5"
+    duration_minutes: 10
+    action: "restart_service"
+    
+  circuit_breaker_open:
+    metric: "weebot_circuit_breaker_state"
+    condition: "== OPEN"
+    duration_minutes: 1
+    action: "alert_only"
+
+# =============================================================================
+# NOTIFICATION CHANNELS
+# =============================================================================
+
+notification_channels:
+  pagerduty:
+    enabled: true
+    service_id: "PXXXXXX"
+    escalation_policy: "default"
+    
+  slack:
+    enabled: true
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#weebot-alerts"
+    
+  email:
+    enabled: true
+    smtp_server: "${SMTP_SERVER}"
+    recipients:
+      - "weebot-team@company.com"
+      
+  sms:
+    enabled: false  # Optional
+    provider: "twilio"
+    phone_numbers:
+      - "+1234567890"

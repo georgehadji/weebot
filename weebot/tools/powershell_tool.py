@@ -7,8 +7,8 @@ from pathlib import Path
 from langchain.tools import BaseTool
 from pydantic import Field
 
-# Configuration
-WORKSPACE_ROOT = Path(r"C:\Users\Public\weebot_workspace")
+# Configuration - import from settings to use consistent workspace
+from weebot.config.settings import WORKSPACE_ROOT
 REQUIRED_PATH_PREFIX = str(WORKSPACE_ROOT)
 
 
@@ -49,12 +49,15 @@ class PowerShellTool(BaseTool):
     ]
     
     def _validate_path_safety(self, command: str) -> bool:
-        """Ensure command doesn't escape sandbox."""
+        """Ensure command doesn't access dangerous system paths."""
+        # Block dangerous system paths but allow user directories
         dangerous_patterns = [
-            r'rm\s+-Recurse\s+C:\\(?!Users\\Public\\weebot_workspace)',
-            r'Remove-Item\s+.*C:\\(?!Users\\Public\\weebot_workspace)',
-            r'Set-Location\s+C:\\(?!Users\\Public)',
-            r'cd\s+C:\\(?!Users\\Public)'
+            r'rm\s+-Recurse\s+C:\\Windows',
+            r'rm\s+-Recurse\s+C:\\Program\s+Files',
+            r'Remove-Item\s+.*C:\\Windows',
+            r'Remove-Item\s+.*C:\\Program\s+Files',
+            r'Format-Volume',
+            r'Clear-Disk',
         ]
         
         for pattern in dangerous_patterns:
@@ -124,11 +127,12 @@ class PowerShellTool(BaseTool):
             return "Error: Command violates sandbox constraints"
         
         try:
+            # Try powershell.exe first (Windows), fallback to pwsh
+            ps_cmd = "powershell.exe" if subprocess.run(["where", "powershell.exe"], capture_output=True).returncode == 0 else "pwsh"
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", command],
+                [ps_cmd, "-NoProfile", "-Command", command],
                 capture_output=True,
                 text=True,
-                cwd=str(WORKSPACE_ROOT),
                 timeout=30
             )
             

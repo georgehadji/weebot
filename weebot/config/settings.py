@@ -1,10 +1,11 @@
 """Configuration and constants for weebot Agent."""
+import os
 from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Constants
-WORKSPACE_ROOT = Path(r"C:\Users\Public\weebot_workspace")
+# Constants - Use environment variable or current working directory
+WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE", os.getcwd()))
 LOGS_DIR = Path("logs")
 LOG_FILE = LOGS_DIR / "agent.log"
 REQUIRED_PATH_PREFIX = str(WORKSPACE_ROOT)
@@ -12,7 +13,7 @@ MAX_RETRIES = 3
 CONFIRM_DELETE = True
 BROWSER_TIMEOUT = 30000  # ms
 HEADLESS = False
-MODEL_NAME = "gpt-4"
+MODEL_NAME = "meta-llama/llama-3.3-70b-instruct:free"
 TEMPERATURE = 0.2
 POWERSHELL_PRIORITY_KEYWORDS = [
     "file", "delete", "copy", "move", "directory",
@@ -74,6 +75,59 @@ class WeebotSettings(BaseSettings):
                 f"sandbox_max_output_bytes must be >= 1024 bytes (got {v})."
             )
         return v
+
+    # ========================================================================
+    # DRIFT MONITORING SETTINGS (v2.4.0+)
+    # ========================================================================
+    
+    # Enable/disable drift monitoring
+    drift_monitoring_enabled: bool = True
+    
+    # Baseline window for comparison
+    drift_baseline_window_days: int = 7
+    
+    # Detection check interval
+    drift_detection_interval_minutes: int = 5
+    
+    # Performance drift thresholds (multipliers of baseline)
+    latency_p95_warning_multiplier: float = 1.20   # 20% increase
+    latency_p95_critical_multiplier: float = 1.50  # 50% increase
+    memory_warning_multiplier: float = 1.30         # 30% increase
+    memory_critical_multiplier: float = 1.50         # 50% increase
+    
+    # Error rate drift thresholds (multipliers of baseline)
+    error_rate_warning_multiplier: float = 2.0       # 2x baseline
+    error_rate_critical_multiplier: float = 5.0        # 5x baseline
+    
+    # Data distribution drift thresholds (KL divergence)
+    kl_divergence_warning: float = 0.5
+    kl_divergence_critical: float = 1.0
+    
+    # Cooldown periods (minutes)
+    alert_cooldown_minutes: int = 15
+    performance_alert_cooldown_minutes: int = 30
+    data_drift_cooldown_minutes: int = 60
+    
+    # Minimum samples for reliable detection
+    drift_min_samples: int = 1000
+    
+    # =======================================================================
+    # HTTP CLIENT SETTINGS (v2.6.0+)
+    # =======================================================================
+    
+    # Default timeouts for HTTP requests
+    http_timeout_default: float = 30.0
+    http_timeout_connect: float = 10.0
+    http_timeout_read: float = 60.0
+    
+    # Connection pooling
+    http_max_connections: int = 20
+    http_max_keepalive: int = 10
+    http_keepalive: bool = True
+    
+    # Retry settings
+    http_max_retries: int = 3
+    http_retry_backoff: float = 1.0
 
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""

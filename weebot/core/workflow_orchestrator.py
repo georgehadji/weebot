@@ -11,7 +11,11 @@ from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, TypeVar
 
 from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
-from weebot.core.dependency_graph import DependencyGraph, CircularDependencyError
+from weebot.core.dependency_graph import (
+    DependencyGraph,
+    CircularDependencyError,
+    MissingDependencyError,
+)
 from weebot.core.agent_context import AgentContext, EventBroker
 
 
@@ -111,9 +115,8 @@ class WorkflowOrchestrator:
         self._event_broker = event_broker
         self._task_handler = task_handler or self._default_task_handler
         
-        self._orchestrator_id: Optional[str] = None
-        self._semaphore: Optional[asyncio.Semaphore] = None
-        self._cancelled = False
+        self._cancelled_sessions: Dict[str, bool] = {}
+        self._lock = asyncio.Lock()
         
     async def execute(
         self,
@@ -135,19 +138,32 @@ class WorkflowOrchestrator:
             WorkflowResult with execution status and results
         """
         start_time = time.time()
-        self._orchestrator_id = orchestrator_id or f"orch-{int(start_time * 1000)}"
-        self._cancelled = False
+        # Use local variables for execution state to support concurrent executions
+        current_orch_id = orchestrator_id or f"orch-{int(start_time * 1000)}"
+        current_semaphore = asyncio.Semaphore(self._max_parallel)
         
-        # Initialize semaphore for parallel control
-        self._semaphore = asyncio.Semaphore(self._max_parallel)
+        async with self._lock:
+            self._cancelled_sessions[current_orch_id] = False
         
         # Build dependency graph
         try:
             graph = DependencyGraph(task_graph)
             graph.validate()
-        except CircularDependencyError as e:
+        except MissingDependencyError as e:
+            async with self._lock:
+                if current_orch_id in self._cancelled_sessions:
+                    del self._cancelled_sessions[current_orch_id]
             return WorkflowResult(
-                orchestrator_id=self._orchestrator_id,
+                orchestrator_id=current_orch_id,
+                success=False,
+                metadata={"error": str(e), "missing_dependencies": e.missing},
+            )
+        except CircularDependencyError as e:
+            async with self._lock:
+                if current_orch_id in self._cancelled_sessions:
+                    del self._cancelled_sessions[current_orch_id]
+            return WorkflowResult(
+                orchestrator_id=current_orch_id,
                 success=False,
                 metadata={"error": f"Circular dependency: {e.cycle}"}
             )
@@ -163,25 +179,26 @@ class WorkflowOrchestrator:
         
         # Shared context for all agents
         context = AgentContext(
-            orchestrator_id=self._orchestrator_id,
+            orchestrator_id=current_orch_id,
             parent_id=None,
             agent_id="orchestrator",
             nesting_level=1,
-            shared_data=shared_data or {}
+            shared_data=shared_data or {},
+            event_broker=self._event_broker or EventBroker(),
         )
         
         await self._publish_event("workflow_started", {
-            "orchestrator_id": self._orchestrator_id,
+            "orchestrator_id": current_orch_id,
             "task_count": len(task_graph)
-        })
+        }, current_orch_id)
         
         # Execute tasks
         try:
-            while len(completed) + len(failed) < len(task_graph) and not self._cancelled:
-                # Clean up finished tasks (safety net)
-                for task in list(running_tasks.keys()):
-                    if task.done():
-                        running_tasks.pop(task, None)
+            while len(completed) + len(failed) < len(task_graph):
+                # Check cancellation
+                async with self._lock:
+                    if self._cancelled_sessions.get(current_orch_id):
+                        break
 
                 # Get tasks ready to run
                 ready = graph.get_ready_tasks(completed | failed) - completed - failed
@@ -189,7 +206,8 @@ class WorkflowOrchestrator:
                 ready = {tid for tid in ready if task_status.get(tid) != TaskStatus.RUNNING}
 
                 if not ready and not running_tasks:
-                    # Deadlock or all remaining tasks depend on failed tasks
+                    # If we reach here, no tasks are running and none can start
+                    # This is a true deadlock or blocked graph state
                     break
 
                 # Start ready tasks (up to max parallel)
@@ -205,7 +223,9 @@ class WorkflowOrchestrator:
                         task_status=task_status,
                         task_results=task_results,
                         completed=completed,
-                        failed=failed
+                        failed=failed,
+                        semaphore=current_semaphore,
+                        orch_id=current_orch_id
                     )
                     task = asyncio.create_task(coro)
                     running_tasks[task] = task_id
@@ -218,8 +238,16 @@ class WorkflowOrchestrator:
                     )
                     for task in done:
                         running_tasks.pop(task, None)
+                        # CRITICAL: Await the task to ensure it has finished 
+                        # its state updates (completed.add, failed.add)
+                        try:
+                            await task 
+                        except Exception:
+                            # Exceptions are handled inside _execute_task
+                            pass
                 else:
-                    await asyncio.sleep(0.1)
+                    # Safety yield
+                    await asyncio.sleep(0.01)
 
         except asyncio.CancelledError:
             # Handle orchestration cancellation
@@ -228,12 +256,19 @@ class WorkflowOrchestrator:
                     task_status[tid] = TaskStatus.CANCELLED
             raise
         finally:
-            if self._cancelled and running_tasks:
+            is_cancelled = False
+            async with self._lock:
+                if current_orch_id in self._cancelled_sessions:
+                    is_cancelled = self._cancelled_sessions[current_orch_id]
+                    del self._cancelled_sessions[current_orch_id]
+
+            if is_cancelled and running_tasks:
                 for task, task_id in list(running_tasks.items()):
                     task.cancel()
                     task_status[task_id] = TaskStatus.CANCELLED
                     failed.add(task_id)
-                await asyncio.gather(*running_tasks.keys(), return_exceptions=True)
+                if running_tasks:
+                    await asyncio.gather(*running_tasks.keys(), return_exceptions=True)
                 running_tasks.clear()
         
         # Build final result
@@ -241,14 +276,14 @@ class WorkflowOrchestrator:
         success = len(failed) == 0 and len(completed) == len(task_graph)
         
         await self._publish_event("workflow_completed", {
-            "orchestrator_id": self._orchestrator_id,
+            "orchestrator_id": current_orch_id,
             "success": success,
             "completed": len(completed),
             "failed": len(failed)
-        })
+        }, current_orch_id)
         
         return WorkflowResult(
-            orchestrator_id=self._orchestrator_id,
+            orchestrator_id=current_orch_id,
             success=success,
             task_results=task_results,
             execution_time_ms=execution_time,
@@ -269,10 +304,12 @@ class WorkflowOrchestrator:
         task_status: Dict[str, TaskStatus],
         task_results: Dict[str, TaskResult],
         completed: Set[str],
-        failed: Set[str]
+        failed: Set[str],
+        semaphore: asyncio.Semaphore,
+        orch_id: str
     ) -> None:
         """Execute a single task with circuit breaker and timeout protection."""
-        async with self._semaphore:
+        async with semaphore:
             start_time = time.time()
             entity_id = task_config.get("entity_id", task_id)
             
@@ -291,21 +328,19 @@ class WorkflowOrchestrator:
                     await self._publish_event("task_blocked", {
                         "task_id": task_id,
                         "reason": breaker_result.reason
-                    })
+                    }, orch_id)
                     return
             
             await self._publish_event("task_started", {
                 "task_id": task_id,
                 "agent_role": task_config.get("agent_role")
-            })
+            }, orch_id)
             
             try:
                 # Get task-specific timeout
                 timeout = task_config.get("timeout", self._timeout)
                 
                 # Create agent context for this task
-                # CRITICAL: share parent's _data_lock, event_broker and activity_stream
-                # so concurrent store_result()/get_result() calls are mutually exclusive
                 task_context = AgentContext(
                     orchestrator_id=context.orchestrator_id,
                     parent_id="orchestrator",
@@ -316,6 +351,18 @@ class WorkflowOrchestrator:
                     activity_stream=context.activity_stream,
                     _data_lock=context._data_lock,
                 )
+
+                # Inject recent sibling events into shared context for awareness
+                recent_events = task_context.get_events_by_tag("task_completed", n=5)
+                if recent_events:
+                    sibling_outputs = [
+                        {
+                            "task_id": e.data.get("task_id"),
+                            "execution_time_ms": e.data.get("execution_time_ms"),
+                        }
+                        for e in recent_events
+                    ]
+                    task_config["_sibling_outputs"] = sibling_outputs
                 
                 # Execute with timeout
                 output = await asyncio.wait_for(
@@ -342,7 +389,7 @@ class WorkflowOrchestrator:
                 await self._publish_event("task_completed", {
                     "task_id": task_id,
                     "execution_time_ms": execution_time_ms
-                })
+                }, orch_id)
                 
             except asyncio.TimeoutError:
                 execution_time_ms = (time.time() - start_time) * 1000
@@ -363,7 +410,7 @@ class WorkflowOrchestrator:
                 await self._publish_event("task_failed", {
                     "task_id": task_id,
                     "error": "timeout"
-                })
+                }, orch_id)
                 
             except Exception as e:
                 execution_time_ms = (time.time() - start_time) * 1000
@@ -384,7 +431,7 @@ class WorkflowOrchestrator:
                 await self._publish_event("task_failed", {
                     "task_id": task_id,
                     "error": str(e)
-                })
+                }, orch_id)
     
     async def _default_task_handler(
         self,
@@ -410,18 +457,28 @@ class WorkflowOrchestrator:
             "context_id": context.agent_id
         }
     
-    async def _publish_event(self, event_type: str, data: Dict[str, Any]) -> None:
+    async def _publish_event(self, event_type: str, data: Dict[str, Any], orch_id: Optional[str] = None) -> None:
         """Publish event to broker if available."""
         if self._event_broker:
             await self._event_broker.publish(
                 event_type=event_type,
-                agent_id=self._orchestrator_id or "orchestrator",
+                agent_id=orch_id or self._orchestrator_id or "orchestrator",
                 data=data
             )
     
-    def cancel(self) -> None:
-        """Cancel the workflow execution."""
-        self._cancelled = True
+    def cancel(self, orchestrator_id: Optional[str] = None) -> None:
+        """
+        Cancel one or all active workflow executions.
+        
+        Args:
+            orchestrator_id: ID of the execution to cancel. If None, all are cancelled.
+        """
+        if orchestrator_id:
+            if orchestrator_id in self._cancelled_sessions:
+                self._cancelled_sessions[orchestrator_id] = True
+        else:
+            for oid in self._cancelled_sessions:
+                self._cancelled_sessions[oid] = True
     
     @property
     def max_parallel_agents(self) -> int:

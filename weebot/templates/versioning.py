@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,16 @@ from packaging import version as pkg_version
 from weebot.templates.parser import WorkflowTemplate
 
 _log = logging.getLogger(__name__)
+
+
+def _unsafe_migration_scripts_enabled() -> bool:
+    """Opt-in flag for legacy migration scripts that execute arbitrary Python."""
+    return os.getenv("WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 @dataclass
@@ -297,13 +308,34 @@ class TemplateVersionManager:
         
         # Apply transformation script if present
         if migration.transformation_script:
-            # Execute transformation in safe context
-            try:
-                transform_locals = {"parameters": migrated, "result": {}}
-                exec(migration.transformation_script, {}, transform_locals)
-                migrated = transform_locals.get("result", migrated)
-            except Exception as e:
-                _log.error(f"Migration transformation failed: {e}")
+            if not _unsafe_migration_scripts_enabled():
+                _log.warning(
+                    "Skipped migration transformation script from %s to %s; "
+                    "set WEEBOT_ENABLE_UNSAFE_MIGRATION_SCRIPTS=true to opt in.",
+                    from_version,
+                    to_version,
+                )
+            else:
+                # Legacy compatibility mode: this is intentionally opt-in only.
+                try:
+                    transform_locals = {
+                        "parameters": dict(migrated),
+                        "result": dict(migrated),
+                    }
+                    exec(
+                        migration.transformation_script,
+                        {"__builtins__": {}},
+                        transform_locals,
+                    )
+                    transformed = transform_locals.get("result", migrated)
+                    if isinstance(transformed, dict):
+                        migrated = transformed
+                    else:
+                        _log.error(
+                            "Migration transformation returned non-dict result; ignoring."
+                        )
+                except Exception as e:
+                    _log.error(f"Migration transformation failed: {e}")
         
         return migrated
     

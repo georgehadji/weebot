@@ -17,7 +17,12 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from weebot.activity_stream import ActivityStream
-from weebot.mcp.resources import build_activity_json, build_schedule_json, build_state_json
+from weebot.mcp.resources import (
+    build_activity_json,
+    build_roadmap_json,
+    build_schedule_json,
+    build_state_json,
+)
 from weebot.mcp.server import WeebotMCPServer
 from weebot.tools.base import ToolResult
 
@@ -328,7 +333,26 @@ class TestLiveResources:
         )()
         data = json.loads(build_schedule_json(scheduler=mock_sched))
         assert data["jobs"] == []
-        assert "error" in data
+        assert data["error"] == "internal_error"
+
+    def test_state_json_error_is_sanitized(self) -> None:
+        mock_sm = type(
+            "SM",
+            (),
+            {
+                "list_projects": lambda self: (_ for _ in ()).throw(
+                    RuntimeError("DB password leaked")
+                )
+            },
+        )()
+        data = json.loads(build_state_json(state_manager=mock_sm))
+        assert data["status"] == "error"
+        assert data["error"] == "internal_error"
+
+    def test_roadmap_json_error_is_sanitized(self) -> None:
+        data = json.loads(build_roadmap_json(product_db_path="Z:\\definitely_missing\\x.db"))
+        assert data["requirements"] == []
+        assert data["error"] == "internal_error"
 
     @pytest.mark.asyncio
     async def test_server_passes_state_manager_to_resource(self) -> None:

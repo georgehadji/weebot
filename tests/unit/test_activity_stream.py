@@ -62,6 +62,11 @@ class TestActivityStream:
         assert e.kind == "search"
         assert e.message == "found 3 results"
 
+    def test_rejects_empty_project_id(self):
+        stream = ActivityStream()
+        with pytest.raises(ValueError, match="project_id"):
+            stream.push("", "job", "invalid")
+
     # ------------------------------------------------------------------
     # Per-project index tests
     # ------------------------------------------------------------------

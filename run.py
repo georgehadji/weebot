@@ -3,7 +3,20 @@
 import sys
 import asyncio
 import argparse
+from pathlib import Path
+from dotenv import load_dotenv
 from weebot.config.settings import WeebotSettings
+
+
+# Load .env into os.environ so os.getenv() works everywhere.
+# override=True ensures .env takes precedence over stale system env vars
+load_dotenv(override=True)
+
+# Clear the adapter cache on every startup so stale model names
+# and expired API keys are never reused from a previous run.
+from weebot.infrastructure.adapters.llm import adapter_factory as _af
+_af.get_adapter_factory().clear_cache()
+_af._default_factory = None
 
 
 def validate_environment() -> None:
@@ -14,7 +27,7 @@ def validate_environment() -> None:
     """
     settings = WeebotSettings()
     settings.validate_at_least_one_key()
-    print(f"✓ weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}")
+    print(f"weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}")
 
 
 def run_cli() -> None:
@@ -67,34 +80,60 @@ def run_diagnostic() -> bool:
 
     return len(errors) == 0
 
-def run_interactive() -> None:
-    """Run interactive agent session."""
-    from weebot.agent_core_v2 import WeebotAgent, AgentConfig
-    from weebot.ai_router import TaskType
 
-    print("weebot Interactive Mode")
-    print("Enter 'quit' to exit.\n")
+def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill: str | None = None) -> None:
+    """Run interactive agent session using the new Clean Architecture flows."""
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+    from weebot.interfaces.cli.event_logger import CLIEventSubscriber
+    from weebot.domain.models.event import WaitForUserEvent
+    from weebot.application.services.model_selection import ModelSelectionService
 
-    project_id = input("Project ID (default: interactive_session): ").strip() or "interactive_session"
-    config = AgentConfig(project_id=project_id, description="Interactive session", daily_budget=5.0)
-    agent = WeebotAgent(config)
+    # Load skill if specified
+    skill_prompt = None
+    if skill:
+        skill_path = Path(__file__).parent / "weebot" / "skills" / f"{skill}.md"
+        if skill_path.exists():
+            skill_prompt = skill_path.read_text(encoding="utf-8")
+            print(f"  Loaded skill: {skill} ({len(skill_prompt)} chars)")
+        else:
+            print(f"  [WARN] Skill file not found: {skill_path}")
 
-    while True:
-        task_desc = input("\nTask description: ").strip()
-        if task_desc.lower() in ("quit", "exit", "q"):
-            break
-        if not task_desc:
-            continue
+    async def _main() -> None:
+        # Use ModelSelectionService to pick the right adapter
+        model_service = ModelSelectionService()
+        # Use a free model by default. Override with --model or env DEFAULT_MODEL.
+        import os as _os
+        _default = _os.environ.get("DEFAULT_MODEL", "qwen/qwen3.7-max")
+        llm = model_service.create_llm_adapter(model or _default)
+        state_repo = SQLiteStateRepository()
+        runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False, skill_prompt=skill_prompt)
+        subscriber = CLIEventSubscriber(use_rich=True)
 
-        plan = [{
-            "name": "user_task",
-            "type": TaskType.CHAT,
-            "description": task_desc,
-            "prompt": task_desc,
-        }]
+        print("weebot Interactive Mode (PlanActFlow)")
+        print("Enter 'quit' to exit.\n")
 
-        asyncio.run(agent.run(plan))
-        print(agent.get_status())
+        session_id = input("Session ID (default: interactive_session): ").strip() or "interactive_session"
+
+        while True:
+            prompt = input("\nTask description: ").strip()
+            if prompt.lower() in ("quit", "exit", "q"):
+                break
+            if not prompt:
+                continue
+
+            async for event in runner.run_prompt(prompt, session_id=session_id):
+                await subscriber.on_event(event)
+                if isinstance(event, WaitForUserEvent):
+                    answer = input(f"\n[weebot asks] {event.question}\nYour answer: ")
+                    async for resume_event in runner.resume_session(session_id, answer):
+                        await subscriber.on_event(resume_event)
+                    break
+
+    try:
+        asyncio.run(_main())
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
 
 
 if __name__ == "__main__":
@@ -102,6 +141,9 @@ if __name__ == "__main__":
     parser.add_argument("--diagnostic", action="store_true", help="Run diagnostics")
     parser.add_argument("--interactive", action="store_true", help="Interactive mode")
     parser.add_argument("--cli", action="store_true", help="Run CLI (default)")
+    parser.add_argument("--flow", default="plan_act", help="Flow type for interactive mode (default: plan_act)")
+    parser.add_argument("--model", default=None, help="Override default LLM model")
+    parser.add_argument("--skill", default=None, help="Load a skill file from weebot/skills/<name>.md")
     args = parser.parse_args()
 
     try:
@@ -114,6 +156,6 @@ if __name__ == "__main__":
         ok = run_diagnostic()
         sys.exit(0 if ok else 1)
     elif args.interactive:
-        run_interactive()
+        run_interactive(flow_type=args.flow, model=args.model, skill=args.skill)
     else:
         run_cli()

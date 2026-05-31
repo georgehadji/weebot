@@ -24,6 +24,13 @@
 | `BASH_SECURITY_FIX_ANALYSIS.md` | ✅ Νέο | Dev/Adversary analysis + stress tests |
 | `BASH_SECURITY_FIX_SUMMARY.md` | ✅ Νέο | Implementation summary |
 | `SECURITY_FIXES_SUMMARY.md` | ✅ Ισχύει | Commit a34110f fixes documented |
+| `SECURITY_MODULE.md` | ✅ Ενημερωμένο | Security module + BashTool integration |
+
+### Έγγραφα QMD Integration
+
+| Έγγραφο | Status | Περιγραφή |
+|---------|--------|-----------|
+| `QMD_INTEGRATION.md` | ✅ Νέο | QMD integration (embeddings, MCP, RAG, query expansion) |
 
 ### Έγγραφα Deployment & Resilience
 

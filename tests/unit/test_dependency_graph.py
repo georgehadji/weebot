@@ -10,6 +10,7 @@ from weebot.core.dependency_graph import (
     DependencyGraph,
     TaskNode,
     CircularDependencyError,
+    MissingDependencyError,
 )
 
 
@@ -116,6 +117,19 @@ class TestDependencyGraphValidation:
         
         with pytest.raises(CircularDependencyError):
             graph.validate()
+
+    def test_missing_dependency_raises_specific_error(self):
+        """Unknown dependency IDs should not be misreported as cycles."""
+        graph = DependencyGraph({
+            "a": {"deps": ["missing_task"]},
+            "b": {"deps": []},
+        })
+
+        with pytest.raises(MissingDependencyError) as exc_info:
+            graph.validate()
+
+        assert "missing_task" in str(exc_info.value)
+        assert exc_info.value.missing == {"a": ["missing_task"]}
 
 
 class TestTopologicalSort:

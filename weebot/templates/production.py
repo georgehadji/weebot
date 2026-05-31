@@ -700,8 +700,8 @@ class HealthChecker:
             import asyncio
             asyncio.run(self.db.init_db())
             return True
-        except:
-            return False
+        except Exception:
+            return False  # Database not available
     
     def check_redis(self) -> bool:
         """Check Redis connectivity."""
@@ -711,8 +711,8 @@ class HealthChecker:
         try:
             self.redis.redis.ping()
             return True
-        except:
-            return False
+        except Exception:
+            return False  # Redis not available
 
 
 import asyncio

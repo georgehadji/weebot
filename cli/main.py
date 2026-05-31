@@ -39,6 +39,7 @@ from weebot.agents.router import PersonaRouter
 from weebot.core.agent_factory import AgentFactory
 from weebot.core.agent_context import AgentContext
 from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.interfaces.cli.behavior_commands import behavior_cli
 
 console = Console()
 
@@ -54,7 +55,7 @@ def cli() -> None:
 @click.argument("description")
 @click.option("--budget", default=10.0, help="Daily AI budget")
 def create(project_id: str, description: str, budget: float) -> None:
-    """Create new project."""
+    """[DEPRECATED] Use 'flow' commands instead. Create new project."""
     config = AgentConfig(
         project_id=project_id,
         description=description,
@@ -66,7 +67,7 @@ def create(project_id: str, description: str, budget: float) -> None:
 
 @cli.command()
 def list_projects() -> None:
-    """List all projects."""
+    """[DEPRECATED] Use 'flow' commands instead. List all projects."""
     sm = StateManager()
     projects = sm.list_projects()
 
@@ -89,7 +90,7 @@ def list_projects() -> None:
 @cli.command()
 @click.argument("project_id")
 def status(project_id: str) -> None:
-    """Check project status."""
+    """[DEPRECATED] Use 'flow' commands instead. Check project status."""
     config = AgentConfig(project_id=project_id, description="")
     agent = WeebotAgent(config)
     stats = agent.get_status()
@@ -108,7 +109,7 @@ def status(project_id: str) -> None:
 @click.argument("project_id")
 @click.argument("plan_file", type=click.Path(exists=True))
 def run(project_id: str, plan_file: str) -> None:
-    """Execute task plan from JSON file."""
+    """[DEPRECATED] Use 'flow' commands instead. Execute task plan from JSON file."""
     import json
     
     plan = json.loads(Path(plan_file).read_text())
@@ -135,7 +136,7 @@ def run(project_id: str, plan_file: str) -> None:
 @cli.command()
 @click.argument("project_id")
 def resume(project_id: str) -> None:
-    """Resume paused project."""
+    """[DEPRECATED] Use 'flow' commands instead. Resume paused project."""
     config = AgentConfig(project_id=project_id, description="")
     agent = WeebotAgent(config)
 
@@ -151,7 +152,7 @@ def resume(project_id: str) -> None:
 @click.argument("checkpoint_id")
 @click.argument("response")
 def checkpoint(project_id: str, checkpoint_id: str, response: str) -> None:
-    """Resolve pending checkpoint."""
+    """[DEPRECATED] Use 'flow' commands instead. Resolve pending checkpoint."""
     sm = StateManager()
     sm.resolve_checkpoint(checkpoint_id, response)
     console.print(f"[green]Resolved checkpoint {checkpoint_id}: {response}[/green]")
@@ -264,6 +265,58 @@ def doctor(json_output: bool) -> None:
             style="green" if report.ok else "yellow",
         )
     )
+
+
+@cli.command()
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def health(json_output: bool) -> None:
+    """Check health of Weebot components."""
+    import asyncio
+    from weebot.infrastructure.observability import HealthCheckService, HealthStatus
+    
+    async def _check() -> None:
+        service = HealthCheckService()
+        report = await service.check_all()
+        
+        if json_output:
+            console.print_json(json.dumps(report.to_dict()))
+            return
+        
+        # Color-coded status
+        status_colors = {
+            HealthStatus.HEALTHY: "green",
+            HealthStatus.DEGRADED: "yellow",
+            HealthStatus.UNHEALTHY: "red",
+            HealthStatus.UNKNOWN: "grey",
+        }
+        
+        table = Table(title="Weebot Health Check")
+        table.add_column("Component", style="cyan")
+        table.add_column("Status", style="magenta")
+        table.add_column("Latency (ms)", style="blue")
+        table.add_column("Message", style="green")
+        
+        for comp in report.components:
+            status_color = status_colors.get(comp.status, "white")
+            table.add_row(
+                comp.name,
+                f"[{status_color}]{comp.status.value}[/{status_color}]",
+                f"{comp.latency_ms:.1f}",
+                comp.message,
+            )
+        
+        console.print(table)
+        
+        # Overall status panel
+        overall_color = status_colors.get(report.overall_status, "white")
+        console.print(
+            Panel(
+                f"Overall Status: [{overall_color}]{report.overall_status.value}[/{overall_color}]",
+                style=overall_color,
+            )
+        )
+    
+    asyncio.run(_check())
 
 
 @cli.group()
@@ -642,6 +695,284 @@ def obsidian_sync(vault_path: str, experiment: str):
     else:
         vault.create_dashboard()
         console.print("[green]Created research dashboard[/green]")
+
+
+# -----------------------------------------------------------------------------
+# New Clean Architecture flow commands
+# -----------------------------------------------------------------------------
+
+@cli.group()
+def flow() -> None:
+    """PlanActFlow commands (new architecture)."""
+    pass
+
+
+@flow.command("run")
+@click.argument("prompt")
+@click.option("--session-id", default=None, help="Session identifier")
+@click.option("--model", default=None, help="Override default LLM model")
+def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
+    """Run a one-shot PlanActFlow with the given prompt."""
+    import asyncio
+
+    from weebot.application.services.model_selection import ModelSelectionService
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+    from weebot.interfaces.cli.event_logger import CLIEventSubscriber
+    from weebot.domain.models.event import WaitForUserEvent
+
+    async def _run() -> None:
+        import uuid
+
+        model_service = ModelSelectionService()
+        llm = model_service.create_llm_adapter(model or "gpt-4o-mini")
+        state_repo = SQLiteStateRepository()
+        run_session_id = session_id or str(uuid.uuid4())
+        runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False)
+        subscriber = CLIEventSubscriber(use_rich=True)
+
+        async for event in runner.run_prompt(prompt, session_id=run_session_id):
+            await subscriber.on_event(event)
+            if isinstance(event, WaitForUserEvent):
+                answer = input(f"\n[weebot asks] {event.question}\nYour answer: ")
+                async for resume_event in runner.resume_session(run_session_id, answer):
+                    await subscriber.on_event(resume_event)
+                break
+
+    asyncio.run(_run())
+
+
+@flow.command("resume")
+@click.argument("session_id")
+@click.argument("answer")
+def flow_resume(session_id: str, answer: str) -> None:
+    """Resume a waiting session with a user answer."""
+    import asyncio
+
+    from weebot.application.services.model_selection import ModelSelectionService
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+    from weebot.interfaces.cli.event_logger import CLIEventSubscriber
+
+    async def _run() -> None:
+        model_service = ModelSelectionService()
+        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        state_repo = SQLiteStateRepository()
+        runner = AgentRunner(llm=llm, state_repo=state_repo, use_rich=False)
+        subscriber = CLIEventSubscriber(use_rich=True)
+
+        async for event in runner.resume_session(session_id, answer):
+            await subscriber.on_event(event)
+
+    asyncio.run(_run())
+
+
+@flow.command("list")
+@click.option("--user-id", default=None, help="Filter by user ID")
+def flow_list(user_id: str | None) -> None:
+    """List active/waiting sessions."""
+    import asyncio
+
+    from weebot.application.services.model_selection import ModelSelectionService
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+
+    async def _run() -> None:
+        model_service = ModelSelectionService()
+        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        state_repo = SQLiteStateRepository()
+        runner = AgentRunner(llm=llm, state_repo=state_repo)
+        sessions = await runner.list_sessions(user_id=user_id)
+
+        table = Table(title="Sessions")
+        table.add_column("ID", style="cyan")
+        table.add_column("Status", style="magenta")
+        table.add_column("Title", style="green")
+        for s in sessions:
+            table.add_row(s.id, s.status.value, s.title or "—")
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@flow.command("cancel")
+@click.argument("session_id")
+def flow_cancel(session_id: str) -> None:
+    """Cancel a running session."""
+    import asyncio
+
+    from weebot.application.services.model_selection import ModelSelectionService
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+
+    async def _run() -> None:
+        model_service = ModelSelectionService()
+        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        state_repo = SQLiteStateRepository()
+        runner = AgentRunner(llm=llm, state_repo=state_repo)
+        ok = await runner.cancel_session(session_id)
+        if ok:
+            console.print(f"[green]Cancelled session {session_id}[/green]")
+        else:
+            console.print(f"[yellow]Session {session_id} was not active[/yellow]")
+
+    asyncio.run(_run())
+
+
+@flow.command("undo")
+@click.argument("session_id")
+def flow_undo(session_id: str) -> None:
+    """Undo the last plan mutation for a session."""
+    import asyncio
+
+    from weebot.application.services.model_selection import ModelSelectionService
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.interfaces.cli.agent_runner import AgentRunner
+
+    async def _run() -> None:
+        model_service = ModelSelectionService()
+        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        state_repo = SQLiteStateRepository()
+        runner = AgentRunner(llm=llm, state_repo=state_repo)
+        ok = await runner.flow_undo(session_id)
+        if ok:
+            console.print(f"[green]Undid last plan change for session {session_id}[/green]")
+        else:
+            console.print(f"[yellow]Nothing to undo for session {session_id}[/yellow]")
+
+    asyncio.run(_run())
+
+
+# Add behavior commands
+cli.add_command(behavior_cli)
+
+
+# ── Benchmark commands ──────────────────────────────────────────────────────
+
+@cli.group()
+def benchmark() -> None:
+    """Run weebot agents against SIA-compatible benchmark tasks."""
+
+
+@benchmark.command("list")
+@click.argument("tasks_dir", type=click.Path(exists=True))
+def benchmark_list(tasks_dir: str) -> None:
+    """List all benchmark tasks found in TASKS_DIR."""
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+
+    tasks = TaskLoader.load_all_from_dir(Path(tasks_dir))
+    if not tasks:
+        console.print("[yellow]No tasks found.[/yellow]")
+        return
+    for task in tasks:
+        tags = ", ".join(task.tags) if task.tags else "—"
+        console.print(
+            f"[bold]{task.task_id}[/bold]  "
+            f"({len(task.samples)} samples, tags: {tags})"
+        )
+
+
+@benchmark.command("run")
+@click.argument("task_path", type=click.Path(exists=True))
+@click.option("--skill-name", default="general", show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--sample", "sample_idx", default=0, type=int, show_default=True)
+@click.option("--db", default="./weebot_sessions.db", show_default=True)
+def benchmark_run(task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str) -> None:
+    """Run one sample from a benchmark task at TASK_PATH."""
+    import asyncio
+    import json
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+    from weebot.application.harness.runner import BenchmarkRunner
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.application.di import Container
+
+    async def _run() -> None:
+        task = TaskLoader.load_from_dir(Path(task_path))
+        container = Container()
+        container.configure_defaults(db_path=db, default_model=model)
+        runner = BenchmarkRunner(
+            flow_factory=container._create_target_flow_factory(),
+            scorer=TaskScorer(),
+            skill_name=skill_name,
+        )
+        result = await runner.run_task(task, sample_idx)
+        console.print(json.dumps(result.to_dict(), indent=2))
+        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+        console.print(f"Score: {result.score:.3f}  {status}")
+
+    asyncio.run(_run())
+
+
+@benchmark.command("batch")
+@click.argument("tasks_dir", type=click.Path(exists=True))
+@click.option("--skill-name", default="general", show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--concurrency", default=4, type=int, show_default=True)
+@click.option("--output", "-o", default="benchmark_results.json", show_default=True)
+@click.option("--db", default="./weebot_sessions.db", show_default=True)
+def benchmark_batch(
+    tasks_dir: str, skill_name: str, model: str | None,
+    concurrency: int, output: str, db: str,
+) -> None:
+    """Run all samples in all tasks under TASKS_DIR and write results to OUTPUT."""
+    import asyncio
+    import json
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+    from weebot.application.harness.runner import BenchmarkRunner
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.application.di import Container
+
+    async def _run() -> None:
+        tasks = TaskLoader.load_all_from_dir(Path(tasks_dir))
+        if not tasks:
+            console.print("[yellow]No tasks found.[/yellow]")
+            return
+
+        container = Container()
+        container.configure_defaults(db_path=db, default_model=model)
+        runner = BenchmarkRunner(
+            flow_factory=container._create_target_flow_factory(),
+            scorer=TaskScorer(),
+            skill_name=skill_name,
+        )
+        results = await runner.run_batch(tasks, concurrency=concurrency)
+        records = [r.to_dict() for r in results]
+        Path(output).write_text(json.dumps(records, indent=2), encoding="utf-8")
+
+        passed = sum(1 for r in results if r.passed)
+        console.print(f"[green]{passed}[/green]/{len(results)} passed. Results → {output}")
+
+    asyncio.run(_run())
+
+
+@benchmark.command("report")
+@click.argument("results_file", type=click.Path(exists=True))
+def benchmark_report(results_file: str) -> None:
+    """Pretty-print a benchmark results JSON file."""
+    import json
+    from pathlib import Path
+
+    records = json.loads(Path(results_file).read_text(encoding="utf-8"))
+    if not records:
+        console.print("[yellow]Empty results file.[/yellow]")
+        return
+
+    passed = sum(1 for r in records if r.get("passed"))
+    avg_score = sum(r.get("score", 0.0) for r in records) / len(records)
+    console.print(f"[bold]Results:[/bold] {passed}/{len(records)} passed, avg score {avg_score:.3f}")
+    console.print("")
+
+    for r in records:
+        status = "[green]✓[/green]" if r.get("passed") else "[red]✗[/red]"
+        console.print(
+            f"  {status} {r['task_id']}[{r['sample_idx']}]  "
+            f"score={r['score']:.3f}  "
+            f"answer={r.get('answer', '')!r}"
+        )
 
 
 if __name__ == "__main__":

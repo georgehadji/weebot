@@ -31,6 +31,17 @@ class CircularDependencyError(Exception):
         super().__init__(f"Circular dependency detected: {' -> '.join(cycle)}")
 
 
+class MissingDependencyError(Exception):
+    """Raised when one or more tasks reference dependencies that do not exist."""
+
+    def __init__(self, missing: Dict[str, List[str]]):
+        self.missing = missing
+        details = "; ".join(
+            f"{task} -> {deps}" for task, deps in sorted(missing.items())
+        )
+        super().__init__(f"Missing dependencies detected: {details}")
+
+
 class DependencyGraph:
     """
     DAG engine for task dependency resolution.
@@ -160,8 +171,13 @@ class DependencyGraph:
             True if valid DAG
             
         Raises:
+            MissingDependencyError: If a task depends on an unknown task ID
             CircularDependencyError: If cycle detected
         """
+        missing = self._find_missing_dependencies()
+        if missing:
+            raise MissingDependencyError(missing)
+
         # Kahn's algorithm for cycle detection
         in_degree = {task_id: len(node.dependencies) 
                      for task_id, node in self._nodes.items()}
@@ -186,6 +202,16 @@ class DependencyGraph:
             raise CircularDependencyError(cycle)
         
         return True
+
+    def _find_missing_dependencies(self) -> Dict[str, List[str]]:
+        """Return tasks that reference dependencies not present in the graph."""
+        missing: Dict[str, List[str]] = {}
+        known = set(self._nodes.keys())
+        for task_id, node in self._nodes.items():
+            unknown = sorted(dep for dep in node.dependencies if dep not in known)
+            if unknown:
+                missing[task_id] = unknown
+        return missing
     
     def _find_cycle(self) -> List[str]:
         """Find a cycle in the graph using DFS."""

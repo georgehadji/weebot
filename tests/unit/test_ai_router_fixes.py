@@ -71,7 +71,7 @@ class TestCancellationPropagation:
 
         call_count = 0
 
-        async def primary_then_fallback(model_id: str, prompt: str) -> str:
+        async def primary_then_fallback(model_id: str, prompt: str, *args, **kwargs) -> str:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -80,11 +80,12 @@ class TestCancellationPropagation:
 
         with patch.object(router, "_call_model", side_effect=primary_then_fallback):
             with patch.object(router, "select_model", return_value="deepseek-chat"):
-                result = await router.generate_with_fallback(
-                    prompt="test",
-                    task_type=TaskType.CHAT,
-                    use_cache=False,
-                )
+                with patch.object(router, "_get_fallback_models", return_value=["gpt-4o-mini"]):
+                    result = await router.generate_with_fallback(
+                        prompt="test",
+                        task_type=TaskType.CHAT,
+                        use_cache=False,
+                    )
         assert result["content"] == "fallback response"
         assert call_count == 2  # primary + 1 fallback
 

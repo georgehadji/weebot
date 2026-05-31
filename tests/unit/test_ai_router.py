@@ -1,7 +1,7 @@
 """Unit tests for ModelRouter, CostTracker, and ResponseCache."""
 import pytest
 from datetime import date, timedelta
-from unittest.mock import patch
+import threading
 from weebot.ai_router import ModelRouter, CostTracker, ResponseCache, TaskType
 
 
@@ -93,6 +93,23 @@ class TestCostTracker:
         assert tracker.today_cost == 0.0
         assert tracker.call_count == 0
 
+    def test_record_call_thread_safe(self):
+        tracker = CostTracker(daily_budget=999.0)
+        workers = 8
+        iterations = 2000
+
+        def worker():
+            for _ in range(iterations):
+                tracker.record_call("gpt-4o-mini", input_tokens=10, output_tokens=5)
+
+        threads = [threading.Thread(target=worker) for _ in range(workers)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert tracker.call_count == workers * iterations
+
 
 class TestResponseCache:
     def test_miss_returns_none(self, tmp_cache):
@@ -118,3 +135,16 @@ class TestResponseCache:
         # TTL is 0 hours — wait a moment and fetch
         time.sleep(0.01)
         assert cache.get("stale-key") is None
+
+    def test_atomic_write_preserves_previous_value_on_replace_failure(self, tmp_cache, monkeypatch):
+        cache = ResponseCache(tmp_cache)
+        cache.set("k", "old")
+
+        def _raise_replace(_src, _dst):
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr("weebot.ai_router.os.replace", _raise_replace)
+        with pytest.raises(OSError, match="replace failure"):
+            cache.set("k", "new")
+
+        assert cache.get("k") == "old"

@@ -48,13 +48,27 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Callable, Generator
 
 # Context variables for correlation tracking
 _correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 _agent_id: ContextVar[Optional[str]] = ContextVar("agent_id", default=None)
 _workflow_id: ContextVar[Optional[str]] = ContextVar("workflow_id", default=None)
+
+
+def _utc_now() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
+def _utc_iso(ts: datetime) -> str:
+    """Format datetime as UTC ISO-8601 with Z suffix."""
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    else:
+        ts = ts.astimezone(timezone.utc)
+    return ts.isoformat().replace("+00:00", "Z")
 
 
 class StructuredLogRecord:
@@ -78,7 +92,7 @@ class StructuredLogRecord:
         self.level = level
         self.message = message
         self.logger_name = logger_name
-        self.timestamp = timestamp or datetime.utcnow()
+        self.timestamp = timestamp or _utc_now()
         self.correlation_id = correlation_id
         self.agent_id = agent_id
         self.workflow_id = workflow_id
@@ -91,7 +105,7 @@ class StructuredLogRecord:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
-            "timestamp": self.timestamp.isoformat() + "Z",
+            "timestamp": _utc_iso(self.timestamp),
             "level": self.level,
             "logger": self.logger_name,
             "message": self.message,
@@ -300,7 +314,7 @@ class StructuredLogger:
         Automatically logs performance data when context exits.
         """
         start_time = time.time()
-        start_iso = datetime.utcnow().isoformat()
+        start_iso = _utc_iso(_utc_now())
         
         try:
             yield
@@ -312,7 +326,7 @@ class StructuredLogger:
                 operation=operation_name,
                 duration_ms=round(duration_ms, 2),
                 start_time=start_iso,
-                end_time=datetime.utcnow().isoformat(),
+                end_time=_utc_iso(_utc_now()),
                 status="success"
             )
         except Exception as e:
@@ -323,7 +337,7 @@ class StructuredLogger:
                 operation=operation_name,
                 duration_ms=round(duration_ms, 2),
                 start_time=start_iso,
-                end_time=datetime.utcnow().isoformat(),
+                end_time=_utc_iso(_utc_now()),
                 status="failed",
                 error_type=type(e).__name__,
                 exc_info=True
@@ -411,7 +425,7 @@ class JSONLogFormatter(logging.Formatter):
         
         # Otherwise, create a standard log record
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": _utc_iso(_utc_now()),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

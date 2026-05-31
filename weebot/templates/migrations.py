@@ -226,8 +226,8 @@ class SchemaManager:
             """))
             row = result.fetchone()
             return row[0] if row else None
-        except:
-            return None
+        except Exception:
+            return None  # No migrations table yet or other error
 
 
 async def init_database(connection: AsyncConnection):

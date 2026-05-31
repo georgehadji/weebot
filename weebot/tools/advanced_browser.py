@@ -9,6 +9,7 @@ from io import BytesIO
 from typing import Optional
 
 from weebot.tools.base import BaseTool, ToolResult
+from weebot.infrastructure.browser.session_manager import BrowserSessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,9 @@ class AdvancedBrowserTool(BaseTool):
                     "wait_for_selector",
                     "get_cookies",
                     "set_cookies",
+                    "save_session",
+                    "list_sessions",
+                    "delete_session",
                 ],
                 "description": "Action to perform",
             },
@@ -111,6 +115,14 @@ class AdvancedBrowserTool(BaseTool):
                 "enum": ["selector", "navigation", "function"],
                 "description": "Type of wait condition",
             },
+            "session_name": {
+                "type": "string",
+                "description": "Session name to persist/restore cookies and storage (optional)",
+            },
+            "save_session": {
+                "type": "boolean",
+                "description": "Save session after this action (default: false)",
+            },
         },
         "required": ["action"],
     }
@@ -126,6 +138,8 @@ class AdvancedBrowserTool(BaseTool):
         timeout: int = 30000,
         headless: bool = True,
         wait_type: str = "selector",
+        session_name: Optional[str] = None,
+        save_session: bool = False,
         **_,
     ) -> ToolResult:
         """Execute browser action."""
@@ -135,7 +149,10 @@ class AdvancedBrowserTool(BaseTool):
             from playwright.async_api import async_playwright
 
             if action == "launch":
-                await self._launch_browser(headless)
+                await self._launch_browser(headless, session_name=session_name)
+                if save_session and session_name and _context:
+                    session_manager = BrowserSessionManager()
+                    await session_manager.save_session(session_name, _context)
                 return ToolResult(output="Browser launched successfully")
 
             elif action == "close":
@@ -146,8 +163,11 @@ class AdvancedBrowserTool(BaseTool):
                 if not url:
                     return ToolResult(output="", error="url required for goto action")
                 if not _page:
-                    await self._launch_browser(headless)
+                    await self._launch_browser(headless, session_name=session_name)
                 await _page.goto(url, wait_until="networkidle", timeout=timeout)
+                if save_session and session_name and _context:
+                    session_manager = BrowserSessionManager()
+                    await session_manager.save_session(session_name, _context)
                 return ToolResult(output=f"Navigated to {url}")
 
             elif action == "back":
@@ -255,6 +275,36 @@ class AdvancedBrowserTool(BaseTool):
                 await _page.context.add_cookies(cookies)
                 return ToolResult(output=f"Set {len(cookies)} cookies")
 
+            elif action == "save_session":
+                if not session_name:
+                    return ToolResult(output="", error="session_name required for save_session")
+                if not _context:
+                    return ToolResult(output="", error="Browser not launched")
+                session_manager = BrowserSessionManager()
+                success = await session_manager.save_session(session_name, _context)
+                return ToolResult(
+                    output=f"Session '{session_name}' saved" if success else f"Failed to save session '{session_name}'"
+                )
+
+            elif action == "list_sessions":
+                session_manager = BrowserSessionManager()
+                sessions = session_manager.list_sessions()
+                if not sessions:
+                    return ToolResult(output="No saved sessions found")
+                output = f"Saved sessions ({len(sessions)}):\n"
+                for s in sessions:
+                    output += f"  - {s['name']} (saved: {s['saved_at']})\n"
+                return ToolResult(output=output)
+
+            elif action == "delete_session":
+                if not session_name:
+                    return ToolResult(output="", error="session_name required for delete_session")
+                session_manager = BrowserSessionManager()
+                success = session_manager.delete_session(session_name)
+                return ToolResult(
+                    output=f"Session '{session_name}' deleted" if success else f"Session '{session_name}' not found"
+                )
+
             else:
                 return ToolResult(output="", error=f"Unknown action: {action}")
 
@@ -263,7 +313,7 @@ class AdvancedBrowserTool(BaseTool):
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 
-    async def _launch_browser(self, headless: bool = True) -> None:
+    async def _launch_browser(self, headless: bool = True, session_name: Optional[str] = None) -> None:
         """Launch browser if not already running."""
         global _browser, _page, _context, _playwright_instance
 
@@ -278,6 +328,14 @@ class AdvancedBrowserTool(BaseTool):
         _browser = b
         c = await b.new_context()
         _context = c
+
+        # Load session if specified
+        if session_name:
+            session_manager = BrowserSessionManager()
+            loaded = await session_manager.load_session(session_name, c)
+            if loaded:
+                logger.info(f"Restored session '{session_name}'")
+
         p = await c.new_page()
         _page = p
 
@@ -327,7 +385,7 @@ class WebScraperTool(BaseTool):
             },
             "extract_type": {
                 "type": "string",
-                "enum": ["text", "html", "attribute", "all"],
+                "enum": ["text", "html", "attribute", "all", "markdown"],
                 "description": "What to extract from matching elements",
             },
             "attribute": {
@@ -342,6 +400,11 @@ class WebScraperTool(BaseTool):
                 "type": "integer",
                 "description": "Timeout in milliseconds (default: 30000)",
             },
+            "max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens for markdown extraction (default: 4000)",
+                "default": 4000,
+            },
         },
         "required": ["url", "selector"],
     }
@@ -354,9 +417,23 @@ class WebScraperTool(BaseTool):
         attribute: Optional[str] = None,
         wait_for: Optional[str] = None,
         timeout: int = 30000,
+        max_tokens: int = 4000,
         **_,
     ) -> ToolResult:
         """Scrape web page and extract data."""
+        # Validate input before launching external browser processes.
+        if not url or not url.strip():
+            return ToolResult(output="", error="url required for scraping")
+        if not selector or not selector.strip():
+            return ToolResult(output="", error="selector required for scraping")
+        if extract_type == "attribute" and not attribute:
+            return ToolResult(
+                output="",
+                error="attribute required when extract_type='attribute'",
+            )
+        if timeout <= 0:
+            return ToolResult(output="", error="timeout must be > 0")
+
         try:
             from playwright.async_api import async_playwright
             from bs4 import BeautifulSoup
@@ -374,6 +451,31 @@ class WebScraperTool(BaseTool):
 
                 # Get page content
                 content = await page.content()
+
+                # Handle markdown extraction directly
+                if extract_type == "markdown":
+                    from weebot.infrastructure.browser.content_extractor import ContentExtractor
+
+                    extractor = ContentExtractor(max_tokens=max_tokens, preserve_links=True)
+                    markdown = extractor.extract_markdown(content, url=url)
+
+                    await browser.close()
+
+                    output = f"Extracted markdown from {url}\n\n{markdown[:800]}"
+                    if len(markdown) > 800:
+                        output += f"...\n\n[Full content: {len(markdown)} chars, ~{extractor.estimate_tokens(markdown)} tokens]"
+
+                    return ToolResult(
+                        output=output,
+                        data={
+                            "url": url,
+                            "markdown": markdown,
+                            "truncated": len(markdown) >= max_tokens * 4,
+                            "char_count": len(markdown),
+                            "estimated_tokens": extractor.estimate_tokens(markdown),
+                        }
+                    )
+
                 await browser.close()
 
             # Parse with BeautifulSoup

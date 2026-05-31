@@ -383,6 +383,9 @@ class SchedulingManager:
         job = self.get_job(job_id)
         if not job or not job.enabled:
             return
+        if job.status == JobStatus.PAUSED.value:
+            logger.info("Job %s is paused — skipping execution", job_id)
+            return
 
         self._running_jobs.add(job_id)
         try:
@@ -391,14 +394,31 @@ class SchedulingManager:
             job.last_run = datetime.now()
             self._save_job(job)
 
-            # Execute callable if registered
-            if job.callable_name and job.callable_name in self._callables:
-                func = self._callables[job.callable_name]
-                if callable(func):
-                    result = func()
-                    if hasattr(result, '__await__'):
-                        await result
-                logger.info("Executed job: %s", job_id)
+            # Execute payload
+            if job.callable_name:
+                func = self._callables.get(job.callable_name)
+                if func is None:
+                    raise ValueError(
+                        f"Callable not registered: {job.callable_name}"
+                    )
+                if not callable(func):
+                    raise TypeError(
+                        f"Registered callable is not callable: {job.callable_name}"
+                    )
+                result = func()
+                if hasattr(result, '__await__'):
+                    await result
+                logger.info("Executed job callable: %s", job_id)
+            elif job.command:
+                # Fail closed instead of reporting false success.
+                raise NotImplementedError(
+                    "Command execution is not implemented in SchedulingManager; "
+                    "register a callable_name for this job."
+                )
+            else:
+                raise ValueError(
+                    f"Job {job_id} has neither callable_name nor command"
+                )
 
             # Update success
             job.status = JobStatus.COMPLETED.value

@@ -535,8 +535,8 @@ class TemplateMarketplace:
                 timeout=5,
             )
             return response.status_code == 200
-        except:
-            return False
+        except Exception:
+            return False  # Network error or other issue, assume offline
     
     def _get_local_catalog(self) -> List[TemplateListing]:
         """Get local catalog cache."""
@@ -644,8 +644,8 @@ class LocalTemplateRepository:
                     "author": template.author,
                     "file": str(yaml_file),
                 })
-            except:
-                pass
+            except Exception:
+                pass  # Skip invalid template files
         
         return templates
     

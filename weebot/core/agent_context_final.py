@@ -23,6 +23,8 @@ _log = logging.getLogger(__name__)
 
 from weebot.activity_stream import ActivityStream
 from weebot.state_manager import StateManager
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.ports import EventPublisher
 
 
 # ============================================================================
@@ -178,6 +180,8 @@ class AgentContext:
     event_broker: EventBroker = field(default_factory=EventBroker)
     activity_stream: ActivityStream = field(default_factory=ActivityStream)
     state_manager: Optional[StateManager] = None
+    state_repository: Optional[StateRepositoryPort] = None
+    event_publisher: Optional[EventPublisher] = None
     
     # CONCURRENCY FIX: Shared lock for shared_data protection
     # NOTE: asyncio.Lock is NOT serializable - excluded from pickle
@@ -198,7 +202,9 @@ class AgentContext:
     def create_orchestrator(
         cls,
         activity_stream: Optional[ActivityStream] = None,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        state_repository: Optional[StateRepositoryPort] = None,
+        event_publisher: Optional[EventPublisher] = None,
     ) -> AgentContext:
         """Create a root orchestrator context."""
         agent_id = f"orchestrator_{uuid.uuid4().hex[:8]}"
@@ -208,7 +214,8 @@ class AgentContext:
             agent_id=agent_id,
             nesting_level=1,
             activity_stream=activity_stream or ActivityStream(),
-            state_manager=state_manager
+            state_manager=state_manager,
+            state_repository=state_repository,
         )
 
     @classmethod
@@ -234,6 +241,8 @@ class AgentContext:
             event_broker=parent_context.event_broker,
             activity_stream=parent_context.activity_stream,
             state_manager=parent_context.state_manager,
+            state_repository=parent_context.state_repository,
+            event_publisher=parent_context.event_publisher,
             # CRITICAL: Share the same lock to protect shared_data
             _data_lock=parent_context._data_lock
         )
@@ -351,7 +360,7 @@ class AgentContext:
             f"{self.agent_id}: {message}"
         )
 
-        if requires_approval and self.state_manager:
+        if requires_approval and (self.state_manager or self.state_repository):
             pass  # Future integration
 
         return True

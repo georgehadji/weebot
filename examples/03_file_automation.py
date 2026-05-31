@@ -34,7 +34,7 @@ SCAFFOLD_DIR = str(Path(__file__).parent / "output" / "scaffold")
 
 async def step_system_info(bash: BashTool, stream: ActivityStream) -> None:
     """Query basic system information via PowerShell."""
-    print("🖥️   Step 1: System info via PowerShell …")
+    print("[Step 1] System info via PowerShell ...")
     cmd = (
         "[PSCustomObject]@{"
         "  PS       = $PSVersionTable.PSVersion.ToString();"
@@ -55,7 +55,14 @@ async def step_system_info(bash: BashTool, stream: ActivityStream) -> None:
 
 async def step_scaffold(editor: StrReplaceEditorTool, stream: ActivityStream) -> None:
     """Create a small project scaffold using StrReplaceEditorTool."""
-    print("📁  Step 2: Creating project scaffold …")
+    print("[Step 2] Creating project scaffold ...")
+    
+    # Clean up existing scaffold first
+    import shutil
+    scaffold_path = Path(SCAFFOLD_DIR)
+    if scaffold_path.exists():
+        shutil.rmtree(scaffold_path)
+        print("  🧹  Cleaned up existing scaffold")
 
     files: dict[str, str] = {
         f"{SCAFFOLD_DIR}/README.md": (
@@ -87,7 +94,7 @@ async def step_scaffold(editor: StrReplaceEditorTool, stream: ActivityStream) ->
     for path, content in files.items():
         result = await editor.execute(command="create", path=path, file_text=content)
         rel = path.replace(SCAFFOLD_DIR, "scaffold")
-        icon = "✅" if not result.is_error else "❌"
+        icon = "[OK]" if not result.is_error else "[FAIL]"
         print(f"  {icon}  {rel}" + (f" — {result.error}" if result.is_error else ""))
 
     stream.push("example-03", "tool", f"file_editor: scaffold {SCAFFOLD_DIR}")
@@ -96,32 +103,41 @@ async def step_scaffold(editor: StrReplaceEditorTool, stream: ActivityStream) ->
 
 async def step_edit_file(editor: StrReplaceEditorTool, stream: ActivityStream) -> None:
     """Demonstrate in-place str_replace editing."""
-    print("✏️   Step 3: In-place file edit (str_replace) …")
+    print("[Step 3] In-place file edit (str_replace) ...")
     target = f"{SCAFFOLD_DIR}/src/main.py"
 
-    result = await editor.execute(
-        command="str_replace",
-        path=target,
-        old_str='    return f"Hello, {name}!"',
-        new_str='    return f"Hello, {name}! — powered by weebot 🤖"',
-    )
-    if result.is_error:
-        print(f"  ❌  Edit failed: {result.error}")
+    # First check current content
+    view_result = await editor.execute(command="view", path=target)
+    if "powered by weebot" in view_result.output:
+        print("  ℹ️   File already edited (from previous run)")
+        print("  ✅  Content is already modified")
     else:
-        stream.push("example-03", "tool", "file_editor: str_replace main.py")
-        # Verify by viewing the changed file
-        view = await editor.execute(
-            command="view", path=target, view_range=[5, 8]
+        result = await editor.execute(
+            command="str_replace",
+            path=target,
+            old_str='    return f"Hello, {name}!"',
+            new_str='    return f"Hello, {name}! — powered by weebot"',
         )
-        print("  ✅  Lines 5-8 after edit:")
-        for line in view.output.strip().splitlines():
-            print(f"       {line}")
+        if result.is_error:
+            print(f"  ⚠️   Edit info: {result.error}")
+            print("  ℹ️   File may already be modified")
+        else:
+            stream.push("example-03", "tool", "file_editor: str_replace main.py")
+            print("  ✅  Successfully edited main.py")
+    
+    # Verify by viewing the file
+    view = await editor.execute(
+        command="view", path=target, view_range=[5, 8]
+    )
+    print("  📄  Lines 5-8:")
+    for line in view.output.strip().splitlines():
+        print(f"       {line}")
     print()
 
 
 async def step_verify(bash: BashTool, stream: ActivityStream) -> None:
     """List the scaffold tree using PowerShell."""
-    print("🔍  Step 4: Verifying structure via PowerShell …")
+    print("[Step 4] Verifying structure via PowerShell ...")
     cmd = (
         f"Get-ChildItem -Path '{SCAFFOLD_DIR}' -Recurse "
         f"| Select-Object -ExpandProperty FullName"
@@ -138,7 +154,7 @@ async def step_verify(bash: BashTool, stream: ActivityStream) -> None:
         for line in result.output.strip().splitlines():
             rel = line.replace(SCAFFOLD_DIR, "scaffold").strip()
             if rel:
-                print(f"  📄  {rel}")
+                print(f"  [FILE] {rel}")
         stream.push("example-03", "tool", "bash: Get-ChildItem scaffold")
     print()
 
@@ -153,7 +169,7 @@ async def main() -> None:
     await step_edit_file(editor, stream)
     await step_verify(bash, stream)
 
-    print(f"📋  Activity log ({len(stream.recent())} events):")
+    print(f"[Activity log] ({len(stream.recent())} events):")
     for event in stream.recent():
         print(f"    [{event.kind}] {event.message}")
 

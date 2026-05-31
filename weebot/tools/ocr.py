@@ -115,22 +115,35 @@ class StructuredOCRTool(BaseTool):
 
             # Build structured output
             text_items = []
+            conf_list = details.get("conf", [])
+            left_list = details.get("left", [])
+            top_list = details.get("top", [])
+            width_list = details.get("width", [])
+            height_list = details.get("height", [])
+            
             for i, text in enumerate(details.get("text", [])):
                 if not text.strip():
                     continue
 
-                confidence = int(details.get("conf", [0])[i])
+                # Guard against mismatched list lengths from OCR
+                if i >= len(conf_list):
+                    continue
+                confidence = int(conf_list[i])
                 if confidence < min_confidence:
+                    continue
+
+                # Guard against mismatched position data
+                if i >= len(left_list) or i >= len(top_list) or i >= len(width_list) or i >= len(height_list):
                     continue
 
                 item = {
                     "text": text,
                     "confidence": confidence,
                     "position": {
-                        "x": details["left"][i],
-                        "y": details["top"][i],
-                        "width": details["width"][i],
-                        "height": details["height"][i],
+                        "x": left_list[i],
+                        "y": top_list[i],
+                        "width": width_list[i],
+                        "height": height_list[i],
                     },
                 }
                 text_items.append(item)

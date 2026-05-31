@@ -28,11 +28,19 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Callable
+
+_log = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 @dataclass
@@ -56,7 +64,7 @@ class MetricsStore:
             self._metrics[metric_name] = deque(maxlen=self._max_points)
         
         self._metrics[metric_name].append(MetricPoint(
-            timestamp=datetime.utcnow(),
+            timestamp=_utc_now(),
             value=value,
             labels=labels
         ))
@@ -76,7 +84,7 @@ class MetricsStore:
         if metric_name not in self._metrics:
             return []
         
-        cutoff = datetime.utcnow() - duration
+        cutoff = _utc_now() - duration
         return [p for p in self._metrics[metric_name] if p.timestamp > cutoff]
     
     def get_average(
@@ -109,7 +117,7 @@ class SystemHealthMonitor:
     def __init__(self, metrics_store: MetricsStore):
         self.metrics = metrics_store
         self._health_score: float = 1.0
-        self._last_update = datetime.utcnow()
+        self._last_update = _utc_now()
         self._status: str = "healthy"  # healthy, degraded, critical
     
     def update(self):
@@ -145,7 +153,7 @@ class SystemHealthMonitor:
             total_score += scores.get(key, 0) * weight
         
         self._health_score = total_score
-        self._last_update = datetime.utcnow()
+        self._last_update = _utc_now()
         
         # Determine status
         if total_score >= 0.9:
@@ -547,20 +555,46 @@ class DashboardServer:
     without external dependencies like Grafana.
     """
     
-    def __init__(self, port: int = 8080, host: str = "0.0.0.0"):
+    def __init__(
+        self,
+        port: int = 8080,
+        host: str = "127.0.0.1",
+        api_token: Optional[str] = None,
+    ):
         self.port = port
         self.host = host
+        self.api_token = api_token
         self.metrics = MetricsStore()
         self.health = SystemHealthMonitor(self.metrics)
         self._server: Optional[Any] = None
         self._running = False
-    
+
+    @staticmethod
+    def _parse_headers(lines: List[str]) -> Dict[str, str]:
+        headers: Dict[str, str] = {}
+        for line in lines[1:]:
+            if not line:
+                break
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            headers[key.strip().lower()] = value.strip()
+        return headers
+
+    def _is_authorized(self, headers: Dict[str, str]) -> bool:
+        """Require bearer token for API endpoints when token auth is configured."""
+        if not self.api_token:
+            return True
+        return headers.get("authorization") == f"Bearer {self.api_token}"
+
     async def handle_request(self, reader, writer):
         """Handle HTTP request."""
         try:
             # Read request
             request = await reader.read(4096)
-            request_str = request.decode()
+            if not request:
+                return
+            request_str = request.decode(errors="replace")
             
             # Parse path
             lines = request_str.split("\r\n")
@@ -572,49 +606,80 @@ class DashboardServer:
             if len(parts) < 2:
                 return
             
-            path = parts[1]
+            path = parts[1].split("?", 1)[0]
+            headers = self._parse_headers(lines)
             
             # Update health before serving
             self.health.update()
             
             # Route request
-            if path == "/" or path == "/index.html":
-                response_body = DashboardHTML.generate(self.metrics, self.health)
-                content_type = "text/html"
-                status = "200 OK"
-            elif path == "/api/metrics":
-                response_body = json.dumps({
-                    "metrics": self.metrics.list_metrics(),
-                    "health": self.health.to_dict(),
-                    "timestamp": datetime.utcnow().isoformat(),
-                })
-                content_type = "application/json"
-                status = "200 OK"
-            elif path == "/api/health":
-                response_body = json.dumps(self.health.to_dict())
-                content_type = "application/json"
-                status = "200 OK"
-            else:
-                response_body = json.dumps({"error": "Not found"})
-                content_type = "application/json"
-                status = "404 Not Found"
+            status, response_body, content_type = self._route_request(path, headers)
             
             # Send response
-            response = f"""HTTP/1.1 {status}
-Content-Type: {content_type}
-Content-Length: {len(response_body)}
-Connection: close
-
-{response_body}"""
+            body_bytes = response_body.encode("utf-8")
+            response = (
+                f"HTTP/1.1 {status}\r\n"
+                f"Content-Type: {content_type}\r\n"
+                f"Content-Length: {len(body_bytes)}\r\n"
+                "Cache-Control: no-store\r\n"
+                "X-Content-Type-Options: nosniff\r\n"
+                "X-Frame-Options: DENY\r\n"
+                "Referrer-Policy: no-referrer\r\n"
+                "Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; script-src 'self'\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + body_bytes
             
-            writer.write(response.encode())
+            writer.write(response)
             await writer.drain()
             
-        except Exception as e:
-            print(f"Error handling request: {e}")
+        except Exception:
+            _log.exception("Error handling dashboard request")
+            try:
+                body = b'{"error":"Internal server error"}'
+                writer.write(
+                    b"HTTP/1.1 500 Internal Server Error\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n"
+                    b"Connection: close\r\n\r\n" + body
+                )
+                await writer.drain()
+            except Exception:
+                pass
         finally:
             writer.close()
             await writer.wait_closed()
+
+    def _route_request(self, path: str, headers: Dict[str, str]) -> tuple[str, str, str]:
+        if path.startswith("/api/") and not self._is_authorized(headers):
+            return (
+                "401 Unauthorized",
+                json.dumps({"error": "Unauthorized"}),
+                "application/json",
+            )
+
+        if path == "/" or path == "/index.html":
+            return (
+                "200 OK",
+                DashboardHTML.generate(self.metrics, self.health),
+                "text/html",
+            )
+        if path == "/api/metrics":
+            return (
+                "200 OK",
+                json.dumps(
+                    {
+                        "metrics": self.metrics.list_metrics(),
+                        "health": self.health.to_dict(),
+                        "timestamp": _utc_now().isoformat(),
+                    }
+                ),
+                "application/json",
+            )
+        if path == "/api/health":
+            return "200 OK", json.dumps(self.health.to_dict()), "application/json"
+        return "404 Not Found", json.dumps({"error": "Not found"}), "application/json"
     
     async def start(self):
         """Start the dashboard server."""
@@ -661,9 +726,13 @@ Connection: close
 
 
 # Convenience function for quick setup
-def start_dashboard(port: int = 8080) -> DashboardServer:
+def start_dashboard(
+    port: int = 8080,
+    host: str = "127.0.0.1",
+    api_token: Optional[str] = None,
+) -> DashboardServer:
     """Create and start a dashboard server."""
-    dashboard = DashboardServer(port=port)
+    dashboard = DashboardServer(port=port, host=host, api_token=api_token)
     dashboard.run_in_background()
     return dashboard
 

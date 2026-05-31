@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from weebot.tools.base import BaseTool, ToolCollection
@@ -31,6 +31,7 @@ class RoleBasedToolRegistry:
             "knowledge",
             "video_ingest",
             "screen_capture",
+            "weather",
         ],
         "analyst": [
             "python_execute",
@@ -74,6 +75,8 @@ class RoleBasedToolRegistry:
             "terminate",
             "ask_human",
             "ocr",
+            "weather",
+            "design_system",
         ],
         "custom": [],  # Custom roles have no default tools
     }
@@ -225,6 +228,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.video_ingest_tool import VideoIngestTool
         from weebot.tools.powershell_tool import PowerShellBaseTool
         from weebot.tools.ocr import OCRTool
+        from weebot.tools.weather_tool import WeatherTool
+        from weebot.tools.design_system_tool import DesignSystemTool
         from weebot.tools.control import TerminateTool, AskHumanTool
 
         cls._TOOL_CLASS_MAP = {
@@ -241,16 +246,23 @@ class RoleBasedToolRegistry:
             "video_ingest": VideoIngestTool,
             "powershell": PowerShellBaseTool,
             "ocr": OCRTool,
+            "weather": WeatherTool,
+            "design_system": DesignSystemTool,
             "terminate": TerminateTool,
             "ask_human": AskHumanTool,
         }
         return cls._TOOL_CLASS_MAP
 
-    def create_tool_collection(self, role: str) -> "ToolCollection":
+    def create_tool_collection(
+        self,
+        role: str,
+        llm_port: Optional[Any] = None,
+    ) -> "ToolCollection":
         """Create a :class:`ToolCollection` with instantiated tools for *role*.
 
         Args:
             role: Agent role name (must exist in the registry).
+            llm_port: Optional LLMPort for tools that support it.
 
         Returns:
             ToolCollection populated with ``BaseTool`` instances.
@@ -258,15 +270,18 @@ class RoleBasedToolRegistry:
         from weebot.tools.base import ToolCollection
 
         tool_names = self.get_tools_for_role(role)
-        return self.create_tool_collection_from_names(tool_names)
+        return self.create_tool_collection_from_names(tool_names, llm_port=llm_port)
 
     def create_tool_collection_from_names(
-        self, tool_names: List[str],
+        self,
+        tool_names: List[str],
+        llm_port: Optional[Any] = None,
     ) -> "ToolCollection":
         """Create a :class:`ToolCollection` from an explicit list of tool names.
 
         Args:
             tool_names: List of ``BaseTool.name`` strings.
+            llm_port: Optional LLMPort for tools that support it (e.g., BrowserTool).
 
         Returns:
             ToolCollection with matching ``BaseTool`` instances.
@@ -279,7 +294,11 @@ class RoleBasedToolRegistry:
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
-                tools.append(tool_cls())
+                # Pass llm_port to BrowserTool if provided
+                if name == "browser_navigator" and llm_port is not None:
+                    tools.append(tool_cls(llm_port=llm_port))
+                else:
+                    tools.append(tool_cls())
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)
         return ToolCollection(*tools)

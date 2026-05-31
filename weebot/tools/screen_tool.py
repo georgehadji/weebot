@@ -120,7 +120,12 @@ class ScreenCaptureBaseTool(_WeebotBaseTool):
         save_path: str | None = None,
         **_,
     ) -> _ToolResult:
-        result = self._inner.capture(monitor_index=monitor_index, save_path=save_path)
+        import asyncio
+        result = await asyncio.to_thread(
+            self._inner.capture, 
+            monitor_index=monitor_index, 
+            save_path=save_path
+        )
         if not result["success"]:
             return _ToolResult(output="", error=result["output"])
         png_bytes: bytes = result["data"]

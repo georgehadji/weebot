@@ -38,9 +38,14 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Generator, Union
+
+
+def _utc_now() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
 
 
 class SpanStatus(Enum):
@@ -112,7 +117,7 @@ class TraceSpan:
     def add_event(self, event_type: str, message: str, **data):
         """Add an event to this span."""
         self.events.append(TraceEvent(
-            timestamp=datetime.utcnow(),
+            timestamp=_utc_now(),
             event_type=event_type,
             message=message,
             data=data
@@ -140,7 +145,7 @@ class TraceSpan:
     
     def finish(self, status: Optional[SpanStatus] = None):
         """Mark this span as finished."""
-        self.end_time = datetime.utcnow()
+        self.end_time = _utc_now()
         if status:
             self.status = status
         elif self.status == SpanStatus.RUNNING:
@@ -221,7 +226,7 @@ class WorkflowTracer:
         self.root_span: Optional[TraceSpan] = None
         self._current_span_stack: List[TraceSpan] = []
         self._all_spans: Dict[str, TraceSpan] = {}
-        self.start_time = datetime.utcnow()
+        self.start_time = _utc_now()
         self.end_time: Optional[datetime] = None
     
     @contextmanager
@@ -237,7 +242,7 @@ class WorkflowTracer:
             parent_id=None,
             span_type=SpanType.WORKFLOW,
             name=self.workflow_name,
-            start_time=datetime.utcnow(),
+            start_time=_utc_now(),
             metadata={"workflow_id": self.workflow_id}
         )
         self._current_span_stack.append(self.root_span)
@@ -248,7 +253,7 @@ class WorkflowTracer:
         finally:
             if self.root_span:
                 self.root_span.finish()
-            self.end_time = datetime.utcnow()
+            self.end_time = _utc_now()
     
     @contextmanager
     def start_agent(self, agent_id: str, model: Optional[str] = None, **metadata) -> Generator[TraceSpan, None, None]:
@@ -260,7 +265,7 @@ class WorkflowTracer:
             parent_id=parent.span_id if parent else None,
             span_type=SpanType.AGENT,
             name=agent_id,
-            start_time=datetime.utcnow(),
+            start_time=_utc_now(),
             metadata={"model": model, **metadata} if model else metadata
         )
         
@@ -286,7 +291,7 @@ class WorkflowTracer:
             parent_id=parent.span_id if parent else None,
             span_type=SpanType.TOOL_CALL,
             name=tool_name,
-            start_time=datetime.utcnow(),
+            start_time=_utc_now(),
             metadata=metadata
         )
         

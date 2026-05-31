@@ -323,7 +323,7 @@ class CircuitBreaker:
         """
         state_counts = {"CLOSED": 0, "OPEN": 0, "HALF_OPEN": 0}
         for entry in self._breakers.values():
-            state_counts[entry.state.value] += 1
+            state_counts[entry.state.name] += 1
         
         recovery_rate = (
             self._successful_recoveries / self._recovery_attempts

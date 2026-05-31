@@ -1,0 +1,6 @@
+[
+  {"prompt": "Is 17 a prime number? Answer with only yes or no.", "expected_answer": "yes"},
+  {"prompt": "Is 100 divisible by 7? Answer with only yes or no.", "expected_answer": "no"},
+  {"prompt": "Is the square root of 144 equal to 12? Answer with only yes or no.", "expected_answer": "yes"},
+  {"prompt": "Is 2 the only even prime number? Answer with only yes or no.", "expected_answer": "yes"}
+]

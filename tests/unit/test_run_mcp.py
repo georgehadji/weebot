@@ -134,6 +134,47 @@ class TestMain:
 
         mock_server.run_sse.assert_called_once()
 
+    def test_rejects_remote_sse_bind_without_opt_in(self) -> None:
+        """Non-loopback SSE host is blocked unless explicit opt-in is provided."""
+        from run_mcp import main
+
+        with (
+            patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),
+            patch("sys.argv", ["run_mcp.py", "--transport", "sse", "--host", "0.0.0.0"]),
+            patch.dict("os.environ", {}, clear=False),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 2
+
+    def test_allows_remote_sse_bind_with_allow_remote_flag(self) -> None:
+        """--allow-remote enables explicit non-loopback SSE binding."""
+        from run_mcp import main
+
+        mock_server = MagicMock()
+        mock_server.run_sse = AsyncMock()
+
+        with (
+            patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),
+            patch("run_mcp._build_server", return_value=mock_server),
+            patch(
+                "sys.argv",
+                [
+                    "run_mcp.py",
+                    "--transport",
+                    "sse",
+                    "--host",
+                    "0.0.0.0",
+                    "--allow-remote",
+                ],
+            ),
+            patch("asyncio.run"),
+        ):
+            main()
+
+        mock_server.run_sse.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # ping tool

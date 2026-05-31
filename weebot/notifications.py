@@ -26,14 +26,22 @@
 import os
 import sys
 import asyncio
+import logging
 import aiohttp
 from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 from datetime import datetime
 
-from weebot.notifications_categorizer import NotificationCategorizer
-from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
+try:
+    from .notifications_categorizer import NotificationCategorizer
+    from .utils.backoff import RetryWithBackoff, BackoffConfig
+except ImportError:
+    # Fallback for direct execution
+    from notifications_categorizer import NotificationCategorizer
+    from utils.backoff import RetryWithBackoff, BackoffConfig
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationLevel(Enum):
@@ -167,8 +175,8 @@ class TelegramChannel:
                         return True
 
             return await self._retry.call(_post)
-        except Exception as e:
-            print(f"Telegram notification failed: {e}")
+        except Exception:
+            logger.warning("Telegram notification failed")
             return False
 
 
@@ -205,8 +213,8 @@ class SlackChannel:
                     json=payload
                 ) as response:
                     return response.status == 200
-        except Exception as e:
-            print(f"Slack notification failed: {e}")
+        except Exception:
+            logger.warning("Slack notification failed")
             return False
 
 
@@ -217,9 +225,8 @@ class LogChannel:
         self.log_file = log_file
 
     async def send(self, notification: Notification) -> bool:
-        """Log notification to file."""
+        """Log notification to file (non-blocking)."""
         import json
-        from pathlib import Path
         
         entry = {
             "timestamp": notification.timestamp.isoformat(),
@@ -229,9 +236,11 @@ class LogChannel:
             "project_id": notification.project_id
         }
         
-        with open(self.log_file, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        def _write():
+            with open(self.log_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
         
+        await asyncio.to_thread(_write)
         return True
 
 class WindowsToastChannel:
@@ -256,7 +265,7 @@ class WindowsToastChannel:
         return self.CATEGORY_ICONS.get(category, "ms-appx:///Assets/StoreLogo.png")
 
     async def send(self, notification: Notification) -> bool:
-        """Send a Windows toast notification."""
+        """Send a Windows toast notification (non-blocking)."""
         try:
             import winotify
         except (ImportError, TypeError):
@@ -271,8 +280,9 @@ class WindowsToastChannel:
             )
             if getattr(notification, "category", "info") == "urgent":
                 toast.set_audio(winotify.audio.Default, loop=True)
-            toast.show()
+            
+            await asyncio.to_thread(toast.show)
             return True
-        except Exception as e:
-            print(f"Windows toast failed: {e}")
+        except Exception:
+            logger.warning("Windows toast notification failed")
             return False

@@ -1,6 +1,13 @@
 """PlanningTool + PlanningFlow — multi-step plan generation and execution."""
 from __future__ import annotations
 
+import warnings
+warnings.warn(
+    "weebot.flow.planning is deprecated; use PlanActFlow from weebot.application.flows.plan_act_flow",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -177,17 +184,38 @@ class PlanningFlow:
         result = await flow.run("Research and summarize the latest Python releases")
     """
 
-    def __init__(self, tools: ToolCollection | None = None) -> None:
+    def __init__(
+        self,
+        tools: ToolCollection | None = None,
+        llm = None,
+    ) -> None:
         planning_tool = PlanningTool()
         all_tools: list[BaseTool] = [planning_tool]
         if tools is not None:
             all_tools.extend(list(tools))
 
-        self._agent = ToolCallWeebotAgent(
-            tools=ToolCollection(*all_tools),
-            system_prompt=PLANNING_SYSTEM_PROMPT,
-        )
+        self._tools = ToolCollection(*all_tools)
+        if llm is None:
+            from weebot.infrastructure.adapters.llm import OpenAIAdapter
+            llm = OpenAIAdapter()
+        self._llm = llm
 
     async def run(self, prompt: str) -> str:
         """Execute the planning flow for the given task prompt."""
-        return await self._agent.run(prompt)
+        from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.domain.models.session import Session
+
+        session = Session(id="planning-flow", user_id="legacy", agent_id="planning")
+        flow = PlanActFlow(
+            llm=self._llm,
+            tools=self._tools,
+            session=session,
+            skill_prompt=PLANNING_SYSTEM_PROMPT,
+        )
+
+        final_answer = ""
+        async for event in flow.run(prompt):
+            if hasattr(event, "message") and event.type == "message":
+                final_answer = event.message
+
+        return final_answer or "Planning flow completed."

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional
@@ -26,6 +27,8 @@ _log = logging.getLogger(__name__)
 
 from weebot.activity_stream import ActivityStream
 from weebot.state_manager import StateManager
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.ports import EventPublisher
 
 
 # ============================================================================
@@ -57,10 +60,12 @@ class EventBroker:
         self,
         max_retries: int = 3,
         base_delay: float = 1.0,
-        max_delay: float = 30.0
+        max_delay: float = 30.0,
+        max_per_tag: int = 100,
     ) -> None:
         self._subscriptions: Dict[str, List[asyncio.Queue]] = {}
         self._event_history: List[ContextEvent] = []
+        self._tag_index: defaultdict[str, deque[ContextEvent]] = defaultdict(lambda: deque(maxlen=max_per_tag))
         self._max_retries = max_retries
         self._base_delay = base_delay
         self._max_delay = max_delay
@@ -87,6 +92,11 @@ class EventBroker:
         if len(self._event_history) >= self.MAX_HISTORY_SIZE:
             self._event_history.pop(0)  # Remove oldest
         self._event_history.append(event)
+
+        # Index by event type and agent_id for fast tag-based retrieval
+        self._tag_index[event.event_type].append(event)
+        agent_tag = f"agent_id:{event.agent_id}"
+        self._tag_index[agent_tag].append(event)
 
         queues = list(self._subscriptions.get(event_type, []))
         all_delivered = True
@@ -149,6 +159,10 @@ class EventBroker:
             return list(self._event_history)
         return [e for e in self._event_history if e.event_type == event_type]
     
+    def get_events_by_tag(self, tag: str, n: int = 10) -> List[ContextEvent]:
+        """Retrieve the most recent n events for a given tag."""
+        return list(self._tag_index.get(tag, []))[-n:]
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get broker metrics for monitoring."""
         return {
@@ -189,6 +203,8 @@ class AgentContext:
     event_broker: EventBroker = field(default_factory=EventBroker)
     activity_stream: ActivityStream = field(default_factory=ActivityStream)
     state_manager: Optional[StateManager] = None
+    state_repository: Optional[StateRepositoryPort] = None
+    event_publisher: Optional[EventPublisher] = None
     
     # CONCURRENCY FIX: Shared lock for shared_data protection
     # NOTE: asyncio.Lock is NOT serializable - excluded from pickle/compare
@@ -209,7 +225,9 @@ class AgentContext:
     def create_orchestrator(
         cls,
         activity_stream: Optional[ActivityStream] = None,
-        state_manager: Optional[StateManager] = None
+        state_manager: Optional[StateManager] = None,
+        state_repository: Optional[StateRepositoryPort] = None,
+        event_publisher: Optional[EventPublisher] = None,
     ) -> AgentContext:
         """Create a root orchestrator context."""
         agent_id = f"orchestrator_{uuid.uuid4().hex[:8]}"
@@ -219,7 +237,9 @@ class AgentContext:
             agent_id=agent_id,
             nesting_level=1,
             activity_stream=activity_stream or ActivityStream(),
-            state_manager=state_manager
+            state_manager=state_manager,
+            state_repository=state_repository,
+            event_publisher=event_publisher,
         )
 
     @classmethod
@@ -245,6 +265,8 @@ class AgentContext:
             event_broker=parent_context.event_broker,
             activity_stream=parent_context.activity_stream,
             state_manager=parent_context.state_manager,
+            state_repository=parent_context.state_repository,
+            event_publisher=parent_context.event_publisher,
             # CRITICAL: Share the same lock to protect shared_data
             _data_lock=parent_context._data_lock
         )
@@ -292,6 +314,10 @@ class AgentContext:
         )
         return True
 
+    def get_events_by_tag(self, tag: str, n: int = 10) -> List[ContextEvent]:
+        """Retrieve recent events from the shared event broker by tag."""
+        return self.event_broker.get_events_by_tag(tag, n=n)
+
     async def get_result(
         self,
         key: str,
@@ -331,13 +357,42 @@ class AgentContext:
                 return value
         return None
 
+    async def get_all_results(self, lock_timeout: float = 5.0) -> Dict[str, Any]:
+        """
+        Retrieve a concurrency-safe copy of all shared data.
+        
+        Args:
+            lock_timeout: Max seconds to wait for lock
+            
+        Returns:
+            Shallow copy of shared_data if locked successfully, else empty dict.
+        """
+        try:
+            async with asyncio.timeout(lock_timeout):
+                async with self._data_lock:
+                    return self.shared_data.copy()
+        except asyncio.TimeoutError:
+            _log.error("AgentContext: LOCK TIMEOUT reading all results after %.1fs", lock_timeout)
+            return {}
+
     async def publish_event(
         self,
         event_type: str,
         data: Optional[Dict[str, Any]] = None
     ) -> bool:
-        """Publish an event with retry guarantee."""
-        delivered = await self.event_broker.publish(event_type, self.agent_id, data)
+        """Publish an event with retry guarantee.
+
+        Uses the EventPublisher bridge when configured, falling back to
+        the in-memory EventBroker for backward compatibility.
+        """
+        if self.event_publisher:
+            delivered = await self.event_publisher.publish(
+                event_type, self.agent_id, data
+            )
+        else:
+            delivered = await self.event_broker.publish(
+                event_type, self.agent_id, data
+            )
         self.activity_stream.push(
             self.orchestrator_id,
             "event",
@@ -366,7 +421,7 @@ class AgentContext:
             f"{self.agent_id}: {message}"
         )
 
-        if requires_approval and self.state_manager:
+        if requires_approval and (self.state_manager or self.state_repository):
             pass  # Future integration
 
         return True

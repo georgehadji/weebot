@@ -12,6 +12,7 @@ from weebot.domain.models import (
     AgentState, Memory, Message, Role, ToolCallSpec,
 )
 from weebot.utils.cost_ledger import CostLedger
+from typing import Optional
 
 SYSTEM_PROMPT = """You are weebot, an autonomous AI agent for Windows 11.
 You have access to tools to help complete tasks. Use them when needed.
@@ -37,7 +38,14 @@ class ToolCallWeebotAgent:
         system_prompt: str = SYSTEM_PROMPT,
         model: str | None = None,
         max_steps: int = MAX_STEPS,
+        executor_agent = None,
     ) -> None:
+        import warnings
+        warnings.warn(
+            "ToolCallWeebotAgent is deprecated; use PlanActFlow from weebot.application.flows.plan_act_flow",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or "no-key"
         base_url = None
         if not os.getenv("OPENAI_API_KEY") and os.getenv("DEEPSEEK_API_KEY"):
@@ -51,6 +59,7 @@ class ToolCallWeebotAgent:
         self.state = AgentState.IDLE
         self._ledger = CostLedger()
         self._step_count = 0
+        self._executor_agent = executor_agent
 
         if system_prompt:
             self.memory.add(Message.system(system_prompt))
@@ -105,11 +114,15 @@ class ToolCallWeebotAgent:
         last = self.memory.messages[-1]
 
         async def _run_one(tc: ToolCallSpec) -> tuple[str, ToolResult]:
-            try:
-                args = json.loads(tc.arguments)
-            except json.JSONDecodeError:
-                args = {}
-            return tc.id, await self.tools.execute(tc.name, **args)
+            if self._executor_agent is not None:
+                result = await self._executor_agent.execute_tool(tc.name, tc.arguments)
+            else:
+                try:
+                    args = json.loads(tc.arguments)
+                except json.JSONDecodeError:
+                    args = {}
+                result = await self.tools.execute(tc.name, **args)
+            return tc.id, result
 
         pairs = await asyncio.gather(*[_run_one(tc) for tc in last.tool_calls])
         for tc_id, result in pairs:

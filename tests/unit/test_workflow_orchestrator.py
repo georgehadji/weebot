@@ -200,6 +200,20 @@ class TestWorkflowOrchestratorFailures:
         assert "circular" in result.metadata.get("error", "").lower()
 
     @pytest.mark.asyncio
+    async def test_missing_dependency_detection(self):
+        """Missing dependency IDs are reported explicitly."""
+        orch = WorkflowOrchestrator()
+
+        result = await orch.execute({
+            "a": {"deps": ["missing_task"]},
+            "b": {"deps": []},
+        })
+
+        assert result.success is False
+        assert "missing dependencies" in result.metadata.get("error", "").lower()
+        assert result.metadata.get("missing_dependencies") == {"a": ["missing_task"]}
+
+    @pytest.mark.asyncio
     async def test_continue_on_failure(self):
         """Independent tasks continue after failure."""
         call_count = 0

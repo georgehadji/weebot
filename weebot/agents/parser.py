@@ -115,7 +115,15 @@ class AgentPersonaParser:
             heading = _HEADING_RE.match(line)
             if heading:
                 title = _normalize_heading(heading.group(1))
-                current_key = _SECTION_MAP.get(title, title)
+                mapped_key = _SECTION_MAP.get(title)
+
+                # Keep unknown subheadings as literal template content when
+                # parsing a deliverable template section (e.g. "## Summary").
+                if current_key == "deliverable_template" and mapped_key is None:
+                    sections[current_key].append(line.strip())
+                    continue
+
+                current_key = mapped_key or title
                 if current_key not in sections:
                     sections[current_key] = []
                 continue
