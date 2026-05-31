@@ -76,7 +76,6 @@ class DesignSystemTool(BaseTool):
                     text=True,
                     timeout=120,
                     cwd=tmpdir,
-                    shell=True,
                 )
             except subprocess.TimeoutExpired:
                 return ToolResult.error_result(
@@ -112,7 +111,6 @@ class DesignSystemTool(BaseTool):
                             text=True,
                             timeout=120,
                             cwd=tmpdir,
-                            shell=True,
                         )
                         if result.returncode != 0:
                             return ToolResult.error_result(
@@ -132,7 +130,8 @@ class DesignSystemTool(BaseTool):
 
     def _build_cmd(
         self, url: str, repo: str, directory: str, name: str, ultra: bool
-    ) -> str:
+    ) -> list[str]:
+        """Build skillui command as a list (no shell injection risk)."""
         parts = ["npx", "skillui"]
         if url:
             parts.extend(["--url", url])
@@ -140,14 +139,13 @@ class DesignSystemTool(BaseTool):
             parts.extend(["--repo", repo])
         else:
             parts.extend(["--dir", directory])
-
         if name:
             parts.extend(["--name", name])
         if ultra:
-            parts.append("--mode ultra")
-
+            parts.append("--mode")
+            parts.append("ultra")
         parts.extend(["--out", "."])
-        return " ".join(parts)
+        return parts
 
     def _derive_name(self, url: str, repo: str, directory: str) -> str:
         if url:
