@@ -179,6 +179,20 @@ class CircuitBreaker:
         Returns:
             :class:`BreakerResult` with ``allowed=True/False``.
         """
+        # Phase 1: dirty pre-check (no lock) to decide whether to stagger.
+        # _maybe_stagger_probe() must NOT be called while the lock is held —
+        # it sleeps for up to 500 ms and would block every other caller
+        # (evaluate / record_success / record_failure) for that duration.
+        # A dirty read here is intentional; the authoritative state check
+        # happens in Phase 2 under the lock.
+        entry_snapshot = self._breakers.get(entity_id)
+        if (entry_snapshot is not None
+                and entry_snapshot.state == BreakerState.OPEN
+                and (time.monotonic() - entry_snapshot.last_state_change
+                     >= self._get_jittered_cooldown())):
+            await self._maybe_stagger_probe()
+
+        # Phase 2: authoritative check and state mutation under lock.
         async with self._lock:
             entry = self._get_or_create(entity_id)
             now = time.monotonic()
@@ -192,22 +206,18 @@ class CircuitBreaker:
                 )
 
             if entry.state == BreakerState.OPEN:
-                # HARDEN: Use jittered cooldown
                 effective_cooldown = self._get_jittered_cooldown()
                 elapsed = now - entry.last_state_change
-                
+
                 if elapsed >= effective_cooldown:
-                    # HARDEN: Stagger probe requests
-                    await self._maybe_stagger_probe()
-                    
-                    # Transition to HALF_OPEN
+                    # Transition to HALF_OPEN (stagger was already applied above)
                     old = entry.state
                     entry.state = BreakerState.HALF_OPEN
                     entry.success_count = 0
-                    entry.last_state_change = time.monotonic()  # Reset after stagger
+                    entry.last_state_change = time.monotonic()
                     self._state_changes += 1
                     self._recovery_attempts += 1
-                    
+
                     await self._publish_state_change(
                         entity_id, old, BreakerState.HALF_OPEN
                     )

@@ -81,11 +81,15 @@ class SQLiteConnectionPool:
         self._write_conn: Optional[aiosqlite.Connection] = None
         self._read_pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue()
         self._read_semaphore = asyncio.Semaphore(self.max_read)
-        
+
         # State
         self._initialized = False
         self._closed = False
         self._lock = asyncio.Lock()
+        # Serialises concurrent writers so they don't share an uncommitted
+        # transaction on the single write connection (which would cause one
+        # writer's failure to roll back another's uncommitted work).
+        self._write_lock = asyncio.Lock()
         
         # Ensure parent directory exists
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -153,15 +157,24 @@ class SQLiteConnectionPool:
         
         if self._write_conn is None:
             raise RuntimeError("Write connection not initialized")
-        
-        try:
-            yield self._write_conn
-        except Exception:
-            # Don't commit on exception
-            raise
-        else:
-            # Auto-commit on success
-            await self._write_conn.commit()
+
+        # Serialise all writers: SQLite has one write connection; without this
+        # lock two concurrent coroutines would share the same open transaction
+        # and one writer's rollback (or lack thereof) would corrupt the other's
+        # work.
+        async with self._write_lock:
+            try:
+                yield self._write_conn
+            except Exception:
+                # Roll back any partial work so the connection is left in a
+                # clean state for the next writer.
+                try:
+                    await self._write_conn.rollback()
+                except Exception:
+                    pass
+                raise
+            else:
+                await self._write_conn.commit()
     
     @asynccontextmanager
     async def acquire_read(self):

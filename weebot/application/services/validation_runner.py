@@ -145,7 +145,16 @@ class ValidationRunner:
         scores = await asyncio.gather(*tasks)
 
         candidate_score = sum(scores) / len(scores) if scores else 0.0
-        current_score = baseline_score if baseline_score is not None else candidate_score
+
+        # When baseline_score is None this is a first-version bootstrap run.
+        # The docstring promises "always accepted" for bootstrap, but using
+        # current_score=candidate_score made passed=False always (a value is
+        # never strictly greater than itself).  Use -1.0 so any non-negative
+        # candidate score beats the sentinel.
+        if baseline_score is None:
+            current_score = -1.0
+        else:
+            current_score = baseline_score
 
         # Ties are rejected (paper §3.5)
         passed = candidate_score > current_score

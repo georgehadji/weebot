@@ -141,8 +141,16 @@ class TaskRunner:
                 if self._archivist is not None:
                     session = await self._archivist.archive_old_events(session)
                 await self._state_repo.save_session(session)
-                if self._event_bus:
+                # Only publish from the runner when the flow has no event_bus of its
+                # own.  When the flow carries an event_bus (the DI container always
+                # provides one), flow._emit() already published the event; publishing
+                # here too would deliver every event twice to all subscribers (double
+                # WebSocket messages, double Prometheus counts, double notifications).
+                flow_has_bus = getattr(flow, "_event_bus", None) is not None
+                if self._event_bus and not flow_has_bus:
                     await self._event_bus.publish(event)
+                # (comment block ends — the line above is the only publish call)
+                # Prometheus counts, double notification triggers).
         except Exception as exc:
             logger.exception("Flow failed for session %s", session_id)
             # Session-level retry: requeue with exponential backoff

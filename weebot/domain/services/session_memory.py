@@ -66,6 +66,19 @@ class SessionMemory:
 
         return plan
 
+    def copy(self) -> "SessionMemory":
+        """Return an independent copy of this index.
+
+        Pydantic v2 model_copy() does not propagate PrivateAttr values, so
+        Session.add_event() must transfer the index manually.  This method
+        provides a correct independent copy (shared deque references would
+        cause both old and new sessions to index the same deque entries).
+        """
+        new = SessionMemory()
+        for event_type, indices in self._index.items():
+            new._index[event_type].extend(indices)
+        return new
+
     def has_unresolved_wait_event(self, events: list[AgentEvent]) -> bool:
         """Check if the last WaitForUserEvent has no subsequent user MessageEvent."""
         for idx in reversed(self._index.get("wait_for_user", [])):

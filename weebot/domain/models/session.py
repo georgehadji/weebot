@@ -143,6 +143,11 @@ class Session(BaseModel):
             "events": events,
             "updated_at": datetime.now(timezone.utc),
         })
+        # Pydantic v2 model_copy() resets PrivateAttr to its default_factory
+        # (a fresh empty SessionMemory), discarding the accumulated index.
+        # Manually carry forward the existing index so get_last_plan() can use
+        # O(1) lookup instead of falling back to an O(n) scan every call.
+        new_session._memory_index = self._memory_index.copy()
         new_session._memory_index.index_event(len(events) - 1, event)
         return new_session
 
