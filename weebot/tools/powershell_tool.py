@@ -273,12 +273,3 @@ class PowerShellBaseTool(_WeebotBaseTool):
             return _ToolResult(output=s_result.combined_output)
         except Exception as e:
             return _ToolResult(output="", error=str(e))
-
-    # Fallback: kept for backward compatibility (inner tool acts as legacy path)
-        try:
-            output = await self._inner._run_async(command, timeout=effective_timeout)
-            if output.startswith("Error:"):
-                return _ToolResult(output="", error=output)
-            return _ToolResult(output=output)
-        except Exception as e:
-            return _ToolResult(output="", error=str(e))

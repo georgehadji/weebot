@@ -1,12 +1,12 @@
 # ARCHITECTURE MINDMAP
 
-> Last updated: 2026-06-01 — forensic reconstruction after Phase 1–4 remediation + hermes-agent integration (feat/sia-integration branch)
+> Last updated: 2026-07-01 — updated after Architecture Enhancement Plan (Phases 1–2) + execution reliability fixes
 
 ---
 
 ## 1. SYSTEM IDENTITY
 
-- **Primary Language:** Python 3.11+
+- **Primary Language:** Python 3.12+
 - **Frameworks:**
   - FastAPI (web server — `weebot/interfaces/web/main.py`)
   - Click (CLI — `cli/main.py`)
@@ -17,14 +17,14 @@
   - APScheduler (background scheduling — `weebot/scheduling/scheduler.py`)
   - Playwright via `playwright.async_api` (browser automation — `weebot/infrastructure/browser/`)
   - Prometheus / prometheus_client (metrics — `weebot/infrastructure/observability/metrics.py`)
-  - structlog (structured logging — `run.py` bootstrap)
+  - structlog (structured logging — `run.py` bootstrap; audit finding: dependency listed but never imported in production code paths)
   - LangChain `BaseTool` (legacy inheritance in `PowerShellTool` — being migrated out)
   - Rich (CLI rendering — `cli/main.py`)
   - diskcache (optional L2 LLM cache — `weebot/infrastructure/cache/llm_cache.py`)
   - OpenAI SDK / `openai.AsyncOpenAI` (used by OpenAI, Anthropic, DeepSeek, OpenRouter adapters)
 - **Architectural Style:** Modular monolith implementing Clean Architecture (Hexagonal). Strict dependency inversion enforced by convention: Interfaces → Infrastructure → Application → Domain (no reverse imports).
 - **Entry Points:**
-  - `run.py` — Primary entry point. Bootstraps structlog, clears adapter cache, validates env, dispatches to CLI or interactive REPL.
+  - `run.py` — Interactive REPL. Creates `Container()` directly (no longer uses `get_container()` singleton — Phase 2.3).
   - `cli/main.py` — Click command group (`flow`, `agents`, `health`, `costs`, `doctor`, `init`, `behavior`).
   - `weebot/interfaces/web/main.py` — FastAPI ASGI app with WebSocket support for real-time event streaming.
   - `run_mcp.py` — MCP server launcher (stdio + SSE transport via FastMCP).
@@ -415,7 +415,7 @@
 - **Exports:** `BashGuard`, `ExecApprovalPolicy`, `CircuitBreaker`, `ErrorClassifier`, `AgentFactory`, `AgentProfile`
 - **Internal Structure:**
   - `bash_guard.py` — `BashGuard`: pattern-based shell command evaluation; 4 risk levels (`SAFE`, `SUSPICIOUS`, `DANGEROUS`, `BLOCKED`); 6 pattern categories (destructive, system, credential, network, attack, windows).
-  - `approval_policy.py` — `ExecApprovalPolicy`: rule-based DENY/ALWAYS_ASK/AUTO_APPROVE; `_DEFAULT_RULES` includes `"format"` substring DENY — **known false-positive: also blocks `Format-Table` and Python `str.format()`** (see Fix 1, execution-reliability-fix-plan.md).
+  - `approval_policy.py` — `ExecApprovalPolicy`: rule-based DENY/ALWAYS_ASK/AUTO_APPROVE; `format` rule fixed to regex `\bformat\s+[a-zA-Z]:` and `\bFormat-Volume\b` — no longer blocks `Format-Table` or Python `str.format()` (Fix 1, execution-reliability-fix-plan.md).
   - `circuit_breaker.py` — `CircuitBreaker`: CLOSED → OPEN → HALF_OPEN state machine per entity; jittered recovery; asyncio-safe locking.
   - `error_classifier.py` — `ErrorClassifier`: maps exception types to `ErrorCategory` enum; `should_fail_fast()` fast path.
   - `agent_factory.py` — `AgentFactory`: constructs `ExecutorAgent`/`PlannerAgent` from config and role.
@@ -873,6 +873,69 @@ graph TD
   - **Location:** `weebot/application/services/complex_task_executor.py`
   - **Possible Interpretations:** A) Higher-level orchestration for multi-flow parallel tasks | B) Legacy service predating `TaskRunner` and `PlanActFlow`
   - **Impact if Wrong:** Determines whether it should be deprecated or actively maintained.
+
+---
+
+## Current Status Addendum (July 2026)
+
+### Changes Since Forensic Reconstruction
+
+| Change | Date | Detail |
+|--------|------|--------|
+| **Architecture Score** | 2026-07 | 6.8 → **9.3/10** after Architecture Excellence Plan (Phases A–E) + Enhancement Plan (Phases 1–2) + 8 execution reliability fixes |
+| **Fitness Tests** | 2026-07 | 12 → **18 AST-based tests**, all passing, 1 skipped |
+| **EventStorePort** | 2026-07 | Orphan resolved — `EventStore` now inherits from `EventStorePort(ABC)` with 3 async wrapper methods |
+| **Orphan Commands** | 2026-07 | `AskUserCommand`, `AnswerUserCommand` deleted — no longer registered in any handler |
+| **Root Shims** | 2026-07 | 10 deleted (zero importers): `ai_providers.py`, `errors.py`, `gitnexus_config.py`, `gitnexus_provider.py`, `gitnexus_router.py`, `interface_customization.py`, `model_registry.py`, `rtk_ai_router.py`, `rtk_provider.py`, `user_profile_model.py`. 22 remain with importers. |
+| **SavePolicyBehavior** | 2026-07 | New `IPipelineBehavior` registered in mediator — persists session after every successful command, replacing ad-hoc `save_session()` in individual flows |
+| **Global Singletons** | 2026-07 | `_default_container` and `get_container()` removed from `di.py`. `cli/main.py` and `run.py` now create their own `Container()` instances. |
+| **Prometheus Metrics** | 2026-07 | All 7 counters wired to actual code paths (Phase A.3). `curl /api/prometheus` returns non-zero values. |
+| **CLI DI** | 2026-07 | 6 `flow.*` commands resolve via `Container.get(StateRepositoryPort)` — zero `SQLiteStateRepository()` constructions in CLI (Phase B.1) |
+| **PowerShell Security** | 2026-07 | SandboxPort path now has `ExecApprovalPolicy`, encoded command detection, and path safety validation (Phase A.2) |
+| **format DENY Rule** | 2026-07 | Fixed — `Format-Table` and `str.format()` no longer blocked (Fix 1) |
+| **bash_security.py** | 2026-07 | Removed operator-based broadening false positive (Fix 2) |
+| **Timeout Ceiling** | 2026-07 | `ToolConfig.max_tool_timeout` (300s) — applies to both BashTool and PowerShellTool (Fixes 3, 4) |
+| **Policy Loop Detection** | 2026-07 | `ExecutorAgent` detects ≥3 consecutive same-class tool errors and emits `WaitForUserEvent` (Fix 5) |
+| **Failure Context** | 2026-07 | `UpdatingState` passes `failure_context` to planner prompt (Fix 6) |
+| **PowerShell Syntax** | 2026-07 | Guidance added to `EXECUTOR_SYSTEM_PROMPT` (Fix 7) |
+| **Async PowerShell** | 2026-07 | `_run_async()` uses `asyncio.create_subprocess_exec()` (Phase C.1) |
+| **E2E Persistence Tests** | 2026-07 | 5 tests in `tests/e2e/test_persistence.py`, all passing |
+| **Security Penetration Tests** | 2026-07 | 5 tests in `tests/integration/test_security_penetration.py`, all passing |
+| **Event Bridge Contract Tests** | 2026-07 | 6 tests in `tests/integration/test_event_bridge_contract.py`, all passing |
+
+### Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| Tests total | ~1,000+ (71 files) |
+| Architecture fitness tests | 18 pass, 1 skip |
+| E2E persistence tests | 5 pass |
+| Security penetration tests | 5 pass |
+| Event bridge contract tests | 6 pass |
+| `__import__()` calls in `application/` | **0** |
+| `SQLiteStateRepository()` outside `di.py` | 1 (`health_checks.py:223` — infrastructure scope, acceptable) |
+| Root-level shim files | 22 (down from 32) |
+| Global `_default_container` | **Eliminated** |
+
+### ADRs
+
+| ADR | Title |
+|-----|-------|
+| 001 | Pydantic BaseModel over dataclasses |
+| 002 | CQRS + Mediator over Service Layer |
+| 003 | Protocol in domain, ABC in application |
+| 004 | SQLite over PostgreSQL |
+| 005 | In-process event bus over message queue |
+
+### Refactoring Roadmap Remaining
+
+| Item | Effort | Priority |
+|------|--------|----------|
+| CLI decomposition (`cli/main.py`: 1,006 → ~80 lines) | 2d | Medium (deferred from Phase 2.1) |
+| Performance/benchmark test infrastructure | 1d | Medium |
+| Browser pool + circuit breaker integration tests | 1d | Low |
+| Telemetry → Prometheus wire-up | 0.5d | Low |
+| Remaining 22 shim deletion (after 2026-09-01) | 1d | Low |
 
 - **Note — Truncated analysis:**
   - `weebot/application/cqrs/behaviors/` — `LoggingBehavior` referenced in `di.py` but source not read.

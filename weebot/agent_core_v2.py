@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+
+# ═══════════════════════════════════════════════════════════════════════
+# ⚠️ LEGACY — Frozen. No new features.
+# Superseded by PlanActFlow / Session domain model.
+# Target sunset: 2027-03-01
+# ═══════════════════════════════════════════════════════════════════════
 """agent_core_v2.py - Enhanced Agent με όλες τις νέες δυνατότητες
 
 Βελτιώσεις από v1:

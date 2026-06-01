@@ -5,9 +5,10 @@ This module is part of the pre-Clean-Architecture legacy track.
 It will not receive new features. File issues against weebot.application.*
 for equivalent functionality.
 
-Migration path: weebot.application.services.complex_task_executor (and successors)
+Migration path: weebot.application.services.failure_recovery (successor)
+Retry logic was consolidated into TaskRunner (R9).
 Last maintainer audit: 2026-06-01
-Target sunset: 2026-09-01
+Target sunset: 2027-03-01
 
 Automatic Failure Recovery System for Weebot
 Provides automatic failure detection and recovery capabilities

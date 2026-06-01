@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Pricing Cards</title>
+    <link rel="stylesheet" href="pricing-styles.css">
+    <style>
+        /* Simple checkmark icon using CSS */
+        .feature-icon::before {
+            content: "✓";
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .feature-item.disabled .feature-icon::before {
+            content: "✗";
+        }
+    </style>
+</head>
+<body>
+    <section class="pricing-section">
+        <div class="pricing-header">
+            <h1>Choose Your Plan</h1>
+            <p>Select the perfect plan for your needs. All plans include our core features with flexible options to scale.</p>
+        </div>
+        
+        <div class="pricing-cards">
+            <!-- Basic Plan -->
+            <div class="pricing-card">
+                <div class="card-header">
+                    <h3>Basic</h3>
+                    <div class="price">$19<span>/month</span></div>
+                    <p class="description">Perfect for small projects</p>
+                </div>
+                
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">10GB Storage</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">5 Users</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Basic Support</span>
+                    </div>
+                    <div class="feature-item disabled">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Advanced Analytics</span>
+                    </div>
+                    <div class="feature-item disabled">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">API Access</span>
+                    </div>
+                </div>
+                
+                <a href="#" class="cta-button cta-secondary">Get Started</a>
+            </div>
+            
+            <!-- Pro Plan (Most Popular) -->
+            <div class="pricing-card popular">
+                <div class="card-header">
+                    <h3>Pro</h3>
+                    <div class="price">$49<span>/month</span></div>
+                    <p class="description">Ideal for growing businesses</p>
+                </div>
+                
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">50GB Storage</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">25 Users</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Priority Support</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Advanced Analytics</span>
+                    </div>
+                    <div class="feature-item disabled">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">API Access</span>
+                    </div>
+                </div>
+                
+                <a href="#" class="cta-button cta-popular">Get Started</a>
+            </div>
+            
+            <!-- Enterprise Plan -->
+            <div class="pricing-card glass">
+                <div class="card-header">
+                    <h3>Enterprise</h3>
+                    <div class="price">$99<span>/month</span></div>
+                    <p class="description">For large organizations</p>
+                </div>
+                
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Unlimited Storage</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Unlimited Users</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">24/7 Support</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Advanced Analytics</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"></div>
+                        <span class="feature-text">Full API Access</span>
+                    </div>
+                </div>
+                
+                <a href="#" class="cta-button cta-primary">Get Started</a>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

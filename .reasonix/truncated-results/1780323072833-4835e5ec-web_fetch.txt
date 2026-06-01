@@ -1,0 +1,805 @@
+dishka · PyPI
+https://pypi.org/project/dishka/
+
+<!DOCTYPE html>
+
+dishka · PyPI
+
+Skip to main content
+Switch to mobile version
+
+Search PyPI
+
+Search
+
+Search PyPI
+
+Search
+
+dishka 1.10.1
+
+pip install dishka
+
+Copy PIP instructions
+
+Latest release
+
+Released: 
+Apr 25, 2026
+
+Cute DI framework with scopes and agreeable API
+
+Navigation
+
+Verified details 
+
+These details have been verified by PyPI
+
+Project links
+
+Bug Tracker
+
+Homepage
+
+Source
+
+GitHub Statistics
+
+Repository
+
+Stars:
+
+Forks:
+
+Open issues:
+
+Open PRs:
+
+Maintainers
+
+pvlzhr
+
+tishka17
+
+Unverified details
+
+These details have not been verified by PyPI
+
+Project links
+
+Documentation
+
+Meta
+
+License Expression: Apache-2.0
+
+SPDX
+License Expression
+
+Author: Andrey Tikhonov
+
+Requires: Python >=3.10
+
+Classifiers
+
+Intended Audience
+
+Developers
+
+Operating System
+
+OS Independent
+
+Programming Language
+
+Python :: 3.10
+
+Python :: 3.11
+
+Python :: 3.12
+
+Python :: 3.13
+
+Python :: 3.14
+
+Topic
+
+Software Development :: Libraries
+
+Typing
+
+Typed
+
+Report project as malware
+
+Project description
+
+dishka (stands for "cute DI" in Russian)
+
+Cute DI framework with scopes and an agreeable API.
+
+📚 Documentation
+
+Purpose
+
+This library provides an IoC container that's genuinely useful.
+If you're exhausted from endlessly passing objects to create other objects, only to have those objects create even
+more — you're not alone, and dishka is a solution.
+Not every project requires an IoC container, but take a look at what dishka offers.
+
+Unlike other tools, dishka focuses only
+on dependency injection (DI) without trying to solve unrelated
+tasks.
+It keeps DI in place without cluttering your code with global variables and scattered specifiers.
+
+To see how dishka stands out among other DI tools, check out
+the detailed comparison.
+
+Key features:
+
+Scopes. Any object can have a lifespan for the entire app, a single request, or even more fractionally. Many
+frameworks either lack scopes completely or offer only two. With dishka, you can define as many scopes as needed.
+
+Finalization. Some dependencies, like database connections, need not only to be created but also carefully
+released. Many frameworks lack this essential feature.
+
+Modular providers. Instead of creating many separate functions or one large class, you can split factories
+into smaller classes for easier reuse.
+
+Clean dependencies. You don't need to add custom markers to dependency code to make it visible for the library.
+
+Simple API. Only a few objects are needed to start using the library.
+
+Framework integrations. Popular frameworks are supported out of the box. You can simply extend it for your needs.
+
+Speed. The library is fast enough that performance is not a concern. In fact, it outperforms many
+alternatives.
+
+See more in technical requirements.
+
+Quickstart
+
+Install dishka.
+
+pip<span class=w> </span>install<span class=w> </span>dishka
+
+Define classes with type hints. Let's have the Service class (business logic) that has
+two infrastructure dependencies: APIClient and UserDAO. UserDAO is implemented in
+SQLiteUserDAO that has its own dependency - sqlite3.Connection.
+
+We want to create an APIClient instance once during the application's lifetime
+and create UserDAO implementation instances on every request (event) our application handles.
+
+<span class=kn>from</span><span class=w> </span><span class=nn>sqlite3</span><span class=w> </span><span class=kn>import</span> <span class=n>Connection</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>typing</span><span class=w> </span><span class=kn>import</span> <span class=n>Protocol</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>APIClient</span><span class=p>:</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>UserDAO</span><span class=p>(</span><span class=n>Protocol</span><span class=p>):</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>SQLiteUserDAO</span><span class=p>(</span><span class=n>UserDAO</span><span class=p>):</span>
+<span class=k>def</span><span class=w> </span><span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>connection</span><span class=p>:</span> <span class=n>Connection</span><span class=p>):</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>Service</span><span class=p>:</span>
+<span class=k>def</span><span class=w> </span><span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>client</span><span class=p>:</span> <span class=n>APIClient</span><span class=p>,</span> <span class=n>user_dao</span><span class=p>:</span> <span class=n>UserDAO</span><span class=p>):</span>
+<span class=o>...</span>
+
+Create providers and specify how to provide dependencies.
+
+Providers are used to set up factories for your objects.
+To learn more about providers, see Provider.
+
+Use Scope.APP for dependencies that should be created once for the entire application lifetime,
+and Scope.REQUEST for those that should be created for each request, event, etc.
+To learn more about scopes, see Scope management.
+
+There are multiple options for registering dependencies. We will use:
+
+class (for Service and APIClient)
+
+specific interface implementation (for UserDAO)
+
+custom factory with finalization (for Connection, as we want to make it releasable)
+
+<span class=kn>import</span><span class=w> </span><span class=nn>sqlite3</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>collections.abc</span><span class=w> </span><span class=kn>import</span> <span class=n>Iterable</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>sqlite3</span><span class=w> </span><span class=kn>import</span> <span class=n>Connection</span>
+
+<span class=kn>from</span><span class=w> </span><span class=nn>dishka</span><span class=w> </span><span class=kn>import</span> <span class=n>Provider</span><span class=p>,</span> <span class=n>Scope</span><span class=p>,</span> <span class=n>provide</span>
+
+<span class=n>service_provider</span> <span class=o>=</span> <span class=n>Provider</span><span class=p>(</span><span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>REQUEST</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>SQLiteUserDAO</span><span class=p>,</span> <span class=n>provides</span><span class=o>=</span><span class=n>UserDAO</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>APIClient</span><span class=p>,</span> <span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>APP</span><span class=p>)</span> <span class=c1># override provider's scope</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>ConnectionProvider</span><span class=p>(</span><span class=n>Provider</span><span class=p>):</span>
+<span class=nd>@provide</span><span class=p>(</span><span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>REQUEST</span><span class=p>)</span>
+<span class=k>def</span><span class=w> </span><span class=nf>new_connection</span><span class=p>(</span><span class=bp>self</span><span class=p>)</span> <span class=o>-></span> <span class=n>Iterable</span><span class=p>[</span><span class=n>Connection</span><span class=p>]:</span>
+<span class=n>connection</span> <span class=o>=</span> <span class=n>sqlite3</span><span class=o>.</span><span class=n>connect</span><span class=p>(</span><span class=s2>":memory:"</span><span class=p>)</span>
+<span class=k>yield</span> <span class=n>connection</span>
+<span class=n>connection</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>
+
+Create a container, passing providers. You can combine as many providers as needed.
+
+Containers hold a cache of dependencies and are used to retrieve them.
+To learn more about containers, see Container.
+
+<span class=kn>from</span><span class=w> </span><span class=nn>dishka</span><span class=w> </span><span class=kn>import</span> <span class=n>make_container</span>
+
+<span class=n>container</span> <span class=o>=</span> <span class=n>make_container</span><span class=p>(</span><span class=n>service_provider</span><span class=p>,</span> <span class=n>ConnectionProvider</span><span class=p>())</span>
+
+Access dependencies using the container.
+
+Use the .get() method to access APP-scoped dependencies.
+It is safe to request the same dependency multiple times.
+
+<span class=c1># APIClient is bound to Scope.APP, so it can be accessed here</span>
+<span class=c1># or from any scope inside including Scope.REQUEST</span>
+<span class=n>client</span> <span class=o>=</span> <span class=n>container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>APIClient</span><span class=p>)</span>
+<span class=n>client</span> <span class=o>=</span> <span class=n>container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>APIClient</span><span class=p>)</span> <span class=c1># the same APIClient instance as above</span>
+
+To access the REQUEST scope (sub-container) and its dependencies, use a context manager.
+Higher level scoped dependencies are also available from sub-containers, e.g. APIClient.
+
+<span class=c1># A sub-container to access shorter-living objects</span>
+<span class=k>with</span> <span class=n>container</span><span class=p>()</span> <span class=k>as</span> <span class=n>request_container</span><span class=p>:</span>
+<span class=c1># Service, UserDAO implementation, and Connection are bound to Scope.REQUEST,</span>
+<span class=c1># so they are accessible here. APIClient can also be accessed here</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span> <span class=c1># the same Service instance as above</span>
+
+<span class=c1># Since we exited the context manager, the sqlite3 connection is now closed</span>
+
+<span class=c1># A new sub-container has a new lifespan for request processing</span>
+<span class=k>with</span> <span class=n>container</span><span class=p>()</span> <span class=k>as</span> <span class=n>request_container</span><span class=p>:</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span> <span class=c1># a new Service instance</span>
+
+Close the container when done.
+
+<span class=n>container</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>
+
+Full example:
+<span class=kn>import</span><span class=w> </span><span class=nn>sqlite3</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>collections.abc</span><span class=w> </span><span class=kn>import</span> <span class=n>Iterable</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>sqlite3</span><span class=w> </span><span class=kn>import</span> <span class=n>Connection</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>typing</span><span class=w> </span><span class=kn>import</span> <span class=n>Protocol</span>
+
+<span class=kn>from</span><span class=w> </span><span class=nn>dishka</span><span class=w> </span><span class=kn>import</span> <span class=n>Provider</span><span class=p>,</span> <span class=n>Scope</span><span class=p>,</span> <span class=n>make_container</span><span class=p>,</span> <span class=n>provide</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>APIClient</span><span class=p>:</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>UserDAO</span><span class=p>(</span><span class=n>Protocol</span><span class=p>):</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>SQLiteUserDAO</span><span class=p>(</span><span class=n>UserDAO</span><span class=p>):</span>
+<span class=k>def</span><span class=w> </span><span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>connection</span><span class=p>:</span> <span class=n>Connection</span><span class=p>):</span>
+<span class=o>...</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>Service</span><span class=p>:</span>
+<span class=k>def</span><span class=w> </span><span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>client</span><span class=p>:</span> <span class=n>APIClient</span><span class=p>,</span> <span class=n>user_dao</span><span class=p>:</span> <span class=n>UserDAO</span><span class=p>):</span>
+<span class=o>...</span>
+
+<span class=n>service_provider</span> <span class=o>=</span> <span class=n>Provider</span><span class=p>(</span><span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>REQUEST</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>SQLiteUserDAO</span><span class=p>,</span> <span class=n>provides</span><span class=o>=</span><span class=n>UserDAO</span><span class=p>)</span>
+<span class=n>service_provider</span><span class=o>.</span><span class=n>provide</span><span class=p>(</span><span class=n>APIClient</span><span class=p>,</span> <span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>APP</span><span class=p>)</span> <span class=c1># override provider's scope</span>
+
+<span class=k>class</span><span class=w> </span><span class=nc>ConnectionProvider</span><span class=p>(</span><span class=n>Provider</span><span class=p>):</span>
+<span class=nd>@provide</span><span class=p>(</span><span class=n>scope</span><span class=o>=</span><span class=n>Scope</span><span class=o>.</span><span class=n>REQUEST</span><span class=p>)</span>
+<span class=k>def</span><span class=w> </span><span class=nf>new_connection</span><span class=p>(</span><span class=bp>self</span><span class=p>)</span> <span class=o>-></span> <span class=n>Iterable</span><span class=p>[</span><span class=n>Connection</span><span class=p>]:</span>
+<span class=n>connection</span> <span class=o>=</span> <span class=n>sqlite3</span><span class=o>.</span><span class=n>connect</span><span class=p>(</span><span class=s2>":memory:"</span><span class=p>)</span>
+<span class=k>yield</span> <span class=n>connection</span>
+<span class=n>connection</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>
+
+<span class=n>container</span> <span class=o>=</span> <span class=n>make_container</span><span class=p>(</span><span class=n>service_provider</span><span class=p>,</span> <span class=n>ConnectionProvider</span><span class=p>())</span>
+
+<span class=c1># APIClient is bound to Scope.APP, so it can be accessed here</span>
+<span class=c1># or from any scope inside including Scope.REQUEST</span>
+<span class=n>client</span> <span class=o>=</span> <span class=n>container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>APIClient</span><span class=p>)</span>
+<span class=n>client</span> <span class=o>=</span> <span class=n>container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>APIClient</span><span class=p>)</span> <span class=c1># the same APIClient instance as above</span>
+
+<span class=c1># A sub-container to access shorter-living objects</span>
+<span class=k>with</span> <span class=n>container</span><span class=p>()</span> <span class=k>as</span> <span class=n>request_container</span><span class=p>:</span>
+<span class=c1># Service, UserDAO implementation, and Connection are bound to Scope.REQUEST,</span>
+<span class=c1># so they are accessible here. APIClient can also be accessed here</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span> <span class=c1># the same Service instance as above</span>
+
+<span class=c1># Since we exited the context manager, the sqlite3 connection is now closed</span>
+
+<span class=c1># A new sub-container has a new lifespan for request processing</span>
+<span class=k>with</span> <span class=n>container</span><span class=p>()</span> <span class=k>as</span> <span class=n>request_container</span><span class=p>:</span>
+<span class=n>service</span> <span class=o>=</span> <span class=n>request_container</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>Service</span><span class=p>)</span> <span class=c1># a new Service instance</span>
+
+<span class=n>container</span><span class=o>.</span><span class=n>close</span><span class=p>()</span>
+
+(optional) Integrate with your framework. If you are using a supported framework, add decorators and middleware for it.
+For more details, see Using with frameworks.
+
+<span class=kn>from</span><span class=w> </span><span class=nn>fastapi</span><span class=w> </span><span class=kn>import</span> <span class=n>APIRouter</span><span class=p>,</span> <span class=n>FastAPI</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>dishka</span><span class=w> </span><span class=kn>import</span> <span class=n>make_async_container</span>
+<span class=kn>from</span><span class=w> </span><span class=nn>dishka.integrations.fastapi</span><span class=w> </span><span class=kn>import</span> <span class=p>(</span>
+<span class=n>FastapiProvider</span><span class=p>,</span>
+<span class=n>FromDishka</span><span class=p>,</span>
+<span class=n>inject</span><span class=p>,</span>
+<span class=n>setup_dishka</span><span class=p>,</span>
+<span class=p>)</span>
+
+<span class=n>app</span> <span class=o>=</span> <span class=n>FastAPI</span><span class=p>()</span>
+<span class=n>router</span> <span class=o>=</span> <span class=n>APIRouter</span><span class=p>()</span>
+<span class=n>app</span><span class=o>.</span><span class=n>include_router</span><span class=p>(</span><span class=n>router</span><span class=p>)</span>
+<span class=n>container</span> <span class=o>=</span> <span class=n>make_async_container</span><span class=p>(</span>
+<span class=n>service_provider</span><span class=p>,</span>
+<span class=n>ConnectionProvider</span><span class=p>(),</span>
+<span class=n>FastapiProvider</span><span class=p>(),</span>
+<span class=p>)</span>
+<span class=n>setup_dishka</span><span class=p>(</span><span class=n>container</span><span class=p>,</span> <span class=n>app</span><span class=p>)</span>
+
+<span class=nd>@router</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=s2>"/"</span><span class=p>)</span>
+<span class=nd>@inject</span>
+<span class=k>async</span> <span class=k>def</span><span class=w> </span><span class=nf>index</span><span class=p>(</span><span class=n>service</span><span class=p>:</span> <span class=n>FromDishka</span><span class=p>[</span><span class=n>Service</span><span class=p>])</span> <span class=o>-></span> <span class=nb>str</span><span class=p>:</span>
+<span class=o>...</span>
+
+Concepts
+
+Dependency is what you need for some parts of your code to work.
+Dependencies are simply objects you don't create directly in place and might want to replace someday, at least for
+testing purposes.
+Some of them live for the entire application lifetime, while others are created and destroyed with each request.
+Dependencies can also rely on other objects, which then become their dependencies.
+
+Scope is the lifespan of a dependency. Standard scopes are (with some skipped):
+
+APP -> REQUEST -> ACTION -> STEP.
+
+You decide when to enter and exit each scope, but this is done one by one.
+You set a scope for each dependency when you configure how it is created.
+If the same dependency is requested multiple times within a single scope without leaving it, then by default the same
+instance is returned.
+
+For a web application, enter APP scope on startup and REQUEST scope for each HTTP request.
+
+You can create a custom scope by defining your own Scope class if the standard scope flow doesn't fit your needs.
+
+Container is what you use to get your dependencies.
+You simply call .get(SomeType) and it finds a way to provide you with an instance of that type.
+Container itself doesn't create objects but manages their lifecycle and caches.
+It delegates object creation to providers that are passed during creation.
+
+Provider is a collection of functions that provide concrete objects.
+Provider is a class with attributes and methods, each being the result of provide, alias, from_context, or
+decorate.
+They can be used as provider methods, functions to assign attributes, or method decorators.
+
+@provide can be used as a decorator for a method.
+This method will be called when the corresponding dependency has to be created.
+Name doesn't matter: just make sure it's different from other Provider attributes.
+Type hints do matter: they indicate what this method creates and what it requires.
+All method parameters are treated as dependencies and are created using the container.
+
+If provide is applied to a class, that class itself is treated as a factory (its __init__ parameters are analyzed).
+Remember to assign this call to an attribute; otherwise, it will be ignored.
+
+Component is an isolated group of providers within the same container, identified by a unique string.
+When a dependency is requested, it is only searched within the same component as its direct dependant, unless explicitly
+specified otherwise.
+
+This structure allows you to build different parts of the application separately without worrying about using the same
+types.
+
+Project details
+
+Verified details 
+
+These details have been verified by PyPI
+
+Project links
+
+Bug Tracker
+
+Homepage
+
+Source
+
+GitHub Statistics
+
+Repository
+
+Stars:
+
+Forks:
+
+Open issues:
+
+Open PRs:
+
+Maintainers
+
+pvlzhr
+
+tishka17
+
+Unverified details
+
+These details have not been verified by PyPI
+
+Project links
+
+Documentation
+
+Meta
+
+License Expression: Apache-2.0
+
+SPDX
+License Expression
+
+Author: Andrey Tikhonov
+
+Requires: Python >=3.10
+
+Classifiers
+
+Intended Audience
+
+Developers
+
+Operating System
+
+OS Independent
+
+Programming Language
+
+Python :: 3.10
+
+Python :: 3.11
+
+Python :: 3.12
+
+Python :: 3.13
+
+Python :: 3.14
+
+Topic
+
+Software Development :: Libraries
+
+Typing
+
+Typed
+
+Release history
+
+Release notifications |
+RSS feed 
+
+This version
+
+1.10.1
+
+Apr 25, 2026
+
+1.10.0
+
+Apr 18, 2026
+
+1.9.1
+
+Mar 8, 2026
+
+1.9.0
+
+Mar 7, 2026
+
+1.8.0
+
+Feb 11, 2026
+
+1.7.2
+
+Sep 24, 2025
+
+1.7.1
+
+Sep 13, 2025
+
+1.7.0
+
+Sep 13, 2025
+
+1.6.0
+
+May 18, 2025
+
+1.5.3
+
+Apr 13, 2025
+
+1.5.2
+
+Mar 29, 2025
+
+1.5.1
+
+Mar 27, 2025
+
+1.5.0
+
+Mar 23, 2025
+
+1.4.2
+
+Nov 28, 2024
+
+1.4.1
+
+Nov 15, 2024
+
+1.4.0
+
+Oct 21, 2024
+
+1.3.0
+
+Aug 15, 2024
+
+1.2.0
+
+May 20, 2024
+
+1.1.1
+
+Apr 26, 2024
+
+1.1.0
+
+Apr 21, 2024
+
+1.0.0
+
+Apr 2, 2024
+
+0.9.0
+
+Mar 29, 2024
+
+0.8.0
+
+Mar 24, 2024
+
+0.7.0
+
+Mar 19, 2024
+
+0.6.0
+
+Mar 4, 2024
+
+0.5.0
+
+Feb 27, 2024
+
+0.4.0
+
+Feb 20, 2024
+
+0.3.0
+
+Feb 18, 2024
+
+0.2.0
+
+Feb 8, 2024
+
+0.1.0
+
+Jan 29, 2024
+
+Download files
+
+Download the file for your platform. If you're not sure which to choose, learn more about installing packages. 
+
+Source Distribution 
+
+dishka-1.10.1.tar.gz
+(282.0 kB
+view details)
+
+Uploaded 
+Apr 25, 2026
+
+Source 
+
+Built Distribution 
+
+Filter files by name, interpreter, ABI, and platform. 
+
+If you're not sure about the file name format, learn more about wheel file names. 
+
+Copy a direct link to the current filters 
+
+Copy 
+
+File name
+
+Interpreter
+
+Interpreter
+py3
+
+ABI
+
+ABI
+none
+
+Platform
+
+Platform
+any
+
+dishka-1.10.1-py3-none-any.whl
+(120.1 kB
+view details)
+
+Uploaded 
+Apr 25, 2026
+
+Python 3 
+
+File details
+
+Details for the file dishka-1.10.1.tar.gz.
+
+File metadata
+
+Download URL: dishka-1.10.1.tar.gz
+
+Upload date: 
+Apr 25, 2026
+
+Size: 282.0 kB 
+
+Tags: Source
+
+Uploaded using Trusted Publishing? Yes 
+
+Uploaded via: uv/0.11.7 {"installer":{"name":"uv","version":"0.11.7","subcommand":["publish"]},"python":null,"implementation":{"name":null,"version":null},"distro":{"name":"Ubuntu","version":"24.04","id":"noble","libc":null},"system":{"name":null,"release":null},"cpu":null,"openssl_version":null,"setuptools_version":null,"rustc_version":null,"ci":true}
+
+File hashes
+
+Hashes for dishka-1.10.1.tar.gz
+
+Algorithm
+Hash digest
+
+SHA256
+
+51fb624b9acc948b90f57128460061d1f3a1780121fe1c7d14c565e8bbff2083
+
+Copy 
+
+MD5
+
+ae7bd301f81bc24bd5996901e5cf2198
+
+Copy 
+
+BLAKE2b-256
+
+97dab75b5fe665d16725e1d46e291c8dd4b0ed1731c7964f41087fda92f03d40
+
+Copy 
+
+See more details on using hashes here.
+
+File details
+
+Details for the file dishka-1.10.1-py3-none-any.whl.
+
+File metadata
+
+Download URL: dishka-1.10.1-py3-none-any.whl
+
+Upload date: 
+Apr 25, 2026
+
+Size: 120.1 kB 
+
+Tags: Python 3
+
+Uploaded using Trusted Publishing? Yes 
+
+Uploaded via: uv/0.11.7 {"installer":{"name":"uv","version":"0.11.7","subcommand":["publish"]},"python":null,"implementation":{"name":null,"version":null},"distro":{"name":"Ubuntu","version":"24.04","id":"noble","libc":null},"system":{"name":null,"release":null},"cpu":null,"openssl_version":null,"setuptools_version":null,"rustc_version":null,"ci":true}
+
+File hashes
+
+Hashes for dishka-1.10.1-py3-none-any.whl
+
+Algorithm
+Hash digest
+
+SHA256
+
+84f40c1115eb391ce3fb558fd7946c5bcaf6361c35b77b7a185b7697a5720ec7
+
+Copy 
+
+MD5
+
+71dc1a5c4d28e3e54d30b8d76d96bedc
+
+Copy 
+
+BLAKE2b-256
+
+2c08dd3259a319ba45c48d975caf237c830c7873a203288cb4ab186cc5bef585
+
+Copy 
+
+See more details on using hashes here.
+
+English
+
+español
+
+français
+
+日本語
+
+português (Brasil)
+
+українська
+
+Ελληνικά
+
+Deutsch
+
+中文 (简体)
+
+中文 (繁體)
+
+русский
+
+עברית
+
+Esperanto
+
+한국어
+
+Supported by
+
+AWS
+
+Cloud computing and Security Sponsor
+
+Datadog
+
+Monitoring
+
+Depot
+
+Continuous Integration
+
+Fastly
+
+CDN
+
+Google
+
+Download Analytics
+
+Pingdom
+
+Monitoring
+
+Sentry
+
+Error logging
+
+StatusPage
+
+Status page

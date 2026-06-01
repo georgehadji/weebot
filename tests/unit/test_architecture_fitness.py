@@ -386,7 +386,9 @@ def test_tools_no_direct_db():
                 rel = path.relative_to(ROOT.parent)
                 violations.append(f"{rel}: imports {imp!r}")
 
-    # Known exceptions (technical debt — tracked in .importlinter)
+    # NOTE: All 3 tools can now be wired through ToolRepositoryPort.
+    # Remove this block after the tools call through the port.
+    # Tracked in docs/plans/FINAL_REMAINING_FIXES.md §A3.
     known_exception_tools = {
         "knowledge_tool",
         "product_tool",

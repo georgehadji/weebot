@@ -1,0 +1,55 @@
+name: Architecture Quality Gates
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  architecture-fitness:
+    name: Architecture Fitness Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install import-linter
+      - name: Run import-linter
+        run: make lint-imports
+      - name: Run architecture fitness tests
+        run: pytest tests/unit/test_architecture_fitness.py -v --tb=short
+      - name: Run event bridge contract tests
+        run: pytest tests/integration/test_event_bridge_contract.py -v --tb=short
+      - name: Run security penetration tests
+        run: pytest tests/integration/test_security_penetration.py -v --tb=short
+
+  persistence:
+    name: Persistence Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run persistence tests
+        run: pytest tests/e2e/test_persistence.py -v --tb=short
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --tb=short -x

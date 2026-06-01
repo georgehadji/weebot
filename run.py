@@ -98,7 +98,8 @@ def run_diagnostic() -> bool:
 
 def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill: str | None = None) -> None:
     """Run interactive agent session using the new Clean Architecture flows."""
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.application.di import Container
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
     from weebot.domain.models.event import WaitForUserEvent
@@ -123,7 +124,9 @@ def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill
         from weebot.config.model_refs import MODEL_BUDGET
         _default = _os.environ.get("DEFAULT_MODEL", MODEL_BUDGET)
         llm = model_service.create_llm_adapter(model or _default)
-        state_repo = SQLiteStateRepository()
+        _container = Container()
+        _container.configure_defaults()
+        state_repo = _container.get(StateRepositoryPort)
         runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False, skill_prompt=skill_prompt)
         subscriber = CLIEventSubscriber(use_rich=True)
 

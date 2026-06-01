@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 
@@ -34,6 +34,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS kb_notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL DEFAULT '',
                     title TEXT NOT NULL DEFAULT '',
                     content TEXT NOT NULL DEFAULT '',
                     tags TEXT NOT NULL DEFAULT '[]',
@@ -44,6 +45,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
                 );
                 CREATE TABLE IF NOT EXISTS video_sources (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL DEFAULT '',
                     url TEXT NOT NULL,
                     title TEXT NOT NULL DEFAULT '',
                     metadata TEXT NOT NULL DEFAULT '{}',
@@ -52,6 +54,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
                 );
                 CREATE TABLE IF NOT EXISTS requirements (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id TEXT NOT NULL DEFAULT '',
                     title TEXT NOT NULL,
                     description TEXT NOT NULL DEFAULT '',
                     priority TEXT NOT NULL DEFAULT 'medium',
@@ -63,7 +66,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    # ---- Notes ----
+    # ── Sync methods ─────────────────────────────────────────────────
 
     def query_notes(self, search: str = "", limit: int = 20) -> list[dict]:
         conn = self._connect()
@@ -85,25 +88,56 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
+    def get_note(self, note_id: str) -> Optional[dict]:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT * FROM kb_notes WHERE id = ?", (note_id,)
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def list_notes(
+        self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
+    ) -> list[dict]:
+        conn = self._connect()
+        try:
+            parts = ["SELECT * FROM kb_notes WHERE 1=1"]
+            params: list[Any] = []
+            if project_id:
+                parts.append("AND project_id = ?")
+                params.append(project_id)
+            if tags:
+                for tag in tags:
+                    parts.append("AND tags LIKE ?")
+                    params.append(f"%{tag}%")
+            parts.append("ORDER BY created_at DESC LIMIT ?")
+            params.append(limit)
+            rows = conn.execute(" ".join(parts), params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
     def save_note(
-        self, title: str, content: str, tags: list[str] | None = None
+        self, title: str, content: str, tags: Optional[list[str]] = None,
+        project_id: str = "",
     ) -> str:
         tags_json = json.dumps(tags or [])
         conn = self._connect()
         try:
             cur = conn.execute(
-                "INSERT INTO kb_notes (title, content, tags) VALUES (?, ?, ?)",
-                (title, content, tags_json),
+                "INSERT INTO kb_notes (project_id, title, content, tags) VALUES (?, ?, ?, ?)",
+                (project_id, title, content, tags_json),
             )
             note_id = str(cur.lastrowid)
-            # Sync FTS index
             try:
                 conn.execute(
                     "INSERT INTO kb_notes_fts (rowid, title, content, tags) VALUES (?, ?, ?, ?)",
                     (cur.lastrowid, title, content, tags_json),
                 )
             except sqlite3.IntegrityError:
-                pass  # FTS trigger may auto-sync
+                pass
             conn.commit()
             return note_id
         finally:
@@ -118,95 +152,135 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    # ---- Video sources ----
-
-    def get_video_sources(self, limit: int = 50) -> list[dict]:
+    def get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]:
         conn = self._connect()
         try:
-            rows = conn.execute(
-                "SELECT * FROM video_sources ORDER BY ingested_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            if project_id:
+                rows = conn.execute(
+                    "SELECT * FROM video_sources WHERE project_id = ? ORDER BY ingested_at DESC LIMIT ?",
+                    (project_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM video_sources ORDER BY ingested_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
 
     def save_video_source(
-        self, url: str, title: str = "", metadata: dict | None = None
+        self, url: str, title: str = "",
+        project_id: str = "", metadata: Optional[dict] = None,
     ) -> str:
         meta_json = json.dumps(metadata or {})
         conn = self._connect()
         try:
             cur = conn.execute(
-                """INSERT INTO video_sources (url, title, metadata)
-                   VALUES (?, ?, ?)
+                """INSERT INTO video_sources (project_id, url, title, metadata)
+                   VALUES (?, ?, ?, ?)
                    ON CONFLICT(url) DO UPDATE SET
                        title = excluded.title,
                        metadata = excluded.metadata""",
-                (url, title, meta_json),
+                (project_id, url, title, meta_json),
             )
             conn.commit()
             return str(cur.lastrowid or 0)
         finally:
             conn.close()
 
-    # ---- Requirements ----
-
-    def get_requirements(self, status: str | None = None) -> list[dict]:
+    def get_requirements(
+        self, project_id: str = "",
+        status: Optional[str] = None, priority: Optional[str] = None,
+    ) -> list[dict]:
         conn = self._connect()
         try:
+            parts = ["SELECT * FROM requirements WHERE 1=1"]
+            params: list[Any] = []
+            if project_id:
+                parts.append("AND project_id = ?")
+                params.append(project_id)
             if status:
-                rows = conn.execute(
-                    "SELECT * FROM requirements WHERE status = ? ORDER BY created_at DESC",
-                    (status,),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM requirements ORDER BY created_at DESC"
-                ).fetchall()
+                parts.append("AND status = ?")
+                params.append(status)
+            if priority:
+                parts.append("AND priority = ?")
+                params.append(priority)
+            parts.append("ORDER BY created_at DESC")
+            rows = conn.execute(" ".join(parts), params).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
 
     def save_requirement(
-        self, title: str, description: str, priority: str = "medium"
+        self, title: str, description: str, priority: str = "medium",
+        project_id: str = "",
     ) -> str:
         conn = self._connect()
         try:
             cur = conn.execute(
-                "INSERT INTO requirements (title, description, priority) VALUES (?, ?, ?)",
-                (title, description, priority),
+                "INSERT INTO requirements (project_id, title, description, priority) VALUES (?, ?, ?, ?)",
+                (project_id, title, description, priority),
             )
             conn.commit()
             return str(cur.lastrowid)
         finally:
             conn.close()
 
-    # ---- Async wrappers (for async tools) ----
+    def update_requirement_status(self, req_id: str, new_status: str) -> bool:
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "UPDATE requirements SET status = ? WHERE id = ?",
+                (new_status, req_id),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+    # ── Async wrappers ───────────────────────────────────────────────
 
     async def query_notes(self, search: str = "", limit: int = 20) -> list[dict]:
         return self.query_notes(search, limit)
 
+    async def get_note(self, note_id: str) -> Optional[dict]:
+        return self.get_note(note_id)
+
+    async def list_notes(
+        self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
+    ) -> list[dict]:
+        return self.list_notes(project_id, tags, limit)
+
     async def save_note(
-        self, title: str, content: str, tags: list[str] | None = None
+        self, title: str, content: str, tags: Optional[list[str]] = None,
+        project_id: str = "",
     ) -> str:
-        return self.save_note(title, content, tags)
+        return self.save_note(title, content, tags, project_id)
 
     async def delete_note(self, note_id: str) -> bool:
         return self.delete_note(note_id)
 
-    async def get_video_sources(self, limit: int = 50) -> list[dict]:
-        return self.get_video_sources(limit)
+    async def get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]:
+        return self.get_video_sources(project_id, limit)
 
     async def save_video_source(
-        self, url: str, title: str = "", metadata: dict | None = None
+        self, url: str, title: str = "",
+        project_id: str = "", metadata: Optional[dict] = None,
     ) -> str:
-        return self.save_video_source(url, title, metadata)
+        return self.save_video_source(url, title, project_id, metadata)
 
-    async def get_requirements(self, status: str | None = None) -> list[dict]:
-        return self.get_requirements(status)
+    async def get_requirements(
+        self, project_id: str = "",
+        status: Optional[str] = None, priority: Optional[str] = None,
+    ) -> list[dict]:
+        return self.get_requirements(project_id, status, priority)
 
     async def save_requirement(
-        self, title: str, description: str, priority: str = "medium"
+        self, title: str, description: str, priority: str = "medium",
+        project_id: str = "",
     ) -> str:
-        return self.save_requirement(title, description, priority)
+        return self.save_requirement(title, description, priority, project_id)
+
+    async def update_requirement_status(self, req_id: str, new_status: str) -> bool:
+        return self.update_requirement_status(req_id, new_status)

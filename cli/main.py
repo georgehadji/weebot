@@ -18,6 +18,24 @@ import click
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
+
+from weebot.application.di import Container
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+
+# Shared container for CLI commands — initialized once in cli()
+_container: Container | None = None
+
+
+def _get_state_repo() -> Any:
+    """Resolve StateRepositoryPort from the shared DI container.
+    Use this instead of constructing SQLiteStateRepository() directly.
+    """
+    global _container
+    if _container is None:
+        _container = Container()
+        _container.configure_defaults()
+    return _container.get(StateRepositoryPort)
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -716,7 +734,6 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
     import asyncio
 
     from weebot.application.services.model_selection import ModelSelectionService
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
     from weebot.domain.models.event import WaitForUserEvent
@@ -726,7 +743,7 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
 
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(model or "gpt-4o-mini")
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         run_session_id = session_id or str(uuid.uuid4())
         runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
@@ -750,14 +767,13 @@ def flow_resume(session_id: str, answer: str) -> None:
     import asyncio
 
     from weebot.application.services.model_selection import ModelSelectionService
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 
     async def _run() -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter("gpt-4o-mini")
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
 
@@ -774,13 +790,12 @@ def flow_list(user_id: str | None) -> None:
     import asyncio
 
     from weebot.application.services.model_selection import ModelSelectionService
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.interfaces.cli.agent_runner import AgentRunner
 
     async def _run() -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter("gpt-4o-mini")
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         sessions = await runner.list_sessions(user_id=user_id)
 
@@ -802,13 +817,12 @@ def flow_cancel(session_id: str) -> None:
     import asyncio
 
     from weebot.application.services.model_selection import ModelSelectionService
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.interfaces.cli.agent_runner import AgentRunner
 
     async def _run() -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter("gpt-4o-mini")
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         ok = await runner.cancel_session(session_id)
         if ok:
@@ -826,13 +840,12 @@ def flow_undo(session_id: str) -> None:
     import asyncio
 
     from weebot.application.services.model_selection import ModelSelectionService
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.interfaces.cli.agent_runner import AgentRunner
 
     async def _run() -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter("gpt-4o-mini")
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         ok = await runner.flow_undo(session_id)
         if ok:
@@ -851,13 +864,12 @@ def flow_export(session_id: str, output: str | None, compress: int | None) -> No
     """Export session events to JSONL for analysis or fine-tuning."""
     import asyncio
 
-    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
     from weebot.application.services.trajectory_exporter import TrajectoryExporter
 
     dest = output or f"{session_id}.jsonl"
 
     async def _run() -> None:
-        state_repo = SQLiteStateRepository()
+        state_repo = _get_state_repo()
         exporter = TrajectoryExporter(repo=state_repo)
         try:
             count = await exporter.export_session(
@@ -1003,4 +1015,11 @@ def benchmark_report(results_file: str) -> None:
 
 
 if __name__ == "__main__":
-    cli()
+    try:
+        cli()
+    except Exception as exc:
+        import logging
+        import sys
+        logging.exception("Unhandled CLI exception: %s", exc)
+        sys.stderr.write(f"\nError: {exc}\n")
+        sys.exit(1)

@@ -1,3 +1,9 @@
+# ═══════════════════════════════════════════════════════════════════════
+# ⚠️ LEGACY — Frozen. No new features.
+# Superseded by PlanActFlow / Session domain model.
+# Target sunset: 2027-03-01
+# ═══════════════════════════════════════════════════════════════════════
+
 """System tray application for weebot (pystray-based).
 
 Run with:
