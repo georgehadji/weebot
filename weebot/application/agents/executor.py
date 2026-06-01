@@ -317,7 +317,7 @@ class ExecutorAgent:
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
         try:
             from weebot.tools.persistent_memory import PersistentMemoryTool
-            snapshot = PersistentMemoryTool.load_snapshot()
+            snapshot = await PersistentMemoryTool.load_snapshot()
             if snapshot:
                 self._system_prompt = self._system_prompt + "\n\n" + snapshot
         except Exception as exc:

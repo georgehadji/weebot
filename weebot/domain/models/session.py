@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from .plan import Plan
 from .event import AgentEvent
@@ -20,6 +20,108 @@ class SessionStatus(str, Enum):
     FAILED = "failed"
 
 
+class SessionContext(BaseModel):
+    """Typed session context.
+
+    Known fields are explicit.  Extra keys from legacy/project-specific
+    code are captured in ``extra`` and accessible via ``.get(key, default)``.
+
+    The ``original_task`` field stores the first substantive prompt so
+    that short follow-ups ("proceed", "yes") can be enriched with it.
+    """
+    skill_name: str = ""
+    skill_content: str = ""
+    skill_version: int = 0
+    original_task: str = Field(default="", alias="_original_task")
+    last_prompt: str = ""
+    facts: Dict[str, Any] = Field(default_factory=dict)
+    archived: bool = False
+    archived_at: Optional[str] = None
+    archive_ttl_days: int = 30
+    extra: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @staticmethod
+    def _cap_facts_dict(facts: Dict[str, Any]) -> Dict[str, Any]:
+        """Evict oldest entries when facts exceed the 100-entry limit."""
+        max_facts = 100
+        if len(facts) > max_facts:
+            keys = list(facts.keys())
+            overflow = len(keys) - max_facts
+            for k in keys[:overflow]:
+                del facts[k]
+        return facts
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_from_dict(cls, data: Any) -> Any:
+        """Accept plain dict (old serialized format) and extract known fields."""
+        if isinstance(data, cls):
+            return data
+        if isinstance(data, BaseModel):
+            return data
+        if not isinstance(data, dict):
+            return data
+        known = {"skill_name", "skill_content", "skill_version", "_original_task",
+                 "original_task", "last_prompt", "facts",
+                 "archived", "archived_at", "archive_ttl_days", "extra"}
+        result: dict[str, Any] = {}
+        # Preserve any pre-existing extra dict (from a roundtrip dump)
+        existing_extra = data.get("extra", {}) if isinstance(data.get("extra"), dict) else {}
+        extra: dict[str, Any] = dict(existing_extra)
+        for k, v in data.items():
+            if k == "extra":
+                continue  # already captured above
+            # Map legacy key name to typed field
+            field_key = {"_original_task": "original_task"}.get(k, k)
+            if field_key in known:
+                result[field_key] = v
+            elif k not in known:
+                extra[k] = v
+        result["extra"] = extra
+        return result
+
+    @property
+    def _field_names(self) -> set[str]:
+        """Cached set of field names for fast membership checks (Pydantic v2 compat)."""
+        return set(type(self).model_fields.keys())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Access known fields or fall through to ``extra``.
+
+        Provides backward compatibility with the old ``Dict[str, Any]``
+        access pattern during migration.
+        """
+        # Handle legacy key name transparently
+        mapped_key = {"_original_task": "original_task"}.get(key, key)
+        if mapped_key in self._field_names:
+            return getattr(self, mapped_key, default)
+        return self.extra.get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        val = self.get(key)
+        if val is None:
+            if key not in self.extra and key not in self._field_names:
+                raise KeyError(key)
+        return val
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Set a known field or fall through to ``extra``."""
+        mapped_key = {"_original_task": "original_task"}.get(key, key)
+        if mapped_key in self._field_names:
+            setattr(self, mapped_key, value)
+        else:
+            self.extra[key] = value
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._field_names or key in self.extra
+
+    def copy(self) -> "SessionContext":
+        """Return a deep copy (used by old dict-style code)."""
+        return self.model_copy(deep=True)
+
+
 class Session(BaseModel):
     """A user session containing events, plan history, and metadata."""
     id: str = Field(default="")
@@ -28,7 +130,7 @@ class Session(BaseModel):
     status: SessionStatus = Field(default=SessionStatus.PENDING)
     title: Optional[str] = Field(default=None)
     events: List[AgentEvent] = Field(default_factory=list)
-    context: Dict[str, Any] = Field(default_factory=dict)
+    context: SessionContext = Field(default_factory=SessionContext)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -97,14 +199,14 @@ class Session(BaseModel):
         return self.add_event(MessageEvent(role="user", message=text))
 
     def set_fact(self, key: str, value: Any) -> "Session":
-        facts = dict(self.context.get("facts", {}))
+        facts = dict(self.context.facts)
         facts[key] = value
-        new_context = dict(self.context)
-        new_context["facts"] = facts
-        return self.model_copy(update={"context": new_context})
+        SessionContext._cap_facts_dict(facts)
+        new_ctx = self.context.model_copy(update={"facts": facts})
+        return self.model_copy(update={"context": new_ctx})
 
     def get_fact(self, key: str, default: Any = None) -> Any:
-        return self.context.get("facts", {}).get(key, default)
+        return self.context.facts.get(key, default)
 
     def get_facts(self) -> dict[str, Any]:
-        return dict(self.context.get("facts", {}))
+        return dict(self.context.facts)

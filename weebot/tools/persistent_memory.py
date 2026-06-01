@@ -14,26 +14,19 @@ Entry delimiter: § (section sign, rare in natural text).
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from weebot.application.ports.memory_port import MemoryPort
+from weebot.infrastructure.persistence.filesystem_memory import (
+    FileSystemMemoryAdapter,
+    DELIMITER,
+)
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["PersistentMemoryTool"]
-
-DELIMITER = "§"
-MEMORY_DIR = Path.home() / ".weebot" / "memory"
-
-# Prompt injection / exfiltration patterns — reject writes containing these.
-# Memory entries are injected verbatim into the system prompt, so a poisoned
-# entry would persist across sessions until explicitly removed.
-_INJECTION_RE = re.compile(
-    r"<INST>|</s>|SYSTEM:|<\|im_start\|>|<\|im_end\|>|\[INST\]|\[/INST\]|<\|system\|>",
-    re.IGNORECASE,
-)
 
 
 class PersistentMemoryTool(BaseTool):
@@ -83,6 +76,21 @@ class PersistentMemoryTool(BaseTool):
         "required": ["action"],
     }
 
+    def __init__(
+        self,
+        memory: Optional[MemoryPort] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize the persistent memory tool.
+
+        Args:
+            memory: A MemoryPort implementation. Defaults to
+                FileSystemMemoryAdapter (which stores in ~/.weebot/memory/).
+            **kwargs: Passed through to BaseTool.
+        """
+        super().__init__(**kwargs)
+        self._memory: MemoryPort = memory or FileSystemMemoryAdapter()
+
     async def execute(
         self,
         action: Literal["add", "replace", "remove", "read"],
@@ -91,54 +99,26 @@ class PersistentMemoryTool(BaseTool):
         match: Optional[str] = None,
         **_: Any,
     ) -> ToolResult:
-        path = self._memory_path(file)
-
         if action == "read":
-            return self._read(path)
+            return await self._read(file)
         if action == "add":
             if not entry:
                 return ToolResult.error_result("'entry' is required for action='add'")
-            return self._add(path, entry)
+            return await self._add(file, entry)
         if action == "replace":
             if not entry or not match:
                 return ToolResult.error_result("'entry' and 'match' are required for action='replace'")
-            return self._replace(path, match, entry)
+            return await self._replace(file, match, entry)
         if action == "remove":
             if not match:
                 return ToolResult.error_result("'match' is required for action='remove'")
-            return self._remove(path, match)
+            return await self._remove(file, match)
         return ToolResult.error_result(f"Unknown action: {action!r}")
-
-    # ── path helpers ──────────────────────────────────────────────────────
-
-    @staticmethod
-    def _memory_path(file: str) -> Path:
-        MEMORY_DIR.mkdir(parents=True, exist_ok=True)
-        return MEMORY_DIR / f"{file.upper()}.md"
-
-    @staticmethod
-    def _load_entries(path: Path) -> list[str]:
-        if not path.exists():
-            return []
-        text = path.read_text(encoding="utf-8")
-        return [e.strip() for e in text.split(DELIMITER) if e.strip()]
-
-    @staticmethod
-    def _save_entries(path: Path, entries: list[str]) -> None:
-        path.write_text(
-            ("\n" + DELIMITER + "\n").join(entries),
-            encoding="utf-8",
-        )
-
-    @staticmethod
-    def _scan_injection(text: str) -> bool:
-        """Return True if the text looks like a prompt injection attempt."""
-        return bool(_INJECTION_RE.search(text))
 
     # ── actions ───────────────────────────────────────────────────────────
 
-    def _read(self, path: Path) -> ToolResult:
-        entries = self._load_entries(path)
+    async def _read(self, file: str) -> ToolResult:
+        entries = await self._memory.read_entries(file)
         if not entries:
             return ToolResult.success_result(
                 output="(no entries)", data={"entries": [], "count": 0}
@@ -149,25 +129,25 @@ class PersistentMemoryTool(BaseTool):
             data={"entries": entries, "count": len(entries)},
         )
 
-    def _add(self, path: Path, entry: str) -> ToolResult:
-        if self._scan_injection(entry):
+    async def _add(self, file: str, entry: str) -> ToolResult:
+        if FileSystemMemoryAdapter.scan_injection(entry):
             return ToolResult.error_result(
                 "Entry rejected: contains a potential prompt injection pattern."
             )
-        entries = self._load_entries(path)
+        entries = await self._memory.read_entries(file)
         entries.append(entry)
-        self._save_entries(path, entries)
+        await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Added entry #{len(entries)} to {path.name}.",
+            output=f"Added entry #{len(entries)} to {file.upper()}.md.",
             data={"count": len(entries)},
         )
 
-    def _replace(self, path: Path, match: str, new_entry: str) -> ToolResult:
-        if self._scan_injection(new_entry):
+    async def _replace(self, file: str, match: str, new_entry: str) -> ToolResult:
+        if FileSystemMemoryAdapter.scan_injection(new_entry):
             return ToolResult.error_result(
                 "Entry rejected: contains a potential prompt injection pattern."
             )
-        entries = self._load_entries(path)
+        entries = await self._memory.read_entries(file)
         replaced = 0
         for i, e in enumerate(entries):
             if match in e:
@@ -175,29 +155,29 @@ class PersistentMemoryTool(BaseTool):
                 replaced += 1
         if not replaced:
             return ToolResult.error_result(f"No entries matched '{match}'")
-        self._save_entries(path, entries)
+        await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Replaced {replaced} entry/entries in {path.name}.",
+            output=f"Replaced {replaced} entry/entries in {file.upper()}.md.",
             data={"replaced": replaced},
         )
 
-    def _remove(self, path: Path, match: str) -> ToolResult:
-        entries = self._load_entries(path)
+    async def _remove(self, file: str, match: str) -> ToolResult:
+        entries = await self._memory.read_entries(file)
         before = len(entries)
         entries = [e for e in entries if match not in e]
         removed = before - len(entries)
         if not removed:
             return ToolResult.error_result(f"No entries matched '{match}'")
-        self._save_entries(path, entries)
+        await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Removed {removed} entry/entries from {path.name}.",
+            output=f"Removed {removed} entry/entries from {file.upper()}.md.",
             data={"removed": removed},
         )
 
     # ── system prompt snapshot ────────────────────────────────────────────
 
     @classmethod
-    def load_snapshot(cls) -> str:
+    async def load_snapshot(cls) -> str:
         """Return a formatted snapshot of both memory files for system prompt injection.
 
         Returns empty string if both files are empty or missing.
@@ -205,13 +185,5 @@ class PersistentMemoryTool(BaseTool):
         that is prepended to the system prompt. Mid-session writes update disk
         but do NOT change the returned snapshot — this preserves the prefix cache.
         """
-        parts: list[str] = []
-        for label, file in (("Agent Knowledge", "agent"), ("User Profile", "user")):
-            path = MEMORY_DIR / f"{file.upper()}.md"
-            if path.exists():
-                text = path.read_text(encoding="utf-8").strip()
-                if text:
-                    parts.append(f"## {label}\n{text}")
-        if not parts:
-            return ""
-        return "# Persistent Memory\n\n" + "\n\n---\n\n".join(parts)
+        adapter = FileSystemMemoryAdapter()
+        return await adapter.read_snapshot()
