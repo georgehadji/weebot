@@ -8,6 +8,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import TEMPERATURE
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -54,6 +55,16 @@ CRITICAL: Respond ONLY with valid JSON. Do not wrap in markdown code blocks. Do 
 Keep completed steps as-is. Adjust or add pending steps based on new information.
 """
 
+# Injected into PLANNER_SYSTEM_PROMPT when skill_prompt references web/UI work.
+SPEC_FILE_RULE = """
+SPEC FILE RULE:
+When a task involves inspecting or building multiple distinct UI sections (more than 2 sections),
+add an explicit spec-writing step for each section BEFORE its build step:
+  {"id": "spec-N", "description": "Write section spec to tasks/specs/<section_name>.md using file_editor — include exact CSS values from browser_inspector, component list, asset paths, and interaction behaviors"}
+Builder steps that follow MUST reference the spec file path so they read it rather than
+relying on conversation context. This keeps executor context small and specs auditable.
+"""
+
 
 class PlannerAgent:
     """Agent responsible for creating and updating plans."""
@@ -71,9 +82,9 @@ class PlannerAgent:
         self._event_bus = event_bus
         self._model = model
         self._episodic_memory = episodic_memory
-        system_prompt = PLANNER_SYSTEM_PROMPT
+        system_prompt = PLANNER_SYSTEM_PROMPT + SPEC_FILE_RULE
         if skill_prompt:
-            system_prompt = f"{PLANNER_SYSTEM_PROMPT}\n\n{skill_prompt}"
+            system_prompt = f"{system_prompt}\n\n{skill_prompt}"
         if facts:
             facts_block = "### Known Facts\n" + "\n".join(f"- {k}: {v}" for k, v in facts.items())
             system_prompt = f"{system_prompt}\n\n{facts_block}"
@@ -162,7 +173,7 @@ class PlannerAgent:
         response = await self._llm.chat(
             messages=self._memory,
             response_format={"type": "json_object"},
-            temperature=0.2,
+            temperature=TEMPERATURE,
             max_tokens=4096,
         )
 
@@ -196,7 +207,7 @@ class PlannerAgent:
         response = await self._llm.chat(
             messages=update_memory,
             response_format={"type": "json_object"},
-            temperature=0.2,
+            temperature=TEMPERATURE,
             max_tokens=4096,
         )
 

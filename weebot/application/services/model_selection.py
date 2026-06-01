@@ -1661,6 +1661,15 @@ class ModelSelectionService:
             tier=ModelTier.FAST,
             api_key_env="OPENROUTER_API_KEY",
         ),
+        "minimax/minimax-m3": ModelConfig(
+            name="MiniMax M3",
+            provider="openrouter",
+            cost_per_1k_tokens=0.0008,
+            context_window=1000000,
+            strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.REASONING],
+            tier=ModelTier.FAST,
+            api_key_env="OPENROUTER_API_KEY",
+        ),
         "qwen/qwen3-vl-8b-thinking": ModelConfig(
             name="Qwen3 VL 8B Thinking",
             provider="openrouter",

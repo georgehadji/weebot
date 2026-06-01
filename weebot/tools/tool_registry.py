@@ -27,6 +27,7 @@ class RoleBasedToolRegistry:
         "researcher": [
             "web_search",
             "advanced_browser",
+            "browser_inspector",
             "file_editor",
             "knowledge",
             "video_ingest",
@@ -62,6 +63,8 @@ class RoleBasedToolRegistry:
         "admin": [
             "web_search",
             "advanced_browser",
+            "browser_inspector",
+            "dispatch_parallel_tasks",
             "file_editor",
             "knowledge",
             "video_ingest",
@@ -231,6 +234,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.weather_tool import WeatherTool
         from weebot.tools.design_system_tool import DesignSystemTool
         from weebot.tools.control import TerminateTool, AskHumanTool
+        from weebot.tools.browser_inspector import BrowserInspectorTool
+        from weebot.tools.dispatch_agents import DispatchAgentsTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -250,6 +255,8 @@ class RoleBasedToolRegistry:
             "design_system": DesignSystemTool,
             "terminate": TerminateTool,
             "ask_human": AskHumanTool,
+            "browser_inspector": BrowserInspectorTool,
+            "dispatch_parallel_tasks": DispatchAgentsTool,
         }
         return cls._TOOL_CLASS_MAP
 
