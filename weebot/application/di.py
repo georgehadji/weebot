@@ -17,10 +17,16 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-from weebot.application.cqrs.mediator import Mediator, ValidationGateBehavior
+from weebot.application.cqrs.behaviors.save_policy import SavePolicyBehavior
+from weebot.application.cqrs.handlers import register_default_handlers
+from weebot.application.cqrs.behaviors.logging import LoggingBehavior
+from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
+from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
+from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.task_runner import TaskRunner
@@ -85,11 +91,29 @@ class Container:
         # LLM port
         self.register(LLMPort, lambda: self._create_llm(default_model))
 
+        # Sandbox port — NativeWindowsSandbox on Windows, DockerLinuxSandbox on Linux
+        self.register(SandboxPort, self._create_sandbox)
+
+        # ActivityStream — replaces StateCoordinator-managed stream
+        self.register(
+            "activity_stream",
+            lambda: self._create_activity_stream(),
+        )
+
+        # ResponseCache — replaces StateCoordinator-managed cache
+        self.register(
+            "response_cache",
+            lambda: self._create_response_cache(),
+        )
+
         # CQRS Mediator (with pipeline behaviours)
         self.register(Mediator, self._create_mediator)
 
         # Task Runner
         self.register(TaskRunner, self._create_task_runner)
+
+        # Event Store — append-only audit log
+        self.register(EventStorePort, lambda: self._create_event_store())
 
     # ── high-level builders ─────────────────────────────────────────
 
@@ -117,10 +141,9 @@ class Container:
         """Build a configured Mediator with default handlers registered."""
         mediator = Mediator()
         # Pipeline behaviours
+        mediator.add_pipeline_behavior(LoggingBehavior())
         mediator.add_pipeline_behavior(
-            __import__(
-                "weebot.application.cqrs.mediator", fromlist=["LoggingBehavior"]
-            ).LoggingBehavior()
+            SavePolicyBehavior(state_repo=self._maybe_get(StateRepositoryPort))
         )
         # Register default handlers (with LLM and tools for agent execution)
         state_repo = self.get(StateRepositoryPort)
@@ -131,7 +154,7 @@ class Container:
         # Build a minimal tool collection for the execution handler
         tools = None
         if llm is not None:
-            from weebot.tools.base import ToolCollection
+            from weebot.application.models.tool_collection import ToolCollection
             from weebot.tools.bash_tool import BashTool
             from weebot.tools.file_editor import FileEditorTool
             from weebot.tools.python_tool import PythonTool
@@ -142,9 +165,7 @@ class Container:
             except Exception:
                 tools = None
 
-        __import__(
-            "weebot.application.cqrs.handlers", fromlist=["register_default_handlers"]
-        ).register_default_handlers(
+        register_default_handlers(
             mediator, state_repo, task_runner,
             llm=llm, tools=tools, event_bus=event_bus,
         )
@@ -168,6 +189,40 @@ class Container:
         """Create EventBrokerAdapter bridging to the global AsyncEventBus."""
         from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
         return EventBrokerAdapter(event_bus=self.get(EventBusPort))
+
+    @staticmethod
+    def _create_activity_stream():
+        """Create an ActivityStream (was managed by StateCoordinator)."""
+        from weebot.activity_stream import ActivityStream
+        return ActivityStream()
+
+    @staticmethod
+    def _create_event_store():
+        """Create the default SQLite-backed EventStore."""
+        from weebot.infrastructure.event_store import EventStore
+        return EventStore()
+
+    @staticmethod
+    def _create_response_cache():
+        """Create a ResponseCache (was managed by StateCoordinator)."""
+        from weebot.infrastructure.persistence.response_cache import ResponseCache
+        return ResponseCache()
+
+    @staticmethod
+    def _create_sandbox() -> SandboxPort:
+        """Create the default sandbox implementation for the current platform.
+
+        NativeWindowsSandbox on Windows; falls back to a simple executor
+        on other platforms.
+        """
+        import sys as _sys
+        if _sys.platform == "win32":
+            from weebot.infrastructure.sandbox.native_windows import (
+                NativeWindowsSandbox,
+            )
+            return NativeWindowsSandbox()
+        from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
+        return DockerLinuxSandbox()
 
     @staticmethod
     def _create_llm(default_model: Optional[str]) -> LLMPort:
@@ -386,7 +441,7 @@ class Container:
         # (needs to be set up after mediator is created)
         self.register(
             "validation_gate",
-            self._create_validation_gate,
+            lambda: self._create_validation_gate(harness),
         )
 
         # Evolution tracker (SIA-inspired longitudinal memory)
@@ -403,12 +458,17 @@ class Container:
         batch_size: int = 40,
         use_planning: bool = False,
     ):
-        """Construct a ready-to-use SkillOptFlow."""
+        """Construct a ready-to-use SkillOptFlow.
+
+        Each call builds a FRESH Mediator instance so that the shared
+        singleton is never mutated.  This prevents duplicate pipeline
+        behaviours accumulating on repeated calls (multiple training runs).
+        """
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
 
-        mediator = self.get(Mediator)
-        # Wire the validation gate into the mediator's pipeline so that
-        # ApplySkillEditsCommand actually runs held-out validation tasks.
+        # Build a scoped mediator with the same default handlers +
+        # the validation gate for this specific SkillOptFlow instance.
+        mediator = self.build_mediator()
         gate = self._maybe_get_str("validation_gate")
         if gate is not None:
             mediator.add_pipeline_behavior(gate)
@@ -420,7 +480,7 @@ class Container:
             skill_store=self.get("skill_store"),
             trajectory_repo=self.get("trajectory_repo"),
             event_bus=self.get(EventBusPort),
-            mediator=self.get(Mediator),
+            mediator=mediator,
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
             batch_size=batch_size,
@@ -471,13 +531,15 @@ class Container:
         llm = self._maybe_get_str("optimizer_llm") or self._maybe_get(LLMPort)
         return EvolutionTracker(llm=llm)
 
-    def _create_validation_gate(self):
-        from weebot.application.cqrs.mediator import ValidationGateBehavior
+    def _create_validation_gate(self, harness: str = "direct_chat"):
+        from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
         from weebot.application.services.validation_runner import ValidationRunner
+
+        llm = self._maybe_get(LLMPort)
         runner = ValidationRunner(
             task_runner=self.get(TaskRunner),
             flow_factory=self._create_target_flow_factory(),
-            scoring_fn=self._create_default_scorer(),
+            scoring_fn=self._create_scorer(harness, llm=llm),
         )
         gate = ValidationGateBehavior(validation_runner=runner)
         return gate
@@ -486,7 +548,7 @@ class Container:
         """Return a callable that creates PlanActFlow with a given session."""
         llm = self.get(LLMPort)
         # We need a session-scoped tool collection — build a simple one
-        from weebot.tools.base import ToolCollection
+        from weebot.application.models.tool_collection import ToolCollection
         from weebot.tools.bash_tool import BashTool
         tools = ToolCollection(BashTool())
 
@@ -500,32 +562,60 @@ class Container:
                 event_bus=self.get(EventBusPort),
                 model=self._maybe_get_model(),
                 mediator=self.get(Mediator),
+                state_repo=self._maybe_get(StateRepositoryPort),
             )
         return factory
 
     @staticmethod
-    def _create_default_scorer():
-        """Return a no-op scoring function (placeholder for real ScoringPort)."""
-        async def noop_scorer(session) -> float:
-            # Simple heuristic: check if session completed without error
+    def _create_scorer(harness: str = "direct_chat", llm=None):
+        """Create a real ScoringPort based on harness type.
+
+        Supports:
+          - 'exact_match'  → ExactMatchScorer (string comparison)
+          - 'execution'    → ExecutionResultScorer (output artifact comparison)
+          - 'verifier'     → VerifierScorer (LLM-based, requires llm=)
+          - anything else  → fallback heuristic scorer
+
+        Returns a Callable[[Session], Awaitable[float]] for ValidationRunner.
+        """
+        if harness == "exact_match":
+            from weebot.infrastructure.scoring.exact_match_scorer import (
+                ExactMatchScorer,
+            )
+            scorer = ExactMatchScorer()
+        elif harness == "execution":
+            from weebot.infrastructure.scoring.execution_scorer import (
+                ExecutionResultScorer,
+            )
+            scorer = ExecutionResultScorer()
+        elif harness == "verifier" and llm is not None:
+            from weebot.infrastructure.scoring.verifier_scorer import (
+                VerifierScorer,
+            )
+            scorer = VerifierScorer(llm=llm)
+        else:
+            scorer = None
+
+        if scorer is not None:
+            async def real_scorer(session) -> float:
+                result = await scorer.score(session)
+                return result.score
+            return real_scorer
+
+        # Fallback: simple heuristic scorer (original placeholder)
+        async def fallback_scorer(session) -> float:
             for event in session.events:
                 if event.type == "error":
                     return 0.0
             if session.status.name == "COMPLETED":
                 return 1.0
             return 0.5
-        return noop_scorer
+        return fallback_scorer
 
 
 # ── module-level convenience ────────────────────────────────────────
 
-_default_container: Optional[Container] = None
-
-
-def get_container() -> Container:
-    """Return the global container singleton, creating it lazily."""
-    global _default_container
-    if _default_container is None:
-        _default_container = Container()
-        _default_container.configure_defaults()
-    return _default_container
+# NOTE: No global _default_container singleton.
+# Callers must create their own Container() instance and call
+# configure_defaults().  See web/main.py for the pattern.
+# The get_container() function was removed in Phase 2.3.

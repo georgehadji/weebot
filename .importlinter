@@ -1,0 +1,65 @@
+[importlinter]
+root_package = weebot
+include_external_packages = True
+
+[importlinter:contract:domain-purity]
+name = Domain layer must not depend on outer layers
+type = forbidden
+source_modules = weebot.domain
+forbidden_modules =
+    weebot.infrastructure
+    weebot.application
+    weebot.interfaces
+    weebot.core
+    weebot.tools
+    weebot.nlp_understanding
+    weebot.multi_source_research
+    weebot.information_synthesis
+    weebot.strategy_adaptation
+    weebot.source_credibility_assessment
+    weebot.external_service_integration
+    weebot.activity_stream
+    weebot.cli_support
+    weebot.complex_task_executor
+    weebot.error_system_base
+    weebot.error_system_handler
+    weebot.error_system_user_messages
+    weebot.notifications
+    weebot.notifications_categorizer
+    weebot.rtk_integration
+    weebot.security_validators
+    weebot.structured_logger
+    weebot.workflow_planner
+
+[importlinter:contract:tools-no-db]
+name = Tools must not access databases directly
+type = forbidden
+source_modules = weebot.tools
+forbidden_modules =
+    sqlite3
+ignore_imports =
+    # Known technical debt — ToolRepositoryPort created, migration pending Phase 2
+    weebot.tools.knowledge_tool -> sqlite3
+    weebot.tools.product_tool -> sqlite3
+    weebot.tools.video_ingest_tool -> sqlite3
+    weebot.scheduling.scheduler -> sqlite3
+
+[importlinter:contract:infra-no-app-services]
+name = Infrastructure must depend on ports, not application services/flows/agents
+type = forbidden
+source_modules = weebot.infrastructure
+forbidden_modules =
+    weebot.application.agents
+    weebot.application.flows
+    weebot.application.services
+    weebot.application.cqrs
+    weebot.application.di
+
+[importlinter:contract:interfaces-no-infra]
+name = Interfaces must not depend on infrastructure adapters directly
+type = forbidden
+source_modules = weebot.interfaces
+forbidden_modules =
+    weebot.infrastructure
+    weebot.tools
+ignore_imports =

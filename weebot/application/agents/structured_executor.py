@@ -5,6 +5,7 @@ for improved reliability and programmatic handling of responses.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, AsyncGenerator, Dict, Optional
 
@@ -25,7 +26,7 @@ from weebot.models.structured_output import (
     parse_agent_output,
     TaskStatus,
 )
-from weebot.tools.base import ToolCollection
+from weebot.application.models.tool_collection import ToolCollection
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ if you performed any checks.
                         tool_call_id=tc["id"],
                         tool_name=tc["function"]["name"],
                         function_name=tc["function"]["name"],
-                        function_args=__import__("json").loads(
+                        function_args=json.loads(
                             tc["function"]["arguments"]
                         ),
                         status=ToolStatus.CALLING,
@@ -146,7 +147,7 @@ if you performed any checks.
                         tool_call_id=tc["id"],
                         tool_name=tc["function"]["name"],
                         function_name=tc["function"]["name"],
-                        function_args=__import__("json").loads(
+                        function_args=json.loads(
                             tc["function"]["arguments"]
                         ),
                         status=ToolStatus.CALLED,

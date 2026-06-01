@@ -28,7 +28,8 @@ from weebot.domain.models.event import (
     WaitForUserEvent,
 )
 from weebot.domain.models.plan import Plan, Step
-from weebot.tools.base import ToolCollection, ToolResult
+from weebot.application.models.tool_collection import ToolCollection
+from weebot.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,17 @@ TOOL SELECTION GUIDELINES:
 - Do NOT open the browser just to read text you could get from web_search
 - If a lightweight tool gets what you need, stop — don't also open the browser
 
+POWERSHELL SYNTAX RULES (Windows 11):
+- Static .NET method calls: [ClassName]::MethodName() — e.g., [Math]::Round(x, 2)
+  NOT ::Round(x, 2) which is invalid syntax.
+- Format-Table, Format-List, Format-Wide are DISPLAY cmdlets, not disk operations — safe to use.
+- Get-ChildItem full-disk recursion (-Recurse -ErrorAction SilentlyContinue) on C:\\ takes
+  several minutes; use -Depth 2 or -Depth 3 for faster partial scans, then widen if needed.
+- PowerShell background jobs (Start-Job) are scoped to the current process and do NOT
+  persist across separate powershell.exe invocations. Use single-call approaches instead.
+- Long timeout: pass the 'timeout' parameter on the tool call (max 300s).
+  Do NOT use Start-Sleep to work around the tool timeout.
+
 EFFICIENCY:
 - Aim to complete each step in 5 tool calls or fewer
 - Don't repeat the same tool call with the same arguments — if it didn't work, try a DIFFERENT approach
@@ -60,6 +72,25 @@ EFFICIENCY:
 
 You will be called repeatedly for each step. Focus only on the current step and wait for the next one.
 """
+
+# ── Policy-error-loop detection constants (Fix 5) ──
+_MAX_SAME_ERROR_CLASS = 3
+
+
+def _classify_tool_error(error_output: str) -> Optional[str]:
+    """Classify a tool error into a stable error-class key, or None if no match."""
+    if not error_output:
+        return None
+    lo = error_output.lower()
+    if "denied by policy" in lo or "command blocked" in lo:
+        return "policy_denied"
+    if "security error" in lo or ("layer" in lo and "triggered" in lo):
+        return "security_blocked"
+    if "timed out" in lo:
+        return "timeout"
+    if "access denied" in lo or "permission" in lo:
+        return "permission_denied"
+    return None
 
 
 class ExecutorAgent:
@@ -275,6 +306,10 @@ class ExecutorAgent:
         self._conversation_buffer.clear()
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
+        # ═══ Policy-error-loop tracking (Fix 5) ═══
+        consecutive_error_class_counts: dict[str, int] = {}
+        last_error_class: Optional[str] = None
+
         system_prompt = EXECUTOR_SYSTEM_PROMPT
         if self._skill_prompt:
             system_prompt = f"{EXECUTOR_SYSTEM_PROMPT}\n\n{self._skill_prompt}"
@@ -289,9 +324,33 @@ class ExecutorAgent:
             logger.warning("Persistent memory snapshot unavailable: %s", exc)
 
         if not self._conversation_buffer:
+            # Build a rich context message so the LLM knows the full task,
+            # how far along the plan is, and what the current step requires.
+            completed_steps = [s for s in plan.steps if s.is_done()]
+            pending_steps = [s for s in plan.steps if not s.is_done()]
+            try:
+                current_idx = plan.steps.index(step) + 1
+            except ValueError:
+                current_idx = len(completed_steps) + 1
+
+            context_lines = [
+                f"Overall goal: {plan.title}",
+                f"Total steps: {len(plan.steps)} | Current: step {current_idx}",
+            ]
+            if plan.message:
+                context_lines.append(f"Plan summary: {plan.message}")
+            if completed_steps:
+                done_summary = "; ".join(s.description for s in completed_steps[-3:])
+                context_lines.append(f"Recently completed: {done_summary}")
+            context_lines += [
+                f"",
+                f"Current step to execute: {step.description}",
+                f"",
+                "Use available tools to execute this specific step.",
+            ]
             self._conversation_buffer.append({
                 "role": "user",
-                "content": f"Plan: {plan.title}\nStep: {step.description}\nExecute this step using available tools.",
+                "content": "\n".join(context_lines),
             })
             # If this is a resume (user provided input), inject it so the LLM
             # sees the answer instead of calling ask_human again.
@@ -315,6 +374,8 @@ class ExecutorAgent:
         last_tool_signature: Optional[str] = None
         recent_tool_signatures: deque[str] = deque(maxlen=6)
         thought_iteration: int = 0
+        tool_calls_attempted: int = 0
+        tool_calls_succeeded: int = 0
 
         self._step_budget.reset()
         while self._step_budget.consume():
@@ -399,6 +460,44 @@ class ExecutorAgent:
                 )
 
                 result = await self._execute_tool_call(tc)
+                tool_calls_attempted += 1
+                if not result.is_error:
+                    tool_calls_succeeded += 1
+
+                # ═══ Policy-error-loop detection (Fix 5) ═══
+                if result.is_error:
+                    err_class = _classify_tool_error(result.error or result.output or "")
+                    if err_class:
+                        if err_class == last_error_class:
+                            consecutive_error_class_counts[err_class] = \
+                                consecutive_error_class_counts.get(err_class, 0) + 1
+                        else:
+                            consecutive_error_class_counts = {err_class: 1}
+                            last_error_class = err_class
+
+                        if consecutive_error_class_counts.get(err_class, 0) >= _MAX_SAME_ERROR_CLASS:
+                            loop_error = (
+                                f"Step '{step.id}' is stuck: the same error class '{err_class}' "
+                                f"has triggered {consecutive_error_class_counts[err_class]} consecutive times. "
+                                f"Last error: {(result.error or result.output)[:300]}. "
+                                "Requesting user input to unblock."
+                            )
+                            yield ErrorEvent(error=loop_error)
+                            yield WaitForUserEvent(
+                                question=(
+                                    f"The agent is blocked by a '{err_class}' policy and cannot proceed "
+                                    f"with step: {step.description!r}.\n"
+                                    f"Last error: {(result.error or result.output)[:500]}\n\n"
+                                    "Please either:\n"
+                                    "  1. Rephrase the task to avoid the blocked operation, or\n"
+                                    "  2. Adjust security settings if appropriate, then resume."
+                                )
+                            )
+                            abort_step = True
+                            break
+                else:
+                    last_error_class = None
+                    consecutive_error_class_counts.clear()
 
                 yield ToolEvent(
                     tool_call_id=tc["id"],
@@ -440,6 +539,24 @@ class ExecutorAgent:
             loop_error = self._build_stuck_error(
                 step=step,
                 reason="max step budget reached",
+                recent_signatures=recent_tool_signatures,
+                max_steps=self._max_steps,
+            )
+            yield ErrorEvent(error=loop_error)
+
+        # Detect hollow completion: tools were attempted but none succeeded and
+        # the LLM produced no substantive output.  Surface this as a failure so
+        # the flow can replan rather than silently marking the step done.
+        if (
+            not abort_step
+            and loop_error is None
+            and tool_calls_attempted > 0
+            and tool_calls_succeeded == 0
+            and not step_result.strip()
+        ):
+            loop_error = self._build_stuck_error(
+                step=step,
+                reason="all tool calls failed and no output was produced",
                 recent_signatures=recent_tool_signatures,
                 max_steps=self._max_steps,
             )

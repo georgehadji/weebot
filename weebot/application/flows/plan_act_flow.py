@@ -18,8 +18,11 @@ from weebot.application.flows.states.completed import CompletedState
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.services.memory_compactor import MemoryCompactor
-from weebot.application.services.context_tokenizer import ContextTokenizer
-from weebot.core.model_cascade_config import select_model_by_tokens
+from weebot.application.services.context_switcher import ContextSwitcher
+from weebot.application.services.plan_history import PlanHistory
+from weebot.application.services.continuation_detector import (
+    ContinuationDetector,
+)
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -32,10 +35,11 @@ from weebot.domain.models.event import (
 )
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session, SessionStatus
-from weebot.tools.base import ToolCollection
+from weebot.application.models.tool_collection import ToolCollection
 
 if TYPE_CHECKING:
     from weebot.application.cqrs.mediator import Mediator
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +66,7 @@ class PlanActFlow(BaseFlow):
         skill_prompt: Optional[str] = None,
         episodic_memory = None,
         mediator: Optional[Mediator] = None,
+        state_repo: Optional[StateRepositoryPort] = None,
         max_step_repetitions: int = 3,
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
@@ -73,13 +78,13 @@ class PlanActFlow(BaseFlow):
         self._event_bus = event_bus
         self._model = model
         self._mediator = mediator
+        self._state_repo = state_repo
         self.status = AgentStatus.IDLE
         self._state: FlowState = None # Will be set in run()
         self._plan: Optional[Plan] = None
         self._compactor = MemoryCompactor()
-        self._tokenizer = ContextTokenizer()
-        self._undo_stack: list[Plan] = []
-        self._redo_stack: list[Plan] = []
+        self._plan_history = PlanHistory()
+        self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
         self._episodic_memory = episodic_memory
         self._max_step_repetitions = max_step_repetitions
         self._auto_terminate_on_plan_complete = auto_terminate_on_plan_complete
@@ -110,6 +115,8 @@ class PlanActFlow(BaseFlow):
         self._session = self._session.add_event(event)
         if self._event_bus:
             await self._event_bus.publish(event)
+        if self._state_repo:
+            await self._state_repo.save_session(self._session)
 
     def is_done(self) -> bool:
         return self._session.status == SessionStatus.COMPLETED
@@ -129,6 +136,23 @@ class PlanActFlow(BaseFlow):
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         logger.info("PlanActFlow started for session %s", self._session.id)
+
+        # --- Task context preservation ---
+        # Store the first substantive prompt so short follow-ups ("proceed", "yes")
+        # can be enriched with it when a brand-new plan is needed.
+        original_task: str = self._session.context.get("_original_task", "")
+        if not original_task and prompt.strip():
+            original_task = prompt.strip()
+            self._session = self._session.model_copy(
+                update={"context": {**self._session.context, "_original_task": original_task}}
+            )
+
+        # Resolve effective prompt — enrich vague continuations via service
+        effective_prompt = ContinuationDetector.resolve_prompt(
+            user_prompt=prompt,
+            original_task=original_task,
+            event_count=len(self._session.events),
+        )
 
         # Initial Resume/Start logic
         last_plan = self._session.get_last_plan()
@@ -150,7 +174,7 @@ class PlanActFlow(BaseFlow):
             iteration_count += 1
 
             # Execute current state
-            async for event in self._state.execute(self, prompt):
+            async for event in self._state.execute(self, effective_prompt):
                 yield event
 
             # If we reached COMPLETED state logic or it paused for HITL, we break
@@ -170,73 +194,50 @@ class PlanActFlow(BaseFlow):
 
     def _maybe_switch_model_for_context(self) -> Optional[str]:
         """Dynamically select model based on context size if enabled.
-        
-        Implements MEMORY_ARTICLE recommendation to use sparse attention
-        models (DeepSeek DSA) for long contexts (50K+ tokens).
-        
+
+        Delegates to ContextSwitcher service.
+
         Returns:
             New model ID if switch recommended, None otherwise.
         """
-        if not self._context_aware_model_selection:
-            return None
-        
-        estimated_tokens = self._tokenizer.estimate_session_tokens(self._session)
-        config = select_model_by_tokens("coding", estimated_tokens)
-        
-        if config.id != self._model:
-            logger.info(
-                "Context-aware model selection: %s -> %s for ~%d tokens",
-                self._model, config.id, estimated_tokens
-            )
-            return config.id
-        
-        return None
-    
+        return self._context_switcher.maybe_switch_model_for_context(
+            session=self._session,
+            current_model=self._model,
+            context_aware_enabled=self._context_aware_model_selection,
+        )
+
     def _update_agents_with_model(self, model: str) -> None:
-        """Update planner and executor with a new model.
-        
+        """Update planner with a new model via ContextSwitcher.
+
         Args:
             model: The new model ID to use.
         """
         self._model = model
-        self._planner = PlannerAgent(
-            llm=self._llm,
-            event_bus=self._event_bus,
-            model=self._model,
+        self._planner = self._context_switcher.update_agents_with_model(
+            model=model,
             skill_prompt=self._skill_prompt,
             facts=self._session.get_facts(),
             episodic_memory=self._episodic_memory,
         )
-        # Executor model is set per-call, no need to recreate
 
     def _snapshot_plan(self) -> None:
-        """Push current plan onto undo stack and clear redo history."""
-        if self._plan is not None:
-            self._undo_stack.append(self._plan.model_copy())
-            self._redo_stack.clear()
+        """Push current plan onto the PlanHistory undo stack."""
+        self._plan_history.snapshot(self._plan)
 
     def undo(self) -> Optional[Plan]:
         """Revert to the previous plan state if available."""
-        if not self._undo_stack:
-            return None
-        if self._plan is not None:
-            self._redo_stack.append(self._plan.model_copy())
-        self._plan = self._undo_stack.pop()
+        self._plan = self._plan_history.undo(self._plan)
         return self._plan
 
     def redo(self) -> Optional[Plan]:
         """Re-apply a plan state that was previously undone."""
-        if not self._redo_stack:
-            return None
-        if self._plan is not None:
-            self._undo_stack.append(self._plan.model_copy())
-        self._plan = self._redo_stack.pop()
+        self._plan = self._plan_history.redo(self._plan)
         return self._plan
 
     @property
     def can_undo(self) -> bool:
-        return len(self._undo_stack) > 0
+        return self._plan_history.can_undo
 
     @property
     def can_redo(self) -> bool:
-        return len(self._redo_stack) > 0
+        return self._plan_history.can_redo

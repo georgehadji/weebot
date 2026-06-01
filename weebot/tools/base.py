@@ -1,15 +1,11 @@
 """BaseTool protocol — OpenManus-style function-calling tools for weebot."""
 from __future__ import annotations
 
-import asyncio
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict
-
-from weebot.config.constants import MAX_TOOL_OUTPUT_CHARS
 
 
 @dataclass
@@ -148,71 +144,15 @@ class BaseTool(ABC, BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class ToolCollection:
-    """Registry of tools; dispatches execute() by name."""
+# ToolCollection has been promoted to weebot.application.models.tool_collection.
+# This module-level __getattr__ provides a lazy backward-compatible re-export
+# that avoids a circular import between tools/base and application/models.
 
-    def __init__(self, *tools: BaseTool) -> None:
-        self._tools: dict[str, BaseTool] = {t.name: t for t in tools}
 
-    def __iter__(self):
-        return iter(self._tools.values())
-
-    def __len__(self) -> int:
-        return len(self._tools)
-
-    def to_params(self) -> list[dict]:
-        return [t.to_param() for t in self._tools.values()]
-
-    async def execute(self, name: str, **kwargs: Any) -> ToolResult:
-        if name not in self._tools:
-            return ToolResult.error_result(
-                error=f"Unknown tool: {name!r}",
-                execution_time_ms=0.0,
-                retry_count=0
-            )
-        
-        start_time = time.time()
-        retry_count = 0
-        max_retries = kwargs.pop("_max_retries", 0)
-        
-        while True:
-            try:
-                result = await self._tools[name].execute(**kwargs)
-                
-                # Add execution metadata
-                execution_time_ms = (time.time() - start_time) * 1000
-                result.metadata.update({
-                    "execution_time_ms": execution_time_ms,
-                    "retry_count": retry_count,
-                    "tool_name": name,
-                })
-
-                # Truncate oversized output to prevent context window bloat
-                if result.output and len(result.output) > MAX_TOOL_OUTPUT_CHARS:
-                    original_length = len(result.output)
-                    removed = original_length - MAX_TOOL_OUTPUT_CHARS
-                    result.output = (
-                        result.output[:MAX_TOOL_OUTPUT_CHARS]
-                        + f"\n...[truncated: {removed} chars omitted]"
-                    )
-                    result.metadata["truncated"] = True
-                    result.metadata["original_length"] = original_length
-                else:
-                    result.metadata.setdefault("truncated", False)
-
-                return result
-                
-            except Exception as exc:
-                retry_count += 1
-                
-                if retry_count > max_retries:
-                    execution_time_ms = (time.time() - start_time) * 1000
-                    return ToolResult.error_result(
-                        error=str(exc),
-                        execution_time_ms=execution_time_ms,
-                        retry_count=retry_count - 1,
-                        tool_name=name
-                    )
-                
-                # Simple backoff before retry
-                await asyncio.sleep(0.1 * retry_count)
+def __getattr__(name: str):
+    if name == "ToolCollection":
+        from weebot.application.models.tool_collection import (
+            ToolCollection as _ToolCollection,
+        )
+        return _ToolCollection
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

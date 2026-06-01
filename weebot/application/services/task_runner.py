@@ -13,7 +13,16 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.memory_archivist import MemoryArchivist
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
-from weebot.tools.base import ToolCollection
+
+# Prometheus metrics — lazy import
+_metrics_mod = None
+def _get_tr_metrics():
+    global _metrics_mod
+    if _metrics_mod is None:
+        from weebot.infrastructure.observability import metrics as m
+        _metrics_mod = m
+    return _metrics_mod
+from weebot.application.models.tool_collection import ToolCollection
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +116,13 @@ class TaskRunner:
             logger.error("Session %s not found for background run", session_id)
             return
 
+        # Session metrics
+        try:
+            _get_tr_metrics().session_active.inc()
+            _get_tr_metrics().session_total.inc()
+        except Exception:
+            pass
+
         try:
             async for event in flow.run(session.context.get("last_prompt", "")):
                 session = session.add_event(event)
@@ -133,6 +149,11 @@ class TaskRunner:
             else:
                 session = session.set_status(SessionStatus.WAITING)
             await self._state_repo.save_session(session)
+        finally:
+            try:
+                _get_tr_metrics().session_active.dec()
+            except Exception:
+                pass
 
     async def resume_session(
         self,
@@ -210,5 +231,6 @@ class TaskRunner:
                 session=session,
                 event_bus=event_bus,
                 model=model,
+                state_repo=self._state_repo,
             )
         return _factory

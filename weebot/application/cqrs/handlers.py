@@ -18,6 +18,7 @@ from weebot.application.cqrs.commands import (
     ArchiveSessionCommand,
     CancelSessionCommand,
     CompactMemoryCommand,
+    SummarizeCommand,
     CreatePlanCommand,
     ExecuteStepCommand,
     ProcessMessageCommand,
@@ -27,15 +28,19 @@ from weebot.application.cqrs.queries import (
     GetSessionQuery,
     GetSessionStatusQuery,
     ListSessionsQuery,
+    GetSessionHistoryQuery,
+    GetPlanQuery,
+    SearchSessionsQuery,
+    GetSimilarSessionsQuery,
+    GetActiveTasksQuery,
 )
 from weebot.application.services.memory_compactor import MemoryCompactor
-
-_T = __import__("weebot.tools.base", fromlist=["ToolCollection"])
+from weebot.application.models.tool_collection import ToolCollection
 
 
 def _empty_tools():
     """Return an empty ToolCollection for handlers that don't need tools."""
-    return _T.ToolCollection()
+    return ToolCollection()
 
 
 if TYPE_CHECKING:
@@ -43,7 +48,6 @@ if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
     from weebot.application.services.task_runner import TaskRunner
-    from weebot.tools.base import ToolCollection
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +105,13 @@ class CreatePlanHandler(CommandHandler):
             final_plan = None
             async for event in planner.create_plan(command.prompt):
                 events.append(event.model_dump())
+                session = session.add_event(event)
                 if isinstance(event, PlanEvent) and event.plan is not None:
                     final_plan = event.plan
+
+            # Persist the updated session so SavePolicyBehavior has
+            # the latest state to save (handler adds events, behavior saves).
+            await self._state_repo.save_session(session)
 
             return CommandResult.ok(
                 data={
@@ -247,8 +256,13 @@ class UpdatePlanHandler(CommandHandler):
             if last_step:
                 async for event in planner.update_plan(plan, last_step):
                     events.append(event.model_dump())
+                    session = session.add_event(event)
                     if isinstance(event, PlanEvent) and event.plan is not None:
                         updated_plan = event.plan
+
+            # Persist the updated session so SavePolicyBehavior has
+            # the latest state to save.
+            await self._state_repo.save_session(session)
 
             return CommandResult.ok(
                 data={
@@ -386,6 +400,33 @@ class ProcessMessageHandler(CommandHandler):
             )
 
 
+class SummarizeHandler(CommandHandler):
+    """Generate a final summary via the executor agent through the mediator."""
+
+    def __init__(self, llm: LLMPort):
+        self._llm = llm
+
+    async def handle(self, command: SummarizeCommand) -> CommandResult:
+        from weebot.application.agents.executor import ExecutorAgent
+
+        try:
+            executor = ExecutorAgent(llm=self._llm)
+            events: list[dict] = []
+            async for event in executor.summarize():
+                events.append(event.model_dump())
+            return CommandResult.ok(
+                data={
+                    "session_id": command.session_id,
+                    "events": events,
+                    "status": "summarized",
+                }
+            )
+        except Exception as exc:
+            return CommandResult.fail(
+                error=str(exc), error_code="SUMMARIZE_ERROR"
+            )
+
+
 class ArchiveSessionHandler(CommandHandler):
     """Archive a completed session."""
 
@@ -401,15 +442,15 @@ class ArchiveSessionHandler(CommandHandler):
                     error_code="SESSION_NOT_FOUND",
                 )
 
+            from datetime import datetime, timezone
+
             # Mark as archived via context flag
             session = session.model_copy(
                 update={
                     "context": {
                         **session.context,
                         "archived": True,
-                        "archived_at": __import__("datetime").datetime.now(
-                            __import__("datetime").timezone.utc
-                        ).isoformat(),
+                        "archived_at": datetime.now(timezone.utc).isoformat(),
                         "archive_ttl_days": command.ttl_days,
                     }
                 }
@@ -430,123 +471,23 @@ class ArchiveSessionHandler(CommandHandler):
 
 
 # ---------------------------------------------------------------------------
-# Query Handlers
+# Query Handlers — imported from handlers/ subdirectory
 # ---------------------------------------------------------------------------
-
-
-class GetSessionHandler(QueryHandler):
-    """Retrieve a session by ID."""
-
-    def __init__(self, state_repo: StateRepositoryPort):
-        self._state_repo = state_repo
-
-    async def handle(self, query: GetSessionQuery) -> QueryResult:
-        try:
-            session = await self._state_repo.load_session(query.session_id)
-            if session is None:
-                return QueryResult.not_found("Session")
-
-            data: dict = {
-                "id": session.id,
-                "user_id": session.user_id,
-                "agent_id": session.agent_id,
-                "status": session.status.value
-                if hasattr(session.status, "value")
-                else str(session.status),
-                "created_at": session.created_at.isoformat()
-                if hasattr(session, "created_at")
-                else None,
-            }
-
-            if query.include_events:
-                data["events"] = [
-                    {
-                        "type": type(e).__name__,
-                        "timestamp": e.timestamp.isoformat()
-                        if hasattr(e, "timestamp")
-                        else None,
-                    }
-                    for e in session.events
-                ]
-
-            return QueryResult.ok(data)
-        except Exception as exc:
-            return QueryResult.fail(str(exc))
-
-
-class ListSessionsHandler(QueryHandler):
-    """List sessions with optional filtering."""
-
-    def __init__(self, state_repo: StateRepositoryPort):
-        self._state_repo = state_repo
-
-    async def handle(self, query: ListSessionsQuery) -> QueryResult:
-        try:
-            sessions = await self._state_repo.list_sessions(
-                user_id=query.user_id,
-                status=query.status,
-                limit=query.limit,
-                offset=query.offset,
-            )
-
-            data = {
-                "sessions": [
-                    {
-                        "id": s.id,
-                        "user_id": s.user_id,
-                        "status": s.status.value
-                        if hasattr(s.status, "value")
-                        else str(s.status),
-                    }
-                    for s in sessions
-                ],
-                "limit": query.limit,
-                "offset": query.offset,
-                "total": len(sessions),
-            }
-            return QueryResult.ok(data)
-        except Exception as exc:
-            return QueryResult.fail(str(exc))
-
-
-class GetSessionStatusHandler(QueryHandler):
-    """Get the status of a session, including active task info."""
-
-    def __init__(
-        self,
-        state_repo: StateRepositoryPort,
-        task_runner: TaskRunner = None,
-    ):
-        self._state_repo = state_repo
-        self._task_runner = task_runner
-
-    async def handle(self, query: GetSessionStatusQuery) -> QueryResult:
-        try:
-            session = await self._state_repo.load_session(query.session_id)
-            if session is None:
-                return QueryResult.not_found("Session")
-
-            data = {
-                "session_id": query.session_id,
-                "status": session.status.value
-                if hasattr(session.status, "value")
-                else str(session.status),
-            }
-
-            if self._task_runner:
-                active = await self._task_runner.list_active_sessions()
-                data["is_active"] = query.session_id in active
-
-            return QueryResult.ok(data)
-        except Exception as exc:
-            return QueryResult.fail(str(exc))
+from weebot.application.cqrs.handlers.query_handlers import (
+    GetSessionHandler,
+    ListSessionsHandler,
+    GetSessionStatusHandler,
+    GetSessionHistoryHandler,
+    GetPlanHandler,
+    SearchSessionsHandler,
+    GetSimilarSessionsHandler,
+    GetActiveTasksHandler,
+)
 
 
 # ---------------------------------------------------------------------------
 # Handler Registration Helper
 # ---------------------------------------------------------------------------
-
-
 def register_default_handlers(
     mediator,
     state_repo: StateRepositoryPort,
@@ -607,6 +548,10 @@ def register_default_handlers(
     mediator.register_command_handler(
         ArchiveSessionCommand, ArchiveSessionHandler(state_repo)
     )
+    if llm is not None:
+        mediator.register_command_handler(
+            SummarizeCommand, SummarizeHandler(llm)
+        )
 
     if task_runner:
         mediator.register_command_handler(
@@ -623,4 +568,21 @@ def register_default_handlers(
     mediator.register_query_handler(
         GetSessionStatusQuery,
         GetSessionStatusHandler(state_repo, task_runner),
+    )
+    mediator.register_query_handler(
+        GetSessionHistoryQuery, GetSessionHistoryHandler(state_repo)
+    )
+    mediator.register_query_handler(
+        GetPlanQuery, GetPlanHandler(state_repo)
+    )
+    mediator.register_query_handler(
+        SearchSessionsQuery, SearchSessionsHandler(state_repo)
+    )
+    mediator.register_query_handler(
+        GetSimilarSessionsQuery, GetSimilarSessionsHandler(state_repo)
+    )
+    mediator.register_query_handler(
+        GetActiveTasksQuery,
+        GetActiveTasksHandler(task_runner) if task_runner
+        else GetActiveTasksHandler(TaskRunner(state_repo=state_repo)),
     )

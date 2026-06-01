@@ -28,19 +28,15 @@ from weebot.application.cqrs.base import (
     QueryResult,
 )
 from weebot.application.cqrs.commands import (
-    AnswerUserCommand,
     ArchiveSessionCommand,
     CancelSessionCommand,
     CompactMemoryCommand,
     CreatePlanCommand,
     ExecuteStepCommand,
+    ProcessMessageCommand,
+    SummarizeCommand,
     UpdatePlanCommand,
-    AskUserCommand,
 )
-try:
-    from weebot.application.cqrs.commands import AnswerUserCommand
-except ImportError:
-    AnswerUserCommand = None
 from weebot.application.cqrs.handlers import (
     ArchiveSessionHandler,
     CancelSessionHandler,
@@ -55,12 +51,12 @@ from weebot.application.cqrs.handlers import (
 )
 from weebot.application.cqrs.mediator import (
     HandlerNotRegisteredError,
-    LoggingBehavior,
     Mediator,
     MediatorError,
-    ValidationBehavior,
-    ValidationGateBehavior,
 )
+from weebot.application.cqrs.behaviors.logging import LoggingBehavior
+from weebot.application.cqrs.behaviors.validation import ValidationBehavior
+from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.queries import (
     GetActiveTasksQuery,
     GetPlanQuery,
@@ -92,8 +88,6 @@ __all__ = [
     "CreatePlanCommand",
     "ExecuteStepCommand",
     "UpdatePlanCommand",
-    "AskUserCommand",
-    "AnswerUserCommand",
     "CompactMemoryCommand",
     "CancelSessionCommand",
     "ArchiveSessionCommand",
