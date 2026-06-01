@@ -11,8 +11,11 @@ Usage:
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 from weebot.application.cqrs.mediator import Mediator, ValidationGateBehavior
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -267,6 +270,7 @@ class Container:
         """Build a PlanActFlow for a sub-agent session (used by DispatchAgentsTool)."""
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.tools.tool_registry import RoleBasedToolRegistry
+        from weebot.config.constants import SUBAGENT_MAX_STEPS
 
         registry = RoleBasedToolRegistry()
         tools = registry.create_tool_collection("admin", llm_port=self._maybe_get(LLMPort))
@@ -276,7 +280,64 @@ class Container:
             state_repo=self._maybe_get(StateRepositoryPort),
             event_bus=self._maybe_get(EventBusPort),
             session=session,
+            max_steps=SUBAGENT_MAX_STEPS,
         )
+
+    # ═══════════════════════════════════════════════════════════════════
+    # Skill Curator bindings
+    # ═══════════════════════════════════════════════════════════════════
+
+    def configure_skill_curator(self) -> None:
+        """Register SkillCurator as a lazily-constructed singleton.
+
+        Call after configure_defaults(). To activate the weekly cron job,
+        also call await _register_curator_job() after the scheduler starts.
+        """
+        self.register("skill_curator", self._create_skill_curator)
+
+    def _create_skill_curator(self):
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from weebot.application.services.skill_curator import SkillCurator
+        from weebot.application.ports.llm_port import LLMPort
+
+        registry = SkillRegistry()
+        llm = self._maybe_get(LLMPort)
+        if llm is None:
+            raise RuntimeError(
+                "LLMPort must be configured before SkillCurator can be created. "
+                "Call configure_defaults() before configure_skill_curator()."
+            )
+        return SkillCurator(registry=registry, llm=llm)
+
+    async def register_curator_job(self, scheduler_db: str = "./weebot_jobs.db") -> None:
+        """Register the SkillCurator as a weekly Sunday 02:00 cron job.
+
+        Must be called after configure_skill_curator() and after the
+        application event loop has started (i.e., inside an async context).
+
+        Args:
+            scheduler_db: Path for APScheduler's SQLite job store.
+        """
+        from weebot.scheduling.scheduler import SchedulingManager
+        from weebot.application.services.skill_curator import SkillCurator
+
+        curator = self.get("skill_curator")
+        mgr = SchedulingManager(db_path=scheduler_db)
+        mgr.register_callable("skill_curation", curator.run_curation)
+
+        existing = await mgr.list_jobs()
+        if not any(j.job_id == "weebot-skill-curator-weekly" for j in existing):
+            await mgr.create_job(
+                job_id="weebot-skill-curator-weekly",
+                name="Weekly Skill Curation",
+                trigger_type="cron",
+                trigger_config={"day_of_week": "sun", "hour": 2, "minute": 0},
+                callable_name="skill_curation",
+                description="Classify and review stale skills weekly.",
+            )
+            logger.info("Registered weekly SkillCurator cron job")
+
+        await mgr.start()
 
     # ═══════════════════════════════════════════════════════════════════
     # SkillOpt bindings

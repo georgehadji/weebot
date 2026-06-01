@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Callable
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
+from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 # Optional caching support
@@ -195,6 +196,9 @@ class ResilientLLMAdapter(LLMPort):
             ) from e
             
         except Exception as e:
+            # Auth errors are unrecoverable — fail fast without circuit recording
+            if ErrorClassifier.should_fail_fast(e):
+                raise
             # Record failure if retryable
             if self._circuit and self._is_retryable_error(e):
                 await self._circuit.record_failure(self._model_name)
@@ -225,27 +229,15 @@ class ResilientLLMAdapter(LLMPort):
         )
     
     def _is_retryable_error(self, exc: Exception) -> bool:
+        """Delegate retry decision to ErrorClassifier.
+
+        AUTH and CONTEXT_LENGTH are not retryable:
+        - AUTH: credentials won't change between retries
+        - CONTEXT_LENGTH: compressor must handle this, not blind retry
+        - UNKNOWN: preserve safe default of not retrying unknown errors
         """
-        Determine if an error warrants retry.
-        
-        Retryable errors:
-        - Timeouts
-        - Connection errors
-        - Rate limiting (429)
-        - Service unavailable (503)
-        - Gateway errors (502, 504)
-        """
-        retryable_patterns = [
-            "timeout", "connection", "rate limit", "temporarily",
-            "503", "502", "504", "429", "too many requests",
-            "service unavailable", "bad gateway", "gateway timeout"
-        ]
-        exc_str = str(exc).lower()
-        exc_type = type(exc).__name__.lower()
-        
-        # Check both message and exception type
-        combined = f"{exc_str} {exc_type}"
-        return any(pattern in combined for pattern in retryable_patterns)
+        cat = ErrorClassifier.classify(exc)
+        return cat not in (ErrorCategory.AUTH, ErrorCategory.CONTEXT_LENGTH, ErrorCategory.UNKNOWN)
     
     def _should_cache(
         self,

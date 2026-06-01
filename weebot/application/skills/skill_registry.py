@@ -87,6 +87,10 @@ class SkillRegistry:
     def get_skill(self, name: str) -> Optional[Skill]:
         return self._skills.get(name)
 
+    def update_skill(self, skill: Skill) -> None:
+        """Insert or replace *skill* in the in-memory registry by name."""
+        self._skills[skill.name] = skill
+
     def list_skills(self) -> List[Skill]:
         return list(self._skills.values())
 

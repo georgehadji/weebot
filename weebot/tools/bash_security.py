@@ -147,8 +147,8 @@ class CommandSecurityAnalyzer:
             return structural
 
         try:
-            from weebot.ai_router import ModelRouter, TaskType
-            router = ModelRouter()
+            from weebot.application.services.model_selection import ModelSelectionService, TaskType
+            router = ModelSelectionService()
 
             system_prompt = (
                 "You are a Senior Security Auditor for a sandboxed terminal environment. "

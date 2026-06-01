@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from weebot.activity_stream import ActivityStream, ActivityEvent
-from weebot.ai_router import ResponseCache
+from weebot.infrastructure.persistence.response_cache import ResponseCache
 from weebot.core.agent_context import AgentContext, EventBroker
 from weebot.state_manager import StateManager, ProjectState, ProjectStatus
 from weebot.application.ports.state_repo_port import StateRepositoryPort

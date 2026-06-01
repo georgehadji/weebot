@@ -34,7 +34,7 @@ class ContextEvent:
 class EventBroker:
     """In-memory pub/sub for agent-to-agent signaling WITH RETRY BACKOFF (Issue #2 Fix)."""
 
-    MAX_HISTORY_SIZE: int = 1000
+    MAX_HISTORY_SIZE: int = 1000  # Centralized in config.constants.MAX_HISTORY_SIZE
 
     def __init__(self, max_retries: int = 3, base_delay: float = 1.0) -> None:
         self._subscriptions: Dict[str, List[asyncio.Queue]] = {}

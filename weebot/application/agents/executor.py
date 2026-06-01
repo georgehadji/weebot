@@ -9,7 +9,13 @@ from collections import deque
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.llm_port import LLMPort, LLMResponse
+from weebot.application.services.conversation_compressor import ConversationCompressor
+from weebot.application.services.step_budget import StepBudget
+from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
+from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE
+from weebot.config.model_refs import MODEL_BUDGET, MODEL_CASCADE_FREE, MODEL_CODE_REVIEW
+from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -65,9 +71,11 @@ class ExecutorAgent:
         tools: ToolCollection,
         event_bus: Optional[EventBusPort] = None,
         model: Optional[str] = None,
-        max_steps: int = 25,
+        max_steps: int = MAX_EXECUTOR_STEPS,
         skill_prompt: Optional[str] = None,
         max_context_turns: int = 15,
+        auto_compress: bool = True,
+        context_window: int = 128_000,
     ):
         self._llm = llm
         self._tools = tools
@@ -80,6 +88,14 @@ class ExecutorAgent:
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
         self._facts: Dict[str, Any] = {}
         self._should_terminate = False
+        # Token tracking + auto-compress
+        self._auto_compress = auto_compress
+        self._context_window = context_window
+        self._total_prompt_tokens: int = 0
+        self._total_completion_tokens: int = 0
+        self._compressor: Optional[ConversationCompressor] = None
+        # Thread-safe step budget
+        self._step_budget = StepBudget(max_steps=max_steps)
 
     @property
     def should_terminate(self) -> bool:
@@ -144,6 +160,113 @@ class ExecutorAgent:
             "Recovery: flow should replan this step or request missing user input."
         )
 
+    _BUDGET_MODEL: str = MODEL_BUDGET
+    _FREE_MODEL: str = MODEL_CASCADE_FREE
+    _REVIEW_MODEL: str = MODEL_CODE_REVIEW
+
+    _REVIEW_KEYWORDS = (
+        "review", "audit", "analyze code", "inspect", "critique",
+        "security audit", "code quality", "refactor analysis"
+    )
+
+    def _is_review_step(self, description: str) -> bool:
+        desc = description.lower()
+        return any(kw in desc for kw in self._REVIEW_KEYWORDS)
+
+    async def _track_usage_and_maybe_compress(self, resp: Any) -> None:
+        """Accumulate real token usage from *resp* and trigger compression if needed."""
+        if resp and resp.usage:
+            self._total_prompt_tokens += resp.usage.get("prompt_tokens", 0)
+            self._total_completion_tokens += resp.usage.get("completion_tokens", 0)
+        await self._maybe_compress()
+
+    async def _maybe_compress(self) -> None:
+        """Summarize the middle of the conversation buffer when approaching context limit."""
+        if not self._auto_compress:
+            return
+        total_tokens = self._total_prompt_tokens + self._total_completion_tokens
+        threshold = int(self._context_window * 0.75)
+        if total_tokens >= threshold and len(self._conversation_buffer) >= 10:
+            logger.info(
+                "Token usage %d >= threshold %d — compressing conversation buffer",
+                total_tokens,
+                threshold,
+            )
+            if self._compressor is None:
+                self._compressor = ConversationCompressor(llm=self._llm)
+            compressed = await self._compressor.compress(list(self._conversation_buffer))
+            self._conversation_buffer.clear()
+            for msg in compressed:
+                self._conversation_buffer.append(msg)
+            # Reset counters post-compaction to avoid immediate re-trigger
+            self._total_prompt_tokens = int(self._total_prompt_tokens * 0.3)
+            self._total_completion_tokens = 0
+
+    @property
+    def token_usage(self) -> Dict[str, int]:
+        """Cumulative real token usage for this executor instance."""
+        return {
+            "prompt_tokens": self._total_prompt_tokens,
+            "completion_tokens": self._total_completion_tokens,
+            "total_tokens": self._total_prompt_tokens + self._total_completion_tokens,
+        }
+
+    async def _call_with_cascade(
+        self, messages: List[Dict[str, Any]], description: str = ""
+    ) -> LLMResponse:
+        """Tiered cascade: free → budget|review → primary (on failure).
+        
+        Code-review steps use Claude Sonnet 4.6 (excels at critique).
+        Other steps use kimi k2.6 (budget generalist).
+        """
+        is_review = self._is_review_step(description)
+        budget_model = self._REVIEW_MODEL if is_review else self._BUDGET_MODEL
+
+        # Attempt 1: FREE tier (no cost)
+        try:
+            resp = await self._llm.chat(
+                messages=messages,
+                tools=self._tools.to_params(),
+                tool_choice="auto",
+                model=self._FREE_MODEL,
+                temperature=TEMPERATURE,
+            )
+            if resp and (resp.content or resp.tool_calls):
+                await self._track_usage_and_maybe_compress(resp)
+                return resp
+        except Exception as exc:
+            if ErrorClassifier.should_fail_fast(exc):
+                raise
+            logger.debug("FREE model failed (%s), trying budget tier: %s", self._FREE_MODEL, exc)
+
+        # Attempt 2: BUDGET or REVIEW model
+        try:
+            resp = await self._llm.chat(
+                messages=messages,
+                tools=self._tools.to_params(),
+                tool_choice="auto",
+                model=budget_model,
+                temperature=TEMPERATURE,
+            )
+            if resp and (resp.content or resp.tool_calls):
+                await self._track_usage_and_maybe_compress(resp)
+                return resp
+        except Exception as exc:
+            if ErrorClassifier.should_fail_fast(exc):
+                raise
+            logger.debug("Budget model failed (%s), falling back to primary: %s", budget_model, exc)
+
+        # Attempt 3: PRIMARY model (always succeeds or raises)
+        resp = await self._llm.chat(
+            messages=messages,
+            tools=self._tools.to_params(),
+            tool_choice="auto",
+            model=self._model,
+            temperature=TEMPERATURE,
+        )
+        await self._track_usage_and_maybe_compress(resp)
+        return resp
+
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -156,6 +279,14 @@ class ExecutorAgent:
         if self._skill_prompt:
             system_prompt = f"{EXECUTOR_SYSTEM_PROMPT}\n\n{self._skill_prompt}"
         self._system_prompt = system_prompt
+        # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
+        try:
+            from weebot.tools.persistent_memory import PersistentMemoryTool
+            snapshot = PersistentMemoryTool.load_snapshot()
+            if snapshot:
+                self._system_prompt = self._system_prompt + "\n\n" + snapshot
+        except Exception as exc:
+            logger.warning("Persistent memory snapshot unavailable: %s", exc)
 
         if not self._conversation_buffer:
             self._conversation_buffer.append({
@@ -177,6 +308,7 @@ class ExecutorAgent:
 
         step_result = ""
         loop_error: Optional[str] = None
+        abort_step = False
         repeated_assistant_turns = 0
         last_assistant_text = ""
         repeated_tool_calls = 0
@@ -184,15 +316,13 @@ class ExecutorAgent:
         recent_tool_signatures: deque[str] = deque(maxlen=6)
         thought_iteration: int = 0
 
-        for _ in range(self._max_steps):
+        self._step_budget.reset()
+        while self._step_budget.consume():
             messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
-            response = await self._llm.chat(
-                messages=messages,
-                tools=self._tools.to_params(),
-                tool_choice="auto",
-                model=self._model,
-                temperature=0.2,
-            )
+            # Cost cascade: try budget model first, fall back to primary on failure.
+            # This saves ~50x tokens on routine calls while keeping premium for
+            # complex reasoning tasks.
+            response = await self._call_with_cascade(messages, description=step.description)
 
             assistant_content = response.content or ""
             assistant_msg: dict = {"role": "assistant", "content": assistant_content}
@@ -292,6 +422,8 @@ class ExecutorAgent:
                     self._should_terminate = True
                     step_result = result.output or "Task completed"
                     yield MessageEvent(role="assistant", message=step_result)
+                    # Refund remaining budget so parent flow tracks accurately
+                    self._step_budget.refund(self._step_budget.remaining)
                     abort_step = True
                     break
 
@@ -303,7 +435,8 @@ class ExecutorAgent:
 
             if abort_step:
                 break
-        else:
+
+        if not abort_step and loop_error is None and self._step_budget.exhausted and not step_result:
             loop_error = self._build_stuck_error(
                 step=step,
                 reason="max step budget reached",

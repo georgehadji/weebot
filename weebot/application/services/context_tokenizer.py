@@ -15,9 +15,9 @@ class ContextTokenizer:
     More accurate than counting characters but faster than real tokenization.
     """
     
-    # Token ratios by content type
-    CHARS_PER_TOKEN = 4
-    CODE_CHARS_PER_TOKEN = 3.5  # Code is more token-efficient
+    # Token ratios by content type.
+    # Single source of truth: weebot/config/constants.py
+    from weebot.config.constants import CHARS_PER_TOKEN, CODE_CHARS_PER_TOKEN
     
     def estimate_session_tokens(self, session: Session) -> int:
         """Estimate total tokens in a session.

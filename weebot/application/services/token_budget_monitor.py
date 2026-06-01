@@ -54,7 +54,8 @@ class TokenBudgetMonitor:
     helping users understand when and why to compact memory.
     """
     
-    CHARS_PER_TOKEN = 4
+    # Single source of truth: weebot/config/constants.py
+    from weebot.config.constants import CHARS_PER_TOKEN
     
     # Max entries per session in _history to prevent unbounded growth.
     _MAX_HISTORY_PER_SESSION = 200

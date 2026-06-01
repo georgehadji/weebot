@@ -33,23 +33,29 @@ class AdapterFactory:
     - LLM_ENABLE_CACHING: Enable response caching (default: false)
     """
     
+    # Default model names sourced from weebot.config.model_refs
+    from weebot.config.model_refs import (
+        MODEL_FACTORY_OPENAI, MODEL_FACTORY_ANTHROPIC,
+        MODEL_FACTORY_DEEPSEEK, MODEL_FACTORY_OPENROUTER,
+    )
+
     # Default configurations per provider
     DEFAULT_CONFIGS: Dict[str, Dict[str, Any]] = {
         "openai": {
             "timeout": 60.0,
-            "default_model": "gpt-4o-mini",
+            "default_model": MODEL_FACTORY_OPENAI,
         },
         "anthropic": {
             "timeout": 90.0,  # Claude can be slower
-            "default_model": "claude-3-5-sonnet-20241022",
+            "default_model": MODEL_FACTORY_ANTHROPIC,
         },
         "deepseek": {
             "timeout": 120.0,  # DeepSeek often has high latency
-            "default_model": "deepseek-chat",
+            "default_model": MODEL_FACTORY_DEEPSEEK,
         },
         "openrouter": {
             "timeout": 90.0,
-            "default_model": "openai/gpt-4o-mini",
+            "default_model": MODEL_FACTORY_OPENROUTER,
         },
     }
     

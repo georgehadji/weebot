@@ -4,6 +4,7 @@ import sys
 import asyncio
 import argparse
 from pathlib import Path
+import structlog
 from dotenv import load_dotenv
 from weebot.config.settings import WeebotSettings
 
@@ -11,6 +12,20 @@ from weebot.config.settings import WeebotSettings
 # Load .env into os.environ so os.getenv() works everywhere.
 # override=True ensures .env takes precedence over stale system env vars
 load_dotenv(override=True)
+
+# Configure structured logging
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.dev.ConsoleRenderer(),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
 # Clear the adapter cache on every startup so stale model names
 # and expired API keys are never reused from a previous run.
@@ -104,7 +119,9 @@ def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill
         model_service = ModelSelectionService()
         # Use a free model by default. Override with --model or env DEFAULT_MODEL.
         import os as _os
-        _default = _os.environ.get("DEFAULT_MODEL", "qwen/qwen3.7-max")
+        # Default model from centralized definition
+        from weebot.config.model_refs import MODEL_BUDGET
+        _default = _os.environ.get("DEFAULT_MODEL", MODEL_BUDGET)
         llm = model_service.create_llm_adapter(model or _default)
         state_repo = SQLiteStateRepository()
         runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False, skill_prompt=skill_prompt)

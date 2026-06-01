@@ -16,7 +16,7 @@ class OpenAIAdapter(LLMPort):
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        default_model: str = "gpt-4o-mini",
+        default_model: str = "gpt-4o-mini",  # see config.model_refs.MODEL_DEFAULT_OPENAI
     ):
         # API key recovery chain
         key = (
@@ -68,6 +68,10 @@ class OpenAIAdapter(LLMPort):
             kwargs["temperature"] = temperature
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        else:
+            # Default cap to stay within OpenRouter free/credit limits.
+            # Raise if your OpenRouter account has more credits, lower for tighter budget.
+            kwargs["max_tokens"] = 16384
 
         response = None
         try:
@@ -79,15 +83,11 @@ class OpenAIAdapter(LLMPort):
             is_openrouter = model_name.startswith("openrouter/") or "/" in model_name
 
             if is_openrouter:
-                fallback_models = [
-                    "openrouter/auto",
-                    "openrouter/openai/gpt-4o-mini",
-                    "deepseek/deepseek-chat",
-                ]
+                from weebot.config.model_refs import MODEL_FALLBACK_OPENROUTER_CHAIN
+                fallback_models = MODEL_FALLBACK_OPENROUTER_CHAIN
             else:
-                fallback_models = [
-                    "gpt-4o-mini",
-                ]
+                from weebot.config.model_refs import MODEL_FALLBACK_NON_OPENROUTER
+                fallback_models = [MODEL_FALLBACK_NON_OPENROUTER]
 
             for fallback_model in fallback_models:
                 if fallback_model == model_name:

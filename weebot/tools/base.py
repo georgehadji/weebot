@@ -1,9 +1,15 @@
 """BaseTool protocol — OpenManus-style function-calling tools for weebot."""
 from __future__ import annotations
+
+import asyncio
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, ConfigDict
+
+from weebot.config.constants import MAX_TOOL_OUTPUT_CHARS
 
 
 @dataclass
@@ -158,8 +164,6 @@ class ToolCollection:
         return [t.to_param() for t in self._tools.values()]
 
     async def execute(self, name: str, **kwargs: Any) -> ToolResult:
-        import time
-        
         if name not in self._tools:
             return ToolResult.error_result(
                 error=f"Unknown tool: {name!r}",
@@ -182,7 +186,20 @@ class ToolCollection:
                     "retry_count": retry_count,
                     "tool_name": name,
                 })
-                
+
+                # Truncate oversized output to prevent context window bloat
+                if result.output and len(result.output) > MAX_TOOL_OUTPUT_CHARS:
+                    original_length = len(result.output)
+                    removed = original_length - MAX_TOOL_OUTPUT_CHARS
+                    result.output = (
+                        result.output[:MAX_TOOL_OUTPUT_CHARS]
+                        + f"\n...[truncated: {removed} chars omitted]"
+                    )
+                    result.metadata["truncated"] = True
+                    result.metadata["original_length"] = original_length
+                else:
+                    result.metadata.setdefault("truncated", False)
+
                 return result
                 
             except Exception as exc:
@@ -198,4 +215,4 @@ class ToolCollection:
                     )
                 
                 # Simple backoff before retry
-                await __import__('asyncio').sleep(0.1 * retry_count)
+                await asyncio.sleep(0.1 * retry_count)

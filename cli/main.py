@@ -843,6 +843,33 @@ def flow_undo(session_id: str) -> None:
     asyncio.run(_run())
 
 
+@flow.command("export")
+@click.argument("session_id")
+@click.option("--output", default=None, help="Output .jsonl file path (default: <session_id>.jsonl)")
+@click.option("--compress", default=None, type=int, help="Compress middle turns to fit this token budget before export")
+def flow_export(session_id: str, output: str | None, compress: int | None) -> None:
+    """Export session events to JSONL for analysis or fine-tuning."""
+    import asyncio
+
+    from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+    from weebot.application.services.trajectory_exporter import TrajectoryExporter
+
+    dest = output or f"{session_id}.jsonl"
+
+    async def _run() -> None:
+        state_repo = SQLiteStateRepository()
+        exporter = TrajectoryExporter(repo=state_repo)
+        try:
+            count = await exporter.export_session(
+                session_id, dest, compress_to_budget=compress
+            )
+            console.print(f"[green]Exported {count} events → {dest}[/green]")
+        except ValueError as exc:
+            console.print(f"[red]Error: {exc}[/red]")
+
+    asyncio.run(_run())
+
+
 # Add behavior commands
 cli.add_command(behavior_cli)
 

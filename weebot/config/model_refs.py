@@ -14,8 +14,8 @@ from __future__ import annotations
 MODEL_BUDGET: str = "moonshotai/kimi-k2.6"
 """Default budget-tier model for interactive mode and executor cascade."""
 
-MODEL_CASCADE_FREE: str = "qwen/qwen3-coder:free"
-"""Free model attempted first in executor cascade (best free coding model)."""
+MODEL_CASCADE_FREE: str = "minimax/minimax-m3"
+"""First-attempt model in executor cascade (1M context, $0.0008/1K)."""
 
 MODEL_CODE_REVIEW: str = "anthropic/claude-sonnet-4.6"
 """Model used for code review tasks (Claude excels at critique/analysis)."""

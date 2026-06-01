@@ -95,7 +95,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         events_data = [e.model_dump() for e in session.events]
 
         # Guard against event bloat: if JSON exceeds limit, keep only recent events
-        MAX_EVENTS_JSON_BYTES = 10 * 1024 * 1024  # 10 MB
+        from weebot.config.constants import MAX_EVENTS_JSON_BYTES
         events_json = json.dumps(events_data, default=str)
         while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
             logger.warning(

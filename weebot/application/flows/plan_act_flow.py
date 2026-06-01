@@ -65,6 +65,7 @@ class PlanActFlow(BaseFlow):
         max_step_repetitions: int = 3,
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
+        max_steps: Optional[int] = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -94,13 +95,16 @@ class PlanActFlow(BaseFlow):
             facts=session.get_facts(),
             episodic_memory=episodic_memory,
         )
-        self._executor = ExecutorAgent(
+        executor_kwargs = dict(
             llm=self._llm,
             tools=self._tools,
             event_bus=self._event_bus,
             model=self._model,
             skill_prompt=skill_prompt,
         )
+        if max_steps is not None:
+            executor_kwargs["max_steps"] = max_steps
+        self._executor = ExecutorAgent(**executor_kwargs)
 
     async def _emit(self, event: AgentEvent) -> None:
         self._session = self._session.add_event(event)

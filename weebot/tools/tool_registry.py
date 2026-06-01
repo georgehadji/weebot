@@ -80,6 +80,8 @@ class RoleBasedToolRegistry:
             "ocr",
             "weather",
             "design_system",
+            "persistent_memory",
+            "mixture_of_agents",
         ],
         "custom": [],  # Custom roles have no default tools
     }
@@ -236,6 +238,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.control import TerminateTool, AskHumanTool
         from weebot.tools.browser_inspector import BrowserInspectorTool
         from weebot.tools.dispatch_agents import DispatchAgentsTool
+        from weebot.tools.persistent_memory import PersistentMemoryTool
+        from weebot.tools.mixture_of_agents import MixtureOfAgentsTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -257,6 +261,8 @@ class RoleBasedToolRegistry:
             "ask_human": AskHumanTool,
             "browser_inspector": BrowserInspectorTool,
             "dispatch_parallel_tasks": DispatchAgentsTool,
+            "persistent_memory": PersistentMemoryTool,
+            "mixture_of_agents": MixtureOfAgentsTool,
         }
         return cls._TOOL_CLASS_MAP
 
@@ -298,11 +304,13 @@ class RoleBasedToolRegistry:
 
         class_map = self._build_tool_class_map()
         tools: list = []
+        # Tools that accept an injected LLMPort via their Pydantic field
+        _llm_port_tools = {"browser_navigator", "mixture_of_agents"}
+
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
-                # Pass llm_port to BrowserTool if provided
-                if name == "browser_navigator" and llm_port is not None:
+                if name in _llm_port_tools and llm_port is not None:
                     tools.append(tool_cls(llm_port=llm_port))
                 else:
                     tools.append(tool_cls())

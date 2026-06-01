@@ -1,13 +1,38 @@
 """weebot: AI Agent Framework for Windows 11."""
-from .agent_core_v2 import WeebotAgent, AgentConfig
-from .ai_router import ModelRouter, TaskType
-from .state_manager import StateManager, ProjectStatus
-from .notifications import NotificationManager
-from .gitnexus_provider import GitNexusProvider, get_gitnexus_provider, enhance_prompt_with_code_context
-from .gitnexus_config import GitNexusConfig, get_gitnexus_config
-from .gitnexus_router import GitNexusRouter, AnalysisMode, get_gitnexus_router
-from .rtk_ai_router import RTKAIRouter, get_rtk_ai_router
-from .rtk_provider import RTKProvider, get_rtk_provider
+# Lazy imports — heavyweight modules are loaded on demand via __getattr__
+# to keep the root namespace fast and prevent transitive layer leaks.
+import typing as _t
+
+
+def __getattr__(name: str) -> _t.Any:
+    _LAZY_MAP = {
+        "WeebotAgent": ".agent_core_v2",
+        "AgentConfig": ".agent_core_v2",
+        "ModelRouter": ".ai_router",
+        "TaskType": ".ai_router",
+        "StateManager": ".state_manager",
+        "ProjectStatus": ".state_manager",
+        "NotificationManager": ".notifications",
+        "GitNexusProvider": ".gitnexus_provider",
+        "get_gitnexus_provider": ".gitnexus_provider",
+        "enhance_prompt_with_code_context": ".gitnexus_provider",
+        "GitNexusConfig": ".gitnexus_config",
+        "get_gitnexus_config": ".gitnexus_config",
+        "GitNexusRouter": ".gitnexus_router",
+        "AnalysisMode": ".gitnexus_router",
+        "get_gitnexus_router": ".gitnexus_router",
+        "RTKProvider": ".rtk_provider",
+        "get_rtk_provider": ".rtk_provider",
+        "RTKAIRouter": ".rtk_ai_router",
+        "get_rtk_ai_router": ".rtk_ai_router",
+    }
+    if name in _LAZY_MAP:
+        import importlib
+        mod = importlib.import_module(_LAZY_MAP[name], __package__)
+        return getattr(mod, name)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
+
 
 __all__ = [
     "WeebotAgent",
