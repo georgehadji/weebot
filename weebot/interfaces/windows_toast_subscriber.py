@@ -15,7 +15,7 @@ class WindowsToastSubscriber:
         self._app_name = app_name
         self._channel = None
         try:
-            from weebot.notifications import WindowsToastChannel
+            from weebot.infrastructure.notifications.notifications import WindowsToastChannel
             self._channel = WindowsToastChannel(app_name=app_name)
         except Exception:
             pass
@@ -25,7 +25,7 @@ class WindowsToastSubscriber:
         if self._channel is None:
             return
 
-        from weebot.notifications import Notification, NotificationLevel
+        from weebot.infrastructure.notifications.notifications import Notification, NotificationLevel
 
         notification: Optional[Notification] = None
 

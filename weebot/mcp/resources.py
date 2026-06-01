@@ -13,7 +13,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from weebot.activity_stream import ActivityStream
+from weebot.core.activity_stream import ActivityStream
 
 _log = logging.getLogger(__name__)
 _INTERNAL_ERROR = "internal_error"

@@ -1,16 +1,17 @@
 """
-State Coordinator - Unifies multiple state management systems
+⚠️ LEGACY MODULE (Bucket D — Freeze)
 
-This module provides a single interface to coordinate between:
-- StateManager (persistent state)
-- AgentContext (in-memory shared context)
-- ActivityStream (event logging)
-- ResponseCache (caching)
+This module is part of the pre-Clean-Architecture legacy track.
+It will not receive new features. Use DI container (Container.get())
+for ActivityStream, ResponseCache, and StateRepositoryPort directly.
 
-The coordinator simplifies access to state management functionality
-while preserving the specialized behavior of each component.
+Migration path: weebot/application/di.py → Container
+Last maintainer audit: 2026-06-01
+Target sunset: 2026-09-01
 """
 from __future__ import annotations
+
+import warnings
 
 import asyncio
 import logging
@@ -18,21 +19,35 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from weebot.activity_stream import ActivityStream, ActivityEvent
+from weebot.core.activity_stream import ActivityStream, ActivityEvent
 from weebot.infrastructure.persistence.response_cache import ResponseCache
 from weebot.core.agent_context import AgentContext, EventBroker
-from weebot.state_manager import StateManager, ProjectState, ProjectStatus
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+
+# Legacy import — kept for type annotation until full migration
+from weebot.state_manager import ProjectState, ProjectStatus
 
 _log = logging.getLogger(__name__)
 
 
+def _create_legacy_state_manager(db_path: str):
+    """Create a legacy StateManager instance.
+
+    Wrapped in a helper so that the direct construction is not inline
+    in __init__, making it easier to remove when StateManager is fully
+    replaced by StateRepositoryPort + LegacyProjectAdapter.
+    """
+    from weebot.state_manager import StateManager
+    return StateManager(db_path=db_path)
+
+
 class StateCoordinator:
     """
-    Coordinates multiple state management systems with a unified interface.
-    
-    This class provides a single entry point for all state-related operations
-    while maintaining the specialized functionality of each underlying system.
+    DEPRECATED — Coordinates multiple state management systems.
+
+    This class is deprecated. Use Container.get() to access
+    ActivityStream, ResponseCache, or StateRepositoryPort directly.
+    Scheduled for removal by 2026-09-01.
     """
     
     def __init__(
@@ -41,9 +56,10 @@ class StateCoordinator:
         cache_dir: Path = Path("cache"),
         activity_buffer_size: int = 200,
         state_repository: Optional[StateRepositoryPort] = None,
+        state_manager: Optional[object] = None,
     ):
         # Initialize all state management systems
-        self.state_manager = StateManager(db_path=db_path)
+        self.state_manager = state_manager or _create_legacy_state_manager(db_path)
         self.state_repository = state_repository
         self.response_cache = ResponseCache(cache_dir=cache_dir)
         self.activity_stream = ActivityStream(max_size=activity_buffer_size)
@@ -87,7 +103,6 @@ class StateCoordinator:
         """Create a root orchestrator context."""
         context = AgentContext.create_orchestrator(
             activity_stream=self.activity_stream,
-            state_manager=self.state_manager,
         )
         self._contexts[context.agent_id] = context
         return context
@@ -198,7 +213,17 @@ _coordinator: Optional[StateCoordinator] = None
 
 
 def get_state_coordinator() -> StateCoordinator:
-    """Get the global state coordinator instance."""
+    """Get the global state coordinator instance.
+
+    DEPRECATED: Use Container.get(ActivityStream) or
+    Container.get(StateRepositoryPort) instead.
+    Scheduled for removal by 2026-09-01.
+    """
+    warnings.warn(
+        "get_state_coordinator() is deprecated. Use DI container directly.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _coordinator
     if _coordinator is None:
         _coordinator = StateCoordinator()

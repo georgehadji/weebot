@@ -193,13 +193,22 @@ class PlannerAgent:
         yield TitleEvent(title=plan.title)
         yield PlanEvent(status=PlanStatus.CREATED, plan=plan.model_dump())
 
-    async def update_plan(self, plan: Plan, completed_step: Step) -> AsyncGenerator[AgentEvent, None]:
+    async def update_plan(self, plan: Plan, completed_step: Step, failure_context: str = "") -> AsyncGenerator[AgentEvent, None]:
+        """Update the plan given the completed step. Optional *failure_context* from the
+        previous execution attempt is injected into the prompt so the LLM can avoid
+        repeating the same blocked/erroneous patterns."""
+        user_content = f"Current plan:\n{plan.model_dump_json()}\n\nCompleted step:\n{completed_step.model_dump_json()}"
+        if failure_context:
+            user_content += (
+                f"\n\nThe previous step failed with: {failure_context[:1000]}\n"
+                "IMPORTANT: Do NOT attempt the same command or pattern. "
+                "If the failure is a security policy block or timeout, redesign the step "
+                "to use a fundamentally different approach (different tool, scoped query, or ask the user)."
+            )
+
         update_memory = [
             {"role": "system", "content": UPDATE_PLAN_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Current plan:\n{plan.model_dump_json()}\n\nCompleted step:\n{completed_step.model_dump_json()}",
-            },
+            {"role": "user", "content": user_content},
         ]
 
         yield MessageEvent(role="assistant", message="Updating plan...")

@@ -1,18 +1,18 @@
 """Event store port — abstract interface for storing and querying events.
 
-Provides an abstraction over the SQLite EventStore so that the trajectory
-pipeline can be tested with an in-memory store.
+Provides an abstraction over the SQLite EventStore so that session event
+logging can be tested with an in-memory store.  Trajectory-related methods
+belong in the TrajectoryRepository, not here — this port covers raw event
+persistence only.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
-
-from weebot.domain.models.trajectory import TrajectorySummary
+from typing import Any
 
 
 class EventStorePort(ABC):
-    """Abstract interface for event persistence."""
+    """Abstract interface for event persistence (log, query, export)."""
 
     @abstractmethod
     async def log_event(
@@ -28,24 +28,15 @@ class EventStorePort(ABC):
         ...
 
     @abstractmethod
-    async def save_trajectory(self, trajectory: TrajectorySummary) -> None:
-        """Persist a scored trajectory for skill optimization."""
-        ...
-
-    @abstractmethod
-    async def get_trajectories_by_skill(
-        self,
-        skill_name: str,
-        skill_version: int,
-        limit: int = 200,
-    ) -> list[TrajectorySummary]:
-        """Retrieve trajectories for a specific skill version."""
-        ...
-
-    @abstractmethod
-    async def get_trajectories_by_session(
+    async def get_session_events(
         self,
         session_id: str,
-    ) -> list[TrajectorySummary]:
-        """Retrieve all trajectories for a session."""
+        event_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get all events for a session, optionally filtered by type."""
+        ...
+
+    @abstractmethod
+    async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
+        """Get cost summary for a session."""
         ...

@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import re
 import subprocess
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, PrivateAttr
 
+from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
-from weebot.sandbox.executor import SandboxedExecutor
+from weebot.core.bash_guard import BashGuard
+from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool, ToolResult
 
 # NEW: Multi-layer security analyzer
@@ -27,22 +29,7 @@ from weebot.security.state_verifier import (
 )
 
 # RTK Integration for token economy
-from weebot.rtk_integration import execute_with_rtk_fallback, RTK_ENABLED, get_rtk_status
-
-if TYPE_CHECKING:
-    from weebot.config.settings import WeebotSettings
-
-# Module-level singleton — parsed once per process instead of per tool instance.
-_SETTINGS: Optional["WeebotSettings"] = None
-
-
-def _get_settings() -> "WeebotSettings":
-    global _SETTINGS
-    if _SETTINGS is None:
-        from weebot.config.settings import WeebotSettings
-        _SETTINGS = WeebotSettings()
-    return _SETTINGS
-
+from weebot.infrastructure.adapters.rtk_integration import execute_with_rtk_fallback, RTK_ENABLED, get_rtk_status
 
 def _wsl_available() -> bool:
     """Return True if WSL2 is installed and responsive on this machine."""
@@ -79,6 +66,7 @@ class BashTool(BaseTool):
     description: str = (
         "Execute a shell command. "
         "Uses PowerShell on Windows (primary) or WSL2 bash (if use_wsl=True). "
+        "Pass 'timeout' in seconds (default: 30, max: MAX_TOOL_TIMEOUT env, ceiling: 300). "
         "Dangerous commands are blocked by multi-layer security analysis. "
         "Destructive commands require user confirmation."
     )
@@ -111,22 +99,26 @@ class BashTool(BaseTool):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _executor: SandboxedExecutor = PrivateAttr(default=None)
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
+    _bash_guard: BashGuard = PrivateAttr(default=None)
     _security_analyzer: CommandSecurityAnalyzer = PrivateAttr(default=None)
     _state_verifier: StateVerifier = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
     _security_enabled: bool = PrivateAttr(default=True)
     _verification_enabled: bool = PrivateAttr(default=True)
+    _sandbox: SandboxPort = PrivateAttr(default=None)
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
 
     def model_post_init(self, __context: object) -> None:
-        """Initialise the sandboxed executor, approval policy, and security analyzer."""
-        settings = _get_settings()
-        self._default_timeout = float(settings.bash_timeout)
-        self._executor = SandboxedExecutor(
-            max_output_bytes=settings.sandbox_max_output_bytes,
+        """Initialise the sandboxed executor, approval policy, and security analyzer.
+
+        Timeout defaults to 30.0 unless set_config() is called.
+        """
+        self._sandbox = NativeWindowsSandbox(
+            config=None,
         )
         self._policy = ExecApprovalPolicy()
+        self._bash_guard = BashGuard()
 
         # NEW: Initialize multi-layer security analyzer
         try:
@@ -155,6 +147,16 @@ class BashTool(BaseTool):
             )
             self._state_verifier = None
             self._verification_enabled = False
+
+    def set_config(self, config: ToolConfig) -> None:
+        """Inject a ToolConfig for settings.
+
+        When set, overrides the default settings loaded from WeebotSettings.
+        """
+        self._tool_config = config
+        self._default_timeout = float(config.bash_timeout)
+        if hasattr(self, '_sandbox') and self._sandbox is not None:
+            self._sandbox = NativeWindowsSandbox()
 
     # LEGACY: Patterns for detecting encoded/obfuscated commands (fallback)
     _ENCODED_COMMAND_PATTERNS = [
@@ -362,12 +364,28 @@ class BashTool(BaseTool):
         Returns:
             ToolResult with combined output on success, or an error message.
         """
-        effective_timeout = timeout if timeout is not None else self._default_timeout
+        # Coerce string timeout (LLMs may pass "90" instead of 90) and apply ceiling
+        try:
+            effective_timeout = float(timeout) if timeout is not None else float(self._default_timeout)
+        except (TypeError, ValueError):
+            effective_timeout = float(self._default_timeout)
+        if self._tool_config is not None:
+            effective_timeout = min(effective_timeout, float(self._tool_config.max_tool_timeout))
 
         # --- Security check: multi-layer analysis (NEW) ---
         is_valid, error_msg = await self._validate_security(command, security_override)
         if not is_valid:
             return ToolResult(output="", error=error_msg)
+
+        # --- BashGuard security (second layer, defense in depth) ---
+        risk_level, checks = self._bash_guard.evaluate(command)
+        from weebot.core.bash_guard import RiskLevel
+        if risk_level == RiskLevel.BLOCKED:
+            reasons = [c.description for c in checks if c.description]
+            return ToolResult(
+                output="",
+                error=f"Command blocked by BashGuard: {'; '.join(reasons)}",
+            )
 
         # --- Safety gate (ExecApprovalPolicy) ---
         approval = self._policy.evaluate(command)
@@ -406,25 +424,14 @@ class BashTool(BaseTool):
             else:
                 return ToolResult(output=stdout)
         else:
-            # --- Build the subprocess command list ---
-            if use_wsl and _wsl_available():
-                cmd = ["wsl", "bash", "-c", command]
-            else:
-                # Use PowerShell with proper escaping for Windows
-                # Using the full path to PowerShell to avoid file not found errors
-                import os
-                system_root = os.environ.get('SystemRoot', 'C:\\Windows')
-                powershell_path = os.path.join(system_root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-
-                # Check if the path exists, otherwise try common locations
-                if not os.path.exists(powershell_path):
-                    import shutil
-                    powershell_path = shutil.which("powershell.exe") or "powershell.exe"
-
-                cmd = [powershell_path, "-NoProfile", "-NonInteractive", "-Command", command]
-
-            # --- Run in sandbox ---
-            result = await self._executor.run(cmd, timeout=effective_timeout, cwd=working_dir)
+            # --- Run in sandbox (always via NativeWindowsSandbox) ---
+            shell_type = "bash" if use_wsl else "powershell"
+            result = await self._sandbox.execute_shell(
+                script=command,
+                shell=shell_type,
+                timeout=effective_timeout,
+                cwd=working_dir,
+            )
 
             if result.timed_out:
                 return ToolResult(

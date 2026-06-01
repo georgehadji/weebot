@@ -270,7 +270,6 @@ class WeebotAgent:
         if context is None:
             context = AgentContext.create_orchestrator(
                 activity_stream=None,
-                state_manager=self.state_manager
             )
 
         # Use factory to spawn child

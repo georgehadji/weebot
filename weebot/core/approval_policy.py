@@ -34,9 +34,9 @@ class ApprovalResult:
 
 # Built-in defaults: destructive → ask, format → deny, rest → auto
 _DEFAULT_RULES: List[CommandRule] = [
-    CommandRule("format", ApprovalMode.DENY,
+    CommandRule(r"\bformat\s+[a-zA-Z]:", ApprovalMode.DENY, is_regex=True,
                 undo_hint="Formatting is irreversible. Use Diskpart carefully."),
-    CommandRule("format-volume", ApprovalMode.DENY,
+    CommandRule(r"\bFormat-Volume\b", ApprovalMode.DENY, is_regex=True,
                 undo_hint="Formatting is irreversible. Use Diskpart carefully."),
     CommandRule("remove-item", ApprovalMode.ALWAYS_ASK,
                 undo_hint="Move to Recycle Bin first: Remove-Item -Confirm"),

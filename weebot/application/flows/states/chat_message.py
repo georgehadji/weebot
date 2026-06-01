@@ -54,17 +54,9 @@ class ChatMessageState(FlowState):
                 return
 
             # Consume events from the mediator result.
-            # Use TypeAdapter (not model_validate) because AgentEvent is
-            # a Union type, not a BaseModel — model_validate raises on Unions.
-            from pydantic import TypeAdapter
-            from weebot.domain.models.event import AgentEvent as AE
-            _ev_adapter = TypeAdapter(AE)
-            for event_dict in cmd_result.data.get("events", []):
-                try:
-                    event = _ev_adapter.validate_python(event_dict)
-                except Exception:
-                    logger.warning("Skipping unparseable event: %s", str(event_dict)[:200])
-                    continue
+            # Consume events via shared reconstructor.
+            from weebot.application.cqrs.event_reconstructor import reconstruct_events
+            for event in reconstruct_events(cmd_result.data.get("events", [])):
                 yield event
 
         else:

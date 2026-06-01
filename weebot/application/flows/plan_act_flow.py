@@ -15,6 +15,7 @@ from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.updating import UpdatingState
 from weebot.application.flows.states.summarizing import SummarizingState
 from weebot.application.flows.states.completed import CompletedState
+from weebot.application.flows.states.base import AgentStatus
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -43,15 +44,6 @@ if TYPE_CHECKING:
     from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 logger = logging.getLogger(__name__)
-
-
-class AgentStatus(str, Enum):
-    IDLE = "idle"
-    PLANNING = "planning"
-    EXECUTING = "executing"
-    UPDATING = "updating"
-    SUMMARIZING = "summarizing"
-    COMPLETED = "completed"
 
 
 class PlanActFlow(BaseFlow):
@@ -128,15 +120,10 @@ class PlanActFlow(BaseFlow):
 
     def set_state(self, state: FlowState) -> None:
         """Change the current flow state."""
-        state_map = {
-            PlanningState: AgentStatus.PLANNING,
-            ExecutingState: AgentStatus.EXECUTING,
-            UpdatingState: AgentStatus.UPDATING,
-            SummarizingState: AgentStatus.SUMMARIZING,
-            CompletedState: AgentStatus.COMPLETED,
-        }
+        # Each FlowState subclass declares its own status class attribute
+        # so adding a new state does not require modifying this method.
         self._state = state
-        self.status = state_map.get(type(state), AgentStatus.IDLE)
+        self.status = getattr(state, "status", AgentStatus.IDLE)
         logger.info("Transition to state: %s", type(state).__name__)
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:

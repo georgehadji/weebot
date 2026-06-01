@@ -8,7 +8,7 @@ This module provides comprehensive error handling with:
 - Production-safe logging
 
 Usage:
-    from weebot.errors import WeebotError, ErrorCode, ErrorSeverity
+    from weebot.core.errors import WeebotError, ErrorCode, ErrorSeverity
     
     raise WeebotError(
         message="Database connection failed",
@@ -18,7 +18,7 @@ Usage:
 """
 
 # Re-export from error system modules
-from weebot.error_system_base import (
+from weebot.core.error_system_base import (
     WeebotError,
     ErrorCode,
     ErrorSeverity,
@@ -29,7 +29,7 @@ from weebot.error_system_base import (
     APIError,
 )
 
-from weebot.error_system_handler import (
+from weebot.core.error_system_handler import (
     ErrorHandler,
     handle_errors,
     handle_async_errors,
@@ -39,7 +39,7 @@ from weebot.error_system_handler import (
     set_error_handler,
 )
 
-from weebot.error_system_user_messages import (
+from weebot.core.error_system_user_messages import (
     get_user_message,
     ErrorTranslator,
     UserErrorCategory,
@@ -48,7 +48,7 @@ from weebot.error_system_user_messages import (
 )
 
 # Security errors
-from weebot.security_validators import (
+from weebot.infrastructure.security.security_validators import (
     SecurityError,
     ValidationError as SecurityValidationError,
     InjectionDetectedError,

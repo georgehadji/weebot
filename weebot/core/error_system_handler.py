@@ -6,7 +6,7 @@ import logging
 from typing import Any, Callable, TypeVar, Optional
 from contextlib import contextmanager
 
-from weebot.error_system_base import WeebotError, ErrorContext, ErrorSeverity, ErrorCode
+from weebot.core.error_system_base import WeebotError, ErrorContext, ErrorSeverity, ErrorCode
 
 
 T = TypeVar('T')

@@ -7,6 +7,7 @@ from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
 from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
 from weebot.tools.base import BaseTool, ToolCollection
@@ -22,6 +23,7 @@ def create_flow(
     model: Optional[str] = None,
     skill_prompt: Optional[str] = None,
     mediator = None,
+    state_repo: Optional[StateRepositoryPort] = None,
 ) -> BaseFlow:
     """Factory for creating agent flows."""
     if flow_type == "plan_act":
@@ -33,6 +35,7 @@ def create_flow(
             model=model,
             skill_prompt=skill_prompt,
             mediator=mediator,
+            state_repo=state_repo,
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

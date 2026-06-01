@@ -17,7 +17,7 @@ import logging
 import aiohttp
 from bs4 import BeautifulSoup
 
-from weebot.multi_source_research import ResearchSource, ResearchSourceType
+from weebot.application.services.multi_source_research import ResearchSource, ResearchSourceType
 
 
 class CredibilityIndicator(Enum):

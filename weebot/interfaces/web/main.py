@@ -9,8 +9,10 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -152,7 +154,58 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
+    # API Key authentication middleware (optional)
+    from weebot.config.settings import WeebotSettings
+    _ws = WeebotSettings()
+    if _ws.weebot_api_key:
+
+        class APIKeyMiddleware(BaseHTTPMiddleware):
+            """Require X-API-Key header for all /api/* routes."""
+
+            async def dispatch(self, request: Request, call_next):
+                # Skip auth for health endpoint and WebSocket test UI
+                if request.url.path in ("/api/health", "/", "/api/prometheus"):
+                    return await call_next(request)
+                # Skip auth for WebSocket upgrade
+                if request.url.path.startswith("/ws"):
+                    return await call_next(request)
+
+                api_key = request.headers.get("X-API-Key")
+                if api_key != _ws.weebot_api_key:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Unauthorized — provide valid X-API-Key header"},
+                    )
+                return await call_next(request)
+
+        app.add_middleware(APIKeyMiddleware)
+        logger.info("API key authentication enabled")
+    else:
+        logger.info("API key authentication disabled (set WEEBOT_API_KEY to enable)")
+
+    # ── Global exception handlers ─────────────────────────────────
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error_code": "HTTP_ERROR", "detail": exc.detail},
+        )
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled exception: %s", exc)
+        # Increment exception counter
+        try:
+            from weebot.infrastructure.observability import metrics as _m
+            _m.exceptions_total.labels(exception_type=type(exc).__name__).inc()
+        except Exception:
+            pass
+        return JSONResponse(
+            status_code=500,
+            content={"error_code": "INTERNAL_ERROR", "detail": "An internal error occurred"},
+        )
+
     # Include routers
     app.include_router(sessions_router, prefix="/api")
     app.include_router(models_router, prefix="/api")

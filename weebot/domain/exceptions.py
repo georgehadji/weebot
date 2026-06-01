@@ -1,28 +1,38 @@
 """Domain exceptions for weebot — zero external dependencies.
 
-This module provides backward compatibility and re-exports from the 
-new error system. New code should use weebot.error_system_base directly.
+Domain layer must remain pure (no imports from core, infrastructure,
+application, interfaces, or tools).  This module defines its own minimal
+exception hierarchy rather than importing from weebot.core.error_system_base.
 """
 
-# Re-export from new error system for backward compatibility
-try:
-    from weebot.error_system_base import (
-        WeebotError as _WeebotError,
-        ErrorCode,
-        ErrorSeverity,
-        ErrorContext,
-    )
-    
-    # Make WeebotError available
-    WeebotError = _WeebotError
-    
-except ImportError:
-    # Fallback if new system not available
-    class WeebotError(Exception):
-        """Base exception for all weebot errors."""
-        def __init__(self, message: str, *args, **kwargs):
-            self.message = message
-            super().__init__(message, *args)
+from enum import Enum
+from typing import Optional
+
+
+class ErrorCode(str, Enum):
+    """Error codes for categorizing domain exceptions."""
+    RESOURCE_EXHAUSTED = "resource_exhausted"
+    SECURITY_VIOLATION = "security_violation"
+    TOOL_EXECUTION_FAILED = "tool_execution_failed"
+    RESOURCE_NOT_FOUND = "resource_not_found"
+    INTERNAL_ERROR = "internal_error"
+    VALIDATION_ERROR = "validation_error"
+
+
+class ErrorSeverity(str, Enum):
+    """Severity levels for domain exceptions."""
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+class WeebotError(Exception):
+    """Base exception for all weebot errors."""
+    def __init__(self, message: str, *args, **kwargs):
+        self.message = message
+        self.code: Optional[ErrorCode] = None
+        self.severity: Optional[ErrorSeverity] = None
+        super().__init__(message, *args)
 
 
 # Legacy exceptions maintained for backward compatibility
@@ -30,31 +40,24 @@ class BudgetExceededError(WeebotError):
     """Raised when daily AI budget is exceeded."""
     def __init__(self, message: str = "Daily AI budget exceeded", **kwargs):
         super().__init__(message, **kwargs)
-        # Try to set code if using new system
-        if hasattr(self, 'code'):
-            from weebot.error_system_base import ErrorCode, ErrorSeverity
-            self.code = ErrorCode.RESOURCE_EXHAUSTED
-            self.severity = ErrorSeverity.WARNING
+        self.code = ErrorCode.RESOURCE_EXHAUSTED
+        self.severity = ErrorSeverity.WARNING
 
 
 class SafetyError(WeebotError):
     """Raised when a safety check fails for a critical operation."""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, **kwargs)
-        if hasattr(self, 'code'):
-            from weebot.error_system_base import ErrorCode, ErrorSeverity
-            self.code = ErrorCode.SECURITY_VIOLATION
-            self.severity = ErrorSeverity.ERROR
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.ERROR
 
 
 class TaskExecutionError(WeebotError):
     """Raised when a task fails after all retries."""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, **kwargs)
-        if hasattr(self, 'code'):
-            from weebot.error_system_base import ErrorCode, ErrorSeverity
-            self.code = ErrorCode.TOOL_EXECUTION_FAILED
-            self.severity = ErrorSeverity.ERROR
+        self.code = ErrorCode.TOOL_EXECUTION_FAILED
+        self.severity = ErrorSeverity.ERROR
 
 
 class ProjectNotFoundError(WeebotError):
@@ -62,20 +65,16 @@ class ProjectNotFoundError(WeebotError):
     def __init__(self, project_id: str, **kwargs):
         super().__init__(f"Project not found: {project_id}", **kwargs)
         self.project_id = project_id
-        if hasattr(self, 'code'):
-            from weebot.error_system_base import ErrorCode, ErrorSeverity
-            self.code = ErrorCode.RESOURCE_NOT_FOUND
-            self.severity = ErrorSeverity.WARNING
+        self.code = ErrorCode.RESOURCE_NOT_FOUND
+        self.severity = ErrorSeverity.WARNING
 
 
 class CheckpointError(WeebotError):
     """Raised for checkpoint-related failures."""
     def __init__(self, message: str, **kwargs):
         super().__init__(message, **kwargs)
-        if hasattr(self, 'code'):
-            from weebot.error_system_base import ErrorCode, ErrorSeverity
-            self.code = ErrorCode.INTERNAL_ERROR
-            self.severity = ErrorSeverity.ERROR
+        self.code = ErrorCode.INTERNAL_ERROR
+        self.severity = ErrorSeverity.ERROR
 
 
 # New security exceptions
@@ -91,6 +90,8 @@ class ValidationException(WeebotError):
 
 # Convenience re-exports
 __all__ = [
+    "ErrorCode",
+    "ErrorSeverity",
     "WeebotError",
     "BudgetExceededError",
     "SafetyError",

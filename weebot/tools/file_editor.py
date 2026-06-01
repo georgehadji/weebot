@@ -1,11 +1,17 @@
 """StrReplaceEditorTool — file view/create/str_replace/insert operations."""
 from __future__ import annotations
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
+from pydantic import PrivateAttr
+
+from weebot.config.tool_config import ToolConfig
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.security_validators import PathValidator, InputSanitizer, ValidationResult
-from weebot.config.settings import WORKSPACE_ROOT
+from weebot.infrastructure.security.security_validators import PathValidator, InputSanitizer, ValidationResult
+
+# Inline workspace root — avoid importing settings at module level.
+# The canonical value is set via ToolConfig DI in production.
+_WORKSPACE_ROOT = "C:\\Users\\Public\\weebot_workspace"
 
 
 class StrReplaceEditorTool(BaseTool):
@@ -59,7 +65,7 @@ class StrReplaceEditorTool(BaseTool):
     def __init__(self, **data):
         super().__init__(**data)
         self._path_validator = PathValidator()
-        self._workspace = WORKSPACE_ROOT.resolve()
+        self._workspace = Path(_WORKSPACE_ROOT).resolve()
 
     async def execute(self, command: str, path: str, **kwargs: Any) -> ToolResult:
         # ============================================================================

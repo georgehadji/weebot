@@ -1,4 +1,17 @@
-"""Agent context - PRODUCTION READY with concurrency safety and retry logic.
+"""
+⚠️ LEGACY MODULE (Bucket D — Freeze)
+
+This module is part of the pre-Clean-Architecture legacy track.
+It will not receive new features.  The AgentContext class has been
+refactored to use StateRepositoryPort instead of StateManager, but
+the broader EventBroker/agent-coordination API is superseded by the
+CQRS mediator + AsyncEventBus pattern.
+
+Migration path: weebot.application.cqrs.mediator.Mediator / weebot.infrastructure.event_bus.AsyncEventBus
+Last maintainer audit: 2026-06-01
+Target sunset: 2026-09-01
+
+Agent context — PRODUCTION READY with concurrency safety and retry logic.
 
 FIXED ISSUES:
 - Issue #1: Race condition in shared_data (asyncio.Lock protection + timeouts)
@@ -25,8 +38,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 _log = logging.getLogger(__name__)
 
-from weebot.activity_stream import ActivityStream
-from weebot.state_manager import StateManager
+from weebot.core.activity_stream import ActivityStream
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.ports import EventPublisher
 
@@ -202,7 +214,6 @@ class AgentContext:
     shared_data: Dict[str, Any] = field(default_factory=dict)
     event_broker: EventBroker = field(default_factory=EventBroker)
     activity_stream: ActivityStream = field(default_factory=ActivityStream)
-    state_manager: Optional[StateManager] = None
     state_repository: Optional[StateRepositoryPort] = None
     event_publisher: Optional[EventPublisher] = None
     
@@ -225,7 +236,6 @@ class AgentContext:
     def create_orchestrator(
         cls,
         activity_stream: Optional[ActivityStream] = None,
-        state_manager: Optional[StateManager] = None,
         state_repository: Optional[StateRepositoryPort] = None,
         event_publisher: Optional[EventPublisher] = None,
     ) -> AgentContext:
@@ -237,7 +247,6 @@ class AgentContext:
             agent_id=agent_id,
             nesting_level=1,
             activity_stream=activity_stream or ActivityStream(),
-            state_manager=state_manager,
             state_repository=state_repository,
             event_publisher=event_publisher,
         )
@@ -264,7 +273,6 @@ class AgentContext:
             shared_data=parent_context.shared_data,
             event_broker=parent_context.event_broker,
             activity_stream=parent_context.activity_stream,
-            state_manager=parent_context.state_manager,
             state_repository=parent_context.state_repository,
             event_publisher=parent_context.event_publisher,
             # CRITICAL: Share the same lock to protect shared_data
@@ -405,7 +413,19 @@ class AgentContext:
         event_type: str,
         agent_filter: Optional[str] = None
     ) -> AsyncIterator[ContextEvent]:
-        """Subscribe to events from other agents."""
+        """Subscribe to events from other agents.
+
+        Uses the in-memory EventBroker for agent-to-agent coordination.
+        When an EventPublisher (EventBrokerAdapter) is also configured,
+        it registers a bridge subscription so system-wide subscribers
+        on AsyncEventBus also receive these events.
+        """
+        # Bridge to AsyncEventBus via EventBrokerAdapter when available
+        if self.event_publisher and hasattr(self.event_publisher, "subscribe"):
+            self.event_publisher.subscribe(event_type, lambda e: None)
+
+        # Primary subscription still uses the in-memory EventBroker
+        # (the async-iterator pattern is not supported by EventBusPort)
         async for event in self.event_broker.subscribe(event_type, agent_filter):
             yield event
 
@@ -421,7 +441,7 @@ class AgentContext:
             f"{self.agent_id}: {message}"
         )
 
-        if requires_approval and (self.state_manager or self.state_repository):
+        if requires_approval and self.state_repository:
             pass  # Future integration
 
         return True

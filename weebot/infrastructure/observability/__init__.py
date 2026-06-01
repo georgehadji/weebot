@@ -10,13 +10,26 @@ from .health_checks import (
     ComponentHealth,
     HealthStatus,
 )
-from .metrics import MetricsCollector, MetricsSnapshot
+from weebot.infrastructure.observability.metrics import (
+    llm_calls_total,
+    tool_calls_total,
+    flow_step_duration_seconds,
+    session_active,
+    session_total,
+    events_published_total,
+    exceptions_total,
+)
 
 __all__ = [
     "HealthCheckService",
     "HealthReport",
     "ComponentHealth",
     "HealthStatus",
-    "MetricsCollector",
-    "MetricsSnapshot",
+    "llm_calls_total",
+    "tool_calls_total",
+    "flow_step_duration_seconds",
+    "session_active",
+    "session_total",
+    "events_published_total",
+    "exceptions_total",
 ]

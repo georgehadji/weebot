@@ -11,7 +11,7 @@ Features:
 - Contextual logging with automatic metadata
 
 Usage:
-    from weebot.structured_logger import StructuredLogger, get_logger
+    from weebot.core.structured_logger import StructuredLogger, get_logger
     
     logger = get_logger("agent.researcher")
     

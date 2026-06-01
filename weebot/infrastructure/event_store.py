@@ -10,6 +10,7 @@ Based on patterns from The Dev Squad and Hyperagent analyses.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -17,6 +18,8 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+from weebot.application.ports.event_store_port import EventStorePort
 
 
 @dataclass
@@ -88,11 +91,11 @@ class SessionInfo:
         }
 
 
-class EventStore:
+class EventStore(EventStorePort):
     """SQLite-based event store for audit logging.
 
-    This class provides persistent storage and retrieval of agent events,
-    with support for cost tracking, querying, and export.
+    Implements EventStorePort using synchronous sqlite3, wrapped with
+    asyncio.to_thread for async compatibility.
 
     Example:
         >>> store = EventStore()
@@ -101,6 +104,39 @@ class EventStore:
         >>> events = store.get_session_events("session-1")
         >>> summary = store.get_cost_summary("session-1")
     """
+
+    # ── EventStorePort async implementation ─────────────────────────
+    async def log_event(
+        self,
+        session_id: str,
+        event_type: str,
+        data: dict[str, Any],
+        cost: float = 0.0,
+        model: str = "",
+        tokens_used: int = 0,
+    ) -> int:
+        """Async wrapper for sync log_event. (EventStorePort implementation)"""
+        return await asyncio.to_thread(
+            self._sync_log_event, session_id, event_type, data, cost, model, tokens_used,
+        )
+
+    async def get_session_events(
+        self,
+        session_id: str,
+        event_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Async wrapper for sync get_session_events. (EventStorePort implementation)"""
+        events = await asyncio.to_thread(
+            self._sync_get_session_events, session_id, event_type,
+        )
+        return [e.to_dict() for e in events]
+
+    async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
+        """Async wrapper for sync get_cost_summary. (EventStorePort implementation)"""
+        summary = await asyncio.to_thread(self._sync_get_cost_summary, session_id)
+        return summary.to_dict()
+
+    # ── Synchronous implementation ───────────────────────────────────
 
     def __init__(self, db_path: str = "~/.weebot/events.db"):
         """Initialize the event store.
@@ -178,7 +214,7 @@ class EventStore:
                 (session_id, user_id),
             )
 
-    def log_event(
+    def _sync_log_event(
         self,
         session_id: str,
         event_type: str,
@@ -219,7 +255,7 @@ class EventStore:
 
             return cursor.lastrowid
 
-    def get_session_events(
+    def _sync_get_session_events(
         self, session_id: str, event_type: Optional[str] = None
     ) -> list[Event]:
         """Get all events for a session.
@@ -261,7 +297,7 @@ class EventStore:
                 for row in rows
             ]
 
-    def get_cost_summary(self, session_id: str) -> CostSummary:
+    def _sync_get_cost_summary(self, session_id: str) -> CostSummary:
         """Get cost summary for a session.
 
         Args:
@@ -470,8 +506,8 @@ class EventStore:
         Returns:
             Exported data as string
         """
-        events = self.get_session_events(session_id)
-        summary = self.get_cost_summary(session_id)
+        events = self._sync_get_session_events(session_id)
+        summary = self._sync_get_cost_summary(session_id)
         session_info = self.get_session_info(session_id)
 
         if format == "json":

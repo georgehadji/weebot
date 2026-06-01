@@ -197,7 +197,7 @@ class Container:
     @staticmethod
     def _create_activity_stream():
         """Create an ActivityStream (was managed by StateCoordinator)."""
-        from weebot.activity_stream import ActivityStream
+        from weebot.core.activity_stream import ActivityStream
         return ActivityStream()
 
     @staticmethod

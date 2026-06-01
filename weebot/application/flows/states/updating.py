@@ -6,7 +6,7 @@ from typing import AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus, StepStatus
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class UpdatingState(FlowState):
     """Handles the updating of the execution plan after a step completes."""
+    status = AgentStatus.UPDATING
 
     async def execute(
         self, context: PlanActFlow, prompt: str
@@ -40,14 +41,25 @@ class UpdatingState(FlowState):
                 return
 
         update_success = False
+        # --- Build failure context for planner ---
+        failure_msg = ""
+        if last_step.status == StepStatus.FAILED and last_step.result:
+            failure_msg = f" | Failure: {str(last_step.result)[:500]}"
+
         # --- CQRS: execute plan update through mediator ---
         if context._mediator:
             from weebot.application.cqrs.commands import UpdatePlanCommand
             cmd_result = await context._mediator.send(
                 UpdatePlanCommand(
                     session_id=context._session.id,
-                    updates={"last_step_id": last_step.id},
-                    reason=f"Step {last_step.id} completed: {last_step.status.value}",
+                    updates={
+                        "last_step_id": last_step.id,
+                        "failure_context": str(last_step.result or ""),
+                    },
+                    reason=(
+                        f"Step {last_step.id} {last_step.status.value}{failure_msg}. "
+                        "Generate a NEW approach that does not repeat the same strategy."
+                    ),
                     model=context._model or "",
                 )
             )
@@ -59,17 +71,9 @@ class UpdatingState(FlowState):
                 return
 
             # Consume events from the mediator result.
-            # Use TypeAdapter (not model_validate) because AgentEvent is
-            # a Union type, not a BaseModel — model_validate raises on Unions.
-            from pydantic import TypeAdapter
-            from weebot.domain.models.event import AgentEvent as AE
-            _ev_adapter = TypeAdapter(AE)
-            for event_dict in cmd_result.data.get("events", []):
-                try:
-                    event = _ev_adapter.validate_python(event_dict)
-                except Exception:
-                    logger.warning("Skipping unparseable event: %s", str(event_dict)[:200])
-                    continue
+            # Consume events via shared reconstructor.
+            from weebot.application.cqrs.event_reconstructor import reconstruct_events
+            for event in reconstruct_events(cmd_result.data.get("events", [])):
                 await context._emit(event)
                 yield event
                 if isinstance(event, PlanEvent) and event.status == PlanStatus.UPDATED:
@@ -82,7 +86,15 @@ class UpdatingState(FlowState):
                 update_success = True
         else:
             # Fallback: direct agent call
-            async for event in context._planner.update_plan(context._plan, last_step):
+            import warnings
+            warnings.warn(
+                "UpdatingState: no mediator, using direct planner call. "
+                "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
+                DeprecationWarning, stacklevel=2,
+            )
+            async for event in context._planner.update_plan(
+                context._plan, last_step, failure_context=str(last_step.result or ""),
+            ):
                 await context._emit(event)
                 yield event
                 if isinstance(event, PlanEvent) and event.status == PlanStatus.UPDATED:

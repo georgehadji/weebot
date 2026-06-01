@@ -5,6 +5,7 @@ natural-language trajectory text and to classify failure/success patterns.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Optional
 
@@ -72,7 +73,7 @@ class TrajectoryBuilder:
                 temperature=0.1,
                 max_tokens=500,
             )
-            analysis = __import__("json").loads(response.content)
+            analysis = json.loads(response.content)
         except Exception as exc:
             logger.warning("Trajectory analysis LLM call failed: %s", exc)
             analysis = {

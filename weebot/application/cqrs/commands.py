@@ -42,24 +42,6 @@ class UpdatePlanCommand(Command):
             raise ValueError("updates is required")
 
 
-class AskUserCommand(Command):
-    """Command to ask the user for input."""
-    session_id: str = Field(min_length=1)
-    question: str = Field(min_length=1)
-    options: list[str] | None = None
-    timeout_seconds: float = 300.0
-
-    def validate(self) -> None:
-        if self.timeout_seconds < 1:
-            raise ValueError("timeout_seconds must be at least 1")
-
-
-class AnswerUserCommand(Command):
-    """Command to provide an answer to a pending user question."""
-    session_id: str = Field(min_length=1)
-    answer: str = Field(min_length=1)
-
-
 class CompactMemoryCommand(Command):
     """Command to compact session memory."""
     session_id: str = Field(min_length=1)
@@ -86,6 +68,11 @@ class ArchiveSessionCommand(Command):
             raise ValueError("ttl_days must be at least 1")
 
 
+class SummarizeCommand(Command):
+    """Command to generate a final summary for a completed session."""
+    session_id: str = Field(min_length=1)
+
+
 class ProcessMessageCommand(Command):
     """Command to process a chat message through the LLM.
 
@@ -109,8 +96,7 @@ class ProcessMessageCommand(Command):
 CreatePlanCommand.model_rebuild()
 ExecuteStepCommand.model_rebuild()
 UpdatePlanCommand.model_rebuild()
-AskUserCommand.model_rebuild()
-AnswerUserCommand.model_rebuild()
+SummarizeCommand.model_rebuild()
 CompactMemoryCommand.model_rebuild()
 CancelSessionCommand.model_rebuild()
 ArchiveSessionCommand.model_rebuild()

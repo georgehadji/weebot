@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 from weebot.core.behavior_tracker import LEDGER_DIR, TRUST_FILE, WEEBOT_DIR, SELF_KNOWLEDGE_FILE
 
-logger = __import__("logging").getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Regex patterns for parsing ledger entries
 ENTRY_HEADER = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]$")

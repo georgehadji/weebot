@@ -6,7 +6,7 @@ from typing import AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus
 from weebot.domain.models.session import SessionStatus
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class CompletedState(FlowState):
     """Final state marking the end of the Plan-Act flow."""
+    status = AgentStatus.COMPLETED
 
     async def execute(
         self, context: PlanActFlow, prompt: str
@@ -31,6 +32,8 @@ class CompletedState(FlowState):
             yield completed
 
         context._session = context._session.set_status(SessionStatus.COMPLETED)
+        if context._state_repo:
+            await context._state_repo.save_session(context._session)
         context._step_execution_counts.clear()  # Reset for next run
         yield DoneEvent()
 

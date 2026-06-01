@@ -2,27 +2,15 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from pydantic import ConfigDict, PrivateAttr
 
+from weebot.application.ports.sandbox_port import SandboxPort, SandboxResult
+from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
-from weebot.sandbox.executor import SandboxedExecutor
+from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool, ToolResult
-
-if TYPE_CHECKING:
-    from weebot.config.settings import WeebotSettings
-
-# Module-level singleton — parsed once per process instead of per tool instance.
-_SETTINGS: Optional["WeebotSettings"] = None
-
-
-def _get_settings() -> "WeebotSettings":
-    global _SETTINGS
-    if _SETTINGS is None:
-        from weebot.config.settings import WeebotSettings
-        _SETTINGS = WeebotSettings()
-    return _SETTINGS
 
 
 class PythonExecuteTool(BaseTool):
@@ -65,18 +53,23 @@ class PythonExecuteTool(BaseTool):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _executor: SandboxedExecutor = PrivateAttr(default=None)
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
+    _sandbox: SandboxPort = PrivateAttr(default=None)
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
 
     def model_post_init(self, __context: object) -> None:
-        """Initialise the sandboxed executor and the approval policy."""
-        settings = _get_settings()
-        self._default_timeout = float(settings.python_timeout)
-        self._executor = SandboxedExecutor(
-            max_output_bytes=settings.sandbox_max_output_bytes,
-        )
+        """Initialise the sandbox and the approval policy.
+
+        Timeout defaults to 30.0 unless set_config() is called.
+        """
+        self._sandbox = NativeWindowsSandbox()
         self._policy = ExecApprovalPolicy()
+
+    def set_config(self, config: ToolConfig) -> None:
+        """Inject a ToolConfig for settings."""
+        self._tool_config = config
+        self._default_timeout = float(config.python_timeout)
 
     async def execute(  # type: ignore[override]
         self,
@@ -112,9 +105,11 @@ class PythonExecuteTool(BaseTool):
                 ),
             )
 
-        # --- Run in isolated subprocess ---
-        cmd = [sys.executable, "-c", code]
-        result = await self._executor.run(cmd, timeout=effective_timeout)
+        # --- Run in isolated subprocess (always via SandboxPort) ---
+        result = await self._sandbox.execute_python(
+            code=code,
+            timeout=effective_timeout,
+        )
 
         if result.timed_out:
             return ToolResult(

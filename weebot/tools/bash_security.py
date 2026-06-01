@@ -251,7 +251,7 @@ class CommandSecurityAnalyzer:
 
         for indicators, targets, description in self._SUSPICIOUS_COMBINATIONS:
             has_indicator = bool(tokens & indicators)
-            has_target = bool(tokens & targets) or bool(operators & {'|', '&&', '||'})
+            has_target = bool(tokens & targets)
 
             if has_indicator and has_target:
                 return SecurityAssessment(

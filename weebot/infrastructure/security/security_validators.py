@@ -94,7 +94,14 @@ class PathValidator:
             ValidationReport with detailed result
         """
         path_str = str(path)
-        
+
+        # Normalize MINGW/Git Bash POSIX drive paths: /c/Users/... → C:\Users\...
+        import re as _re
+        _mingw = _re.match(r'^/([a-zA-Z])/(.*)', path_str)
+        if _mingw:
+            import os as _os
+            path_str = f"{_mingw.group(1).upper()}:{_os.sep}{_mingw.group(2).replace('/', _os.sep)}"
+
         # Check for null bytes
         if "\x00" in path_str:
             return ValidationReport(

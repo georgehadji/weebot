@@ -270,12 +270,16 @@ class RoleBasedToolRegistry:
         self,
         role: str,
         llm_port: Optional[Any] = None,
+        sandbox_port: Optional[Any] = None,
+        tool_config: Optional[Any] = None,
     ) -> "ToolCollection":
         """Create a :class:`ToolCollection` with instantiated tools for *role*.
 
         Args:
             role: Agent role name (must exist in the registry).
             llm_port: Optional LLMPort for tools that support it.
+            sandbox_port: Optional SandboxPort for tools that support it.
+            tool_config: Optional ToolConfig for tools that support it.
 
         Returns:
             ToolCollection populated with ``BaseTool`` instances.
@@ -283,12 +287,18 @@ class RoleBasedToolRegistry:
         from weebot.tools.base import ToolCollection
 
         tool_names = self.get_tools_for_role(role)
-        return self.create_tool_collection_from_names(tool_names, llm_port=llm_port)
+        return self.create_tool_collection_from_names(
+            tool_names, llm_port=llm_port,
+            sandbox_port=sandbox_port,
+            tool_config=tool_config,
+        )
 
     def create_tool_collection_from_names(
         self,
         tool_names: List[str],
         llm_port: Optional[Any] = None,
+        sandbox_port: Optional[Any] = None,
+        tool_config: Optional[Any] = None,
     ) -> "ToolCollection":
         """Create a :class:`ToolCollection` from an explicit list of tool names.
 
@@ -307,13 +317,21 @@ class RoleBasedToolRegistry:
         # Tools that accept an injected LLMPort via their Pydantic field
         _llm_port_tools = {"browser_navigator", "mixture_of_agents"}
 
+        # Tools now initialize with NativeWindowsSandbox directly (no injection needed)
+
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
                 if name in _llm_port_tools and llm_port is not None:
-                    tools.append(tool_cls(llm_port=llm_port))
+                    tool = tool_cls(llm_port=llm_port)
                 else:
-                    tools.append(tool_cls())
+                    tool = tool_cls()
+                # Inject sandbox_port after construction if tool supports it
+                # SandboxPort is initialized directly in model_post_init (no injection needed)
+                # Inject tool_config after construction if tool supports it
+                if tool_config is not None and hasattr(tool, "set_config"):
+                    tool.set_config(tool_config)
+                tools.append(tool)
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)
         return ToolCollection(*tools)

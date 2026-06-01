@@ -6,7 +6,7 @@ from typing import AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, ErrorEvent, WaitForUserEvent
 from weebot.domain.models.plan import StepStatus
 from weebot.domain.models.session import SessionStatus
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
+    status = AgentStatus.EXECUTING
 
     async def execute(
         self, context: PlanActFlow, prompt: str
@@ -86,17 +87,9 @@ class ExecutingState(FlowState):
             # Consume events from the mediator result.
             # inner_facts and inner_should_terminate are already
             # initialised above; the direct-call path fills them in.
-            # Use TypeAdapter (not model_validate) because AgentEvent is
-            # a Union type, not a BaseModel — model_validate raises on Unions.
-            from pydantic import TypeAdapter
-            from weebot.domain.models.event import AgentEvent as AE
-            _ev_adapter = TypeAdapter(AE)
-            for event_dict in cmd_result.data.get("events", []):
-                try:
-                    event = _ev_adapter.validate_python(event_dict)
-                except Exception:
-                    logger.warning("Skipping unparseable event: %s", str(event_dict)[:200])
-                    continue
+            # Consume events via shared reconstructor.
+            from weebot.application.cqrs.event_reconstructor import reconstruct_events
+            for event in reconstruct_events(cmd_result.data.get("events", [])):
                 await context._emit(event)
                 yield event
                 if isinstance(event, WaitForUserEvent):
@@ -108,6 +101,12 @@ class ExecutingState(FlowState):
                     inner_should_terminate = True
         else:
             # Fallback: direct agent call.
+            import warnings
+            warnings.warn(
+                "ExecutingState: no mediator, using direct executor call. "
+                "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
+                DeprecationWarning, stacklevel=2,
+            )
             # Pass prompt as user_input so resume answers reach the LLM.
             async for event in context._executor.execute_step(
                 context._plan, step, user_input=prompt

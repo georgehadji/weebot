@@ -1,4 +1,5 @@
 """Sandboxed code execution for weebot."""
-from weebot.sandbox.executor import ExecutionResult, SandboxedExecutor
+# SandboxedExecutor was merged into NativeWindowsSandbox.
+# All execution now goes through weebot.infrastructure.sandbox.native_windows.NativeWindowsSandbox.
+# This module is retained as a namespace for backward compatibility.
 
-__all__ = ["ExecutionResult", "SandboxedExecutor"]

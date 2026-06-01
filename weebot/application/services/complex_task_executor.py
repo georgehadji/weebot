@@ -27,7 +27,7 @@ from weebot.core.workflow_orchestrator import (
 )
 
 if TYPE_CHECKING:
-    from weebot.strategy_adaptation import StrategyAdapter
+    from weebot.application.services.strategy_adaptation import StrategyAdapter
 
 
 class ComplexTaskStatus(Enum):

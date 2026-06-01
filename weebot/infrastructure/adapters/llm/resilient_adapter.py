@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Callable
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
+from weebot.infrastructure.observability import metrics as _metrics
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 # Optional caching support
@@ -152,6 +153,10 @@ class ResilientLLMAdapter(LLMPort):
                 logger.warning(f"Cache read error: {e}")
         
         # Step 3: Execute with retry and timeout
+        _model_id = model or self._model_name
+        _provider = _model_id.split("/")[0] if "/" in _model_id else "unknown"
+        _start = asyncio.get_event_loop().time()
+
         try:
             if self._retry:
                 response = await self._retry.call(
@@ -174,34 +179,54 @@ class ResilientLLMAdapter(LLMPort):
                     temperature=temperature,
                     max_tokens=max_tokens
                 )
-            
+
+            # Duration & success counter
+            _duration = asyncio.get_event_loop().time() - _start
+            try:
+                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="success").inc()
+                _metrics.llm_call_duration_seconds.labels(model=_model_id, provider=_provider).observe(_duration)
+            except Exception:
+                pass
+
             # Step 4: Record success
             if self._circuit:
                 await self._circuit.record_success(self._model_name)
-            
+
             # Step 5: Cache response
             if cache_key and self._cache:
                 try:
                     await self._cache.set(cache_key, response)
                 except Exception as e:
                     logger.warning(f"Cache write error: {e}")
-            
+
             return response
-            
+
         except asyncio.TimeoutError as e:
             if self._circuit:
                 await self._circuit.record_failure(self._model_name)
+            try:
+                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="timeout").inc()
+            except Exception:
+                pass
             raise LLMTimeoutError(
                 f"Request to {self._model_name} timed out after {self._timeout}s"
             ) from e
-            
+
         except Exception as e:
             # Auth errors are unrecoverable — fail fast without circuit recording
             if ErrorClassifier.should_fail_fast(e):
+                try:
+                    _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="auth_error").inc()
+                except Exception:
+                    pass
                 raise
             # Record failure if retryable
             if self._circuit and self._is_retryable_error(e):
                 await self._circuit.record_failure(self._model_name)
+            try:
+                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="error").inc()
+            except Exception:
+                pass
             raise
     
     async def _execute_with_timeout(

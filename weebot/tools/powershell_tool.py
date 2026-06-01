@@ -8,8 +8,9 @@ from langchain.tools import BaseTool
 from pydantic import Field
 
 # Configuration - import from settings to use consistent workspace
-from weebot.config.settings import WORKSPACE_ROOT
-REQUIRED_PATH_PREFIX = str(WORKSPACE_ROOT)
+# Inline workspace root — avoid importing settings at module level.
+# The canonical value is set via ToolConfig DI in production.
+_WORKSPACE_ROOT = "C:\\Users\\Public\\weebot_workspace"
 
 
 class PowerShellTool(BaseTool):
@@ -23,8 +24,8 @@ class PowerShellTool(BaseTool):
         "system_info": "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory, CsProcessors",
         "processes": "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name, CPU, WorkingSet",
         "network_test": "Test-NetConnection -ComputerName google.com -Port 443 | Select-Object ComputerName, TcpTestSucceeded",
-        "list_workspace": f"Get-ChildItem -Path '{WORKSPACE_ROOT}' -Recurse | Select-Object FullName, Length",
-        "read_logs": f"Get-Content -Path '{WORKSPACE_ROOT}\\error.log' -Tail 20",
+        "list_workspace": f"Get-ChildItem -Path '{_WORKSPACE_ROOT}' -Recurse | Select-Object FullName, Length",
+        "read_logs": f"Get-Content -Path '{_WORKSPACE_ROOT}\\error.log' -Tail 20",
         "reset_browser": "Stop-Process -Name 'msedge' -Force -ErrorAction SilentlyContinue",
         "execution_policy": "Get-ExecutionPolicy",
         "system_events": "Get-EventLog -LogName System -Newest 5 | Select-Object EntryType, Source, Message"
@@ -200,7 +201,7 @@ from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolRe
 
 _POWERSHELL_DESC = (
     f"Execute a PowerShell command on Windows 11. "
-    f"Working directory / workspace root: {WORKSPACE_ROOT}. "
+    f"Working directory / workspace root: {_WORKSPACE_ROOT}. "
     "Accepts optional 'timeout' in seconds (default: 30, max: 300). "
     "Diagnostic shortcuts: system_info, processes, network_test, list_workspace."
 )

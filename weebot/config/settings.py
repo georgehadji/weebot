@@ -36,6 +36,9 @@ class WeebotSettings(BaseSettings):
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
 
+    # Web API Auth
+    weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
+
     # Notifications (optional)
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None

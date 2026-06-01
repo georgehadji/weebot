@@ -320,26 +320,7 @@ def test_no_flat_files_at_root():
     """Only allowed shim files and directories may exist at ``weebot/`` root."""
     allowed_files = {
         "__init__.py",
-        # Deprecated shims from Phase 3
-        "activity_stream.py",
-        "cli_support.py",
-        "complex_task_executor.py",
-        "error_system_base.py",
-        "error_system_handler.py",
-        "error_system_user_messages.py",
-        "external_service_integration.py",
-        "information_synthesis.py",
-        "multi_source_research.py",
-        "nlp_understanding.py",
-        "notifications.py",
-        "notifications_categorizer.py",
-        "rtk_integration.py",
-        "security_validators.py",
-        "source_credibility_assessment.py",
-        "strategy_adaptation.py",
-        "structured_logger.py",
-        "workflow_planner.py",
-        # Other legacy files
+        # Legacy files (Bucket D — frozen, no new features)
         "agent_core_v2.py",
         "agent_selection.py",
         "failure_recovery.py",
@@ -631,16 +612,11 @@ def test_no_settings_import_in_tools():
                         rel = path.relative_to(ROOT.parent)
                         violations.append(f"{rel}: imports WeebotSettings at module level")
 
-    # Known exceptions — ToolConfig migration not yet applied
-    settings_exceptions = {
-        "bash_tool.py",       # has set_config() but retains legacy import
-        "python_tool.py",     # has set_config() but retains legacy import
-        "file_editor.py",     # not yet migrated to ToolConfig
-        "powershell_tool.py",  # not yet migrated to ToolConfig
-    }
+    # NOTE: All tools have been migrated to ToolConfig DI.
+    # If a new tool imports WeebotSettings at module level, add it here
+    # temporarily with a tracking issue link.
     violations = [
         v for v in violations
-        if not any(e in v for e in settings_exceptions)
     ]
 
     assert not violations, (

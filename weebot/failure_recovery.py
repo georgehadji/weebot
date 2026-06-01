@@ -1,7 +1,16 @@
 """
-Automatic Failure Recovery System for Weebot
+⚠️ LEGACY MODULE (Bucket D — Freeze)
 
-This module provides automatic failure detection and recovery capabilities
+This module is part of the pre-Clean-Architecture legacy track.
+It will not receive new features. File issues against weebot.application.*
+for equivalent functionality.
+
+Migration path: weebot.application.services.complex_task_executor (and successors)
+Last maintainer audit: 2026-06-01
+Target sunset: 2026-09-01
+
+Automatic Failure Recovery System for Weebot
+Provides automatic failure detection and recovery capabilities
 to ensure robust task execution and workflow continuity.
 """
 from __future__ import annotations
@@ -19,7 +28,7 @@ from enum import Enum
 from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
 from weebot.core.agent_context import AgentContext
 from weebot.workflow_planner import WorkflowPlan, PlannedTask
-from weebot.complex_task_executor import ComplexTaskResult, ComplexTaskStatus
+from weebot.application.services.complex_task_executor import ComplexTaskResult, ComplexTaskStatus
 
 
 class FailureType(Enum):

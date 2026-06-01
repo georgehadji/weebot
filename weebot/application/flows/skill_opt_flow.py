@@ -25,6 +25,8 @@ from weebot.domain.models.event import (
     SkillEditAccepted,
     SkillEditRejected,
 )
+from weebot.application.cqrs.commands.skill_edit_commands import ApplySkillEditsCommand
+from weebot.domain.models.session import Session
 from weebot.domain.models.skill import Skill
 from weebot.domain.models.trajectory import OptimizationBatch
 if TYPE_CHECKING:
@@ -139,8 +141,7 @@ class SkillOptFlow(BaseFlow):
 
                 # 5. APPLY + VALIDATE — through CQRS mediator
                 result = await self._mediator.send(
-                    __import__("weebot.application.cqrs.commands.skill_edit_commands",
-                               fromlist=["ApplySkillEditsCommand"]).ApplySkillEditsCommand(
+                    ApplySkillEditsCommand(
                         skill_name=self._skill_name,
                         edits=[e.model_dump() for e in ranked],
                         budget=budget,
@@ -254,8 +255,7 @@ class SkillOptFlow(BaseFlow):
             if i >= self._batch_size:
                 break
             # Create a session with the current skill
-            session = __import__("weebot.domain.models.session",
-                                  fromlist=["Session"]).Session(
+            session = Session(
                 id=f"opt-{epoch}-{step}-{i}",
                 user_id="skillopt",
                 agent_id="target-model",

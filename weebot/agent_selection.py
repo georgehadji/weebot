@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import re
-from weebot.nlp_understanding import IntentRecognitionResult, IntentType
-from weebot.workflow_planner import PlannedTask, TaskCategory
+from weebot.application.services.nlp_understanding import IntentRecognitionResult, IntentType
+from weebot.application.flows.workflow_planner import PlannedTask, TaskCategory
 from weebot.core.agent_factory import AgentFactory
 from weebot.core.agent_context import AgentContext
 
@@ -323,8 +323,8 @@ class AgentSelector:
 
 # Example usage
 if __name__ == "__main__":
-    from weebot.nlp_understanding import NaturalLanguageProcessor
-    from weebot.workflow_planner import WorkflowPlanner, TaskCategory
+    from weebot.application.services.nlp_understanding import NaturalLanguageProcessor
+    from weebot.application.flows.workflow_planner import WorkflowPlanner, TaskCategory
     
     # Create dependencies
     processor = NaturalLanguageProcessor()
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     selector.register_agent_profile("writer_1", writer_profile)
     
     # Test with a sample task
-    from weebot.workflow_planner import PlannedTask
+    from weebot.application.flows.workflow_planner import PlannedTask
     
     task = PlannedTask(
         id="task_1",

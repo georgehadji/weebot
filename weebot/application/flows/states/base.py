@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,8 +10,23 @@ if TYPE_CHECKING:
 from weebot.domain.models.event import AgentEvent
 
 
+class AgentStatus(str, Enum):
+    """Status of the Plan-Act flow state machine."""
+    IDLE = "idle"
+    PLANNING = "planning"
+    EXECUTING = "executing"
+    UPDATING = "updating"
+    SUMMARIZING = "summarizing"
+    COMPLETED = "completed"
+
+
 class FlowState(ABC):
     """Abstract base class for all Plan-Act Flow states."""
+
+    # Each subclass overrides this to indicate its position in the
+    # state machine.  Used by PlanActFlow.set_state() instead of a
+    # hardcoded dict.
+    status: AgentStatus = AgentStatus.IDLE
 
     @abstractmethod
     async def execute(

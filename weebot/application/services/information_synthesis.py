@@ -17,8 +17,8 @@ from abc import ABC, abstractmethod
 import re
 from collections import defaultdict
 
-from weebot.multi_source_research import ResearchResult
-from weebot.source_credibility_assessment import CredibilityAssessment, CredibilityScore
+from weebot.application.services.multi_source_research import ResearchResult
+from weebot.application.services.source_credibility_assessment import CredibilityAssessment, CredibilityScore
 
 
 class SynthesisType(Enum):
@@ -773,7 +773,7 @@ if __name__ == "__main__":
         engine = InformationSynthesisEngine()
         
         # Create sample research results (simulated)
-        from weebot.multi_source_research import ResearchSource, ResearchSourceType
+        from weebot.application.services.multi_source_research import ResearchSource, ResearchSourceType
         
         sample_results = [
             ResearchResult(

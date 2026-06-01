@@ -5,7 +5,7 @@ from enum import Enum, auto
 from dataclasses import dataclass
 from typing import Optional
 
-from weebot.error_system_base import WeebotError, ErrorCode, ErrorSeverity
+from weebot.core.error_system_base import WeebotError, ErrorCode, ErrorSeverity
 
 
 class UserErrorCategory(Enum):

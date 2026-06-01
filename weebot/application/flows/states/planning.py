@@ -6,7 +6,7 @@ from typing import AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class PlanningState(FlowState):
     """Handles the creation of the initial execution plan."""
+    status = AgentStatus.PLANNING
 
     async def execute(
         self, context: PlanActFlow, prompt: str
@@ -44,18 +45,9 @@ class PlanningState(FlowState):
                 yield EE(error=f"Plan creation rejected: {cmd_result.error}")
                 return
 
-            # Consume events from the mediator result.
-            # Use TypeAdapter (not model_validate) because AgentEvent is
-            # a Union type, not a BaseModel — model_validate raises on Unions.
-            from pydantic import TypeAdapter
-            from weebot.domain.models.event import AgentEvent as AE
-            _ev_adapter = TypeAdapter(AE)
-            for event_dict in cmd_result.data.get("events", []):
-                try:
-                    event = _ev_adapter.validate_python(event_dict)
-                except Exception:
-                    logger.warning("Skipping unparseable event: %s", str(event_dict)[:200])
-                    continue
+            # Consume events from the mediator result using shared reconstructor.
+            from weebot.application.cqrs.event_reconstructor import reconstruct_events
+            for event in reconstruct_events(cmd_result.data.get("events", [])):
                 await context._emit(event)
                 yield event
                 if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
@@ -67,6 +59,12 @@ class PlanningState(FlowState):
                 context._plan = Plan.model_validate(cmd_result.data["plan"])
         else:
             # Fallback: direct agent call (no mediator available)
+            import warnings
+            warnings.warn(
+                "PlanningState: no mediator, using direct planner call. "
+                "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
+                DeprecationWarning, stacklevel=2,
+            )
             async for event in context._planner.create_plan(prompt):
                 await context._emit(event)
                 yield event

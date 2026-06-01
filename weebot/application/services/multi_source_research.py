@@ -19,7 +19,7 @@ from urllib.parse import urlparse, urljoin
 import re
 
 if TYPE_CHECKING:
-    from weebot.external_service_integration import ServiceRegistry
+    from weebot.infrastructure.external_service_integration import ServiceRegistry
     from weebot.tools.web_search import WebSearchTool
     from weebot.tools.advanced_browser import AdvancedBrowserTool
 

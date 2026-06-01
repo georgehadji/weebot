@@ -57,6 +57,22 @@ class EventBrokerAdapter:
         await self._bus.publish(agent_event)
         return True
 
+    def subscribe(
+        self,
+        event_type: str,
+        handler: Any,
+    ) -> None:
+        """Subscribe to events of a given type via the AsyncEventBus.
+
+        This bridges the old EventBroker.subscribe(event_type=…) API
+        onto the new AsyncEventBus.subscribe_by_type().  The *handler*
+        receives the deserialised AgentEvent subtypes.
+
+        To unsubscribe, call unsubscribe() with the *same handler
+        reference*.
+        """
+        self._bus.subscribe_by_type(event_type, handler)
+
     def _convert(
         self,
         event_type: str,

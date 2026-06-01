@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
+from weebot.tools.advanced_browser import AdvancedBrowserTool
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -273,7 +274,7 @@ class BrowserInspectorTool(BaseTool):
         """Launch browser if needed and navigate to url."""
         if not url:
             return ToolResult.error_result("url is required for 'navigate' action")
-        advanced = __import__("weebot.tools.advanced_browser", fromlist=["AdvancedBrowserTool"]).AdvancedBrowserTool()
+        advanced = AdvancedBrowserTool()
         result = await advanced.execute(action="goto", url=url)
         if result.is_error:
             return result

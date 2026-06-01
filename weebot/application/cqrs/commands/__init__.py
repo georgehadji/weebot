@@ -27,13 +27,13 @@ _spec = _il.util.spec_from_file_location(
 _cmds = _il.util.module_from_spec(_spec)
 _spec.loader.exec_module(_cmds)
 
-AnswerUserCommand = _cmds.AnswerUserCommand
 ArchiveSessionCommand = _cmds.ArchiveSessionCommand
-AskUserCommand = _cmds.AskUserCommand
 CancelSessionCommand = _cmds.CancelSessionCommand
 CompactMemoryCommand = _cmds.CompactMemoryCommand
 CreatePlanCommand = _cmds.CreatePlanCommand
 ExecuteStepCommand = _cmds.ExecuteStepCommand
+ProcessMessageCommand = _cmds.ProcessMessageCommand
+SummarizeCommand = _cmds.SummarizeCommand
 UpdatePlanCommand = _cmds.UpdatePlanCommand
 
 __all__ = [
@@ -41,12 +41,12 @@ __all__ = [
     "BuildOptimizationBatchCommand",
     "ApplySkillEditsCommand",
     "ValidateSkillCommand",
-    "AnswerUserCommand",
     "ArchiveSessionCommand",
-    "AskUserCommand",
     "CancelSessionCommand",
     "CompactMemoryCommand",
     "CreatePlanCommand",
     "ExecuteStepCommand",
+    "ProcessMessageCommand",
+    "SummarizeCommand",
     "UpdatePlanCommand",
 ]

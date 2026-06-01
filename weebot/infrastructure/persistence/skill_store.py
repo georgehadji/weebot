@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -63,9 +64,7 @@ class SkillStore:
                     skill.name,
                     skill.description,
                     skill.model_dump_json(),
-                    __import__("datetime").datetime.now(
-                        __import__("datetime").timezone.utc
-                    ).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ),
             )
             logger.debug("Skill '%s' saved (v%d)", skill.name, skill.current_version)
