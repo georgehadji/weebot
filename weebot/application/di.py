@@ -160,8 +160,8 @@ class Container:
         if llm is not None:
             from weebot.application.models.tool_collection import ToolCollection
             from weebot.tools.bash_tool import BashTool
-            from weebot.tools.file_editor import FileEditorTool
-            from weebot.tools.python_tool import PythonTool
+            from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
+            from weebot.tools.python_tool import PythonExecuteTool as PythonTool
             try:
                 tools = ToolCollection(
                     BashTool(), FileEditorTool(), PythonTool()
@@ -623,6 +623,24 @@ class Container:
                 return 1.0
             return 0.5
         return fallback_scorer
+
+
+    # ── startup validation ──────────────────────────────────────────
+
+    def validate(self) -> list[str]:
+        """Resolve every registered binding to catch misconfiguration early.
+
+        Returns a list of error messages (empty if everything is OK).
+        """
+        errors: list[str] = []
+        for port_type in list(self._bindings.keys()):
+            if isinstance(port_type, str):
+                continue  # string keys are service aliases, not ports
+            try:
+                self.get(port_type)
+            except Exception as exc:
+                errors.append(f"{port_type.__name__}: {exc}")
+        return errors
 
 
 # ── module-level convenience ────────────────────────────────────────

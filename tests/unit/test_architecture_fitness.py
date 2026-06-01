@@ -469,10 +469,8 @@ def test_interfaces_no_infrastructure_adapter_imports():
 # Test 12: No circular imports between application layers
 # ═════════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.skip(reason="Circular import detection is expensive — run separately")
 def test_no_circular_imports():
     """Check for circular imports between major application packages.
-    This test is slow and skipped by default; run it explicitly.
     """
     import sys
     packages = [
