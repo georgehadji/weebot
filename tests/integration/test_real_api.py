@@ -53,13 +53,11 @@ def factory() -> AdapterFactory:
 
 @pytest.fixture
 def adapter(factory: AdapterFactory) -> LLMPort:
-    """OpenRouter adapter — uses free models to keep costs minimal.
+    """OpenRouter adapter using Kimi K2.6.
 
-    ``microsoft/phi-4-mini-instruct`` is a strong free model on OpenRouter.
+    ``moonshotai/kimi-k2-0905`` — Moonshot AI's K2.6 via OpenRouter.
     Retry is disabled for tests to avoid tripping rate limits.
-    API key is loaded from .env directly to avoid pytest ordering issues.
     """
-    # Load key from .env directly — os.getenv may be stale at fixture time
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
         env_path = Path(__file__).resolve().parent.parent.parent / ".env"
@@ -71,7 +69,7 @@ def adapter(factory: AdapterFactory) -> LLMPort:
                     break
     return factory.create_adapter(
         provider="openrouter",
-        model="microsoft/phi-4-mini-instruct",
+        model="moonshotai/kimi-k2-0905",
         api_key=key,
         enable_retry=False,
         enable_circuit_breaker=False,
@@ -162,8 +160,8 @@ async def test_usage_tokens_are_populated(adapter: LLMPort):
 async def test_adapter_caching():
     """Within a single factory, repeated adapter creation returns cached instance."""
     f = AdapterFactory()
-    a1 = f.create_adapter("openrouter", model="microsoft/phi-4-mini-instruct")
-    a2 = f.create_adapter("openrouter", model="microsoft/phi-4-mini-instruct")
+    a1 = f.create_adapter("openrouter", model="moonshotai/kimi-k2-0905")
+    a2 = f.create_adapter("openrouter", model="moonshotai/kimi-k2-0905")
     assert a1 is a2
 
 
