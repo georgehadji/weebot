@@ -9,6 +9,7 @@ When no mediator is configured, falls back to direct agent call.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncGenerator, Optional, TYPE_CHECKING
 
@@ -49,6 +50,7 @@ class ChatFlow(BaseFlow):
         self._done = False
         self._current_state = None
         self._next_state = None
+        self._emit_lock = asyncio.Lock()
 
     def is_done(self) -> bool:
         return self._done
@@ -58,11 +60,12 @@ class ChatFlow(BaseFlow):
 
     async def _emit(self, event: AgentEvent) -> None:
         """Persist and publish an event."""
-        self._session = self._session.add_event(event)
-        if self._state_repo:
-            await self._state_repo.save_session(self._session)
-        if self._event_bus:
-            await self._event_bus.publish(event)
+        async with self._emit_lock:
+            self._session = self._session.add_event(event)
+            if self._state_repo:
+                await self._state_repo.save_session(self._session)
+            if self._event_bus:
+                await self._event_bus.publish(event)
 
     async def run(self, prompt: str = "") -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.chat_message import ChatMessageState

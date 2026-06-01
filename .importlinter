@@ -38,7 +38,8 @@ source_modules = weebot.tools
 forbidden_modules =
     sqlite3
 ignore_imports =
-    # Known technical debt — ToolRepositoryPort created, migration pending Phase 2
+    # Known technical debt — ToolRepositoryPort wired in di.py but 3 tools
+    # still bypass it with direct sqlite3.  Tracked in REMAINING_ARCHITECTURE_FIXES.md §R7.
     weebot.tools.knowledge_tool -> sqlite3
     weebot.tools.product_tool -> sqlite3
     weebot.tools.video_ingest_tool -> sqlite3

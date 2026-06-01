@@ -24,6 +24,7 @@ from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBeha
 from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
+from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.application.ports.sandbox_port import SandboxPort
@@ -115,6 +116,9 @@ class Container:
         # Event Store — append-only audit log
         self.register(EventStorePort, lambda: self._create_event_store())
 
+        # Tool Repository — knowledge/requirements/video persistence
+        self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
+
     # ── high-level builders ─────────────────────────────────────────
 
     def build_agent_runner(
@@ -195,6 +199,14 @@ class Container:
         """Create an ActivityStream (was managed by StateCoordinator)."""
         from weebot.activity_stream import ActivityStream
         return ActivityStream()
+
+    @staticmethod
+    def _create_tool_repo():
+        """Create the default SQLite-backed ToolRepository."""
+        from weebot.infrastructure.persistence.sqlite_tool_repo import (
+            SQLiteToolRepository,
+        )
+        return SQLiteToolRepository()
 
     @staticmethod
     def _create_event_store():

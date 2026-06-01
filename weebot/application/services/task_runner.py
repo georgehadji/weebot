@@ -45,13 +45,17 @@ class TaskRunner:
         event_bus: Optional[EventBusPort] = None,
         archivist: Optional[MemoryArchivist] = None,
         max_pending: int = 100,
+        max_session_retries: int = 2,
     ):
         self._state_repo = state_repo
         self._event_bus = event_bus
         self._archivist = archivist
+        self._max_session_retries = max_session_retries
         self._tasks: Dict[str, asyncio.Task] = {}
         self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending)
         self._worker_task: Optional[asyncio.Task] = None
+        self._retry_counts: Dict[str, int] = {}  # session_id -> attempts remaining
+        self._flow_factories: Dict[str, FlowFactory] = {}  # session_id -> factory for retries
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
@@ -75,17 +79,25 @@ class TaskRunner:
         """Internal direct task creation (bypasses queue)."""
         session = session.set_status(SessionStatus.RUNNING)
         await self._state_repo.save_session(session)
+        session_id = session.id
+
+        # Record the factory so _run_flow can retry on failure
+        self._flow_factories[session_id] = flow_factory
+        if session_id not in self._retry_counts:
+            self._retry_counts[session_id] = self._max_session_retries
 
         task = asyncio.create_task(
-            self._run_flow(session.id, flow_factory(session)),
-            name=f"weebot-session-{session.id}",
+            self._run_flow(session_id, flow_factory(session)),
+            name=f"weebot-session-{session_id}",
         )
-        self._tasks[session.id] = task
+        self._tasks[session_id] = task
 
         def _cleanup(t: asyncio.Task) -> None:
-            self._tasks.pop(session.id, None)
+            self._tasks.pop(session_id, None)
+            self._flow_factories.pop(session_id, None)
+            self._retry_counts.pop(session_id, None)
             if t.exception():
-                logger.error("Session %s failed: %s", session.id, t.exception())
+                logger.error("Session %s failed: %s", session_id, t.exception())
 
         task.add_done_callback(_cleanup)
         return session
@@ -133,6 +145,22 @@ class TaskRunner:
                     await self._event_bus.publish(event)
         except Exception as exc:
             logger.exception("Flow failed for session %s", session_id)
+            # Session-level retry: requeue with exponential backoff
+            remaining = self._retry_counts.get(session_id, 0)
+            if remaining > 0:
+                self._retry_counts[session_id] = remaining - 1
+                backoff = 5.0 * (2 ** (self._max_session_retries - remaining))
+                logger.info(
+                    "Retrying session %s in %.0fs (%d retries remaining)",
+                    session_id, backoff, remaining - 1,
+                )
+                await asyncio.sleep(backoff)
+                factory = self._flow_factories.get(session_id)
+                if factory:
+                    reloaded = await self._state_repo.load_session(session_id)
+                    if reloaded:
+                        await self._start_direct(reloaded, factory)
+                        return
             session = session.set_status(SessionStatus.FAILED)
             await self._state_repo.save_session(session)
         else:

@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from collections import deque
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -33,7 +34,11 @@ from weebot.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
 
-EXECUTOR_SYSTEM_PROMPT = """You are an execution agent. You have access to tools.
+# EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
+# An inline fallback is kept for environments where the file is not available.
+_EXECUTOR_SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "executor_system.txt"
+
+_EXECUTOR_SYSTEM_PROMPT_FALLBACK = """You are an execution agent. You have access to tools.
 Your job is to execute ONE step from a larger plan. Do not try to complete the entire task in one go.
 
 IMPORTANT RULES:
@@ -72,6 +77,16 @@ EFFICIENCY:
 
 You will be called repeatedly for each step. Focus only on the current step and wait for the next one.
 """
+
+
+def _load_executor_system_prompt() -> str:
+    """Load the executor system prompt from a file, falling back to inline constant."""
+    try:
+        if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
+            return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
 
 # ── Policy-error-loop detection constants (Fix 5) ──
 _MAX_SAME_ERROR_CLASS = 3
@@ -310,9 +325,9 @@ class ExecutorAgent:
         consecutive_error_class_counts: dict[str, int] = {}
         last_error_class: Optional[str] = None
 
-        system_prompt = EXECUTOR_SYSTEM_PROMPT
+        system_prompt = _load_executor_system_prompt()
         if self._skill_prompt:
-            system_prompt = f"{EXECUTOR_SYSTEM_PROMPT}\n\n{self._skill_prompt}"
+            system_prompt = f"{system_prompt}\n\n{self._skill_prompt}"
         self._system_prompt = system_prompt
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
         try:
@@ -623,7 +638,7 @@ class ExecutorAgent:
             "role": "user",
             "content": summary_prompt,
         })
-        system_prompt = self._system_prompt or EXECUTOR_SYSTEM_PROMPT
+        system_prompt = self._system_prompt or _load_executor_system_prompt()
         messages = [{"role": "system", "content": system_prompt}] + list(self._conversation_buffer)
         response = await self._llm.chat(
             messages=messages,

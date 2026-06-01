@@ -1,6 +1,7 @@
 """Plan-Act flow — core state machine for autonomous task execution."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from enum import Enum
 from typing import AsyncGenerator, Optional, TYPE_CHECKING
@@ -68,6 +69,7 @@ class PlanActFlow(BaseFlow):
         mediator: Optional[Mediator] = None,
         state_repo: Optional[StateRepositoryPort] = None,
         max_step_repetitions: int = 3,
+        max_iterations: int = 50,
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
         max_steps: Optional[int] = None,
@@ -89,7 +91,9 @@ class PlanActFlow(BaseFlow):
         self._max_step_repetitions = max_step_repetitions
         self._auto_terminate_on_plan_complete = auto_terminate_on_plan_complete
         self._context_aware_model_selection = context_aware_model_selection
+        self._max_iterations = max_iterations
         self._step_execution_counts: dict[str, int] = {}  # Track step repetitions
+        self._emit_lock = asyncio.Lock()
 
         self._skill_prompt = skill_prompt
         self._planner = PlannerAgent(
@@ -112,11 +116,12 @@ class PlanActFlow(BaseFlow):
         self._executor = ExecutorAgent(**executor_kwargs)
 
     async def _emit(self, event: AgentEvent) -> None:
-        self._session = self._session.add_event(event)
-        if self._event_bus:
-            await self._event_bus.publish(event)
-        if self._state_repo:
-            await self._state_repo.save_session(self._session)
+        async with self._emit_lock:
+            self._session = self._session.add_event(event)
+            if self._event_bus:
+                await self._event_bus.publish(event)
+            if self._state_repo:
+                await self._state_repo.save_session(self._session)
 
     def is_done(self) -> bool:
         return self._session.status == SessionStatus.COMPLETED
@@ -144,7 +149,9 @@ class PlanActFlow(BaseFlow):
         if not original_task and prompt.strip():
             original_task = prompt.strip()
             self._session = self._session.model_copy(
-                update={"context": {**self._session.context, "_original_task": original_task}}
+                update={"context": self._session.context.model_copy(
+                    update={"original_task": original_task}
+                )}
             )
 
         # Resolve effective prompt — enrich vague continuations via service
@@ -167,7 +174,7 @@ class PlanActFlow(BaseFlow):
         else:
             self.set_state(PlanningState())
 
-        max_iterations = 50  # Prevent infinite loops
+        max_iterations = self._max_iterations
         iteration_count = 0
 
         while iteration_count <= max_iterations:
