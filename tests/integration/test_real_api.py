@@ -1,10 +1,10 @@
-"""Integration tests — real LLM API calls (DeepSeek).
+"""Integration tests — real OpenRouter API calls.
 
 Verifies that the LLM adapter stack (AdapterFactory → ResilientLLMAdapter →
-DeepSeekAdapter) correctly sends requests to the DeepSeek API and returns valid
-responses.
+OpenRouterAdapter) correctly sends requests to the OpenRouter API and returns
+valid responses.
 
-These tests require a valid DEEPSEEK_API_KEY in the environment or .env file.
+These tests require a valid OPENROUTER_API_KEY in the environment or .env file.
 They are marked with ``@pytest.mark.real_api`` so they can be selected or
 excluded independently.
 
@@ -14,6 +14,7 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -24,39 +25,16 @@ from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Load .env
-# ═════════════════════════════════════════════════════════════════════════════
-
-def _load_dotenv() -> None:
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip()
-        if value.startswith('"') and value.endswith('"'):
-            value = value[1:-1]
-        # Always set – force override any stale pytest session values
-        if key:
-            os.environ[key] = value
-
-_load_dotenv()
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# Skip markers
+# Skip marker
 # ═════════════════════════════════════════════════════════════════════════════
 
 _real_api_reason: str | None = None
-if not os.getenv("DEEPSEEK_API_KEY"):
-    _real_api_reason = "DEEPSEEK_API_KEY not set"
+if not os.getenv("OPENROUTER_API_KEY"):
+    _real_api_reason = "OPENROUTER_API_KEY not set"
 
-needs_deepseek = pytest.mark.skipif(
+needs_router = pytest.mark.skipif(
     _real_api_reason is not None,
-    reason=_real_api_reason or "DEEPSEEK_API_KEY not set",
+    reason=_real_api_reason or "OPENROUTER_API_KEY not set",
 )
 
 
@@ -67,7 +45,7 @@ needs_deepseek = pytest.mark.skipif(
 
 @pytest.fixture(scope="function")
 def factory() -> AdapterFactory:
-    """Fresh factory per test — avoid cached adapter from prior tests."""
+    """Fresh factory per test to avoid cached adapters across tests."""
     f = AdapterFactory()
     f.clear_cache()
     return f
@@ -75,16 +53,15 @@ def factory() -> AdapterFactory:
 
 @pytest.fixture
 def adapter(factory: AdapterFactory) -> LLMPort:
-    """DeepSeek adapter.
+    """OpenRouter adapter — uses free models to keep costs minimal.
 
-    deepseek-chat routes to deepseek-v4-flash (fast, free-tier compatible).
-    Retry is disabled to avoid tripping API rate limits on the free tier.
-    API key is passed explicitly to avoid dotenv/pytest ordering issues.
+    ``microsoft/phi-4-mini-instruct`` is a strong free model on OpenRouter.
+    Retry is disabled for tests to avoid tripping rate limits.
     """
     return factory.create_adapter(
-        provider="deepseek",
-        model="deepseek-chat",
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        provider="openrouter",
+        model="microsoft/phi-4-mini-instruct",
+        api_key=os.getenv("OPENROUTER_API_KEY"),
         enable_retry=False,
         enable_circuit_breaker=False,
     )
@@ -96,7 +73,7 @@ def adapter(factory: AdapterFactory) -> LLMPort:
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_simple_chat_returns_content(adapter: LLMPort):
     response = await adapter.chat(
@@ -108,7 +85,7 @@ async def test_simple_chat_returns_content(adapter: LLMPort):
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_multi_turn_conversation(adapter: LLMPort):
     messages = [
@@ -122,7 +99,7 @@ async def test_multi_turn_conversation(adapter: LLMPort):
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_system_prompt_influences_response(adapter: LLMPort):
     messages = [
@@ -135,10 +112,9 @@ async def test_system_prompt_influences_response(adapter: LLMPort):
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_json_response_mode(adapter: LLMPort):
-    import json
     response = await adapter.chat(
         messages=[
             {"role": "system", "content": "Respond only with valid JSON."},
@@ -157,7 +133,7 @@ async def test_json_response_mode(adapter: LLMPort):
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_usage_tokens_are_populated(adapter: LLMPort):
     response = await adapter.chat(
@@ -169,18 +145,18 @@ async def test_usage_tokens_are_populated(adapter: LLMPort):
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_adapter_caching():
     """Within a single factory, repeated adapter creation returns cached instance."""
     f = AdapterFactory()
-    a1 = f.create_adapter("deepseek", model="deepseek-chat")
-    a2 = f.create_adapter("deepseek", model="deepseek-chat")
+    a1 = f.create_adapter("openrouter", model="microsoft/phi-4-mini-instruct")
+    a2 = f.create_adapter("openrouter", model="microsoft/phi-4-mini-instruct")
     assert a1 is a2
 
 
 @pytest.mark.real_api
-@needs_deepseek
+@needs_router
 @pytest.mark.asyncio
 async def test_long_prompt_handled(adapter: LLMPort):
     long_text = "The quick brown fox jumps over the lazy dog. " * 50
