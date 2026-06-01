@@ -94,8 +94,14 @@ class TaskRunner:
 
         def _cleanup(t: asyncio.Task) -> None:
             self._tasks.pop(session_id, None)
-            self._flow_factories.pop(session_id, None)
-            self._retry_counts.pop(session_id, None)
+            # Only clean up retry state when no more retries are expected.
+            # If _retry_counts > 0, a retry task is in-flight and owns the
+            # count; popping here would kill the retry task's counter
+            # before it can read it, leaving it with 0 retries remaining.
+            remaining = self._retry_counts.get(session_id, 0)
+            if remaining <= 0:
+                self._flow_factories.pop(session_id, None)
+                self._retry_counts.pop(session_id, None)
             if t.exception():
                 logger.error("Session %s failed: %s", session_id, t.exception())
 
@@ -149,8 +155,6 @@ class TaskRunner:
                 flow_has_bus = getattr(flow, "_event_bus", None) is not None
                 if self._event_bus and not flow_has_bus:
                     await self._event_bus.publish(event)
-                # (comment block ends — the line above is the only publish call)
-                # Prometheus counts, double notification triggers).
         except Exception as exc:
             logger.exception("Flow failed for session %s", session_id)
             # Session-level retry: requeue with exponential backoff
