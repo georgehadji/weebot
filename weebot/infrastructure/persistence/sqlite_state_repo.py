@@ -126,7 +126,7 @@ class SQLiteStateRepository(StateRepositoryPort):
                     "status": session.status.value,
                     "title": session.title,
                     "events_json": events_json,
-                    "context_json": json.dumps(session.context, default=str),
+                    "context_json": json.dumps(session.context.model_dump(mode="json")),
                     "created_at": session.created_at.isoformat(),
                     "updated_at": session.updated_at.isoformat(),
                 },
@@ -299,7 +299,7 @@ class SQLiteStateRepository(StateRepositoryPort):
             status=SessionStatus(row["status"]),
             title=row["title"],
             events=events,
-            context=json.loads(row["context_json"] or "{}"),
+            context=json.loads(row["context_json"] or "{}") if row["context_json"] and row["context_json"] != "null" else {},
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )

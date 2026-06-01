@@ -136,6 +136,21 @@ class Session(BaseModel):
 
     _memory_index: SessionMemory = PrivateAttr(default_factory=SessionMemory)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _fix_broken_context(cls, data: Any) -> Any:
+        """Repair sessions saved with the broken json.dumps(context, default=str).
+
+        Before fix: json.dumps(session.context, default=str) produced a repr
+        string like \"skill_name='' ...\" instead of valid JSON.  These sessions
+        have context_json containing a str instead of a dict.
+        """
+        if isinstance(data, dict) and isinstance(data.get("context"), str):
+            # Broken serialization — context is a repr string.  Return an
+            # empty context so the session loads without crashing.
+            data["context"] = {}
+        return data
+
     def add_event(self, event: AgentEvent) -> "Session":
         events = list(self.events)
         events.append(event)
@@ -214,4 +229,12 @@ class Session(BaseModel):
         return self.context.facts.get(key, default)
 
     def get_facts(self) -> dict[str, Any]:
-        return dict(self.context.facts)
+        try:
+            return dict(self.context.facts)
+        except AttributeError:
+            # Old sessions may have context stored as plain dict from
+            # the broken json.dumps(..., default=str) serialization.
+            ctx = self.context
+            if isinstance(ctx, dict):
+                return dict(ctx.get("facts", {}))
+            return {}
