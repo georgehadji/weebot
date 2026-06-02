@@ -16,7 +16,7 @@ class OpenRouterAdapter(OpenAIAdapter):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "openrouter/auto",
+        default_model: str = "moonshotai/kimi-k2.6",
         http_referer: Optional[str] = None,
         x_title: Optional[str] = None,
     ):

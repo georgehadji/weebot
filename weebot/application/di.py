@@ -22,7 +22,7 @@ from weebot.application.cqrs.handlers import register_default_handlers
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.mediator import Mediator
-from weebot.config.model_refs import MODEL_DI_FALLBACK
+from weebot.config.model_refs import MODEL_DI_DEFAULT
 from weebot.config.model_registry import ModelProvider
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort

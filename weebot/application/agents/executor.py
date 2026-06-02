@@ -15,7 +15,7 @@ from weebot.application.services.conversation_compressor import ConversationComp
 from weebot.application.services.step_budget import StepBudget
 from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
 from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE
-from weebot.config.model_refs import MODEL_BUDGET, MODEL_CASCADE_FREE, MODEL_CODE_REVIEW
+from weebot.config.model_refs import MODEL_BUDGET, MODEL_CASCADE_FREE, MODEL_CODE_REVIEW, MODEL_PRIMARY
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.domain.models.event import (
     AgentEvent,
@@ -206,8 +206,9 @@ class ExecutorAgent:
             "Recovery: flow should replan this step or request missing user input."
         )
 
-    _BUDGET_MODEL: str = MODEL_BUDGET
     _FREE_MODEL: str = MODEL_CASCADE_FREE
+    _BUDGET_MODEL: str = MODEL_BUDGET
+    _PRIMARY_MODEL: str = MODEL_PRIMARY
     _REVIEW_MODEL: str = MODEL_CODE_REVIEW
 
     _REVIEW_KEYWORDS = (
@@ -302,12 +303,12 @@ class ExecutorAgent:
                 raise
             logger.debug("Budget model failed (%s), falling back to primary: %s", budget_model, exc)
 
-        # Attempt 3: PRIMARY model (always succeeds or raises)
+        # Attempt 3: PRIMARY model — best quality, highest cost
         resp = await self._llm.chat(
             messages=messages,
             tools=self._tools.to_params(),
             tool_choice="auto",
-            model=self._model,
+            model=self._model or self._PRIMARY_MODEL,
             temperature=TEMPERATURE,
         )
         await self._track_usage_and_maybe_compress(resp)
