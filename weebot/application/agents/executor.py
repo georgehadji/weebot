@@ -126,6 +126,7 @@ class ExecutorAgent:
         max_context_turns: int = 15,
         auto_compress: bool = True,
         context_window: int = 128_000,
+        skill_retriever=None,  # SkillRetrieverPort (Tier 1.2)
     ):
         self._llm = llm
         self._tools = tools
@@ -133,6 +134,8 @@ class ExecutorAgent:
         self._model = model
         self._max_steps = max_steps
         self._skill_prompt = skill_prompt
+        self._skill_retriever = skill_retriever
+        self._trajectory_monitor = None  # lazy-created in execute_step
         self._max_context_turns = max_context_turns
         self._system_prompt: Optional[str] = None
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
@@ -386,6 +389,22 @@ class ExecutorAgent:
         system_prompt = _load_executor_system_prompt()
         if self._skill_prompt:
             system_prompt = f"{system_prompt}\n\n{self._skill_prompt}"
+
+        # ── Tier 1.2: BM25 Skill Retrieval — inject relevant skills ──
+        if self._skill_retriever is not None:
+            try:
+                matches = await self._skill_retriever.retrieve(
+                    step.description, top_k=2
+                )
+                for m in matches:
+                    if m.score > 0.15:  # Only inject meaningfully relevant skills
+                        system_prompt += (
+                            f"\n\n## Relevant Skill: {m.skill_name}\n"
+                            f"{m.content_preview}"
+                        )
+            except Exception as exc:
+                logger.warning("Skill retrieval failed: %s", exc)
+
         self._system_prompt = system_prompt
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
         try:
@@ -449,6 +468,10 @@ class ExecutorAgent:
         thought_iteration: int = 0
         tool_calls_attempted: int = 0
         tool_calls_succeeded: int = 0
+
+        # ── Tier 1.3: TrajectoryMonitor ──
+        from weebot.application.services.trajectory_monitor import TrajectoryMonitor
+        self._trajectory_monitor = TrajectoryMonitor()
 
         self._step_budget.reset()
         while self._step_budget.consume():
@@ -536,6 +559,28 @@ class ExecutorAgent:
                 tool_calls_attempted += 1
                 if not result.is_error:
                     tool_calls_succeeded += 1
+
+                # ── Tier 1.3: TrajectoryMonitor — detect degenerate patterns ──
+                if self._trajectory_monitor is not None:
+                    diagnosis = self._trajectory_monitor.diagnose(
+                        step_id=step.id,
+                        tool_signature=signature,
+                        tool_output=result.output if not result.is_error else None,
+                        step_result=step_result if step_result else None,
+                        total_budget=self._max_steps,
+                        used_budget=tool_calls_attempted,
+                    )
+                    if diagnosis.recovery_message:
+                        # Inject recovery into conversation buffer so the LLM
+                        # sees it on the next iteration
+                        self._conversation_buffer.append({
+                            "role": "system",
+                            "content": f"[RECOVERY] {diagnosis.recovery_message}",
+                        })
+                        logger.warning(
+                            "Trajectory %s for step %s: %s",
+                            diagnosis.health.value, step.id, diagnosis.detail,
+                        )
 
                 # ═══ Policy-error-loop detection (Fix 5) ═══
                 if result.is_error:

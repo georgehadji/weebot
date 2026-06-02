@@ -1,26 +1,19 @@
-"""Trajectory domain models — scored execution records for skill optimization.
+"""Trajectory domain models — scored execution records + degenerate pattern detection.
 
-A TrajectorySummary is the input to the SkillOpt optimizer model.  It
-condenses a full session event stream into a compact (~500–2000 token)
-natural-language representation of what the agent did, what score it
-achieved, and what failure/success patterns were observed.
-
-An OptimizationBatch groups trajectories from one rollout step so the
-optimizer can perform minibatch reflection over failures and successes.
+TrajectorySummary / OptimizationBatch are the input to the SkillOpt optimizer.
+TrajectoryHealth / TrajectoryDiagnosis are used by the TrajectoryMonitor (Tier 1.3)
+for real-time degenerate pattern detection during execution.
 """
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
 class TrajectorySummary(BaseModel):
-    """Compact representation of a single task execution for the optimizer.
-
-    This is what the optimizer model sees — not the full event stream.
-    Typical size: 500–2000 tokens per trajectory.
-    """
+    """Compact representation of a single task execution for the optimizer."""
 
     task_id: str = Field(description="Unique task identifier")
     session_id: str = Field(description="Session that produced this trajectory")
@@ -30,9 +23,7 @@ class TrajectorySummary(BaseModel):
         default="direct_chat",
         description='Execution harness: "direct_chat" | "codex" | "claude_code"',
     )
-    score: float = Field(
-        ge=0.0, le=1.0, description="Benchmark-native score (0.0 – 1.0)"
-    )
+    score: float = Field(ge=0.0, le=1.0, description="Benchmark-native score (0.0 – 1.0)")
     passed: bool = Field(default=False, description="True when score meets pass threshold")
     failure_modes: list[str] = Field(
         default_factory=list,
@@ -67,7 +58,7 @@ class OptimizationBatch(BaseModel):
     failure_count: int = Field(default=0)
     success_count: int = Field(default=0)
 
-    def add(self, t: TrajectorySummary) -> OptimizationBatch:
+    def add(self, t: TrajectorySummary) -> "OptimizationBatch":
         """Return a new batch with *t* appended, recomputing aggregates."""
         new_trajs = list(self.trajectories) + [t]
         total_score = sum(t.score for t in new_trajs)
@@ -79,3 +70,26 @@ class OptimizationBatch(BaseModel):
             failure_count=sum(1 for t in new_trajs if not t.passed),
             success_count=sum(1 for t in new_trajs if t.passed),
         )
+
+
+class TrajectoryHealth(str, Enum):
+    """Health classification of a trajectory after a step (Tier 1.3)."""
+
+    HEALTHY = "healthy"
+    REPEATING = "repeating"          # Same tool call 4+ consecutive times
+    SEMANTIC_LOOP = "semantic_loop"  # Different calls, identical output
+    STAGNATING = "stagnating"        # No progress across multiple steps
+    BUDGET_HOTSPOT = "budget_hotspot"  # One sub-goal consuming >40% budget
+    EXHAUSTED = "exhausted"          # Budget at 90%+ with no completion
+
+
+class TrajectoryDiagnosis(BaseModel):
+    """Result of diagnosing the current trajectory health (Tier 1.3)."""
+
+    health: TrajectoryHealth = Field(default=TrajectoryHealth.HEALTHY)
+    detail: str = Field(default="")
+    recovery_message: str = Field(
+        default="",
+        description="Injected into the executor's conversation buffer",
+    )
+    affected_step_ids: list[str] = Field(default_factory=list)

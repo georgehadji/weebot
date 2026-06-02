@@ -32,8 +32,11 @@ def _get_tool_metrics():
 class ToolCollection:
     """Registry of tools; dispatches execute() by name."""
 
-    def __init__(self, *tools: BaseTool) -> None:
+    def __init__(self, *tools: BaseTool, canonicalizer=None) -> None:
         self._tools: dict[str, BaseTool] = {t.name: t for t in tools}
+        # Action Canonicalizer (Tier 1.1) — validates + corrects tool calls
+        # before dispatch.  Injected via DI; may be None.
+        self._canonicalizer = canonicalizer
 
     def __iter__(self):
         return iter(self._tools.values())
@@ -51,6 +54,18 @@ class ToolCollection:
                 execution_time_ms=0.0,
                 retry_count=0,
             )
+
+        # ── Tier 1.1: Action Canonicalizer — validate + correct before dispatch ──
+        if self._canonicalizer is not None:
+            result = self._canonicalizer.canonicalize(_name, kwargs)
+            if result.verdict == "block":
+                return ToolResult.error_result(
+                    error=result.block_reason or f"Blocked by canonicalizer for '{_name}'",
+                    execution_time_ms=0.0,
+                    retry_count=0,
+                )
+            if result.changes:
+                kwargs = result.corrected_args
 
         start_time = time.time()
         retry_count = 0

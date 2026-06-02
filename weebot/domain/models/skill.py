@@ -334,3 +334,15 @@ class Skill(BaseModel):
         """Append an epoch narrative to the evolution log, capped at *max_entries*."""
         updated = list(self.evolution_log) + [entry]
         return self.model_copy(update={"evolution_log": updated[-max_entries:]})
+
+
+class SkillMatch(BaseModel):
+    """A skill retrieved by the Procedural Skill Layer (Tier 1.2).
+
+    Returned by BM25SkillRetriever; injected into the executor's system
+    prompt to provide relevant procedural guidance for the current task.
+    """
+    skill_name: str = Field(default="")
+    description: str = Field(default="")
+    content_preview: str = Field(default="")
+    score: float = Field(default=0.0, ge=0.0, le=1.0)

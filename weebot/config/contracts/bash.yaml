@@ -1,0 +1,30 @@
+tool: bash
+description: |
+  Execute a shell command via PowerShell on Windows (primary) or WSL2 bash.
+coercions:
+  command:
+    type: str
+    required: true
+  timeout:
+    type: float
+    default: 30.0
+    min: 1.0
+    max: 300.0
+  working_dir:
+    type: str
+  use_wsl:
+    type: bool
+    default: false
+  security_override:
+    type: str
+defaults:
+  use_wsl: false
+block_patterns:
+  - argument: command
+    pattern: "^\\s*$"
+    reason: Empty command
+pitfalls:
+  - "PowerShell on Windows uses ; not && for command chaining"
+  - "cd does not persist between tool calls — use the working_dir parameter instead"
+  - "Use forward slashes in paths for cross-platform compatibility"
+  - "WSL2 must be installed for use_wsl=True"

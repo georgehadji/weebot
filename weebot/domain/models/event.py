@@ -97,6 +97,27 @@ class SteeringEvent(BaseEvent):
     message: str = Field(default="")
 
 
+class CanonicalizationEvent(BaseEvent):
+    """Emitted when the Action Canonicalizer validates a tool call (Tier 1.1).
+
+    Records what was corrected or blocked for audit and harness evolution.
+    """
+    type: Literal["canonicalization"] = "canonicalization"
+    tool_name: str = Field(default="")
+    verdict: str = Field(default="")
+    changes: list[str] = Field(default_factory=list)
+    block_reason: str = Field(default="")
+
+
+class TrajectoryDiagnosisEvent(BaseEvent):
+    """Emitted when TrajectoryMonitor detects a degenerate pattern (Tier 1.3)."""
+    type: Literal["trajectory_diagnosis"] = "trajectory_diagnosis"
+    step_id: str = Field(default="")
+    health: str = Field(default="")
+    detail: str = Field(default="")
+    recovery_message: str = Field(default="")
+
+
 AgentEvent = Union[
     ErrorEvent,
     PlanEvent,
@@ -109,6 +130,8 @@ AgentEvent = Union[
     NotificationEvent,
     ThoughtEvent,
     SteeringEvent,
+    CanonicalizationEvent,
+    TrajectoryDiagnosisEvent,
 ]
 
 

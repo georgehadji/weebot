@@ -1,0 +1,25 @@
+tool: python_execute
+description: |
+  Execute Python code in an isolated subprocess. Code is run with PIPE
+  stdin and captured stdout/stderr. Dangerous code is blocked by policy.
+coercions:
+  code:
+    type: str
+    required: true
+  timeout:
+    type: float
+    default: 30.0
+    min: 1.0
+    max: 300.0
+  working_dir:
+    type: str
+defaults: {}
+block_patterns:
+  - argument: code
+    pattern: "^\\s*$"
+    reason: Empty code
+pitfalls:
+  - "The subprocess has no persistent state across calls"
+  - "All imports must be declared inside the code string"
+  - "Use print() for output — plain expressions are not captured"
+  - "sys.modules cache persists within a single execution, not across calls"
