@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@openrouter/agent": "^0.7.0",
+    "@openrouter/sdk": "^0.12.79"
+  }
+}

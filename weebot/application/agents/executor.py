@@ -211,6 +211,19 @@ class ExecutorAgent:
     _PRIMARY_MODEL: str = MODEL_PRIMARY
     _REVIEW_MODEL: str = MODEL_CODE_REVIEW
 
+    # ── Task-model routing ─────────────────────────────────────────
+    @staticmethod
+    def _model_for_step(description: str) -> str:
+        """Return the best model for *description* using the task-model router.
+
+        Falls back to _TIER1_MODEL if the router can't load or classify.
+        """
+        try:
+            from weebot.application.services.task_model_router import model_for_step
+            return model_for_step(description)
+        except Exception:
+            return MODEL_CASCADE_TIER1
+
     _REVIEW_KEYWORDS = (
         "review", "audit", "analyze code", "inspect", "critique",
         "security audit", "code quality", "refactor analysis"
@@ -269,13 +282,17 @@ class ExecutorAgent:
         is_review = self._is_review_step(description)
         tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
 
-        # Attempt 1: TIER 1 — Kimi K2.6 (strong reasoning, fast)
+        # Select task-specific model as first attempt
+        task_model = self._model_for_step(description)
+        skip_tier1 = (task_model != self._TIER1_MODEL)
+
+        # Attempt 1: TASK-SPECIFIC model
         try:
             resp = await self._llm.chat(
                 messages=messages,
                 tools=self._tools.to_params(),
                 tool_choice="auto",
-                model=self._TIER1_MODEL,
+                model=task_model,
                 temperature=TEMPERATURE,
             )
             if resp and (resp.content or resp.tool_calls):
@@ -284,9 +301,27 @@ class ExecutorAgent:
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
                 raise
-            logger.debug("Kimi K2.6 failed (%s), trying Qwen tier: %s", self._TIER1_MODEL, exc)
+            logger.debug("Task model %s failed: %s", task_model, exc)
 
-        # Attempt 2: TIER 2 — Qwen 3.7 Max or REVIEW model
+        # Attempt 2: TIER 1 — Kimi K2.6 (skip if already tried)
+        if not skip_tier1:
+            try:
+                resp = await self._llm.chat(
+                    messages=messages,
+                    tools=self._tools.to_params(),
+                    tool_choice="auto",
+                    model=self._TIER1_MODEL,
+                    temperature=TEMPERATURE,
+                )
+                if resp and (resp.content or resp.tool_calls):
+                    await self._track_usage_and_maybe_compress(resp)
+                    return resp
+            except Exception as exc:
+                if ErrorClassifier.should_fail_fast(exc):
+                    raise
+                logger.debug("Tier1 model %s failed: %s", self._TIER1_MODEL, exc)
+
+        # Attempt 3: TIER 2 — DeepSeek R1 or REVIEW model
         try:
             resp = await self._llm.chat(
                 messages=messages,
@@ -303,7 +338,7 @@ class ExecutorAgent:
                 raise
             logger.debug("Tier2 model failed (%s), falling back to primary: %s", tier2_model, exc)
 
-        # Attempt 3: PRIMARY — Claude Sonnet 4.6 (best quality, highest cost)
+        # Attempt 4: PRIMARY — Claude Sonnet 4.6 (best quality, highest cost)
         resp = await self._llm.chat(
             messages=messages,
             tools=self._tools.to_params(),
