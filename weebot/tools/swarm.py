@@ -107,7 +107,9 @@ class SwarmTool(BaseTool):
             len(spec.goals), spec.max_concurrency, spec.synthesis_strategy,
         )
 
-        # 2. Dispatch sub-agents via existing dispatch_parallel_tasks pattern
+        # 2. Create swarm event bus and dispatch
+        from weebot.infrastructure.swarm_event_bus import SwarmEventBus
+        swarm_bus = SwarmEventBus()
         tasks = []
         for goal in spec.goals:
             tasks.append({
@@ -123,15 +125,23 @@ class SwarmTool(BaseTool):
 
         dispatcher = DispatchAgentsTool(
             flow_factory=self._flow_factory,
+            swarm_bus=swarm_bus,
         )
         dispatch_result = await dispatcher.execute(
             tasks=tasks,
             max_concurrency=min(max_concurrency, spec.max_concurrency),
         )
 
-        # 3. Synthesize
+        # 3. Synthesize — optionally using swarm bus for real-time insights
         sub_results = dispatch_result.data.get("results", [])
         from weebot.application.agents.synthesizer_agent import SynthesizerAgent
+
+        # Collect bus messages for richer context
+        insight_history = swarm_bus.get_all_topics()
+        bus_insights = {}
+        for topic in insight_history:
+            msgs = swarm_bus.get_history(topic)
+            bus_insights[topic] = [m.payload for m in msgs]
 
         synthesizer = SynthesizerAgent(self._llm)
         swarm_result = await synthesizer.synthesize(

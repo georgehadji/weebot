@@ -83,11 +83,17 @@ class DispatchAgentsTool(BaseTool):
     _flow_factory: Optional[Callable] = None
     _state_repo: Optional[Any] = None
 
-    def __init__(self, flow_factory: Optional[Callable] = None, state_repo: Optional[Any] = None, **data):
+    def __init__(
+        self,
+        flow_factory: Optional[Callable] = None,
+        state_repo: Optional[Any] = None,
+        swarm_bus=None,
+        **data,
+    ):
         super().__init__(**data)
-        # Store via object.__setattr__ to bypass Pydantic's frozen model
         object.__setattr__(self, "_flow_factory", flow_factory)
         object.__setattr__(self, "_state_repo", state_repo)
+        object.__setattr__(self, "_swarm_bus", swarm_bus)
 
     async def execute(
         self,
@@ -123,6 +129,25 @@ class DispatchAgentsTool(BaseTool):
                             content = getattr(event, "content", None) or getattr(event, "message", "")
                             summary_lines.append(str(content))
                     summary = summary_lines[-1] if summary_lines else "(no output)"
+
+                    # ── Tier 3.1: Publish findings to swarm bus ──
+                    if self._swarm_bus is not None:
+                        from weebot.domain.models.inter_agent import (
+                            InterAgentMessage,
+                        )
+                        await self._swarm_bus.publish(
+                            InterAgentMessage(
+                                sender_agent_id=task_id,
+                                topic="agent_completed",
+                                payload={
+                                    "task_id": task_id,
+                                    "summary": summary[:500],
+                                    "description": description[:200],
+                                },
+                                confidence=0.5,
+                            )
+                        )
+
                     return {"task_id": task_id, "status": "completed", "summary": summary}
                 except Exception as exc:
                     logger.warning("Sub-agent failed for task_id=%s: %s", task_id, exc)
