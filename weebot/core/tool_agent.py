@@ -13,12 +13,13 @@ from weebot.domain.models import (
 )
 from weebot.config.model_refs import MODEL_DEPRECATED_TOOL_AGENT
 from weebot.utils.cost_ledger import CostLedger
+from weebot.utils.prompt_loader import load_prompt_with_fallback
 from typing import Optional
 
-SYSTEM_PROMPT = """You are weebot, an autonomous AI agent for Windows 11.
-You have access to tools to help complete tasks. Use them when needed.
-When you are finished, respond with a clear summary of what you accomplished.
-"""
+SYSTEM_PROMPT = load_prompt_with_fallback(
+    "tool_agent_system.txt",
+    "You are weebot, an autonomous AI agent.\nYou have access to tools.\n",
+)
 
 MAX_STEPS = 30
 

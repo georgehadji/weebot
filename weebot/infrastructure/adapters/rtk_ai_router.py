@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from weebot.config.model_refs import MODEL_RTK_CHEAP, MODEL_RTK_PREMIUM, MODEL_RTK_STANDARD
 from .rtk_provider import RTKProvider, get_rtk_provider
 from .ai_router import TaskType
 
@@ -41,15 +42,14 @@ class RTKAIRouter:
         if task_type in [TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.DEBUGGING]:
             # These tasks often involve examining command outputs, so use models with good reasoning
             if budget_constraint and budget_constraint < 0.005:
-                return "gpt-4o-mini"  # Use cheaper model when budget is tight
+                return MODEL_RTK_CHEAP
             else:
-                return "gpt-4o"  # Use premium model for complex tasks
+                return MODEL_RTK_PREMIUM
         else:
-            # For other tasks, use standard model selection
             if budget_constraint and budget_constraint < 0.005:
-                return "gpt-4o-mini"
+                return MODEL_RTK_CHEAP
             else:
-                return "gpt-3.5-turbo"
+                return MODEL_RTK_STANDARD
 
 
 # Global RTK-AI router instance

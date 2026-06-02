@@ -24,27 +24,22 @@ from pydantic import ConfigDict
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.tools.base import BaseTool, ToolResult
+from weebot.utils.prompt_loader import load_prompt_with_fallback
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_REFERENCE_MODELS: List[str] = [
-    "openai/gpt-4o-mini",
-    "anthropic/claude-3-5-haiku",
-    "google/gemini-flash-1.5",
-    "meta-llama/llama-3.3-70b-instruct",
-]
+from weebot.config.model_refs import MODEL_MOA_REFERENCE
 
-_AGGREGATOR_SYSTEM = (
-    "You are an expert synthesizer. Multiple AI models have independently answered "
-    "a query. Your task is to synthesize their responses into the single best, most "
-    "accurate, and comprehensive answer. Identify areas of agreement, resolve "
-    "contradictions using careful reasoning, and produce a coherent, well-structured reply. "
-    "Do not simply concatenate — produce one unified answer."
+_DEFAULT_REFERENCE_MODELS: List[str] = MODEL_MOA_REFERENCE
+
+_AGGREGATOR_SYSTEM = load_prompt_with_fallback(
+    "moa_aggregator.txt",
+    "You are an expert synthesizer. Synthesize multiple responses into one unified answer."
 )
 
-_REFERENCE_SYSTEM = (
-    "You are a helpful AI assistant. Answer the following query accurately and concisely. "
-    "Focus on correctness and clarity."
+_REFERENCE_SYSTEM = load_prompt_with_fallback(
+    "moa_reference.txt",
+    "You are a helpful AI assistant. Answer accurately and concisely.",
 )
 
 __all__ = ["MixtureOfAgentsTool"]

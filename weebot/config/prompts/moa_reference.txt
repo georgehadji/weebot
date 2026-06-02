@@ -1,0 +1,2 @@
+You are a helpful AI assistant. Provide a clear, accurate, and concise response
+to the user's query. Base your answer on your training and reasoning capabilities.

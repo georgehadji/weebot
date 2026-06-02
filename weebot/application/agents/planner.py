@@ -21,39 +21,18 @@ from weebot.domain.models.plan import Plan, Step
 
 logger = logging.getLogger(__name__)
 
-PLANNER_SYSTEM_PROMPT = """You are a planning agent. Given a user task, create a COMPLETE plan with ALL necessary steps.
+# Prompts loaded from files in config/prompts/ with inline fallbacks.
+from pathlib import Path
+_PLANNER_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_system.txt"
+_PLANNER_UPDATE_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_update.txt"
 
-CRITICAL: Respond ONLY with valid JSON. Do not wrap in markdown code blocks. Do not add any text before or after the JSON.
-
-Required JSON structure:
-{
-  "title": "Short title",
-  "message": "Brief plan summary",
-  "steps": [
-    {"id": "step-1", "description": "First action", "status": "pending"},
-    {"id": "step-2", "description": "Second action", "status": "pending"}
-  ]
-}
-
-Rules:
-- Create ALL steps needed to fully complete the task - do not stop at just one or two steps
-- For file operations: include steps to find files, verify destination, move/copy files, and verify completion
-- Include a follow-up step ONLY when user clarification is genuinely needed to continue
-- ONLY create steps that this agent can execute with available tools (searching, reading, writing, code edits, shell commands, browser/web tools)
-- Do NOT create human-only or physical-world steps (e.g., phone calls, visiting properties, signing legal documents)
-- If a human-only action is required, end with one concise informational step telling the user what they must do next
-- Each step must have: unique "id", "description", and "status" set to "pending"
-- Output RAW JSON only, no ```json markers
-- Keep descriptions actionable and specific
-"""
-
-UPDATE_PLAN_SYSTEM_PROMPT = """You are a planning agent. Given the current plan and the most recently completed step,
-update the plan if needed.
-
-CRITICAL: Respond ONLY with valid JSON. Do not wrap in markdown code blocks. Do not add any text before or after the JSON.
-
-Keep completed steps as-is. Adjust or add pending steps based on new information.
-"""
+def _load_planner_prompt(path: Path, fallback: str) -> str:
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    return fallback
 
 # Injected into PLANNER_SYSTEM_PROMPT when skill_prompt references web/UI work.
 SPEC_FILE_RULE = """
@@ -82,7 +61,7 @@ class PlannerAgent:
         self._event_bus = event_bus
         self._model = model
         self._episodic_memory = episodic_memory
-        system_prompt = PLANNER_SYSTEM_PROMPT + SPEC_FILE_RULE
+        system_prompt = self._get_system_prompt() + SPEC_FILE_RULE
         if skill_prompt:
             system_prompt = f"{system_prompt}\n\n{skill_prompt}"
         if facts:
@@ -91,6 +70,17 @@ class PlannerAgent:
         self._memory: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
+
+    def _get_system_prompt(self) -> str:
+        return _load_planner_prompt(_PLANNER_PROMPT_PATH, (
+            'You are a planning agent. Given a user task, create a COMPLETE plan with ALL necessary steps.\n'
+            'Do not add any text before or after the JSON. Output RAW JSON only.'
+        ))
+
+    def _get_update_prompt(self) -> str:
+        return _load_planner_prompt(_PLANNER_UPDATE_PATH, (
+            'You are a planning agent. Update the plan keeping completed steps as-is.'
+        ))
 
     async def _emit(self, event: AgentEvent) -> None:
         if self._event_bus:
@@ -154,7 +144,7 @@ class PlannerAgent:
     async def create_plan(self, prompt: str, attachments: Optional[List[str]] = None) -> AsyncGenerator[AgentEvent, None]:
         # Reset _memory to just the system prompt so stale conversation
         # from a previous create_plan() call doesn't pollute this one.
-        system_prompt = self._memory[0]["content"] if self._memory else PLANNER_SYSTEM_PROMPT
+        system_prompt = self._memory[0]["content"] if self._memory else self._get_system_prompt()
         self._memory = [{"role": "system", "content": system_prompt}]
 
         user_msg = prompt
@@ -207,7 +197,7 @@ class PlannerAgent:
             )
 
         update_memory = [
-            {"role": "system", "content": UPDATE_PLAN_SYSTEM_PROMPT},
+            {"role": "system", "content": self._get_update_prompt()},
             {"role": "user", "content": user_content},
         ]
 

@@ -116,6 +116,21 @@ MODEL_ROUTER_ANTHROPIC_FALLBACK: str = "claude-3-5-sonnet-20241022"
 MODEL_ROUTER_GOOGLE_FALLBACK: str = "gemini/gemini-1.5-pro"
 """Provider fallback return values in ai_router.py selection logic."""
 
+MODEL_RTK_CHEAP: str = "gpt-4o-mini"
+"""Budget model for RTK-routed tasks when cost is constrained."""
+MODEL_RTK_PREMIUM: str = "gpt-4o"
+"""Premium model for RTK-routed complex code tasks."""
+MODEL_RTK_STANDARD: str = "gpt-3.5-turbo"
+"""Standard model for RTK-routed non-code tasks."""
+
+MODEL_MOA_REFERENCE: list[str] = [
+    "openai/gpt-4o-mini",
+    "anthropic/claude-3-5-haiku",
+    "google/gemini-flash-1.5",
+    "meta-llama/llama-3.3-70b-instruct",
+]
+"""Default reference models for Mixture-of-Agents ensemble."""
+
 
 # ========================================================================
 # Pricing table (cost_ledger.py)
