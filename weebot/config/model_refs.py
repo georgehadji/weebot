@@ -1,122 +1,111 @@
 """Centralized LLM model name references.
 
-Single source of truth for model strings.  Every OpenRouter model is
-an explicit provider-qualified ID — ``openrouter/auto`` is FORBIDDEN
-(it routes unpredictably and can select expensive models silently).
+Every model is an explicit provider-qualified ID sourced from the
+OpenRouter /v1/models API (2026-06-01).  ``openrouter/auto`` is FORBIDDEN.
 
-Model Selection Rationale (per-task):
-  - Code Review: Claude Sonnet 4.6 — unmatched for critique, bug finding, architecture review
-  - Planning: Kimi K2.6 — strong JSON-structured output, good at task decomposition
-  - Executing (free): Qwen Coder Free — best free model for code/agent tasks, 1M context
-  - Executing (budget): Kimi K2.6 — strong reasoning, good tool use, mid-cost
-  - Executing (primary): Claude Sonnet 4.6 — best agentic tool use, longest autonomous horizon
-  - Summarizing / Chat: Claude Sonnet 4.6 — clear concise output
-  - Fallback chain: three explicit models, no auto-routing
+Cascade (cost ignored — quality only):
+  Tier 1: Owl Alpha (FREE, 1M ctx, agentic, tool use, 100k+ installed)
+  Tier 2: Grok Build 0.1 (fast coding, agentic SWE workflows)
+  Primary: Claude Opus 4.8 (Anthropic's most capable model)
 
-Naming convention: ``MODEL_<PURPOSE>``.
+Task-specific best picks:
+  CODING:        Grok Build 0.1 — specialized agentic coding model
+  FILE_OPS:      Gemini 3.1 Flash Lite — lowest latency, 1M context
+  RESEARCH:      Kimi K2.6 — strong structured output
+  REVIEW:        Claude Opus 4.8 — unmatched analysis
+  PLANNING:      Owl Alpha — agentic, tool use, FREE
+  SECURITY:      Claude Opus 4.8 — best vulnerability detection
+  SUMMARIZATION: Gemini 3.1 Flash Lite — fast, coherent
+  GENERAL:       Kimi K2.6 — strong all-rounder
+
+Fallback chain: Owl Alpha → Grok Build 0.1 → Kimi K2.6 → Claude Opus 4.8
 """
 from __future__ import annotations
 
 # ========================================================================
-# Executor Cascade (3-tier: budget → reasoning → frontier)
+# Executor Cascade (3-tier: agentic → coding → frontier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6"
-"""First-attempt: Kimi K2.6 — 1st on LMArena overall, strong reasoning, fast."""
+MODEL_CASCADE_TIER1: str = "openrouter/owl-alpha"
+"""First-attempt: Owl Alpha — FREE, 1M context, natively supports tool use, 100k+ installed on OpenRouter."""
 
-MODEL_CASCADE_TIER2: str = "deepseek/deepseek-r1"
-"""Second-attempt: DeepSeek R1 — 87.5% AIME, frontier-level reasoning at ~12x cheaper than Claude Opus."""
+MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
+"""Second-attempt: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
 
-MODEL_PRIMARY: str = "anthropic/claude-sonnet-4.6"
-"""Third-attempt / primary fallback: Claude Sonnet 4.6 — best agentic tool use, 79.6% SWE-bench."""
+MODEL_PRIMARY: str = "anthropic/claude-opus-4.8"
+"""Primary fallback: Claude Opus 4.8 — Anthropic's most capable model, 1M context."""
 
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "moonshotai/kimi-k2.6"
-"""Planning: Kimi K2.6 — strong task decomposition and JSON-structured output."""
+MODEL_PLANNER: str = "openrouter/owl-alpha"
+"""Planning: Owl Alpha — agentic, tool use, strong at task decomposition."""
 
-MODEL_CODE_REVIEW: str = "anthropic/claude-sonnet-4.6"
-"""Code review: Claude Sonnet 4.6 — unmatched critique/analysis/bug-finding."""
+MODEL_CODE_REVIEW: str = "anthropic/claude-opus-4.8"
+"""Code review: Claude Opus 4.8 — unmatched critique/analysis/bug-finding."""
 
-MODEL_SUMMARIZE: str = "anthropic/claude-sonnet-4.6"
-"""Summary/Chat: Claude Sonnet 4.6 — clear, concise, accurate."""
+MODEL_SUMMARIZE: str = "google/gemini-3.1-flash-lite"
+"""Summary: Gemini 3.1 Flash Lite — fast, coherent, 1M context."""
 
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6"
-"""Default when no model is explicitly configured (never auto)."""
+MODEL_DI_DEFAULT: str = "openrouter/owl-alpha"
+"""Default when no model is explicitly configured."""
 
-MODEL_DI_SKILLOPT: str = "anthropic/claude-sonnet-4.6"
-"""SkillOpt optimizer — needs strong reasoning for skill improvement."""
+MODEL_DI_SKILLOPT: str = "anthropic/claude-opus-4.8"
+"""SkillOpt optimizer — needs strongest reasoning for skill improvement."""
 
 MODEL_FACTORY_OPENAI: str = "gpt-4o-mini"
-MODEL_FACTORY_ANTHROPIC: str = "claude-3-5-sonnet-20241022"
+MODEL_FACTORY_ANTHROPIC: str = "anthropic/claude-opus-4.8"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek-chat"
-MODEL_FACTORY_OPENROUTER: str = "deepseek/deepseek-r1"
-"""Factory defaults per provider (used when model= param is omitted)."""
+MODEL_FACTORY_OPENROUTER: str = "openrouter/owl-alpha"
+"""Factory defaults per provider."""
 
 MODEL_DEFAULT_OPENAI: str = "gpt-4o-mini"
-MODEL_DEFAULT_ANTHROPIC: str = "claude-3-5-sonnet-20241022"
+MODEL_DEFAULT_ANTHROPIC: str = "anthropic/claude-opus-4.8"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek-chat"
-MODEL_DEFAULT_OPENROUTER: str = "deepseek/deepseek-r1"
+MODEL_DEFAULT_OPENROUTER: str = "openrouter/owl-alpha"
 """Adapter constructor defaults."""
 
 # ========================================================================
-# Fallback chain (rate-limit recovery)
+# Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
-    "moonshotai/kimi-k2.6",             # Tier 1 — strong reasoning
-    "deepseek/deepseek-r1",             # Tier 2 — frontier reasoning, cheap
-    "anthropic/claude-sonnet-4.6",      # Primary — best quality
+    "openrouter/owl-alpha",              # Tier 1 — FREE, agentic
+    "x-ai/grok-build-0.1",               # Tier 2 — fast coding
+    "moonshotai/kimi-k2.6",              # Tier 3 — strong reasoning
+    "anthropic/claude-opus-4.8",         # Primary — best quality
 ]
-"""Fallback models tried in order on rate-limit (not auto-routed)."""
 
 MODEL_FALLBACK_NON_OPENROUTER: str = "gpt-4o-mini"
-"""Fallback when non-OpenRouter rate-limit is hit."""
 
 # ========================================================================
-# Free model pool (available for cascade experiments)
+# CQRS / deprecated
 # ========================================================================
-MODEL_CASCADE_FREE_GEMINI: str = "google/gemini-2.0-flash-exp:free"
-MODEL_CASCADE_FREE_LLAMA: str = "meta-llama/llama-3.3-70b-instruct:free"
-MODEL_CASCADE_FREE_NVIDIA: str = "nvidia/nemotron-3-super-120b-a12b:free"
-
-# ========================================================================
-# CQRS command defaults
-# ========================================================================
-MODEL_COMMAND_DEFAULT: str = "moonshotai/kimi-k2.6"
-
-# ========================================================================
-# Deprecated agents (legacy — frozen)
-# ========================================================================
-MODEL_DEPRECATED_AGENT: str = "moonshotai/kimi-k2.6"
-MODEL_DEPRECATED_TOOL_AGENT: str = "moonshotai/kimi-k2.6"
-
-# ========================================================================
-# Router fallback strings (rtk_ai_router.py — legacy)
-# ========================================================================
-MODEL_RTK_CHEAP: str = "moonshotai/kimi-k2.6"
-MODEL_RTK_PREMIUM: str = "anthropic/claude-sonnet-4.6"
-MODEL_RTK_STANDARD: str = "moonshotai/kimi-k2.6"
+MODEL_COMMAND_DEFAULT: str = "openrouter/owl-alpha"
+MODEL_DEPRECATED_AGENT: str = "openrouter/owl-alpha"
+MODEL_DEPRECATED_TOOL_AGENT: str = "openrouter/owl-alpha"
+MODEL_RTK_CHEAP: str = "openrouter/owl-alpha"
+MODEL_RTK_PREMIUM: str = "anthropic/claude-opus-4.8"
+MODEL_RTK_STANDARD: str = "openrouter/owl-alpha"
 
 # ========================================================================
 # Mixture-of-Agents ensemble
 # ========================================================================
 MODEL_MOA_REFERENCE: list[str] = [
-    "moonshotai/kimi-k2.6",
+    "openrouter/owl-alpha",
+    "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "anthropic/claude-3-5-haiku",
-    "google/gemini-2.0-flash-exp:free",
+    "moonshotai/kimi-k2.6",
 ]
 
 # ========================================================================
 # Pricing table (cost_ledger.py)
 # ========================================================================
-MODEL_PRICE_CLAUDE_SONNET: str = "claude-sonnet-4-6"
-MODEL_PRICE_CLAUDE_OPUS: str = "claude-opus-4-6"
-MODEL_PRICE_CLAUDE_HAIKU: str = "claude-haiku-4-5"
-MODEL_PRICE_GPT4O: str = "gpt-4o"
+MODEL_PRICE_CLAUDE_SONNET: str = "claude-opus-4.8"
+MODEL_PRICE_CLAUDE_OPUS: str = "claude-opus-4.8"
+MODEL_PRICE_CLAUDE_HAIKU: str = "claude-haiku-latest"
+MODEL_PRICE_GPT4O: str = "gpt-chat-latest"
 MODEL_PRICE_GPT4O_MINI: str = "gpt-4o-mini"
 MODEL_PRICE_KIMI: str = "kimi-k2.6"
 MODEL_PRICE_DEEPSEEK: str = "deepseek-chat"
