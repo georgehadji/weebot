@@ -15,7 +15,11 @@ from weebot.application.services.conversation_compressor import ConversationComp
 from weebot.application.services.step_budget import StepBudget
 from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
 from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE
-from weebot.config.model_refs import MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2, MODEL_CODE_REVIEW, MODEL_PRIMARY
+from weebot.config.model_refs import (
+    MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2,
+    MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4,
+    MODEL_CODE_REVIEW,
+)
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.domain.models.event import (
     AgentEvent,
@@ -208,7 +212,8 @@ class ExecutorAgent:
 
     _TIER1_MODEL: str = MODEL_CASCADE_TIER1
     _TIER2_MODEL: str = MODEL_CASCADE_TIER2
-    _PRIMARY_MODEL: str = MODEL_PRIMARY
+    _TIER3_MODEL: str = MODEL_CASCADE_TIER3
+    _TIER4_MODEL: str = MODEL_CASCADE_TIER4
     _REVIEW_MODEL: str = MODEL_CODE_REVIEW
 
     # ── Task-model routing ─────────────────────────────────────────
@@ -274,10 +279,10 @@ class ExecutorAgent:
     async def _call_with_cascade(
         self, messages: List[Dict[str, Any]], description: str = ""
     ) -> LLMResponse:
-        """Tiered cascade: tier1 (kimi) → tier2 (qwen)|review → primary (claude).
+        """4-tier cascade: task-model → tier1 → tier2 → tier3 → tier4.
 
-        Code-review steps use Claude Sonnet 4.6 directly.
-        Other steps cascade: Kimi K2.6 → Qwen 3.7 Max → Claude Sonnet 4.6.
+        Code-review steps use Grok 4.3 directly.
+        Other steps: task-specific → Owl Alpha → Grok Build → Qwen 3.7 → DeepSeek V4.
         """
         is_review = self._is_review_step(description)
         tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
@@ -286,7 +291,7 @@ class ExecutorAgent:
         task_model = self._model_for_step(description)
         skip_tier1 = (task_model != self._TIER1_MODEL)
 
-        # Attempt 1: TASK-SPECIFIC model
+        # Attempt 1: TASK-SPECIFIC model (from task_model_router)
         try:
             resp = await self._llm.chat(
                 messages=messages,
@@ -303,7 +308,7 @@ class ExecutorAgent:
                 raise
             logger.debug("Task model %s failed: %s", task_model, exc)
 
-        # Attempt 2: TIER 1 — Kimi K2.6 (skip if already tried)
+        # Attempt 2: TIER 1 — Owl Alpha (skip if already tried as task-model)
         if not skip_tier1:
             try:
                 resp = await self._llm.chat(
@@ -321,7 +326,7 @@ class ExecutorAgent:
                     raise
                 logger.debug("Tier1 model %s failed: %s", self._TIER1_MODEL, exc)
 
-        # Attempt 3: TIER 2 — DeepSeek R1 or REVIEW model
+        # Attempt 3: TIER 2 — Grok Build 0.1 (fast coding SWE)
         try:
             resp = await self._llm.chat(
                 messages=messages,
@@ -336,14 +341,31 @@ class ExecutorAgent:
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
                 raise
-            logger.debug("Tier2 model failed (%s), falling back to primary: %s", tier2_model, exc)
+            logger.debug("Tier2 model failed (%s), trying tier 3: %s", tier2_model, exc)
 
-        # Attempt 4: PRIMARY — Claude Sonnet 4.6 (best quality, highest cost)
+        # Attempt 4: TIER 3 — Qwen 3.7 Max (flagship coding, 1M ctx)
+        try:
+            resp = await self._llm.chat(
+                messages=messages,
+                tools=self._tools.to_params(),
+                tool_choice="auto",
+                model=self._TIER3_MODEL,
+                temperature=TEMPERATURE,
+            )
+            if resp and (resp.content or resp.tool_calls):
+                await self._track_usage_and_maybe_compress(resp)
+                return resp
+        except Exception as exc:
+            if ErrorClassifier.should_fail_fast(exc):
+                raise
+            logger.debug("Tier3 model failed (%s), trying tier 4: %s", self._TIER3_MODEL, exc)
+
+        # Attempt 5: TIER 4 — DeepSeek V4 Pro (strongest reasoning)
         resp = await self._llm.chat(
             messages=messages,
             tools=self._tools.to_params(),
             tool_choice="auto",
-            model=self._model or self._PRIMARY_MODEL,
+            model=self._TIER4_MODEL,
             temperature=TEMPERATURE,
         )
         await self._track_usage_and_maybe_compress(resp)
