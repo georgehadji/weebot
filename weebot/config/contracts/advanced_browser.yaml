@@ -1,0 +1,27 @@
+tool: advanced_browser
+description: |
+  Full Playwright browser automation.
+coercions:
+  action:
+    type: str
+    required: true
+  url:
+    type: str
+  timeout:
+    type: int
+    default: 30000
+    min: 5000
+    max: 120000
+  script:
+    type: str
+defaults: {}
+block_patterns: []
+pitfalls:
+  - "Each tool call creates a fresh context — browser state does not persist between calls"
+  - "Cloudflare-protected sites (dior.com, sezane.com) may block headless browsers"
+  - "Use web_search first — only open browser for JS-rendered content or interactive tasks"
+  - "Page.goto timeout default is 30s; increase for slow sites with timeout=60000"
+  - "Not all actions are available in headless mode — use screenshots to verify"
+constraints:
+  - "Requires Playwright browsers installed: playwright install chromium"
+  - "Launch the browser first with action='launch' before navigating"

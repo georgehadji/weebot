@@ -32,11 +32,12 @@ def _get_tool_metrics():
 class ToolCollection:
     """Registry of tools; dispatches execute() by name."""
 
-    def __init__(self, *tools: BaseTool, canonicalizer=None) -> None:
+    def __init__(self, *tools: BaseTool, canonicalizer=None, contract_loader=None) -> None:
         self._tools: dict[str, BaseTool] = {t.name: t for t in tools}
         # Action Canonicalizer (Tier 1.1) — validates + corrects tool calls
-        # before dispatch.  Injected via DI; may be None.
         self._canonicalizer = canonicalizer
+        # Environment Contract DSL (Tier 3.2) — enhances tool descriptions
+        self._contract_loader = contract_loader
 
     def __iter__(self):
         return iter(self._tools.values())
@@ -45,7 +46,17 @@ class ToolCollection:
         return len(self._tools)
 
     def to_params(self) -> list[dict]:
-        return [t.to_param() for t in self._tools.values()]
+        params = []
+        for tool in self._tools.values():
+            spec = tool.to_param()
+            # Inject contract pitfalls into description if available (Tier 3.2)
+            if self._contract_loader is not None:
+                enhanced = self._contract_loader.enhance_description(
+                    tool.name, spec["function"]["description"]
+                )
+                spec["function"]["description"] = enhanced
+            params.append(spec)
+        return params
 
     async def execute(self, _name: str, **kwargs: Any) -> ToolResult:
         if _name not in self._tools:
