@@ -1,0 +1,234 @@
+$ git add -A && git commit -m "feat: task-model router — best model per step category
+
+New weebot/application/services/task_model_router.py:
+  Classifies any step description into 7 categories and assigns
+  the best model for each:
+    CODING        → deepseek/deepseek-r1 (frontier reasoning, cheap)
+    FILE_OPS      → google/gemini-2.0-flash-exp:free (free, fast)
+    RESEARCH      → moonshotai/kimi-k2.6 (structured output)
+    REVIEW        → anthropic/claude-sonnet-4.6 (unmatched critique)
+    PLANNING      → moonshotai/kimi-k2.6 (JSON-structured plans)
+    SECURITY      → anthropic/claude-sonnet-4.6 (best vulnerability detection)
+    SUMMARIZATION → google/gemini-2.0-flash-exp:free (free, coherent)
+
+  Priority-based tiebreaking: SECURITY > REVIEW > CODING > PLANNING >
+  RESEARCH > FILE_OPS > SUMMARIZATION.  Falls back to Kimi K2.6.
+
+  qwen3-coder is ONLY used through the cascade fallback, never directly.
+
+ExecutorAgent now routes first attempt through task_model_router.
+Cascade order: task-model → tier1 (kimi) → tier2 (deepseek-r1) → primary (claude).
+10/10 classification tests pass. 19/19 architecture tests pass." && git push
+[exit 0]
+warning: in the working copy of 'node_modules/.package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/api-shape-helpers/claude-message.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/api-shape-helpers/claude-message.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/index.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/index.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/inner-loop/call-model.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/inner-loop/call-model.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/anthropic-compat.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/anthropic-compat.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/anthropic-compat.test.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/anthropic-compat.test.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/async-params.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/async-params.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/chat-compat.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/chat-compat.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/chat-compat.test.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/chat-compat.test.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/claude-constants.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/claude-constants.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/claude-type-guards.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/claude-type-guards.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/conversation-state.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/conversation-state.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/item-types.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/item-types.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/model-result.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/model-result.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/next-turn-params.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/next-turn-params.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/next-turn-params.test.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/next-turn-params.test.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/reusable-stream.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/reusable-stream.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stop-conditions.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stop-conditions.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stream-transformers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stream-transformers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stream-type-guards.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/stream-type-guards.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-context.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-context.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-event-broadcaster.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-event-broadcaster.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-executor.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-executor.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-orchestrator.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-orchestrator.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-types.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool-types.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/tool.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/turn-context.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/lib/turn-context.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/openrouter.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/esm/openrouter.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/agent/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/.devcontainer/devcontainer.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/FUNCTIONS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/LICENSE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/RUNTIMES.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/_speakeasy/.github/action-inputs-config.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/_speakeasy/.github/action-security-config.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/biome.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/core.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/core.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/analyticsGetUserActivity.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/analyticsGetUserActivity.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysCreate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysCreate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysDelete.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysDelete.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysGet.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysGet.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysGetCurrentKeyMetadata.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysGetCurrentKeyMetadata.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysUpdate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/apiKeysUpdate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/betaResponsesSend.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/betaResponsesSend.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokCreate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokCreate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokDelete.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokDelete.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokGet.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokGet.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokUpdate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/byokUpdate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/call-model.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/call-model.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/chatSend.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/chatSend.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/creditsGetCredits.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/creditsGetCredits.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/datasetsGetRankingsDaily.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/datasetsGetRankingsDaily.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/embeddingsGenerate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/embeddingsGenerate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/embeddingsListModels.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/embeddingsListModels.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/endpointsList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/endpointsList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/endpointsListZdrEndpoints.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/endpointsListZdrEndpoints.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/generationsGetGeneration.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/generationsGetGeneration.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/generationsListGenerationContent.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/generationsListGenerationContent.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignKeys.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignKeys.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignMembers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkAssignMembers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignKeys.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignKeys.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignMembers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsBulkUnassignMembers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsCreate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsCreate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsDelete.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsDelete.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsGet.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsGet.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailKeyAssignments.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailKeyAssignments.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailMemberAssignments.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListGuardrailMemberAssignments.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListKeyAssignments.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListKeyAssignments.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListMemberAssignments.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsListMemberAssignments.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsUpdate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/guardrailsUpdate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsCount.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsCount.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsListForUser.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/modelsListForUser.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthCode.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthCode.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthorizationUrl.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateAuthorizationUrl.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateSHA256CodeChallenge.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthCreateSHA256CodeChallenge.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthExchangeAuthCodeForAPIKey.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/oAuthExchangeAuthCodeForAPIKey.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityCreate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityCreate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityDelete.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityDelete.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityGet.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityGet.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityUpdate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/observabilityUpdate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/organizationListMembers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/organizationListMembers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsChatCompletions.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsChatCompletions.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsMessages.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsMessages.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsResponses.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/presetsCreatePresetsResponses.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/providersList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/providersList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/rerankRerank.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/rerankRerank.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/sttCreateTranscription.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/sttCreateTranscription.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/ttsCreateSpeech.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/ttsCreateSpeech.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGenerate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGenerate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGetGeneration.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGetGeneration.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGetVideoContent.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationGetVideoContent.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationListVideosModels.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/videoGenerationListVideosModels.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesBulkAddMembers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesBulkAddMembers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesBulkRemoveMembers.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesBulkRemoveMembers.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesCreate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesCreate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesDelete.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesDelete.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesGet.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesGet.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesList.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesList.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesUpdate.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/funcs/workspacesUpdate.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/hooks.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/hooks.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/index.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/index.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/registration.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/registration.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/types.d.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'node_modules/@openrouter/sdk/esm/hooks/types.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working co
+
+[… truncated 224000 chars …]

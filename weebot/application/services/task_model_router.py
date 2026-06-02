@@ -28,12 +28,12 @@ class TaskCategory(Enum):
 
 CATEGORY_MODEL: dict[TaskCategory, str] = {
     TaskCategory.CODING: "deepseek/deepseek-r1",
-    TaskCategory.FILE_OPS: "google/gemini-2.0-flash-exp:free",
+    TaskCategory.FILE_OPS: "google/gemini-2.5-flash",
     TaskCategory.RESEARCH: "moonshotai/kimi-k2.6",
     TaskCategory.REVIEW: "anthropic/claude-sonnet-4.6",
     TaskCategory.PLANNING: "moonshotai/kimi-k2.6",
     TaskCategory.SECURITY: "anthropic/claude-sonnet-4.6",
-    TaskCategory.SUMMARIZATION: "google/gemini-2.0-flash-exp:free",
+    TaskCategory.SUMMARIZATION: "google/gemini-2.5-flash",
     TaskCategory.GENERAL: "moonshotai/kimi-k2.6",
 }
 
