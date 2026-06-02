@@ -856,6 +856,69 @@ def flow_undo(session_id: str) -> None:
     asyncio.run(_run())
 
 
+@flow.command("skillopt")
+@click.argument("skill_name")
+@click.option("--epochs", default=4, help="Number of optimization epochs")
+@click.option("--steps", default=5, help="Steps per epoch")
+@click.option("--batch", default=40, help="Batch size")
+@click.option("--output", default="best_skill.md", help="Output skill file path")
+@click.option("--planning/--no-planning", default=False, help="Enable SIA-inspired pre-reflect planning")
+def flow_skillopt(skill_name: str, epochs: int, steps: int, batch: int, output: str, planning: bool) -> None:
+    """Run SkillOptFlow — optimize a skill through rollout → reflect → merge → validate."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.application.di import Container
+
+        container = Container()
+        container.configure_defaults()
+        container.configure_skillopt()
+
+        flow = container.build_skill_opt_flow(
+            skill_name=skill_name,
+            train_tasks=[],
+            validation_tasks=None,
+            output_path=output,
+            epochs=epochs,
+            steps_per_epoch=steps,
+            batch_size=batch,
+            use_planning=planning,
+        )
+
+        console.print(f"[bold]SkillOptFlow: {skill_name}[/bold]")
+        console.print(f"  Epochs: {epochs}  Steps/epoch: {steps}  Batch: {batch}")
+        console.print(f"  Planning: {planning}  Output: {output}\n")
+
+        async for event in flow.run():
+            event_type = getattr(event, "type", "?")
+            if event_type == "epoch_completed":
+                e = event
+                console.print(
+                    f"  [green]Epoch {e.epoch}[/green]  "
+                    f"best_score={e.best_validation_score:.3f}  "
+                    f"accepted={e.edits_accepted}  rejected={e.edits_rejected}"
+                )
+            elif event_type == "skill_edit_accepted":
+                e = event
+                console.print(
+                    f"    [green]✓ accepted[/green]  "
+                    f"{e.skill_name} v{e.old_version}→v{e.new_version}  "
+                    f"Δ={e.validation_score_delta:+.3f}"
+                )
+            elif event_type == "skill_edit_rejected":
+                e = event
+                console.print(
+                    f"    [red]✗ rejected[/red]  "
+                    f"{e.skill_name}  drop={e.score_drop:.3f}"
+                )
+            elif event_type == "done":
+                console.print(f"\n[bold green]SkillOpt complete → {output}[/bold green]")
+            else:
+                console.print(f"  [{event_type}]")
+
+    asyncio.run(_run())
+
+
 @flow.command("export")
 @click.argument("session_id")
 @click.option("--output", default=None, help="Output .jsonl file path (default: <session_id>.jsonl)")

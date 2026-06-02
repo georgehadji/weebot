@@ -7,17 +7,18 @@ from pathlib import Path
 from langchain.tools import BaseTool
 from pydantic import Field
 
-# Configuration - import from settings to use consistent workspace
-# Inline workspace root — avoid importing settings at module level.
-# The canonical value is set via ToolConfig DI in production.
-_WORKSPACE_ROOT = "C:\\Users\\Public\\weebot_workspace"
+# Configuration — use the canonical workspace from settings so the
+# PowerShell tool operates in the same directory as every other tool.
+# Respects the WEEBOT_WORKSPACE environment variable.
+from weebot.config.settings import WORKSPACE_ROOT as _WORKSPACE_ROOT
 
 
 class PowerShellTool(BaseTool):
     name: str = "powershell_executor"
     description: str = """Execute PowerShell commands in Windows 11 Sandbox environment.
     Use for: file operations, process management, system diagnostics, network testing.
-    Workspace isolated to: C:\\Users\\Public\\weebot_workspace. Pass 'timeout' in seconds (default: 30, max: 300)."""
+    Workspace is configured via WEEBOT_WORKSPACE env var (default: current directory).
+    Pass 'timeout' in seconds (default: 30, max: 300)."""
     
     # Available diagnostic commands as requested
     DIAGNOSTIC_COMMANDS: ClassVar[Dict[str, str]] = {

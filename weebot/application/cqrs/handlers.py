@@ -403,17 +403,32 @@ class ProcessMessageHandler(CommandHandler):
 class SummarizeHandler(CommandHandler):
     """Generate a final summary via the executor agent through the mediator."""
 
-    def __init__(self, llm: LLMPort):
+    def __init__(self, llm: LLMPort, state_repo: StateRepositoryPort | None = None):
         self._llm = llm
+        self._state_repo = state_repo
 
     async def handle(self, command: SummarizeCommand) -> CommandResult:
         from weebot.application.agents.executor import ExecutorAgent
 
         try:
+            # Load session if state_repo is available (best-effort —
+            # the flow state also persists via _emit, but direct
+            # callers of this handler need their own persistence).
+            if self._state_repo:
+                session = await self._state_repo.load_session(command.session_id)
+            else:
+                session = None
+
             executor = ExecutorAgent(llm=self._llm)
             events: list[dict] = []
             async for event in executor.summarize():
                 events.append(event.model_dump())
+                if session is not None:
+                    session = session.add_event(event)
+
+            if session is not None:
+                await self._state_repo.save_session(session)
+
             return CommandResult.ok(
                 data={
                     "session_id": command.session_id,
@@ -549,7 +564,7 @@ def register_default_handlers(
     )
     if llm is not None:
         mediator.register_command_handler(
-            SummarizeCommand, SummarizeHandler(llm)
+            SummarizeCommand, SummarizeHandler(llm, state_repo)
         )
 
     if task_runner:

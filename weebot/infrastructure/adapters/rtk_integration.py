@@ -158,7 +158,7 @@ async def execute_with_rtk_fallback(command: str, timeout: float = 30.0) -> Tupl
         
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return stdout.decode('utf-8'), stderr.decode('utf-8'), proc.returncode
+            return stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace'), proc.returncode
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
@@ -179,7 +179,7 @@ async def execute_with_rtk_fallback(command: str, timeout: float = 30.0) -> Tupl
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             # RTK should provide optimized output in stdout, with minimal stderr
-            return stdout.decode('utf-8'), stderr.decode('utf-8'), proc.returncode
+            return stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace'), proc.returncode
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
@@ -196,7 +196,7 @@ async def execute_with_rtk_fallback(command: str, timeout: float = 30.0) -> Tupl
         
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return stdout.decode('utf-8'), stderr.decode('utf-8'), proc.returncode
+            return stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace'), proc.returncode
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()

@@ -44,10 +44,10 @@ class ToolCollection:
     def to_params(self) -> list[dict]:
         return [t.to_param() for t in self._tools.values()]
 
-    async def execute(self, name: str, **kwargs: Any) -> ToolResult:
-        if name not in self._tools:
+    async def execute(self, _name: str, **kwargs: Any) -> ToolResult:
+        if _name not in self._tools:
             return ToolResult.error_result(
-                error=f"Unknown tool: {name!r}",
+                error=f"Unknown tool: {_name!r}",
                 execution_time_ms=0.0,
                 retry_count=0,
             )
@@ -58,7 +58,7 @@ class ToolCollection:
 
         while True:
             try:
-                result = await self._tools[name].execute(**kwargs)
+                result = await self._tools[_name].execute(**kwargs)
 
                 # Add execution metadata
                 execution_time_ms = (time.time() - start_time) * 1000
@@ -66,7 +66,7 @@ class ToolCollection:
                     {
                         "execution_time_ms": execution_time_ms,
                         "retry_count": retry_count,
-                        "tool_name": name,
+                        "tool_name": _name,
                     }
                 )
 
@@ -87,7 +87,7 @@ class ToolCollection:
                 m = _get_tool_metrics()
                 if m is not None:
                     try:
-                        m.tool_calls_total.labels(tool=name, success="true").inc()
+                        m.tool_calls_total.labels(tool=_name, success="true").inc()
                     except Exception:
                         pass
 
@@ -98,7 +98,7 @@ class ToolCollection:
                 m = _get_tool_metrics()
                 if m is not None:
                     try:
-                        m.tool_calls_total.labels(tool=name, success="false").inc()
+                        m.tool_calls_total.labels(tool=_name, success="false").inc()
                     except Exception:
                         pass
 

@@ -93,7 +93,11 @@ class TaskRunner:
         self._tasks[session_id] = task
 
         def _cleanup(t: asyncio.Task) -> None:
-            self._tasks.pop(session_id, None)
+            # Only pop if this task is the one currently tracked.
+            # When a retry creates a new task via _start_direct, the old
+            # task's cleanup must not remove the new task from _tasks.
+            if self._tasks.get(session_id) is t:
+                self._tasks.pop(session_id, None)
             # Only clean up retry state when no more retries are expected.
             # If _retry_counts > 0, a retry task is in-flight and owns the
             # count; popping here would kill the retry task's counter

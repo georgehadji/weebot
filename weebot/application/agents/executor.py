@@ -668,7 +668,7 @@ class ExecutorAgent:
             args = arguments or {}
         timeout = 60.0
         try:
-            result = await asyncio.wait_for(self._tools.execute(name, **args), timeout=timeout)
+            result = await asyncio.wait_for(self._tools.execute(_name=name, **args), timeout=timeout)
         except asyncio.TimeoutError:
             logger.warning("Tool %s timed out after %.0fs", name, timeout)
             return ToolResult.error_result(

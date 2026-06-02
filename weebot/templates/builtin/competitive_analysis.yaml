@@ -1,8 +1,11 @@
 name: "Competitive Analysis Workflow"
-version: "1.0.0"
+version: "1.1.0"
 description: |
   Analyzes competitors in a market space and generates
   a competitive landscape report with SWOT analysis.
+  For open-ended research without predefined competitors,
+  prefer the swarm tool + competitive_analysis skill
+  (see weebot/skills/builtin/competitive_analysis/SKILL.md).
 author: "Weebot Team"
 
 parameters:

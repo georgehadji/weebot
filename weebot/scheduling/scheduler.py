@@ -405,9 +405,10 @@ class SchedulingManager:
                     raise TypeError(
                         f"Registered callable is not callable: {job.callable_name}"
                     )
-                result = func()
-                if hasattr(result, '__await__'):
-                    await result
+                if asyncio.iscoroutinefunction(func):
+                    await func()
+                else:
+                    func()
                 logger.info("Executed job callable: %s", job_id)
             elif job.command:
                 # Fail closed instead of reporting false success.

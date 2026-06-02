@@ -256,13 +256,17 @@ class ResilientLLMAdapter(LLMPort):
     def _is_retryable_error(self, exc: Exception) -> bool:
         """Delegate retry decision to ErrorClassifier.
 
-        AUTH and CONTEXT_LENGTH are not retryable:
+        AUTH, CONTEXT_LENGTH, and TOOL_ERROR are not retryable:
         - AUTH: credentials won't change between retries
         - CONTEXT_LENGTH: compressor must handle this, not blind retry
-        - UNKNOWN: preserve safe default of not retrying unknown errors
+        - TOOL_ERROR: deterministic tool failures won't resolve with retry
+
+        UNKNOWN errors are retried — transient API errors (e.g. 500-class
+        responses with non-standard messages) won't match any known pattern
+        and would otherwise fail immediately.
         """
         cat = ErrorClassifier.classify(exc)
-        return cat not in (ErrorCategory.AUTH, ErrorCategory.CONTEXT_LENGTH, ErrorCategory.UNKNOWN)
+        return cat not in (ErrorCategory.AUTH, ErrorCategory.CONTEXT_LENGTH, ErrorCategory.TOOL_ERROR)
     
     def _should_cache(
         self,

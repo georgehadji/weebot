@@ -58,6 +58,13 @@ class FileSystemMemoryAdapter(MemoryPort):
     # ── Sync helpers run via asyncio.to_thread ─────────────────────────
 
     def _resolve(self, file: str) -> Path:
+        # Reject path separators and traversal sequences to prevent
+        # writes escaping the memory directory (e.g. "../../../etc/passwd").
+        if ".." in file or "/" in file or "\\" in file:
+            raise ValueError(
+                f"Invalid memory file name: {file!r}. "
+                "Use alphanumeric names only (agent, user, etc.)."
+            )
         self._dir.mkdir(parents=True, exist_ok=True)
         return self._dir / f"{file.upper()}.md"
 

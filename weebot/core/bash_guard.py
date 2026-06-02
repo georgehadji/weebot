@@ -86,9 +86,9 @@ class BashGuard:
             "Verify the current directory is correct. Consider using absolute paths.",
         ),
         (
-            r">\s*/[a-zA-Z/]+",
+            r">\s*/(etc|bin|sbin|boot|dev|lib|proc|root|sys|usr|var|opt|srv)/",
             RiskLevel.SUSPICIOUS,
-            "Overwriting system file with redirection",
+            "Redirect overwriting a system directory file",
             "Ensure you're not overwriting critical system files.",
         ),
         (

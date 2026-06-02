@@ -56,7 +56,7 @@ class RetryWithBackoff:
                 last_exc = exc
                 if attempt < len(self._config.delays):
                     base = self._config.delays[attempt]
-                    delay = base * (1.0 + random.random() * self._config.jitter)
+                    delay = base * (1.0 + (random.random() * 2 - 1) * self._config.jitter)
                     self._delay_index = attempt + 1
                     await asyncio.sleep(delay)
 

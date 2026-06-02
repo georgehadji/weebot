@@ -27,6 +27,9 @@ from __future__ import annotations
 MODEL_CASCADE_TIER1: str = "openrouter/owl-alpha"
 """Tier 1: Owl Alpha — FREE, 1M context, natively supports tool use, agentic."""
 
+MODEL_BUDGET: str = "openrouter/owl-alpha"
+"""Budget/free model for non-critical operations (compression, curation, defaults)."""
+
 MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
 """Tier 2: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
 

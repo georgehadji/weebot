@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """run.py - Main entry point for weebot Agent Framework."""
+import os
 import sys
 import asyncio
 import argparse
@@ -96,7 +97,12 @@ def run_diagnostic() -> bool:
     return len(errors) == 0
 
 
-def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill: str | None = None) -> None:
+def run_interactive(
+    flow_type: str = "plan_act",
+    model: str | None = None,
+    skill: str | None = None,
+    skillopt: bool = False,
+) -> None:
     """Run interactive agent session using the new Clean Architecture flows."""
     from weebot.application.di import Container
     from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -127,13 +133,47 @@ def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill
         _container = Container()
         _container.configure_defaults()
         state_repo = _container.get(StateRepositoryPort)
-        runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False, skill_prompt=skill_prompt)
+
+        # ── Phase 5: Steering — wire up mid-execution input channel ──
+        from weebot.application.ports.steering_port import SteeringPort
+        steering = _container.get(SteeringPort)
+
         subscriber = CLIEventSubscriber(use_rich=True)
 
         print("weebot Interactive Mode (PlanActFlow)")
+        print("Type '>>' followed by a message to steer the agent mid-execution.")
         print("Enter 'quit' to exit.\n")
 
         session_id = input("Session ID (default: interactive_session): ").strip() or "interactive_session"
+
+        # Spawn background thread that reads stdin for ">> steer message"
+        import threading as _threading
+        _steering_stop = _threading.Event()
+
+        def _steering_reader():
+            while not _steering_stop.is_set():
+                try:
+                    line = sys.stdin.readline()
+                    if not line:
+                        break
+                    line = line.strip()
+                    if line.startswith(">>") and len(line) > 2:
+                        msg = line[2:].strip()
+                        if msg:
+                            steering.send_threadsafe(session_id, msg)
+                except (EOFError, OSError):
+                    break
+
+        _reader_thread = _threading.Thread(
+            target=_steering_reader, daemon=True, name="weebot-steering"
+        )
+        _reader_thread.start()
+
+        runner = AgentRunner(
+            llm=llm, state_repo=state_repo, model=model,
+            use_rich=False, skill_prompt=skill_prompt,
+            steering=steering,
+        )
 
         while True:
             prompt = input("\nTask description: ").strip()
@@ -150,10 +190,83 @@ def run_interactive(flow_type: str = "plan_act", model: str | None = None, skill
                         await subscriber.on_event(resume_event)
                     break
 
+        # ── Post-session SkillOpt (opt-in via --skillopt or WEEBOT_SKILLOPT=1) ──
+        if skillopt:
+            print("\n🧪 Running SkillOptFlow learning pass...")
+            await _run_skillopt_pass()
+
     try:
         asyncio.run(_main())
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
+    finally:
+        # Stop steering reader thread
+        if '_steering_stop' in dir():
+            import threading
+            _steering_stop.set()
+
+
+async def _run_skillopt_pass() -> None:
+    """Run a single lightweight SkillOpt pass on available skills.
+
+    Uses 1 epoch × 2 steps to keep cost low.  Full training runs
+    are available via ``python -m cli.main flow skillopt <name>``.
+    """
+    import os as _os
+    from weebot.application.di import Container
+
+    container = Container()
+    container.configure_defaults()
+
+    try:
+        container.configure_skillopt()
+    except Exception as exc:
+        print(f"  [WARN] SkillOpt wiring failed: {exc}")
+        return
+
+    # Discover available skills
+    from weebot.application.skills.skill_registry import SkillRegistry
+    registry = SkillRegistry()
+    registry.load_all()
+    skills = registry.list_names()
+
+    if not skills:
+        print("  No skills found in registry — skipping SkillOpt.")
+        return
+
+    print(f"  Found {len(skills)} skill(s): {', '.join(skills[:5])}")
+    if len(skills) > 5:
+        print(f"  ... and {len(skills) - 5} more. Optimizing first 3.")
+
+    optimized = 0
+    for skill_name in skills[:3]:
+        try:
+            flow = container.build_skill_opt_flow(
+                skill_name=skill_name,
+                train_tasks=[],
+                validation_tasks=None,
+                output_path=f"{skill_name}.md",
+                epochs=1,
+                steps_per_epoch=2,
+                batch_size=16,
+                use_planning=False,
+            )
+            async for event in flow.run():
+                etype = getattr(event, "type", "")
+                if etype == "epoch_completed":
+                    e = event
+                    print(
+                        f"    {skill_name}: best={e.best_validation_score:.3f}  "
+                        f"accepted={e.edits_accepted}  rejected={e.edits_rejected}"
+                    )
+            optimized += 1
+        except Exception as exc:
+            print(f"    [WARN] {skill_name}: {exc}")
+
+    if optimized:
+        print(f"  SkillOpt complete — {optimized} skill(s) processed.\n")
+    else:
+        print("  SkillOpt: no skills processed.\n")
 
 
 if __name__ == "__main__":
@@ -164,6 +277,12 @@ if __name__ == "__main__":
     parser.add_argument("--flow", default="plan_act", help="Flow type for interactive mode (default: plan_act)")
     parser.add_argument("--model", default=None, help="Override default LLM model")
     parser.add_argument("--skill", default=None, help="Load a skill file from weebot/skills/<name>.md")
+    parser.add_argument(
+        "--skillopt", action="store_true",
+        default=os.environ.get("WEEBOT_SKILLOPT", "0") == "1",
+        help="Run SkillOptFlow learning pass after interactive session "
+             "(set WEEBOT_SKILLOPT=1 in .env to enable by default)",
+    )
     args = parser.parse_args()
 
     try:
@@ -176,6 +295,6 @@ if __name__ == "__main__":
         ok = run_diagnostic()
         sys.exit(0 if ok else 1)
     elif args.interactive:
-        run_interactive(flow_type=args.flow, model=args.model, skill=args.skill)
+        run_interactive(flow_type=args.flow, model=args.model, skill=args.skill, skillopt=args.skillopt)
     else:
         run_cli()

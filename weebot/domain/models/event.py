@@ -85,6 +85,18 @@ class ThoughtEvent(BaseEvent):
     iteration: int = Field(default=0)
 
 
+class SteeringEvent(BaseEvent):
+    """User-injected mid-execution feedback (Phase 5 — Steering).
+
+    Unlike WaitForUserEvent (which pauses the flow), SteeringEvent is
+    non-blocking — the flow continues but adapts its next step based
+    on the message.  Sent via SteeringPort from CLI stdin or WebSocket.
+    """
+    type: Literal["steering"] = "steering"
+    session_id: str = Field(default="")
+    message: str = Field(default="")
+
+
 AgentEvent = Union[
     ErrorEvent,
     PlanEvent,
@@ -96,6 +108,7 @@ AgentEvent = Union[
     WaitForUserEvent,
     NotificationEvent,
     ThoughtEvent,
+    SteeringEvent,
 ]
 
 

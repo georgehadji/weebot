@@ -170,28 +170,6 @@ class PathValidator:
             sanitized_value=str(input_path)
         )
     
-    def get_safe_path(self, path: str | Path) -> Path:
-        """
-        Get a safe path, raising SecurityError if invalid.
-        
-        Args:
-            path: The path to validate and sanitize
-            
-        Returns:
-            Resolved Path within workspace
-            
-        Raises:
-            SecurityError: If path is invalid or dangerous
-        """
-        report = self.validate(path)
-        if report.result != ValidationResult.VALID:
-            raise SecurityError(
-                message=report.message,
-                error_code="PATH_VALIDATION_FAILED",
-                details={"matched_pattern": report.matched_pattern}
-            )
-        return Path(report.sanitized_value or path).resolve()
-    
     def _check_encoded_traversal(self, path: str) -> ValidationReport | None:
         """Check for various encoding tricks used in path traversal."""
         # URL encoding
@@ -236,8 +214,6 @@ class PathValidator:
         Raises:
             SecurityError: If path is invalid or dangerous
         """
-        from weebot.errors.security_errors import SecurityError
-        
         report = self.validate(path)
         if report.result != ValidationResult.VALID:
             raise SecurityError(

@@ -77,11 +77,16 @@ class ConnectionManager:
                 logger.warning(f"Failed to send to WebSocket: {e}")
                 disconnected.add(connection)
 
-        # Clean up disconnected clients
+        # Clean up disconnected clients.
+        # Guard: the session may have been removed by disconnect() between
+        # the first lock acquisition (copy) and this second acquisition
+        # (cleanup).  If that happened, the key no longer exists and we
+        # must not attempt to discard from a missing set.
         if disconnected:
             async with self._connections_lock:
-                for conn in disconnected:
-                    self._connections[session_id].discard(conn)
+                if session_id in self._connections:
+                    for conn in disconnected:
+                        self._connections[session_id].discard(conn)
 
     async def broadcast_global(self, message: dict | str) -> None:
         """Broadcast to all global connections."""

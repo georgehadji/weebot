@@ -61,6 +61,7 @@ class PlanActFlow(BaseFlow):
         episodic_memory = None,
         mediator: Optional[Mediator] = None,
         state_repo: Optional[StateRepositoryPort] = None,
+        steering = None,  # SteeringPort — mid-execution user feedback (Phase 5)
         max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
         max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
         auto_terminate_on_plan_complete: bool = True,
@@ -74,6 +75,7 @@ class PlanActFlow(BaseFlow):
         self._model = model
         self._mediator = mediator
         self._state_repo = state_repo
+        self._steering = steering  # May be None if not wired
         self.status = AgentStatus.IDLE
         self._state: FlowState = None # Will be set in run()
         self._plan: Optional[Plan] = None

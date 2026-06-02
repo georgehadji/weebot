@@ -185,11 +185,16 @@ class CircuitBreaker:
         # (evaluate / record_success / record_failure) for that duration.
         # A dirty read here is intentional; the authoritative state check
         # happens in Phase 2 under the lock.
+        #
+        # Compute jittered cooldown ONCE so the dirty check and the
+        # authoritative check use the same value — avoids wasted stagger
+        # delay when the two calls return different random jitter.
+        jittered_cooldown = self._get_jittered_cooldown()
         entry_snapshot = self._breakers.get(entity_id)
         if (entry_snapshot is not None
                 and entry_snapshot.state == BreakerState.OPEN
                 and (time.monotonic() - entry_snapshot.last_state_change
-                     >= self._get_jittered_cooldown())):
+                     >= jittered_cooldown)):
             await self._maybe_stagger_probe()
 
         # Phase 2: authoritative check and state mutation under lock.
@@ -206,10 +211,9 @@ class CircuitBreaker:
                 )
 
             if entry.state == BreakerState.OPEN:
-                effective_cooldown = self._get_jittered_cooldown()
                 elapsed = now - entry.last_state_change
 
-                if elapsed >= effective_cooldown:
+                if elapsed >= jittered_cooldown:
                     # Transition to HALF_OPEN (stagger was already applied above)
                     old = entry.state
                     entry.state = BreakerState.HALF_OPEN
@@ -228,7 +232,7 @@ class CircuitBreaker:
                         reason="Probing after cooldown",
                         failure_count=entry.failure_count,
                     )
-                remaining = effective_cooldown - elapsed
+                remaining = jittered_cooldown - elapsed
                 return BreakerResult(
                     entity_id=entity_id,
                     allowed=False,

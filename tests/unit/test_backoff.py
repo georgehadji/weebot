@@ -116,7 +116,7 @@ class TestRetryWithBackoff:
 
     @pytest.mark.asyncio
     async def test_jitter_delays_within_expected_range(self):
-        """Actual sleep delay must be in [base, base * (1 + jitter)]."""
+        """Actual sleep delay must be in [base*(1-jitter), base*(1+jitter)]."""
         slept: list[float] = []
 
         async def capture_sleep(delay: float) -> None:
@@ -133,5 +133,5 @@ class TestRetryWithBackoff:
                 await retry.call(always_fails)
 
         assert slept, "sleep should have been called"
-        assert slept[0] >= 1.0
+        assert slept[0] >= 1.0 * (1 - 0.5)
         assert slept[0] <= 1.0 * (1 + 0.5)

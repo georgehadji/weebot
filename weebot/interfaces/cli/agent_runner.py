@@ -38,6 +38,7 @@ class AgentRunner:
         use_rich: bool = True,
         mediator = None,
         skill_prompt: Optional[str] = None,
+        steering = None,  # SteeringPort (Phase 5)
     ) -> None:
         self._llm = llm
         self._state_repo = state_repo
@@ -47,6 +48,7 @@ class AgentRunner:
         self._mcp_config = mcp_config
         self._mediator = mediator
         self._skill_prompt = skill_prompt
+        self._steering = steering
         self._task_runner = TaskRunner(state_repo=state_repo, event_bus=event_bus)
         self._tools: Optional[ToolCollection] = None
 
@@ -101,19 +103,27 @@ class AgentRunner:
             model=self._model,
             skill_prompt=self._skill_prompt,
             mediator=self._mediator,
+            steering=self._steering,
         )
 
         async for event in flow.run(prompt):
+            # PlanActFlow._emit() already persists every event via
+            # save_session(flow._session).  Our local `session` copy
+            # lacks flow-side mutations (facts, compaction).  We track
+            # only HITL state for the interactive loop — the flow
+            # owns canonical persistence.
             session = session.add_event(event)
-            # Set WAITING status before yielding a HITL event so the session
-            # is resumable even if the consumer breaks the generator early.
             if isinstance(event, WaitForUserEvent):
                 session = session.set_status(SessionStatus.WAITING)
-            await self._state_repo.save_session(session)
+                await self._state_repo.save_session(session)
             if self._event_bus:
                 await self._event_bus.publish(event)
             yield event
 
+        # Sync flow-mutated state (facts, compaction) before final save.
+        flow_session = getattr(flow, "_session", None)
+        if flow_session is not None:
+            session = session.model_copy(update={"context": flow_session.context})
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
         else:
@@ -161,17 +171,22 @@ class AgentRunner:
             model=self._model,
             skill_prompt=self._skill_prompt,
             mediator=self._mediator,
+            steering=self._steering,
         )
 
         async for event in flow.run(answer):
             session = session.add_event(event)
             if isinstance(event, WaitForUserEvent):
                 session = session.set_status(SessionStatus.WAITING)
-            await self._state_repo.save_session(session)
+                await self._state_repo.save_session(session)
             if self._event_bus:
                 await self._event_bus.publish(event)
             yield event
 
+        # Sync flow-mutated state (facts, compaction) before final save.
+        flow_session = getattr(flow, "_session", None)
+        if flow_session is not None:
+            session = session.model_copy(update={"context": flow_session.context})
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
         else:
@@ -197,6 +212,7 @@ class AgentRunner:
             model=self._model,
             skill_prompt=self._skill_prompt,
             mediator=self._mediator,
+            steering=self._steering,
         )
         previous = flow.undo()
         if previous is None:

@@ -33,6 +33,8 @@ class RoleBasedToolRegistry:
             "video_ingest",
             "screen_capture",
             "weather",
+            "swarm",
+            "debate",
         ],
         "analyst": [
             "python_execute",
@@ -65,6 +67,8 @@ class RoleBasedToolRegistry:
             "advanced_browser",
             "browser_inspector",
             "dispatch_parallel_tasks",
+            "swarm",
+            "debate",
             "file_editor",
             "knowledge",
             "video_ingest",
@@ -240,6 +244,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.dispatch_agents import DispatchAgentsTool
         from weebot.tools.persistent_memory import PersistentMemoryTool
         from weebot.tools.mixture_of_agents import MixtureOfAgentsTool
+        from weebot.tools.swarm import SwarmTool
+        from weebot.tools.debate import DebateTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -263,6 +269,8 @@ class RoleBasedToolRegistry:
             "dispatch_parallel_tasks": DispatchAgentsTool,
             "persistent_memory": PersistentMemoryTool,
             "mixture_of_agents": MixtureOfAgentsTool,
+            "swarm": SwarmTool,
+            "debate": DebateTool,
         }
         return cls._TOOL_CLASS_MAP
 

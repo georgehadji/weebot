@@ -32,6 +32,7 @@ from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.steering_port import SteeringPort
 from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.ports import EventPublisher
 
@@ -114,6 +115,9 @@ class Container:
 
         # Task Runner
         self.register(TaskRunner, self._create_task_runner)
+
+        # Steering — mid-execution user feedback (Phase 5)
+        self.register(SteeringPort, self._create_steering)
 
         # Event Store — append-only audit log
         self.register(EventStorePort, lambda: self._create_event_store())
@@ -253,6 +257,13 @@ class Container:
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
         )
+
+    @staticmethod
+    def _create_steering():
+        from weebot.infrastructure.adapters.steering_adapter import (
+            InMemorySteeringAdapter,
+        )
+        return InMemorySteeringAdapter()
 
     def _maybe_get(self, port_type: type) -> Optional[Any]:
         """Return registered instance or None if not bound."""

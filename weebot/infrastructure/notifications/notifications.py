@@ -33,13 +33,8 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict
 from datetime import datetime
 
-try:
-    from .notifications_categorizer import NotificationCategorizer
-    from .utils.backoff import RetryWithBackoff, BackoffConfig
-except ImportError:
-    # Fallback for direct execution
-    from notifications_categorizer import NotificationCategorizer
-    from utils.backoff import RetryWithBackoff, BackoffConfig
+from .notifications_categorizer import NotificationCategorizer
+from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 logger = logging.getLogger(__name__)
 

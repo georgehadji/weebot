@@ -130,9 +130,27 @@ async def cancel_session(
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
-    # TODO: Actually cancel the running flow
-    session = session.set_status(SessionStatus.FAILED)
-    await state_repo.save_session(session)
+    # Cancel via TaskRunner if available, otherwise just mark status.
+    # The TaskRunner owns the running asyncio.Task — we must stop it
+    # or it will overwrite the FAILED status when it finishes.
+    container = request.app.state.container
+    try:
+        from weebot.application.services.task_runner import TaskRunner
+        task_runner = container.get(TaskRunner)
+        cancelled = await task_runner.cancel_session(session_id)
+        if not cancelled:
+            # TaskRunner didn't have an active task — mark manually
+            session = session.set_status(SessionStatus.FAILED)
+            await state_repo.save_session(session)
+    except (KeyError, Exception):
+        # TaskRunner not registered in container — fall back to status-only
+        session = session.set_status(SessionStatus.FAILED)
+        await state_repo.save_session(session)
+    else:
+        # Reload session to get TaskRunner's updated status
+        session = await state_repo.load_session(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
     logger.info(f"Cancelled session {session_id}")
     return _session_to_response(session)

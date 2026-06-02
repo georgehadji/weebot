@@ -24,6 +24,7 @@ def create_flow(
     skill_prompt: Optional[str] = None,
     mediator = None,
     state_repo: Optional[StateRepositoryPort] = None,
+    steering = None,
 ) -> BaseFlow:
     """Factory for creating agent flows."""
     if flow_type == "plan_act":
@@ -36,6 +37,7 @@ def create_flow(
             skill_prompt=skill_prompt,
             mediator=mediator,
             state_repo=state_repo,
+            steering=steering,
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

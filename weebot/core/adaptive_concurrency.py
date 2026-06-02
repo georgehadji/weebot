@@ -89,7 +89,11 @@ class AdaptiveConcurrencyController:
         self.scale_up_increment = scale_up_increment
         
         self.current_workers = self.min_workers
-        self._semaphore = asyncio.Semaphore(self.current_workers)
+        # Semaphore is created once at max capacity and never replaced.
+        # Replacing it (as the old code did) orphans any coroutines
+        # blocked on acquire() — they wait forever on the discarded
+        # semaphore while release() operates on the new one.
+        self._semaphore = asyncio.Semaphore(self.max_workers)
         self._lock = asyncio.Lock()
         
         self._running = False
@@ -183,10 +187,12 @@ class AdaptiveConcurrencyController:
                         f"scaling up: {old_workers} -> {new_workers}"
                     )
             
-            # Update if changed
+            # Update if changed.  Scaling up: we already have max capacity
+            # (the semaphore was created at max_workers).  Scaling down:
+            # we record the advisory limit in current_workers but cannot
+            # shrink the semaphore without orphaning blocked waiters.
             if new_workers != old_workers:
                 self.current_workers = new_workers
-                self._semaphore = asyncio.Semaphore(new_workers)
                 self._stats["adjustments"] += 1
     
     async def acquire(self) -> None:
@@ -258,10 +264,10 @@ class AdaptiveSemaphore:
     ):
         self.min_value = min_value
         self.max_value = max_value
-        self.current_value = initial
+        self._initial = initial
         self.adjustment_interval = adjustment_interval
         
-        self._semaphore = asyncio.Semaphore(initial)
+        self._semaphore = asyncio.Semaphore(max_value)
         self._controller: Optional[AdaptiveConcurrencyController] = None
     
     async def start(self) -> None:
@@ -274,20 +280,14 @@ class AdaptiveSemaphore:
             max_workers=self.max_value,
             adjustment_interval=self.adjustment_interval
         )
-        
-        # Monkey-patch to update our semaphore
-        original_adjust = self._controller._adjust
-        
-        async def patched_adjust():
-            await original_adjust()
-            # Update our semaphore to match controller
-            new_value = self._controller.current_workers
-            if new_value != self.current_value:
-                self.current_value = new_value
-                self._semaphore = asyncio.Semaphore(new_value)
-        
-        self._controller._adjust = patched_adjust
         await self._controller.start()
+
+    @property
+    def current_value(self) -> int:
+        """Current worker limit (reads from controller if started)."""
+        if self._controller is not None:
+            return self._controller.current_workers
+        return self._initial
     
     async def acquire(self) -> None:
         """Acquire the semaphore."""

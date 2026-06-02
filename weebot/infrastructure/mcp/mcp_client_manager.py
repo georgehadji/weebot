@@ -44,18 +44,32 @@ class MCPClientManager:
         if self._initialized:
             return
         servers = self._config.get("mcpServers", {})
+        failed: list[str] = []
         for server_name, server_config in servers.items():
             if not server_config.get("enabled", True):
                 continue
-            await self._connect_with_retry(server_name, server_config)
+            try:
+                await self._connect_with_retry(server_name, server_config)
+            except Exception as exc:
+                logger.error("Failed to connect to MCP server %s: %s", server_name, exc)
+                failed.append(server_name)
         self._initialized = True
+        if failed and not self._clients:
+            raise RuntimeError(
+                f"All MCP servers failed to connect: {', '.join(failed)}"
+            )
 
     async def _connect_with_retry(
         self,
         server_name: str,
         server_config: Dict[str, Any],
     ) -> None:
-        """Connect to a server with exponential backoff retry."""
+        """Connect to a server with exponential backoff retry.
+
+        Raises:
+            RuntimeError: If all retry attempts are exhausted.
+        """
+        last_exc: Optional[Exception] = None
         for attempt in range(1, self._max_retries + 1):
             try:
                 await self._connect_server(server_name, server_config)
@@ -63,6 +77,7 @@ class MCPClientManager:
                 logger.info("Connected to MCP server %s on attempt %d", server_name, attempt)
                 return
             except Exception as exc:
+                last_exc = exc
                 logger.warning(
                     "Failed to connect to MCP server %s (attempt %d/%d): %s",
                     server_name, attempt, self._max_retries, exc
@@ -71,6 +86,9 @@ class MCPClientManager:
                     delay = min(self._base_delay * (2 ** (attempt - 1)), self._max_delay)
                     await asyncio.sleep(delay)
         logger.error("Permanent failure connecting to MCP server %s", server_name)
+        raise RuntimeError(
+            f"MCP server {server_name!r} failed after {self._max_retries} attempts"
+        ) from last_exc
 
     async def _connect_server(self, server_name: str, server_config: Dict[str, Any]) -> None:
         transport = server_config.get("transport", "stdio")

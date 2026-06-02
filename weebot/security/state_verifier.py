@@ -476,17 +476,30 @@ class StateVerifier:
         command_lower = command.lower()
         return any(op in command_lower for op in self._CRITICAL_OPERATIONS)
 
-    async def _execute_verify_command(self, command: str) -> asyncio.subprocess.Process:
-        """Execute a command to verify its actual result."""
-        # Use a timeout to prevent hanging
+    async def _execute_verify_command(self, command: str):
+        """Execute a command to verify its actual result.
+
+        Returns a simple result object with .returncode (int),
+        .stdout (str), and .stderr (str) so callers can access
+        decoded output without dealing with asyncio StreamReaders.
+        """
+        from collections import namedtuple
+        VerifyResult = namedtuple("VerifyResult", ["returncode", "stdout", "stderr"])
+
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-            return proc
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                proc.communicate(), timeout=5.0
+            )
+            return VerifyResult(
+                returncode=proc.returncode or -1,
+                stdout=stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else "",
+                stderr=stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "",
+            )
         except asyncio.TimeoutError:
             proc.kill()
             raise

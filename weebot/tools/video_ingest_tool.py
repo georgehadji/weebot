@@ -123,21 +123,23 @@ def _fetch_transcript(video_id: str, language: str = "en") -> tuple[str, str]:
         )
 
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        # Prefer requested language; fall back to any available transcript.
+        api = YouTubeTranscriptApi()
+        # Try requested language first; fall back to any available.
         try:
-            transcript = transcript_list.find_transcript([language])
+            segments = api.fetch(video_id, languages=[language])
         except Exception:
-            transcript = transcript_list.find_generated_transcript(
-                [t.language_code for t in transcript_list]
-            )
-        segments = transcript.fetch()
+            # List available languages and pick the first one
+            available = api.list(video_id)
+            if not available:
+                raise ValueError("No transcripts available")
+            first_lang = available[0].language_code
+            segments = api.fetch(video_id, languages=[first_lang])
     except (TranscriptsDisabled, NoTranscriptFound) as exc:
         raise ValueError(f"No transcript available for video {video_id!r}: {exc}") from exc
     except Exception as exc:
         raise ValueError(f"Failed to fetch transcript: {exc}") from exc
 
-    full_text = " ".join(s["text"] for s in segments)
+    full_text = " ".join(s.text if hasattr(s, 'text') else s["text"] for s in segments)
     # Attempt to get video title via oEmbed (no API key needed).
     title = _fetch_title(video_id)
     return title, full_text

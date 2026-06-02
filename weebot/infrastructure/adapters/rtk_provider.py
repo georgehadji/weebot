@@ -190,7 +190,7 @@ class RTKProvider:
             )
             
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=effective_timeout)
-            return stdout.decode('utf-8'), stderr.decode('utf-8'), proc.returncode
+            return stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace'), proc.returncode
             
         except asyncio.TimeoutError:
             proc.kill()
@@ -212,7 +212,7 @@ class RTKProvider:
         
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return stdout.decode('utf-8'), stderr.decode('utf-8'), proc.returncode
+            return stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace'), proc.returncode
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()

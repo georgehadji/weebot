@@ -343,14 +343,14 @@ class BashTool(BaseTool):
             )
             return None
 
-    async def execute(  # type: ignore[override]
+    async def execute(
         self,
         command: str,
         timeout: Optional[float] = None,
         working_dir: Optional[str] = None,
         use_wsl: bool = False,
         security_override: Optional[str] = None,
-        **_: object,
+        **kwargs: object,
     ) -> ToolResult:
         """Execute *command* in a sandboxed subprocess.
 

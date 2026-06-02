@@ -39,6 +39,20 @@ class ExecutingState(FlowState):
             context.set_state(UpdatingState())
             return
 
+        # ── Phase 5: Steering — poll for mid-execution user feedback ──
+        effective_prompt = prompt
+        if context._steering is not None:
+            steering_msg = await context._steering.poll(context._session.id)
+            if steering_msg:
+                logger.info(
+                    "Steering received for session %s: %s",
+                    context._session.id, steering_msg[:80],
+                )
+                effective_prompt = (
+                    f"{prompt}\n\n[STEERING — the user says: {steering_msg}. "
+                    "Adjust your approach immediately.]"
+                )
+
         # Check for step repetition limit (prevent infinite loops)
         step_exec_count = context._step_execution_counts.get(step.id, 0) + 1
         context._step_execution_counts[step.id] = step_exec_count
@@ -107,9 +121,10 @@ class ExecutingState(FlowState):
                 "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
                 DeprecationWarning, stacklevel=2,
             )
-            # Pass prompt as user_input so resume answers reach the LLM.
+            # Pass prompt (with any steering) as user_input so resume
+            # answers and mid-execution feedback reach the LLM.
             async for event in context._executor.execute_step(
-                context._plan, step, user_input=prompt
+                context._plan, step, user_input=effective_prompt
             ):
                 await context._emit(event)
                 yield event
