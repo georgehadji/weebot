@@ -283,6 +283,10 @@ if __name__ == "__main__":
         help="Run SkillOptFlow learning pass after interactive session "
              "(set WEEBOT_SKILLOPT=1 in .env to enable by default)",
     )
+    parser.add_argument(
+        "--harness-version", default=os.environ.get("WEEBOT_HARNESS_VERSION"),
+        help="Select harness version (YAML file name in config/harness/)",
+    )
     args = parser.parse_args()
 
     try:

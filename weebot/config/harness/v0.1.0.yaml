@@ -1,0 +1,26 @@
+# Harness v0.1.0 — Default configuration with contract files and BM25 skills.
+# This harness is model-agnostic.  It was NOT evolved from any specific
+# backbone — it contains sensible defaults for all models.
+#
+# To evolve: run SkillOptFlow with --harness-version v0.1.0, or manually
+# edit any value below and re-run tasks.
+version: "0.1.0"
+description: "Default harness — contracts + BM25 skills + trajectory regulation"
+evolved_from: null
+
+canonicalizer:
+  strict_mode: false
+  coerce_types: true
+  contracts_dir: "config/contracts/"
+
+skill_retrieval:
+  enabled: true
+  retriever: "bm25"
+  top_k: 3
+  index_path: null
+
+trajectory:
+  repetition_threshold: 4
+  stagnation_window: 3
+  budget_hotspot_ratio: 0.4
+  exhaustion_ratio: 0.9

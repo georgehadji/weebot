@@ -40,10 +40,13 @@ class ActionCanonicalizer(CanonicalizerPort):
     Args:
         contracts_dir: Directory containing *.yaml contract files.
                        Defaults to weebot/config/contracts/.
+        harness_config: Optional HarnessConfig for cross-model settings.
     """
 
     def __init__(
-        self, contracts_dir: Optional[Path] = None
+        self,
+        contracts_dir: Optional[Path] = None,
+        harness_config=None,
     ) -> None:
         self._contracts_dir = contracts_dir or _CONTRACTS_DIR
         self._contracts: dict[str, dict] = {}

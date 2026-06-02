@@ -32,11 +32,18 @@ class BM25SkillRetriever(SkillRetrieverPort):
         registry: Loaded SkillRegistry instance.
     """
 
-    def __init__(self, registry: SkillRegistry) -> None:
+    def __init__(
+        self, registry: SkillRegistry, harness_config=None
+    ) -> None:
         self._registry = registry
         self._corpus: list[str] = []
         self._skill_names: list[str] = []
         self._bm25: Optional["BM25Okapi"] = None
+        self._top_k = 3
+        if harness_config is not None:
+            self._top_k = getattr(
+                harness_config.skill_retrieval, "top_k", 3
+            )
         self.refresh()
 
     def refresh(self) -> None:

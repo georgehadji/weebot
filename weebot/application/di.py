@@ -34,6 +34,7 @@ from weebot.application.ports.scoring_port import ScoringPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.steering_port import SteeringPort
 from weebot.application.services.task_runner import TaskRunner
+from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.ports import EventPublisher
 
 
@@ -118,6 +119,9 @@ class Container:
 
         # Steering — mid-execution user feedback (Phase 5)
         self.register(SteeringPort, self._create_steering)
+
+        # Harness config — model-agnostic runtime configuration
+        self.register(HarnessConfig, self._create_harness_config)
 
         # Event Store — append-only audit log
         self.register(EventStorePort, lambda: self._create_event_store())
@@ -264,6 +268,20 @@ class Container:
             InMemorySteeringAdapter,
         )
         return InMemorySteeringAdapter()
+
+    @staticmethod
+    def _create_harness_config():
+        from pathlib import Path
+        import os
+
+        version = os.getenv("WEEBOT_HARNESS_VERSION", "v0.1.0")
+        config_path = (
+            Path(__file__).resolve().parent.parent
+            / "config" / "harness" / f"{version}.yaml"
+        )
+        if config_path.exists():
+            return HarnessConfig.load(str(config_path))
+        return HarnessConfig.default()
 
     def _maybe_get(self, port_type: type) -> Optional[Any]:
         """Return registered instance or None if not bound."""
