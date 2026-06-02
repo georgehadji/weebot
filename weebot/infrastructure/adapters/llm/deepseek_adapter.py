@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 from .openai_adapter import OpenAIAdapter
+from weebot.config.api_endpoints import DEEPSEEK_API_BASE
 
 
 class DeepSeekAdapter(OpenAIAdapter):
@@ -18,6 +19,6 @@ class DeepSeekAdapter(OpenAIAdapter):
         key = api_key or os.getenv("DEEPSEEK_API_KEY") or "no-key"
         super().__init__(
             api_key=key,
-            base_url="https://api.deepseek.com",
+            base_url=DEEPSEEK_API_BASE,
             default_model=default_model,
         )

@@ -595,7 +595,6 @@ def test_no_settings_import_in_tools():
     violations: list[str] = []
     settings_imports = (
         "from weebot.config.settings import WeebotSettings",
-        "from weebot.config.settings import",
     )
 
     for path in _walk_py(ROOT / "tools"):

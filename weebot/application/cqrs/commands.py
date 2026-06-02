@@ -12,13 +12,14 @@ from typing import Any
 from pydantic import Field, model_validator
 
 from weebot.application.cqrs.base import Command
+from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 
 
 class CreatePlanCommand(Command):
     """Command to create a new plan."""
     session_id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
-    model: str = "gpt-4"
+    model: str = MODEL_COMMAND_DEFAULT
     context: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -22,6 +22,7 @@ from weebot.application.cqrs.handlers import register_default_handlers
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.mediator import Mediator
+from weebot.config.model_refs import MODEL_DI_FALLBACK
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
@@ -239,7 +240,7 @@ class Container:
     @staticmethod
     def _create_llm(default_model: Optional[str]) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
-        model = default_model or "openrouter/auto"
+        model = default_model or MODEL_DI_FALLBACK
         # Determine provider from model prefix
         if "/" in model:
             provider = "openrouter"

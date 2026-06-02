@@ -7,6 +7,7 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from .openai_adapter import OpenAIAdapter
+from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
 
 class OpenRouterAdapter(OpenAIAdapter):
@@ -27,7 +28,7 @@ class OpenRouterAdapter(OpenAIAdapter):
         # Re-initialize the OpenAI client with custom headers
         self._client = AsyncOpenAI(
             api_key=key,
-            base_url="https://openrouter.ai/api/v1",
+            base_url=OPENROUTER_API_BASE,
             default_headers=headers,
         )
         self._default_model = default_model

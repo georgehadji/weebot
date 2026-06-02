@@ -11,6 +11,7 @@ from weebot.tools.base import ToolCollection, ToolResult
 from weebot.domain.models import (
     AgentState, Memory, Message, Role, ToolCallSpec,
 )
+from weebot.config.model_refs import MODEL_DEPRECATED_TOOL_AGENT
 from weebot.utils.cost_ledger import CostLedger
 from typing import Optional
 
@@ -52,7 +53,7 @@ class ToolCallWeebotAgent:
             base_url = "https://api.deepseek.com"
 
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model or os.getenv("WEEBOT_MODEL", "gpt-4o-mini")
+        self.model = model or os.getenv("WEEBOT_MODEL", MODEL_DEPRECATED_TOOL_AGENT)
         self.tools = tools
         self.max_steps = max_steps
         self.memory = Memory()

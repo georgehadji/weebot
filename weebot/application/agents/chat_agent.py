@@ -10,6 +10,7 @@ import logging
 from typing import AsyncGenerator, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.config.constants import DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import AgentEvent, MessageEvent
 
@@ -25,7 +26,7 @@ class ChatAgent:
 
     # Maximum number of recent messages to include as context.
     # Beyond this, older messages are dropped to keep token usage bounded.
-    MAX_CONTEXT_MESSAGES = 50
+    MAX_CONTEXT_MESSAGES = DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
 
     def __init__(
         self,

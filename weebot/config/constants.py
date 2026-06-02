@@ -90,3 +90,30 @@ MAX_TOOL_OUTPUT_CHARS: int = 20_000
 
 SUBAGENT_MAX_STEPS: int = 15
 """Max tool-call iterations for sub-agents spawned by DispatchAgentsTool."""
+
+# ========================================================================
+# Flow execution limits
+# ========================================================================
+DEFAULT_MAX_STEP_REPETITIONS: int = 3
+"""Default max times the same step can be re-attempted before forcing completion."""
+DEFAULT_MAX_FLOW_ITERATIONS: int = 50
+"""Default safety cap on state-machine iterations to prevent infinite loops."""
+DEFAULT_MAX_CHAT_CONTEXT_MESSAGES: int = 50
+"""Default max conversation turns before summarization."""
+
+# ========================================================================
+# SkillOpt defaults
+# ========================================================================
+DEFAULT_SKILLOPT_EPOCHS: int = 4
+DEFAULT_SKILLOPT_STEPS_PER_EPOCH: int = 5
+DEFAULT_SKILLOPT_BATCH_SIZE: int = 40
+DEFAULT_SKILLOPT_MINIBATCH_SIZE: int = 8
+
+# ========================================================================
+# External service defaults
+# ========================================================================
+MCP_MAX_RETRIES: int = 3
+MCP_RETRY_BASE_DELAY: float = 1.0
+MCP_RETRY_MAX_DELAY: float = 10.0
+EXTERNAL_SERVICE_TIMEOUT: int = 30
+EXTERNAL_SERVICE_RETRIES: int = 3

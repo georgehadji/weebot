@@ -6,7 +6,9 @@ import aiohttp
 
 from weebot.tools.base import BaseTool, ToolResult
 
-_WTTR_URL = "https://wttr.in"
+from weebot.config.api_endpoints import WEATHER_WTTR_URL
+
+_WTTR_URL = WEATHER_WTTR_URL
 
 
 class WeatherTool(BaseTool):

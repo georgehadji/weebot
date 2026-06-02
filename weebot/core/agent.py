@@ -9,6 +9,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from weebot.tools.powershell_tool import PowerShellTool
 from weebot.tools.browser_tool import BrowserTool
 from weebot.tools.heuristic_router import HeuristicRouter
+from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 from weebot.core.safety import SafetyChecker
 
 MAX_RETRIES = 3
@@ -31,7 +32,7 @@ class RecursiveWeebotAgent:
     """
     
     def __init__(self):
-        self.llm = ChatOpenAI(model="gpt-4", temperature=0.2)
+        self.llm = ChatOpenAI(model=MODEL_COMMAND_DEFAULT, temperature=0.2)
         self.heuristic_router = HeuristicRouter()
         self.safety_checker = SafetyChecker()
         self.history: List[ExecutionStep] = []

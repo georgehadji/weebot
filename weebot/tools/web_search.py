@@ -6,10 +6,11 @@ from typing import Any
 
 import aiohttp
 
+from weebot.config.api_endpoints import SEARCH_DDG_URL, SEARCH_BING_URL
 from weebot.tools.base import BaseTool, ToolResult
 
-_DDG_URL = "https://html.duckduckgo.com/html/"
-_BING_URL = "https://api.bing.microsoft.com/v7.0/search"
+_DDG_URL = SEARCH_DDG_URL
+_BING_URL = SEARCH_BING_URL
 
 
 class WebSearchTool(BaseTool):

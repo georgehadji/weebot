@@ -38,6 +38,7 @@ from weebot.domain.models.event import (
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.config.constants import DEFAULT_MAX_STEP_REPETITIONS, DEFAULT_MAX_FLOW_ITERATIONS
 
 if TYPE_CHECKING:
     from weebot.application.cqrs.mediator import Mediator
@@ -60,8 +61,8 @@ class PlanActFlow(BaseFlow):
         episodic_memory = None,
         mediator: Optional[Mediator] = None,
         state_repo: Optional[StateRepositoryPort] = None,
-        max_step_repetitions: int = 3,
-        max_iterations: int = 50,
+        max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
+        max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
         max_steps: Optional[int] = None,
