@@ -18,16 +18,16 @@ Naming convention: ``MODEL_<PURPOSE>``.
 from __future__ import annotations
 
 # ========================================================================
-# Executor Cascade (3-tier: budget → mid → primary)
+# Executor Cascade (3-tier: budget → reasoning → frontier)
 # ========================================================================
 MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6"
-"""First-attempt: Kimi K2.6 — strong reasoning, good tool use, mid-cost."""
+"""First-attempt: Kimi K2.6 — 1st on LMArena overall, strong reasoning, fast."""
 
-MODEL_CASCADE_TIER2: str = "qwen/qwen3.7-max"
-"""Second-attempt: Qwen 3.7 Max — powerful coding/agent model, high throughput."""
+MODEL_CASCADE_TIER2: str = "deepseek/deepseek-r1"
+"""Second-attempt: DeepSeek R1 — 87.5% AIME, frontier-level reasoning at ~12x cheaper than Claude Opus."""
 
 MODEL_PRIMARY: str = "anthropic/claude-sonnet-4.6"
-"""Third-attempt / primary fallback: Claude Sonnet 4.6 — best agentic tool use."""
+"""Third-attempt / primary fallback: Claude Sonnet 4.6 — best agentic tool use, 79.6% SWE-bench."""
 
 # ========================================================================
 # Task-specific
@@ -53,13 +53,13 @@ MODEL_DI_SKILLOPT: str = "anthropic/claude-sonnet-4.6"
 MODEL_FACTORY_OPENAI: str = "gpt-4o-mini"
 MODEL_FACTORY_ANTHROPIC: str = "claude-3-5-sonnet-20241022"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek-chat"
-MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6"
+MODEL_FACTORY_OPENROUTER: str = "deepseek/deepseek-r1"
 """Factory defaults per provider (used when model= param is omitted)."""
 
 MODEL_DEFAULT_OPENAI: str = "gpt-4o-mini"
 MODEL_DEFAULT_ANTHROPIC: str = "claude-3-5-sonnet-20241022"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek-chat"
-MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
+MODEL_DEFAULT_OPENROUTER: str = "deepseek/deepseek-r1"
 """Adapter constructor defaults."""
 
 # ========================================================================
@@ -67,7 +67,7 @@ MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "moonshotai/kimi-k2.6",             # Tier 1 — strong reasoning
-    "qwen/qwen3.7-max",                 # Tier 2 — powerful coding
+    "deepseek/deepseek-r1",             # Tier 2 — frontier reasoning, cheap
     "anthropic/claude-sonnet-4.6",      # Primary — best quality
 ]
 """Fallback models tried in order on rate-limit (not auto-routed)."""
