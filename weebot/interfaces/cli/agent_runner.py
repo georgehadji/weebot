@@ -76,10 +76,10 @@ class AgentRunner:
                 user_id=user_id,
                 agent_id=agent_id,
             )
-            session = session.model_copy(update={"context": {"last_prompt": prompt}})
+            session = session.model_copy(update={"context": session.context.model_copy(update={"last_prompt": prompt})})
             await self._state_repo.save_session(session)
         else:
-            session = session.model_copy(update={"context": {**session.context, "last_prompt": prompt}})
+            session = session.model_copy(update={"context": session.context.model_copy(update={"last_prompt": prompt})})
         
         # Start behavior tracking for this session
         behavior_tracker = await start_session_tracking_async(
@@ -201,7 +201,7 @@ class AgentRunner:
         previous = flow.undo()
         if previous is None:
             return False
-        session = session.model_copy(update={"context": {**session.context, "plan_undo": True}})
+        session = session.model_copy(update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "plan_undo": True}})})
         await self._state_repo.save_session(session)
         return True
 

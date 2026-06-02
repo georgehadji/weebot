@@ -55,3 +55,8 @@ Thumbs.db
 # Word / Office temp & source files
 *.docx
 ~$*.docx
+
+/docs
+/stripe-landing
+/Notion
+/logs

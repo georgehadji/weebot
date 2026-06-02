@@ -447,12 +447,11 @@ class ArchiveSessionHandler(CommandHandler):
             # Mark as archived via context flag
             session = session.model_copy(
                 update={
-                    "context": {
-                        **session.context,
+                    "context": session.context.model_copy(update={
                         "archived": True,
                         "archived_at": datetime.now(timezone.utc).isoformat(),
                         "archive_ttl_days": command.ttl_days,
-                    }
+                    })
                 }
             )
             await self._state_repo.save_session(session)

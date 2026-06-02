@@ -59,7 +59,7 @@ class LegacyProjectAdapter:
         if session is None:
             session = Session(id=project_id, user_id="legacy", agent_id="legacy")
         session = session.model_copy(
-            update={"context": {**session.context, "legacy_state": state}}
+            update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "legacy_state": state}})}
         )
         await self._repo.save_session(session)
 
@@ -106,7 +106,7 @@ class LegacyProjectAdapter:
         session = session.model_copy(
             update={
                 "context": {
-                    **session.context,
+                    **session.context.extra,
                     "checkpoints": session.context.get("checkpoints", [])
                     + [{
                         "id": chk_id,
@@ -133,7 +133,7 @@ class LegacyProjectAdapter:
                     chk["resolved"] = True
                     chk["user_response"] = user_response
                     session = session.model_copy(
-                        update={"context": {**session.context, "checkpoints": chks}}
+                        update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "checkpoints": chks}})}
                     )
                     await self._repo.save_session(session)
                     return

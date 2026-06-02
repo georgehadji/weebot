@@ -1,0 +1,666 @@
+$ python -m pytest tests/integration/test_real_api.py -v -m real_api 2>&1
+[exit 1]
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\tesse\AppData\Local\Programs\Python\Python312\python.EXE
+cachedir: .pytest_cache
+rootdir: E:\Documents\Vibe-Coding\weebot
+configfile: pytest.ini
+plugins: anyio-4.13.0, dash-4.0.0, langsmith-0.7.25, asyncio-0.24.0, cov-7.0.0, mock-3.15.1, timeout-2.4.0, xdist-3.8.0
+asyncio: mode=Mode.STRICT, default_loop_scope=None
+collecting ... collected 7 items
+
+tests/integration/test_real_api.py::test_simple_chat_returns_content FAILED [ 14%]
+tests/integration/test_real_api.py::test_multi_turn_conversation FAILED  [ 28%]
+tests/integration/test_real_api.py::test_system_prompt_influences_response FAILED [ 42%]
+tests/integration/test_real_api.py::test_json_response_mode FAILED       [ 57%]
+tests/integration/test_real_api.py::test_usage_tokens_are_populated FAILED [ 71%]
+tests/integration/test_real_api.py::test_adapter_caching PASSED          [ 85%]
+tests/integration/test_real_api.py::test_long_prompt_handled FAILED      [100%]
+
+================================== FAILURES ===================================
+______________________ test_simple_chat_returns_content _______________________
+
+adapter = <weebot.infrastructure.adapters.llm.resilient_adapter.ResilientLLMAdapter object at 0x0000022D7E342C60>
+
+    @pytest.mark.real_api
+    @needs_deepseek
+    @pytest.mark.asyncio
+    async def test_simple_chat_returns_content(adapter: LLMPort):
+>       response = await adapter.chat(
+            messages=[{"role": "user", "content": "Say exactly: hello world"}],
+        )
+
+tests\integration\test_real_api.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+weebot\infrastructure\adapters\llm\resilient_adapter.py:162: in chat
+    response = await self._retry.call(
+weebot\utils\backoff.py:49: in call
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+weebot\infrastructure\adapters\llm\resilient_adapter.py:243: in _execute_with_timeout
+    return await asyncio.wait_for(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\asyncio\tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+weebot\infrastructure\adapters\llm\openai_adapter.py:78: in chat
+    response = await self._client.chat.completions.create(**kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py:2585: in create
+    return await self._post(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1794: in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <openai.AsyncOpenAI object at 0x0000022D7E342D20>
+cast_to = <class 'openai.types.chat.chat_completion.ChatCompletion'>
+options = FinalRequestOptions(method='post', url='/chat/completions', params={}, headers=NOT_GIVEN, max_retries=NOT_GIVEN, timeo...ole': 'user', 'content': 'Say exactly: hello world'}], 'model': 'deepseek-chat', 'max_tokens': 16384}, extra_json=None)
+
+    async def request(
+        self,
+        cast_to: Type[ResponseT],
+        options: FinalRequestOptions,
+        *,
+        stream: bool = False,
+        stream_cls: type[_AsyncStreamT] | None = None,
+    ) -> ResponseT | _AsyncStreamT:
+        if self._platform is None:
+            # `get_platform` can make blocking IO calls so we
+            # execute it earlier while we are in an async context
+            self._platform = await asyncify(get_platform)()
+    
+        cast_to = self._maybe_override_cast_to(cast_to, options)
+    
+        # create a copy of the options we were given so that if the
+        # options are mutated later & we then retry, the retries are
+        # given the original options
+        input_options = model_copy(options)
+        if input_options.idempotency_key is None and input_options.method.lower() != "get":
+            # ensure the idempotency key is reused between requests
+            input_options.idempotency_key = self._idempotency_key()
+    
+        response: httpx.Response | None = None
+        max_retries = input_options.get_max_retries(self.max_retries)
+    
+        retries_taken = 0
+        for retries_taken in range(max_retries + 1):
+            options = model_copy(input_options)
+            options = await self._prepare_options(options)
+    
+            remaining_retries = max_retries - retries_taken
+            request = self._build_request(options, retries_taken=retries_taken)
+            await self._prepare_request(request)
+    
+            kwargs: HttpxSendArgs = {}
+            if self.custom_auth is not None:
+                kwargs["auth"] = self.custom_auth
+    
+            if options.follow_redirects is not None:
+                kwargs["follow_redirects"] = options.follow_redirects
+    
+            log.debug("Sending HTTP Request: %s %s", request.method, request.url)
+    
+            response = None
+            try:
+                response = await self._client.send(
+                    request,
+                    stream=stream or self._should_stream_response_body(request=request),
+                    **kwargs,
+                )
+            except httpx.TimeoutException as err:
+                log.debug("Encountered httpx.TimeoutException", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising timeout error")
+                raise APITimeoutError(request=request) from err
+            except Exception as err:
+                log.debug("Encountered Exception", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising connection error")
+                raise APIConnectionError(request=request) from err
+    
+            log.debug(
+                'HTTP Response: %s %s "%i %s" %s',
+                request.method,
+                request.url,
+                response.status_code,
+                response.reason_phrase,
+                response.headers,
+            )
+            log.debug("request_id: %s", response.headers.get("x-request-id"))
+    
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as err:  # thrown on 4xx and 5xx status code
+                log.debug("Encountered httpx.HTTPStatusError", exc_info=True)
+    
+                if remaining_retries > 0 and self._should_retry(err.response):
+                    await err.response.aclose()
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=response,
+                    )
+                    continue
+    
+                # If the response is streamed then we need to explicitly read the response
+                # to completion before attempting to access the response text.
+                if not err.response.is_closed:
+                    await err.response.aread()
+    
+                log.debug("Re-raising status error")
+>               raise self._make_status_error_from_response(err.response) from None
+E               openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Authentication Fails, Your api key: ****-key is invalid', 'type': 'authentication_error', 'param': None, 'code': 'invalid_request_error'}}
+
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1594: AuthenticationError
+________________________ test_multi_turn_conversation _________________________
+
+adapter = <weebot.infrastructure.adapters.llm.resilient_adapter.ResilientLLMAdapter object at 0x0000022D7E342C60>
+
+    @pytest.mark.real_api
+    @needs_deepseek
+    @pytest.mark.asyncio
+    async def test_multi_turn_conversation(adapter: LLMPort):
+        messages = [
+            {"role": "user", "content": "My name is TestBot. Remember it."},
+            {"role": "assistant", "content": "Got it, your name is TestBot."},
+            {"role": "user", "content": "What is my name?"},
+        ]
+>       response = await adapter.chat(messages=messages)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\test_real_api.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+weebot\infrastructure\adapters\llm\resilient_adapter.py:162: in chat
+    response = await self._retry.call(
+weebot\utils\backoff.py:49: in call
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+weebot\infrastructure\adapters\llm\resilient_adapter.py:243: in _execute_with_timeout
+    return await asyncio.wait_for(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\asyncio\tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+weebot\infrastructure\adapters\llm\openai_adapter.py:78: in chat
+    response = await self._client.chat.completions.create(**kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py:2585: in create
+    return await self._post(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1794: in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <openai.AsyncOpenAI object at 0x0000022D7E342D20>
+cast_to = <class 'openai.types.chat.chat_completion.ChatCompletion'>
+options = FinalRequestOptions(method='post', url='/chat/completions', params={}, headers=NOT_GIVEN, max_retries=NOT_GIVEN, timeo....'}, {'role': 'user', 'content': 'What is my name?'}], 'model': 'deepseek-chat', 'max_tokens': 16384}, extra_json=None)
+
+    async def request(
+        self,
+        cast_to: Type[ResponseT],
+        options: FinalRequestOptions,
+        *,
+        stream: bool = False,
+        stream_cls: type[_AsyncStreamT] | None = None,
+    ) -> ResponseT | _AsyncStreamT:
+        if self._platform is None:
+            # `get_platform` can make blocking IO calls so we
+            # execute it earlier while we are in an async context
+            self._platform = await asyncify(get_platform)()
+    
+        cast_to = self._maybe_override_cast_to(cast_to, options)
+    
+        # create a copy of the options we were given so that if the
+        # options are mutated later & we then retry, the retries are
+        # given the original options
+        input_options = model_copy(options)
+        if input_options.idempotency_key is None and input_options.method.lower() != "get":
+            # ensure the idempotency key is reused between requests
+            input_options.idempotency_key = self._idempotency_key()
+    
+        response: httpx.Response | None = None
+        max_retries = input_options.get_max_retries(self.max_retries)
+    
+        retries_taken = 0
+        for retries_taken in range(max_retries + 1):
+            options = model_copy(input_options)
+            options = await self._prepare_options(options)
+    
+            remaining_retries = max_retries - retries_taken
+            request = self._build_request(options, retries_taken=retries_taken)
+            await self._prepare_request(request)
+    
+            kwargs: HttpxSendArgs = {}
+            if self.custom_auth is not None:
+                kwargs["auth"] = self.custom_auth
+    
+            if options.follow_redirects is not None:
+                kwargs["follow_redirects"] = options.follow_redirects
+    
+            log.debug("Sending HTTP Request: %s %s", request.method, request.url)
+    
+            response = None
+            try:
+                response = await self._client.send(
+                    request,
+                    stream=stream or self._should_stream_response_body(request=request),
+                    **kwargs,
+                )
+            except httpx.TimeoutException as err:
+                log.debug("Encountered httpx.TimeoutException", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising timeout error")
+                raise APITimeoutError(request=request) from err
+            except Exception as err:
+                log.debug("Encountered Exception", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising connection error")
+                raise APIConnectionError(request=request) from err
+    
+            log.debug(
+                'HTTP Response: %s %s "%i %s" %s',
+                request.method,
+                request.url,
+                response.status_code,
+                response.reason_phrase,
+                response.headers,
+            )
+            log.debug("request_id: %s", response.headers.get("x-request-id"))
+    
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as err:  # thrown on 4xx and 5xx status code
+                log.debug("Encountered httpx.HTTPStatusError", exc_info=True)
+    
+                if remaining_retries > 0 and self._should_retry(err.response):
+                    await err.response.aclose()
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=response,
+                    )
+                    continue
+    
+                # If the response is streamed then we need to explicitly read the response
+                # to completion before attempting to access the response text.
+                if not err.response.is_closed:
+                    await err.response.aread()
+    
+                log.debug("Re-raising status error")
+>               raise self._make_status_error_from_response(err.response) from None
+E               openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Authentication Fails, Your api key: ****-key is invalid', 'type': 'authentication_error', 'param': None, 'code': 'invalid_request_error'}}
+
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1594: AuthenticationError
+___________________ test_system_prompt_influences_response ____________________
+
+adapter = <weebot.infrastructure.adapters.llm.resilient_adapter.ResilientLLMAdapter object at 0x0000022D7E342C60>
+
+    @pytest.mark.real_api
+    @needs_deepseek
+    @pytest.mark.asyncio
+    async def test_system_prompt_influences_response(adapter: LLMPort):
+        messages = [
+            {"role": "system", "content": "You are a pirate. End every response with 'Arrr!'."},
+            {"role": "user", "content": "Yes or no: is water wet?"},
+        ]
+>       response = await adapter.chat(messages=messages)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\test_real_api.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+weebot\infrastructure\adapters\llm\resilient_adapter.py:162: in chat
+    response = await self._retry.call(
+weebot\utils\backoff.py:49: in call
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+weebot\infrastructure\adapters\llm\resilient_adapter.py:243: in _execute_with_timeout
+    return await asyncio.wait_for(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\asyncio\tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+weebot\infrastructure\adapters\llm\openai_adapter.py:78: in chat
+    response = await self._client.chat.completions.create(**kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py:2585: in create
+    return await self._post(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1794: in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <openai.AsyncOpenAI object at 0x0000022D7E342D20>
+cast_to = <class 'openai.types.chat.chat_completion.ChatCompletion'>
+options = FinalRequestOptions(method='post', url='/chat/completions', params={}, headers=NOT_GIVEN, max_retries=NOT_GIVEN, timeo...ole': 'user', 'content': 'Yes or no: is water wet?'}], 'model': 'deepseek-chat', 'max_tokens': 16384}, extra_json=None)
+
+    async def request(
+        self,
+        cast_to: Type[ResponseT],
+        options: FinalRequestOptions,
+        *,
+        stream: bool = False,
+        stream_cls: type[_AsyncStreamT] | None = None,
+    ) -> ResponseT | _AsyncStreamT:
+        if self._platform is None:
+            # `get_platform` can make blocking IO calls so we
+            # execute it earlier while we are in an async context
+            self._platform = await asyncify(get_platform)()
+    
+        cast_to = self._maybe_override_cast_to(cast_to, options)
+    
+        # create a copy of the options we were given so that if the
+        # options are mutated later & we then retry, the retries are
+        # given the original options
+        input_options = model_copy(options)
+        if input_options.idempotency_key is None and input_options.method.lower() != "get":
+            # ensure the idempotency key is reused between requests
+            input_options.idempotency_key = self._idempotency_key()
+    
+        response: httpx.Response | None = None
+        max_retries = input_options.get_max_retries(self.max_retries)
+    
+        retries_taken = 0
+        for retries_taken in range(max_retries + 1):
+            options = model_copy(input_options)
+            options = await self._prepare_options(options)
+    
+            remaining_retries = max_retries - retries_taken
+            request = self._build_request(options, retries_taken=retries_taken)
+            await self._prepare_request(request)
+    
+            kwargs: HttpxSendArgs = {}
+            if self.custom_auth is not None:
+                kwargs["auth"] = self.custom_auth
+    
+            if options.follow_redirects is not None:
+                kwargs["follow_redirects"] = options.follow_redirects
+    
+            log.debug("Sending HTTP Request: %s %s", request.method, request.url)
+    
+            response = None
+            try:
+                response = await self._client.send(
+                    request,
+                    stream=stream or self._should_stream_response_body(request=request),
+                    **kwargs,
+                )
+            except httpx.TimeoutException as err:
+                log.debug("Encountered httpx.TimeoutException", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising timeout error")
+                raise APITimeoutError(request=request) from err
+            except Exception as err:
+                log.debug("Encountered Exception", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising connection error")
+                raise APIConnectionError(request=request) from err
+    
+            log.debug(
+                'HTTP Response: %s %s "%i %s" %s',
+                request.method,
+                request.url,
+                response.status_code,
+                response.reason_phrase,
+                response.headers,
+            )
+            log.debug("request_id: %s", response.headers.get("x-request-id"))
+    
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as err:  # thrown on 4xx and 5xx status code
+                log.debug("Encountered httpx.HTTPStatusError", exc_info=True)
+    
+                if remaining_retries > 0 and self._should_retry(err.response):
+                    await err.response.aclose()
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=response,
+                    )
+                    continue
+    
+                # If the response is streamed then we need to explicitly read the response
+                # to completion before attempting to access the response text.
+                if not err.response.is_closed:
+                    await err.response.aread()
+    
+                log.debug("Re-raising status error")
+>               raise self._make_status_error_from_response(err.response) from None
+E               openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Authentication Fails, Your api key: ****-key is invalid', 'type': 'authentication_error', 'param': None, 'code': 'invalid_request_error'}}
+
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1594: AuthenticationError
+___________________________ test_json_response_mode ___________________________
+
+adapter = <weebot.infrastructure.adapters.llm.resilient_adapter.ResilientLLMAdapter object at 0x0000022D7E342C60>
+
+    @pytest.mark.real_api
+    @needs_deepseek
+    @pytest.mark.asyncio
+    async def test_json_response_mode(adapter: LLMPort):
+        import json
+>       response = await adapter.chat(
+            messages=[
+                {"role": "system", "content": "Respond only with valid JSON."},
+                {"role": "user", "content": 'Return {"language": "Python", "year": 1991}'},
+            ],
+            response_format={"type": "json_object"},
+        )
+
+tests\integration\test_real_api.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+weebot\infrastructure\adapters\llm\resilient_adapter.py:162: in chat
+    response = await self._retry.call(
+weebot\utils\backoff.py:49: in call
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+weebot\infrastructure\adapters\llm\resilient_adapter.py:243: in _execute_with_timeout
+    return await asyncio.wait_for(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\asyncio\tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+weebot\infrastructure\adapters\llm\openai_adapter.py:78: in chat
+    response = await self._client.chat.completions.create(**kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py:2585: in create
+    return await self._post(
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1794: in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <openai.AsyncOpenAI object at 0x0000022D7E342D20>
+cast_to = <class 'openai.types.chat.chat_completion.ChatCompletion'>
+options = FinalRequestOptions(method='post', url='/chat/completions', params={}, headers=NOT_GIVEN, max_retries=NOT_GIVEN, timeo... 1991}'}], 'model': 'deepseek-chat', 'max_tokens': 16384, 'response_format': {'type': 'json_object'}}, extra_json=None)
+
+    async def request(
+        self,
+        cast_to: Type[ResponseT],
+        options: FinalRequestOptions,
+        *,
+        stream: bool = False,
+        stream_cls: type[_AsyncStreamT] | None = None,
+    ) -> ResponseT | _AsyncStreamT:
+        if self._platform is None:
+            # `get_platform` can make blocking IO calls so we
+            # execute it earlier while we are in an async context
+            self._platform = await asyncify(get_platform)()
+    
+        cast_to = self._maybe_override_cast_to(cast_to, options)
+    
+        # create a copy of the options we were given so that if the
+        # options are mutated later & we then retry, the retries are
+        # given the original options
+        input_options = model_copy(options)
+        if input_options.idempotency_key is None and input_options.method.lower() != "get":
+            # ensure the idempotency key is reused between requests
+            input_options.idempotency_key = self._idempotency_key()
+    
+        response: httpx.Response | None = None
+        max_retries = input_options.get_max_retries(self.max_retries)
+    
+        retries_taken = 0
+        for retries_taken in range(max_retries + 1):
+            options = model_copy(input_options)
+            options = await self._prepare_options(options)
+    
+            remaining_retries = max_retries - retries_taken
+            request = self._build_request(options, retries_taken=retries_taken)
+            await self._prepare_request(request)
+    
+            kwargs: HttpxSendArgs = {}
+            if self.custom_auth is not None:
+                kwargs["auth"] = self.custom_auth
+    
+            if options.follow_redirects is not None:
+                kwargs["follow_redirects"] = options.follow_redirects
+    
+            log.debug("Sending HTTP Request: %s %s", request.method, request.url)
+    
+            response = None
+            try:
+                response = await self._client.send(
+                    request,
+                    stream=stream or self._should_stream_response_body(request=request),
+                    **kwargs,
+                )
+            except httpx.TimeoutException as err:
+                log.debug("Encountered httpx.TimeoutException", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising timeout error")
+                raise APITimeoutError(request=request) from err
+            except Exception as err:
+                log.debug("Encountered Exception", exc_info=True)
+    
+                if remaining_retries > 0:
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising connection error")
+                raise APIConnectionError(request=request) from err
+    
+            log.debug(
+                'HTTP Response: %s %s "%i %s" %s',
+                request.method,
+                request.url,
+                response.status_code,
+                response.reason_phrase,
+                response.headers,
+            )
+            log.debug("request_id: %s", response.headers.get("x-request-id"))
+    
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as err:  # thrown on 4xx and 5xx status code
+                log.debug("Encountered httpx.HTTPStatusError", exc_info=True)
+    
+                if remaining_retries > 0 and self._should_retry(err.response):
+                    await err.response.aclose()
+                    await self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=response,
+                    )
+                    continue
+    
+                # If the response is streamed then we need to explicitly read the response
+                # to completion before attempting to access the response text.
+                if not err.response.is_closed:
+                    await err.response.aread()
+    
+                log.debug("Re-raising status error")
+>               raise self._make_status_error_from_response(err.response) from None
+E               openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Authentication Fails, Your api key: ****-key is invalid', 'type': 'authentication_error', 'param': None, 'code': 'invalid_request_error'}}
+
+C:\Users\tesse\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py:1594: AuthenticationError
+_______________________ test_usage_tokens_are_populated _______________________
+
+adapter = <weebot.infrastructure.adapters.llm.resilient_adapter.ResilientLLMAdapter object at 0x0000022D7E342C60>
+
+    @pytest.mark.real_api
+    @needs_deepseek
+    @pytest.mark.asyncio
+    async def test_usage_tokens_are_populated(adapter: LLMPort):
+>       response = await adapter.chat(
+            messages=[{"role": "user", "content": "Count to 3: 1, 2, 3."}],
+        )
+
+tests\integration\test_real_api.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+weebot\infrastructure\adapters\llm\resilient_adapter.py:162: in chat
+    response = await self._retry.call(
+weebot\utils\backoff.py:49: in call
+    result = await fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+weebot\infrastructure\adapters\llm\res
+
+[… truncated 17070 chars …]
