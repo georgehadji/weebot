@@ -15,7 +15,7 @@ from weebot.application.services.conversation_compressor import ConversationComp
 from weebot.application.services.step_budget import StepBudget
 from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
 from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE
-from weebot.config.model_refs import MODEL_BUDGET, MODEL_CASCADE_FREE, MODEL_CODE_REVIEW, MODEL_PRIMARY
+from weebot.config.model_refs import MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2, MODEL_CODE_REVIEW, MODEL_PRIMARY
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.domain.models.event import (
     AgentEvent,
@@ -206,8 +206,8 @@ class ExecutorAgent:
             "Recovery: flow should replan this step or request missing user input."
         )
 
-    _FREE_MODEL: str = MODEL_CASCADE_FREE
-    _BUDGET_MODEL: str = MODEL_BUDGET
+    _TIER1_MODEL: str = MODEL_CASCADE_TIER1
+    _TIER2_MODEL: str = MODEL_CASCADE_TIER2
     _PRIMARY_MODEL: str = MODEL_PRIMARY
     _REVIEW_MODEL: str = MODEL_CODE_REVIEW
 
@@ -261,21 +261,21 @@ class ExecutorAgent:
     async def _call_with_cascade(
         self, messages: List[Dict[str, Any]], description: str = ""
     ) -> LLMResponse:
-        """Tiered cascade: free → budget|review → primary (on failure).
-        
-        Code-review steps use Claude Sonnet 4.6 (excels at critique).
-        Other steps use kimi k2.6 (budget generalist).
+        """Tiered cascade: tier1 (kimi) → tier2 (qwen)|review → primary (claude).
+
+        Code-review steps use Claude Sonnet 4.6 directly.
+        Other steps cascade: Kimi K2.6 → Qwen 3.7 Max → Claude Sonnet 4.6.
         """
         is_review = self._is_review_step(description)
-        budget_model = self._REVIEW_MODEL if is_review else self._BUDGET_MODEL
+        tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
 
-        # Attempt 1: FREE tier (no cost)
+        # Attempt 1: TIER 1 — Kimi K2.6 (strong reasoning, fast)
         try:
             resp = await self._llm.chat(
                 messages=messages,
                 tools=self._tools.to_params(),
                 tool_choice="auto",
-                model=self._FREE_MODEL,
+                model=self._TIER1_MODEL,
                 temperature=TEMPERATURE,
             )
             if resp and (resp.content or resp.tool_calls):
@@ -284,15 +284,15 @@ class ExecutorAgent:
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
                 raise
-            logger.debug("FREE model failed (%s), trying budget tier: %s", self._FREE_MODEL, exc)
+            logger.debug("Kimi K2.6 failed (%s), trying Qwen tier: %s", self._TIER1_MODEL, exc)
 
-        # Attempt 2: BUDGET or REVIEW model
+        # Attempt 2: TIER 2 — Qwen 3.7 Max or REVIEW model
         try:
             resp = await self._llm.chat(
                 messages=messages,
                 tools=self._tools.to_params(),
                 tool_choice="auto",
-                model=budget_model,
+                model=tier2_model,
                 temperature=TEMPERATURE,
             )
             if resp and (resp.content or resp.tool_calls):
@@ -301,9 +301,9 @@ class ExecutorAgent:
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
                 raise
-            logger.debug("Budget model failed (%s), falling back to primary: %s", budget_model, exc)
+            logger.debug("Tier2 model failed (%s), falling back to primary: %s", tier2_model, exc)
 
-        # Attempt 3: PRIMARY model — best quality, highest cost
+        # Attempt 3: PRIMARY — Claude Sonnet 4.6 (best quality, highest cost)
         resp = await self._llm.chat(
             messages=messages,
             tools=self._tools.to_params(),

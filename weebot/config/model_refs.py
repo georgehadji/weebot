@@ -18,13 +18,13 @@ Naming convention: ``MODEL_<PURPOSE>``.
 from __future__ import annotations
 
 # ========================================================================
-# Executor Cascade (3-tier: free → budget → primary)
+# Executor Cascade (3-tier: budget → mid → primary)
 # ========================================================================
-MODEL_CASCADE_FREE: str = "qwen/qwen3-coder:free"
-"""First-attempt: Qwen Coder Free — free, 1M context, strong for code/agents."""
+MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6"
+"""First-attempt: Kimi K2.6 — strong reasoning, good tool use, mid-cost."""
 
-MODEL_BUDGET: str = "moonshotai/kimi-k2.6"
-"""Second-attempt: Kimi K2.6 — strong reasoning, good tool use, mid-cost."""
+MODEL_CASCADE_TIER2: str = "qwen/qwen3.7-max"
+"""Second-attempt: Qwen 3.7 Max — powerful coding/agent model, high throughput."""
 
 MODEL_PRIMARY: str = "anthropic/claude-sonnet-4.6"
 """Third-attempt / primary fallback: Claude Sonnet 4.6 — best agentic tool use."""
@@ -66,9 +66,9 @@ MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 # Fallback chain (rate-limit recovery)
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
-    "qwen/qwen3-coder:free",            # free, always available
-    "moonshotai/kimi-k2.6",             # cheap, strong
-    "anthropic/claude-sonnet-4.6",      # premium, if budget allows
+    "moonshotai/kimi-k2.6",             # Tier 1 — strong reasoning
+    "qwen/qwen3.7-max",                 # Tier 2 — powerful coding
+    "anthropic/claude-sonnet-4.6",      # Primary — best quality
 ]
 """Fallback models tried in order on rate-limit (not auto-routed)."""
 
@@ -105,9 +105,9 @@ MODEL_RTK_STANDARD: str = "moonshotai/kimi-k2.6"
 # ========================================================================
 MODEL_MOA_REFERENCE: list[str] = [
     "moonshotai/kimi-k2.6",
+    "qwen/qwen3.7-max",
     "anthropic/claude-3-5-haiku",
     "google/gemini-2.0-flash-exp:free",
-    "qwen/qwen3-coder:free",
 ]
 
 # ========================================================================
