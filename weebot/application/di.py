@@ -23,6 +23,7 @@ from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.mediator import Mediator
 from weebot.config.model_refs import MODEL_DI_FALLBACK
+from weebot.config.model_registry import ModelProvider
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
@@ -241,15 +242,7 @@ class Container:
     def _create_llm(default_model: Optional[str]) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
         model = default_model or MODEL_DI_FALLBACK
-        # Determine provider from model prefix
-        if "/" in model:
-            provider = "openrouter"
-        elif model.startswith("claude"):
-            provider = "anthropic"
-        elif model.startswith("deepseek"):
-            provider = "deepseek"
-        else:
-            provider = "openai"
+        provider = ModelProvider.from_model_name(model).value
         return create_adapter(provider, model=model)
 
     def _create_mediator(self) -> Mediator:
@@ -510,14 +503,7 @@ class Container:
     @staticmethod
     def _create_llm_by_id(model_id: str) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
-        if "/" in model_id:
-            provider = "openrouter" if model_id.startswith("openrouter/") else "openrouter"
-        elif model_id.startswith("claude"):
-            provider = "anthropic"
-        elif model_id.startswith("deepseek"):
-            provider = "deepseek"
-        else:
-            provider = "openai"
+        provider = ModelProvider.from_model_name(model_id).value
         return create_adapter(provider, model=model_id)
 
     def _create_optimizer_agent(self) -> OptimizerPort:

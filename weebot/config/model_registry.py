@@ -40,6 +40,11 @@ class ModelProvider(Enum):
     VLLM = "vllm"
     CUSTOM_OPENAI = "custom_openai"
 
+    @classmethod
+    def from_model_name(cls, model_name: str) -> "ModelProvider":
+        """Infer provider from a model name string."""
+        return _infer_provider_from_model_name(model_name)
+
 
 @dataclass
 class ModelInfo:
@@ -74,42 +79,44 @@ def _load_model_registry() -> Dict[str, ModelInfo]:
 
 
 def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
-    """Infer provider from model name pattern."""
-    if model_name.startswith("gpt-"):
-        return ModelProvider.OPENAI
-    elif model_name.startswith("claude-"):
-        return ModelProvider.ANTHROPIC
-    elif model_name.startswith("gemini/") or model_name.startswith("google/"):
-        return ModelProvider.GOOGLE
-    elif model_name.startswith("azure/"):
-        return ModelProvider.AZURE
-    elif model_name.startswith("bedrock/"):
-        return ModelProvider.AWS_BEDROCK
-    elif model_name.startswith("ollama/"):
-        return ModelProvider.OLLAMA
-    elif model_name.startswith("mistral/"):
-        return ModelProvider.MISTRAL
-    elif model_name.startswith("groq/"):
-        return ModelProvider.GROQ
-    elif model_name.startswith("together_ai/"):
-        return ModelProvider.TOGETHER_AI
-    elif model_name.startswith("deepseek/"):
-        return ModelProvider.DEEPSEEK
-    elif model_name.startswith("moonshot/"):
-        return ModelProvider.MOONSHOT
-    elif model_name.startswith("xai/"):
-        return ModelProvider.XAI
-    elif model_name.startswith("nvidia/"):
-        return ModelProvider.NVIDIA
-    elif model_name.startswith("fireworks/"):
-        return ModelProvider.FIREWORKS_AI
-    elif model_name.startswith("replicate/"):
-        return ModelProvider.REPLICATE
-    elif model_name.startswith("openrouter/"):
+    """Infer provider from model name pattern.
+
+    Covers both prefixed names (``openrouter/auto``) and bare names
+    (``deepseek-chat``, ``claude-3.5-sonnet``, ``kimi-k2-0905``).
+    """
+    name = model_name.lower()
+    # Prefixed names (from OpenRouter routing)
+    if name.startswith("openrouter/") or "/" in name:
         return ModelProvider.OPENROUTER
-    else:
-        # Default to OpenAI for unknown models
+    if name.startswith("azure/"):
+        return ModelProvider.AZURE
+    if name.startswith("bedrock/"):
+        return ModelProvider.AWS_BEDROCK
+    if name.startswith("deepseek/"):
+        return ModelProvider.DEEPSEEK
+    if name.startswith("claude/"):
+        return ModelProvider.ANTHROPIC
+    if name.startswith("gemini/") or name.startswith("google/"):
+        return ModelProvider.GOOGLE
+    # Bare names (direct provider model IDs)
+    if name.startswith("gpt-"):
         return ModelProvider.OPENAI
+    if name.startswith("claude-") or name.startswith("claude"):
+        return ModelProvider.ANTHROPIC
+    if name.startswith("deepseek"):
+        return ModelProvider.DEEPSEEK
+    if name.startswith("kimi-") or name.startswith("moonshot"):
+        return ModelProvider.MOONSHOT
+    if name.startswith("grok"):
+        return ModelProvider.XAI
+    if name.startswith("gemini") or name.startswith("google-"):
+        return ModelProvider.GEMINI
+    if name.startswith("mistral"):
+        return ModelProvider.MISTRAL
+    if name.startswith("llama") or name.startswith("qwen") or name.startswith("phi"):
+        return ModelProvider.OLLAMA
+    # Default to OpenAI for unknown models
+    return ModelProvider.OPENAI
 
 
 def _get_default_model_registry() -> Dict[str, ModelInfo]:
