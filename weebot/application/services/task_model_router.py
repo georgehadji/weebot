@@ -27,14 +27,14 @@ class TaskCategory(Enum):
 # ── Category → best model ──────────────────────────────────────────
 
 CATEGORY_MODEL: dict[TaskCategory, str] = {
-    TaskCategory.CODING: "x-ai/grok-build-0.1",
-    TaskCategory.FILE_OPS: "google/gemini-3.1-flash-lite",
-    TaskCategory.RESEARCH: "moonshotai/kimi-k2.6",
-    TaskCategory.REVIEW: "anthropic/claude-sonnet-4.6",
-    TaskCategory.PLANNING: "openrouter/owl-alpha",
-    TaskCategory.SECURITY: "anthropic/claude-sonnet-4.6",
-    TaskCategory.SUMMARIZATION: "google/gemini-3.1-flash-lite",
-    TaskCategory.GENERAL: "openrouter/owl-alpha",
+    TaskCategory.CODING: "qwen/qwen3.7-max",
+    TaskCategory.FILE_OPS: "minimax/minimax-m3",
+    TaskCategory.RESEARCH: "moonshotai/kimi-k2.6:free",
+    TaskCategory.REVIEW: "z-ai/glm-5.1",
+    TaskCategory.PLANNING: "moonshotai/kimi-k2.6:free",
+    TaskCategory.SECURITY: "deepseek/deepseek-v4-pro",
+    TaskCategory.SUMMARIZATION: "minimax/minimax-m3",
+    TaskCategory.GENERAL: "moonshotai/kimi-k2.6:free",
 }
 
 # ── Keyword patterns ───────────────────────────────────────────────
