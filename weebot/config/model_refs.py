@@ -31,7 +31,7 @@ MODEL_CASCADE_TIER1: str = "openrouter/owl-alpha"
 MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
 """Second-attempt: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
 
-MODEL_PRIMARY: str = "anthropic/claude-opus-4.8"
+MODEL_PRIMARY: str = "anthropic/claude-sonnet-4.6"
 """Primary fallback: Claude Opus 4.8 — Anthropic's most capable model, 1M context."""
 
 # ========================================================================
@@ -40,7 +40,7 @@ MODEL_PRIMARY: str = "anthropic/claude-opus-4.8"
 MODEL_PLANNER: str = "openrouter/owl-alpha"
 """Planning: Owl Alpha — agentic, tool use, strong at task decomposition."""
 
-MODEL_CODE_REVIEW: str = "anthropic/claude-opus-4.8"
+MODEL_CODE_REVIEW: str = "anthropic/claude-sonnet-4.6"
 """Code review: Claude Opus 4.8 — unmatched critique/analysis/bug-finding."""
 
 MODEL_SUMMARIZE: str = "google/gemini-3.1-flash-lite"
@@ -52,17 +52,17 @@ MODEL_SUMMARIZE: str = "google/gemini-3.1-flash-lite"
 MODEL_DI_DEFAULT: str = "openrouter/owl-alpha"
 """Default when no model is explicitly configured."""
 
-MODEL_DI_SKILLOPT: str = "anthropic/claude-opus-4.8"
+MODEL_DI_SKILLOPT: str = "anthropic/claude-sonnet-4.6"
 """SkillOpt optimizer — needs strongest reasoning for skill improvement."""
 
 MODEL_FACTORY_OPENAI: str = "gpt-4o-mini"
-MODEL_FACTORY_ANTHROPIC: str = "anthropic/claude-opus-4.8"
+MODEL_FACTORY_ANTHROPIC: str = "anthropic/claude-sonnet-4.6"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek-chat"
 MODEL_FACTORY_OPENROUTER: str = "openrouter/owl-alpha"
 """Factory defaults per provider."""
 
 MODEL_DEFAULT_OPENAI: str = "gpt-4o-mini"
-MODEL_DEFAULT_ANTHROPIC: str = "anthropic/claude-opus-4.8"
+MODEL_DEFAULT_ANTHROPIC: str = "anthropic/claude-sonnet-4.6"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek-chat"
 MODEL_DEFAULT_OPENROUTER: str = "openrouter/owl-alpha"
 """Adapter constructor defaults."""
@@ -74,7 +74,7 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "openrouter/owl-alpha",              # Tier 1 — FREE, agentic
     "x-ai/grok-build-0.1",               # Tier 2 — fast coding
     "moonshotai/kimi-k2.6",              # Tier 3 — strong reasoning
-    "anthropic/claude-opus-4.8",         # Primary — best quality
+    "anthropic/claude-sonnet-4.6",         # Primary — best quality
 ]
 
 MODEL_FALLBACK_NON_OPENROUTER: str = "gpt-4o-mini"
@@ -86,7 +86,7 @@ MODEL_COMMAND_DEFAULT: str = "openrouter/owl-alpha"
 MODEL_DEPRECATED_AGENT: str = "openrouter/owl-alpha"
 MODEL_DEPRECATED_TOOL_AGENT: str = "openrouter/owl-alpha"
 MODEL_RTK_CHEAP: str = "openrouter/owl-alpha"
-MODEL_RTK_PREMIUM: str = "anthropic/claude-opus-4.8"
+MODEL_RTK_PREMIUM: str = "anthropic/claude-sonnet-4.6"
 MODEL_RTK_STANDARD: str = "openrouter/owl-alpha"
 
 # ========================================================================
@@ -102,8 +102,8 @@ MODEL_MOA_REFERENCE: list[str] = [
 # ========================================================================
 # Pricing table (cost_ledger.py)
 # ========================================================================
-MODEL_PRICE_CLAUDE_SONNET: str = "claude-opus-4.8"
-MODEL_PRICE_CLAUDE_OPUS: str = "claude-opus-4.8"
+MODEL_PRICE_CLAUDE_SONNET: str = "claude-sonnet-4.6"
+MODEL_PRICE_CLAUDE_OPUS: str = "claude-sonnet-4.6"
 MODEL_PRICE_CLAUDE_HAIKU: str = "claude-haiku-latest"
 MODEL_PRICE_GPT4O: str = "gpt-chat-latest"
 MODEL_PRICE_GPT4O_MINI: str = "gpt-4o-mini"
