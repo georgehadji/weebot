@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+weebot-ui/node_modules/
+weebot-ui/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache
+.pytest_cache/
+.ruff_cache/
+.cache/
+
+# Weebot
+Output/
+logs/
