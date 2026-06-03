@@ -374,6 +374,92 @@ def hooks_install(target: str, force: bool, allow_outside: bool) -> None:
         console.print(f"[red]Hook install failed: {exc}[/red]")
 
 
+# ---------------------------------------------------------------------------
+# Skill conversion commands (Enhancement 10)
+# ---------------------------------------------------------------------------
+
+
+@cli.group()
+def skill() -> None:
+    """Manage and convert skills."""
+    pass
+
+
+@skill.command("convert")
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--name", default=None, help="Override skill name")
+@click.option("--output", default=None, help="Target directory (default: skills/builtin/<name>)")
+def skill_convert(source: str, name: str | None, output: str | None) -> None:
+    """Convert an external skill to Weebot format.
+
+    SOURCE can be a directory or file.  Detects format automatically
+    (Manus SKILL.md, MyManus plugin.json, AgenticSeek .txt).
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from pathlib import Path
+        from weebot.application.skills.skill_converter import SkillConverter
+
+        converter = SkillConverter()
+        report = converter.convert(Path(source))
+
+        if report.success:
+            console.print(f"[green]✓ Converted:[/green] {report.target_path}")
+        else:
+            console.print(f"[red]✗ Failed:[/red] {report.source_path}")
+            for err in report.errors:
+                console.print(f"  [red]{err}[/red]")
+
+        for w in report.warnings or []:
+            console.print(f"  [yellow]{w}[/yellow]")
+
+    asyncio.run(_run())
+
+
+@skill.command("convert-all")
+@click.option("--dry-run", is_flag=True, help="Show what would be converted without writing")
+def skill_convert_all(dry_run: bool) -> None:
+    """Scan skills/import/ and convert all detected external skills."""
+    import asyncio
+
+    async def _run() -> None:
+        from pathlib import Path
+        from weebot.application.skills.format_detector import FormatDetector
+        from weebot.application.skills.skill_converter import SkillConverter
+        from weebot.domain.models.skill_source import SourceFormat
+
+        import_dir = Path("skills/import")
+        if not import_dir.exists():
+            console.print("[yellow]No skills/import/ directory found[/yellow]")
+            return
+
+        converter = SkillConverter()
+        found = 0
+        converted = 0
+
+        for entry in sorted(import_dir.iterdir()):
+            source = FormatDetector.detect(entry)
+            if source.format != SourceFormat.UNKNOWN and source.format != SourceFormat.WEEBOT:
+                found += 1
+                if dry_run:
+                    console.print(f"  [blue]Would convert:[/blue] {entry.name} ({source.format.value})")
+                else:
+                    report = converter.convert(entry)
+                    if report.success:
+                        converted += 1
+                        console.print(f"  [green]✓ {entry.name}[/green] → {report.target_path}")
+                    else:
+                        console.print(f"  [red]✗ {entry.name}: {report.errors[0]}[/red]")
+
+        if found == 0:
+            console.print("[yellow]No external skills found in skills/import/[/yellow]")
+        else:
+            console.print(f"\nFound: {found}, Converted: {converted}")
+
+    asyncio.run(_run())
+
+
 @cli.command("check-updates")
 @click.option("--template", "template_filter", default=None, help="Filter by template name/id")
 @click.option("--marketplace-url", default=None, help="Marketplace URL override")

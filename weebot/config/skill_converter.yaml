@@ -1,0 +1,45 @@
+# Tool name mappings for SkillConverter (Enhancement 10).
+# Maps tool names from various source formats to their Weebot equivalents.
+
+tool_mappings:
+  # Manus / OpenClaw → Weebot
+  manus:
+    shell: "bash"
+    bash: "bash"
+    browser: "advanced_browser"
+    python: "python_execute"
+    edit: "file_editor"
+    web_search: "web_search"
+    file_system: "file_editor"
+    plan: "terminate"
+    finish: "terminate"
+
+  # MyManus → Weebot
+  mymanus:
+    Read: "file_editor"
+    Write: "file_editor"
+    Edit: "file_editor"
+    Bash: "bash"
+    Python: "python_execute"
+    Search: "web_search"
+    Browse: "advanced_browser"
+    Computer: "computer_use"
+    Screen: "screen_capture"
+    OCR: "ocr"
+
+  # AgenticSeek → Weebot
+  agenticseek:
+    web_browser: "advanced_browser"
+    file_system: "file_editor"
+    code_bash: "bash"
+    python_repl: "python_execute"
+    web_search: "web_search"
+
+# Template for converted skill manifests
+manifest_template:
+  name: "{name}"
+  version: "1.0.0"
+  description: "Converted from {source_format} — {original_description}"
+  author: "Import ({source})"
+  requires: "{tools_list}"
+  prompt_file: "prompt.md"
