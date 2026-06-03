@@ -72,6 +72,8 @@ class RoleBasedToolRegistry:
             "search_history",
             "todo_write",
             "audit_session",
+            "voice_input",
+            "voice_output",
             "file_editor",
             "knowledge",
             "video_ingest",
@@ -252,6 +254,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.search_history import SearchHistoryTool
         from weebot.tools.todo_tool import TodoWriteTool
         from weebot.tools.audit_tool import AuditTool
+        from weebot.tools.voice_input_tool import VoiceInputTool
+        from weebot.tools.voice_output_tool import VoiceOutputTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -280,6 +284,8 @@ class RoleBasedToolRegistry:
             "search_history": SearchHistoryTool,
             "todo_write": TodoWriteTool,
             "audit_session": AuditTool,
+            "voice_input": VoiceInputTool,
+            "voice_output": VoiceOutputTool,
         }
         return cls._TOOL_CLASS_MAP
 
