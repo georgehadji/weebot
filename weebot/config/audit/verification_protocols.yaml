@@ -1,0 +1,27 @@
+# Verification protocols — standard checks to apply during audit.
+
+protocols:
+  source_citation:
+    description: "Verify all factual claims have source citations"
+    dimension: accuracy
+    check: "output contains at least one URL or [source] marker"
+    
+  no_fabrication:
+    description: "Verify claims are not fabricated"
+    dimension: accuracy
+    check: "No claims presented as fact without supporting evidence"
+    
+  instruction_compliance:
+    description: "Verify output follows task instructions"
+    dimension: compliance
+    check: "Output addresses all stated requirements from the task"
+    
+  self_consistency:
+    description: "Verify output is internally consistent"
+    dimension: consistency
+    check: "No contradictory statements within the output"
+    
+  completeness:
+    description: "Verify all required sections are present"
+    dimension: completeness
+    check: "Output covers the topic without obvious gaps"

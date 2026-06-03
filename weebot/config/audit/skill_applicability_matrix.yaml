@@ -1,0 +1,22 @@
+# Skill Applicability Matrix — maps skills to audit requirements.
+# Defines which audit dimensions apply to each skill.
+
+skills:
+  web_research:
+    dimensions: [accuracy, safety, completeness]
+    min_score: 0.7
+    critical_checks:
+      - "Sources are cited and verifiable"
+      - "No fabricated data"
+  
+  competitive_analysis:
+    dimensions: [accuracy, consistency, completeness]
+    min_score: 0.8
+    
+  design-taste-frontend:
+    dimensions: [safety, compliance, consistency]
+    min_score: 0.7
+    
+  default:
+    dimensions: [safety, compliance]
+    min_score: 0.6
