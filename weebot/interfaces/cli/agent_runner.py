@@ -11,11 +11,12 @@ from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.models.event import AgentEvent, WaitForUserEvent
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
-from weebot.interfaces.factories import build_tools, create_flow
+from weebot.interfaces.factories import build_tools, create_flow, route_and_create_flow
 from weebot.tools.base import ToolCollection
 from weebot.core.behavior_integration import (
     start_session_tracking_async,
@@ -39,6 +40,7 @@ class AgentRunner:
         mediator = None,
         skill_prompt: Optional[str] = None,
         steering = None,  # SteeringPort (Phase 5)
+        router: Optional[TaskRouterPort] = None,  # Enhancement 6 — Neural Task Router
     ) -> None:
         self._llm = llm
         self._state_repo = state_repo
@@ -49,6 +51,7 @@ class AgentRunner:
         self._mediator = mediator
         self._skill_prompt = skill_prompt
         self._steering = steering
+        self._router = router  # Enhancement 6
         self._task_runner = TaskRunner(state_repo=state_repo, event_bus=event_bus)
         self._tools: Optional[ToolCollection] = None
 
@@ -67,6 +70,13 @@ class AgentRunner:
         user_id: str = "cli-user",
         agent_id: str = "weebot-cli",
     ) -> AsyncGenerator[AgentEvent, None]:
+        # ── Enhancement 7: Detect language ──
+        from weebot.application.services.language_detector import LanguageDetector
+        lang = LanguageDetector.detect(prompt)
+        if lang != "en":
+            language_injection = LanguageDetector.get_injection(lang)
+        else:
+            language_injection = ""
         """Run a prompt through PlanActFlow, yielding events."""
         session: Optional[Session] = None
         if session_id:
@@ -93,18 +103,48 @@ class AgentRunner:
         if behavior_tracker:
             self._print_behavior_notice(session.id)
 
+        # ── Enhancement 7: Append language instruction if non-English ──
+        if language_injection:
+            prompt = prompt + language_injection
+
         tools = await self._ensure_tools()
-        flow = create_flow(
-            flow_type="plan_act",
-            session=session,
-            llm=self._llm,
-            tools=tools,
-            event_bus=self._event_bus,
-            model=self._model,
-            skill_prompt=self._skill_prompt,
-            mediator=self._mediator,
-            steering=self._steering,
-        )
+
+        # Enhancement 6: route through task router if available
+        if self._router is not None:
+            flow, task_route = await route_and_create_flow(
+                query=prompt,
+                session=session,
+                llm=self._llm,
+                tools=tools,
+                router=self._router,
+                event_bus=self._event_bus,
+                model=self._model,
+                skill_prompt=self._skill_prompt,
+                mediator=self._mediator,
+                steering=self._steering,
+            )
+            # Store the route in session context for audit and traceability
+            session = session.model_copy(update={
+                "context": session.context.model_copy(update={
+                    "extra": {
+                        **session.context.extra,
+                        "task_route": task_route.category.value,
+                        "task_complexity": task_route.complexity.value,
+                    }
+                })
+            })
+        else:
+            flow = create_flow(
+                flow_type="plan_act",
+                session=session,
+                llm=self._llm,
+                tools=tools,
+                event_bus=self._event_bus,
+                model=self._model,
+                skill_prompt=self._skill_prompt,
+                mediator=self._mediator,
+                steering=self._steering,
+            )
 
         async for event in flow.run(prompt):
             # PlanActFlow._emit() already persists every event via
@@ -112,22 +152,26 @@ class AgentRunner:
             # lacks flow-side mutations (facts, compaction).  We track
             # only HITL state for the interactive loop — the flow
             # owns canonical persistence.
-            session = session.add_event(event)
             if isinstance(event, WaitForUserEvent):
+                # Ensure local status is updated for the interactive loop
                 session = session.set_status(SessionStatus.WAITING)
-                await self._state_repo.save_session(session)
             if self._event_bus:
                 await self._event_bus.publish(event)
             yield event
 
-        # Sync flow-mutated state (facts, compaction) before final save.
+        # Sync flow-mutated state (facts, compaction, status) before final save.
         flow_session = getattr(flow, "_session", None)
         if flow_session is not None:
-            session = session.model_copy(update={"context": flow_session.context})
+            # The flow's session is the canonical state after execution
+            session = flow_session
+        
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
-        else:
+        elif not session.status == SessionStatus.WAITING:
+            # If not done and not explicitly waiting for HITL, assume it finished
+            # its current loop and is waiting for the next task description.
             session = session.set_status(SessionStatus.WAITING)
+            
         await self._state_repo.save_session(session)
         
         # Stop behavior tracking and show final report
@@ -175,22 +219,26 @@ class AgentRunner:
         )
 
         async for event in flow.run(answer):
-            session = session.add_event(event)
             if isinstance(event, WaitForUserEvent):
+                # Ensure local status is updated for the interactive loop
                 session = session.set_status(SessionStatus.WAITING)
-                await self._state_repo.save_session(session)
             if self._event_bus:
                 await self._event_bus.publish(event)
             yield event
 
-        # Sync flow-mutated state (facts, compaction) before final save.
+        # Sync flow-mutated state (facts, compaction, status) before final save.
         flow_session = getattr(flow, "_session", None)
         if flow_session is not None:
-            session = session.model_copy(update={"context": flow_session.context})
+            # The flow's session is the canonical state after execution
+            session = flow_session
+            
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
-        else:
+        elif not session.status == SessionStatus.WAITING:
+            # If not done and not explicitly waiting for HITL, assume it finished
+            # its current loop and is waiting for the next task description.
             session = session.set_status(SessionStatus.WAITING)
+            
         await self._state_repo.save_session(session)
 
     async def list_sessions(self, user_id: Optional[str] = None) -> list[Session]:

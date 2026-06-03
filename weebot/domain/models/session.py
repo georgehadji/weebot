@@ -38,6 +38,10 @@ class SessionContext(BaseModel):
     archived: bool = False
     archived_at: Optional[str] = None
     archive_ttl_days: int = 30
+    detected_language: str = Field(
+        default="",
+        description="ISO 639-1 language code detected from user input (Enhancement 7)",
+    )
     extra: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(populate_by_name=True)
