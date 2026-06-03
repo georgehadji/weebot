@@ -1,0 +1,126 @@
+# Shared classification data for TaskRouter (Enhancement 6) and RuleSelector (Enhancement 2).
+# Categories match TaskCategory enum values. Keywords are matched against user queries
+# (for routing) and step descriptions (for rules). Both use the same logic:
+# highest keyword-hit count wins.
+#
+# This file is loaded by KeywordTaskRouter at startup and refreshed on SIGHUP.
+
+categories:
+  casual:
+    keywords:
+      - "hi"
+      - "hello"
+      - "hey"
+      - "how are you"
+      - "tell me a joke"
+      - "good morning"
+      - "good evening"
+      - "what's up"
+      - "thanks"
+      - "thank you"
+    flow_type: "chat"
+    tool_restriction: "none"             # No tools at all — just converse
+    mandatory_rules: []                  # No rule modules needed
+    complexity: "low"
+
+  code:
+    keywords:
+      - "write"
+      - "implement"
+      - "debug"
+      - "refactor"
+      - "python"
+      - "javascript"
+      - "typescript"
+      - "function"
+      - "class"
+      - "method"
+      - "fix"
+      - "bug"
+      - "error"
+      - "compile"
+      - "test"
+      - "lint"
+      - "type error"
+      - "syntax"
+      - "code review"
+      - "pull request"
+      - "pr"
+      - "commit"
+      - "git"
+      - "algorithm"
+      - "data structure"
+    flow_type: "chat"                   # LOW complexity → ChatFlow
+    tool_restriction: "code_only"        # Only python_execute, bash, file_editor
+    mandatory_rules: ["coding.md", "error_handling.md"]
+
+  research:
+    keywords:
+      - "search"
+      - "find"
+      - "look up"
+      - "research"
+      - "browse"
+      - "what is"
+      - "who is"
+      - "tell me about"
+      - "information"
+      - "news"
+      - "latest"
+      - "recent"
+      - "weather"
+      - "forecast"
+      - "price"
+      - "compare"
+      - "analysis"
+      - "investigate"
+      - "explore"
+      - "documentation"
+      - "docs"
+      - "learn about"
+      - "how to"
+    flow_type: "plan_act"               # Always use planner for research
+    tool_restriction: "researcher_role"  # web_search, advanced_browser only
+    mandatory_rules: ["research.md", "browser.md", "error_handling.md"]
+
+  file_ops:
+    keywords:
+      - "file"
+      - "folder"
+      - "directory"
+      - "create"
+      - "delete"
+      - "move"
+      - "rename"
+      - "copy"
+      - "list"
+      - "read"
+      - "write"
+      - "edit"
+      - "save"
+      - "open"
+      - "new file"
+      - "remove"
+    flow_type: "chat"
+    tool_restriction: "file_only"        # file_editor only
+    mandatory_rules: ["file_ops.md", "error_handling.md"]
+
+  mcp:
+    keywords:
+      - "mcp"
+      - "use mcp"
+      - "connect to"
+      - "external tool"
+      - "filesystem"
+      - "github"
+      - "database"
+      - "api"
+    flow_type: "mcp"
+    tool_restriction: "mcp_only"
+    mandatory_rules: ["error_handling.md"]
+
+fallback:
+  flow_type: "plan_act"
+  tool_restriction: "admin_role"
+  mandatory_rules: ["error_handling.md"]
+  complexity: "high"

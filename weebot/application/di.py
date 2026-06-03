@@ -33,6 +33,7 @@ from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.steering_port import SteeringPort
+from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.application.services.task_runner import TaskRunner
 from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.ports import EventPublisher
@@ -122,6 +123,12 @@ class Container:
 
         # Harness config — model-agnostic runtime configuration
         self.register(HarnessConfig, self._create_harness_config)
+
+        # Task router — query classification (Enhancement 6)
+        self.register(TaskRouterPort, self._create_task_router)
+
+        # Personality manager — WEEBOT_CORE.md identity injection
+        self.register("personality", self._create_personality)
 
         # Event Store — append-only audit log
         self.register(EventStorePort, lambda: self._create_event_store())
@@ -268,6 +275,18 @@ class Container:
             InMemorySteeringAdapter,
         )
         return InMemorySteeringAdapter()
+
+    @staticmethod
+    def _create_task_router():
+        from weebot.application.services.keyword_task_router import (
+            KeywordTaskRouter,
+        )
+        return KeywordTaskRouter()
+
+    @staticmethod
+    def _create_personality():
+        from weebot.core.personality_manager import PersonalityManager
+        return PersonalityManager()
 
     @staticmethod
     def _create_harness_config():
