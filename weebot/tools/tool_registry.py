@@ -69,6 +69,8 @@ class RoleBasedToolRegistry:
             "dispatch_parallel_tasks",
             "swarm",
             "debate",
+            "search_history",
+            "todo_write",
             "file_editor",
             "knowledge",
             "video_ingest",
@@ -246,6 +248,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.mixture_of_agents import MixtureOfAgentsTool
         from weebot.tools.swarm import SwarmTool
         from weebot.tools.debate import DebateTool
+        from weebot.tools.search_history import SearchHistoryTool
+        from weebot.tools.todo_tool import TodoWriteTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -271,6 +275,8 @@ class RoleBasedToolRegistry:
             "mixture_of_agents": MixtureOfAgentsTool,
             "swarm": SwarmTool,
             "debate": DebateTool,
+            "search_history": SearchHistoryTool,
+            "todo_write": TodoWriteTool,
         }
         return cls._TOOL_CLASS_MAP
 

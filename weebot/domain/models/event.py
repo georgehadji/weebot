@@ -109,6 +109,17 @@ class CanonicalizationEvent(BaseEvent):
     block_reason: str = Field(default="")
 
 
+class TodoEvent(BaseEvent):
+    """Self-reported progress checklist item (Enhancement 4)."""
+    type: Literal["todo"] = "todo"
+    session_id: str = Field(default="")
+    step_id: str = Field(default="")
+    action: str = Field(default="")         # "add" | "update" | "complete"
+    description: str = Field(default="")
+    status: str = Field(default="pending")  # "pending" | "in_progress" | "completed" | "failed"
+    progress: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class TrajectoryDiagnosisEvent(BaseEvent):
     """Emitted when TrajectoryMonitor detects a degenerate pattern (Tier 1.3)."""
     type: Literal["trajectory_diagnosis"] = "trajectory_diagnosis"
@@ -132,6 +143,7 @@ AgentEvent = Union[
     SteeringEvent,
     CanonicalizationEvent,
     TrajectoryDiagnosisEvent,
+    TodoEvent,
 ]
 
 
