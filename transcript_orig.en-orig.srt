@@ -1,0 +1,2144 @@
+1
+00:00:00,000 --> 00:00:03,760
+Hey everyone, this is Sean. Today I want
+
+2
+00:00:01,280 --> 00:00:05,440
+to introduce you to agent team and agent
+
+3
+00:00:03,760 --> 00:00:07,040
+swarm. These are two of the latest AI
+
+4
+00:00:05,440 --> 00:00:08,639
+agents concepts. We're going to walk you
+
+5
+00:00:07,040 --> 00:00:09,840
+through the system design real quick and
+
+6
+00:00:08,639 --> 00:00:11,519
+then we're going to test it with the
+
+7
+00:00:09,840 --> 00:00:14,160
+products out there on the market. Just
+
+8
+00:00:11,519 --> 00:00:16,640
+in January, Kim AI launched a new model
+
+9
+00:00:14,160 --> 00:00:19,199
+called K2.5 where they introduced their
+
+10
+00:00:16,640 --> 00:00:20,960
+agent swarm product feature which can
+
+11
+00:00:19,199 --> 00:00:22,880
+help you break down your task into 100
+
+12
+00:00:20,960 --> 00:00:24,880
+sub pages that will work in parallel.
+
+13
+00:00:22,880 --> 00:00:27,199
+And then shortly after that in February,
+
+14
+00:00:24,880 --> 00:00:29,199
+Claude Opus 4.6 was launched. And then
+
+15
+00:00:27,199 --> 00:00:31,359
+they also made a huge update on
+
+16
+00:00:29,199 --> 00:00:33,200
+introducing agent teams in claw code.
+
+17
+00:00:31,359 --> 00:00:34,640
+These two are not exactly the same
+
+18
+00:00:33,200 --> 00:00:36,000
+concepts. Doesn't matter if you're
+
+19
+00:00:34,640 --> 00:00:37,840
+technical or not. I'm going to introduce
+
+20
+00:00:36,000 --> 00:00:39,760
+these things to you very clearly. And
+
+21
+00:00:37,840 --> 00:00:41,200
+then we're going to test two products at
+
+22
+00:00:39,760 --> 00:00:42,879
+the same time with the same problem to
+
+23
+00:00:41,200 --> 00:00:44,800
+see which one does a better job at
+
+24
+00:00:42,879 --> 00:00:46,160
+breaking down task. And lastly, we're
+
+25
+00:00:44,800 --> 00:00:49,280
+also going to quickly talk about the
+
+26
+00:00:46,160 --> 00:00:50,960
+difference between team swarm and deep
+
+27
+00:00:49,280 --> 00:00:52,640
+research agent. There's a quite a bit of
+
+28
+00:00:50,960 --> 00:00:54,079
+similarities and differences. So it's
+
+29
+00:00:52,640 --> 00:00:55,920
+going to be a really fun video. Let's
+
+30
+00:00:54,079 --> 00:00:57,760
+get started. So normally when we talk
+
+31
+00:00:55,920 --> 00:01:00,160
+about AI agent, we can start with a
+
+32
+00:00:57,760 --> 00:01:02,160
+single agent. Basically, you can imagine
+
+33
+00:01:00,160 --> 00:01:04,000
+you're talking to chat GBT where you're
+
+34
+00:01:02,160 --> 00:01:06,240
+sending a user prompt. You can say,
+
+35
+00:01:04,000 --> 00:01:08,159
+"Help me research who is the best AI
+
+36
+00:01:06,240 --> 00:01:10,560
+builder and YouTuber on the internet and
+
+37
+00:01:08,159 --> 00:01:12,560
+then the LM agent from Chat GBT will be
+
+38
+00:01:10,560 --> 00:01:15,200
+processing this information and they'll
+
+39
+00:01:12,560 --> 00:01:16,960
+be using a tool for example a search API
+
+40
+00:01:15,200 --> 00:01:18,799
+to look on the internet and maybe they
+
+41
+00:01:16,960 --> 00:01:20,240
+find Sean is the best AI builder and
+
+42
+00:01:18,799 --> 00:01:22,400
+YouTuber on the internet." So that's
+
+43
+00:01:20,240 --> 00:01:23,680
+finishes one task for a single agent and
+
+44
+00:01:22,400 --> 00:01:25,200
+then things can get a little bit more
+
+45
+00:01:23,680 --> 00:01:27,439
+complicated. We can introduce a
+
+46
+00:01:25,200 --> 00:01:29,280
+sequential agent. After the user asks
+
+47
+00:01:27,439 --> 00:01:31,200
+the first question, they can send that
+
+48
+00:01:29,280 --> 00:01:32,880
+to a research agent first and it's going
+
+49
+00:01:31,200 --> 00:01:34,560
+to pass down the contact that it has
+
+50
+00:01:32,880 --> 00:01:36,560
+researched to the next agent called
+
+51
+00:01:34,560 --> 00:01:38,240
+analysis agent which probably will do a
+
+52
+00:01:36,560 --> 00:01:40,079
+lot of processing after you know the
+
+53
+00:01:38,240 --> 00:01:41,280
+research online. And after the analysis
+
+54
+00:01:40,079 --> 00:01:43,439
+agent has finished, it's probably going
+
+55
+00:01:41,280 --> 00:01:44,960
+to call a report agent which will write
+
+56
+00:01:43,439 --> 00:01:46,799
+the report for you. You can think of it
+
+57
+00:01:44,960 --> 00:01:48,640
+as just a sequential workflow that would
+
+58
+00:01:46,799 --> 00:01:50,720
+happen in a lot of daily life and daily
+
+59
+00:01:48,640 --> 00:01:52,880
+work. Okay. One problem with sequential
+
+60
+00:01:50,720 --> 00:01:54,960
+agents is that they're doing things one
+
+61
+00:01:52,880 --> 00:01:56,479
+by one and there's an order there. So
+
+62
+00:01:54,960 --> 00:01:58,000
+sometimes it could take a really long
+
+63
+00:01:56,479 --> 00:01:59,680
+time or maybe you want to you know
+
+64
+00:01:58,000 --> 00:02:01,840
+increase the capacity of work. So that's
+
+65
+00:01:59,680 --> 00:02:04,079
+why agent teams comes really handy.
+
+66
+00:02:01,840 --> 00:02:06,479
+Clocko is basically using a leader agent
+
+67
+00:02:04,079 --> 00:02:07,840
+first to process this new prompt and
+
+68
+00:02:06,479 --> 00:02:09,520
+then the leader agent is going to think
+
+69
+00:02:07,840 --> 00:02:11,760
+what can it do to make this such a
+
+70
+00:02:09,520 --> 00:02:14,080
+thorough and nice report. What you can
+
+71
+00:02:11,760 --> 00:02:16,720
+do is that you can define a few agents
+
+72
+00:02:14,080 --> 00:02:18,640
+in parallel at the same time to process
+
+73
+00:02:16,720 --> 00:02:20,640
+different tasks. The leader agent has
+
+74
+00:02:18,640 --> 00:02:21,920
+control over all of them just like the
+
+75
+00:02:20,640 --> 00:02:23,840
+deep research agent. You might have
+
+76
+00:02:21,920 --> 00:02:25,440
+realized that in deep research when the
+
+77
+00:02:23,840 --> 00:02:26,959
+user asks a question they're going to
+
+78
+00:02:25,440 --> 00:02:28,319
+clarify the question with you and then
+
+79
+00:02:26,959 --> 00:02:30,160
+they're going to write a research brief.
+
+80
+00:02:28,319 --> 00:02:31,920
+there's going to be a supervisor agent
+
+81
+00:02:30,160 --> 00:02:34,000
+that will be you know the leader agent
+
+82
+00:02:31,920 --> 00:02:36,400
+here and then delegate all the tasks to
+
+83
+00:02:34,000 --> 00:02:38,720
+the subress researchers over here right
+
+84
+00:02:36,400 --> 00:02:40,400
+so this part I would say is very similar
+
+85
+00:02:38,720 --> 00:02:42,080
+uh but it's not entirely the same right
+
+86
+00:02:40,400 --> 00:02:43,920
+because agent teams doesn't really have
+
+87
+00:02:42,080 --> 00:02:45,599
+you know some predefined clarification
+
+88
+00:02:43,920 --> 00:02:47,200
+and research brief all these little
+
+89
+00:02:45,599 --> 00:02:48,640
+workers are you know doing things in
+
+90
+00:02:47,200 --> 00:02:50,800
+parallel at the same time and then
+
+91
+00:02:48,640 --> 00:02:52,239
+report back to the leader agent at this
+
+92
+00:02:50,800 --> 00:02:54,400
+time the leader agent is really being
+
+93
+00:02:52,239 --> 00:02:56,319
+the boss here the team lead that's why
+
+94
+00:02:54,400 --> 00:02:57,599
+it's called agent teams this team lead
+
+95
+00:02:56,319 --> 00:02:59,519
+is going to process all the information
+
+96
+00:02:57,599 --> 00:03:02,080
+that the subtask that you know my
+
+97
+00:02:59,519 --> 00:03:04,080
+workers have done for me. So what is an
+
+98
+00:03:02,080 --> 00:03:06,000
+agent swarm then? Imagine you have a
+
+99
+00:03:04,080 --> 00:03:08,080
+bunch of bees in a hive to work for the
+
+100
+00:03:06,000 --> 00:03:10,319
+queen and then the queen is basically
+
+101
+00:03:08,080 --> 00:03:12,480
+processing a user prompt. There's a goal
+
+102
+00:03:10,319 --> 00:03:14,800
+agent that will help derive some of the
+
+103
+00:03:12,480 --> 00:03:16,720
+goals and specs that you know this user
+
+104
+00:03:14,800 --> 00:03:18,080
+actually wants right again who's the
+
+105
+00:03:16,720 --> 00:03:19,360
+best AI YouTuber on the internet.
+
+106
+00:03:18,080 --> 00:03:21,840
+They're going to say okay the goal is
+
+107
+00:03:19,360 --> 00:03:24,159
+let me find like the top 20 YouTubers
+
+108
+00:03:21,840 --> 00:03:26,560
+who do a lot of really good videos
+
+109
+00:03:24,159 --> 00:03:28,560
+covering AI agent systems. And then
+
+110
+00:03:26,560 --> 00:03:30,239
+you're going to define some subtask or
+
+111
+00:03:28,560 --> 00:03:32,239
+even create some agents with templates
+
+112
+00:03:30,239 --> 00:03:34,799
+by itself. You see the difference here
+
+113
+00:03:32,239 --> 00:03:37,360
+is that this goal agent is creating
+
+114
+00:03:34,799 --> 00:03:39,760
+agents templates by itself. Each little
+
+115
+00:03:37,360 --> 00:03:42,159
+one of these smaller agents are actually
+
+116
+00:03:39,760 --> 00:03:44,319
+created right there instead of defined
+
+117
+00:03:42,159 --> 00:03:45,920
+previously. Okay. In agent teams, you
+
+118
+00:03:44,319 --> 00:03:47,360
+have to define who's doing the research,
+
+119
+00:03:45,920 --> 00:03:49,680
+who's doing the analysis and everything
+
+120
+00:03:47,360 --> 00:03:51,680
+and then report back. But in an agent
+
+121
+00:03:49,680 --> 00:03:53,360
+swarm scenario, simply deciding, okay,
+
+122
+00:03:51,680 --> 00:03:54,640
+maybe I need 20 agents and each one of
+
+123
+00:03:53,360 --> 00:03:56,000
+them should be doing certain things.
+
+124
+00:03:54,640 --> 00:03:58,000
+there's no human involvement there. I
+
+125
+00:03:56,000 --> 00:03:59,680
+don't need to tell it who should be
+
+126
+00:03:58,000 --> 00:04:01,280
+doing what, right? So that's why you see
+
+127
+00:03:59,680 --> 00:04:02,560
+like a swarm here for people who study
+
+128
+00:04:01,280 --> 00:04:04,799
+machine learning. It's kind of like a
+
+129
+00:04:02,560 --> 00:04:07,599
+random forest where you have like little
+
+130
+00:04:04,799 --> 00:04:09,360
+sub trees to make decisions on say
+
+131
+00:04:07,599 --> 00:04:11,360
+classifying if an image is a dog or a
+
+132
+00:04:09,360 --> 00:04:13,519
+cat. And then basically the system is
+
+133
+00:04:11,360 --> 00:04:16,880
+just spawning some parallel agents or
+
+134
+00:04:13,519 --> 00:04:18,079
+parallel sub trees to um finish the
+
+135
+00:04:16,880 --> 00:04:20,400
+task. Eventually, you're going to
+
+136
+00:04:18,079 --> 00:04:22,639
+crowdsource uh the information with a
+
+137
+00:04:20,400 --> 00:04:24,960
+synthesizer agent, which is basically
+
+138
+00:04:22,639 --> 00:04:27,520
+like the final layer of a random forest
+
+139
+00:04:24,960 --> 00:04:29,680
+model where they're going to say, "Okay,
+
+140
+00:04:27,520 --> 00:04:32,080
+um each one of you has done certain
+
+141
+00:04:29,680 --> 00:04:33,600
+jobs. Let me compile them together." And
+
+142
+00:04:32,080 --> 00:04:35,360
+they eventually, you know, cluster the
+
+143
+00:04:33,600 --> 00:04:37,440
+information together and then merge them
+
+144
+00:04:35,360 --> 00:04:39,840
+into a deliverable that will become your
+
+145
+00:04:37,440 --> 00:04:42,320
+output. So this was a quick overview
+
+146
+00:04:39,840 --> 00:04:44,880
+from single agent to sequential agents
+
+147
+00:04:42,320 --> 00:04:47,040
+to a team of agents with team lead to an
+
+148
+00:04:44,880 --> 00:04:49,280
+agent swarm where there's simply a goal
+
+149
+00:04:47,040 --> 00:04:51,919
+der and then just let the rest of the
+
+150
+00:04:49,280 --> 00:04:54,320
+work done by a bunch of agents
+
+151
+00:04:51,919 --> 00:04:56,160
+themselves without any definitions. And
+
+152
+00:04:54,320 --> 00:04:57,520
+I think agent swarm would excel at a lot
+
+153
+00:04:56,160 --> 00:04:59,600
+of tasks that would require a lot of
+
+154
+00:04:57,520 --> 00:05:01,759
+parallel task processing without a lot
+
+155
+00:04:59,600 --> 00:05:03,280
+of predefin. And that's very powerful
+
+156
+00:05:01,759 --> 00:05:05,360
+because sometimes you might just have a
+
+157
+00:05:03,280 --> 00:05:07,199
+really vague intent when you ask a
+
+158
+00:05:05,360 --> 00:05:08,960
+question to an AI, right? you wanted to
+
+159
+00:05:07,199 --> 00:05:10,720
+figure out how to break down tasks by
+
+160
+00:05:08,960 --> 00:05:12,080
+itself. But at the same time, I think it
+
+161
+00:05:10,720 --> 00:05:14,160
+depends on the task. If your task
+
+162
+00:05:12,080 --> 00:05:16,880
+requires a lot of like determined
+
+163
+00:05:14,160 --> 00:05:19,039
+workflow and you want the agent system
+
+164
+00:05:16,880 --> 00:05:20,960
+or the agent organizations to run
+
+165
+00:05:19,039 --> 00:05:22,960
+exactly the way you want, like you're
+
+166
+00:05:20,960 --> 00:05:24,479
+the board member or you're the CEO, then
+
+167
+00:05:22,960 --> 00:05:25,919
+I think agent teams would do a really
+
+168
+00:05:24,479 --> 00:05:27,919
+good task because you can have full
+
+169
+00:05:25,919 --> 00:05:30,240
+control on who's doing what. But I would
+
+170
+00:05:27,919 --> 00:05:32,160
+say both systems have really good batch
+
+171
+00:05:30,240 --> 00:05:34,160
+processing features here because they
+
+172
+00:05:32,160 --> 00:05:36,320
+will allow you to do multiple tasks at
+
+173
+00:05:34,160 --> 00:05:38,320
+the same time. For example, you can
+
+174
+00:05:36,320 --> 00:05:40,560
+imagine they can do they might be doing
+
+175
+00:05:38,320 --> 00:05:42,880
+search, downloading, batch processing
+
+176
+00:05:40,560 --> 00:05:45,120
+files, talking to different agents uh
+
+177
+00:05:42,880 --> 00:05:46,639
+all at the same time, which will save
+
+178
+00:05:45,120 --> 00:05:48,400
+you so much time, but it could also
+
+179
+00:05:46,639 --> 00:05:51,600
+consume a lot of tokens too. Unlike
+
+180
+00:05:48,400 --> 00:05:54,479
+these simpler agent systems, teams or
+
+181
+00:05:51,600 --> 00:05:56,479
+swarm allow a bunch of agents to have
+
+182
+00:05:54,479 --> 00:05:57,759
+different opinions because they could
+
+183
+00:05:56,479 --> 00:06:00,160
+have a different conclusion
+
+184
+00:05:57,759 --> 00:06:02,000
+individualistically. And then eventually
+
+185
+00:06:00,160 --> 00:06:04,560
+what they do is that either the leader
+
+186
+00:06:02,000 --> 00:06:07,280
+agent or the synthesizer agent need to
+
+187
+00:06:04,560 --> 00:06:09,360
+compile reconciliate the decision-m so
+
+188
+00:06:07,280 --> 00:06:11,759
+that they can come up with a solution
+
+189
+00:06:09,360 --> 00:06:13,600
+that is not you know uh super biased.
+
+190
+00:06:11,759 --> 00:06:15,440
+Right? All of what I just explained were
+
+191
+00:06:13,600 --> 00:06:16,880
+quite theoretical. Let's jump right in
+
+192
+00:06:15,440 --> 00:06:18,960
+and test the products and see what
+
+193
+00:06:16,880 --> 00:06:21,120
+happens. The first demo I want to try is
+
+194
+00:06:18,960 --> 00:06:23,120
+to do a YouTube search. You should be
+
+195
+00:06:21,120 --> 00:06:24,960
+searching similar channels like Sean's
+
+196
+00:06:23,120 --> 00:06:26,720
+AI stories. explore those channels that
+
+197
+00:06:24,960 --> 00:06:28,960
+do developer tools, automation
+
+198
+00:06:26,720 --> 00:06:30,479
+creations, indie hacking, all these kind
+
+199
+00:06:28,960 --> 00:06:32,560
+of things. And the result is that I want
+
+200
+00:06:30,479 --> 00:06:34,639
+them to return four channels uh with
+
+201
+00:06:32,560 --> 00:06:36,560
+their names and URLs. And the very
+
+202
+00:06:34,639 --> 00:06:38,880
+similar prompt for claw code is that
+
+203
+00:06:36,560 --> 00:06:40,400
+you're using agent teams and the context
+
+204
+00:06:38,880 --> 00:06:42,560
+the same, but then you can be more
+
+205
+00:06:40,400 --> 00:06:44,319
+specific teammate 1 2 3 4 5 what they're
+
+206
+00:06:42,560 --> 00:06:47,520
+doing. So I have just pasted both
+
+207
+00:06:44,319 --> 00:06:52,039
+prompts in claw code and in Kimmy. So
+
+208
+00:06:47,520 --> 00:06:52,039
+let's get started and run it. All right.
+
+209
+00:06:54,800 --> 00:07:00,080
+You can see that it shows agent swarm
+
+210
+00:06:56,479 --> 00:07:01,919
+over there. Okay, cool. Let's see. You
+
+211
+00:07:00,080 --> 00:07:03,440
+can see that clock understood that it's
+
+212
+00:07:01,919 --> 00:07:05,280
+running a agent team and it's
+
+213
+00:07:03,440 --> 00:07:09,919
+establishing shared framework for
+
+214
+00:07:05,280 --> 00:07:11,680
+strategy editor. Okay. Oh, and then uh
+
+215
+00:07:09,919 --> 00:07:13,840
+what Kim is doing is that it's creating
+
+216
+00:07:11,680 --> 00:07:15,840
+all these little agent by itself without
+
+217
+00:07:13,840 --> 00:07:18,080
+my definition. You see this one is doing
+
+218
+00:07:15,840 --> 00:07:21,039
+a research agent. This is really cool.
+
+219
+00:07:18,080 --> 00:07:22,479
+They have this um role description.
+
+220
+00:07:21,039 --> 00:07:25,280
+You're a competitive intelligence
+
+221
+00:07:22,479 --> 00:07:29,599
+researcher specializing in AI coding.
+
+222
+00:07:25,280 --> 00:07:31,759
+And then there are research agents too.
+
+223
+00:07:29,599 --> 00:07:33,680
+Um you are a competitive intelligence
+
+224
+00:07:31,759 --> 00:07:36,319
+researcher specializ AI agent automation
+
+225
+00:07:33,680 --> 00:07:38,880
+content creators.
+
+226
+00:07:36,319 --> 00:07:41,280
+And this one is searching for educators
+
+227
+00:07:38,880 --> 00:07:43,919
+I would say I think. Yeah, they're
+
+228
+00:07:41,280 --> 00:07:46,639
+specializing in AI education. Okay. So
+
+229
+00:07:43,919 --> 00:07:49,199
+he created these sub agents in parallel
+
+230
+00:07:46,639 --> 00:07:51,840
+uh like a swarm and then you can see
+
+231
+00:07:49,199 --> 00:07:55,520
+what they're doing one by one. Okay.
+
+232
+00:07:51,840 --> 00:07:58,319
+Lewis is doing some uh searching a
+
+233
+00:07:55,520 --> 00:08:00,319
+YouTube AI SAS solarreneur MR revenue.
+
+234
+00:07:58,319 --> 00:08:01,680
+Jane who's looking for uh YouTube
+
+235
+00:08:00,319 --> 00:08:04,639
+channels focus on AI education
+
+236
+00:08:01,680 --> 00:08:07,759
+explaining uh is doing the following
+
+237
+00:08:04,639 --> 00:08:12,000
+task. See all of these were written by
+
+238
+00:08:07,759 --> 00:08:14,639
+um by Kimi itself. This is really cool.
+
+239
+00:08:12,000 --> 00:08:17,520
+Uh, and then let's see claw code. It
+
+240
+00:08:14,639 --> 00:08:20,240
+deployed all five scouts in parallel
+
+241
+00:08:17,520 --> 00:08:22,560
+with the task mainly web search and it's
+
+242
+00:08:20,240 --> 00:08:27,039
+using tools. I can see exactly what they
+
+243
+00:08:22,560 --> 00:08:29,520
+looked up for. All right, this YouTuber
+
+244
+00:08:27,039 --> 00:08:32,159
+uh I don't know who this is.
+
+245
+00:08:29,520 --> 00:08:36,240
+Kimmy has spent a lot of time polishing
+
+246
+00:08:32,159 --> 00:08:38,240
+their UI so that it looks very neat and
+
+247
+00:08:36,240 --> 00:08:40,080
+um you can see what each agent is
+
+248
+00:08:38,240 --> 00:08:42,719
+actually doing and then check out their
+
+249
+00:08:40,080 --> 00:08:45,519
+results. This is very similar to how
+
+250
+00:08:42,719 --> 00:08:47,360
+Chajbt was doing deep research I think
+
+251
+00:08:45,519 --> 00:08:48,720
+where they will show you exactly what
+
+252
+00:08:47,360 --> 00:08:50,640
+they're searching. I think Grock also
+
+253
+00:08:48,720 --> 00:08:53,279
+has similar features where they will
+
+254
+00:08:50,640 --> 00:08:56,000
+show very clearly and streaming it uh
+
+255
+00:08:53,279 --> 00:08:57,920
+how how the agent is doing the internet
+
+256
+00:08:56,000 --> 00:09:01,360
+search whereas if you're doing clock
+
+257
+00:08:57,920 --> 00:09:04,000
+code in the terminal I think the the UI
+
+258
+00:09:01,360 --> 00:09:05,760
+is quite minimum but I would say I would
+
+259
+00:09:04,000 --> 00:09:08,800
+say that's fine because clock code is
+
+260
+00:09:05,760 --> 00:09:11,120
+mainly focused on coding tasks. Looks
+
+261
+00:09:08,800 --> 00:09:14,240
+like Jane has finished her task. Let's
+
+262
+00:09:11,120 --> 00:09:16,480
+see. Jane, find four YouTube channels
+
+263
+00:09:14,240 --> 00:09:18,480
+focused on education. The final answer
+
+264
+00:09:16,480 --> 00:09:21,920
+is they found four YouTube channels
+
+265
+00:09:18,480 --> 00:09:24,959
+focused on AI education. Robert Miles,
+
+266
+00:09:21,920 --> 00:09:28,959
+Jeremy Howard, Weights and Biases, AI
+
+267
+00:09:24,959 --> 00:09:30,800
+Uncovered, and then generated a file. I
+
+268
+00:09:28,959 --> 00:09:32,800
+think I made a mistake because I was
+
+269
+00:09:30,800 --> 00:09:35,920
+supposed to say five agents here.
+
+270
+00:09:32,800 --> 00:09:37,360
+Somehow I put 12 and clock doing five.
+
+271
+00:09:35,920 --> 00:09:40,880
+So, I think we're using a lot more
+
+272
+00:09:37,360 --> 00:09:44,000
+tokens on uh Kimi. Four, five, six,
+
+273
+00:09:40,880 --> 00:09:46,160
+seven, eight. Eight out of 12 agents are
+
+274
+00:09:44,000 --> 00:09:49,200
+finished. I think I'm going to tell Claw
+
+275
+00:09:46,160 --> 00:09:51,519
+Code, don't overthink.
+
+276
+00:09:49,200 --> 00:09:56,000
+Let's
+
+277
+00:09:51,519 --> 00:10:02,560
+focus on letting the scouts
+
+278
+00:09:56,000 --> 00:10:04,560
+do the basic research. We don't need to
+
+279
+00:10:02,560 --> 00:10:07,680
+use
+
+280
+00:10:04,560 --> 00:10:09,200
+more than 10 tools. How come you guys
+
+281
+00:10:07,680 --> 00:10:11,600
+took such a long time? Oh, this one is
+
+282
+00:10:09,200 --> 00:10:13,680
+searching like foreign languages. That's
+
+283
+00:10:11,600 --> 00:10:17,240
+why non-English channel. That's why it's
+
+284
+00:10:13,680 --> 00:10:17,240
+taking him one time.
+
+285
+00:10:17,760 --> 00:10:23,200
+Oh, look at this. It's like reading the
+
+286
+00:10:20,800 --> 00:10:25,040
+channel real time. Took my request now.
+
+287
+00:10:23,200 --> 00:10:27,200
+Got it. Simplifying. Scout one and two
+
+288
+00:10:25,040 --> 00:10:29,440
+already back. Let me launch the
+
+289
+00:10:27,200 --> 00:10:31,519
+remaining three scouts now with learner
+
+290
+00:10:29,440 --> 00:10:33,440
+instructions. Four channels max minimum
+
+291
+00:10:31,519 --> 00:10:37,200
+tool usage. Look at this. It took my
+
+292
+00:10:33,440 --> 00:10:39,680
+feedback. It was done. Scout 3 teammate
+
+293
+00:10:37,200 --> 00:10:42,399
+3 searching for founder building public
+
+294
+00:10:39,680 --> 00:10:44,959
+channels. Only use three tools. 15,000
+
+295
+00:10:42,399 --> 00:10:47,839
+tokens. Previously it was like 70 80
+
+296
+00:10:44,959 --> 00:10:50,480
+tools was 90,000 tokens. Uhhuh. Looks
+
+297
+00:10:47,839 --> 00:10:52,320
+like both of them are finished.
+
+298
+00:10:50,480 --> 00:10:54,880
+10 of 12 agents completed successfully.
+
+299
+00:10:52,320 --> 00:10:56,720
+Now compiling findings. Look at this. is
+
+300
+00:10:54,880 --> 00:10:58,640
+compiling the findings and launch
+
+301
+00:10:56,720 --> 00:11:00,320
+clustering agent. Remember we talked
+
+302
+00:10:58,640 --> 00:11:02,079
+about the synthesizer. That's that's
+
+303
+00:11:00,320 --> 00:11:05,519
+what it's doing. Uh because it has
+
+304
+00:11:02,079 --> 00:11:07,279
+finished the swarm and now they're crowd
+
+305
+00:11:05,519 --> 00:11:10,640
+they're processing the crowdsourced
+
+306
+00:11:07,279 --> 00:11:13,040
+information with the synthesizer or it's
+
+307
+00:11:10,640 --> 00:11:15,680
+calling it launch a clustering agent.
+
+308
+00:11:13,040 --> 00:11:18,320
+Okay. And clustering agent is Bowwin.
+
+309
+00:11:15,680 --> 00:11:21,279
+Okay. Bowen, you're analyzing the
+
+310
+00:11:18,320 --> 00:11:24,160
+competitive landscape for this
+
+311
+00:11:21,279 --> 00:11:26,399
+and research data.
+
+312
+00:11:24,160 --> 00:11:30,480
+Okay. So, you see like all of these
+
+313
+00:11:26,399 --> 00:11:32,480
+researched channels from other um swarm
+
+314
+00:11:30,480 --> 00:11:34,560
+agents
+
+315
+00:11:32,480 --> 00:11:37,279
+have been used by this clustering
+
+316
+00:11:34,560 --> 00:11:39,920
+synthesizer. It clustered 26 channels by
+
+317
+00:11:37,279 --> 00:11:42,320
+positioning formats. All scouts are back
+
+318
+00:11:39,920 --> 00:11:44,399
+now synthesizing a strategy editor as
+
+319
+00:11:42,320 --> 00:11:46,079
+strategy editor lead. So this is this
+
+320
+00:11:44,399 --> 00:11:47,920
+one is returning the information back to
+
+321
+00:11:46,079 --> 00:11:50,800
+the lead agent remember and then he's
+
+322
+00:11:47,920 --> 00:11:52,959
+duping the clustering and um producing
+
+323
+00:11:50,800 --> 00:11:55,920
+the final deliverable the competitive
+
+324
+00:11:52,959 --> 00:11:58,160
+landscape shown AI stories. Okay, this
+
+325
+00:11:55,920 --> 00:12:00,720
+final report already
+
+326
+00:11:58,160 --> 00:12:02,959
+honestly it's a little hard to read this
+
+327
+00:12:00,720 --> 00:12:05,440
+from a terminal. It took 20 minutes in
+
+328
+00:12:02,959 --> 00:12:07,600
+total. 18 minutes 14 seconds. Yeah, it
+
+329
+00:12:05,440 --> 00:12:11,279
+told me things that other people are not
+
+330
+00:12:07,600 --> 00:12:13,440
+doing. This is helpful. Um non-English
+
+331
+00:12:11,279 --> 00:12:15,760
+practical builder content. The Spanish
+
+332
+00:12:13,440 --> 00:12:17,519
+market has explainer and news, but no
+
+333
+00:12:15,760 --> 00:12:20,560
+hands-on ship AI product from zero
+
+334
+00:12:17,519 --> 00:12:22,560
+channel. Okay, maybe that's a good idea.
+
+335
+00:12:20,560 --> 00:12:25,200
+Every channel shows happy path. Nobody
+
+336
+00:12:22,560 --> 00:12:26,959
+documents what broke. Oh, yeah. Yeah,
+
+337
+00:12:25,200 --> 00:12:30,320
+everyone's showing what's working, but
+
+338
+00:12:26,959 --> 00:12:32,639
+nothing's not working. Um, people don't
+
+339
+00:12:30,320 --> 00:12:34,959
+show their failures. Okay, fair enough.
+
+340
+00:12:32,639 --> 00:12:38,320
+Nobody's doing systematic applies to
+
+341
+00:12:34,959 --> 00:12:39,920
+applies test. Same use case built NN
+
+342
+00:12:38,320 --> 00:12:41,440
+Langraph.
+
+343
+00:12:39,920 --> 00:12:44,000
+Every creator picks one tool and
+
+344
+00:12:41,440 --> 00:12:45,519
+advocates for it. Impartial comparison
+
+345
+00:12:44,000 --> 00:12:48,240
+seat is empty. That's what we're doing.
+
+346
+00:12:45,519 --> 00:12:50,639
+We're comparing two tools today. And uh
+
+347
+00:12:48,240 --> 00:12:53,120
+next video concept for Sean's AI
+
+348
+00:12:50,639 --> 00:12:55,600
+stories. I built the same agent in Fry
+
+349
+00:12:53,120 --> 00:12:57,120
+Frameworks. Why my AI agent broke in
+
+350
+00:12:55,600 --> 00:13:00,320
+production
+
+351
+00:12:57,120 --> 00:13:03,040
+0 to 10K AI SAS stack. Clocko versus
+
+352
+00:13:00,320 --> 00:13:06,560
+cursor versus windsurf. Windsor is dead.
+
+353
+00:13:03,040 --> 00:13:08,480
+No. Um I automated Well, they're not
+
+354
+00:13:06,560 --> 00:13:10,959
+dead. They're required by by Devon, but
+
+355
+00:13:08,480 --> 00:13:12,720
+I haven't heard from them ever since. I
+
+356
+00:13:10,959 --> 00:13:16,880
+automated my entire YouTube workflow
+
+357
+00:13:12,720 --> 00:13:18,959
+with AI agents. Okay, not a bad report.
+
+358
+00:13:16,880 --> 00:13:20,399
+At least I real I know at least I
+
+359
+00:13:18,959 --> 00:13:22,399
+learned that in the Spanish speaking
+
+360
+00:13:20,399 --> 00:13:26,560
+market, there's not a lot of channels
+
+361
+00:13:22,399 --> 00:13:28,800
+for hands-on building. Okay, some of our
+
+362
+00:13:26,560 --> 00:13:32,800
+customers for Automanis, which is a
+
+363
+00:13:28,800 --> 00:13:35,440
+WhatsApp first Asian sales lead uh tool
+
+364
+00:13:32,800 --> 00:13:37,600
+has customer from Latin America and uh
+
+365
+00:13:35,440 --> 00:13:40,720
+they're mainly speaking Spanish and
+
+366
+00:13:37,600 --> 00:13:42,880
+Portuguese. So, that's a really good uh
+
+367
+00:13:40,720 --> 00:13:45,120
+good advice. I like that. Okay, look at
+
+368
+00:13:42,880 --> 00:13:48,240
+this. I think Bowen now is writing the
+
+369
+00:13:45,120 --> 00:13:52,560
+report. Cool. Look at this. This one's
+
+370
+00:13:48,240 --> 00:13:55,760
+done. Uh so Kimi was telling me
+
+371
+00:13:52,560 --> 00:13:58,560
+developer and coder is oversaturated. I
+
+372
+00:13:55,760 --> 00:14:01,120
+agree. Non-technical founders under
+
+373
+00:13:58,560 --> 00:14:04,320
+saturating
+
+374
+00:14:01,120 --> 00:14:07,360
+public founder is moderate. Uh business
+
+375
+00:14:04,320 --> 00:14:10,000
+automation is underserved. AI education
+
+376
+00:14:07,360 --> 00:14:11,279
+is moderate. Okay. So probably this one
+
+377
+00:14:10,000 --> 00:14:13,760
+is suggesting that I should focus on
+
+378
+00:14:11,279 --> 00:14:15,680
+nontechnical founders and business
+
+379
+00:14:13,760 --> 00:14:18,320
+automation. Three whites space
+
+380
+00:14:15,680 --> 00:14:20,079
+opportunities. Cool. Asian workflows for
+
+381
+00:14:18,320 --> 00:14:22,720
+non-developers.
+
+382
+00:14:20,079 --> 00:14:25,040
+Okay. Nontechnical founders.
+
+383
+00:14:22,720 --> 00:14:26,959
+Rigorous tool comparison. This one is
+
+384
+00:14:25,040 --> 00:14:28,880
+consistent with what Claude told me.
+
+385
+00:14:26,959 --> 00:14:31,440
+Yeah. The impartial comparison seat is
+
+386
+00:14:28,880 --> 00:14:34,720
+empty. Asian workflow case studies
+
+387
+00:14:31,440 --> 00:14:36,639
+theory heavy real metrics rare for
+
+388
+00:14:34,720 --> 00:14:38,959
+founders and business owners. Okay.
+
+389
+00:14:36,639 --> 00:14:41,839
+Money related things. Okay. Sure.
+
+390
+00:14:38,959 --> 00:14:44,320
+Comparing cursor wins co-pilot. How I
+
+391
+00:14:41,839 --> 00:14:46,480
+built a 4,000 per month uh yeah agency
+
+392
+00:14:44,320 --> 00:14:48,000
+in 90 days. At least I learned something
+
+393
+00:14:46,480 --> 00:14:51,120
+which is there is probably an
+
+394
+00:14:48,000 --> 00:14:54,399
+oversaturation of highly technical
+
+395
+00:14:51,120 --> 00:14:56,399
+content and um there lacks a lot of uh
+
+396
+00:14:54,399 --> 00:14:58,160
+AI contents that help educate
+
+397
+00:14:56,399 --> 00:15:01,040
+non-technical founders or business
+
+398
+00:14:58,160 --> 00:15:02,880
+owners and uh perhaps I need to compare
+
+399
+00:15:01,040 --> 00:15:04,959
+some tools because every video is
+
+400
+00:15:02,880 --> 00:15:07,279
+probably very deep dive in one tool and
+
+401
+00:15:04,959 --> 00:15:09,040
+also people love money related contents
+
+402
+00:15:07,279 --> 00:15:12,639
+and last but not least I think in Latin
+
+403
+00:15:09,040 --> 00:15:14,880
+America there's lack of supply of such
+
+404
+00:15:12,639 --> 00:15:16,720
+content. Good advice. Thank you both
+
+405
+00:15:14,880 --> 00:15:18,560
+agent teams from claw code and agent
+
+406
+00:15:16,720 --> 00:15:20,480
+swarm from Kimmy. And meanwhile I was
+
+407
+00:15:18,560 --> 00:15:23,600
+running the second demo at the same time
+
+408
+00:15:20,480 --> 00:15:26,079
+which is a expert review of my uh
+
+409
+00:15:23,600 --> 00:15:28,959
+current company automatis. We basically
+
+410
+00:15:26,079 --> 00:15:31,600
+are an WhatsApp first AI sales agent for
+
+411
+00:15:28,959 --> 00:15:34,079
+consultative made to order sales. You
+
+412
+00:15:31,600 --> 00:15:36,639
+can imagine like uh companies that are
+
+413
+00:15:34,079 --> 00:15:39,199
+selling some complex solutions like an
+
+414
+00:15:36,639 --> 00:15:41,199
+agency or consulting agencies or you
+
+415
+00:15:39,199 --> 00:15:44,639
+know they could be doing B2B sales like
+
+416
+00:15:41,199 --> 00:15:46,399
+in um renewable energiesarmacies
+
+417
+00:15:44,639 --> 00:15:49,279
+uh these things are really complex sales
+
+418
+00:15:46,399 --> 00:15:51,920
+or even apparel where there's not like a
+
+419
+00:15:49,279 --> 00:15:54,000
+single SKU to be sold. Sometimes there's
+
+420
+00:15:51,920 --> 00:15:56,000
+there needs to be a package of like the
+
+421
+00:15:54,000 --> 00:15:57,519
+entire quantity that you need for
+
+422
+00:15:56,000 --> 00:15:59,199
+certain products and maybe you need to
+
+423
+00:15:57,519 --> 00:16:02,000
+customize a little bit. So that's what
+
+424
+00:15:59,199 --> 00:16:03,759
+we're building um to use agents to
+
+425
+00:16:02,000 --> 00:16:05,440
+capture all these requests for a
+
+426
+00:16:03,759 --> 00:16:07,360
+business so that they won't miss any
+
+427
+00:16:05,440 --> 00:16:10,079
+leads. Okay. So now what I'm doing is
+
+428
+00:16:07,360 --> 00:16:12,240
+that I want to ask agent swarm from Kimi
+
+429
+00:16:10,079 --> 00:16:14,240
+and agent team from call code give me
+
+430
+00:16:12,240 --> 00:16:16,800
+some feedback. For example in teams I
+
+431
+00:16:14,240 --> 00:16:19,600
+was asking for five teammates to tell me
+
+432
+00:16:16,800 --> 00:16:21,600
+about my product from VC's perspective
+
+433
+00:16:19,600 --> 00:16:23,839
+product go to market customer success
+
+434
+00:16:21,600 --> 00:16:27,199
+and legal. They eventually gave me a
+
+435
+00:16:23,839 --> 00:16:29,759
+report. Okay. And I was uh running it
+
+436
+00:16:27,199 --> 00:16:32,320
+and this is surprisingly really fast.
+
+437
+00:16:29,759 --> 00:16:34,720
+Okay, it's almost done. Okay, it gave me
+
+438
+00:16:32,320 --> 00:16:37,600
+some advice about pricing. Uh you should
+
+439
+00:16:34,720 --> 00:16:41,040
+start flat SAS track qualify lead volume
+
+440
+00:16:37,600 --> 00:16:43,040
+internally introduce per lead pricing in
+
+441
+00:16:41,040 --> 00:16:44,880
+month three once you can define qualify
+
+442
+00:16:43,040 --> 00:16:47,040
+with data. That's true. Our investors
+
+443
+00:16:44,880 --> 00:16:48,720
+gave us similar advice which is uh later
+
+444
+00:16:47,040 --> 00:16:51,839
+if you have bigger clients what we
+
+445
+00:16:48,720 --> 00:16:54,320
+should do is uh charge our clients based
+
+446
+00:16:51,839 --> 00:16:56,079
+on the percentage of conversion but
+
+447
+00:16:54,320 --> 00:16:59,120
+initially we can do flat pricing which
+
+448
+00:16:56,079 --> 00:17:00,959
+is um $200 $300 a month design
+
+449
+00:16:59,120 --> 00:17:03,279
+architecture to be channel agnostic but
+
+450
+00:17:00,959 --> 00:17:05,679
+doesn't build SMS in week one okay yeah
+
+451
+00:17:03,279 --> 00:17:07,760
+SMS is probably used only in the US uh
+
+452
+00:17:05,679 --> 00:17:11,120
+the rest of the world use what's a lot
+
+453
+00:17:07,760 --> 00:17:13,360
+more so Kimmy had five agents Owen was
+
+454
+00:17:11,120 --> 00:17:15,199
+evaluating my product well each one
+
+455
+00:17:13,360 --> 00:17:16,799
+everyone's eval made product. What's
+
+456
+00:17:15,199 --> 00:17:18,959
+strong already is that WhatsApp channel
+
+457
+00:17:16,799 --> 00:17:20,799
+selection is strategically sound. 2
+
+458
+00:17:18,959 --> 00:17:22,799
+billion users. That's true. Two billion
+
+459
+00:17:20,799 --> 00:17:24,880
+users. Huge market. Made to order
+
+460
+00:17:22,799 --> 00:17:26,720
+vertical target is smart. Yeah, because
+
+461
+00:17:24,880 --> 00:17:30,080
+we talked to so many made to order
+
+462
+00:17:26,720 --> 00:17:32,000
+businesses and um their sales process is
+
+463
+00:17:30,080 --> 00:17:34,480
+a huge mess. Okay. The risk is
+
+464
+00:17:32,000 --> 00:17:36,000
+defensibility is thin. Uh yeah, sure.
+
+465
+00:17:34,480 --> 00:17:39,520
+There's a lot of WhatsApp agents. That's
+
+466
+00:17:36,000 --> 00:17:41,919
+why we're doing a lot of um sort of lead
+
+467
+00:17:39,520 --> 00:17:43,600
+structuring as well after talking with
+
+468
+00:17:41,919 --> 00:17:47,120
+just agents. is not just another
+
+469
+00:17:43,600 --> 00:17:50,000
+chatbot. Some final comments. Um, I
+
+470
+00:17:47,120 --> 00:17:52,880
+think AI has been evolving
+
+471
+00:17:50,000 --> 00:17:56,720
+to mimic how human societies and human
+
+472
+00:17:52,880 --> 00:17:58,080
+organizations collaborate because I
+
+473
+00:17:56,720 --> 00:18:00,720
+remember listening to a podcast the
+
+474
+00:17:58,080 --> 00:18:03,360
+other day that
+
+475
+00:18:00,720 --> 00:18:06,240
+the way to function really well in the
+
+476
+00:18:03,360 --> 00:18:09,520
+human society is that there is a team of
+
+477
+00:18:06,240 --> 00:18:11,360
+specialized workers like you and me who
+
+478
+00:18:09,520 --> 00:18:13,600
+will be good at, you know, things that
+
+479
+00:18:11,360 --> 00:18:15,120
+we're good at and uh, collaborating
+
+480
+00:18:13,600 --> 00:18:17,840
+together. That's how we make the economy
+
+481
+00:18:15,120 --> 00:18:20,720
+runs. And now we're at the position
+
+482
+00:18:17,840 --> 00:18:23,360
+where coding agent is really strong.
+
+483
+00:18:20,720 --> 00:18:24,640
+Tachibbt general agent is really strong.
+
+484
+00:18:23,360 --> 00:18:26,320
+There are a lot of models that are very
+
+485
+00:18:24,640 --> 00:18:28,400
+specialized at what they do. And what we
+
+486
+00:18:26,320 --> 00:18:31,760
+can do is create agent that specialize
+
+487
+00:18:28,400 --> 00:18:34,240
+in what they do too. Okay. So what I see
+
+488
+00:18:31,760 --> 00:18:38,720
+is that we're seeing a trend or a shift
+
+489
+00:18:34,240 --> 00:18:40,960
+from simple AI agents or simple AI agent
+
+490
+00:18:38,720 --> 00:18:42,480
+systems to AI organizations or AI
+
+491
+00:18:40,960 --> 00:18:44,240
+societies.
+
+492
+00:18:42,480 --> 00:18:47,679
+and all of these concepts of whether
+
+493
+00:18:44,240 --> 00:18:51,840
+it's a swarm from Kimmy or teams from
+
+494
+00:18:47,679 --> 00:18:55,280
+claw code in my opinion it's
+
+495
+00:18:51,840 --> 00:18:58,240
+trying to balance the breadth
+
+496
+00:18:55,280 --> 00:19:00,799
+um of the amount of information that the
+
+497
+00:18:58,240 --> 00:19:02,960
+decision makers could get in order to
+
+498
+00:19:00,799 --> 00:19:04,880
+make the best possible decisions rather
+
+499
+00:19:02,960 --> 00:19:07,600
+than relying on one specific agent to
+
+500
+00:19:04,880 --> 00:19:10,400
+make a decision at the end. Okay. And
+
+501
+00:19:07,600 --> 00:19:11,760
+similarly in deep research agent is not
+
+502
+00:19:10,400 --> 00:19:14,000
+just the decision maker which is
+
+503
+00:19:11,760 --> 00:19:16,000
+clarification agent, research brief
+
+504
+00:19:14,000 --> 00:19:18,080
+agent and supervisor agent are making
+
+505
+00:19:16,000 --> 00:19:20,240
+the decision without asking anybody
+
+506
+00:19:18,080 --> 00:19:22,240
+else's opinion. Instead they spread it
+
+507
+00:19:20,240 --> 00:19:24,480
+out and delegate the task to every
+
+508
+00:19:22,240 --> 00:19:27,600
+single researcher and compress them and
+
+509
+00:19:24,480 --> 00:19:30,080
+compile them and synthesize the final
+
+510
+00:19:27,600 --> 00:19:33,200
+output in order to make a more educated
+
+511
+00:19:30,080 --> 00:19:36,000
+information decision-m. Okay, I feel
+
+512
+00:19:33,200 --> 00:19:38,960
+like this is a general trend and all
+
+513
+00:19:36,000 --> 00:19:40,799
+these model providers have realized that
+
+514
+00:19:38,960 --> 00:19:42,559
+this is a trend and that's why they're
+
+515
+00:19:40,799 --> 00:19:44,400
+making these products for us. I would
+
+516
+00:19:42,559 --> 00:19:46,799
+encourage everyone to try this out
+
+517
+00:19:44,400 --> 00:19:49,840
+because uh when new technology comes
+
+518
+00:19:46,799 --> 00:19:52,000
+out, it's important that we feel aware
+
+519
+00:19:49,840 --> 00:19:54,000
+of what's going on. I think the results
+
+520
+00:19:52,000 --> 00:19:56,160
+definitely are decent for now if we're
+
+521
+00:19:54,000 --> 00:19:58,160
+doing some, you know, research, building
+
+522
+00:19:56,160 --> 00:19:59,520
+some features on a product. And I think
+
+523
+00:19:58,160 --> 00:20:01,520
+they will take another couple of years
+
+524
+00:19:59,520 --> 00:20:04,080
+or maybe just a few months that it will
+
+525
+00:20:01,520 --> 00:20:07,679
+evolve into something that's much more
+
+526
+00:20:04,080 --> 00:20:10,240
+holistic at doing tasks. So what we all
+
+527
+00:20:07,679 --> 00:20:12,080
+can do right now is make sure we don't
+
+528
+00:20:10,240 --> 00:20:14,559
+lag behind and that we're always
+
+529
+00:20:12,080 --> 00:20:17,360
+informed about uh what is going on with
+
+530
+00:20:14,559 --> 00:20:20,400
+all these uh architecture or infrawise
+
+531
+00:20:17,360 --> 00:20:21,919
+updates from these top AI companies.
+
+532
+00:20:20,400 --> 00:20:24,080
+Thanks for watching this video. I hope
+
+533
+00:20:21,919 --> 00:20:26,320
+this was helpful and leave a comment or
+
+534
+00:20:24,080 --> 00:20:28,240
+join our Discord channel for a
+
+535
+00:20:26,320 --> 00:20:30,720
+discussion. I'll see you next time.
+
+536
+00:20:28,240 --> 00:20:30,720
+Thank you very
+

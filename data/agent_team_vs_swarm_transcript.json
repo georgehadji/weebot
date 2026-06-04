@@ -1,0 +1,2754 @@
+{
+  "video_id": "WuOlqBsDg-w",
+  "url": "https://youtu.be/WuOlqBsDg-w",
+  "title": "Agent Team vs Agent Swarm - System Design & Testing",
+  "language": "en-US",
+  "segment_count": 549,
+  "segments": [
+    {
+      "text": "hey everyone this is Sean",
+      "start": 0.0,
+      "duration": 0.833
+    },
+    {
+      "text": "today",
+      "start": 0.83,
+      "duration": 0.233
+    },
+    {
+      "text": "I wanna introduce you to Agent Team and Agent Swarm",
+      "start": 1.07,
+      "duration": 3.0
+    },
+    {
+      "text": "these are two of the latest AI agents concepts",
+      "start": 4.2,
+      "duration": 2.133
+    },
+    {
+      "text": "we're gonna walk you through the system design",
+      "start": 6.33,
+      "duration": 1.533
+    },
+    {
+      "text": "real quick and we're gonna test it",
+      "start": 7.87,
+      "duration": 1.6
+    },
+    {
+      "text": "with the products out there on the market",
+      "start": 9.47,
+      "duration": 1.6
+    },
+    {
+      "text": "just in January",
+      "start": 11.2,
+      "duration": 1.066
+    },
+    {
+      "text": "Kimi AI launched a new model called K2.5",
+      "start": 12.27,
+      "duration": 3.034
+    },
+    {
+      "text": "where they introduced",
+      "start": 15.3,
+      "duration": 1.1
+    },
+    {
+      "text": "their Agent Swarm product feature",
+      "start": 16.4,
+      "duration": 1.933
+    },
+    {
+      "text": "which can help you break down your task into hundred",
+      "start": 18.4,
+      "duration": 2.566
+    },
+    {
+      "text": "sub agents",
+      "start": 20.97,
+      "duration": 0.667
+    },
+    {
+      "text": "that will work in parallel",
+      "start": 21.63,
+      "duration": 1.2
+    },
+    {
+      "text": "and then shortly after that in February",
+      "start": 22.83,
+      "duration": 1.867
+    },
+    {
+      "text": "Claude Opus 4.6 was launched",
+      "start": 24.83,
+      "duration": 0.433
+    },
+    {
+      "text": "and then they also made a huge update on",
+      "start": 26.83,
+      "duration": 2.333
+    },
+    {
+      "text": "introducing agent teams in Claude code",
+      "start": 29.17,
+      "duration": 2.1
+    },
+    {
+      "text": "these two are not exactly the same concepts",
+      "start": 31.37,
+      "duration": 2.534
+    },
+    {
+      "text": "doesn't matter if you're technical or not",
+      "start": 33.97,
+      "duration": 1.267
+    },
+    {
+      "text": "I'm gonna introduce these things to you very clearly",
+      "start": 35.23,
+      "duration": 2.333
+    },
+    {
+      "text": "and then we're gonna test",
+      "start": 37.63,
+      "duration": 1.133
+    },
+    {
+      "text": "two products at the same time",
+      "start": 38.77,
+      "duration": 1.5
+    },
+    {
+      "text": "with the same problem",
+      "start": 40.27,
+      "duration": 0.767
+    },
+    {
+      "text": "to see which one does a better job",
+      "start": 41.03,
+      "duration": 1.6
+    },
+    {
+      "text": "at breaking down task",
+      "start": 42.63,
+      "duration": 1.1
+    },
+    {
+      "text": "and lastly",
+      "start": 43.77,
+      "duration": 0.834
+    },
+    {
+      "text": "we're also gonna quickly talk about the difference",
+      "start": 44.6,
+      "duration": 1.966
+    },
+    {
+      "text": "between Team",
+      "start": 46.57,
+      "duration": 1.334
+    },
+    {
+      "text": "Swarm and Deep Research Agent",
+      "start": 47.9,
+      "duration": 2.133
+    },
+    {
+      "text": "there's a quite a bit of similarities and differences",
+      "start": 50.03,
+      "duration": 2.267
+    },
+    {
+      "text": "so it's gonna be a really fun video",
+      "start": 52.3,
+      "duration": 1.433
+    },
+    {
+      "text": "let's get started",
+      "start": 53.73,
+      "duration": 0.9
+    },
+    {
+      "text": "so normally when we talk about AI Agent",
+      "start": 54.77,
+      "duration": 2.034
+    },
+    {
+      "text": "we can start with a single agent",
+      "start": 56.8,
+      "duration": 1.933
+    },
+    {
+      "text": "basically you can imagine you're talking to",
+      "start": 58.9,
+      "duration": 2.066
+    },
+    {
+      "text": "ChatGPT where you're sending a user prompt",
+      "start": 60.97,
+      "duration": 2.367
+    },
+    {
+      "text": "you can say",
+      "start": 63.43,
+      "duration": 0.567
+    },
+    {
+      "text": "help me research who is the best",
+      "start": 64.1,
+      "duration": 1.766
+    },
+    {
+      "text": "AI builder and Youtuber on the internet",
+      "start": 65.87,
+      "duration": 2.0
+    },
+    {
+      "text": "and then the LLM agent from",
+      "start": 67.9,
+      "duration": 1.8
+    },
+    {
+      "text": "ChatGPT will be processing this information",
+      "start": 69.7,
+      "duration": 2.266
+    },
+    {
+      "text": "and they'll be using a tool",
+      "start": 72.13,
+      "duration": 1.367
+    },
+    {
+      "text": "for example a search API to look on the internet",
+      "start": 73.5,
+      "duration": 2.9
+    },
+    {
+      "text": "and maybe they find Sean is the best AI builder",
+      "start": 76.4,
+      "duration": 2.2
+    },
+    {
+      "text": "and Youtuber on the internet",
+      "start": 78.6,
+      "duration": 1.1
+    },
+    {
+      "text": "so that finishes one task for a single agent",
+      "start": 79.7,
+      "duration": 2.433
+    },
+    {
+      "text": "and then things can get a little bit more complicated",
+      "start": 82.13,
+      "duration": 2.033
+    },
+    {
+      "text": "we can introduce a sequential agents",
+      "start": 84.17,
+      "duration": 2.134
+    },
+    {
+      "text": "after user ask the first question",
+      "start": 86.3,
+      "duration": 2.133
+    },
+    {
+      "text": "they can send that to a research agent first",
+      "start": 88.47,
+      "duration": 2.234
+    },
+    {
+      "text": "and it's gonna pass",
+      "start": 90.7,
+      "duration": 0.866
+    },
+    {
+      "text": "down the contact that it has researched",
+      "start": 91.57,
+      "duration": 1.9
+    },
+    {
+      "text": "to the next agent called Analysis Agent",
+      "start": 93.47,
+      "duration": 2.167
+    },
+    {
+      "text": "which probably will do a lot of processing after",
+      "start": 95.63,
+      "duration": 2.2
+    },
+    {
+      "text": "you know the research online",
+      "start": 97.83,
+      "duration": 1.2
+    },
+    {
+      "text": "and after the analysis agent has finished",
+      "start": 99.03,
+      "duration": 1.667
+    },
+    {
+      "text": "he's probably gonna call a report agent",
+      "start": 100.7,
+      "duration": 0.9
+    },
+    {
+      "text": "which will write the report for you",
+      "start": 102.7,
+      "duration": 1.6
+    },
+    {
+      "text": "you can think of it as just a sequential workflow",
+      "start": 104.3,
+      "duration": 2.133
+    },
+    {
+      "text": "that would happen in a lot of daily life",
+      "start": 106.43,
+      "duration": 1.667
+    },
+    {
+      "text": "and daily work okay",
+      "start": 108.1,
+      "duration": 1.233
+    },
+    {
+      "text": "one problem with sequential agents",
+      "start": 109.4,
+      "duration": 1.766
+    },
+    {
+      "text": "is that they're doing things one by one",
+      "start": 111.17,
+      "duration": 2.3
+    },
+    {
+      "text": "and there's an order there",
+      "start": 113.47,
+      "duration": 1.167
+    },
+    {
+      "text": "so sometimes it could take a really long time",
+      "start": 114.63,
+      "duration": 2.167
+    },
+    {
+      "text": "or maybe you wanna you know",
+      "start": 116.8,
+      "duration": 1.033
+    },
+    {
+      "text": "increase the capacity of work",
+      "start": 117.83,
+      "duration": 1.467
+    },
+    {
+      "text": "so that's why Agent Teams comes really handy",
+      "start": 119.3,
+      "duration": 2.466
+    },
+    {
+      "text": "Clocko is basically using a leader agent first",
+      "start": 121.87,
+      "duration": 2.734
+    },
+    {
+      "text": "to process this new prompt",
+      "start": 124.6,
+      "duration": 1.7
+    },
+    {
+      "text": "and then the leader agent is gonna think",
+      "start": 126.3,
+      "duration": 1.466
+    },
+    {
+      "text": "what can it do to make this such a thorough and nice",
+      "start": 127.77,
+      "duration": 2.9
+    },
+    {
+      "text": "report",
+      "start": 130.67,
+      "duration": 0.567
+    },
+    {
+      "text": "what you can do is that you can define a few agents in",
+      "start": 131.27,
+      "duration": 2.934
+    },
+    {
+      "text": "parallel at the same time",
+      "start": 134.2,
+      "duration": 1.7
+    },
+    {
+      "text": "to process different tasks",
+      "start": 135.9,
+      "duration": 1.666
+    },
+    {
+      "text": "the leader agent has control over all of them",
+      "start": 137.57,
+      "duration": 2.6
+    },
+    {
+      "text": "just like the deep research agent",
+      "start": 140.17,
+      "duration": 1.267
+    },
+    {
+      "text": "you might have realized that in deep research",
+      "start": 141.43,
+      "duration": 1.033
+    },
+    {
+      "text": "when the user asks a question",
+      "start": 143.4,
+      "duration": 1.533
+    },
+    {
+      "text": "they're gonna clarify the question with you",
+      "start": 144.93,
+      "duration": 1.667
+    },
+    {
+      "text": "and then they're gonna write a research brief",
+      "start": 146.6,
+      "duration": 1.6
+    },
+    {
+      "text": "there's gonna be a supervisor agent that would be",
+      "start": 148.23,
+      "duration": 2.667
+    },
+    {
+      "text": "you know the leader agent here",
+      "start": 150.9,
+      "duration": 1.4
+    },
+    {
+      "text": "and then delegate all the tasks to the sub researchers",
+      "start": 152.3,
+      "duration": 2.733
+    },
+    {
+      "text": "over here right",
+      "start": 155.03,
+      "duration": 1.367
+    },
+    {
+      "text": "so this part I would say is very similar",
+      "start": 156.4,
+      "duration": 2.266
+    },
+    {
+      "text": "um but it's not entirely the same right",
+      "start": 158.7,
+      "duration": 1.733
+    },
+    {
+      "text": "cause agent teams doesn't really have",
+      "start": 160.43,
+      "duration": 1.6
+    },
+    {
+      "text": "you know",
+      "start": 162.03,
+      "duration": 0.267
+    },
+    {
+      "text": "some predefined clarification and research brief",
+      "start": 162.3,
+      "duration": 2.5
+    },
+    {
+      "text": "all of these little workers are",
+      "start": 164.8,
+      "duration": 1.4
+    },
+    {
+      "text": "you know doing things in parallel at the same time",
+      "start": 166.2,
+      "duration": 2.1
+    },
+    {
+      "text": "and then report back to the leader agent",
+      "start": 168.3,
+      "duration": 2.066
+    },
+    {
+      "text": "at this time",
+      "start": 170.43,
+      "duration": 0.533
+    },
+    {
+      "text": "the leader agent is really being the boss here",
+      "start": 170.97,
+      "duration": 2.134
+    },
+    {
+      "text": "the team lead that's why it's called agent teams",
+      "start": 173.1,
+      "duration": 2.566
+    },
+    {
+      "text": "this team lead is gonna process all the information",
+      "start": 175.67,
+      "duration": 2.1
+    },
+    {
+      "text": "that the subtask that",
+      "start": 177.77,
+      "duration": 1.267
+    },
+    {
+      "text": "you know my workers have done for me",
+      "start": 179.03,
+      "duration": 1.667
+    },
+    {
+      "text": "so what is an agent swarm then",
+      "start": 181.07,
+      "duration": 2.234
+    },
+    {
+      "text": "imagine you have a bunch of bees in a hive to work for",
+      "start": 183.3,
+      "duration": 2.5
+    },
+    {
+      "text": "the queen and then the queen is basically",
+      "start": 185.8,
+      "duration": 2.2
+    },
+    {
+      "text": "processing a user prompt",
+      "start": 188.0,
+      "duration": 1.5
+    },
+    {
+      "text": "there's an goal agent",
+      "start": 189.57,
+      "duration": 1.3
+    },
+    {
+      "text": "that will help derive some of the goals and specs that",
+      "start": 190.87,
+      "duration": 3.134
+    },
+    {
+      "text": "you know this user actually wants right",
+      "start": 194.0,
+      "duration": 1.8
+    },
+    {
+      "text": "again who's the best AI Youtubers on the internet",
+      "start": 196.03,
+      "duration": 1.333
+    },
+    {
+      "text": "they're gonna say okay",
+      "start": 198.03,
+      "duration": 0.733
+    },
+    {
+      "text": "the goal is let me",
+      "start": 198.77,
+      "duration": 0.8
+    },
+    {
+      "text": "find like the top 20 Youtubers who",
+      "start": 199.57,
+      "duration": 1.567
+    },
+    {
+      "text": "do a lot of really good videos",
+      "start": 202.3,
+      "duration": 1.8
+    },
+    {
+      "text": "covering AI agent systems",
+      "start": 204.1,
+      "duration": 1.9
+    },
+    {
+      "text": "and then you're gonna define some subtask",
+      "start": 206.1,
+      "duration": 2.133
+    },
+    {
+      "text": "or even create some agents with templates by itself",
+      "start": 208.23,
+      "duration": 2.833
+    },
+    {
+      "text": "you see the difference here is that this goal",
+      "start": 211.1,
+      "duration": 2.533
+    },
+    {
+      "text": "agent is creating agents templates by itself",
+      "start": 213.63,
+      "duration": 3.033
+    },
+    {
+      "text": "each little one of these smaller agents",
+      "start": 216.7,
+      "duration": 2.366
+    },
+    {
+      "text": "are actually created right there",
+      "start": 219.07,
+      "duration": 2.0
+    },
+    {
+      "text": "instead of defined previously okay",
+      "start": 221.07,
+      "duration": 2.367
+    },
+    {
+      "text": "in agent teams",
+      "start": 223.43,
+      "duration": 0.633
+    },
+    {
+      "text": "you have to define who's doing the research",
+      "start": 224.07,
+      "duration": 0.9
+    },
+    {
+      "text": "who's doing the analysis and everything",
+      "start": 225.9,
+      "duration": 1.533
+    },
+    {
+      "text": "and then report back but in an agent swarm scenario",
+      "start": 227.43,
+      "duration": 3.2
+    },
+    {
+      "text": "simply deciding OK",
+      "start": 230.7,
+      "duration": 0.9
+    },
+    {
+      "text": "maybe I need 20 agents",
+      "start": 231.6,
+      "duration": 1.166
+    },
+    {
+      "text": "and each one of them should be doing certain things",
+      "start": 232.77,
+      "duration": 1.934
+    },
+    {
+      "text": "there's no human involvement there",
+      "start": 234.7,
+      "duration": 1.1
+    },
+    {
+      "text": "I don't need to tell it who should be doing what right",
+      "start": 235.8,
+      "duration": 3.066
+    },
+    {
+      "text": "so that's why you see like a swarm here",
+      "start": 238.87,
+      "duration": 1.567
+    },
+    {
+      "text": "for people who study machine learning",
+      "start": 240.5,
+      "duration": 1.3
+    },
+    {
+      "text": "it's kind of like a random forest",
+      "start": 241.8,
+      "duration": 1.633
+    },
+    {
+      "text": "where you have like",
+      "start": 243.43,
+      "duration": 1.067
+    },
+    {
+      "text": "little subtrees to make decisions on",
+      "start": 244.5,
+      "duration": 2.7
+    },
+    {
+      "text": "say classifying if an image is a dog or a cat",
+      "start": 247.27,
+      "duration": 2.4
+    },
+    {
+      "text": "and then basically",
+      "start": 249.67,
+      "duration": 0.767
+    },
+    {
+      "text": "the system is just spawning some parallel agents",
+      "start": 250.43,
+      "duration": 2.933
+    },
+    {
+      "text": "parallel subtrees to um",
+      "start": 253.4,
+      "duration": 2.6
+    },
+    {
+      "text": "finish the task",
+      "start": 256.27,
+      "duration": 1.034
+    },
+    {
+      "text": "eventually you're gonna crowdsource the information",
+      "start": 257.3,
+      "duration": 2.733
+    },
+    {
+      "text": "with a synthesizer agent which is basically",
+      "start": 260.03,
+      "duration": 2.567
+    },
+    {
+      "text": "like the final layer of a random forest model",
+      "start": 262.6,
+      "duration": 2.933
+    },
+    {
+      "text": "where they're gonna say OK um",
+      "start": 265.57,
+      "duration": 2.234
+    },
+    {
+      "text": "each one of you has done certain jobs",
+      "start": 268.17,
+      "duration": 2.067
+    },
+    {
+      "text": "let me compile them together",
+      "start": 270.23,
+      "duration": 1.667
+    },
+    {
+      "text": "and they eventually you know",
+      "start": 271.97,
+      "duration": 0.867
+    },
+    {
+      "text": "cluster the information together",
+      "start": 272.83,
+      "duration": 1.633
+    },
+    {
+      "text": "and emerge them into a deliverable",
+      "start": 274.47,
+      "duration": 2.134
+    },
+    {
+      "text": "that will become your output",
+      "start": 276.6,
+      "duration": 1.433
+    },
+    {
+      "text": "so this was a quick overview",
+      "start": 278.1,
+      "duration": 1.7
+    },
+    {
+      "text": "from single agent to sequential agents",
+      "start": 279.8,
+      "duration": 2.4
+    },
+    {
+      "text": "to a team of agents with team lead to an agent swarm",
+      "start": 282.27,
+      "duration": 3.334
+    },
+    {
+      "text": "where there's simply a goal driver",
+      "start": 285.6,
+      "duration": 2.033
+    },
+    {
+      "text": "and then just let the rest of the work",
+      "start": 287.63,
+      "duration": 1.867
+    },
+    {
+      "text": "done by a bunch of agents themselves",
+      "start": 289.5,
+      "duration": 3.0
+    },
+    {
+      "text": "without any definitions",
+      "start": 292.5,
+      "duration": 1.266
+    },
+    {
+      "text": "and I think Agent 1 would excel at a lot of tasks",
+      "start": 294.17,
+      "duration": 2.267
+    },
+    {
+      "text": "that would require a lot of parallel task processing",
+      "start": 296.43,
+      "duration": 2.567
+    },
+    {
+      "text": "without a lot of predefinitions",
+      "start": 299.0,
+      "duration": 1.6
+    },
+    {
+      "text": "and that's very powerful",
+      "start": 300.8,
+      "duration": 0.9
+    },
+    {
+      "text": "because sometimes you might just have a really vague",
+      "start": 301.7,
+      "duration": 2.133
+    },
+    {
+      "text": "intent when you ask a question to an AI right",
+      "start": 303.83,
+      "duration": 2.667
+    },
+    {
+      "text": "you want it to figure out how to break down tasks",
+      "start": 306.5,
+      "duration": 2.2
+    },
+    {
+      "text": "by itself",
+      "start": 308.7,
+      "duration": 0.733
+    },
+    {
+      "text": "but at the same time I think it depends on the task",
+      "start": 309.5,
+      "duration": 1.9
+    },
+    {
+      "text": "if your task requires a lot of like",
+      "start": 311.4,
+      "duration": 2.033
+    },
+    {
+      "text": "determined workflow and you want the agent system",
+      "start": 313.43,
+      "duration": 3.533
+    },
+    {
+      "text": "or the agent organizations",
+      "start": 316.97,
+      "duration": 1.5
+    },
+    {
+      "text": "to run exactly the way you want",
+      "start": 318.47,
+      "duration": 2.0
+    },
+    {
+      "text": "like you're the board member or you're the CEO",
+      "start": 320.6,
+      "duration": 2.133
+    },
+    {
+      "text": "then I think agent teams would do a really good task",
+      "start": 322.8,
+      "duration": 2.066
+    },
+    {
+      "text": "because you can have full control on who's doing what",
+      "start": 324.87,
+      "duration": 0.234
+    },
+    {
+      "text": "but I would say both systems have really good",
+      "start": 327.3,
+      "duration": 2.5
+    },
+    {
+      "text": "batch processing features here",
+      "start": 329.8,
+      "duration": 1.566
+    },
+    {
+      "text": "because they will allow you to do multiple tasks",
+      "start": 331.37,
+      "duration": 2.6
+    },
+    {
+      "text": "at the same time for example",
+      "start": 333.97,
+      "duration": 1.967
+    },
+    {
+      "text": "you can imagine they can do they",
+      "start": 336.0,
+      "duration": 1.566
+    },
+    {
+      "text": "they might be doing search",
+      "start": 337.57,
+      "duration": 1.234
+    },
+    {
+      "text": "downloading batch processing files",
+      "start": 338.8,
+      "duration": 2.3
+    },
+    {
+      "text": "talking to different agents",
+      "start": 341.1,
+      "duration": 1.366
+    },
+    {
+      "text": "uh all at the same time",
+      "start": 342.7,
+      "duration": 1.333
+    },
+    {
+      "text": "and which will save you so much time",
+      "start": 344.03,
+      "duration": 1.833
+    },
+    {
+      "text": "but it could also consume a lot of tokens too",
+      "start": 345.87,
+      "duration": 2.067
+    },
+    {
+      "text": "unlike these simpler agent systems",
+      "start": 348.03,
+      "duration": 2.233
+    },
+    {
+      "text": "teams or swarm",
+      "start": 350.8,
+      "duration": 1.5
+    },
+    {
+      "text": "allow a bunch of agents to have different opinions",
+      "start": 352.3,
+      "duration": 3.066
+    },
+    {
+      "text": "because they could have a different conclusion",
+      "start": 355.6,
+      "duration": 2.1
+    },
+    {
+      "text": "individualistically and then eventually",
+      "start": 357.7,
+      "duration": 2.5
+    },
+    {
+      "text": "what they do is that either the leader agent",
+      "start": 360.2,
+      "duration": 2.366
+    },
+    {
+      "text": "or the synthesizer agent need to compile",
+      "start": 362.57,
+      "duration": 2.467
+    },
+    {
+      "text": "reconcile the decision making",
+      "start": 365.03,
+      "duration": 2.033
+    },
+    {
+      "text": "so that they can come up with a solution that is not",
+      "start": 367.07,
+      "duration": 3.134
+    },
+    {
+      "text": "you know uh",
+      "start": 370.2,
+      "duration": 0.666
+    },
+    {
+      "text": "super biased right",
+      "start": 370.87,
+      "duration": 1.134
+    },
+    {
+      "text": "all of what I just explained were quite theoretical",
+      "start": 372.07,
+      "duration": 2.434
+    },
+    {
+      "text": "let's jump right in and test the product",
+      "start": 374.5,
+      "duration": 1.8
+    },
+    {
+      "text": "and see what happens",
+      "start": 376.3,
+      "duration": 1.0
+    },
+    {
+      "text": "the first demo I wanna try is to do a YouTube search",
+      "start": 377.37,
+      "duration": 3.1
+    },
+    {
+      "text": "you should be searching similar channels",
+      "start": 380.47,
+      "duration": 1.1
+    },
+    {
+      "text": "like Shawn's AI Stories",
+      "start": 382.37,
+      "duration": 1.534
+    },
+    {
+      "text": "explore those channels that do developer tools",
+      "start": 383.9,
+      "duration": 2.266
+    },
+    {
+      "text": "automation creations",
+      "start": 386.17,
+      "duration": 1.134
+    },
+    {
+      "text": "indie hacking all these kind of things",
+      "start": 387.57,
+      "duration": 1.634
+    },
+    {
+      "text": "and",
+      "start": 389.27,
+      "duration": 0.167
+    },
+    {
+      "text": "the result is that I want them to return four channels",
+      "start": 389.43,
+      "duration": 2.633
+    },
+    {
+      "text": "with their names and URLs",
+      "start": 392.3,
+      "duration": 1.666
+    },
+    {
+      "text": "and a very similar prompt for Claude code",
+      "start": 394.03,
+      "duration": 2.0
+    },
+    {
+      "text": "is that you're using agent teams",
+      "start": 396.03,
+      "duration": 1.833
+    },
+    {
+      "text": "and the contacts the same",
+      "start": 397.87,
+      "duration": 1.7
+    },
+    {
+      "text": "but then you can be more specific teammate 1",
+      "start": 399.57,
+      "duration": 1.8
+    },
+    {
+      "text": "2 3 4",
+      "start": 401.37,
+      "duration": 0.434
+    },
+    {
+      "text": "5 what they're doing",
+      "start": 401.8,
+      "duration": 1.033
+    },
+    {
+      "text": "so I have just pasted both prompts in Claude code",
+      "start": 402.83,
+      "duration": 2.867
+    },
+    {
+      "text": "and in Kimi so let's get started and run it alright",
+      "start": 405.7,
+      "duration": 3.9
+    },
+    {
+      "text": "you can see that it shows Agent's form over there",
+      "start": 414.67,
+      "duration": 2.434
+    },
+    {
+      "text": "okay cool",
+      "start": 417.3,
+      "duration": 1.2
+    },
+    {
+      "text": "let's see",
+      "start": 418.5,
+      "duration": 0.933
+    },
+    {
+      "text": "you can see that",
+      "start": 419.7,
+      "duration": 0.933
+    },
+    {
+      "text": "Claude Code understood that it's running an agent team",
+      "start": 420.63,
+      "duration": 2.333
+    },
+    {
+      "text": "and it's establishing shared framework for strategy",
+      "start": 422.97,
+      "duration": 2.7
+    },
+    {
+      "text": "editor okay",
+      "start": 425.67,
+      "duration": 1.867
+    },
+    {
+      "text": "oh and then uh",
+      "start": 427.83,
+      "duration": 2.067
+    },
+    {
+      "text": "what Kimi is doing is that it's creating all these",
+      "start": 429.9,
+      "duration": 2.4
+    },
+    {
+      "text": "little agent by itself without my definition",
+      "start": 432.3,
+      "duration": 2.466
+    },
+    {
+      "text": "you see this one is doing a research agent",
+      "start": 434.9,
+      "duration": 2.1
+    },
+    {
+      "text": "this is really cool they have this um role description",
+      "start": 437.2,
+      "duration": 3.8
+    },
+    {
+      "text": "you're a competitive intelligence researcher",
+      "start": 441.0,
+      "duration": 2.2
+    },
+    {
+      "text": "specializing AI coding",
+      "start": 443.3,
+      "duration": 1.5
+    },
+    {
+      "text": "and then there are research agents too",
+      "start": 445.07,
+      "duration": 4.234
+    },
+    {
+      "text": "um you are a competitive intelligence researcher",
+      "start": 449.5,
+      "duration": 2.666
+    },
+    {
+      "text": "specializing AI agent automation content creators",
+      "start": 452.17,
+      "duration": 2.367
+    },
+    {
+      "text": "and this one is searching for educators",
+      "start": 456.23,
+      "duration": 2.533
+    },
+    {
+      "text": "I would say I think yeah",
+      "start": 458.77,
+      "duration": 2.2
+    },
+    {
+      "text": "they're specialized in AI education",
+      "start": 460.97,
+      "duration": 1.734
+    },
+    {
+      "text": "okay so he created these sub agents in parallel",
+      "start": 462.77,
+      "duration": 3.767
+    },
+    {
+      "text": "uh like a swarm",
+      "start": 466.67,
+      "duration": 1.0
+    },
+    {
+      "text": "and you can see what they're doing one by one okay",
+      "start": 468.4,
+      "duration": 3.166
+    },
+    {
+      "text": "Louis is doing some uh searching a YouTube AI SAS",
+      "start": 471.8,
+      "duration": 4.666
+    },
+    {
+      "text": "solo entrepreneur MRR revenue",
+      "start": 476.47,
+      "duration": 1.667
+    },
+    {
+      "text": "Jane who's looking for a",
+      "start": 478.3,
+      "duration": 1.466
+    },
+    {
+      "text": "YouTube channel focused on AI education",
+      "start": 480.0,
+      "duration": 1.6
+    },
+    {
+      "text": "explaining is doing the following task",
+      "start": 481.6,
+      "duration": 3.6
+    },
+    {
+      "text": "you see all of these were written by um by Kimi itself",
+      "start": 485.27,
+      "duration": 4.867
+    },
+    {
+      "text": "this is really cool",
+      "start": 490.47,
+      "duration": 1.167
+    },
+    {
+      "text": "and then let's see Claude code",
+      "start": 492.67,
+      "duration": 1.6
+    },
+    {
+      "text": "and deployed all five scouts in parallel with the task",
+      "start": 494.33,
+      "duration": 3.133
+    },
+    {
+      "text": "mainly web search and is using tools",
+      "start": 498.43,
+      "duration": 2.667
+    },
+    {
+      "text": "I can see exactly what they looked up for alright",
+      "start": 501.1,
+      "duration": 3.433
+    },
+    {
+      "text": "this Youtuber",
+      "start": 504.63,
+      "duration": 1.233
+    },
+    {
+      "text": "uh I don't know who this is",
+      "start": 507.03,
+      "duration": 1.567
+    },
+    {
+      "text": "Kimi has spent a lot of time polishing their UI",
+      "start": 509.47,
+      "duration": 3.4
+    },
+    {
+      "text": "so that it looks very neat",
+      "start": 512.87,
+      "duration": 2.134
+    },
+    {
+      "text": "and um you can see what each agent is actually doing",
+      "start": 515.17,
+      "duration": 3.667
+    },
+    {
+      "text": "and then check out their results",
+      "start": 518.83,
+      "duration": 1.833
+    },
+    {
+      "text": "this is very similar to how Chat",
+      "start": 520.67,
+      "duration": 2.334
+    },
+    {
+      "text": "GPT was doing deep research",
+      "start": 523.0,
+      "duration": 1.633
+    },
+    {
+      "text": "I think where",
+      "start": 524.63,
+      "duration": 1.4
+    },
+    {
+      "text": "they will show you exactly what they're searching",
+      "start": 526.03,
+      "duration": 1.767
+    },
+    {
+      "text": "I think Grok also has similar features where",
+      "start": 527.8,
+      "duration": 2.433
+    },
+    {
+      "text": "they will show very clearly and streaming it uh",
+      "start": 530.23,
+      "duration": 2.967
+    },
+    {
+      "text": "how how the agent is doing the internet search",
+      "start": 533.2,
+      "duration": 3.366
+    },
+    {
+      "text": "whereas if you're doing clock code in the terminal",
+      "start": 536.63,
+      "duration": 2.333
+    },
+    {
+      "text": "I think the the UI is quite minimum",
+      "start": 539.03,
+      "duration": 3.567
+    },
+    {
+      "text": "but I would say I would say that's fine",
+      "start": 542.6,
+      "duration": 1.833
+    },
+    {
+      "text": "because Clock Code is mainly focused on coding tasks",
+      "start": 544.43,
+      "duration": 3.8
+    },
+    {
+      "text": "looks like Jane has finished her task",
+      "start": 548.47,
+      "duration": 2.134
+    },
+    {
+      "text": "let's see",
+      "start": 550.7,
+      "duration": 1.0
+    },
+    {
+      "text": "Jane find 4 YouTube channels focus on education",
+      "start": 552.27,
+      "duration": 3.1
+    },
+    {
+      "text": "the final answer is they found four YouTube channels",
+      "start": 555.6,
+      "duration": 2.866
+    },
+    {
+      "text": "focused on AI education Robert Miles",
+      "start": 558.47,
+      "duration": 3.0
+    },
+    {
+      "text": "Jeremy Howard Watson",
+      "start": 561.87,
+      "duration": 1.7
+    },
+    {
+      "text": "biases AI uncovered and then generated a file",
+      "start": 563.57,
+      "duration": 4.234
+    },
+    {
+      "text": "I think I made a mistake",
+      "start": 568.63,
+      "duration": 1.2
+    },
+    {
+      "text": "because I was supposed to say five agents here",
+      "start": 569.83,
+      "duration": 2.867
+    },
+    {
+      "text": "somehow I put 12 and clock always doing five",
+      "start": 572.8,
+      "duration": 3.066
+    },
+    {
+      "text": "so I think we're using a lot more tokens on uh",
+      "start": 575.87,
+      "duration": 3.0
+    },
+    {
+      "text": "Kimi 4 5 6",
+      "start": 578.87,
+      "duration": 0.6
+    },
+    {
+      "text": "7 eight eight out of 12 agents are finished",
+      "start": 580.7,
+      "duration": 3.833
+    },
+    {
+      "text": "I think I'm gonna tell clock code don't overthink",
+      "start": 584.57,
+      "duration": 3.634
+    },
+    {
+      "text": "let's",
+      "start": 588.97,
+      "duration": 0.834
+    },
+    {
+      "text": "focus on letting the Scouts um do the basic research",
+      "start": 591.37,
+      "duration": 8.4
+    },
+    {
+      "text": "we don't need to use more than 10 tools",
+      "start": 600.23,
+      "duration": 6.667
+    },
+    {
+      "text": "how come you guys took such a long time",
+      "start": 607.03,
+      "duration": 1.267
+    },
+    {
+      "text": "oh this one searching like foreign languages",
+      "start": 608.3,
+      "duration": 2.3
+    },
+    {
+      "text": "that's why not English Channel",
+      "start": 611.1,
+      "duration": 2.066
+    },
+    {
+      "text": "that's why it's taking a long time",
+      "start": 613.17,
+      "duration": 1.534
+    },
+    {
+      "text": "oh look at this",
+      "start": 617.5,
+      "duration": 1.566
+    },
+    {
+      "text": "it's like reading the channel real time",
+      "start": 619.17,
+      "duration": 2.734
+    },
+    {
+      "text": "took my request now got it",
+      "start": 622.03,
+      "duration": 1.567
+    },
+    {
+      "text": "simplifying Scout 1 and 2 already back",
+      "start": 623.6,
+      "duration": 2.1
+    },
+    {
+      "text": "let me launch the remaining 3 scouts",
+      "start": 625.7,
+      "duration": 2.4
+    },
+    {
+      "text": "now with learner instructions",
+      "start": 628.1,
+      "duration": 2.066
+    },
+    {
+      "text": "4 channels max minimum tool usage",
+      "start": 630.17,
+      "duration": 2.234
+    },
+    {
+      "text": "look at this it took my feedback",
+      "start": 632.5,
+      "duration": 1.666
+    },
+    {
+      "text": "it was done scout 3",
+      "start": 634.63,
+      "duration": 2.133
+    },
+    {
+      "text": "teammate 3 for searching for founder",
+      "start": 636.77,
+      "duration": 2.2
+    },
+    {
+      "text": "building public channels only use 3 tools",
+      "start": 638.97,
+      "duration": 2.434
+    },
+    {
+      "text": "15,000 tokens",
+      "start": 641.6,
+      "duration": 1.4
+    },
+    {
+      "text": "previously it was like 70 80 tools with 90,000 tokens",
+      "start": 643.07,
+      "duration": 3.7
+    },
+    {
+      "text": "aha looks like both of them are finished",
+      "start": 647.17,
+      "duration": 2.134
+    },
+    {
+      "text": "10 of 12 agents completed successfully",
+      "start": 650.43,
+      "duration": 1.767
+    },
+    {
+      "text": "now compiling findings",
+      "start": 652.2,
+      "duration": 1.7
+    },
+    {
+      "text": "look at this is compiling the findings",
+      "start": 653.9,
+      "duration": 2.2
+    },
+    {
+      "text": "and launch clustering agent",
+      "start": 656.1,
+      "duration": 1.666
+    },
+    {
+      "text": "remember we talked about the synthesizer",
+      "start": 657.97,
+      "duration": 1.7
+    },
+    {
+      "text": "that's that's what it's doing uh",
+      "start": 659.67,
+      "duration": 1.734
+    },
+    {
+      "text": "because it has finished the swarm",
+      "start": 661.4,
+      "duration": 1.733
+    },
+    {
+      "text": "and now they're crowd",
+      "start": 663.27,
+      "duration": 2.067
+    },
+    {
+      "text": "they're processing the crowd sourced information",
+      "start": 665.43,
+      "duration": 2.567
+    },
+    {
+      "text": "with the synthesizer",
+      "start": 668.07,
+      "duration": 1.3
+    },
+    {
+      "text": "or it's calling it launch a clustering agent okay",
+      "start": 669.5,
+      "duration": 4.033
+    },
+    {
+      "text": "and cluster agent is Bowen OK",
+      "start": 673.77,
+      "duration": 2.467
+    },
+    {
+      "text": "Bowen",
+      "start": 676.23,
+      "duration": 0.8
+    },
+    {
+      "text": "you're analyzing the competitive landscape for this",
+      "start": 677.2,
+      "duration": 3.166
+    },
+    {
+      "text": "and research data",
+      "start": 680.9,
+      "duration": 2.266
+    },
+    {
+      "text": "OK so you see",
+      "start": 684.1,
+      "duration": 1.133
+    },
+    {
+      "text": "like all of these researched channels from other um",
+      "start": 685.23,
+      "duration": 4.133
+    },
+    {
+      "text": "swarm agents",
+      "start": 690.0,
+      "duration": 1.1
+    },
+    {
+      "text": "have been used by this clustering synthesizer",
+      "start": 692.37,
+      "duration": 3.134
+    },
+    {
+      "text": "it clustered 26 channels by positioning formats",
+      "start": 695.67,
+      "duration": 2.667
+    },
+    {
+      "text": "all scouts are back now",
+      "start": 698.8,
+      "duration": 1.4
+    },
+    {
+      "text": "synthesizing a strategy editor",
+      "start": 700.2,
+      "duration": 1.833
+    },
+    {
+      "text": "as a strategy editor lead",
+      "start": 702.03,
+      "duration": 1.467
+    },
+    {
+      "text": "so this is",
+      "start": 703.5,
+      "duration": 0.6
+    },
+    {
+      "text": "this one is returning the information back to the lead",
+      "start": 704.1,
+      "duration": 2.266
+    },
+    {
+      "text": "agent remember",
+      "start": 706.37,
+      "duration": 1.0
+    },
+    {
+      "text": "and they're deduping clustering",
+      "start": 707.4,
+      "duration": 1.666
+    },
+    {
+      "text": "and producing the final deliverable",
+      "start": 709.07,
+      "duration": 2.934
+    },
+    {
+      "text": "the competitive landscape shows AI stories OK",
+      "start": 712.37,
+      "duration": 2.9
+    },
+    {
+      "text": "this is final report already",
+      "start": 715.63,
+      "duration": 1.433
+    },
+    {
+      "text": "honestly",
+      "start": 718.0,
+      "duration": 0.466
+    },
+    {
+      "text": "it's a little hard to read this from a terminal",
+      "start": 718.47,
+      "duration": 3.134
+    },
+    {
+      "text": "it took 20 minutes in total 18 minutes 14 seconds",
+      "start": 721.7,
+      "duration": 3.266
+    },
+    {
+      "text": "yeah it told me things that other people are not doing",
+      "start": 725.03,
+      "duration": 3.133
+    },
+    {
+      "text": "and this is helpful",
+      "start": 728.2,
+      "duration": 1.133
+    },
+    {
+      "text": "and now English practical builder content",
+      "start": 729.57,
+      "duration": 3.334
+    },
+    {
+      "text": "the Spanish market has explainer and news",
+      "start": 732.9,
+      "duration": 2.366
+    },
+    {
+      "text": "but no hands on ship a product from zero channel okay",
+      "start": 735.27,
+      "duration": 3.534
+    },
+    {
+      "text": "maybe that's a good idea every channel shows happy path",
+      "start": 738.8,
+      "duration": 3.3
+    },
+    {
+      "text": "nobody documents what broke",
+      "start": 742.1,
+      "duration": 1.8
+    },
+    {
+      "text": "oh yeah yeah",
+      "start": 744.1,
+      "duration": 1.066
+    },
+    {
+      "text": "everyone's showing what's working",
+      "start": 745.17,
+      "duration": 1.4
+    },
+    {
+      "text": "but nothing's not working",
+      "start": 746.57,
+      "duration": 1.934
+    },
+    {
+      "text": "um people don't show their failures",
+      "start": 748.67,
+      "duration": 2.6
+    },
+    {
+      "text": "okay fair enough",
+      "start": 751.27,
+      "duration": 1.234
+    },
+    {
+      "text": "nobody's doing systematic applies to applies test",
+      "start": 752.6,
+      "duration": 3.233
+    },
+    {
+      "text": "same use case build N and n LAN graph",
+      "start": 755.83,
+      "duration": 3.267
+    },
+    {
+      "text": "every creator picks one tool and advocates for it",
+      "start": 759.77,
+      "duration": 2.8
+    },
+    {
+      "text": "in partial comparison see is empty",
+      "start": 762.77,
+      "duration": 2.034
+    },
+    {
+      "text": "that's what we're doing we're comparing two tools today",
+      "start": 764.8,
+      "duration": 2.2
+    },
+    {
+      "text": "and next video concept for Shawn's AI stories",
+      "start": 767.4,
+      "duration": 3.8
+    },
+    {
+      "text": "I built the same agent in 5 frameworks",
+      "start": 771.4,
+      "duration": 2.5
+    },
+    {
+      "text": "why my AI agent broke in production 0 to 10",
+      "start": 774.03,
+      "duration": 3.767
+    },
+    {
+      "text": "k AI Sass stack CLO",
+      "start": 777.8,
+      "duration": 1.9
+    },
+    {
+      "text": "Claude Code versus cursor versus windsurf",
+      "start": 779.7,
+      "duration": 2.1
+    },
+    {
+      "text": "windsurf is dead no",
+      "start": 782.03,
+      "duration": 1.467
+    },
+    {
+      "text": "um I automated",
+      "start": 783.67,
+      "duration": 2.134
+    },
+    {
+      "text": "well they're not dead",
+      "start": 785.9,
+      "duration": 0.866
+    },
+    {
+      "text": "they're acquired by by Devin",
+      "start": 786.77,
+      "duration": 1.5
+    },
+    {
+      "text": "but I haven't heard from them since",
+      "start": 788.27,
+      "duration": 1.534
+    },
+    {
+      "text": "ever since I automated my entire YouTube workflow",
+      "start": 789.8,
+      "duration": 3.0
+    },
+    {
+      "text": "AI agents",
+      "start": 792.8,
+      "duration": 0.866
+    },
+    {
+      "text": "okay",
+      "start": 794.27,
+      "duration": 0.6
+    },
+    {
+      "text": "not a bad report at least I real I know",
+      "start": 794.97,
+      "duration": 3.3
+    },
+    {
+      "text": "at least I Learned that in the Spanish speaking market",
+      "start": 798.27,
+      "duration": 2.4
+    },
+    {
+      "text": "there's not a lot of channels for hands on building",
+      "start": 800.67,
+      "duration": 3.334
+    },
+    {
+      "text": "okay",
+      "start": 804.47,
+      "duration": 0.8
+    },
+    {
+      "text": "some of our customers for AutoManus",
+      "start": 805.87,
+      "duration": 2.3
+    },
+    {
+      "text": "which is a WhatsApp first AI agent sales list",
+      "start": 808.17,
+      "duration": 3.0
+    },
+    {
+      "text": "uh tool has customers from Latin America",
+      "start": 811.4,
+      "duration": 3.4
+    },
+    {
+      "text": "and they're mainly speaking Spanish and Portuguese",
+      "start": 814.8,
+      "duration": 3.5
+    },
+    {
+      "text": "so that's really good uh",
+      "start": 818.5,
+      "duration": 2.166
+    },
+    {
+      "text": "good advice I like that",
+      "start": 820.67,
+      "duration": 1.434
+    },
+    {
+      "text": "okay look at this",
+      "start": 822.2,
+      "duration": 1.166
+    },
+    {
+      "text": "I think Bowen now is writing the report",
+      "start": 823.4,
+      "duration": 2.333
+    },
+    {
+      "text": "cool look at this",
+      "start": 826.43,
+      "duration": 1.2
+    },
+    {
+      "text": "this one's done and so Kimi was telling me",
+      "start": 827.63,
+      "duration": 4.7
+    },
+    {
+      "text": "developer and coder is over saturated",
+      "start": 832.4,
+      "duration": 3.066
+    },
+    {
+      "text": "I agree non technical founders undersaturated",
+      "start": 835.47,
+      "duration": 3.567
+    },
+    {
+      "text": "underserved okay",
+      "start": 839.03,
+      "duration": 1.567
+    },
+    {
+      "text": "building public founder is moderate",
+      "start": 840.63,
+      "duration": 2.467
+    },
+    {
+      "text": "um business automation is underserved",
+      "start": 843.57,
+      "duration": 2.834
+    },
+    {
+      "text": "AI education is moderate okay",
+      "start": 846.4,
+      "duration": 2.4
+    },
+    {
+      "text": "so probably this one is suggesting that",
+      "start": 848.8,
+      "duration": 1.766
+    },
+    {
+      "text": "I should focus on non technical founders",
+      "start": 850.57,
+      "duration": 1.834
+    },
+    {
+      "text": "and business automation",
+      "start": 852.4,
+      "duration": 2.066
+    },
+    {
+      "text": "3 white space opportunities",
+      "start": 854.6,
+      "duration": 1.833
+    },
+    {
+      "text": "cool Asian workflows for non developers",
+      "start": 856.43,
+      "duration": 2.867
+    },
+    {
+      "text": "okay non technical founders rigorous tool comparison",
+      "start": 859.97,
+      "duration": 4.4
+    },
+    {
+      "text": "this one is consistent with what Claude told me",
+      "start": 864.37,
+      "duration": 2.467
+    },
+    {
+      "text": "yeah the impartial comparison C is empty",
+      "start": 866.83,
+      "duration": 2.667
+    },
+    {
+      "text": "Asian workflow case studies theory heavy real metrics",
+      "start": 869.7,
+      "duration": 3.7
+    },
+    {
+      "text": "rare for founders and business owners",
+      "start": 873.63,
+      "duration": 2.333
+    },
+    {
+      "text": "okay",
+      "start": 875.97,
+      "duration": 0.434
+    },
+    {
+      "text": "money related things okay",
+      "start": 876.57,
+      "duration": 1.667
+    },
+    {
+      "text": "sure compare and cursor winter co pilot",
+      "start": 878.23,
+      "duration": 2.767
+    },
+    {
+      "text": "how I built a 4,000 per month",
+      "start": 881.37,
+      "duration": 2.234
+    },
+    {
+      "text": "uh yeah",
+      "start": 883.6,
+      "duration": 0.366
+    },
+    {
+      "text": "agency in 90 days",
+      "start": 883.97,
+      "duration": 1.334
+    },
+    {
+      "text": "at least I Learned something which is",
+      "start": 885.43,
+      "duration": 1.733
+    },
+    {
+      "text": "there is probably an over saturation of highly",
+      "start": 887.2,
+      "duration": 2.733
+    },
+    {
+      "text": "technical contents and um",
+      "start": 890.4,
+      "duration": 2.133
+    },
+    {
+      "text": "there lacks a lot of",
+      "start": 892.83,
+      "duration": 1.233
+    },
+    {
+      "text": "AI contents that help educate non technical founders",
+      "start": 894.37,
+      "duration": 3.267
+    },
+    {
+      "text": "or business owners",
+      "start": 897.63,
+      "duration": 1.1
+    },
+    {
+      "text": "and perhaps I need to compare some tools",
+      "start": 899.0,
+      "duration": 2.466
+    },
+    {
+      "text": "because every video is probably very deep",
+      "start": 901.47,
+      "duration": 2.034
+    },
+    {
+      "text": "dive in one tool",
+      "start": 903.5,
+      "duration": 1.166
+    },
+    {
+      "text": "and also people love money related contents",
+      "start": 904.67,
+      "duration": 2.6
+    },
+    {
+      "text": "and last but not least I think in Latin America",
+      "start": 907.27,
+      "duration": 2.334
+    },
+    {
+      "text": "there's lack of a supply of such contents",
+      "start": 909.6,
+      "duration": 3.4
+    },
+    {
+      "text": "good advice thank you",
+      "start": 913.0,
+      "duration": 1.5
+    },
+    {
+      "text": "both agent teams from Claw Code and Agent 1 from Kimi",
+      "start": 914.5,
+      "duration": 3.1
+    },
+    {
+      "text": "and meanwhile",
+      "start": 917.6,
+      "duration": 0.6
+    },
+    {
+      "text": "I was running the second demo at the same time",
+      "start": 918.2,
+      "duration": 2.166
+    },
+    {
+      "text": "which is a expert review of my uh",
+      "start": 920.37,
+      "duration": 3.2
+    },
+    {
+      "text": "current company AutoManus",
+      "start": 923.57,
+      "duration": 1.234
+    },
+    {
+      "text": "we basically are in a WhatsApp first",
+      "start": 925.1,
+      "duration": 2.066
+    },
+    {
+      "text": "AI sales agent for consultative",
+      "start": 927.17,
+      "duration": 2.734
+    },
+    {
+      "text": "made to order sales",
+      "start": 930.07,
+      "duration": 1.267
+    },
+    {
+      "text": "you can imagine like uh",
+      "start": 931.37,
+      "duration": 1.5
+    },
+    {
+      "text": "companies that are selling some uh",
+      "start": 932.87,
+      "duration": 2.234
+    },
+    {
+      "text": "complex solutions",
+      "start": 935.1,
+      "duration": 1.1
+    },
+    {
+      "text": "like an agency or consulting agencies or",
+      "start": 936.2,
+      "duration": 2.833
+    },
+    {
+      "text": "you know they could be doing B to B sales like in um",
+      "start": 939.03,
+      "duration": 3.167
+    },
+    {
+      "text": "renewable energies",
+      "start": 942.23,
+      "duration": 1.067
+    },
+    {
+      "text": "pharmacies and these things are really complex sales",
+      "start": 943.3,
+      "duration": 3.133
+    },
+    {
+      "text": "even apparel",
+      "start": 946.43,
+      "duration": 1.033
+    },
+    {
+      "text": "where there's not like a single SKU to be sold",
+      "start": 947.57,
+      "duration": 3.467
+    },
+    {
+      "text": "sometimes there's there needs to be a package of like",
+      "start": 951.03,
+      "duration": 2.767
+    },
+    {
+      "text": "the entire quantity that you need for certain products",
+      "start": 953.8,
+      "duration": 2.833
+    },
+    {
+      "text": "and maybe you need to customize a little bit",
+      "start": 956.63,
+      "duration": 2.033
+    },
+    {
+      "text": "so that's what we're building",
+      "start": 958.67,
+      "duration": 1.034
+    },
+    {
+      "text": "um",
+      "start": 959.7,
+      "duration": 0.8
+    },
+    {
+      "text": "to use our agents to capture",
+      "start": 960.87,
+      "duration": 1.7
+    },
+    {
+      "text": "all these requests for business",
+      "start": 962.57,
+      "duration": 1.667
+    },
+    {
+      "text": "so that they won't miss any leads",
+      "start": 964.23,
+      "duration": 1.667
+    },
+    {
+      "text": "okay so now what I'm doing is that I want to ask Agent",
+      "start": 965.9,
+      "duration": 2.966
+    },
+    {
+      "text": "Swarm from Kimi and Agent Team from Cloak Code",
+      "start": 968.87,
+      "duration": 2.934
+    },
+    {
+      "text": "give me some feedback for example",
+      "start": 971.83,
+      "duration": 1.667
+    },
+    {
+      "text": "in teams I was asking for 5 teammates to",
+      "start": 973.5,
+      "duration": 2.766
+    },
+    {
+      "text": "tell me about my product from vcs perspective",
+      "start": 976.43,
+      "duration": 3.033
+    },
+    {
+      "text": "product go to market customer success and legal",
+      "start": 979.47,
+      "duration": 3.034
+    },
+    {
+      "text": "they eventually gave me a report",
+      "start": 982.7,
+      "duration": 1.666
+    },
+    {
+      "text": "okay and I was running it",
+      "start": 984.4,
+      "duration": 2.566
+    },
+    {
+      "text": "and this is surprisingly really fast",
+      "start": 987.1,
+      "duration": 2.6
+    },
+    {
+      "text": "OK it's almost done",
+      "start": 989.7,
+      "duration": 1.466
+    },
+    {
+      "text": "OK give me some advice about pricing",
+      "start": 991.6,
+      "duration": 2.066
+    },
+    {
+      "text": "and I should start flat Sass",
+      "start": 994.0,
+      "duration": 2.1
+    },
+    {
+      "text": "track qualified lead volume internally",
+      "start": 996.1,
+      "duration": 2.3
+    },
+    {
+      "text": "introduce per lead pricing in month three",
+      "start": 998.4,
+      "duration": 3.166
+    },
+    {
+      "text": "once you can define qualify with data",
+      "start": 1001.57,
+      "duration": 2.2
+    },
+    {
+      "text": "that's true our investors gave us similar advice",
+      "start": 1003.87,
+      "duration": 2.0
+    },
+    {
+      "text": "which is uh later if you have bigger clients",
+      "start": 1005.87,
+      "duration": 2.434
+    },
+    {
+      "text": "what we should do is uh charge",
+      "start": 1008.3,
+      "duration": 2.6
+    },
+    {
+      "text": "our clients based on the percentage of conversion",
+      "start": 1010.9,
+      "duration": 3.0
+    },
+    {
+      "text": "but initially we can do flat pricing which is um 200",
+      "start": 1014.03,
+      "duration": 3.267
+    },
+    {
+      "text": "$300 a month design architecture to be channel agnostic",
+      "start": 1017.3,
+      "duration": 1.066
+    },
+    {
+      "text": "but doesn't build SMS in week one OK",
+      "start": 1020.7,
+      "duration": 2.3
+    },
+    {
+      "text": "yeah SMS is probably used only in the US",
+      "start": 1023.0,
+      "duration": 2.466
+    },
+    {
+      "text": "the rest of the world use WhatsApp a lot more",
+      "start": 1025.7,
+      "duration": 2.533
+    },
+    {
+      "text": "so Kimi had 5 agents Owen was evaluating my product",
+      "start": 1028.27,
+      "duration": 4.434
+    },
+    {
+      "text": "well each one",
+      "start": 1032.7,
+      "duration": 0.566
+    },
+    {
+      "text": "everyone was evaluating my product",
+      "start": 1033.27,
+      "duration": 1.534
+    },
+    {
+      "text": "what's wrong already is that",
+      "start": 1034.87,
+      "duration": 1.234
+    },
+    {
+      "text": "WhatsApp channel selection is strategically sound",
+      "start": 1036.1,
+      "duration": 2.4
+    },
+    {
+      "text": "2 billion users that's true",
+      "start": 1038.57,
+      "duration": 1.667
+    },
+    {
+      "text": "2 billion users huge market",
+      "start": 1040.23,
+      "duration": 1.733
+    },
+    {
+      "text": "made to order vertical target is smart",
+      "start": 1042.17,
+      "duration": 2.067
+    },
+    {
+      "text": "yeah",
+      "start": 1044.23,
+      "duration": 0.367
+    },
+    {
+      "text": "because we talk to so many made to order businesses",
+      "start": 1044.6,
+      "duration": 2.633
+    },
+    {
+      "text": "and their sales process is a huge mess",
+      "start": 1047.23,
+      "duration": 3.767
+    },
+    {
+      "text": "okay the risk is defensibility is thin",
+      "start": 1051.0,
+      "duration": 2.366
+    },
+    {
+      "text": "uh yeah",
+      "start": 1053.63,
+      "duration": 0.433
+    },
+    {
+      "text": "sure there's a lot of WhatsApp agents",
+      "start": 1054.07,
+      "duration": 1.7
+    },
+    {
+      "text": "that's why we're doing a lot of um",
+      "start": 1055.77,
+      "duration": 1.934
+    },
+    {
+      "text": "sort of leads structuring as well after talking with uh",
+      "start": 1058.57,
+      "duration": 3.3
+    },
+    {
+      "text": "Justin agents",
+      "start": 1061.87,
+      "duration": 0.734
+    },
+    {
+      "text": "it's not just another chatbot",
+      "start": 1062.6,
+      "duration": 1.5
+    },
+    {
+      "text": "some final comments um",
+      "start": 1064.1,
+      "duration": 2.166
+    },
+    {
+      "text": "I think AI has been evolving",
+      "start": 1066.7,
+      "duration": 2.1
+    },
+    {
+      "text": "to mimic how human societies and human organizations",
+      "start": 1069.8,
+      "duration": 3.766
+    },
+    {
+      "text": "collaborate",
+      "start": 1074.17,
+      "duration": 0.967
+    },
+    {
+      "text": "because I remember listening to a podcast the other day",
+      "start": 1075.27,
+      "duration": 3.4
+    },
+    {
+      "text": "that",
+      "start": 1078.77,
+      "duration": 1.0
+    },
+    {
+      "text": "the way to function really well in the human society",
+      "start": 1080.6,
+      "duration": 3.366
+    },
+    {
+      "text": "is that there is a team of specialized workers",
+      "start": 1083.97,
+      "duration": 4.134
+    },
+    {
+      "text": "like you and me who will be good at",
+      "start": 1088.1,
+      "duration": 2.533
+    },
+    {
+      "text": "you know",
+      "start": 1090.63,
+      "duration": 0.333
+    },
+    {
+      "text": "things that we're good at and collaborating together",
+      "start": 1090.97,
+      "duration": 2.9
+    },
+    {
+      "text": "that's how we make the economy runs",
+      "start": 1093.87,
+      "duration": 1.7
+    },
+    {
+      "text": "and now we're at the position where coding",
+      "start": 1095.97,
+      "duration": 2.5
+    },
+    {
+      "text": "agent is really strong",
+      "start": 1098.47,
+      "duration": 1.4
+    },
+    {
+      "text": "TGBTI General agent is really strong",
+      "start": 1100.77,
+      "duration": 2.5
+    },
+    {
+      "text": "there are a lot of models that are very specialized",
+      "start": 1103.37,
+      "duration": 1.667
+    },
+    {
+      "text": "at what they do and what we can",
+      "start": 1105.03,
+      "duration": 1.267
+    },
+    {
+      "text": "do",
+      "start": 1106.3,
+      "duration": 0.266
+    },
+    {
+      "text": "is create agents that are specialized in what they do",
+      "start": 1106.57,
+      "duration": 2.4
+    },
+    {
+      "text": "too okay",
+      "start": 1108.97,
+      "duration": 1.634
+    },
+    {
+      "text": "so what I see is that we're seeing a trend",
+      "start": 1110.67,
+      "duration": 2.767
+    },
+    {
+      "text": "or a shift from simple AI agents",
+      "start": 1113.43,
+      "duration": 3.167
+    },
+    {
+      "text": "or simple AI agent systems to AI organizations",
+      "start": 1117.17,
+      "duration": 3.3
+    },
+    {
+      "text": "or AI societies",
+      "start": 1120.47,
+      "duration": 1.267
+    },
+    {
+      "text": "and all of these concepts of whether it's a swarm",
+      "start": 1122.27,
+      "duration": 3.0
+    },
+    {
+      "text": "from Kimi or teams from Claw Code",
+      "start": 1125.4,
+      "duration": 2.966
+    },
+    {
+      "text": "in my opinion it's trying to balance the breaths",
+      "start": 1129.3,
+      "duration": 4.9
+    },
+    {
+      "text": "um of the amount of information that",
+      "start": 1134.9,
+      "duration": 3.133
+    },
+    {
+      "text": "decision makers",
+      "start": 1138.17,
+      "duration": 1.0
+    },
+    {
+      "text": "could get in order to make the best possible decisions",
+      "start": 1139.27,
+      "duration": 3.234
+    },
+    {
+      "text": "rather than relying on one specific",
+      "start": 1142.6,
+      "duration": 1.8
+    },
+    {
+      "text": "agent to make a decision at the end okay",
+      "start": 1144.4,
+      "duration": 2.566
+    },
+    {
+      "text": "and similarly in Deep Research Agent",
+      "start": 1147.2,
+      "duration": 2.333
+    },
+    {
+      "text": "it's not just the decision maker",
+      "start": 1149.97,
+      "duration": 1.3
+    },
+    {
+      "text": "which is clarification agent",
+      "start": 1151.27,
+      "duration": 1.834
+    },
+    {
+      "text": "research brief agent",
+      "start": 1153.1,
+      "duration": 1.133
+    },
+    {
+      "text": "and supervisor agent are making the decision",
+      "start": 1154.23,
+      "duration": 2.633
+    },
+    {
+      "text": "without asking anybody else's opinion instead",
+      "start": 1156.97,
+      "duration": 2.634
+    },
+    {
+      "text": "they spread it out",
+      "start": 1159.6,
+      "duration": 0.866
+    },
+    {
+      "text": "and delegate the task to every single researcher",
+      "start": 1160.47,
+      "duration": 2.834
+    },
+    {
+      "text": "and compress them and compile them and synthesize",
+      "start": 1163.37,
+      "duration": 2.934
+    },
+    {
+      "text": "the final output",
+      "start": 1166.7,
+      "duration": 1.566
+    },
+    {
+      "text": "in order to make a more educated information",
+      "start": 1168.27,
+      "duration": 2.367
+    },
+    {
+      "text": "decision making okay",
+      "start": 1170.63,
+      "duration": 1.467
+    },
+    {
+      "text": "I feel like this is a general trend",
+      "start": 1172.8,
+      "duration": 1.866
+    },
+    {
+      "text": "and all these model providers",
+      "start": 1175.0,
+      "duration": 2.366
+    },
+    {
+      "text": "have realized that this is a trend",
+      "start": 1177.43,
+      "duration": 2.367
+    },
+    {
+      "text": "and that's why they're making these products",
+      "start": 1180.0,
+      "duration": 1.466
+    },
+    {
+      "text": "for us",
+      "start": 1181.47,
+      "duration": 0.6
+    },
+    {
+      "text": "I would encourage everyone to try this out",
+      "start": 1182.1,
+      "duration": 2.133
+    },
+    {
+      "text": "because when a new technology comes out",
+      "start": 1184.23,
+      "duration": 2.767
+    },
+    {
+      "text": "it's important that we feel aware of what's going on",
+      "start": 1187.0,
+      "duration": 4.033
+    },
+    {
+      "text": "I think the results definitely are decent for now",
+      "start": 1191.07,
+      "duration": 2.5
+    },
+    {
+      "text": "if we're doing some you know research",
+      "start": 1193.57,
+      "duration": 2.167
+    },
+    {
+      "text": "building some features on a product",
+      "start": 1195.8,
+      "duration": 1.866
+    },
+    {
+      "text": "and I think they will take another couple of years",
+      "start": 1197.7,
+      "duration": 1.866
+    },
+    {
+      "text": "or maybe just a few months",
+      "start": 1199.57,
+      "duration": 1.134
+    },
+    {
+      "text": "that it will evolve into",
+      "start": 1200.7,
+      "duration": 1.866
+    },
+    {
+      "text": "something that's much more holistic",
+      "start": 1202.57,
+      "duration": 2.367
+    },
+    {
+      "text": "at doing tax so",
+      "start": 1205.03,
+      "duration": 1.9
+    },
+    {
+      "text": "what we all can do right now is make sure we don't",
+      "start": 1207.0,
+      "duration": 3.1
+    },
+    {
+      "text": "lag behind",
+      "start": 1210.23,
+      "duration": 0.767
+    },
+    {
+      "text": "and we're always informed about what is going on with",
+      "start": 1211.0,
+      "duration": 3.5
+    },
+    {
+      "text": "all these architecture or infrastructure",
+      "start": 1214.5,
+      "duration": 2.266
+    },
+    {
+      "text": "updates from these top AI companies",
+      "start": 1217.2,
+      "duration": 3.166
+    },
+    {
+      "text": "thanks for watching this video",
+      "start": 1220.37,
+      "duration": 1.134
+    },
+    {
+      "text": "I hope this was helpful and leave a comment",
+      "start": 1221.5,
+      "duration": 2.2
+    },
+    {
+      "text": "or join our discord channel for a discussion",
+      "start": 1223.7,
+      "duration": 3.266
+    },
+    {
+      "text": "I'll see you next time thank you very much",
+      "start": 1227.27,
+      "duration": 1.934
+    }
+  ]
+}

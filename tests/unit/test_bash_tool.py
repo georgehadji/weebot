@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from weebot.sandbox.executor import ExecutionResult
+from weebot.application.ports.sandbox_port import SandboxResult
 from weebot.tools.bash_tool import BashTool
 
 
@@ -13,16 +13,16 @@ from weebot.tools.bash_tool import BashTool
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _ok(stdout: str = "hello\n") -> ExecutionResult:
-    return ExecutionResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=10.0)
+def _ok(stdout: str = "hello\n") -> SandboxResult:
+    return SandboxResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=10.0)
 
 
-def _fail(stderr: str = "something went wrong", returncode: int = 1) -> ExecutionResult:
-    return ExecutionResult(stdout="", stderr=stderr, returncode=returncode, elapsed_ms=5.0)
+def _fail(stderr: str = "something went wrong", returncode: int = 1) -> SandboxResult:
+    return SandboxResult(stdout="", stderr=stderr, returncode=returncode, elapsed_ms=5.0)
 
 
-def _timeout() -> ExecutionResult:
-    return ExecutionResult(stdout="", stderr="killed", returncode=-1, elapsed_ms=30_000.0, timed_out=True)
+def _timeout() -> SandboxResult:
+    return SandboxResult(stdout="", stderr="killed", returncode=-1, elapsed_ms=30_000.0, timed_out=True)
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ class TestBashTool:
     async def test_successful_command_returns_output(self):
         """Happy path: stdout ends up in ToolResult.output."""
         tool = BashTool()
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_ok("hello\n"))):
+        with patch.object(tool._sandbox, "execute_shell", new=AsyncMock(return_value=_ok("hello\n"))):
             result = await tool.execute(command="echo hello")
 
         assert not result.is_error
@@ -47,7 +47,7 @@ class TestBashTool:
         tool = BashTool()
         # "format" is a built-in DENY pattern in ExecApprovalPolicy
         run_mock = AsyncMock()
-        with patch.object(tool._executor, "run", run_mock):
+        with patch.object(tool._sandbox, "execute_shell", run_mock):
             result = await tool.execute(command="format c:")
 
         assert result.is_error
@@ -60,7 +60,7 @@ class TestBashTool:
         tool = BashTool()
         # "rm " is a built-in ALWAYS_ASK pattern
         run_mock = AsyncMock()
-        with patch.object(tool._executor, "run", run_mock):
+        with patch.object(tool._sandbox, "execute_shell", run_mock):
             result = await tool.execute(command="rm -rf /tmp/junk")
 
         assert result.is_error
@@ -71,7 +71,7 @@ class TestBashTool:
     async def test_timeout_returns_tool_error(self):
         """timed_out=True from executor maps to a clear ToolResult error."""
         tool = BashTool()
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_timeout())):
+        with patch.object(tool._sandbox, "execute_shell", new=AsyncMock(return_value=_timeout())):
             result = await tool.execute(command="sleep 999", timeout=1)
 
         assert result.is_error
@@ -81,7 +81,7 @@ class TestBashTool:
     async def test_nonzero_exit_code_is_error(self):
         """Non-zero returncode produces ToolResult with is_error=True."""
         tool = BashTool()
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_fail())):
+        with patch.object(tool._sandbox, "execute_shell", new=AsyncMock(return_value=_fail())):
             result = await tool.execute(command="false")
 
         assert result.is_error
@@ -104,7 +104,7 @@ class TestBashTool:
             captured.append(cmd)
             return _ok()
 
-        with patch.object(tool._executor, "run", side_effect=capture_cmd):
+        with patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd):
             await tool.execute(command="Get-Date")
 
         assert captured, "executor.run was not called"

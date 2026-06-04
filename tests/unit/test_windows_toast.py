@@ -1,12 +1,12 @@
 # tests/unit/test_windows_toast.py
-"""Unit tests for WindowsToastChannel."""
+"""Unit tests for ."""
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
-from weebot.notifications import Notification, NotificationLevel, WindowsToastChannel
+from weebot.infrastructure.notifications import Notification, NotificationLevel
 
 
-class TestWindowsToastChannel:
+class Test:
     def _make_notification(self, title="Test", message="body", category="info"):
         return Notification(
             title=title, message=message,
@@ -21,7 +21,7 @@ class TestWindowsToastChannel:
         mock_toast = MagicMock()
         mock_toast_cls.return_value = mock_toast
         with patch.dict("sys.modules", {"winotify": MagicMock(Notification=mock_toast_cls)}):
-            ch = WindowsToastChannel(app_name="weebot-test")
+            ch = (app_name="weebot-test")
             result = await ch.send(self._make_notification())
         assert result is True
         mock_toast.show.assert_called_once()
@@ -30,7 +30,7 @@ class TestWindowsToastChannel:
     async def test_send_returns_false_when_winotify_missing(self):
         # None sentinel causes ImportError on `import winotify` in CPython
         with patch.dict("sys.modules", {"winotify": None}):
-            ch = WindowsToastChannel(app_name="weebot-test")
+            ch = (app_name="weebot-test")
             result = await ch.send(self._make_notification())
         assert result is False
 
@@ -41,11 +41,11 @@ class TestWindowsToastChannel:
         mock_winotify.Notification.return_value = mock_toast
         mock_winotify.audio = MagicMock()
         with patch.dict("sys.modules", {"winotify": mock_winotify}):
-            ch = WindowsToastChannel(app_name="weebot-test")
+            ch = (app_name="weebot-test")
             await ch.send(self._make_notification(category="urgent"))
         mock_toast.set_audio.assert_called_once_with(mock_winotify.audio.Default, loop=True)
 
     def test_category_to_icon_mapping(self):
-        ch = WindowsToastChannel(app_name="weebot-test")
+        ch = (app_name="weebot-test")
         assert ch._icon_for_category("urgent") == "ms-appx:///Assets/StoreLogo.png"
         assert ch._icon_for_category("info") == ch._icon_for_category("unknown_cat")

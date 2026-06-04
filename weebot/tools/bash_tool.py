@@ -21,7 +21,7 @@ from weebot.tools.bash_security import (
 )
 
 # NEW: StateVerifier for false confidence detection (arXiv:2602.20021)
-from weebot.security.state_verifier import (
+from weebot.infrastructure.security.state_verifier import (
     StateVerifier,
     CommandExecutionClaim,
     get_state_verifier,

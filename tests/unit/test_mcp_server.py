@@ -263,13 +263,13 @@ class TestSettingsTimeout:
         """Explicit timeout= kwarg overrides the settings default."""
         from unittest.mock import AsyncMock, patch
         from weebot.tools.bash_tool import BashTool
-        from weebot.sandbox.executor import ExecutionResult
+        from weebot.application.ports.sandbox_port import SandboxResult
 
         captured: list[float] = []
 
         async def fake_run(cmd, timeout=30.0, **kw):  # type: ignore[override]
             captured.append(timeout)
-            return ExecutionResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
+            return SandboxResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
 
         tool = BashTool()
         with patch.object(tool._executor, "run", side_effect=fake_run):

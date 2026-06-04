@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 from weebot.workflow_planner import WorkflowPlan, PlannedTask
-from weebot.nlp_understanding import IntentRecognitionResult
+from weebot.application.services.nlp_understanding import IntentRecognitionResult
 
 
 class AdaptationTrigger(Enum):

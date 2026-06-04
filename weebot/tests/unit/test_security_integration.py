@@ -9,7 +9,7 @@ import pytest
 from pathlib import Path
 
 from weebot.tools.bash_tool import BashTool
-from weebot.security.state_verifier import (
+from weebot.infrastructure.security.state_verifier import (
     StateVerifier,
     FileOperationClaim,
     CommandExecutionClaim,
@@ -171,8 +171,8 @@ class TestSecurityModuleIntegration:
     @pytest.mark.asyncio
     async def test_full_security_flow_with_bash(self):
         """Test complete security flow: verify -> execute -> verify result."""
-        from weebot.security.identity_verifier import IdentityVerifier, IdentityClaim, VerificationLevel
-        from weebot.security.audit_logger import SecurityAuditLogger, AuditEventType
+        from weebot.infrastructure.security.identity_verifier import IdentityVerifier, IdentityClaim, VerificationLevel
+        from weebot.infrastructure.security.audit_logger import SecurityAuditLogger, AuditEventType
 
         # Initialize components
         identity_verifier = IdentityVerifier()
@@ -209,7 +209,7 @@ class TestSecurityModuleIntegration:
     @pytest.mark.asyncio
     async def test_sanitizer_with_bash_context(self):
         """Test agent sanitizer with bash tool context."""
-        from weebot.security.agent_sanitizer import AgentMemorySanitizer, SanitizationLevel
+        from weebot.infrastructure.security.agent_sanitizer import AgentMemorySanitizer, SanitizationLevel
 
         sanitizer = AgentMemorySanitizer()
 

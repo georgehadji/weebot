@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from weebot.sandbox.executor import ExecutionResult
+from weebot.application.ports.sandbox_port import SandboxResult
 from weebot.tools.python_tool import PythonExecuteTool
 
 
@@ -14,16 +14,16 @@ from weebot.tools.python_tool import PythonExecuteTool
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _ok(stdout: str = "42\n") -> ExecutionResult:
-    return ExecutionResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=50.0)
+def _ok(stdout: str = "42\n") -> SandboxResult:
+    return SandboxResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=50.0)
 
 
-def _fail(stderr: str = "Traceback...", returncode: int = 1) -> ExecutionResult:
-    return ExecutionResult(stdout="", stderr=stderr, returncode=returncode, elapsed_ms=20.0)
+def _fail(stderr: str = "Traceback...", returncode: int = 1) -> SandboxResult:
+    return SandboxResult(stdout="", stderr=stderr, returncode=returncode, elapsed_ms=20.0)
 
 
-def _timeout() -> ExecutionResult:
-    return ExecutionResult(
+def _timeout() -> SandboxResult:
+    return SandboxResult(
         stdout="", stderr="killed", returncode=-1, elapsed_ms=30_000.0, timed_out=True
     )
 
@@ -38,7 +38,7 @@ class TestPythonExecuteTool:
     async def test_successful_code_returns_stdout(self):
         """Happy path: print() output captured in ToolResult.output."""
         tool = PythonExecuteTool()
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_ok("hello\n"))):
+        with patch.object(tool._sandbox, "execute_python", new=AsyncMock(return_value=_ok("hello\n"))):
             result = await tool.execute(code='print("hello")')
 
         assert not result.is_error
@@ -49,7 +49,7 @@ class TestPythonExecuteTool:
         """Syntax / runtime errors in stderr produce is_error=True."""
         tool = PythonExecuteTool()
         err = "SyntaxError: invalid syntax"
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_fail(err))):
+        with patch.object(tool._sandbox, "execute_python", new=AsyncMock(return_value=_fail(err))):
             result = await tool.execute(code="!!!bad code!!!")
 
         assert result.is_error
@@ -60,7 +60,7 @@ class TestPythonExecuteTool:
         """ZeroDivisionError or other runtime exceptions map to ToolResult.error."""
         tool = PythonExecuteTool()
         err = "ZeroDivisionError: division by zero"
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_fail(err))):
+        with patch.object(tool._sandbox, "execute_python", new=AsyncMock(return_value=_fail(err))):
             result = await tool.execute(code="1/0")
 
         assert result.is_error
@@ -70,7 +70,7 @@ class TestPythonExecuteTool:
     async def test_timeout_returns_tool_error(self):
         """timed_out=True from executor produces a clear timeout message."""
         tool = PythonExecuteTool()
-        with patch.object(tool._executor, "run", new=AsyncMock(return_value=_timeout())):
+        with patch.object(tool._sandbox, "execute_python", new=AsyncMock(return_value=_timeout())):
             result = await tool.execute(code="import time; time.sleep(9999)", timeout=1)
 
         assert result.is_error
@@ -81,7 +81,7 @@ class TestPythonExecuteTool:
         """Code matching a DENY policy rule must not reach the executor."""
         tool = PythonExecuteTool()
         run_mock = AsyncMock()
-        with patch.object(tool._executor, "run", run_mock):
+        with patch.object(tool._sandbox, "execute_python", run_mock):
             # "format" is a built-in DENY pattern in ExecApprovalPolicy
             result = await tool.execute(code="format(42)")
 
@@ -106,7 +106,7 @@ class TestPythonExecuteTool:
             captured.append(cmd)
             return _ok()
 
-        with patch.object(tool._executor, "run", side_effect=capture_cmd):
+        with patch.object(tool._sandbox, "execute_python", side_effect=capture_cmd):
             await tool.execute(code='print("x")')
 
         assert captured, "executor.run was not called"

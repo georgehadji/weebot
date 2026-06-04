@@ -44,7 +44,7 @@ from rich.progress import Progress
 
 from weebot.agent_core_v2 import WeebotAgent, AgentConfig
 from weebot.state_manager import StateManager, ProjectStatus
-from weebot.cli_support import (
+from weebot.interfaces.cli.support import (
     init_project,
     init_hooks,
     install_hooks,

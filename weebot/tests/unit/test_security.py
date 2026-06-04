@@ -12,21 +12,21 @@ import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from weebot.security.state_verifier import (
+from weebot.infrastructure.security.state_verifier import (
     StateVerifier,
     VerificationStatus,
     FileOperationClaim,
     CommandExecutionClaim,
 )
-from weebot.security.agent_sanitizer import (
+from weebot.infrastructure.security.agent_sanitizer import (
     AgentMemorySanitizer,
     SanitizationLevel,
 )
-from weebot.security.audit_logger import (
+from weebot.infrastructure.security.audit_logger import (
     SecurityAuditLogger,
     AuditEventType,
 )
-from weebot.security.identity_verifier import (
+from weebot.infrastructure.security.identity_verifier import (
     IdentityVerifier,
     IdentityClaim,
     VerificationLevel,

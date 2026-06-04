@@ -1,0 +1,516 @@
+[0:01] Hey everyone, this is Sean. Today I want
+[0:03] to introduce you to agent team and agent
+[0:05] swarm. These are two of the latest AI
+[0:07] agents concepts. We're going to walk you
+[0:08] through the system design real quick and
+[0:09] then we're going to test it with the
+[0:11] products out there on the market. Just
+[0:14] in January, Kim AI launched a new model
+[0:16] called K2.5 where they introduced their
+[0:19] agent swarm product feature which can
+[0:21] help you break down your task into 100
+[0:22] sub pages that will work in parallel.
+[0:24] And then shortly after that in February,
+[0:27] Claude Opus 4.6 was launched. And then
+[0:29] they also made a huge update on
+[0:31] introducing agent teams in claw code.
+[0:33] These two are not exactly the same
+[0:34] concepts. Doesn't matter if you're
+[0:36] technical or not. I'm going to introduce
+[0:37] these things to you very clearly. And
+[0:39] then we're going to test two products at
+[0:41] the same time with the same problem to
+[0:42] see which one does a better job at
+[0:44] breaking down task. And lastly, we're
+[0:46] also going to quickly talk about the
+[0:49] difference between team swarm and deep
+[0:51] research agent. There's a quite a bit of
+[0:52] similarities and differences. So it's
+[0:54] going to be a really fun video. Let's
+[0:55] get started. So normally when we talk
+[0:57] about AI agent, we can start with a
+[1:00] single agent. Basically, you can imagine
+[1:02] you're talking to chat GBT where you're
+[1:04] sending a user prompt. You can say,
+[1:06] "Help me research who is the best AI
+[1:08] builder and YouTuber on the internet and
+[1:10] then the LM agent from Chat GBT will be
+[1:12] processing this information and they'll
+[1:15] be using a tool for example a search API
+[1:17] to look on the internet and maybe they
+[1:18] find Sean is the best AI builder and
+[1:20] YouTuber on the internet." So that's
+[1:22] finishes one task for a single agent and
+[1:23] then things can get a little bit more
+[1:25] complicated. We can introduce a
+[1:27] sequential agent. After the user asks
+[1:29] the first question, they can send that
+[1:31] to a research agent first and it's going
+[1:32] to pass down the contact that it has
+[1:34] researched to the next agent called
+[1:36] analysis agent which probably will do a
+[1:38] research online. And after the analysis
+[1:41] agent has finished, it's probably going
+[1:43] to call a report agent which will write
+[1:45] the report for you. You can think of it
+[1:46] as just a sequential workflow that would
+[1:48] happen in a lot of daily life and daily
+[1:50] work. Okay. One problem with sequential
+[1:52] agents is that they're doing things one
+[1:55] by one and there's an order there. So
+[1:56] sometimes it could take a really long
+[1:58] time or maybe you want to you know
+[1:59] increase the capacity of work. So that's
+[2:01] why agent teams comes really handy.
+[2:04] Clocko is basically using a leader agent
+[2:06] first to process this new prompt and
+[2:07] then the leader agent is going to think
+[2:09] what can it do to make this such a
+[2:11] thorough and nice report. What you can
+[2:16] in parallel at the same time to process
+[2:18] different tasks. The leader agent has
+[2:20] control over all of them just like the
+[2:21] deep research agent. You might have
+[2:23] realized that in deep research when the
+[2:25] user asks a question they're going to
+[2:27] clarify the question with you and then
+[2:28] they're going to write a research brief.
+[2:31] that will be you know the leader agent
+[2:34] here and then delegate all the tasks to
+[2:36] the subress researchers over here right
+[2:38] so this part I would say is very similar
+[2:40] uh but it's not entirely the same right
+[2:42] because agent teams doesn't really have
+[2:43] you know some predefined clarification
+[2:45] and research brief all these little
+[2:47] workers are you know doing things in
+[2:48] parallel at the same time and then
+[2:50] report back to the leader agent at this
+[2:54] the boss here the team lead that's why
+[2:56] it's called agent teams this team lead
+[2:57] is going to process all the information
+[2:59] that the subtask that you know my
+[3:02] workers have done for me. So what is an
+[3:04] agent swarm then? Imagine you have a
+[3:06] bunch of bees in a hive to work for the
+[3:08] queen and then the queen is basically
+[3:10] processing a user prompt. There's a goal
+[3:12] agent that will help derive some of the
+[3:14] goals and specs that you know this user
+[3:16] actually wants right again who's the
+[3:18] best AI YouTuber on the internet.
+[3:19] They're going to say okay the goal is
+[3:21] let me find like the top 20 YouTubers
+[3:24] who do a lot of really good videos
+[3:26] covering AI agent systems. And then
+[3:28] you're going to define some subtask or
+[3:30] even create some agents with templates
+[3:32] by itself. You see the difference here
+[3:34] is that this goal agent is creating
+[3:37] agents templates by itself. Each little
+[3:39] one of these smaller agents are actually
+[3:42] created right there instead of defined
+[3:44] previously. Okay. In agent teams, you
+[3:45] have to define who's doing the research,
+[3:49] and then report back. But in an agent
+[3:51] swarm scenario, simply deciding, okay,
+[3:53] maybe I need 20 agents and each one of
+[3:54] them should be doing certain things.
+[3:56] there's no human involvement there. I
+[3:58] don't need to tell it who should be
+[3:59] doing what, right? So that's why you see
+[4:01] like a swarm here for people who study
+[4:02] machine learning. It's kind of like a
+[4:04] random forest where you have like little
+[4:07] sub trees to make decisions on say
+[4:09] classifying if an image is a dog or a
+[4:11] cat. And then basically the system is
+[4:13] just spawning some parallel agents or
+[4:16] parallel sub trees to um finish the
+[4:18] task. Eventually, you're going to
+[4:20] crowdsource uh the information with a
+[4:22] synthesizer agent, which is basically
+[4:25] like the final layer of a random forest
+[4:27] model where they're going to say, "Okay,
+[4:29] um each one of you has done certain
+[4:32] jobs. Let me compile them together." And
+[4:33] they eventually, you know, cluster the
+[4:35] information together and then merge them
+[4:37] into a deliverable that will become your
+[4:39] output. So this was a quick overview
+[4:42] to a team of agents with team lead to an
+[4:47] agent swarm where there's simply a goal
+[4:49] der and then just let the rest of the
+[4:51] work done by a bunch of agents
+[4:54] themselves without any definitions. And
+[4:56] I think agent swarm would excel at a lot
+[4:57] of tasks that would require a lot of
+[4:59] parallel task processing without a lot
+[5:01] of predefin. And that's very powerful
+[5:03] because sometimes you might just have a
+[5:05] really vague intent when you ask a
+[5:07] question to an AI, right? you wanted to
+[5:09] figure out how to break down tasks by
+[5:10] itself. But at the same time, I think it
+[5:12] depends on the task. If your task
+[5:14] requires a lot of like determined
+[5:16] workflow and you want the agent system
+[5:23] the board member or you're the CEO, then
+[5:24] I think agent teams would do a really
+[5:25] good task because you can have full
+[5:27] control on who's doing what. But I would
+[5:30] say both systems have really good batch
+[5:32] processing features here because they
+[5:34] will allow you to do multiple tasks at
+[5:36] the same time. For example, you can
+[5:38] imagine they can do they might be doing
+[5:40] search, downloading, batch processing
+[5:42] files, talking to different agents uh
+[5:45] all at the same time, which will save
+[5:46] you so much time, but it could also
+[5:48] consume a lot of tokens too. Unlike
+[5:51] these simpler agent systems, teams or
+[5:54] swarm allow a bunch of agents to have
+[5:56] different opinions because they could
+[5:57] have a different conclusion
+[6:00] individualistically. And then eventually
+[6:02] what they do is that either the leader
+[6:04] agent or the synthesizer agent need to
+[6:07] compile reconciliate the decision-m so
+[6:09] that they can come up with a solution
+[6:11] that is not you know uh super biased.
+[6:13] Right? All of what I just explained were
+[6:15] quite theoretical. Let's jump right in
+[6:16] and test the products and see what
+[6:19] happens. The first demo I want to try is
+[6:21] to do a YouTube search. You should be
+[6:23] searching similar channels like Sean's
+[6:25] AI stories. explore those channels that
+[6:26] do developer tools, automation
+[6:29] creations, indie hacking, all these kind
+[6:30] of things. And the result is that I want
+[6:32] them to return four channels uh with
+[6:34] their names and URLs. And the very
+[6:36] similar prompt for claw code is that
+[6:38] you're using agent teams and the context
+[6:40] the same, but then you can be more
+[6:42] specific teammate 1 2 3 4 5 what they're
+[6:44] doing. So I have just pasted both
+[6:47] prompts in claw code and in Kimmy. So
+[6:56] You can see that it shows agent swarm
+[7:00] over there. Okay, cool. Let's see. You
+[7:01] can see that clock understood that it's
+[7:03] running a agent team and it's
+[7:05] establishing shared framework for
+[7:09] strategy editor. Okay. Oh, and then uh
+[7:11] what Kim is doing is that it's creating
+[7:13] all these little agent by itself without
+[7:15] my definition. You see this one is doing
+[7:21] They have this um role description.
+[7:22] You're a competitive intelligence
+[7:25] researcher specializing in AI coding.
+[7:29] And then there are research agents too.
+[7:31] Um you are a competitive intelligence
+[7:33] researcher specializ AI agent automation
+[7:36] content creators.
+[7:38] And this one is searching for educators
+[7:41] I would say I think. Yeah, they're
+[7:43] specializing in AI education. Okay. So
+[7:46] he created these sub agents in parallel
+[7:49] uh like a swarm and then you can see
+[7:51] what they're doing one by one. Okay.
+[7:55] Lewis is doing some uh searching a
+[7:58] YouTube AI SAS solarreneur MR revenue.
+[8:00] Jane who's looking for uh YouTube
+[8:01] channels focus on AI education
+[8:04] explaining uh is doing the following
+[8:07] task. See all of these were written by
+[8:12] um by Kimi itself. This is really cool.
+[8:14] Uh, and then let's see claw code. It
+[8:17] deployed all five scouts in parallel
+[8:20] with the task mainly web search and it's
+[8:22] using tools. I can see exactly what they
+[8:27] looked up for. All right, this YouTuber
+[8:29] uh I don't know who this is.
+[8:32] Kimmy has spent a lot of time polishing
+[8:36] their UI so that it looks very neat and
+[8:38] um you can see what each agent is
+[8:40] actually doing and then check out their
+[8:42] results. This is very similar to how
+[8:45] Chajbt was doing deep research I think
+[8:47] where they will show you exactly what
+[8:48] they're searching. I think Grock also
+[8:50] has similar features where they will
+[8:53] show very clearly and streaming it uh
+[8:56] how how the agent is doing the internet
+[8:57] search whereas if you're doing clock
+[9:01] code in the terminal I think the the UI
+[9:04] is quite minimum but I would say I would
+[9:05] say that's fine because clock code is
+[9:08] mainly focused on coding tasks. Looks
+[9:11] like Jane has finished her task. Let's
+[9:14] see. Jane, find four YouTube channels
+[9:16] focused on education. The final answer
+[9:18] is they found four YouTube channels
+[9:21] focused on AI education. Robert Miles,
+[9:25] Jeremy Howard, Weights and Biases, AI
+[9:29] Uncovered, and then generated a file. I
+[9:32] supposed to say five agents here.
+[9:35] Somehow I put 12 and clock doing five.
+[9:37] So, I think we're using a lot more
+[9:40] tokens on uh Kimi. Four, five, six,
+[9:44] seven, eight. Eight out of 12 agents are
+[9:46] finished. I think I'm going to tell Claw
+[9:49] Code, don't overthink.
+[9:51] Let's
+[9:56] focus on letting the scouts
+[10:02] do the basic research. We don't need to
+[10:04] use
+[10:07] more than 10 tools. How come you guys
+[10:09] took such a long time? Oh, this one is
+[10:11] searching like foreign languages. That's
+[10:13] why non-English channel. That's why it's
+[10:20] Oh, look at this. It's like reading the
+[10:23] channel real time. Took my request now.
+[10:25] Got it. Simplifying. Scout one and two
+[10:27] already back. Let me launch the
+[10:29] remaining three scouts now with learner
+[10:31] instructions. Four channels max minimum
+[10:33] tool usage. Look at this. It took my
+[10:37] feedback. It was done. Scout 3 teammate
+[10:39] 3 searching for founder building public
+[10:42] channels. Only use three tools. 15,000
+[10:45] tokens. Previously it was like 70 80
+[10:47] tools was 90,000 tokens. Uhhuh. Looks
+[10:50] like both of them are finished.
+[10:52] 10 of 12 agents completed successfully.
+[10:54] Now compiling findings. Look at this. is
+[10:56] compiling the findings and launch
+[10:58] clustering agent. Remember we talked
+[11:00] about the synthesizer. That's that's
+[11:02] what it's doing. Uh because it has
+[11:05] finished the swarm and now they're crowd
+[11:07] they're processing the crowdsourced
+[11:10] information with the synthesizer or it's
+[11:13] calling it launch a clustering agent.
+[11:15] Okay. And clustering agent is Bowwin.
+[11:18] Okay. Bowen, you're analyzing the
+[11:21] competitive landscape for this
+[11:24] and research data.
+[11:26] Okay. So, you see like all of these
+[11:30] researched channels from other um swarm
+[11:32] agents
+[11:34] have been used by this clustering
+[11:37] synthesizer. It clustered 26 channels by
+[11:39] positioning formats. All scouts are back
+[11:42] now synthesizing a strategy editor as
+[11:46] one is returning the information back to
+[11:47] the lead agent remember and then he's
+[11:50] duping the clustering and um producing
+[11:53] the final deliverable the competitive
+[11:55] landscape shown AI stories. Okay, this
+[11:58] final report already
+[12:00] honestly it's a little hard to read this
+[12:03] from a terminal. It took 20 minutes in
+[12:05] total. 18 minutes 14 seconds. Yeah, it
+[12:07] told me things that other people are not
+[12:11] doing. This is helpful. Um non-English
+[12:13] practical builder content. The Spanish
+[12:15] market has explainer and news, but no
+[12:17] hands-on ship AI product from zero
+[12:20] channel. Okay, maybe that's a good idea.
+[12:22] Every channel shows happy path. Nobody
+[12:25] documents what broke. Oh, yeah. Yeah,
+[12:27] everyone's showing what's working, but
+[12:30] nothing's not working. Um, people don't
+[12:32] show their failures. Okay, fair enough.
+[12:35] Nobody's doing systematic applies to
+[12:38] applies test. Same use case built NN
+[12:39] Langraph.
+[12:41] Every creator picks one tool and
+[12:44] advocates for it. Impartial comparison
+[12:45] seat is empty. That's what we're doing.
+[12:48] We're comparing two tools today. And uh
+[12:50] next video concept for Sean's AI
+[12:53] stories. I built the same agent in Fry
+[12:55] Frameworks. Why my AI agent broke in
+[12:57] production
+[13:00] 0 to 10K AI SAS stack. Clocko versus
+[13:03] cursor versus windsurf. Windsor is dead.
+[13:06] No. Um I automated Well, they're not
+[13:08] dead. They're required by by Devon, but
+[13:11] I haven't heard from them ever since. I
+[13:12] automated my entire YouTube workflow
+[13:16] with AI agents. Okay, not a bad report.
+[13:19] At least I real I know at least I
+[13:20] learned that in the Spanish speaking
+[13:22] market, there's not a lot of channels
+[13:26] for hands-on building. Okay, some of our
+[13:28] customers for Automanis, which is a
+[13:32] WhatsApp first Asian sales lead uh tool
+[13:35] has customer from Latin America and uh
+[13:37] they're mainly speaking Spanish and
+[13:40] Portuguese. So, that's a really good uh
+[13:42] good advice. I like that. Okay, look at
+[13:45] this. I think Bowen now is writing the
+[13:48] report. Cool. Look at this. This one's
+[13:52] done. Uh so Kimi was telling me
+[13:55] developer and coder is oversaturated. I
+[13:58] agree. Non-technical founders under
+[14:01] saturating
+[14:04] public founder is moderate. Uh business
+[14:07] automation is underserved. AI education
+[14:10] is moderate. Okay. So probably this one
+[14:11] is suggesting that I should focus on
+[14:13] nontechnical founders and business
+[14:15] automation. Three whites space
+[14:18] opportunities. Cool. Asian workflows for
+[14:20] non-developers.
+[14:22] Okay. Nontechnical founders.
+[14:25] Rigorous tool comparison. This one is
+[14:27] consistent with what Claude told me.
+[14:28] Yeah. The impartial comparison seat is
+[14:31] empty. Asian workflow case studies
+[14:34] theory heavy real metrics rare for
+[14:36] founders and business owners. Okay.
+[14:39] Money related things. Okay. Sure.
+[14:41] Comparing cursor wins co-pilot. How I
+[14:44] built a 4,000 per month uh yeah agency
+[14:46] in 90 days. At least I learned something
+[14:48] which is there is probably an
+[14:51] oversaturation of highly technical
+[14:54] content and um there lacks a lot of uh
+[14:56] AI contents that help educate
+[14:58] non-technical founders or business
+[15:01] owners and uh perhaps I need to compare
+[15:02] some tools because every video is
+[15:05] probably very deep dive in one tool and
+[15:07] also people love money related contents
+[15:09] and last but not least I think in Latin
+[15:12] America there's lack of supply of such
+[15:14] content. Good advice. Thank you both
+[15:16] swarm from Kimmy. And meanwhile I was
+[15:20] running the second demo at the same time
+[15:23] which is a expert review of my uh
+[15:26] current company automatis. We basically
+[15:29] are an WhatsApp first AI sales agent for
+[15:31] consultative made to order sales. You
+[15:34] can imagine like uh companies that are
+[15:36] selling some complex solutions like an
+[15:39] agency or consulting agencies or you
+[15:41] know they could be doing B2B sales like
+[15:44] in um renewable energiesarmacies
+[15:46] uh these things are really complex sales
+[15:49] or even apparel where there's not like a
+[15:51] single SKU to be sold. Sometimes there's
+[15:56] entire quantity that you need for
+[15:57] certain products and maybe you need to
+[15:59] customize a little bit. So that's what
+[16:02] we're building um to use agents to
+[16:03] capture all these requests for a
+[16:05] business so that they won't miss any
+[16:07] leads. Okay. So now what I'm doing is
+[16:10] that I want to ask agent swarm from Kimi
+[16:14] some feedback. For example in teams I
+[16:16] was asking for five teammates to tell me
+[16:19] about my product from VC's perspective
+[16:21] product go to market customer success
+[16:23] and legal. They eventually gave me a
+[16:27] report. Okay. And I was uh running it
+[16:29] and this is surprisingly really fast.
+[16:32] Okay, it's almost done. Okay, it gave me
+[16:34] some advice about pricing. Uh you should
+[16:37] start flat SAS track qualify lead volume
+[16:41] internally introduce per lead pricing in
+[16:43] month three once you can define qualify
+[16:44] with data. That's true. Our investors
+[16:47] gave us similar advice which is uh later
+[16:48] if you have bigger clients what we
+[16:51] should do is uh charge our clients based
+[16:54] on the percentage of conversion but
+[16:56] initially we can do flat pricing which
+[16:59] is um $200 $300 a month design
+[17:01] architecture to be channel agnostic but
+[17:03] doesn't build SMS in week one okay yeah
+[17:05] SMS is probably used only in the US uh
+[17:07] the rest of the world use what's a lot
+[17:11] more so Kimmy had five agents Owen was
+[17:13] evaluating my product well each one
+[17:15] everyone's eval made product. What's
+[17:16] strong already is that WhatsApp channel
+[17:19] selection is strategically sound. 2
+[17:20] billion users. That's true. Two billion
+[17:22] users. Huge market. Made to order
+[17:24] vertical target is smart. Yeah, because
+[17:26] we talked to so many made to order
+[17:30] businesses and um their sales process is
+[17:32] a huge mess. Okay. The risk is
+[17:34] defensibility is thin. Uh yeah, sure.
+[17:36] There's a lot of WhatsApp agents. That's
+[17:39] why we're doing a lot of um sort of lead
+[17:41] structuring as well after talking with
+[17:43] just agents. is not just another
+[17:47] chatbot. Some final comments. Um, I
+[17:50] think AI has been evolving
+[17:52] to mimic how human societies and human
+[17:56] organizations collaborate because I
+[17:58] remember listening to a podcast the
+[18:00] other day that
+[18:03] the way to function really well in the
+[18:06] human society is that there is a team of
+[18:09] specialized workers like you and me who
+[18:11] will be good at, you know, things that
+[18:13] we're good at and uh, collaborating
+[18:15] together. That's how we make the economy
+[18:17] runs. And now we're at the position
+[18:20] Tachibbt general agent is really strong.
+[18:24] There are a lot of models that are very
+[18:26] specialized at what they do. And what we
+[18:28] can do is create agent that specialize
+[18:31] in what they do too. Okay. So what I see
+[18:34] is that we're seeing a trend or a shift
+[18:38] from simple AI agents or simple AI agent
+[18:42] societies.
+[18:44] and all of these concepts of whether
+[18:47] it's a swarm from Kimmy or teams from
+[18:51] claw code in my opinion it's
+[18:55] trying to balance the breadth
+[18:58] um of the amount of information that the
+[19:00] decision makers could get in order to
+[19:03] make the best possible decisions rather
+[19:04] than relying on one specific agent to
+[19:07] make a decision at the end. Okay. And
+[19:10] similarly in deep research agent is not
+[19:11] just the decision maker which is
+[19:14] clarification agent, research brief
+[19:16] agent and supervisor agent are making
+[19:18] the decision without asking anybody
+[19:20] else's opinion. Instead they spread it
+[19:22] out and delegate the task to every
+[19:24] single researcher and compress them and
+[19:30] output in order to make a more educated
+[19:33] information decision-m. Okay, I feel
+[19:36] like this is a general trend and all
+[19:39] these model providers have realized that
+[19:40] this is a trend and that's why they're
+[19:42] making these products for us. I would
+[19:44] encourage everyone to try this out
+[19:46] because uh when new technology comes
+[19:49] out, it's important that we feel aware
+[19:52] of what's going on. I think the results
+[19:54] definitely are decent for now if we're
+[19:56] doing some, you know, research, building
+[19:58] some features on a product. And I think
+[19:59] they will take another couple of years
+[20:01] or maybe just a few months that it will
+[20:04] evolve into something that's much more
+[20:07] holistic at doing tasks. So what we all
+[20:10] can do right now is make sure we don't
+[20:12] lag behind and that we're always
+[20:14] informed about uh what is going on with
+[20:17] all these uh architecture or infrawise
+[20:20] updates from these top AI companies.
+[20:21] Thanks for watching this video. I hope
+[20:24] this was helpful and leave a comment or
+[20:26] join our Discord channel for a
+[20:28] discussion. I'll see you next time.

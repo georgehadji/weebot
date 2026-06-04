@@ -1,0 +1,1066 @@
+[1.3s] Hey everyone, this is Sean. Today I want
+to introduce you to agent team and agent
+[3.8s] to introduce you to agent team and agent
+swarm. These are two of the latest AI
+[5.4s] swarm. These are two of the latest AI
+agents concepts. We're going to walk you
+[7.0s] agents concepts. We're going to walk you
+through the system design real quick and
+[8.6s] through the system design real quick and
+then we're going to test it with the
+[9.8s] then we're going to test it with the
+products out there on the market. Just
+[11.5s] products out there on the market. Just
+in January, Kim AI launched a new model
+[14.2s] in January, Kim AI launched a new model
+called K2.5 where they introduced their
+[16.6s] called K2.5 where they introduced their
+agent swarm product feature which can
+[19.2s] agent swarm product feature which can
+help you break down your task into 100
+[21.0s] help you break down your task into 100
+sub pages that will work in parallel.
+[22.9s] sub pages that will work in parallel.
+And then shortly after that in February,
+[24.9s] And then shortly after that in February,
+Claude Opus 4.6 was launched. And then
+[27.2s] Claude Opus 4.6 was launched. And then
+they also made a huge update on
+[29.2s] they also made a huge update on
+introducing agent teams in claw code.
+[31.4s] introducing agent teams in claw code.
+These two are not exactly the same
+[33.2s] These two are not exactly the same
+concepts. Doesn't matter if you're
+[34.6s] concepts. Doesn't matter if you're
+technical or not. I'm going to introduce
+[36.0s] technical or not. I'm going to introduce
+these things to you very clearly. And
+[37.8s] these things to you very clearly. And
+then we're going to test two products at
+[39.8s] then we're going to test two products at
+the same time with the same problem to
+[41.2s] the same time with the same problem to
+see which one does a better job at
+[42.9s] see which one does a better job at
+breaking down task. And lastly, we're
+[44.8s] breaking down task. And lastly, we're
+also going to quickly talk about the
+[46.2s] also going to quickly talk about the
+difference between team swarm and deep
+[49.3s] difference between team swarm and deep
+research agent. There's a quite a bit of
+[51.0s] research agent. There's a quite a bit of
+similarities and differences. So it's
+[52.6s] similarities and differences. So it's
+going to be a really fun video. Let's
+[54.1s] going to be a really fun video. Let's
+get started. So normally when we talk
+[55.9s] get started. So normally when we talk
+about AI agent, we can start with a
+[57.8s] about AI agent, we can start with a
+single agent. Basically, you can imagine
+[60.2s] single agent. Basically, you can imagine
+you're talking to chat GBT where you're
+[62.2s] you're talking to chat GBT where you're
+sending a user prompt. You can say,
+[64.0s] sending a user prompt. You can say,
+"Help me research who is the best AI
+[66.2s] "Help me research who is the best AI
+builder and YouTuber on the internet and
+[68.2s] builder and YouTuber on the internet and
+then the LM agent from Chat GBT will be
+[70.6s] then the LM agent from Chat GBT will be
+processing this information and they'll
+[72.6s] processing this information and they'll
+be using a tool for example a search API
+[75.2s] be using a tool for example a search API
+to look on the internet and maybe they
+[77.0s] to look on the internet and maybe they
+find Sean is the best AI builder and
+[78.8s] find Sean is the best AI builder and
+YouTuber on the internet." So that's
+[80.2s] YouTuber on the internet." So that's
+finishes one task for a single agent and
+[82.4s] finishes one task for a single agent and
+then things can get a little bit more
+[83.7s] then things can get a little bit more
+complicated. We can introduce a
+[85.2s] complicated. We can introduce a
+sequential agent. After the user asks
+[87.4s] sequential agent. After the user asks
+the first question, they can send that
+[89.3s] the first question, they can send that
+to a research agent first and it's going
+[91.2s] to a research agent first and it's going
+to pass down the contact that it has
+[92.9s] to pass down the contact that it has
+researched to the next agent called
+[94.6s] researched to the next agent called
+analysis agent which probably will do a
+[96.6s] analysis agent which probably will do a
+lot of processing after you know the
+[98.2s] lot of processing after you know the
+research online. And after the analysis
+[100.1s] research online. And after the analysis
+agent has finished, it's probably going
+[101.3s] agent has finished, it's probably going
+to call a report agent which will write
+[103.4s] to call a report agent which will write
+the report for you. You can think of it
+[105.0s] the report for you. You can think of it
+as just a sequential workflow that would
+[106.8s] as just a sequential workflow that would
+happen in a lot of daily life and daily
+[108.6s] happen in a lot of daily life and daily
+work. Okay. One problem with sequential
+[110.7s] work. Okay. One problem with sequential
+agents is that they're doing things one
+[112.9s] agents is that they're doing things one
+by one and there's an order there. So
+[115.0s] by one and there's an order there. So
+sometimes it could take a really long
+[116.5s] sometimes it could take a really long
+time or maybe you want to you know
+[118.0s] time or maybe you want to you know
+increase the capacity of work. So that's
+[119.7s] increase the capacity of work. So that's
+why agent teams comes really handy.
+[121.8s] why agent teams comes really handy.
+Clocko is basically using a leader agent
+[124.1s] Clocko is basically using a leader agent
+first to process this new prompt and
+[126.5s] first to process this new prompt and
+then the leader agent is going to think
+[127.8s] then the leader agent is going to think
+what can it do to make this such a
+[129.5s] what can it do to make this such a
+thorough and nice report. What you can
+[131.8s] thorough and nice report. What you can
+do is that you can define a few agents
+[134.1s] do is that you can define a few agents
+in parallel at the same time to process
+[136.7s] in parallel at the same time to process
+different tasks. The leader agent has
+[138.6s] different tasks. The leader agent has
+control over all of them just like the
+[140.6s] control over all of them just like the
+deep research agent. You might have
+[141.9s] deep research agent. You might have
+realized that in deep research when the
+[143.8s] realized that in deep research when the
+user asks a question they're going to
+[145.4s] user asks a question they're going to
+clarify the question with you and then
+[147.0s] clarify the question with you and then
+they're going to write a research brief.
+[148.3s] they're going to write a research brief.
+there's going to be a supervisor agent
+[150.2s] there's going to be a supervisor agent
+that will be you know the leader agent
+[151.9s] that will be you know the leader agent
+here and then delegate all the tasks to
+[154.0s] here and then delegate all the tasks to
+the subress researchers over here right
+[156.4s] the subress researchers over here right
+so this part I would say is very similar
+[158.7s] so this part I would say is very similar
+uh but it's not entirely the same right
+[160.4s] uh but it's not entirely the same right
+because agent teams doesn't really have
+[162.1s] because agent teams doesn't really have
+you know some predefined clarification
+[163.9s] you know some predefined clarification
+and research brief all these little
+[165.6s] and research brief all these little
+workers are you know doing things in
+[167.2s] workers are you know doing things in
+parallel at the same time and then
+[168.6s] parallel at the same time and then
+report back to the leader agent at this
+[170.8s] report back to the leader agent at this
+time the leader agent is really being
+[172.2s] time the leader agent is really being
+the boss here the team lead that's why
+[174.4s] the boss here the team lead that's why
+it's called agent teams this team lead
+[176.3s] it's called agent teams this team lead
+is going to process all the information
+[177.6s] is going to process all the information
+that the subtask that you know my
+[179.5s] that the subtask that you know my
+workers have done for me. So what is an
+[182.1s] workers have done for me. So what is an
+agent swarm then? Imagine you have a
+[184.1s] agent swarm then? Imagine you have a
+bunch of bees in a hive to work for the
+[186.0s] bunch of bees in a hive to work for the
+queen and then the queen is basically
+[188.1s] queen and then the queen is basically
+processing a user prompt. There's a goal
+[190.3s] processing a user prompt. There's a goal
+agent that will help derive some of the
+[192.5s] agent that will help derive some of the
+goals and specs that you know this user
+[194.8s] goals and specs that you know this user
+actually wants right again who's the
+[196.7s] actually wants right again who's the
+best AI YouTuber on the internet.
+[198.1s] best AI YouTuber on the internet.
+They're going to say okay the goal is
+[199.4s] They're going to say okay the goal is
+let me find like the top 20 YouTubers
+[201.8s] let me find like the top 20 YouTubers
+who do a lot of really good videos
+[204.2s] who do a lot of really good videos
+covering AI agent systems. And then
+[206.6s] covering AI agent systems. And then
+you're going to define some subtask or
+[208.6s] you're going to define some subtask or
+even create some agents with templates
+[210.2s] even create some agents with templates
+by itself. You see the difference here
+[212.2s] by itself. You see the difference here
+is that this goal agent is creating
+[214.8s] is that this goal agent is creating
+agents templates by itself. Each little
+[217.4s] agents templates by itself. Each little
+one of these smaller agents are actually
+[219.8s] one of these smaller agents are actually
+created right there instead of defined
+[222.2s] created right there instead of defined
+previously. Okay. In agent teams, you
+[224.3s] previously. Okay. In agent teams, you
+have to define who's doing the research,
+[225.9s] have to define who's doing the research,
+who's doing the analysis and everything
+[227.4s] who's doing the analysis and everything
+and then report back. But in an agent
+[229.7s] and then report back. But in an agent
+swarm scenario, simply deciding, okay,
+[231.7s] swarm scenario, simply deciding, okay,
+maybe I need 20 agents and each one of
+[233.4s] maybe I need 20 agents and each one of
+them should be doing certain things.
+[234.6s] them should be doing certain things.
+there's no human involvement there. I
+[236.0s] there's no human involvement there. I
+don't need to tell it who should be
+[238.0s] don't need to tell it who should be
+doing what, right? So that's why you see
+[239.7s] doing what, right? So that's why you see
+like a swarm here for people who study
+[241.3s] like a swarm here for people who study
+machine learning. It's kind of like a
+[242.6s] machine learning. It's kind of like a
+random forest where you have like little
+[244.8s] random forest where you have like little
+sub trees to make decisions on say
+[247.6s] sub trees to make decisions on say
+classifying if an image is a dog or a
+[249.4s] classifying if an image is a dog or a
+cat. And then basically the system is
+[251.4s] cat. And then basically the system is
+just spawning some parallel agents or
+[253.5s] just spawning some parallel agents or
+parallel sub trees to um finish the
+[256.9s] parallel sub trees to um finish the
+task. Eventually, you're going to
+[258.1s] task. Eventually, you're going to
+crowdsource uh the information with a
+[260.4s] crowdsource uh the information with a
+synthesizer agent, which is basically
+[262.6s] synthesizer agent, which is basically
+like the final layer of a random forest
+[265.0s] like the final layer of a random forest
+model where they're going to say, "Okay,
+[267.5s] model where they're going to say, "Okay,
+um each one of you has done certain
+[269.7s] um each one of you has done certain
+jobs. Let me compile them together." And
+[272.1s] jobs. Let me compile them together." And
+they eventually, you know, cluster the
+[273.6s] they eventually, you know, cluster the
+information together and then merge them
+[275.4s] information together and then merge them
+into a deliverable that will become your
+[277.4s] into a deliverable that will become your
+output. So this was a quick overview
+[279.8s] output. So this was a quick overview
+from single agent to sequential agents
+[282.3s] from single agent to sequential agents
+to a team of agents with team lead to an
+[284.9s] to a team of agents with team lead to an
+agent swarm where there's simply a goal
+[287.0s] agent swarm where there's simply a goal
+der and then just let the rest of the
+[289.3s] der and then just let the rest of the
+work done by a bunch of agents
+[291.9s] work done by a bunch of agents
+themselves without any definitions. And
+[294.3s] themselves without any definitions. And
+I think agent swarm would excel at a lot
+[296.2s] I think agent swarm would excel at a lot
+of tasks that would require a lot of
+[297.5s] of tasks that would require a lot of
+parallel task processing without a lot
+[299.6s] parallel task processing without a lot
+of predefin. And that's very powerful
+[301.8s] of predefin. And that's very powerful
+because sometimes you might just have a
+[303.3s] because sometimes you might just have a
+really vague intent when you ask a
+[305.4s] really vague intent when you ask a
+question to an AI, right? you wanted to
+[307.2s] question to an AI, right? you wanted to
+figure out how to break down tasks by
+[309.0s] figure out how to break down tasks by
+itself. But at the same time, I think it
+[310.7s] itself. But at the same time, I think it
+depends on the task. If your task
+[312.1s] depends on the task. If your task
+requires a lot of like determined
+[314.2s] requires a lot of like determined
+workflow and you want the agent system
+[316.9s] workflow and you want the agent system
+or the agent organizations to run
+[319.0s] or the agent organizations to run
+exactly the way you want, like you're
+[321.0s] exactly the way you want, like you're
+the board member or you're the CEO, then
+[323.0s] the board member or you're the CEO, then
+I think agent teams would do a really
+[324.5s] I think agent teams would do a really
+good task because you can have full
+[325.9s] good task because you can have full
+control on who's doing what. But I would
+[327.9s] control on who's doing what. But I would
+say both systems have really good batch
+[330.2s] say both systems have really good batch
+processing features here because they
+[332.2s] processing features here because they
+will allow you to do multiple tasks at
+[334.2s] will allow you to do multiple tasks at
+the same time. For example, you can
+[336.3s] the same time. For example, you can
+imagine they can do they might be doing
+[338.3s] imagine they can do they might be doing
+search, downloading, batch processing
+[340.6s] search, downloading, batch processing
+files, talking to different agents uh
+[342.9s] files, talking to different agents uh
+all at the same time, which will save
+[345.1s] all at the same time, which will save
+you so much time, but it could also
+[346.6s] you so much time, but it could also
+consume a lot of tokens too. Unlike
+[348.4s] consume a lot of tokens too. Unlike
+these simpler agent systems, teams or
+[351.6s] these simpler agent systems, teams or
+swarm allow a bunch of agents to have
+[354.5s] swarm allow a bunch of agents to have
+different opinions because they could
+[356.5s] different opinions because they could
+have a different conclusion
+[357.8s] have a different conclusion
+individualistically. And then eventually
+[360.2s] individualistically. And then eventually
+what they do is that either the leader
+[362.0s] what they do is that either the leader
+agent or the synthesizer agent need to
+[364.6s] agent or the synthesizer agent need to
+compile reconciliate the decision-m so
+[367.3s] compile reconciliate the decision-m so
+that they can come up with a solution
+[369.4s] that they can come up with a solution
+that is not you know uh super biased.
+[371.8s] that is not you know uh super biased.
+Right? All of what I just explained were
+[373.6s] Right? All of what I just explained were
+quite theoretical. Let's jump right in
+[375.4s] quite theoretical. Let's jump right in
+and test the products and see what
+[376.9s] and test the products and see what
+happens. The first demo I want to try is
+[379.0s] happens. The first demo I want to try is
+to do a YouTube search. You should be
+[381.1s] to do a YouTube search. You should be
+searching similar channels like Sean's
+[383.1s] searching similar channels like Sean's
+AI stories. explore those channels that
+[385.0s] AI stories. explore those channels that
+do developer tools, automation
+[386.7s] do developer tools, automation
+creations, indie hacking, all these kind
+[389.0s] creations, indie hacking, all these kind
+of things. And the result is that I want
+[390.5s] of things. And the result is that I want
+them to return four channels uh with
+[392.6s] them to return four channels uh with
+their names and URLs. And the very
+[394.6s] their names and URLs. And the very
+similar prompt for claw code is that
+[396.6s] similar prompt for claw code is that
+you're using agent teams and the context
+[398.9s] you're using agent teams and the context
+the same, but then you can be more
+[400.4s] the same, but then you can be more
+specific teammate 1 2 3 4 5 what they're
+[402.6s] specific teammate 1 2 3 4 5 what they're
+doing. So I have just pasted both
+[404.3s] doing. So I have just pasted both
+prompts in claw code and in Kimmy. So
+[407.5s] prompts in claw code and in Kimmy. So
+let's get started and run it. All right.
+[416.5s] You can see that it shows agent swarm
+over there. Okay, cool. Let's see. You
+[420.1s] over there. Okay, cool. Let's see. You
+can see that clock understood that it's
+[421.9s] can see that clock understood that it's
+running a agent team and it's
+[423.4s] running a agent team and it's
+establishing shared framework for
+[425.3s] establishing shared framework for
+strategy editor. Okay. Oh, and then uh
+[429.9s] strategy editor. Okay. Oh, and then uh
+what Kim is doing is that it's creating
+[431.7s] what Kim is doing is that it's creating
+all these little agent by itself without
+[433.8s] all these little agent by itself without
+my definition. You see this one is doing
+[435.8s] my definition. You see this one is doing
+a research agent. This is really cool.
+[438.1s] a research agent. This is really cool.
+They have this um role description.
+[441.0s] They have this um role description.
+You're a competitive intelligence
+[442.5s] You're a competitive intelligence
+researcher specializing in AI coding.
+[445.3s] researcher specializing in AI coding.
+And then there are research agents too.
+[449.6s] And then there are research agents too.
+Um you are a competitive intelligence
+[451.8s] Um you are a competitive intelligence
+researcher specializ AI agent automation
+[453.7s] researcher specializ AI agent automation
+content creators.
+[456.3s] content creators.
+And this one is searching for educators
+[458.9s] And this one is searching for educators
+I would say I think. Yeah, they're
+[461.3s] I would say I think. Yeah, they're
+specializing in AI education. Okay. So
+[463.9s] specializing in AI education. Okay. So
+he created these sub agents in parallel
+[466.6s] he created these sub agents in parallel
+uh like a swarm and then you can see
+[469.2s] uh like a swarm and then you can see
+what they're doing one by one. Okay.
+[471.8s] what they're doing one by one. Okay.
+Lewis is doing some uh searching a
+[475.5s] Lewis is doing some uh searching a
+YouTube AI SAS solarreneur MR revenue.
+[478.3s] YouTube AI SAS solarreneur MR revenue.
+Jane who's looking for uh YouTube
+[480.3s] Jane who's looking for uh YouTube
+channels focus on AI education
+[481.7s] channels focus on AI education
+explaining uh is doing the following
+[484.6s] explaining uh is doing the following
+task. See all of these were written by
+[487.8s] task. See all of these were written by
+um by Kimi itself. This is really cool.
+[492.0s] um by Kimi itself. This is really cool.
+Uh, and then let's see claw code. It
+[494.6s] Uh, and then let's see claw code. It
+deployed all five scouts in parallel
+[497.5s] deployed all five scouts in parallel
+with the task mainly web search and it's
+[500.2s] with the task mainly web search and it's
+using tools. I can see exactly what they
+[502.6s] using tools. I can see exactly what they
+looked up for. All right, this YouTuber
+[507.0s] looked up for. All right, this YouTuber
+uh I don't know who this is.
+[509.5s] uh I don't know who this is.
+Kimmy has spent a lot of time polishing
+[512.2s] Kimmy has spent a lot of time polishing
+their UI so that it looks very neat and
+[516.2s] their UI so that it looks very neat and
+um you can see what each agent is
+[518.2s] um you can see what each agent is
+actually doing and then check out their
+[520.1s] actually doing and then check out their
+results. This is very similar to how
+[522.7s] results. This is very similar to how
+Chajbt was doing deep research I think
+[525.5s] Chajbt was doing deep research I think
+where they will show you exactly what
+[527.4s] where they will show you exactly what
+they're searching. I think Grock also
+[528.7s] they're searching. I think Grock also
+has similar features where they will
+[530.6s] has similar features where they will
+show very clearly and streaming it uh
+[533.3s] show very clearly and streaming it uh
+how how the agent is doing the internet
+[536.0s] how how the agent is doing the internet
+search whereas if you're doing clock
+[537.9s] search whereas if you're doing clock
+code in the terminal I think the the UI
+[541.4s] code in the terminal I think the the UI
+is quite minimum but I would say I would
+[544.0s] is quite minimum but I would say I would
+say that's fine because clock code is
+[545.8s] say that's fine because clock code is
+mainly focused on coding tasks. Looks
+[548.8s] mainly focused on coding tasks. Looks
+like Jane has finished her task. Let's
+[551.1s] like Jane has finished her task. Let's
+see. Jane, find four YouTube channels
+[554.2s] see. Jane, find four YouTube channels
+focused on education. The final answer
+[556.5s] focused on education. The final answer
+is they found four YouTube channels
+[558.5s] is they found four YouTube channels
+focused on AI education. Robert Miles,
+[561.9s] focused on AI education. Robert Miles,
+Jeremy Howard, Weights and Biases, AI
+[565.0s] Jeremy Howard, Weights and Biases, AI
+Uncovered, and then generated a file. I
+[569.0s] Uncovered, and then generated a file. I
+think I made a mistake because I was
+[570.8s] think I made a mistake because I was
+supposed to say five agents here.
+[572.8s] supposed to say five agents here.
+Somehow I put 12 and clock doing five.
+[575.9s] Somehow I put 12 and clock doing five.
+So, I think we're using a lot more
+[577.4s] So, I think we're using a lot more
+tokens on uh Kimi. Four, five, six,
+[580.9s] tokens on uh Kimi. Four, five, six,
+seven, eight. Eight out of 12 agents are
+[584.0s] seven, eight. Eight out of 12 agents are
+finished. I think I'm going to tell Claw
+[586.2s] finished. I think I'm going to tell Claw
+Code, don't overthink.
+[589.2s] Code, don't overthink.
+Let's
+[591.5s] Let's
+focus on letting the scouts
+[596.0s] focus on letting the scouts
+do the basic research. We don't need to
+[602.6s] do the basic research. We don't need to
+use
+[604.6s] use
+more than 10 tools. How come you guys
+[607.7s] more than 10 tools. How come you guys
+took such a long time? Oh, this one is
+[609.2s] took such a long time? Oh, this one is
+searching like foreign languages. That's
+[611.6s] searching like foreign languages. That's
+why non-English channel. That's why it's
+[613.7s] why non-English channel. That's why it's
+taking him one time.
+[620.8s] Oh, look at this. It's like reading the
+channel real time. Took my request now.
+[623.2s] channel real time. Took my request now.
+Got it. Simplifying. Scout one and two
+[625.0s] Got it. Simplifying. Scout one and two
+already back. Let me launch the
+[627.2s] already back. Let me launch the
+remaining three scouts now with learner
+[629.4s] remaining three scouts now with learner
+instructions. Four channels max minimum
+[631.5s] instructions. Four channels max minimum
+tool usage. Look at this. It took my
+[633.4s] tool usage. Look at this. It took my
+feedback. It was done. Scout 3 teammate
+[637.2s] feedback. It was done. Scout 3 teammate
+3 searching for founder building public
+[639.7s] 3 searching for founder building public
+channels. Only use three tools. 15,000
+[642.4s] channels. Only use three tools. 15,000
+tokens. Previously it was like 70 80
+[645.0s] tokens. Previously it was like 70 80
+tools was 90,000 tokens. Uhhuh. Looks
+[647.8s] tools was 90,000 tokens. Uhhuh. Looks
+like both of them are finished.
+[650.5s] like both of them are finished.
+10 of 12 agents completed successfully.
+[652.3s] 10 of 12 agents completed successfully.
+Now compiling findings. Look at this. is
+[654.9s] Now compiling findings. Look at this. is
+compiling the findings and launch
+[656.7s] compiling the findings and launch
+clustering agent. Remember we talked
+[658.6s] clustering agent. Remember we talked
+about the synthesizer. That's that's
+[660.3s] about the synthesizer. That's that's
+what it's doing. Uh because it has
+[662.1s] what it's doing. Uh because it has
+finished the swarm and now they're crowd
+[665.5s] finished the swarm and now they're crowd
+they're processing the crowdsourced
+[667.3s] they're processing the crowdsourced
+information with the synthesizer or it's
+[670.6s] information with the synthesizer or it's
+calling it launch a clustering agent.
+[673.0s] calling it launch a clustering agent.
+Okay. And clustering agent is Bowwin.
+[675.7s] Okay. And clustering agent is Bowwin.
+Okay. Bowen, you're analyzing the
+[678.3s] Okay. Bowen, you're analyzing the
+competitive landscape for this
+[681.3s] competitive landscape for this
+and research data.
+[684.2s] and research data.
+Okay. So, you see like all of these
+[686.4s] Okay. So, you see like all of these
+researched channels from other um swarm
+[690.5s] researched channels from other um swarm
+agents
+[692.5s] agents
+have been used by this clustering
+[694.6s] have been used by this clustering
+synthesizer. It clustered 26 channels by
+[697.3s] synthesizer. It clustered 26 channels by
+positioning formats. All scouts are back
+[699.9s] positioning formats. All scouts are back
+now synthesizing a strategy editor as
+[702.3s] now synthesizing a strategy editor as
+strategy editor lead. So this is this
+[704.4s] strategy editor lead. So this is this
+one is returning the information back to
+[706.1s] one is returning the information back to
+the lead agent remember and then he's
+[707.9s] the lead agent remember and then he's
+duping the clustering and um producing
+[710.8s] duping the clustering and um producing
+the final deliverable the competitive
+[713.0s] the final deliverable the competitive
+landscape shown AI stories. Okay, this
+[715.9s] landscape shown AI stories. Okay, this
+final report already
+[718.2s] final report already
+honestly it's a little hard to read this
+[720.7s] honestly it's a little hard to read this
+from a terminal. It took 20 minutes in
+[723.0s] from a terminal. It took 20 minutes in
+total. 18 minutes 14 seconds. Yeah, it
+[725.4s] total. 18 minutes 14 seconds. Yeah, it
+told me things that other people are not
+[727.6s] told me things that other people are not
+doing. This is helpful. Um non-English
+[731.3s] doing. This is helpful. Um non-English
+practical builder content. The Spanish
+[733.4s] practical builder content. The Spanish
+market has explainer and news, but no
+[735.8s] market has explainer and news, but no
+hands-on ship AI product from zero
+[737.5s] hands-on ship AI product from zero
+channel. Okay, maybe that's a good idea.
+[740.6s] channel. Okay, maybe that's a good idea.
+Every channel shows happy path. Nobody
+[742.6s] Every channel shows happy path. Nobody
+documents what broke. Oh, yeah. Yeah,
+[745.2s] documents what broke. Oh, yeah. Yeah,
+everyone's showing what's working, but
+[747.0s] everyone's showing what's working, but
+nothing's not working. Um, people don't
+[750.3s] nothing's not working. Um, people don't
+show their failures. Okay, fair enough.
+[752.6s] show their failures. Okay, fair enough.
+Nobody's doing systematic applies to
+[755.0s] Nobody's doing systematic applies to
+applies test. Same use case built NN
+[758.3s] applies test. Same use case built NN
+Langraph.
+[759.9s] Langraph.
+Every creator picks one tool and
+[761.4s] Every creator picks one tool and
+advocates for it. Impartial comparison
+[764.0s] advocates for it. Impartial comparison
+seat is empty. That's what we're doing.
+[765.5s] seat is empty. That's what we're doing.
+We're comparing two tools today. And uh
+[768.2s] We're comparing two tools today. And uh
+next video concept for Sean's AI
+[770.6s] next video concept for Sean's AI
+stories. I built the same agent in Fry
+[773.1s] stories. I built the same agent in Fry
+Frameworks. Why my AI agent broke in
+[775.6s] Frameworks. Why my AI agent broke in
+production
+[777.1s] production
+0 to 10K AI SAS stack. Clocko versus
+[780.3s] 0 to 10K AI SAS stack. Clocko versus
+cursor versus windsurf. Windsor is dead.
+[783.0s] cursor versus windsurf. Windsor is dead.
+No. Um I automated Well, they're not
+[786.6s] No. Um I automated Well, they're not
+dead. They're required by by Devon, but
+[788.5s] dead. They're required by by Devon, but
+I haven't heard from them ever since. I
+[791.0s] I haven't heard from them ever since. I
+automated my entire YouTube workflow
+[792.7s] automated my entire YouTube workflow
+with AI agents. Okay, not a bad report.
+[796.9s] with AI agents. Okay, not a bad report.
+At least I real I know at least I
+[799.0s] At least I real I know at least I
+learned that in the Spanish speaking
+[800.4s] learned that in the Spanish speaking
+market, there's not a lot of channels
+[802.4s] market, there's not a lot of channels
+for hands-on building. Okay, some of our
+[806.6s] for hands-on building. Okay, some of our
+customers for Automanis, which is a
+[808.8s] customers for Automanis, which is a
+WhatsApp first Asian sales lead uh tool
+[812.8s] WhatsApp first Asian sales lead uh tool
+has customer from Latin America and uh
+[815.4s] has customer from Latin America and uh
+they're mainly speaking Spanish and
+[817.6s] they're mainly speaking Spanish and
+Portuguese. So, that's a really good uh
+[820.7s] Portuguese. So, that's a really good uh
+good advice. I like that. Okay, look at
+[822.9s] good advice. I like that. Okay, look at
+this. I think Bowen now is writing the
+[825.1s] this. I think Bowen now is writing the
+report. Cool. Look at this. This one's
+[828.2s] report. Cool. Look at this. This one's
+done. Uh so Kimi was telling me
+[832.6s] done. Uh so Kimi was telling me
+developer and coder is oversaturated. I
+[835.8s] developer and coder is oversaturated. I
+agree. Non-technical founders under
+[838.6s] agree. Non-technical founders under
+saturating
+[841.1s] saturating
+public founder is moderate. Uh business
+[844.3s] public founder is moderate. Uh business
+automation is underserved. AI education
+[847.4s] automation is underserved. AI education
+is moderate. Okay. So probably this one
+[850.0s] is moderate. Okay. So probably this one
+is suggesting that I should focus on
+[851.3s] is suggesting that I should focus on
+nontechnical founders and business
+[853.8s] nontechnical founders and business
+automation. Three whites space
+[855.7s] automation. Three whites space
+opportunities. Cool. Asian workflows for
+[858.3s] opportunities. Cool. Asian workflows for
+non-developers.
+[860.1s] non-developers.
+Okay. Nontechnical founders.
+[862.7s] Okay. Nontechnical founders.
+Rigorous tool comparison. This one is
+[865.0s] Rigorous tool comparison. This one is
+consistent with what Claude told me.
+[867.0s] consistent with what Claude told me.
+Yeah. The impartial comparison seat is
+[868.9s] Yeah. The impartial comparison seat is
+empty. Asian workflow case studies
+[871.4s] empty. Asian workflow case studies
+theory heavy real metrics rare for
+[874.7s] theory heavy real metrics rare for
+founders and business owners. Okay.
+[876.6s] founders and business owners. Okay.
+Money related things. Okay. Sure.
+[879.0s] Money related things. Okay. Sure.
+Comparing cursor wins co-pilot. How I
+[881.8s] Comparing cursor wins co-pilot. How I
+built a 4,000 per month uh yeah agency
+[884.3s] built a 4,000 per month uh yeah agency
+in 90 days. At least I learned something
+[886.5s] in 90 days. At least I learned something
+which is there is probably an
+[888.0s] which is there is probably an
+oversaturation of highly technical
+[891.1s] oversaturation of highly technical
+content and um there lacks a lot of uh
+[894.4s] content and um there lacks a lot of uh
+AI contents that help educate
+[896.4s] AI contents that help educate
+non-technical founders or business
+[898.2s] non-technical founders or business
+owners and uh perhaps I need to compare
+[901.0s] owners and uh perhaps I need to compare
+some tools because every video is
+[902.9s] some tools because every video is
+probably very deep dive in one tool and
+[905.0s] probably very deep dive in one tool and
+also people love money related contents
+[907.3s] also people love money related contents
+and last but not least I think in Latin
+[909.0s] and last but not least I think in Latin
+America there's lack of supply of such
+[912.6s] America there's lack of supply of such
+content. Good advice. Thank you both
+[914.9s] content. Good advice. Thank you both
+agent teams from claw code and agent
+[916.7s] agent teams from claw code and agent
+swarm from Kimmy. And meanwhile I was
+[918.6s] swarm from Kimmy. And meanwhile I was
+running the second demo at the same time
+[920.5s] running the second demo at the same time
+which is a expert review of my uh
+[923.6s] which is a expert review of my uh
+current company automatis. We basically
+[926.1s] current company automatis. We basically
+are an WhatsApp first AI sales agent for
+[929.0s] are an WhatsApp first AI sales agent for
+consultative made to order sales. You
+[931.6s] consultative made to order sales. You
+can imagine like uh companies that are
+[934.1s] can imagine like uh companies that are
+selling some complex solutions like an
+[936.6s] selling some complex solutions like an
+agency or consulting agencies or you
+[939.2s] agency or consulting agencies or you
+know they could be doing B2B sales like
+[941.2s] know they could be doing B2B sales like
+in um renewable energiesarmacies
+[944.6s] in um renewable energiesarmacies
+uh these things are really complex sales
+[946.4s] uh these things are really complex sales
+or even apparel where there's not like a
+[949.3s] or even apparel where there's not like a
+single SKU to be sold. Sometimes there's
+[951.9s] single SKU to be sold. Sometimes there's
+there needs to be a package of like the
+[954.0s] there needs to be a package of like the
+entire quantity that you need for
+[956.0s] entire quantity that you need for
+certain products and maybe you need to
+[957.5s] certain products and maybe you need to
+customize a little bit. So that's what
+[959.2s] customize a little bit. So that's what
+we're building um to use agents to
+[962.0s] we're building um to use agents to
+capture all these requests for a
+[963.8s] capture all these requests for a
+business so that they won't miss any
+[965.4s] business so that they won't miss any
+leads. Okay. So now what I'm doing is
+[967.4s] leads. Okay. So now what I'm doing is
+that I want to ask agent swarm from Kimi
+[970.1s] that I want to ask agent swarm from Kimi
+and agent team from call code give me
+[972.2s] and agent team from call code give me
+some feedback. For example in teams I
+[974.2s] some feedback. For example in teams I
+was asking for five teammates to tell me
+[976.8s] was asking for five teammates to tell me
+about my product from VC's perspective
+[979.6s] about my product from VC's perspective
+product go to market customer success
+[981.6s] product go to market customer success
+and legal. They eventually gave me a
+[983.8s] and legal. They eventually gave me a
+report. Okay. And I was uh running it
+[987.2s] report. Okay. And I was uh running it
+and this is surprisingly really fast.
+[989.8s] and this is surprisingly really fast.
+Okay, it's almost done. Okay, it gave me
+[992.3s] Okay, it's almost done. Okay, it gave me
+some advice about pricing. Uh you should
+[994.7s] some advice about pricing. Uh you should
+start flat SAS track qualify lead volume
+[997.6s] start flat SAS track qualify lead volume
+internally introduce per lead pricing in
+[1001.0s] internally introduce per lead pricing in
+month three once you can define qualify
+[1003.0s] month three once you can define qualify
+with data. That's true. Our investors
+[1004.9s] with data. That's true. Our investors
+gave us similar advice which is uh later
+[1007.0s] gave us similar advice which is uh later
+if you have bigger clients what we
+[1008.7s] if you have bigger clients what we
+should do is uh charge our clients based
+[1011.8s] should do is uh charge our clients based
+on the percentage of conversion but
+[1014.3s] on the percentage of conversion but
+initially we can do flat pricing which
+[1016.1s] initially we can do flat pricing which
+is um $200 $300 a month design
+[1019.1s] is um $200 $300 a month design
+architecture to be channel agnostic but
+[1021.0s] architecture to be channel agnostic but
+doesn't build SMS in week one okay yeah
+[1023.3s] doesn't build SMS in week one okay yeah
+SMS is probably used only in the US uh
+[1025.7s] SMS is probably used only in the US uh
+the rest of the world use what's a lot
+[1027.8s] the rest of the world use what's a lot
+more so Kimmy had five agents Owen was
+[1031.1s] more so Kimmy had five agents Owen was
+evaluating my product well each one
+[1033.4s] evaluating my product well each one
+everyone's eval made product. What's
+[1035.2s] everyone's eval made product. What's
+strong already is that WhatsApp channel
+[1036.8s] strong already is that WhatsApp channel
+selection is strategically sound. 2
+[1039.0s] selection is strategically sound. 2
+billion users. That's true. Two billion
+[1040.8s] billion users. That's true. Two billion
+users. Huge market. Made to order
+[1042.8s] users. Huge market. Made to order
+vertical target is smart. Yeah, because
+[1044.9s] vertical target is smart. Yeah, because
+we talked to so many made to order
+[1046.7s] we talked to so many made to order
+businesses and um their sales process is
+[1050.1s] businesses and um their sales process is
+a huge mess. Okay. The risk is
+[1052.0s] a huge mess. Okay. The risk is
+defensibility is thin. Uh yeah, sure.
+[1054.5s] defensibility is thin. Uh yeah, sure.
+There's a lot of WhatsApp agents. That's
+[1056.0s] There's a lot of WhatsApp agents. That's
+why we're doing a lot of um sort of lead
+[1059.5s] why we're doing a lot of um sort of lead
+structuring as well after talking with
+[1061.9s] structuring as well after talking with
+just agents. is not just another
+[1063.6s] just agents. is not just another
+chatbot. Some final comments. Um, I
+[1067.1s] chatbot. Some final comments. Um, I
+think AI has been evolving
+[1070.0s] think AI has been evolving
+to mimic how human societies and human
+[1072.9s] to mimic how human societies and human
+organizations collaborate because I
+[1076.7s] organizations collaborate because I
+remember listening to a podcast the
+[1078.1s] remember listening to a podcast the
+other day that
+[1080.7s] other day that
+the way to function really well in the
+[1083.4s] the way to function really well in the
+human society is that there is a team of
+[1086.2s] human society is that there is a team of
+specialized workers like you and me who
+[1089.5s] specialized workers like you and me who
+will be good at, you know, things that
+[1091.4s] will be good at, you know, things that
+we're good at and uh, collaborating
+[1093.6s] we're good at and uh, collaborating
+together. That's how we make the economy
+[1095.1s] together. That's how we make the economy
+runs. And now we're at the position
+[1097.8s] runs. And now we're at the position
+where coding agent is really strong.
+[1100.7s] where coding agent is really strong.
+Tachibbt general agent is really strong.
+[1103.4s] Tachibbt general agent is really strong.
+There are a lot of models that are very
+[1104.6s] There are a lot of models that are very
+specialized at what they do. And what we
+[1106.3s] specialized at what they do. And what we
+can do is create agent that specialize
+[1108.4s] can do is create agent that specialize
+in what they do too. Okay. So what I see
+[1111.8s] in what they do too. Okay. So what I see
+is that we're seeing a trend or a shift
+[1114.2s] is that we're seeing a trend or a shift
+from simple AI agents or simple AI agent
+[1118.7s] from simple AI agents or simple AI agent
+systems to AI organizations or AI
+[1121.0s] systems to AI organizations or AI
+societies.
+[1122.5s] societies.
+and all of these concepts of whether
+[1124.2s] and all of these concepts of whether
+it's a swarm from Kimmy or teams from
+[1127.7s] it's a swarm from Kimmy or teams from
+claw code in my opinion it's
+[1131.8s] claw code in my opinion it's
+trying to balance the breadth
+[1135.3s] trying to balance the breadth
+um of the amount of information that the
+[1138.2s] um of the amount of information that the
+decision makers could get in order to
+[1140.8s] decision makers could get in order to
+make the best possible decisions rather
+[1143.0s] make the best possible decisions rather
+than relying on one specific agent to
+[1144.9s] than relying on one specific agent to
+make a decision at the end. Okay. And
+[1147.6s] make a decision at the end. Okay. And
+similarly in deep research agent is not
+[1150.4s] similarly in deep research agent is not
+just the decision maker which is
+[1151.8s] just the decision maker which is
+clarification agent, research brief
+[1154.0s] clarification agent, research brief
+agent and supervisor agent are making
+[1156.0s] agent and supervisor agent are making
+the decision without asking anybody
+[1158.1s] the decision without asking anybody
+else's opinion. Instead they spread it
+[1160.2s] else's opinion. Instead they spread it
+out and delegate the task to every
+[1162.2s] out and delegate the task to every
+single researcher and compress them and
+[1164.5s] single researcher and compress them and
+compile them and synthesize the final
+[1167.6s] compile them and synthesize the final
+output in order to make a more educated
+[1170.1s] output in order to make a more educated
+information decision-m. Okay, I feel
+[1173.2s] information decision-m. Okay, I feel
+like this is a general trend and all
+[1176.0s] like this is a general trend and all
+these model providers have realized that
+[1179.0s] these model providers have realized that
+this is a trend and that's why they're
+[1180.8s] this is a trend and that's why they're
+making these products for us. I would
+[1182.6s] making these products for us. I would
+encourage everyone to try this out
+[1184.4s] encourage everyone to try this out
+because uh when new technology comes
+[1186.8s] because uh when new technology comes
+out, it's important that we feel aware
+[1189.8s] out, it's important that we feel aware
+of what's going on. I think the results
+[1192.0s] of what's going on. I think the results
+definitely are decent for now if we're
+[1194.0s] definitely are decent for now if we're
+doing some, you know, research, building
+[1196.2s] doing some, you know, research, building
+some features on a product. And I think
+[1198.2s] some features on a product. And I think
+they will take another couple of years
+[1199.5s] they will take another couple of years
+or maybe just a few months that it will
+[1201.5s] or maybe just a few months that it will
+evolve into something that's much more
+[1204.1s] evolve into something that's much more
+holistic at doing tasks. So what we all
+[1207.7s] holistic at doing tasks. So what we all
+can do right now is make sure we don't
+[1210.2s] can do right now is make sure we don't
+lag behind and that we're always
+[1212.1s] lag behind and that we're always
+informed about uh what is going on with
+[1214.6s] informed about uh what is going on with
+all these uh architecture or infrawise
+[1217.4s] all these uh architecture or infrawise
+updates from these top AI companies.
+[1220.4s] updates from these top AI companies.
+Thanks for watching this video. I hope
+[1221.9s] Thanks for watching this video. I hope
+this was helpful and leave a comment or
+[1224.1s] this was helpful and leave a comment or
+join our Discord channel for a
+[1226.3s] join our Discord channel for a
+discussion. I'll see you next time.
+[1228.2s] discussion. I'll see you next time.
+Thank you very

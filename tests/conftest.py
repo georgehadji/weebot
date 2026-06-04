@@ -98,8 +98,8 @@ def workspace_editor(workspace_path, monkeypatch):
     # Remove cached file_editor to force re-import with new settings
     if "weebot.tools.file_editor" in sys.modules:
         del sys.modules["weebot.tools.file_editor"]
-    if "weebot.security_validators" in sys.modules:
-        del sys.modules["weebot.security_validators"]
+    if "weebot.infrastructure.security.security_validators" in sys.modules:
+        del sys.modules["weebot.infrastructure.security.security_validators"]
 
     return workspace_path
 

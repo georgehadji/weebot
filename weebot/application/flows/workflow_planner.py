@@ -387,7 +387,7 @@ class WorkflowPlanner:
 
 # Example usage
 if __name__ == "__main__":
-    from weebot.nlp_understanding import NaturalLanguageProcessor
+    from weebot.application.services.nlp_understanding import NaturalLanguageProcessor
     
     planner = WorkflowPlanner()
     processor = NaturalLanguageProcessor()
