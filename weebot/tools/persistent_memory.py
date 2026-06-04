@@ -78,16 +78,23 @@ class PersistentMemoryTool(BaseTool):
 
     def __init__(
         self,
-        memory: MemoryPort,
+        memory: Optional[MemoryPort] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the persistent memory tool.
 
         Args:
             memory: A MemoryPort implementation injected by DI.
+                When None (constructed by RoleBasedToolRegistry),
+                uses the default adapter from the DI container.
             **kwargs: Passed through to BaseTool.
         """
         super().__init__(**kwargs)
+        if memory is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            memory = container.get(MemoryPort)
         self._memory = memory
 
     async def execute(

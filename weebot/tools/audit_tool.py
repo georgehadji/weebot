@@ -39,8 +39,13 @@ class AuditTool(BaseTool):
 
     _service: Optional[AuditPort] = None
 
-    def __init__(self, service: AuditPort, **data: Any) -> None:
+    def __init__(self, service: Optional[AuditPort] = None, **data: Any) -> None:
         super().__init__(**data)
+        if service is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            service = container.get(AuditPort)
         object.__setattr__(self, "_service", service)
 
     async def execute(self, output: str, skill_name: str = "", **_: Any) -> ToolResult:
