@@ -7,6 +7,8 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 
 from langchain.tools import BaseTool
 
+from weebot.tools.base import ToolResult
+
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
 
@@ -111,3 +113,38 @@ class BrowserTool(BaseTool):
     async def _arun(self, task: str) -> str:
         """Async execution."""
         return await self._run_browser_task(task)
+
+    # ── weebot BaseTool compatibility ────────────────────────────────
+    # BrowserTool extends langchain's BaseTool, but weebot's ToolCollection
+    # expects execute(**kwargs) + to_param(). These bridge methods provide
+    # that interface.
+
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "task": {
+                "type": "string",
+                "description": "Natural language task for the browser agent",
+            },
+        },
+        "required": ["task"],
+    }
+
+    def to_param(self) -> dict:
+        """Convert to OpenAI function spec (weebot-compatible)."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+    async def execute(self, task: str = "", **kwargs):
+        """weebot-compatible execute: delegates to _arun."""
+        try:
+            result = await self._arun(task)
+            return ToolResult(output=str(result))
+        except Exception as exc:
+            return ToolResult(error=str(exc), output="")
