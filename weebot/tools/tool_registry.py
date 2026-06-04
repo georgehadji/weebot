@@ -67,6 +67,7 @@ class RoleBasedToolRegistry:
         "admin": [
             "web_search",
             "advanced_browser",
+            "browser_navigator",
             "browser_inspector",
             "dispatch_parallel_tasks",
             "workflow_orchestrator",
@@ -326,6 +327,8 @@ class RoleBasedToolRegistry:
         from weebot.tools.audit_tool import AuditTool
         from weebot.tools.voice_input_tool import VoiceInputTool
         from weebot.tools.voice_output_tool import VoiceOutputTool
+        from weebot.tools.browser_tool import BrowserTool
+        from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -356,6 +359,8 @@ class RoleBasedToolRegistry:
             "audit_session": AuditTool,
             "voice_input": VoiceInputTool,
             "voice_output": VoiceOutputTool,
+            "browser_navigator": BrowserTool,
+            "workflow_orchestrator": WorkflowOrchestratorTool,
         }
         return cls._TOOL_CLASS_MAP
 
