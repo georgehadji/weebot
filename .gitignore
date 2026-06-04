@@ -49,8 +49,19 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Claude Code
+# Claude Code / Reasonix
 .claude/
+.reasonix/
+
+# Vendored sub-projects
+weebot/GitNexus-main/
+
+# Node.js
+node_modules/
+
+# Graphify schema cache
+graphify-out/.graphify_*.json
+graphify-out/cache/
 
 # Word / Office temp & source files
 *.docx
