@@ -103,6 +103,8 @@ class FormatDetector:
                     name=name,
                     confidence=0.95,
                 )
+        else:
+            content = path.read_text(encoding="utf-8", errors="replace")
 
         # Single SKILL.md with frontmatter
         if path.name == "SKILL.md" and content.startswith("---"):

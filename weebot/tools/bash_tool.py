@@ -274,17 +274,26 @@ class BashTool(BaseTool):
     
     def _verify_override_token(self, command: str, token: str) -> bool:
         """
-        Verify security override token.
+        Verify security override token using HMAC-SHA256.
 
-        NOTE: This is a placeholder. In production, implement:
-        - HMAC verification
-        - Token expiration checking
-        - Audit logging
-        - Admin permission verification
+        The token must be ``hex(HMAC-SHA256(ADMIN_SECRET, command))`` where
+        ``ADMIN_SECRET`` is set via the ``WEEBOT_ADMIN_SECRET`` environment
+        variable.  If no secret is configured, overrides are always rejected.
         """
-        # PLACEHOLDER: Always reject in default implementation
-        # Subclasses can override with proper implementation
-        return False
+        import hashlib
+        import hmac
+        import os
+
+        secret = os.environ.get("WEEBOT_ADMIN_SECRET")
+        if not secret:
+            return False
+
+        expected = hmac.new(
+            secret.encode("utf-8"),
+            command.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, token)
 
     async def _verify_command_execution(
         self,

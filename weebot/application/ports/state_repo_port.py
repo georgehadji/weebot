@@ -34,3 +34,16 @@ class StateRepositoryPort(ABC):
     async def delete_session(self, session_id: str) -> None:
         """Delete a session."""
         ...
+
+    @abstractmethod
+    async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
+        """Full-text search across all indexed sessions (M2).
+
+        Args:
+            query: Natural-language search query (porter-tokenized).
+            limit: Maximum results.
+
+        Returns:
+            List of {session_id, event_type, summary, content, score}.
+        """
+        ...

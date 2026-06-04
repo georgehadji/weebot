@@ -39,6 +39,31 @@ class ExecutingState(FlowState):
             context.set_state(UpdatingState())
             return
 
+        # ── Capability 5: Behavioral Learning — extract rules from corrections ──
+        # Dedup: only process one user message per session per 30-second window
+        _dedup_key = f"blearn:{context._session.id}"
+        _dedup_window = 30.0
+        if context._behavioral_learner is not None and prompt:
+            import time as _time
+            now = _time.time()
+            last = getattr(context, "_last_blearn_ts", {}).get(context._session.id, 0)
+            if now - last > _dedup_window:
+                try:
+                    await context._behavioral_learner.learn_from_correction(
+                        prompt,
+                        {
+                            "session_id": context._session.id,
+                            "step_description": step.description if step else "",
+                            "tool_name": "",
+                        },
+                    )
+                except Exception as ble:
+                    logger.warning("Behavioral learner error: %s", ble)
+                if not hasattr(context, "_last_blearn_ts"):
+                    context._last_blearn_ts = {}
+                context._last_blearn_ts[context._session.id] = now
+        # ────────────────────────────────────────────────────────────────────────
+
         # ── Phase 5: Steering — poll for mid-execution user feedback ──
         effective_prompt = prompt
         if context._steering is not None:
@@ -152,6 +177,18 @@ class ExecutingState(FlowState):
         # Persist any facts extracted by the executor BEFORE checking termination
         for key, value in inner_facts.items():
             context._session = context._session.set_fact(key, value)
+
+        # ── Capability 2: Knowledge Graph — upsert discovered facts ──
+        if context._knowledge_graph is not None:
+            try:
+                await context._knowledge_graph.extract_from_step_result(
+                    step_description=step.description,
+                    result=step.result or "",
+                    session_id=context._session.id,
+                )
+            except Exception as kg_exc:
+                logger.warning("Knowledge graph extraction failed: %s", kg_exc)
+        # ────────────────────────────────────────────────────────────
 
         # Check if terminate was called
         if inner_should_terminate:

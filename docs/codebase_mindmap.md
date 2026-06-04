@@ -1,6 +1,6 @@
 # ARCHITECTURE MINDMAP
 
-> Last updated: 2026-07-01 — updated after Architecture Enhancement Plan (Phases 1–2) + execution reliability fixes
+> Last updated: 2025-07-17 — updated after OpenClaw enhancements (1-6), Harness integration (H1-H6), and audit bug fixes (B1-B10)
 
 ---
 
@@ -30,7 +30,8 @@
   - `run_mcp.py` — MCP server launcher (stdio + SSE transport via FastMCP).
   - `examples/` — Standalone usage examples (not imported by main code).
 - **Build/Config Files:**
-  - `.env` / `.env.example` — API keys, timeout overrides, daily budget
+  - `.env` / `.env.example` — API keys, timeout overrides, daily budget, `SANDBOX_MODE`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `SKILLHUB_INDEX_URL`
+  - `docker/weebot-tool-env.Dockerfile` — Custom Docker image for sandbox tool execution (Enhancement 5)
   - `pytest.ini` — Test runner config
   - `weebot/config/settings.py` — `WeebotSettings` (pydantic-settings, reads `.env`)
   - `weebot/config/constants.py` — Module-level constants (timeouts, model defaults, workspace root)
@@ -71,7 +72,7 @@
 ### Application — Ports `weebot/application/ports/`
 - **Responsibility:** Abstract interface contracts between application and infrastructure layers.
 - **Type:** Core logic
-- **Exports:** `LLMPort`, `StateRepositoryPort`, `EventBusPort`, `SandboxPort`, `BrowserPort`, `NotificationPort`, `ScoringPort`, `OptimizerPort`, `EventStorePort`, `SummaryRepoPort`, `ToolRepositoryPort`
+- **Exports:** `LLMPort`, `StateRepositoryPort`, `EventBusPort`, `SandboxPort`, `BrowserPort`, `NotificationPort`, `ScoringPort`, `OptimizerPort`, `EventStorePort`, `SummaryRepoPort`, `ToolRepositoryPort`, `SpeechPort`, `DesktopPort`, `SkillIndexPort`
 - **Internal Structure:**
   - `llm_port.py` — `LLMPort` ABC (`chat()` abstract method), `LLMResponse` value object
   - `state_repo_port.py` — `StateRepositoryPort` ABC (CRUD for `Session`)
@@ -84,6 +85,9 @@
   - `event_store_port.py` — `EventStorePort` ABC (immutable event log)
   - `summary_repo_port.py` — `SummaryRepoPort` ABC
   - `tool_repository_port.py` — `ToolRepositoryPort` ABC
+  - `speech_port.py` — `SpeechPort` ABC (`transcribe()`, `synthesize()`) — Enhancement 1 (OpenClaw)
+  - `desktop_port.py` — `DesktopPort` ABC (`start()`, `stop()`, `set_status()`, `show_overlay()`, `show_response()`) — Enhancement 4 (OpenClaw)
+  - `skill_index_port.py` — `SkillIndexPort` ABC (`fetch_index()`, `search()`, `download()`) — Enhancement 6 (OpenClaw)
 - **Dependencies:**
   - → Domain: `AgentEvent`, `Session`, `LLMResponse`
 
@@ -190,6 +194,7 @@
   - `skill_registry.py` — `SkillRegistry`: loads `.md` skill files from `weebot/skills/builtin/` and custom paths; provides `get_skill_prompt(name)`.
   - `builtin/loader.py` — Discovers built-in skill files.
   - `builtin/clone_website/`, `builtin/optimizer/` — Built-in skill implementations.
+  - `builtin/skill-author/` — Harness-inspired skill writing guide (H5); manifest.json + prompt.md covering why-first, progressive disclosure, pushy descriptions, script bundling.
 - **Dependencies:**
   - → Infrastructure: `SkillStore` (for persisted skills)
   - → Domain: `Skill`
@@ -217,10 +222,63 @@
 - **Internal Structure:**
   - `loader.py` — `HarnessLoader`: discovers and loads benchmark task definitions.
   - `scorer.py` — `HarnessScorer`: delegates to `ScoringPort` adapters.
-  - `runner.py` — `HarnessRunner`: drives full evaluation epoch (load → run → score → persist trajectory).
+  - `runner.py` — `BenchmarkRunner`: drives full evaluation epoch (load → run → score → persist trajectory).
+  - `comparison_runner.py` — `ComparisonRunner`: A/B with-vs-without skill evaluation; `ComparisonResult`, `ComparisonReport`; delta scoring; inspired by revfactory/harness Phase 6-3 — Enhancement H6
 - **Dependencies:**
   - → Ports: `ScoringPort`, `LLMPort`
   - → Infrastructure scoring: exact-match, execution, verifier scorers
+
+---
+
+### Application — Flows (New) `weebot/application/flows/harness_generation_flow.py`
+- **Responsibility:** Generates agent team harnesses from domain descriptions (Harness-inspired H3).
+- **Type:** Core logic
+- **Exports:** `HarnessGenerationFlow`
+- **Internal Structure:** 6-phase generation (domain analysis → pattern selection → agent design → skill design → rendering → file output); supports dry-run mode; selects from 6 team patterns; writes `.claude/agents/` + `.claude/skills/` + `CLAUDE.md` pointer.
+- **Dependencies:**
+  - → Domain: `TeamArchitecture`, `AgentDefinition`, `SkillBlueprint`, `TeamPattern`
+
+---
+
+### Domain — New Models `weebot/domain/models/team_architecture.py`
+- **Responsibility:** Team architecture domain models for harness generation (H3).
+- **Type:** Core logic
+- **Exports:** `TeamPattern` (enum: 6 patterns), `AgentDefinition`, `SkillBlueprint`, `TeamArchitecture`
+- **Internal Structure:** Dataclasses for agent definitions (name, role, persona, skills, agent_type, model), skill blueprints (name, description, content, references), and team architecture (domain, pattern, agents, skills, orchestrator, rationale).
+
+---
+
+### Domain — Updated Models `weebot/domain/models/skill.py`
+- **Changes (H1 Progressive Disclosure):** Added `references` field (dict), `_reference_paths` (PrivateAttr), `get_reference(key)` method with path traversal protection, `list_references()` method.
+
+---
+
+### Application — Skills Updated `weebot/application/skills/`
+- **Changes (H1):** `skill_registry.py` — added `_discover_references()` module-level function; `_parse_skill()` now populates `_reference_paths` after construction.
+- **Changes (Enhancement 2):** `format_detector.py` — fixed `_detect_file()` UnboundLocalError for non-.txt files.
+
+---
+
+### Application — Services (New) `weebot/application/services/skill_trigger_tester.py`
+- **Responsibility:** Validates skill description trigger behaviour (H4).
+- **Type:** Core logic
+- **Exports:** `SkillTriggerTester`, `TriggerTestReport`, `TriggerTestResult`
+- **Internal Structure:** Generates should-trigger and should-NOT-trigger queries; evaluates trigger correctness via keyword matching; produces pass rate reports. Supports LLM-based generation (future) and deterministic keyword template fallback.
+
+---
+
+### Infrastructure — Adapters (New) `weebot/infrastructure/adapters/`
+- **New — `windows_desktop.py`:** `WindowsDesktopAdapter` implements `DesktopPort`; uses pystray (tray icon), tkinter (overlay window), keyboard (global hotkey Win+Alt+W); thread-safe via `_icon_lock` + `_icon_ready` event. Enhancement 4 (OpenClaw).
+- **New — `skill_index_github.py`:** `GitHubSkillIndexAdapter` implements `SkillIndexPort`; fetches JSON index from configurable URL; client-side search; streaming download with `_MAX_DOWNLOAD_BYTES=50MB` ceiling; SHA-256 verification and tarball extraction. Enhancement 6 (OpenClaw).
+- **New — `speech/whisper_adapter.py`:** `WhisperSpeechAdapter` implements `SpeechPort`; Whisper STT + pyttsx3 TTS; lazy dependency loading. Enhancement 1 (OpenClaw).
+
+---
+
+### Infrastructure — Sandbox Updated `weebot/infrastructure/sandbox/`
+- **Changes (Enhancement 1):** `factory.py` — added `MODE_TO_TYPE` dict; `create_default(mode=...)` parameter with availability check.
+- **Changes (Enhancement 5):** `docker_linux.py` — added `CUSTOM_IMAGE = "weebot-tool-env:latest"`; async `_resolve_image()` with graceful fallback; `_build_docker_command()` now async.
+- **Changes (B8 fix):** `docker_linux.py` — `_resolve_image()` now uses `self._docker_path` instead of hardcoded `"docker"`.
+- **Changes (B9 fix):** `docker_linux.py` — path traversal check on `read_only_paths`/`read_write_paths` before Docker bind-mount.
 
 ---
 
@@ -388,6 +446,7 @@
   - `routers/behavior_router.py` — Behavior tracking endpoints.
   - `routers/chat_router.py` — Chat endpoint (non-planning flows).
   - `websocket.py` — `ConnectionManager`: broadcasts session events to all subscribed WebSocket clients.
+  - `routers/discord_webhook.py` — `POST /api/gateway/discord/interactions`; Ed25519 signature verification; PING/PONG; `DiscordAdapter` integration — Enhancement 3 (OpenClaw)
   - `schemas/` — Pydantic request/response schemas for API contracts.
 - **Dependencies:**
   - → Application: `Container`, `TaskRunner`, `StateRepositoryPort`
@@ -395,8 +454,19 @@
 
 ---
 
+### Interfaces — Gateways `weebot/interfaces/gateways/`
+- **New — `discord.py`:** `DiscordAdapter` (Enhancement 3); extends `GatewayAdapter`; Discord Interactions Endpoint; Ed25519 HMAC via pynacl; slash command parsing; PlanActFlow integration.
+
+---
+
+### Interfaces — Windows `weebot/interfaces/windows/`
+- **New package (Enhancement 4):** `__init__.py` entry point (`run_companion()`); system tray + global hotkey + tkinter overlay.
+
+---
+
 ### Interfaces — CLI (top-level) `cli/`
 - **Responsibility:** Primary Click CLI with all user-facing commands.
+- **New commands:** `companion` (system tray + hotkey), `skill list` / `skill install` / `skill update` (Enhancement 2+6), `skill test` (H4 trigger validation), `harness generate` (H3 team architecture generation).
 - **Type:** Interface
 - **Exports:** `cli` Click group
 - **Internal Structure:**
@@ -422,7 +492,7 @@
   - `agent_profile.py` — `AgentProfile`: persona descriptor model.
   - `agent_context.py` — `AgentContext`: mutable runtime context for legacy agent code.
   - `dependency_graph.py` — `DependencyGraph`: topological sort for task ordering.
-  - `safety.py` — Additional safety predicates (legacy, wraps `BashGuard`).
+  - `safety.py` — `SafetyChecker`; class-level `_llm_instance` singleton (B1 fix — `ChatOpenAI` created once); `is_critical_operation()`, `generate_plan_b()`.
   - `dashboard.py` — Live metrics dashboard (Rich TUI).
   - `workflow_tracer.py` — Records tool-call traces for observability.
   - `alerting.py` — Alert rule evaluation.
@@ -502,6 +572,7 @@
 - **Internal Structure:**
   - `registry.py`, `engine.py`, `jinja_renderer.py`, `parser.py`, `parameters.py`, `adaptive.py`, `hooks.py`, `versioning.py`, `agent_integration.py`, `feature_flags.py`, `privacy_audit.py`, `db_monitor.py`, `metrics_exporter.py`
   - `builtin/` — YAML template files: `research_analysis`, `competitive_analysis`, `data_processing`, `code_review`, `documentation`, `bug_analysis`, `meeting_summary`, `learning_path`.
+  - `builtin/team_patterns/` — 6 team architecture templates (H2): `pipeline.yaml`, `fan_out_fan_in.yaml`, `expert_pool.yaml`, `producer_reviewer.yaml`, `supervisor.yaml`, `hierarchical_delegation.yaml`. Each defines agents, workflow phases, data flow, and error policy.
 - **Dependencies:**
   - → External: `jinja2`
 

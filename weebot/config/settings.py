@@ -39,6 +39,11 @@ class WeebotSettings(BaseSettings):
     # Web API Auth
     weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
 
+    # Discord (optional)
+    discord_public_key: str | None = None      # env: DISCORD_PUBLIC_KEY
+    discord_bot_token: str | None = None       # env: DISCORD_BOT_TOKEN
+    discord_application_id: str | None = None  # env: DISCORD_APPLICATION_ID
+
     # Notifications (optional)
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
@@ -47,7 +52,13 @@ class WeebotSettings(BaseSettings):
     # Budget
     daily_ai_budget: float = 10.0
 
+    # SkillHub — remote skill registry index
+    skillhub_index_url: str = (
+        "https://raw.githubusercontent.com/weebot-community/skillhub/main/index.json"
+    )  # env: SKILLHUB_INDEX_URL — JSON index of community-contributed skills
+
     # Sandbox / code execution
+    sandbox_mode: str = "auto"              # env: SANDBOX_MODE — "auto" | "native" | "docker" | "wsl2"
     bash_timeout: int = 30                  # env: BASH_TIMEOUT
     python_timeout: int = 30               # env: PYTHON_TIMEOUT
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
@@ -69,6 +80,17 @@ class WeebotSettings(BaseSettings):
                 "Set BASH_TIMEOUT and PYTHON_TIMEOUT to a positive integer."
             )
         return v
+
+    @field_validator("sandbox_mode")
+    @classmethod
+    def validate_sandbox_mode(cls, v: str) -> str:
+        allowed = {"auto", "native", "docker", "wsl2"}
+        if v.lower() not in allowed:
+            raise ValueError(
+                f"sandbox_mode must be one of {allowed}, got '{v}'. "
+                "Set SANDBOX_MODE to 'auto', 'native', 'docker', or 'wsl2'."
+            )
+        return v.lower()
 
     @field_validator("sandbox_max_output_bytes")
     @classmethod

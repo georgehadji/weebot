@@ -1,0 +1,13 @@
+{
+    "name": "skill-author",
+    "version": "1.0.0",
+    "description": "Authoring guide for writing high-quality weebot skills with Progressive Disclosure, trigger testing, and A/B evaluation.",
+    "emoji": "📝",
+    "author": "Weebot Team (Harness-inspired)",
+    "tier": "public",
+    "requires_user_presence": false,
+    "requires_approval_per_use": false,
+    "anticipatory_simulation": false,
+    "requires": [],
+    "prompt_file": "prompt.md"
+}

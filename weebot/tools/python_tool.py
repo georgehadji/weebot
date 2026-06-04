@@ -9,6 +9,7 @@ from pydantic import ConfigDict, PrivateAttr
 from weebot.application.ports.sandbox_port import SandboxPort, SandboxResult
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
+from weebot.core.bash_guard import BashGuard
 from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -54,6 +55,7 @@ class PythonExecuteTool(BaseTool):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
+    _bash_guard: BashGuard = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
     _sandbox: SandboxPort = PrivateAttr(default=None)
     _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
@@ -65,6 +67,7 @@ class PythonExecuteTool(BaseTool):
         """
         self._sandbox = NativeWindowsSandbox()
         self._policy = ExecApprovalPolicy()
+        self._bash_guard = BashGuard()
 
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig for settings."""
@@ -88,6 +91,16 @@ class PythonExecuteTool(BaseTool):
             message describing why execution failed.
         """
         effective_timeout = timeout if timeout is not None else self._default_timeout
+
+        # --- Defense-in-depth: BashGuard catches shell injection ---
+        from weebot.core.bash_guard import RiskLevel as BashRiskLevel
+        risk, checks = self._bash_guard.evaluate(code)
+        if risk == BashRiskLevel.BLOCKED:
+            reasons = [c.description for c in checks if c.description]
+            return ToolResult(
+                output="",
+                error=f"Code blocked by BashGuard: {'; '.join(reasons)}",
+            )
 
         # --- Safety gate (ExecApprovalPolicy) ---
         approval = self._policy.evaluate(code)

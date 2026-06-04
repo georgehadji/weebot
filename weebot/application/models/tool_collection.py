@@ -136,7 +136,7 @@ class ToolCollection:
                         error=str(exc),
                         execution_time_ms=execution_time_ms,
                         retry_count=retry_count - 1,
-                        tool_name=name,
+                        tool_name=_name,
                     )
 
                 # Simple backoff before retry

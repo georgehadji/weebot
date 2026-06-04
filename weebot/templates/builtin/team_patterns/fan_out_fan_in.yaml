@@ -1,0 +1,65 @@
+name: "Fan-out/Fan-in Team"
+version: "1.0.0"
+description: |
+  Parallel independent tasks with results merged by a synthesis agent.
+  Best when multiple perspectives or parallel investigations are needed.
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain or topic for parallel investigation"
+    required: true
+  specialists:
+    type: list
+    description: "List of specialist agent names for parallel work"
+    required: true
+  synthesizer_agent:
+    type: string
+    description: "Agent name responsible for merging results"
+    required: true
+  output_path:
+    type: string
+    description: "Path for the consolidated output"
+    default: "./_workspace/consolidated_report.md"
+    required: false
+
+workflow:
+  distribute:
+    agent_role: "coordinator"
+    task: |
+      Distribute the following domain to each specialist:
+      {{ domain }}
+      
+      Specialists: {{ specialists | join(', ') }}
+      Each specialist writes to _workspace/fanout/{name}_findings.md
+    parameters:
+      fanout_dir: "_workspace/fanout/"
+  
+  parallel_investigation:
+    agent_role: "{{ item }}"
+    task: "Investigate {{ domain }} from your expertise angle. Write findings to _workspace/fanout/{{ item }}_findings.md"
+    parallel_for_each: "{{ specialists }}"
+    depends_on: [distribute]
+    parameters:
+      output: "_workspace/fanout/{{ item }}_findings.md"
+  
+  synthesize:
+    agent_role: "{{ synthesizer_agent }}"
+    task: |
+      Read all findings from _workspace/fanout/ and synthesize a unified report.
+      Identify: common themes, conflicting findings, gaps, and recommendations.
+      Write to {{ output_path }}.
+    depends_on: [parallel_investigation]
+    parameters:
+      input_dir: "_workspace/fanout/"
+      output: "{{ output_path }}"
+
+output:
+  format: "markdown"
+  sections:
+    - "executive_summary"
+    - "specialist_findings"
+    - "synthesis"
+    - "recommendations"
+    - "gaps"

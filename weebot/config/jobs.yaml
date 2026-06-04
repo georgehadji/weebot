@@ -1,0 +1,49 @@
+# Background Job Definitions — managed by SchedulingManager
+# Each job runs on a schedule, records its last successful run,
+# and supports catch-up on restart.
+
+jobs:
+  - job_id: knowledge_graph_consolidation
+    name: "Knowledge Graph Consolidation"
+    description: "Prune stale nodes, merge duplicate entities, recalculate confidence scores"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 1
+    callable_name: "kg_consolidation"
+    enabled: true
+
+  - job_id: opportunity_scan
+    name: "Opportunity Scan"
+    description: "Query KG for gaps and FTS5 for recurring patterns, rank opportunities"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 6
+    callable_name: "opportunity_scan"
+    enabled: true
+
+  - job_id: behavioral_rule_consolidation
+    name: "Behavioral Rule Consolidation"
+    description: "Recalculate rule confidence, prune low-confidence rules"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 1
+    callable_name: "behavioral_consolidation"
+    enabled: true
+
+  - job_id: self_integrity_check
+    name: "Self Integrity Check"
+    description: "Check git status, DB integrity, disk space"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 24
+    callable_name: "integrity_check"
+    enabled: true
+
+  - job_id: memory_cleanup
+    name: "Memory Cleanup"
+    description: "FTS5 event cleanup, old session archival (>90 days)"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 168  # weekly
+    callable_name: "memory_cleanup"
+    enabled: true

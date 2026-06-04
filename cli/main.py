@@ -17,6 +17,7 @@ monitor     Real-time monitoring
 import click
 import asyncio
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -456,6 +457,305 @@ def skill_convert_all(dry_run: bool) -> None:
             console.print("[yellow]No external skills found in skills/import/[/yellow]")
         else:
             console.print(f"\nFound: {found}, Converted: {converted}")
+
+    asyncio.run(_run())
+
+
+@skill.command("list")
+@click.option("--active-only", is_flag=True, help="Show only skills with all required env vars set")
+def skill_list(active_only: bool) -> None:
+    """List all discovered skills from builtin and user directories."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from rich.table import Table
+
+        registry = SkillRegistry()
+        registry.load_all()
+
+        skills = registry.get_active_skills() if active_only else registry.list_skills()
+        if not skills:
+            console.print("[dim]No skills found.[/dim]")
+            return
+
+        table = Table(title="Installed Skills")
+        table.add_column("Name", style="cyan")
+        table.add_column("Description")
+        table.add_column("Source", style="dim")
+
+        for sk in sorted(skills, key=lambda s: s.name):
+            table.add_row(sk.name, sk.description[:80], sk.source_path or "—")
+
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@skill.command("install")
+@click.argument("source", type=click.Path(exists=True))
+@click.option("--name", default=None, help="Override skill name (default: auto-detected)")
+def skill_install(source: str, name: str | None) -> None:
+    """Install a skill from a file or directory.
+
+    SOURCE can be a directory containing SKILL.md (Weebot format),
+    a Manus plugin.json, or an AgenticSeek .txt file.
+
+    The format is auto-detected.  The skill is installed into
+    .weebot/skills/<name>/ so it appears in the SkillRegistry.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        import yaml
+        from pathlib import Path
+        from weebot.application.skills.format_detector import FormatDetector
+        from weebot.application.skills.skill_converter import SkillConverter
+        from weebot.domain.models.skill_source import SourceFormat
+
+        source_path = Path(source).resolve()
+        detected = FormatDetector.detect(source_path)
+
+        # Extract name from YAML frontmatter when possible
+        skill_name = name
+        if name is None:
+            if detected.format in (SourceFormat.WEEBOT, SourceFormat.MANUS):
+                # Parse YAML frontmatter for the name field
+                skill_md = source_path if source_path.is_file() and source_path.name == "SKILL.md" else source_path / "SKILL.md"
+                if skill_md.exists():
+                    text = skill_md.read_text(encoding="utf-8")
+                    if text.startswith("---"):
+                        parts = text.split("---", 2)
+                        if len(parts) >= 3:
+                            try:
+                                fm = yaml.safe_load(parts[1])
+                                skill_name = (fm or {}).get("name") or detected.name
+                            except Exception:
+                                skill_name = detected.name
+                        else:
+                            skill_name = detected.name
+                    else:
+                        skill_name = detected.name
+                else:
+                    skill_name = detected.name or source_path.stem
+            else:
+                skill_name = detected.name or source_path.stem
+
+        # Target: .weebot/skills/<skill_name>/
+        target_dir = Path.cwd() / ".weebot" / "skills" / skill_name
+
+        if detected.format in (SourceFormat.WEEBOT, SourceFormat.MANUS):
+            # Direct SKILL.md copy
+            if source_path.is_dir():
+                skill_md = source_path / "SKILL.md"
+            else:
+                skill_md = source_path
+
+            if not skill_md.exists() or skill_md.name != "SKILL.md":
+                console.print(f"[red]✗[/red] Expected a SKILL.md file at {source}")
+                return
+
+            # Verify the file has YAML frontmatter (not arbitrary content)
+            first_bytes = skill_md.read_bytes()[:200]
+            if not first_bytes.startswith(b"---"):
+                console.print(
+                    f"[red]✗[/red] {skill_md} does not appear to be a valid "
+                    "Weebot/Manus skill file (missing YAML frontmatter)."
+                )
+                return
+
+            target_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(skill_md), str(target_dir / "SKILL.md"))
+            console.print(
+                f"[green]✓[/green] Installed '[cyan]{skill_name}[/cyan]' "
+                f"to {target_dir.relative_to(Path.cwd())}"
+            )
+            return
+
+        if detected.format in (SourceFormat.MYMANUS, SourceFormat.AGENTICSEEK):
+            # Convert and write to target
+            converter = SkillConverter(skills_dir=target_dir.parent)
+            report = converter.convert(source_path)
+            if report.success:
+                console.print(
+                    f"[green]✓[/green] Installed '[cyan]{skill_name}[/cyan]' "
+                    f"to {target_dir.relative_to(Path.cwd())}"
+                )
+            else:
+                console.print(f"[red]✗[/red] Conversion failed: {report.errors[0]}")
+            return
+
+        console.print(
+            f"[red]✗[/red] Cannot determine format of {source}. "
+            "Expected a Weebot SKILL.md, Manus plugin.json, "
+            "or AgenticSeek .txt file."
+        )
+
+    asyncio.run(_run())
+
+
+@skill.command("update")
+@click.argument("skill_name", required=False)
+@click.option("--check", is_flag=True, help="Check for updates without installing")
+@click.option("--source", type=click.Choice(["skillhub", "agentskills"]), default="skillhub",
+              help="Index source (default: weebot SkillHub, agentskills: agentskills.io)")
+def skill_update(skill_name: str | None, check: bool) -> None:
+    """Update installed skills from the SkillHub remote index.
+
+    Without arguments: check all installed skills for updates.
+    With SKILL_NAME: update (or check) that specific skill.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        import yaml
+        from pathlib import Path
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from weebot.infrastructure.adapters.skill_index_github import GitHubSkillIndexAdapter
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+
+        # Load local skills
+        registry = SkillRegistry()
+        registry.load_all()
+        local_skills = {s.name: s for s in registry.list_skills()}
+
+        if not local_skills:
+            console.print("[dim]No local skills found to check for updates.[/dim]")
+            return
+
+        # Fetch remote index
+        index = GitHubSkillIndexAdapter()
+        remote_skills = await index.fetch_index()
+        remote_map = {s.name: s for s in remote_skills}
+
+        if not remote_map:
+            console.print("[yellow]Could not fetch SkillHub index. Check your internet connection.[/yellow]")
+            return
+
+        # Filter to requested skill if specified
+        names_to_check = [skill_name] if skill_name else list(local_skills.keys())
+
+        updates: list[tuple[str, str, str]] = []  # (name, local_version, remote_version)
+        for name in names_to_check:
+            local = local_skills.get(name)
+            if local is None:
+                console.print(f"[yellow]Skill '{name}' is not installed locally.[/yellow]")
+                continue
+            remote = remote_map.get(name)
+            if remote is None:
+                console.print(f"[dim]'{name}' not found in SkillHub.[/dim]")
+                continue
+            local_ver = str(local.current_version)
+            if remote.version != local_ver:
+                updates.append((name, local_ver, remote.version))
+
+        if not updates:
+            console.print("[green]All checked skills are up to date.[/green]")
+            return
+
+        if check:
+            table = Table(title="Available SkillHub Updates")
+            table.add_column("Skill", style="cyan")
+            table.add_column("Installed")
+            table.add_column("Available")
+            for n, lv, rv in updates:
+                table.add_row(n, lv, rv)
+            console.print(table)
+            return
+
+        # Apply updates
+        for skill_name, _, remote_version in updates:
+            remote = remote_map[skill_name]
+            target = Path.cwd() / ".weebot" / "skills" / skill_name
+            target.mkdir(parents=True, exist_ok=True)
+            console.print(f"Updating [cyan]{skill_name}[/cyan] (v{remote_version})...")
+            ok = await index.download(remote, str(target))
+            if ok:
+                console.print(f"  [green]✓[/green] Updated to {remote_version}")
+            else:
+                console.print(f"  [red]✗[/red] Download or verification failed for {skill_name}")
+
+        await index.close()
+
+    asyncio.run(_run())
+
+
+@skill.command("test")
+@click.argument("skill_name", required=False)
+@click.option("--should", "num_should", default=5, help="Number of should-trigger queries to generate")
+@click.option("--should-not", "num_should_not", default=5, help="Number of should-NOT-trigger queries to generate")
+@click.option("--verbose", is_flag=True, help="Show individual query results")
+def skill_test(
+    skill_name: str | None,
+    num_should: int,
+    num_should_not: int,
+    verbose: bool,
+) -> None:
+    """Test skill trigger behaviour — validates the description triggers correctly.
+
+    Generates should-trigger and should-NOT-trigger test queries, then
+    evaluates whether the skill's description would cause correct trigger
+    decisions.  Inspired by revfactory/harness trigger verification.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from weebot.application.services.skill_trigger_tester import SkillTriggerTester
+        from rich.table import Table
+        from rich.console import Console
+
+        console = Console()
+
+        registry = SkillRegistry()
+        registry.load_all()
+
+        if skill_name:
+            skill = registry.get_skill(skill_name)
+            if skill is None:
+                console.print(f"[red]Skill '{skill_name}' not found.[/red]")
+                return
+            skills = [skill]
+        else:
+            skills = registry.list_skills()
+            if not skills:
+                console.print("[dim]No skills found to test.[/dim]")
+                return
+
+        tester = SkillTriggerTester()
+
+        for skill in skills:
+            console.print(f"\n[bold]Testing:[/bold] [cyan]{skill.name}[/cyan]")
+            console.print(f"  Description: {skill.description[:100]}...")
+
+            report = await tester.test_skill(
+                skill,
+                num_should=num_should,
+                num_should_not=num_should_not,
+            )
+
+            if verbose:
+                table = Table(title=f"Trigger Test — {skill.name}")
+                table.add_column("Query", style="cyan")
+                table.add_column("Expected", style="bold")
+                table.add_column("Actual", style="bold")
+                table.add_column("Pass?", style="bold")
+                for r in report.results:
+                    expected = "TRIGGER" if r.expected_trigger else "NO TRIGGER"
+                    actual = "TRIGGER" if r.actual_triggered else "NO TRIGGER"
+                    status = "[green]✓[/green]" if r.passed else "[red]✗[/red]"
+                    table.add_row(r.query[:60], expected, actual, status)
+                console.print(table)
+
+            console.print(
+                f"  [bold]Pass rate:[/bold] {report.pass_count}/{report.total} "
+                f"({report.pass_rate:.0%})  "
+                f"Should-trigger: {report.should_trigger_pass_rate:.0%}  "
+                f"Should-NOT: {report.should_not_trigger_pass_rate:.0%}"
+            )
 
     asyncio.run(_run())
 
@@ -1020,6 +1320,63 @@ def flow_export(session_id: str, output: str | None, compress: int | None) -> No
     async def _run() -> None:
         state_repo = _get_state_repo()
         exporter = TrajectoryExporter(repo=state_repo)
+        count = await exporter.export_session(session_id, str(dest), compress=compress)
+        console.print(f"[green]✓[/green] Exported {count} events to {dest}")
+
+    asyncio.run(_run())
+
+
+@flow.command("search")
+@click.argument("query")
+@click.option("--limit", default=10, type=int, help="Max results")
+def cmd_flow_search(query: str, limit: int) -> None:
+    """Full-text search across all session events (M2).
+
+    QUERY is a natural-language search phrase.  Results include
+    session IDs, event summaries, and relevance scores.
+    """
+    import asyncio
+    from rich.table import Table
+
+    async def _run() -> None:
+        state_repo = _get_state_repo()
+        results = await state_repo.search_sessions(query, limit=limit)
+
+        if not results:
+            console.print("[dim]No results found.[/dim]")
+            return
+
+        table = Table(title=f"Session Search: {query}")
+        table.add_column("Session ID", style="cyan")
+        table.add_column("Type", style="yellow")
+        table.add_column("Summary")
+        table.add_column("Score", style="green")
+
+        for r in results:
+            score = r.get("score", 0)
+            score_str = f"{score:.3f}" if score else "—"
+            table.add_row(
+                r.get("session_id", "?")[:20],
+                r.get("event_type", "?")[:15],
+                r.get("summary", "")[:60],
+                score_str,
+            )
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+def flow_export(session_id: str, output: str | None, compress: int | None) -> None:
+    """Export session events to JSONL for analysis or fine-tuning."""
+    import asyncio
+
+    from weebot.application.services.trajectory_exporter import TrajectoryExporter
+
+    dest = output or f"{session_id}.jsonl"
+
+    async def _run() -> None:
+        state_repo = _get_state_repo()
+        exporter = TrajectoryExporter(repo=state_repo)
         try:
             count = await exporter.export_session(
                 session_id, dest, compress_to_budget=compress
@@ -1161,6 +1518,271 @@ def benchmark_report(results_file: str) -> None:
             f"score={r['score']:.3f}  "
             f"answer={r.get('answer', '')!r}"
         )
+
+
+@cli.group()
+def harness() -> None:
+    """Generate and manage agent team harnesses for domain-specific workflows."""
+    pass
+
+
+@harness.command("generate")
+@click.argument("domain")
+@click.option("--output-dir", default=".", help="Output directory (default: current)")
+@click.option("--dry-run", is_flag=True, help="Show what would be generated without writing")
+def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
+    """Generate an agent team harness for a domain description.
+
+    DOMAIN is a natural language description of the work, e.g.
+    "deep research with web scraping and academic sources".
+
+    Creates agent definitions in .claude/agents/ and skills in
+    .claude/skills/ tailored to the domain.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.application.flows.harness_generation_flow import (
+            HarnessGenerationFlow,
+        )
+        from rich.console import Console
+
+        console = Console()
+
+        if dry_run:
+            flow = HarnessGenerationFlow(output_dir=output_dir)
+            arch = await flow.generate(domain)
+
+            console.print(f"[bold]Domain:[/bold] {arch.domain}")
+            console.print(f"[bold]Pattern:[/bold] {arch.pattern.value}")
+            console.print(f"\n[bold]Agents ({len(arch.agents)}):[/bold]")
+            for a in arch.agents:
+                console.print(f"  [cyan]{a.name}[/cyan] — {a.role}")
+            console.print(f"\n[bold]Skills ({len(arch.skills)}):[/bold]")
+            for s in arch.skills:
+                console.print(f"  [green]{s.name}[/green] — {s.description[:60]}")
+            console.print(f"\n[dim]Dry run — no files written.[/dim]")
+            return
+
+        flow = HarnessGenerationFlow(output_dir=output_dir)
+        arch = await flow.generate_and_write(domain)
+
+        console.print(f"[green]✓[/green] Generated [bold]{arch.pattern.value}[/bold] harness for '[cyan]{arch.domain}[/cyan]'")
+        console.print(f"  Agents: {len(arch.agents)}")
+        console.print(f"  Skills: {len(arch.skills)}")
+        console.print(f"  Output: {Path(output_dir).resolve() / '.claude'}")
+
+    asyncio.run(_run())
+
+
+@cli.group()
+def profile() -> None:
+    """Manage named profiles with isolated configuration."""
+    pass
+
+
+@profile.command("create")
+@click.argument("name")
+@click.option("--from-profile", default=None, help="Copy settings from an existing profile")
+def profile_create(name: str, from_profile: str | None) -> None:
+    """Create a new profile with isolated config."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    try:
+        p = mgr.create(name, from_profile=from_profile)
+        console.print(f"[green]✓[/green] Created profile '[cyan]{p.name}[/cyan]' at {p.path}")
+    except ValueError as exc:
+        console.print(f"[red]✗[/red] {exc}")
+
+
+@profile.command("list")
+def profile_list() -> None:
+    """List all available profiles."""
+    from weebot.application.services.profile_manager import ProfileManager
+    from rich.table import Table
+
+    mgr = ProfileManager()
+    profiles = mgr.list_profiles()
+
+    if not profiles:
+        console.print("[dim]No profiles found. Run 'weebot profile create <name>' to create one.[/dim]")
+        return
+
+    active = ProfileManager.active_profile_name()
+    table = Table(title="Profiles")
+    table.add_column("Name", style="cyan")
+    table.add_column("Path", style="dim")
+    table.add_column("Active", style="green")
+
+    for p in profiles:
+        is_active = "✓" if p.name == active else ""
+        table.add_row(p.name, str(p.path), is_active)
+    console.print(table)
+
+
+@profile.command("switch")
+@click.argument("name")
+def profile_switch(name: str) -> None:
+    """Switch to an existing profile."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    profile = mgr.switch(name)
+    if profile is None:
+        console.print(f"[red]✗[/red] Profile '{name}' not found.")
+        return
+    console.print(f"[green]✓[/green] Switched to profile '[cyan]{profile.name}[/cyan]'")
+
+
+@profile.command("delete")
+@click.argument("name")
+@click.confirmation_option(prompt=f"Delete profile '{{name}}'?")
+def profile_delete(name: str) -> None:
+    """Delete a profile and its directory."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    try:
+        if mgr.delete(name):
+            console.print(f"[green]✓[/green] Deleted profile '[cyan]{name}[/cyan]'")
+        else:
+            console.print(f"[yellow]Profile '{name}' not found.[/yellow]")
+    except ValueError as exc:
+        console.print(f"[red]✗[/red] {exc}")
+
+
+@cli.group()
+def cron() -> None:
+    """Schedule recurring tasks with natural language."""
+    pass
+
+
+@cron.command("schedule")
+@click.argument("schedule_text", nargs=-1, required=True)
+@click.option("--task", required=True, help="Task description to execute")
+@click.option("--name", default=None, help="Job name (default: auto-generated)")
+def cron_schedule(schedule_text: tuple[str, ...], task: str, name: str | None) -> None:
+    """Schedule a recurring task using natural language.
+
+    SCHEDULE_TEXT is a natural-language schedule like
+    "every Friday at 2pm" or "every 3 hours".
+
+    Example:
+        weebot cron schedule "every day at 9am" --task "Run daily report"
+        weebot cron schedule "every Monday" --task "Weekly security audit"
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.nl_cron import parse_schedule
+        from weebot.scheduling.scheduler import SchedulingManager
+        import uuid
+
+        text = " ".join(schedule_text)
+        parsed = parse_schedule(text)
+
+        if parsed is None:
+            console.print(
+                f"[red]✗[/red] Could not parse schedule: '{text}'. "
+                "Try: 'every day at 9am', 'every Monday at 2pm', "
+                "'every 3 hours'."
+            )
+            return
+
+        job_id = f"cron-{uuid.uuid4().hex[:8]}"
+        job_name = name or f"Scheduled: {task[:40]}"
+
+        # Store the schedule in jobs.yaml or create an in-memory job
+        mgr = SchedulingManager()
+        try:
+            from apscheduler.triggers.cron import CronTrigger
+            trigger = CronTrigger.from_crontab(parsed["cron_expression"])
+            await mgr.create_job(
+                job_id=job_id,
+                name=job_name,
+                description=task,
+                trigger_type="cron",
+                trigger_config={"cron_expression": parsed["cron_expression"]},
+                callable_name="_nl_cron_executor",
+            )
+            console.print(
+                f"[green]✓[/green] Scheduled: [cyan]{job_name}[/cyan]\n"
+                f"  Schedule: {parsed['description']} ({parsed['cron_expression']})\n"
+                f"  Task: {task}"
+            )
+        except Exception as exc:
+            console.print(f"[red]✗[/red] Failed to schedule: {exc}")
+
+    asyncio.run(_run())
+
+
+@cron.command("list")
+def cron_list() -> None:
+    """List all scheduled cron jobs."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.scheduler import SchedulingManager
+        from rich.table import Table
+
+        mgr = SchedulingManager()
+        jobs = await mgr.list_jobs()
+
+        if not jobs:
+            console.print("[dim]No scheduled jobs.[/dim]")
+            return
+
+        table = Table(title="Scheduled Jobs")
+        table.add_column("ID", style="cyan")
+        table.add_column("Name")
+        table.add_column("Schedule")
+        table.add_column("Enabled", style="green")
+
+        for j in jobs:
+            schedule = j.trigger_config.get("cron_expression", j.trigger_type) if hasattr(j, "trigger_config") else j.trigger_type
+            enabled = "✓" if getattr(j, "enabled", True) else "✗"
+            table.add_row(
+                getattr(j, "job_id", "?")[:12],
+                getattr(j, "name", "?")[:40],
+                str(schedule)[:20],
+                enabled,
+            )
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@cron.command("remove")
+@click.argument("job_id")
+def cron_remove(job_id: str) -> None:
+    """Remove a scheduled job by ID."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.scheduler import SchedulingManager
+
+        mgr = SchedulingManager()
+        await mgr.remove_job(job_id)
+        console.print(f"[green]✓[/green] Removed job '[cyan]{job_id}[/cyan]'")
+
+    asyncio.run(_run())
+
+
+@cli.command()
+def companion() -> None:
+    """Start the Windows desktop companion (system tray + global hotkey).
+
+    Requires optional dependencies: pystray, keyboard, and tkinter.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.interfaces.windows import run_companion
+
+        await run_companion()
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":

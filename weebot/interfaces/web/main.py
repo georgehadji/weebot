@@ -18,6 +18,9 @@ from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.web.routers import sessions_router, models_router, health_router, dashboard_router, behavior_router
 from weebot.interfaces.web.routers.chat_router import router as chat_router
+from weebot.interfaces.web.routers.sse import router as sse_router
+from weebot.interfaces.web.routers.webhook import router as webhook_router
+from weebot.interfaces.web.routers.discord_webhook import router as discord_router
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -213,6 +216,9 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router, prefix="/api")
     app.include_router(behavior_router, prefix="/api")
     app.include_router(chat_router)
+    app.include_router(sse_router)
+    app.include_router(webhook_router)
+    app.include_router(discord_router)
     
     # Root endpoint - WebSocket test UI
     @app.get("/", response_class=HTMLResponse)

@@ -1,0 +1,102 @@
+name: "Hierarchical Delegation Team"
+version: "1.0.0"
+description: |
+  Top-down recursive delegation — orchestrator delegates to team leads,
+  who further delegate to specialists.  Best for problems with natural
+  hierarchical decomposition (max 2 levels deep).
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain or project description"
+    required: true
+  orchestrator_agent:
+    type: string
+    description: "Top-level orchestrator agent"
+    required: true
+  team_leads:
+    type: dict
+    description: "Mapping of team lead names to their area of responsibility"
+    required: true
+  specialists:
+    type: dict
+    description: "Mapping of specialist names to their team lead and role"
+    required: true
+  output_path:
+    type: string
+    description: "Path for the final consolidated output"
+    default: "./_workspace/hierarchical_output.md"
+    required: false
+
+workflow:
+  decompose:
+    agent_role: "{{ orchestrator_agent }}"
+    task: |
+      Decompose the following domain into sub-domains:
+      {{ domain }}
+      
+      Team leads and their areas:
+      {% for lead, area in team_leads.items() %}
+      - {{ lead }}: {{ area }}
+      {% endfor %}
+      
+      Write decomposition plan to _workspace/decomposition.json
+    parameters:
+      output: "_workspace/decomposition.json"
+  
+  lead_plan:
+    agent_role: "{{ lead_name }}"
+    task: |
+      Read _workspace/decomposition.json.
+      For your area ({{ lead_area }}), create a sub-plan.
+      Assign tasks to your specialists.
+      Write to _workspace/lead_{{ lead_name }}_plan.json
+    parallel_for_each: "{{ team_leads.keys() | list }}"
+    depends_on: [decompose]
+    parameters:
+      lead_name: "{{ item }}"
+      lead_area: "{{ team_leads[item] }}"
+  
+  specialist_execute:
+    agent_role: "{{ specialist_name }}"
+    task: |
+      Read your assigned task from _workspace/lead_{{ team_lead }}_plan.json.
+      Execute and write results to _workspace/specialist_{{ specialist_name }}_output.md
+    parallel_for_each: "{{ specialists.keys() | list }}"
+    depends_on: [lead_plan]
+    parameters:
+      specialist_name: "{{ item }}"
+      team_lead: "{{ specialists[item] }}"
+  
+  lead_consolidate:
+    agent_role: "{{ lead_name }}"
+    task: |
+      Read outputs from your specialists.
+      Consolidate into _workspace/lead_{{ lead_name }}_consolidated.md.
+      Include: key findings, quality issues, cross-cutting concerns.
+    parallel_for_each: "{{ team_leads.keys() | list }}"
+    depends_on: [specialist_execute]
+    parameters:
+      lead_name: "{{ item }}"
+  
+  orchestrate_final:
+    agent_role: "{{ orchestrator_agent }}"
+    task: |
+      Read all lead consolidations from _workspace/lead_*_consolidated.md.
+      Integrate into final output at {{ output_path }}.
+      Resolve cross-area conflicts, identify gaps, produce unified report.
+    depends_on: [lead_consolidate]
+    parameters:
+      output: "{{ output_path }}"
+
+output:
+  format: "markdown"
+  sections:
+    - "decomposition"
+    - "lead_findings"
+    - "specialist_outputs"
+    - "consolidated_report"
+    - "cross_cutting_concerns"
+  max_depth: 2
+  error_policy: "isolate_failures"

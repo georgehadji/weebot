@@ -1,0 +1,13 @@
+{
+    "name": "design-taste-frontend",
+    "version": "1.0.0",
+    "description": "Anti-slop frontend skill for landing pages, portfolios, and redesigns.",
+    "emoji": "🎨",
+    "author": "Weebot Team",
+    "tier": "controlled",
+    "requires_user_presence": true,
+    "requires_approval_per_use": false,
+    "anticipatory_simulation": false,
+    "requires": ["file_editor", "browser_inspector", "design_system"],
+    "prompt_file": "prompt.md"
+}

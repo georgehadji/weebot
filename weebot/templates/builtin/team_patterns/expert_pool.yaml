@@ -1,0 +1,62 @@
+name: "Expert Pool Team"
+version: "1.0.0"
+description: |
+  Context-dependent selective invocation — a router dispatches tasks
+  to the appropriate expert based on input type.  Best when different
+  inputs require different specialist handling.
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain description"
+    required: true
+  router_agent:
+    type: string
+    description: "Agent name that classifies and routes inputs"
+    required: true
+  experts:
+    type: dict
+    description: "Mapping of expert names to their speciality descriptions"
+    required: true
+  output_path:
+    type: string
+    description: "Path for the final output"
+    default: "./_workspace/expert_output.md"
+    required: false
+
+workflow:
+  classify:
+    agent_role: "{{ router_agent }}"
+    task: |
+      Classify the following domain into one expert category:
+      {{ domain }}
+      
+      Available experts: {{ experts | dict_to_kv(', ') }}
+      
+      Output format:
+      selected_expert: <name>
+      rationale: <why this expert>
+    parameters:
+      output: "_workspace/classification.json"
+  
+  execute:
+    agent_role: "{{ selected_expert }}"
+    task: "Handle the following request using your expertise: {{ domain }}"
+    depends_on: [classify]
+    parameters:
+      output: "_workspace/expert_output_raw.md"
+  
+  review:
+    agent_role: "{{ router_agent }}"
+    task: "Review _workspace/expert_output_raw.md for completeness and quality. Write final to {{ output_path }}"
+    depends_on: [execute]
+    parameters:
+      output: "{{ output_path }}"
+
+output:
+  format: "markdown"
+  sections:
+    - "classification"
+    - "expert_analysis"
+    - "quality_review"

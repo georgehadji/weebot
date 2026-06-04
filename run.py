@@ -109,6 +109,7 @@ def run_interactive(
     from weebot.interfaces.cli.agent_runner import AgentRunner
     from weebot.interfaces.cli.event_logger import CLIEventSubscriber
     from weebot.domain.models.event import WaitForUserEvent
+    from weebot.domain.models.session import SessionStatus
     from weebot.application.services.model_selection import ModelSelectionService
 
     # Load skill if specified
@@ -145,29 +146,15 @@ def run_interactive(
         print("Enter 'quit' to exit.\n")
 
         session_id = input("Session ID (default: interactive_session): ").strip() or "interactive_session"
-
-        # Spawn background thread that reads stdin for ">> steer message"
-        import threading as _threading
-        _steering_stop = _threading.Event()
-
-        def _steering_reader():
-            while not _steering_stop.is_set():
-                try:
-                    line = sys.stdin.readline()
-                    if not line:
-                        break
-                    line = line.strip()
-                    if line.startswith(">>") and len(line) > 2:
-                        msg = line[2:].strip()
-                        if msg:
-                            steering.send_threadsafe(session_id, msg)
-                except (EOFError, OSError):
-                    break
-
-        _reader_thread = _threading.Thread(
-            target=_steering_reader, daemon=True, name="weebot-steering"
-        )
-        _reader_thread.start()
+        
+        # Check if session exists and show status
+        session = await state_repo.load_session(session_id)
+        if session:
+            print(f"  Joining session: {session_id} (Status: {session.status.value})")
+            if session.get_last_plan():
+                plan = session.get_last_plan()
+                done = len([s for s in plan.steps if s.is_done()])
+                print(f"  Current Plan: {plan.title} ({done}/{len(plan.steps)} steps complete)")
 
         runner = AgentRunner(
             llm=llm, state_repo=state_repo, model=model,
@@ -176,18 +163,52 @@ def run_interactive(
         )
 
         while True:
-            prompt = input("\nTask description: ").strip()
-            if prompt.lower() in ("quit", "exit", "q"):
-                break
-            if not prompt:
+            # More conversational prompt
+            prompt_text = "Task / Answer: " if session and session.status == SessionStatus.WAITING else "Task description: "
+            raw = input(f"\n{prompt_text}").strip()
+
+            # ">>" prefix sends a steering message mid-execution (no new task)
+            if raw.startswith(">>") and len(raw) > 2:
+                steer_msg = raw[2:].strip()
+                if steer_msg and steering:
+                    steering.send_threadsafe(session_id, steer_msg)
+                    print(f"  (steering sent: {steer_msg})")
                 continue
 
-            async for event in runner.run_prompt(prompt, session_id=session_id):
-                await subscriber.on_event(event)
-                if isinstance(event, WaitForUserEvent):
-                    answer = input(f"\n[weebot asks] {event.question}\nYour answer: ")
-                    async for resume_event in runner.resume_session(session_id, answer):
-                        await subscriber.on_event(resume_event)
+            if raw.lower() in ("quit", "exit", "q"):
+                break
+            if not raw:
+                # If session is waiting, empty input might mean "continue"
+                if session and session.status == SessionStatus.WAITING:
+                    raw = "continue"
+                else:
+                    continue
+            
+            # Recursive prompt handler for HITL
+            current_prompt = raw
+            while True:
+                is_hitl = False
+                hitl_question = ""
+                
+                # Execute (either run_prompt for new/starting or resume for waiting)
+                # Note: run_prompt handles both if session exists.
+                async for event in runner.run_prompt(current_prompt, session_id=session_id):
+                    await subscriber.on_event(event)
+                    if isinstance(event, WaitForUserEvent):
+                        is_hitl = True
+                        hitl_question = event.question
+                        # We break the async for to get the next answer from user
+                        break
+                
+                # Update our local session state to check status
+                session = await state_repo.load_session(session_id)
+                
+                if is_hitl:
+                    current_prompt = input(f"\n[weebot asks] {hitl_question}\nYour answer: ").strip()
+                    if not current_prompt:
+                        current_prompt = "yes" # default to affirmative
+                else:
+                    # No more HITL, go back to main task description prompt
                     break
 
         # ── Post-session SkillOpt (opt-in via --skillopt or WEEBOT_SKILLOPT=1) ──
@@ -199,11 +220,6 @@ def run_interactive(
         asyncio.run(_main())
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
-    finally:
-        # Stop steering reader thread
-        if '_steering_stop' in dir():
-            import threading
-            _steering_stop.set()
 
 
 async def _run_skillopt_pass() -> None:

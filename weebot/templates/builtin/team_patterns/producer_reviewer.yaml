@@ -1,0 +1,77 @@
+name: "Producer-Reviewer Team"
+version: "1.0.0"
+description: |
+  Generation followed by quality review with iterative refinement.
+  Best when output quality is critical and objective review criteria exist.
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain or task description"
+    required: true
+  producer_agent:
+    type: string
+    description: "Agent that creates the initial output"
+    required: true
+  reviewer_agent:
+    type: string
+    description: "Agent that reviews and provides feedback"
+    required: true
+  max_iterations:
+    type: int
+    description: "Maximum review cycles (prevents infinite loops)"
+    default: 3
+    required: false
+  output_path:
+    type: string
+    description: "Path for the final reviewed output"
+    default: "./_workspace/final_reviewed.md"
+    required: false
+
+workflow:
+  produce:
+    agent_role: "{{ producer_agent }}"
+    task: |
+      Create the initial output for: {{ domain }}
+      Write to _workspace/draft_v1.md
+    parameters:
+      output: "_workspace/draft_v1.md"
+  
+  review:
+    agent_role: "{{ reviewer_agent }}"
+    task: |
+      Review _workspace/{{ iteration_output }} against quality criteria.
+      Provide specific, actionable feedback.
+      Decision: ACCEPT or REVISE
+      If ACCEPT: copy to {{ output_path }}
+      If REVISE: write feedback to _workspace/review_feedback.md
+    depends_on: [produce]
+    parameters:
+      iteration: 1
+      max_iterations: "{{ max_iterations }}"
+      output: "{{ output_path }}"
+  
+  revise:
+    agent_role: "{{ producer_agent }}"
+    task: |
+      Read _workspace/review_feedback.md and revise.
+      Apply all feedback to improve _workspace/draft_v{{ iteration + 1 }}.md
+    depends_on: [review]
+    condition: "{% if iteration < max_iterations %}true{% endif %}"
+    parameters:
+      output: "_workspace/draft_v{{ iteration + 1 }}.md"
+  
+  finalize:
+    agent_role: "{{ reviewer_agent }}"
+    task: "Confirm final output at {{ output_path }} meets quality standards and produce summary"
+    depends_on: [revise]
+    condition: "{% if iteration >= max_iterations %}true{% endif %}"
+
+output:
+  format: "markdown"
+  sections:
+    - "final_output"
+    - "review_history"
+    - "iteration_count"
+  error_policy: "accept_best_on_max_iterations"

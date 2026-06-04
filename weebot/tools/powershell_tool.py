@@ -268,7 +268,7 @@ class PowerShellBaseTool(_WeebotBaseTool):
                 timeout=effective_timeout,
             )
             if s_result.timed_out:
-                return _ToolResult(output="", error="Command timed out after 30s")
+                return _ToolResult(output="", error=f"Command timed out after {effective_timeout:.0f}s")
             if not s_result.success and s_result.stderr:
                 return _ToolResult(output=s_result.stdout, error=s_result.stderr)
             return _ToolResult(output=s_result.combined_output)

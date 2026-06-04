@@ -25,10 +25,13 @@ from weebot.application.services.plan_history import PlanHistory
 from weebot.application.services.continuation_detector import (
     ContinuationDetector,
 )
+from weebot.application.services.plan_critic import PlanCriticService
+from weebot.application.services.truth_binder import TruthBinder
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
     ErrorEvent,
+    MessageEvent,
     PlanEvent,
     PlanStatus,
     StepEvent,
@@ -67,6 +70,10 @@ class PlanActFlow(BaseFlow):
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
         max_steps: Optional[int] = None,
+        truth_binder: Optional[TruthBinder] = None,
+        plan_critic: Optional[PlanCriticService] = None,
+        knowledge_graph: Optional[Any] = None,
+        behavioral_learner: Optional[Any] = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -76,6 +83,11 @@ class PlanActFlow(BaseFlow):
         self._mediator = mediator
         self._state_repo = state_repo
         self._steering = steering  # May be None if not wired
+        self._truth_binder = truth_binder  # Optional truth-binding response validator
+        self._plan_critic = plan_critic  # Optional plan critic (Capability 3)
+        self._plan_critique = None  # Set by CritiquingState
+        self._knowledge_graph = knowledge_graph  # Optional KnowledgeGraphService (Capability 2)
+        self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
         self.status = AgentStatus.IDLE
         self._state: FlowState = None # Will be set in run()
         self._plan: Optional[Plan] = None
@@ -112,6 +124,33 @@ class PlanActFlow(BaseFlow):
 
     async def _emit(self, event: AgentEvent) -> None:
         async with self._emit_lock:
+            # ── Capability 1: Truth-binding response layer ──────────────
+            # Before publishing, validate assistant responses against
+            # deterministic guards (no LLM in the policy path).
+            if (
+                self._truth_binder is not None
+                and isinstance(event, MessageEvent)
+                and event.role == "assistant"
+            ):
+                result = await self._truth_binder.bind(
+                    event.message,
+                    {
+                        "session_events": self._session.events,
+                        "step": self._plan.current_step if self._plan else None,
+                        "facts": self._session.get_facts(),
+                    },
+                )
+                if not result.passed or result.has_rewrites():
+                    logger.info(
+                        "Truth binding %s for response (%d violations)",
+                        "blocked" if result.has_blockers() else "rewrote",
+                        len(result.violations),
+                    )
+                    for v in result.violations:
+                        logger.debug("  Violation [%s]: %s", v.check, v.message)
+                    event = event.model_copy(update={"message": result.bound_text})
+            # ────────────────────────────────────────────────────────────
+
             self._session = self._session.add_event(event)
             if self._event_bus:
                 await self._event_bus.publish(event)
@@ -166,13 +205,25 @@ class PlanActFlow(BaseFlow):
 
         max_iterations = self._max_iterations
         iteration_count = 0
+        
+        # Track if the prompt has been "consumed" by a state that needs it.
+        # This prevents an answer to step 1 from being injected as a prompt to step 2.
+        prompt_consumed = False
 
         while iteration_count <= max_iterations:
             iteration_count += 1
 
-            # Execute current state
-            async for event in self._state.execute(self, effective_prompt):
+            # Execute current state.
+            # Only pass the prompt if it's the first iteration or it's a re-planning loop
+            # where the prompt is the original task.
+            state_prompt = effective_prompt if not prompt_consumed else ""
+            
+            async for event in self._state.execute(self, state_prompt):
                 yield event
+                # Once we start receiving events, consider the prompt consumed
+                # for the current state transition logic.
+                if state_prompt:
+                    prompt_consumed = True
 
             # If we reached COMPLETED state logic or it paused for HITL, we break
             if self._session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING):

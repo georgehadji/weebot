@@ -101,6 +101,8 @@ def _classify_tool_error(error_output: str) -> Optional[str]:
     if not error_output:
         return None
     lo = error_output.lower()
+    if "requires user confirmation" in lo:
+        return "confirmation_required"
     if "denied by policy" in lo or "command blocked" in lo:
         return "policy_denied"
     if "security error" in lo or ("layer" in lo and "triggered" in lo):
@@ -127,6 +129,8 @@ class ExecutorAgent:
         auto_compress: bool = True,
         context_window: int = 128_000,
         skill_retriever=None,  # SkillRetrieverPort (Tier 1.2)
+        personality=None,      # PersonalityManager (Phase 1.1)
+        behavioral_learner=None,  # BehavioralLearner (Capability 5)
     ):
         self._llm = llm
         self._tools = tools
@@ -135,6 +139,8 @@ class ExecutorAgent:
         self._max_steps = max_steps
         self._skill_prompt = skill_prompt
         self._skill_retriever = skill_retriever
+        self._personality = personality
+        self._behavioral_learner = behavioral_learner
         self._trajectory_monitor = None  # lazy-created in execute_step
         self._max_context_turns = max_context_turns
         self._system_prompt: Optional[str] = None
@@ -404,6 +410,19 @@ class ExecutorAgent:
                         )
             except Exception as exc:
                 logger.warning("Skill retrieval failed: %s", exc)
+
+        # ── Capability 5: Behavioral Rules — inject learned rules ──
+        if self._behavioral_learner is not None:
+            try:
+                rules_prompt = self._behavioral_learner.get_rules_for_prompt()
+                if rules_prompt:
+                    system_prompt += f"\n\n{rules_prompt}"
+            except Exception as exc:
+                logger.warning("Behavioral rules injection failed: %s", exc)
+
+        # ── Phase 1.1: Core Personality — inject WEEBOT_CORE.md ──
+        if self._personality is not None and self._personality.loaded:
+            system_prompt += self._personality.get_system_prompt()
 
         self._system_prompt = system_prompt
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
@@ -711,7 +730,17 @@ class ExecutorAgent:
                 )
         else:
             args = arguments or {}
+        # Determine effective timeout for the asyncio safety net.
+        # Tools like bash/powershell have their own internal timeouts, but
+        # this provides a hard ceiling for the awaitable itself.
         timeout = 60.0
+        if "timeout" in args:
+            try:
+                # Allow up to 300s (max) if explicitly requested
+                timeout = min(float(args["timeout"]) + 5.0, 305.0)
+            except (ValueError, TypeError):
+                pass
+        
         try:
             result = await asyncio.wait_for(self._tools.execute(_name=name, **args), timeout=timeout)
         except asyncio.TimeoutError:

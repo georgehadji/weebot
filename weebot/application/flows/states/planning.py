@@ -87,4 +87,9 @@ class PlanningState(FlowState):
                 facts=context._session.get_facts(),
                 episodic_memory=context._episodic_memory,
             )
-            context.set_state(ExecutingState())
+            # Transition to CritiquingState if a critic is available
+            if context._plan_critic is not None:
+                from weebot.application.flows.states.critiquing import CritiquingState
+                context.set_state(CritiquingState(critic=context._plan_critic))
+            else:
+                context.set_state(ExecutingState())

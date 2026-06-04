@@ -1,6 +1,5 @@
 """Counterfactual Simulation and Safety mechanisms."""
 from typing import Dict, Any, Optional
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from weebot.core.approval_policy import ExecApprovalPolicy
 
@@ -10,8 +9,14 @@ class SafetyChecker:
 
     CRITICAL_KEYWORDS = ["delete", "remove", "format", "kill", "stop-process", "rm", "del"]
 
+    # Class-level singleton: all SafetyChecker instances share one ChatOpenAI
+    _llm_instance = None
+
     def __init__(self):
-        self.llm = ChatOpenAI(temperature=0)
+        if SafetyChecker._llm_instance is None:
+            from langchain_openai import ChatOpenAI
+            SafetyChecker._llm_instance = ChatOpenAI(temperature=0)
+        self.llm = SafetyChecker._llm_instance
         self.approval_policy = ExecApprovalPolicy()
     
     def is_critical_operation(self, action: str, tool: str) -> bool:

@@ -48,6 +48,35 @@ class Step(BaseModel):
         return self.model_copy(update=updates)
 
 
+class PlanCritique(BaseModel):
+    """LLM-generated critique of a plan before execution.
+
+    Evaluates step-by-step viability, tool choice, and scope before
+    the plan reaches the executor.
+    """
+    plan_id: str = Field(default="", description="The plan being critiqued")
+    step_scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="step_id -> 0.0-1.0 confidence score",
+    )
+    flaws: list[str] = Field(
+        default_factory=list,
+        description="Specific concerns about the plan",
+    )
+    suggestions: list[str] = Field(
+        default_factory=list,
+        description="Concrete fixes for identified flaws",
+    )
+    overall_confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Overall confidence that the plan will succeed",
+    )
+    verdict: str = Field(
+        default="approved",
+        description="'approved' | 'revise' | 'reject'",
+    )
+
+
 class Plan(BaseModel):
     """A structured plan with steps."""
     title: str = Field(default="", description="Plan title")

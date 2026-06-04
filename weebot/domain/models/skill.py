@@ -7,9 +7,10 @@ export.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from .skill_edit import SLOW_UPDATE_END, SLOW_UPDATE_START, SkillEdit
 
@@ -21,6 +22,41 @@ class SkillMetadata(BaseModel):
     primary_env: Optional[str] = Field(default=None)
     homepage: Optional[str] = Field(default=None)
     source: Optional[str] = Field(default=None)
+
+    # --- Hermes-inspired (M3) Platform-specific skills ---
+    platforms: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Restrict skill to specific OS platforms (macos, linux, windows). "
+            "Empty list means all platforms."
+        ),
+    )
+
+    # --- Hermes-inspired (M4) Skill config schema ---
+    config: list[dict] = Field(
+        default_factory=list,
+        description=(
+            "Declared config keys for this skill. Each entry: "
+            "{key, description, default, prompt}. "
+            "Missing values are requested on skill load via CLI."
+        ),
+    )
+
+    # --- Hermes-inspired (M11) Conditional activation ---
+    fallback_for_toolsets: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Only activate when these toolsets are unavailable. "
+            "Enables free/local alternatives when premium is missing."
+        ),
+    )
+    requires_toolsets: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Only activate when these toolsets are available. "
+            "Hide skill when required tools are missing."
+        ),
+    )
 
 
 class SkillVersion(BaseModel):
@@ -89,6 +125,18 @@ class Skill(BaseModel):
     metadata: SkillMetadata = Field(default_factory=SkillMetadata)
     source_path: Optional[str] = Field(default=None)
 
+    # --- Progressive Disclosure (H1) ---
+    references: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Lazily-loaded reference files keyed by relative path "
+            "(e.g. 'references/aws.md'). Populated on first access."
+        ),
+    )
+    _reference_paths: list[str] = PrivateAttr(default_factory=list)
+
+    model_config = {"arbitrary_types_allowed": True}
+
     # --- SkillOpt optimisation state ---
     versions: list[SkillVersion] = Field(default_factory=list)
     current_version: int = Field(default=0, description="Index into versions[]")
@@ -149,6 +197,112 @@ class Skill(BaseModel):
         if not self.metadata.env:
             return True
         return all(self.check_env().values())
+
+    # --- M3: Platform compatibility ---
+
+    def is_compatible_with_platform(self, platform: str) -> bool:
+        """Check if this skill is compatible with *platform* (macos, linux, windows).
+
+        If the skill declares no platform restrictions, it is compatible
+        with all platforms.  If it declares a non-empty list, the current
+        platform must be in it.
+        """
+        if not self.metadata.platforms:
+            return True
+        return platform in self.metadata.platforms
+
+    @staticmethod
+    def detect_platform() -> str:
+        """Detect the current OS platform: macos, linux, or windows."""
+        import sys
+        if sys.platform == "darwin":
+            return "macos"
+        if sys.platform == "win32":
+            return "windows"
+        return "linux"
+
+    # --- M4: Config management ---
+
+    def get_missing_config(self) -> list[dict]:
+        """Return config entries that have no value set.
+
+        Only config keys without a ``default`` value are considered required.
+        Keys that already have a value set in the active config are skipped.
+        """
+        import sys as _sys
+        # Check if config is stored in a module-level dict (set by CLI/DI)
+        active_config = getattr(_sys.modules.get("weebot.config.settings"), "_skill_config", {})
+        if active_config is None:
+            active_config = {}
+
+        missing = []
+        for entry in self.metadata.config:
+            key = entry.get("key", "")
+            if key and key not in active_config and not entry.get("default"):
+                missing.append(entry)
+        return missing
+
+    # --- M11: Conditional activation ---
+
+    def requires_toolset(self, available_toolsets: set[str]) -> bool:
+        """Return True if all required toolsets are available."""
+        if not self.metadata.requires_toolsets:
+            return True
+        return all(t in available_toolsets for t in self.metadata.requires_toolsets)
+
+    def is_fallback_for(self, available_toolsets: set[str]) -> bool:
+        """Return True if this skill should activate as a fallback.
+
+        A skill is a fallback candidate when at least one of its
+        ``fallback_for_toolsets`` entries is missing from *available_toolsets*.
+        """
+        if not self.metadata.fallback_for_toolsets:
+            return False
+        return any(t not in available_toolsets for t in self.metadata.fallback_for_toolsets)
+
+    # --- Progressive Disclosure methods (H1) ---
+
+    def get_reference(self, key: str) -> Optional[str]:
+        """Load and return a reference file on demand.
+
+        Only loads the file on first access — subsequent calls return the
+        cached content.  Returns ``None`` if the file does not exist or
+        if the path attempts to traverse outside the skill directory.
+
+        Args:
+            key: Relative path under the skill directory, e.g.
+                ``"references/aws.md"``.
+
+        Returns:
+            File content as a string, or ``None``.
+        """
+        if key in self.references:
+            return self.references[key]
+        if not self.source_path:
+            return None
+        skill_dir = Path(self.source_path).parent.resolve()
+        ref_path = (skill_dir / key).resolve()
+        # Safety: block traversal outside the skill directory
+        try:
+            ref_path.relative_to(skill_dir)
+        except ValueError:
+            return None
+        if ref_path.exists() and ref_path.is_file():
+            try:
+                content = ref_path.read_text(encoding="utf-8")
+                self.references[key] = content
+                return content
+            except Exception:
+                return None
+        return None
+
+    def list_references(self) -> list[str]:
+        """Return available reference paths for this skill.
+
+        Uses the index discovered at load time; does not scan the
+        filesystem on every call.
+        """
+        return list(self._reference_paths)
 
     # --- optimization methods ---
 

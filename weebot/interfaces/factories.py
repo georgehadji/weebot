@@ -1,4 +1,9 @@
-"""Factories for flows and tool collections."""
+"""Factories for flows and tool collections.
+
+Supports TaskRoute-based flow selection (Enhancement 6 — Neural Task Router).
+When a TaskRoute is provided, flow_type is derived from the route rather
+than being passed explicitly.
+"""
 from __future__ import annotations
 
 from typing import Optional
@@ -8,10 +13,45 @@ from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.session import Session
+from weebot.domain.models.task_route import TaskRoute
 from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
 from weebot.tools.base import BaseTool, ToolCollection
 from weebot.tools.tool_registry import RoleBasedToolRegistry
+
+
+async def route_and_create_flow(
+    query: str,
+    session: Session,
+    llm: LLMPort,
+    tools: ToolCollection,
+    router: TaskRouterPort,
+    event_bus: Optional[EventBusPort] = None,
+    model: Optional[str] = None,
+    skill_prompt: Optional[str] = None,
+    mediator = None,
+    state_repo: Optional[StateRepositoryPort] = None,
+    steering = None,
+) -> tuple[BaseFlow, TaskRoute]:
+    """Route *query* through *router*, then create the appropriate flow.
+
+    Returns (flow, route) so callers can inspect the route decision.
+    """
+    task_route = await router.route(query)
+    flow = create_flow(
+        flow_type=task_route.flow_type,
+        session=session,
+        llm=llm,
+        tools=tools,
+        event_bus=event_bus,
+        model=model,
+        skill_prompt=skill_prompt,
+        mediator=mediator,
+        state_repo=state_repo,
+        steering=steering,
+    )
+    return flow, task_route
 
 
 def create_flow(
@@ -25,8 +65,17 @@ def create_flow(
     mediator = None,
     state_repo: Optional[StateRepositoryPort] = None,
     steering = None,
+    task_route: Optional[TaskRoute] = None,
 ) -> BaseFlow:
-    """Factory for creating agent flows."""
+    """Factory for creating agent flows.
+
+    When *task_route* is provided, it overrides *flow_type*.
+    This allows the task router to determine the execution path
+    while maintaining backward compatibility with direct callers.
+    """
+    if task_route is not None:
+        flow_type = task_route.flow_type
+
     if flow_type == "plan_act":
         return PlanActFlow(
             llm=llm,

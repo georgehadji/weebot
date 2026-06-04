@@ -179,6 +179,16 @@ class StrReplaceEditorTool(BaseTool):
         if path.exists():
             return ToolResult(output="", error=f"File already exists: {path}. Use str_replace to modify.")
         
+        # Check if any parent is an existing file (not a directory)
+        for parent in reversed(path.parents):
+            if parent == self._workspace:
+                break
+            if parent.exists() and not parent.is_dir():
+                return ToolResult(
+                    output="", 
+                    error=f"Cannot create file: Parent component {parent} exists but is a file, not a directory."
+                )
+
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8")

@@ -1,0 +1,13 @@
+{
+    "name": "reasoner",
+    "version": "1.0.0",
+    "description": "Reasoner — production-grade reasoning orchestrator with 24 multi-LLM reasoning methods / 46 presets (debate, scientific, jury, research, socratic, pre-mortem, bayesian, dialectical, analogical, delphi, CoVE, SoT, ToT, PoT, self-discover, subagent, writing, coding, brainstorming, iterative-critique, cross-language, image-gen, nvidia, and more). Cross-lab diversity across 90+ models. Use for complex analysis, strategy, risk, decisions, or any problem needing structured multi-perspective reasoning.",
+    "emoji": "🧠",
+    "author": "Weebot Team",
+    "tier": "public",
+    "requires_user_presence": false,
+    "requires_approval_per_use": true,
+    "anticipatory_simulation": false,
+    "requires": ["bash"],
+    "prompt_file": "prompt.md"
+}

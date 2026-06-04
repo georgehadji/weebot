@@ -240,7 +240,13 @@ class NativeWindowsSandbox(SandboxPort):
             SandboxResult with execution details.
         """
         if shell == "powershell":
-            command = ["powershell", "-Command", script]
+            # REFINEMENT: PowerShell's mkdir (New-Item wrapper) doesn't support '-p'.
+            # It is recursive by default if using -Force or just multiple levels.
+            # We strip '-p ' or ' -p' to prevent "ERROR: A subdirectory or file -p already exists."
+            import re
+            script = re.sub(r'\bmkdir\s+-p\s+', 'mkdir ', script)
+            script = re.sub(r'\bmkdir\s+--parents\s+', 'mkdir ', script)
+            command = ["powershell", "-NoProfile", "-Command", script]
         elif shell == "cmd":
             command = ["cmd", "/c", script]
         elif shell == "bash":

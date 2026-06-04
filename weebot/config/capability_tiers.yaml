@@ -1,0 +1,79 @@
+# Capability Tiers — permission levels for skills and tools
+#
+# Four tiers:
+#   PUBLIC:      Safe, no restrictions — always loaded
+#   CONTROLLED:  Requires user presence (interactive mode)
+#   RESTRICTED:  Requires explicit user approval per usage
+#   PRIVILEGED:  Requires operator override token
+#
+# Each entry maps a skill/tool name to its tier and permission flags.
+# Skills not listed here default to PUBLIC (backward compatible).
+
+skills:
+  web_research:
+    tier: public
+    requires_user_presence: false
+    requires_approval_per_use: false
+    anticipatory_simulation: false
+
+  competitive_analysis:
+    tier: controlled
+    requires_user_presence: true
+    requires_approval_per_use: false
+    anticipatory_simulation: false
+
+  design-taste-frontend:
+    tier: controlled
+    requires_user_presence: true
+    requires_approval_per_use: false
+    anticipatory_simulation: false
+
+tools:
+  bash:
+    tier: restricted
+    requires_approval_per_use: true
+  python_execute:
+    tier: controlled
+    requires_user_presence: true
+  file_editor:
+    tier: controlled
+    requires_user_presence: true
+  computer_use:
+    tier: privileged
+    requires_operator_override: true
+  powershell:
+    tier: restricted
+    requires_approval_per_use: true
+  schedule:
+    tier: controlled
+    requires_user_presence: true
+  dispatch_parallel_tasks:
+    tier: restricted
+    requires_approval_per_use: true
+  workflow_orchestrator:
+    tier: restricted
+    requires_approval_per_use: true
+  terminate:
+    tier: privileged
+    requires_operator_override: true
+  persistent_memory:
+    tier: controlled
+    requires_user_presence: true
+  advanced_browser:
+    tier: controlled
+    requires_user_presence: false
+  screen_capture:
+    tier: restricted
+    requires_approval_per_use: true
+  swarm:
+    tier: controlled
+    requires_user_presence: true
+  debate:
+    tier: controlled
+    requires_user_presence: true
+  mixture_of_agents:
+    tier: controlled
+    requires_user_presence: false
+  audit_session:
+    tier: restricted
+    requires_approval_per_use: true

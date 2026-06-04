@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Optional
 
 from weebot.application.ports.sandbox_port import (
@@ -41,6 +41,7 @@ class DockerLinuxSandbox(SandboxPort):
     
     _TRUNCATION_SUFFIX = b"...[truncated]"
     DEFAULT_IMAGE = "python:3.11-slim"
+    CUSTOM_IMAGE = "weebot-tool-env:latest"
     
     def __init__(
         self,
@@ -59,6 +60,30 @@ class DockerLinuxSandbox(SandboxPort):
         self._image = image or self.DEFAULT_IMAGE
         self._docker_path = docker_path or shutil.which("docker") or "docker"
     
+    async def _resolve_image(self) -> str:
+        """Return the custom image if available, else fall back to DEFAULT_IMAGE.
+
+        When an explicit *image* was passed to the constructor, it is used
+        as-is.  When using the default, the builder-preferred
+        ``weebot-tool-env:latest`` is tried first with a graceful fallback
+        to ``python:3.11-slim``.
+        """
+        if self._image != self.DEFAULT_IMAGE:
+            return self._image
+        # Quick docker inspect to check for the custom image
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._docker_path, "image", "inspect", self.CUSTOM_IMAGE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+            if proc.returncode == 0:
+                return self.CUSTOM_IMAGE
+        except Exception:
+            pass
+        return self.DEFAULT_IMAGE
+
     @property
     def sandbox_type(self) -> SandboxType:
         """Return the type of this sandbox."""
@@ -94,13 +119,17 @@ class DockerLinuxSandbox(SandboxPort):
         
         return capabilities
     
-    def _build_docker_command(
+    async def _build_docker_command(
         self,
         command: list[str],
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
     ) -> list[str]:
-        """Build the docker run command with all options."""
+        """Build the docker run command with all options.
+
+        Resolves the effective image (custom → fallback) before building.
+        """
+        image = await self._resolve_image()
         docker_cmd = [
             self._docker_path,
             "run",
@@ -121,14 +150,20 @@ class DockerLinuxSandbox(SandboxPort):
             for key, value in env.items():
                 docker_cmd.extend(["-e", f"{key}={value}"])
         
-        # Mount paths
+        # Mount paths (sanitized against traversal)
         for ro_path in self._config.read_only_paths:
+            if ".." in PurePath(str(ro_path)).parts:
+                logger.warning("Blocked path traversal in ro_path: %s", ro_path)
+                continue
             docker_cmd.extend([
                 "-v",
                 f"{ro_path}:{ro_path}:ro",
             ])
         
         for rw_path in self._config.read_write_paths:
+            if ".." in PurePath(str(rw_path)).parts:
+                logger.warning("Blocked path traversal in rw_path: %s", rw_path)
+                continue
             docker_cmd.extend([
                 "-v",
                 f"{rw_path}:{rw_path}",
@@ -139,7 +174,7 @@ class DockerLinuxSandbox(SandboxPort):
             docker_cmd.extend(["-w", str(cwd)])
         
         # Image and command
-        docker_cmd.append(self._image)
+        docker_cmd.append(image)
         docker_cmd.extend(command)
         
         return docker_cmd
@@ -187,8 +222,8 @@ class DockerLinuxSandbox(SandboxPort):
         if env:
             merged_env.update(env)
         
-        # Build docker command
-        docker_command = self._build_docker_command(command, cwd, merged_env)
+        # Build docker command (image resolved lazily)
+        docker_command = await self._build_docker_command(command, cwd, merged_env)
         
         import time
         t_start = time.monotonic()
@@ -298,11 +333,13 @@ class DockerLinuxSandbox(SandboxPort):
         if not await self.is_available():
             return False, "Docker is not available"
         
+        image = await self._resolve_image()
+        
         try:
             proc = await asyncio.create_subprocess_exec(
                 self._docker_path,
                 "pull",
-                self._image,
+                image,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

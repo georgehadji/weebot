@@ -15,6 +15,13 @@ from weebot.application.ports.sandbox_port import (
     SandboxResult,
     SandboxType,
 )
+
+# Mode string → SandboxType mapping for the WEEBOT_SANDBOX_MODE toggle
+MODE_TO_TYPE: dict[str, SandboxType] = {
+    "native": SandboxType.NATIVE_WINDOWS,
+    "docker": SandboxType.DOCKER_LINUX,
+    "wsl2": SandboxType.WSL2,
+}
 from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.infrastructure.sandbox.wsl2 import WSL2Sandbox
 
@@ -129,22 +136,54 @@ class SandboxFactory:
         self,
         config: Optional[SandboxConfig] = None,
         required_capabilities: Optional[set[SandboxCapability]] = None,
+        mode: str = "auto",
     ) -> SandboxPort:
         """Create the best available sandbox.
         
         Selects the highest-priority sandbox that is available on this
         system and supports the required capabilities.
         
+        When *mode* is not ``"auto"``, attempts to create the specific
+        sandbox type directly (``native``, ``docker``, ``wsl2``) and
+        raises ``RuntimeError`` if that type is not available.
+        
         Args:
             config: Optional configuration for the sandbox.
             required_capabilities: Required capabilities for the sandbox.
+            mode: Sandbox selection mode — ``"auto"`` (default, detect
+                best available), or a specific type from
+                ``{"native", "docker", "wsl2"}``.
         
         Returns:
             Configured sandbox instance.
         
         Raises:
-            RuntimeError: If no suitable sandbox is available.
+            RuntimeError: If no suitable sandbox is available, or if
+                the requested *mode* is not available on this system.
+            ValueError: If *mode* is not a recognized value.
         """
+        if mode != "auto":
+            sandbox_type = MODE_TO_TYPE.get(mode.lower())
+            if sandbox_type is None:
+                raise ValueError(
+                    f"Unknown sandbox mode: '{mode}'. "
+                    f"Use one of: auto, native, docker, wsl2."
+                )
+            if sandbox_type not in self._sandbox_classes:
+                raise RuntimeError(
+                    f"Sandbox mode '{mode}' ({sandbox_type.name}) is not "
+                    f"available on this system (dependency not installed)."
+                )
+            # Quick availability check
+            instance = self._sandbox_classes[sandbox_type]()
+            if not await instance.is_available():
+                raise RuntimeError(
+                    f"Sandbox mode '{mode}' ({sandbox_type.name}) is not "
+                    f"available on this system (runtime check failed)."
+                )
+            logger.info("Selected sandbox via mode toggle: %s (%s)", sandbox_type.name, mode)
+            return self.create(sandbox_type, config)
+        
         available = await self.detect_available(required_capabilities)
         
         if not available:
@@ -156,7 +195,7 @@ class SandboxFactory:
                 raise RuntimeError("No sandbox available on this system")
         
         selected = available[0]
-        logger.info(f"Auto-selected sandbox: {selected.name}")
+        logger.info("Auto-selected sandbox: %s", selected.name)
         
         return self.create(selected, config)
     

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator, Callable, Optional
 
 from weebot.application.flows.base_flow import BaseFlow
@@ -18,6 +19,7 @@ from weebot.application.flows.states.base import FlowState
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.application.services.lr_scheduler import LearningRateScheduler
+from weebot.application.services.self_improver import SelfImprover
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -58,6 +60,8 @@ class SkillOptFlow(BaseFlow):
         output_path: str = "best_skill.md",
         evolution_tracker: Optional["EvolutionTracker"] = None,
         use_planning: bool = False,
+        self_improver: Optional[SelfImprover] = None,
+        self_improve_contracts: bool = False,
     ):
         self._skill_name = skill_name
         self._target_flow_factory = target_flow_factory
@@ -75,6 +79,8 @@ class SkillOptFlow(BaseFlow):
         self._output_path = output_path
         self._evolution_tracker = evolution_tracker
         self._use_planning = use_planning
+        self._self_improver = self_improver
+        self._self_improve_contracts = self_improve_contracts
 
         self._scheduler = LearningRateScheduler(
             initial=8, floor=2, schedule="cosine"
@@ -217,6 +223,14 @@ class SkillOptFlow(BaseFlow):
                 except Exception as exc:
                     logger.warning("EvolutionTracker.record_epoch failed: %s — continuing", exc)
 
+            # ── Capability 6: Self-Improvement — propose contract/rule edits ──
+            if self._self_improver is not None and self._self_improve_contracts:
+                try:
+                    await self._run_self_improvement(skill, epoch, epoch_accepted, epoch_rejected)
+                except Exception as sic_exc:
+                    logger.warning("Self-improvement step failed: %s", sic_exc)
+            # ─────────────────────────────────────────────────────────────────
+
             previous_skill = skill
             yield epoch_event
 
@@ -322,3 +336,82 @@ class SkillOptFlow(BaseFlow):
                 comparisons.append((prev_traj[0], curr[0]))
 
         return comparisons
+
+    async def _run_self_improvement(
+        self,
+        skill: Skill,
+        epoch: int,
+        epoch_accepted: int,
+        epoch_rejected: int,
+    ) -> None:
+        """Propose and apply patches to contract/rule files based on epoch results.
+
+        Called after each epoch boundary if self-improver is configured.
+        Targets:
+          - Contract YAML files (weebot/config/contracts/)
+          - Rule files (weebot/config/prompts/rules/)
+
+        Args:
+            skill: The current Skill after epoch edits.
+            epoch: Current epoch number.
+            epoch_accepted: Number of accepted edits this epoch.
+            epoch_rejected: Number of rejected edits this epoch.
+        """
+        if self._self_improver is None:
+            return
+
+        # Only propose patches when there's meaningful feedback
+        if epoch_accepted == 0 and epoch_rejected == 0:
+            return
+
+        # Determine which files to propose patches for
+        _contract_base = Path(__file__).resolve().parent.parent.parent / "config" / "contracts"
+        _rules_base = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "rules"
+
+        # Check contract files
+        for contract_file in sorted(_contract_base.glob("*.yaml")):
+            rel_path = contract_file.relative_to(
+                Path(__file__).resolve().parent.parent.parent
+            ).as_posix()
+            current = contract_file.read_text(encoding="utf-8")
+            context = {
+                "target_file": rel_path,
+                "target_type": "contract",
+                "current_content": current,
+                "new_content": current,  # No change unless optimizer proposes one
+                "validation_tasks": self._validation_tasks,
+            }
+            patch = await self._self_improver.propose_patch(context)
+            if patch is not None:
+                score = await self._self_improver.validate_patch(patch)
+                if score >= 0.5:
+                    applied = await self._self_improver.apply_patch(patch)
+                    if applied:
+                        logger.info(
+                            "Self-improvement: applied patch to %s (score: %.2f)",
+                            rel_path, score,
+                        )
+
+        # Check rule files
+        for rule_file in sorted(_rules_base.glob("*.md")):
+            rel_path = rule_file.relative_to(
+                Path(__file__).resolve().parent.parent.parent
+            ).as_posix()
+            current = rule_file.read_text(encoding="utf-8")
+            context = {
+                "target_file": rel_path,
+                "target_type": "rule",
+                "current_content": current,
+                "new_content": current,
+                "validation_tasks": self._validation_tasks,
+            }
+            patch = await self._self_improver.propose_patch(context)
+            if patch is not None:
+                score = await self._self_improver.validate_patch(patch)
+                if score >= 0.5:
+                    applied = await self._self_improver.apply_patch(patch)
+                    if applied:
+                        logger.info(
+                            "Self-improvement: applied patch to %s (score: %.2f)",
+                            rel_path, score,
+                        )

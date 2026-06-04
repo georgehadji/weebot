@@ -241,9 +241,33 @@ class Container:
     def _create_sandbox() -> SandboxPort:
         """Create the default sandbox implementation for the current platform.
 
-        NativeWindowsSandbox on Windows; falls back to a simple executor
-        on other platforms.
+        Respects the ``sandbox_mode`` setting (env var ``SANDBOX_MODE``):
+          - ``auto`` (default): NativeWindowsSandbox on Windows,
+            DockerLinuxSandbox on other platforms.
+          - ``native``: force NativeWindowsSandbox.
+          - ``docker``: force DockerLinuxSandbox.
+          - ``wsl2``: force WSL2Sandbox.
+
+        Raises ``RuntimeError`` if the requested mode is not available.
         """
+        from weebot.config.settings import WeebotSettings
+        settings = WeebotSettings()
+
+        if settings.sandbox_mode != "auto":
+            from weebot.infrastructure.sandbox.factory import SandboxFactory, MODE_TO_TYPE
+            from weebot.application.ports.sandbox_port import SandboxConfig
+
+            sandbox_type = MODE_TO_TYPE.get(settings.sandbox_mode.lower())
+            if sandbox_type is None:
+                raise ValueError(
+                    f"Unknown sandbox_mode '{settings.sandbox_mode}'. "
+                    f"Set SANDBOX_MODE to: auto, native, docker, wsl2."
+                )
+            factory = SandboxFactory()
+            return factory.create(sandbox_type)
+
+        # Legacy auto-detection — direct instantiation (async check
+        # is skipped here; runtime will fail fast if unavailable).
         import sys as _sys
         if _sys.platform == "win32":
             from weebot.infrastructure.sandbox.native_windows import (
@@ -351,9 +375,9 @@ class Container:
         db_path: str = "./weebot_sessions.db",
         default_model: Optional[str] = None,
     ) -> None:
-        """Register web-cloning tools (BrowserInspectorTool + DispatchAgentsTool).
+        """Register multi-agent tools (BrowserInspector + Dispatch + WorkflowOrchestrator).
 
-        Call after configure_defaults() or instead of it.  Both tools are also
+        Call after configure_defaults() or instead of it.  These tools are also
         included in the 'admin' role via the tool registry so they are available
         without calling this method explicitly when using RoleBasedToolRegistry.
         """
@@ -361,6 +385,7 @@ class Container:
 
         self.register("browser_inspector_tool", self._create_browser_inspector)
         self.register("dispatch_agents_tool", self._create_dispatch_agents)
+        self.register("workflow_orchestrator_tool", self._create_workflow_orchestrator)
 
     def _create_browser_inspector(self):
         from weebot.tools.browser_inspector import BrowserInspectorTool
@@ -374,6 +399,15 @@ class Container:
             return self._build_plan_act_flow_for_session(session)
 
         return DispatchAgentsTool(flow_factory=_flow_factory, state_repo=state_repo)
+
+    def _create_workflow_orchestrator(self):
+        from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
+        state_repo = self._maybe_get(StateRepositoryPort)
+
+        def _flow_factory(session):
+            return self._build_plan_act_flow_for_session(session)
+
+        return WorkflowOrchestratorTool(flow_factory=_flow_factory, state_repo=state_repo)
 
     def _build_plan_act_flow_for_session(self, session):
         """Build a PlanActFlow for a sub-agent session (used by DispatchAgentsTool)."""
@@ -391,6 +425,144 @@ class Container:
             session=session,
             max_steps=SUBAGENT_MAX_STEPS,
         )
+
+    # ═══════════════════════════════════════════════════════════════════
+    # AgentWasp Capability Integration bindings
+    # ═══════════════════════════════════════════════════════════════════
+
+    def configure_agentwasp_capabilities(
+        self,
+        *,
+        db_path: str = "./weebot_sessions.db",
+    ) -> None:
+        """Register AgentWasp capability services.
+
+        Call after configure_defaults(). Registers:
+        - Knowledge Graph (Capability 2)
+        - Background Jobs (Capability 8)
+        - Opportunity Engine (Capability 7)
+
+        Truth Binding (Cap 1), Capability Tiers (Cap 4), Plan Critic (Cap 3),
+        Behavioral Learning (Cap 5), and Self-Improvement (Cap 6) are
+        registered via their respective factories.
+        """
+        # Knowledge Graph adapter + service
+        self.register(
+            "kg_adapter",
+            lambda: self._create_kg_adapter(db_path),
+        )
+        self.register(
+            "knowledge_graph",
+            lambda: self._create_kg_service(),
+        )
+
+        # Behavioral Learner
+        self.register(
+            "behavioral_learner",
+            lambda: self._create_behavioral_learner(),
+        )
+
+        # Opportunity Engine
+        self.register(
+            "opportunity_engine",
+            lambda: self._create_opportunity_engine(db_path),
+        )
+
+    @staticmethod
+    def _create_kg_adapter(db_path: str):
+        from weebot.infrastructure.persistence.sqlite_knowledge_graph import (
+            SQLiteKnowledgeGraph,
+        )
+        return SQLiteKnowledgeGraph(db_path=db_path)
+
+    def _create_kg_service(self):
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
+        adapter = self.get("kg_adapter")
+        return KnowledgeGraphService(adapter=adapter)
+
+    def _create_behavioral_learner(self):
+        from weebot.application.services.behavioral_learner import (
+            BehavioralLearner,
+        )
+        llm = self._maybe_get(LLMPort)
+        return BehavioralLearner(llm=llm)
+
+    def _create_opportunity_engine(self, db_path: str):
+        from weebot.application.services.opportunity_engine import (
+            OpportunityEngine,
+        )
+        kg = self._maybe_get_str("knowledge_graph")
+        fts5 = self._maybe_get_str("fts5_search")
+        return OpportunityEngine(knowledge_graph=kg, fts5_search=fts5)
+
+    async def register_agentwasp_jobs(self, scheduler_db: str = "./weebot_jobs.db") -> None:
+        """Register AgentWasp background jobs with the scheduler.
+
+        Must be called after configure_agentwasp_capabilities() and after
+        the application event loop has started.
+
+        Args:
+            scheduler_db: Path for APScheduler's SQLite job store.
+        """
+        from weebot.scheduling.scheduler import SchedulingManager
+
+        mgr = SchedulingManager(db_path=scheduler_db)
+
+        # Register callables for each job type
+        kg = self._maybe_get_str("knowledge_graph")
+        if kg is not None:
+            async def kg_consolidation():
+                stats = await kg.get_stats()
+                logger.info("KG consolidation: %s", stats)
+            mgr.register_callable("kg_consolidation", kg_consolidation)
+
+        opp = self._maybe_get_str("opportunity_engine")
+        if opp is not None:
+            async def opportunity_scan():
+                proposals = await opp.scan()
+                logger.info("Opportunity scan: %d proposals", len(proposals))
+            mgr.register_callable("opportunity_scan", opportunity_scan)
+
+        learner = self._maybe_get_str("behavioral_learner")
+        if learner is not None:
+            async def behavioral_consolidation():
+                rules = await learner.get_active_rules()
+                logger.info("Behavioral consolidation: %d active rules", len(rules))
+            mgr.register_callable("behavioral_consolidation", behavioral_consolidation)
+
+        # Integrity check and memory cleanup are generic
+        async def integrity_check():
+            import subprocess
+            import shutil
+            issues = []
+            # Check git status
+            try:
+                result = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.stdout.strip():
+                    issues.append(f"Uncommitted changes: {result.stdout.count(chr(10))} files")
+            except Exception as e:
+                issues.append(f"Git check failed: {e}")
+            # Check disk space
+            total, used, free = shutil.disk_usage(Path.cwd())
+            free_gb = free // (2**30)
+            if free_gb < 1:
+                issues.append(f"Low disk space: {free_gb} GB free")
+            logger.info("Integrity check: %s", issues or "all clear")
+        mgr.register_callable("integrity_check", integrity_check)
+
+        async def memory_cleanup():
+            logger.info("Memory cleanup: archival of sessions >90 days old not yet implemented")
+        mgr.register_callable("memory_cleanup", memory_cleanup)
+
+        # Load jobs from config
+        await mgr.load_from_config()
+
+        # Start scheduler
+        await mgr.start()
 
     # ═══════════════════════════════════════════════════════════════════
     # Skill Curator bindings

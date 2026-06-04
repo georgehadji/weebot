@@ -1,0 +1,88 @@
+name: "Supervisor Team"
+version: "1.0.0"
+description: |
+  Central supervisor agent dynamically distributes tasks to workers
+  based on runtime progress.  Best when workload is variable and
+  requires dynamic reallocation.
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain or project description"
+    required: true
+  supervisor_agent:
+    type: string
+    description: "Central agent that monitors and distributes work"
+    required: true
+  workers:
+    type: list
+    description: "List of worker agent names"
+    required: true
+  output_path:
+    type: string
+    description: "Path for the final consolidated output"
+    default: "./_workspace/supervisor_output.md"
+    required: false
+
+workflow:
+  plan:
+    agent_role: "{{ supervisor_agent }}"
+    task: |
+      Analyze the domain and create a work plan:
+      {{ domain }}
+      
+      Workers available: {{ workers | join(', ') }}
+      
+      Break the work into independent tasks and assign each to a worker.
+      Write the plan to _workspace/work_plan.json
+    parameters:
+      output: "_workspace/work_plan.json"
+  
+  dispatch:
+    agent_role: "{{ supervisor_agent }}"
+    task: |
+      Read _workspace/work_plan.json.
+      For each unassigned task, dispatch to the appropriate worker.
+      Track progress in _workspace/status.json
+    parameters:
+      workers: "{{ workers | join(', ') }}"
+  
+  execute_task:
+    agent_role: "{{ item }}"
+    task: |
+      Read your assigned task from _workspace/work_plan.json.
+      Execute it and write results to _workspace/worker_{{ item }}_output.md
+      Update status in _workspace/status.json
+    parallel_for_each: "{{ workers }}"
+    depends_on: [dispatch]
+    parameters:
+      output: "_workspace/worker_{{ item }}_output.md"
+  
+  monitor_and_rebalance:
+    agent_role: "{{ supervisor_agent }}"
+    task: |
+      Monitor progress in _workspace/status.json.
+      If any worker is idle and others are overloaded, rebalance.
+      Update _workspace/work_plan.json with reassignments.
+    depends_on: [execute_task]
+    parameters:
+      status_file: "_workspace/status.json"
+  
+  consolidate:
+    agent_role: "{{ supervisor_agent }}"
+    task: |
+      Read all worker outputs from _workspace/worker_*_output.md.
+      Consolidate into {{ output_path }}.
+      Include: completed tasks, blockers, quality assessment.
+    depends_on: [monitor_and_rebalance]
+    parameters:
+      output: "{{ output_path }}"
+
+output:
+  format: "markdown"
+  sections:
+    - "work_plan"
+    - "worker_outputs"
+    - "consolidated_results"
+    - "blockers"

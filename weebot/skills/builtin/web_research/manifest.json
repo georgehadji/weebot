@@ -1,0 +1,13 @@
+{
+    "name": "web_research",
+    "version": "1.0.0",
+    "description": "Conduct thorough web research using browser tools and search engines.",
+    "emoji": "🔍",
+    "author": "Weebot Team",
+    "tier": "public",
+    "requires_user_presence": false,
+    "requires_approval_per_use": false,
+    "anticipatory_simulation": false,
+    "requires": ["web_search", "advanced_browser"],
+    "prompt_file": "prompt.md"
+}

@@ -1,0 +1,13 @@
+{
+    "name": "multi_llm_orchestrator",
+    "version": "1.0.0",
+    "description": "Delegate full-stack app development to the Multi-LLM Orchestrator — decomposes specs, routes tasks across 52 LLMs, runs generate→critique→revise cycles. Use for complex multi-file builds when the user says 'build an app', 'create a project', or the task is too large for direct execution.",
+    "emoji": "🧠",
+    "author": "Weebot Team",
+    "tier": "public",
+    "requires_user_presence": false,
+    "requires_approval_per_use": true,
+    "anticipatory_simulation": false,
+    "requires": ["bash"],
+    "prompt_file": "prompt.md"
+}

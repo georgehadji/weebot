@@ -54,7 +54,7 @@ class PathValidator:
     # Allowed file extensions for write operations
     ALLOWED_EXTENSIONS: set[str] = {
         ".txt", ".md", ".py", ".json", ".yaml", ".yml",
-        ".js", ".ts", ".html", ".css", ".xml", ".csv",
+        ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".xml", ".csv",
         ".log", ".ini", ".cfg", ".conf", ".sql", ".sh",
         ".ps1", ".bat", ".cmd"
     }

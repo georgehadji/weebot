@@ -1,0 +1,13 @@
+{
+    "name": "berb-research",
+    "version": "1.0.0",
+    "description": "Berb — autonomous 23-stage research pipeline that turns a research idea into a conference-ready academic paper. Literature search, hypothesis generation, experiments, peer review, and paper writing for $0.40-0.70/paper. Use when the user says 'research', 'write a paper', 'literature review', or wants academic/deep investigation.",
+    "emoji": "📚",
+    "author": "Weebot Team",
+    "tier": "public",
+    "requires_user_presence": false,
+    "requires_approval_per_use": true,
+    "anticipatory_simulation": false,
+    "requires": ["bash"],
+    "prompt_file": "prompt.md"
+}

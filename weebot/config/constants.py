@@ -28,7 +28,7 @@ CODE_CHARS_PER_TOKEN: float = 3.5
 # ========================================================================
 # Execution defaults
 # ========================================================================
-MAX_EXECUTOR_STEPS: int = 25
+MAX_EXECUTOR_STEPS: int = 50
 """Max tool-call iterations per step in ExecutorAgent."""
 
 MAX_PLANNER_STEPS: int = 15

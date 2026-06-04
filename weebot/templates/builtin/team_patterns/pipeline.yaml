@@ -1,0 +1,66 @@
+name: "Pipeline Team"
+version: "1.0.0"
+description: |
+  Sequential dependent tasks — each agent's output feeds the next.
+  Ideal when each stage strongly depends on the previous stage's output.
+author: "Weebot Team (Harness-inspired)"
+
+parameters:
+  domain:
+    type: string
+    description: "Domain or project description for the pipeline"
+    required: true
+  agents:
+    type: list
+    description: "Ordered list of agent names in the pipeline"
+    required: true
+  output_path:
+    type: string
+    description: "Path for the final output artifact"
+    default: "./_workspace/final_output.md"
+    required: false
+
+workflow:
+  phase_1_analysis:
+    agent_role: "{{ agents[0] }}"
+    task: "Analyze the domain: {{ domain }}"
+    parameters:
+      output: "_workspace/01_analysis.md"
+  
+  phase_2_design:
+    agent_role: "{{ agents[1] if agents|length > 1 else agents[0] }}"
+    task: "Design based on: _workspace/01_analysis.md"
+    depends_on: [phase_1_analysis]
+    parameters:
+      output: "_workspace/02_design.md"
+  
+  phase_3_implementation:
+    agent_role: "{{ agents[2] if agents|length > 2 else agents[-1] }}"
+    task: "Implement based on: _workspace/02_design.md"
+    depends_on: [phase_2_design]
+    parameters:
+      output: "_workspace/03_implementation.md"
+  
+  phase_4_review:
+    agent_role: "{{ agents[3] if agents|length > 3 else agents[-1] }}"
+    task: "Review _workspace/03_implementation.md for quality and correctness"
+    depends_on: [phase_3_implementation]
+    parameters:
+      output: "_workspace/04_review.md"
+  
+  finalize:
+    agent_role: "{{ agents[0] }}"
+    task: "Consolidate all pipeline outputs into {{ output_path }}"
+    depends_on: [phase_4_review]
+    parameters:
+      sources: ["_workspace/01_analysis.md", "_workspace/02_design.md", "_workspace/03_implementation.md", "_workspace/04_review.md"]
+
+output:
+  format: "markdown"
+  sections:
+    - "analysis"
+    - "design"
+    - "implementation"
+    - "review"
+    - "final_output"
+  error_policy: "stop_on_fail"

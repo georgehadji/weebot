@@ -8,10 +8,16 @@ from pathlib import Path
 from typing import List, Optional
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.connection_pool import (
     SQLiteConnectionPool,
     get_or_create_pool,
+)
+from weebot.infrastructure.persistence.fts5_search import (
+    ensure_fts5_table,
+    index_event,
+    search_events,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +86,33 @@ class SQLiteStateRepository(StateRepositoryPort):
                 ON sessions(status)
                 """
             )
+
+            # ── Capability 7: pending_opportunities table ──
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS pending_opportunities (
+                    id TEXT PRIMARY KEY,
+                    prompt TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    evidence TEXT NOT NULL DEFAULT '[]',
+                    confidence REAL NOT NULL DEFAULT 0.0,
+                    estimated_effort TEXT NOT NULL DEFAULT 'medium',
+                    created_at TEXT NOT NULL,
+                    presented INTEGER NOT NULL DEFAULT 0,
+                    accepted INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_opp_presented
+                ON pending_opportunities(presented)
+                """
+            )
+            # ── FTS5 event search table (M2) ──────────────
+            await ensure_fts5_table(conn)
+
+            # ────────────────────────────────────────────────
             
             logger.debug("Database schema ensured")
     
@@ -132,6 +165,20 @@ class SQLiteStateRepository(StateRepositoryPort):
                 },
             )
             logger.debug(f"Session saved: {session.id}")
+            
+            # Index events for FTS5 search (M2)
+            for event in session.events:
+                event_type = getattr(event, "type", "unknown")
+                summary = getattr(event, "message", "") or getattr(event, "summary", "") or event_type
+                content = ""
+                if hasattr(event, "details") and event.details:
+                    content = str(event.details)[:1000]
+                try:
+                    await index_event(
+                        conn, session.id, str(event_type), str(summary), content,
+                    )
+                except Exception:
+                    logger.warning("Failed to index event for FTS5", exc_info=True)
     
     async def load_session(self, session_id: str) -> Optional[Session]:
         """Load a session by ID."""
@@ -246,8 +293,22 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
         
         logger.debug(f"Session deleted: {session_id}")
+        # Clear FTS5 index for this session
+        try:
+            from weebot.infrastructure.persistence.fts5_search import clear_session_events
+            async with pool.acquire_write() as conn:
+                await clear_session_events(conn, session_id)
+        except Exception:
+            pass
         return True
-    
+
+    async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
+        """Full-text search across all indexed sessions (M2)."""
+        from weebot.infrastructure.persistence.fts5_search import search_events
+
+        pool = await self._get_pool()
+        return await search_events(pool, query, limit=limit)
+
     async def count_sessions(self, user_id: Optional[str] = None) -> int:
         """Count total sessions (optionally filtered by user)."""
         pool = await self._get_pool()
@@ -304,6 +365,172 @@ class SQLiteStateRepository(StateRepositoryPort):
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
     
+    # ── Behavioral Rule persistence (Capability 5) ──────────────────
+
+    async def save_behavioral_rule(self, rule: "BehavioralRule") -> None:
+        """Persist a behavioral rule.
+
+        Args:
+            rule: The BehavioralRule to save.
+        """
+        from weebot.domain.models.behavioral_rule import BehavioralRule
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS behavioral_rules (
+                    id TEXT PRIMARY KEY,
+                    rule_text TEXT NOT NULL,
+                    source_session_id TEXT NOT NULL DEFAULT '',
+                    source_message TEXT NOT NULL DEFAULT '',
+                    scope TEXT NOT NULL DEFAULT 'global',
+                    created_at TEXT NOT NULL,
+                    applied_count INTEGER NOT NULL DEFAULT 0,
+                    last_applied_at TEXT
+                )
+                """,
+            )
+            await conn.execute(
+                """
+                INSERT OR REPLACE INTO behavioral_rules
+                    (id, rule_text, source_session_id, source_message, scope,
+                     created_at, applied_count, last_applied_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    rule.id,
+                    rule.rule_text,
+                    rule.source_session_id,
+                    rule.source_message,
+                    rule.scope,
+                    rule.created_at.isoformat(),
+                    rule.applied_count,
+                    rule.last_applied_at.isoformat() if rule.last_applied_at else None,
+                ),
+            )
+
+    async def list_behavioral_rules(self) -> list["BehavioralRule"]:
+        """Load all persisted behavioral rules."""
+        from weebot.domain.models.behavioral_rule import BehavioralRule
+        pool = await self._get_pool()
+        # Ensure table exists (may not if never written to)
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS behavioral_rules (
+                    id TEXT PRIMARY KEY,
+                    rule_text TEXT NOT NULL,
+                    source_session_id TEXT NOT NULL DEFAULT '',
+                    source_message TEXT NOT NULL DEFAULT '',
+                    scope TEXT NOT NULL DEFAULT 'global',
+                    created_at TEXT NOT NULL,
+                    applied_count INTEGER NOT NULL DEFAULT 0,
+                    last_applied_at TEXT
+                )
+                """,
+            )
+        rows = await pool.execute_read(
+            "SELECT * FROM behavioral_rules ORDER BY created_at DESC",
+        )
+        return [
+            BehavioralRule(
+                id=r["id"],
+                rule_text=r["rule_text"],
+                source_session_id=r["source_session_id"],
+                source_message=r["source_message"],
+                scope=r["scope"],
+                created_at=datetime.fromisoformat(r["created_at"]),
+                applied_count=r["applied_count"],
+                last_applied_at=datetime.fromisoformat(r["last_applied_at"]) if r["last_applied_at"] else None,
+            )
+            for r in rows
+        ]
+
+    # ── Capability 7: Opportunity persistence ───────────────────────
+
+    async def save_opportunity(self, proposal: "OpportunityProposal") -> None:
+        """Save an opportunity proposal."""
+        from weebot.domain.models.opportunity import OpportunityProposal
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                INSERT OR REPLACE INTO pending_opportunities
+                    (id, prompt, source, evidence, confidence, estimated_effort,
+                     created_at, presented, accepted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    proposal.id,
+                    proposal.prompt,
+                    proposal.source,
+                    json.dumps(proposal.evidence),
+                    proposal.confidence,
+                    proposal.estimated_effort,
+                    proposal.created_at.isoformat(),
+                    1 if proposal.presented else 0,
+                    1 if proposal.accepted else 0,
+                ),
+            )
+
+    async def list_opportunities(
+        self, only_unpresented: bool = False, limit: int = 10
+    ) -> list["OpportunityProposal"]:
+        """List opportunity proposals."""
+        from weebot.domain.models.opportunity import OpportunityProposal
+        pool = await self._get_pool()
+
+        if only_unpresented:
+            rows = await pool.execute_read(
+                "SELECT * FROM pending_opportunities WHERE presented = 0 ORDER BY confidence DESC LIMIT ?",
+                (limit,),
+            )
+        else:
+            rows = await pool.execute_read(
+                "SELECT * FROM pending_opportunities ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+
+        return [self._row_to_opportunity(r) for r in rows]
+
+    async def mark_opportunity_presented(self, proposal_id: str) -> bool:
+        """Mark an opportunity as presented."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                "UPDATE pending_opportunities SET presented = 1 WHERE id = ?",
+                (proposal_id,),
+            )
+        return True
+
+    async def accept_opportunity(self, proposal_id: str) -> bool:
+        """Mark an opportunity as accepted by the user."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                "UPDATE pending_opportunities SET accepted = 1, presented = 1 WHERE id = ?",
+                (proposal_id,),
+            )
+        return True
+
+    @staticmethod
+    def _row_to_opportunity(row) -> "OpportunityProposal":
+        """Convert a DB row to OpportunityProposal."""
+        from weebot.domain.models.opportunity import OpportunityProposal
+        return OpportunityProposal(
+            id=row["id"],
+            prompt=row["prompt"],
+            source=row["source"],
+            evidence=json.loads(row["evidence"] or "[]"),
+            confidence=row["confidence"],
+            estimated_effort=row["estimated_effort"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            presented=bool(row["presented"]),
+            accepted=bool(row["accepted"]),
+        )
+
+    # ────────────────────────────────────────────────────────────────
+
     async def close(self) -> None:
         """Close the connection pool."""
         if self._pool:

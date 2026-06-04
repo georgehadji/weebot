@@ -66,6 +66,7 @@ class SkillRegistry:
 
         meta = frontmatter.get("metadata", {})
         openclaw_meta = meta.get("openclaw", {}) if isinstance(meta, dict) else {}
+        hermes_meta = meta.get("hermes", {}) if isinstance(meta, dict) else {}
 
         from weebot.domain.models.skill import SkillMetadata
         metadata = SkillMetadata(
@@ -74,15 +75,25 @@ class SkillRegistry:
             primary_env=openclaw_meta.get("primaryEnv") or meta.get("primaryEnv"),
             homepage=openclaw_meta.get("homepage") or meta.get("homepage") or frontmatter.get("homepage"),
             source=openclaw_meta.get("source") or meta.get("source") or frontmatter.get("source"),
+            platforms=hermes_meta.get("platforms", []) or meta.get("platforms", []),
+            config=hermes_meta.get("config", []) or meta.get("config", []),
+            fallback_for_toolsets=hermes_meta.get("fallback_for_toolsets", []) or meta.get("fallback_for_toolsets", []),
+            requires_toolsets=hermes_meta.get("requires_toolsets", []) or meta.get("requires_toolsets", []),
         )
 
-        return Skill(
+        skill = Skill(
             name=frontmatter.get("name", filepath.parent.name),
             description=frontmatter.get("description", ""),
             content=content,
             metadata=metadata,
             source_path=str(filepath),
         )
+
+        # Discover reference files for Progressive Disclosure (H1)
+        # Set PrivateAttr directly (pydantic allows this for PrivateAttr fields)
+        object.__setattr__(skill, "_reference_paths", _discover_references(filepath.parent))
+
+        return skill
 
     def get_skill(self, name: str) -> Optional[Skill]:
         return self._skills.get(name)
@@ -110,3 +121,22 @@ class SkillRegistry:
         for skill in skills:
             parts.append(skill.to_system_prompt_extension())
         return "\n\n".join(parts)
+
+
+# ── module-level helpers ────────────────────────────────────────────
+
+
+def _discover_references(skill_dir: Path) -> list[str]:
+    """List available reference file paths relative to *skill_dir*.
+
+    Scans for a ``references/`` subdirectory and returns relative
+    paths of all ``.md`` files found inside.  Does **not** load
+    content — that happens lazily via ``Skill.get_reference()``.
+    """
+    ref_dir = skill_dir / "references"
+    if not ref_dir.is_dir():
+        return []
+    return sorted(
+        p.relative_to(skill_dir).as_posix()
+        for p in ref_dir.rglob("*.md")
+    )

@@ -1,0 +1,13 @@
+{
+    "name": "competitive_analysis",
+    "version": "1.0.0",
+    "description": "Analyze a competitive landscape using swarm research and whitespace identification.",
+    "emoji": "🔬",
+    "author": "Weebot Team",
+    "tier": "controlled",
+    "requires_user_presence": true,
+    "requires_approval_per_use": false,
+    "anticipatory_simulation": false,
+    "requires": ["swarm", "debate", "web_search"],
+    "prompt_file": "prompt.md"
+}

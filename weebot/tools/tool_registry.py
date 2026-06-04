@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from weebot.tools.base import BaseTool, ToolCollection
+    from weebot.application.services.capability_gate import CapabilityGate
+    from weebot.domain.models.capability_tier import CapabilityTier
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,7 @@ class RoleBasedToolRegistry:
             "advanced_browser",
             "browser_inspector",
             "dispatch_parallel_tasks",
+            "workflow_orchestrator",
             "swarm",
             "debate",
             "search_history",
@@ -97,6 +100,27 @@ class RoleBasedToolRegistry:
 
     # Lazy singleton: BaseTool.name -> tool class.
     _TOOL_CLASS_MAP: Optional[Dict[str, type]] = None
+
+    # Capability tiers per tool (Capability 4).
+    # Maps tool name -> tier string. Default is "public".
+    TOOL_TIERS: Dict[str, str] = {
+        "bash": "restricted",
+        "computer_use": "privileged",
+        "powershell": "restricted",
+        "python_execute": "controlled",
+        "file_editor": "controlled",
+        "schedule": "controlled",
+        "dispatch_parallel_tasks": "restricted",
+        "terminate": "privileged",
+        "persistent_memory": "controlled",
+        "advanced_browser": "controlled",
+        "screen_capture": "restricted",
+        "swarm": "controlled",
+        "debate": "controlled",
+        "mixture_of_agents": "controlled",
+        "audit_session": "restricted",
+        # Everything else defaults to "public" via get_tool_tier()
+    }
 
     def __init__(self, role_mappings: Optional[Dict[str, List[str]]] = None) -> None:
         """Initialize the registry.
@@ -200,6 +224,52 @@ class RoleBasedToolRegistry:
         for tools in self.role_mappings.values():
             all_tools.update(tools)
         return sorted(list(all_tools))
+
+    def get_tool_tier(self, tool_name: str) -> str:
+        """Get the capability tier for a tool.
+
+        Args:
+            tool_name: The tool's name (e.g. "bash", "file_editor").
+
+        Returns:
+            Tier string: "public", "controlled", "restricted", or "privileged".
+        """
+        return self.TOOL_TIERS.get(tool_name, "public")
+
+    def get_tools_for_role_with_gate(
+        self,
+        role: str,
+        gate: "CapabilityGate",
+        context: dict[str, Any],
+    ) -> list[str]:
+        """Get tools for a role, filtered by capability tier gate.
+
+        Args:
+            role: The role name.
+            gate: CapabilityGate instance for tier checking.
+            context: Context dict passed to gate.check().
+
+        Returns:
+            List of tool names that passed the tier gate.
+        """
+        all_tools = self.get_tools_for_role(role)
+        passed: list[str] = []
+        for tool_name in all_tools:
+            tier_str = self.get_tool_tier(tool_name)
+            from weebot.domain.models.capability_tier import CapabilityTier
+            try:
+                tier = CapabilityTier(tier_str)
+            except ValueError:
+                tier = CapabilityTier.PUBLIC
+            allowed, _reason = gate.check(tier, context)
+            if allowed:
+                passed.append(tool_name)
+            else:
+                logger.info(
+                    "Tool '%s' excluded from role '%s' by capability gate (tier: %s)",
+                    tool_name, role, tier_str,
+                )
+        return passed
 
     def get_registry_summary(self) -> Dict[str, Dict]:
         """Get a summary of all role-to-tools mappings.

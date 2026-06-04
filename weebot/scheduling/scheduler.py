@@ -457,11 +457,96 @@ class SchedulingManager:
             )
             conn.commit()
 
+    async def load_from_config(self, config_path: Optional[Path] = None) -> int:
+        """Load job definitions from a YAML config file.
+
+        Args:
+            config_path: Path to jobs.yaml. Defaults to project config/jobs.yaml.
+
+        Returns:
+            Number of jobs loaded.
+        """
+        if config_path is None:
+            config_path = Path(__file__).resolve().parent.parent / "config" / "jobs.yaml"
+        if not config_path.exists():
+            logger.warning("Job config not found at %s", config_path)
+            return 0
+
+        try:
+            import yaml
+            with open(config_path) as f:
+                data = yaml.safe_load(f)
+
+            loaded = 0
+            for job_def in data.get("jobs", []):
+                existing = self.get_job(job_def["job_id"])
+                if existing is None:
+                    await self.create_job(
+                        job_id=job_def["job_id"],
+                        name=job_def["name"],
+                        description=job_def.get("description", ""),
+                        trigger_type=job_def["trigger_type"],
+                        trigger_config=job_def.get("trigger_config", {}),
+                        callable_name=job_def.get("callable_name"),
+                    )
+                    loaded += 1
+            logger.info("Loaded %d jobs from %s", loaded, config_path)
+            return loaded
+        except Exception as exc:
+            logger.error("Failed to load jobs from config: %s", exc)
+            return 0
+
+    async def run_catch_up(self) -> int:
+        """Run catch-up for missed scheduled jobs.
+
+        Checks each enabled job: if its last_run is more than 2x the
+        interval behind, it executes once immediately to catch up.
+        Uses coalesce semantics — at most one catch-up run per job.
+
+        Returns:
+            Number of catch-up jobs executed.
+        """
+        caught_up = 0
+        jobs = self.list_jobs(enabled_only=True)
+        now = datetime.now()
+
+        for job in jobs:
+            if job.last_run is None:
+                # Never run — skip catch-up (first run will happen on schedule)
+                continue
+
+            # Calculate expected interval in seconds
+            interval_hours = job.trigger_config.get("hours", 0)
+            interval_minutes = job.trigger_config.get("minutes", 0)
+            interval_seconds = job.trigger_config.get("seconds", 0)
+            total_seconds = interval_hours * 3600 + interval_minutes * 60 + interval_seconds
+
+            if total_seconds <= 0:
+                continue  # Cron-triggered jobs need different catch-up logic
+
+            elapsed = (now - job.last_run).total_seconds()
+            if elapsed > total_seconds * 2:
+                logger.info(
+                    "Catch-up: job '%s' last ran %.1f hours ago (interval: %.1f hrs)",
+                    job.job_id, elapsed / 3600, total_seconds / 3600,
+                )
+                try:
+                    await self._execute_job(job.job_id)
+                    caught_up += 1
+                except Exception as exc:
+                    logger.warning("Catch-up execution failed for %s: %s", job.job_id, exc)
+
+        if caught_up:
+            logger.info("Catch-up complete: %d jobs executed", caught_up)
+        return caught_up
+
     async def start(self) -> None:
-        """Start the scheduler."""
+        """Start the scheduler and run catch-up for missed jobs."""
         if not self.scheduler.running:
             self.scheduler.start()
             logger.info("Scheduler started")
+            # Run catch-up for missed jobs
+            await self.run_catch_up()
 
     async def stop(self) -> None:
         """Stop the scheduler."""
