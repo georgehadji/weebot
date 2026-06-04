@@ -97,6 +97,7 @@ class ModalSandboxBackend(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a command on Modal.
 
@@ -128,7 +129,15 @@ class ModalSandboxBackend(SandboxPort):
         try:
             # Stub: use docker as the underlying executor when Modal is
             # authenticated but the full function deployment isn't set up.
-            docker_cmd = ["docker", "run", "--rm", "-i", self._image] + command
+            docker_cmd = ["docker", "run", "--rm", "-i"]
+            
+            # Memory limit (pass through to docker stub)
+            limit = memory_limit_mb or self._config.memory_limit_mb
+            if limit:
+                docker_cmd.extend(["-m", f"{limit}m"])
+                
+            docker_cmd.extend([self._image] + command)
+            
             proc = await asyncio.create_subprocess_exec(
                 *docker_cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -150,7 +159,7 @@ class ModalSandboxBackend(SandboxPort):
         except asyncio.TimeoutError:
             return SandboxResult(
                 stdout="",
-                stderr=f"Command timed out after {timeout:.0f}s on Modal.",
+                stderr=f"Command timed out after {timeout or self._config.timeout:.0f}s on Modal.",
                 returncode=-1,
                 elapsed_ms=(time.monotonic() - t_start) * 1000,
                 timed_out=True,
@@ -172,9 +181,10 @@ class ModalSandboxBackend(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         command = [shell, "-c", script]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
 
     async def execute_python(
         self,
@@ -182,6 +192,7 @@ class ModalSandboxBackend(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         command = ["python", "-c", code]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)

@@ -293,6 +293,17 @@ class BashTool(BaseTool):
         Returns:
             ToolResult with combined output on success, or an error message.
         """
+        # Windows refinement: if the agent uses 'curl', they might be hitting
+        # the PowerShell alias 'curl' -> 'Invoke-WebRequest'. We prefer 'curl.exe'
+        # if it's available to ensure consistent behavior with Linux curl.
+        import sys
+        if sys.platform == "win32" and not use_wsl:
+            if command.strip().startswith("curl ") or command.strip() == "curl":
+                import shutil
+                if shutil.which("curl.exe"):
+                    command = command.replace("curl", "curl.exe", 1)
+                    logger.debug(f"Refined Windows command: {command}")
+
         # Coerce string timeout (LLMs may pass "90" instead of 90) and apply ceiling
         try:
             effective_timeout = float(timeout) if timeout is not None else float(self._default_timeout)

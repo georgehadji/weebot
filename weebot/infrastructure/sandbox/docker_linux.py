@@ -124,6 +124,7 @@ class DockerLinuxSandbox(SandboxPort):
         command: list[str],
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> list[str]:
         """Build the docker run command with all options.
 
@@ -138,8 +139,9 @@ class DockerLinuxSandbox(SandboxPort):
         ]
         
         # Memory limit
-        if self._config.memory_limit_mb:
-            docker_cmd.extend(["-m", f"{self._config.memory_limit_mb}m"])
+        limit = memory_limit_mb or self._config.memory_limit_mb
+        if limit:
+            docker_cmd.extend(["-m", f"{limit}m"])
         
         # Network
         if not self._config.allow_network:
@@ -185,6 +187,7 @@ class DockerLinuxSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a command in a Docker container.
         
@@ -193,6 +196,7 @@ class DockerLinuxSandbox(SandboxPort):
             timeout: Timeout in seconds. Uses config default if None.
             cwd: Working directory inside container.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult with execution details.
@@ -223,7 +227,7 @@ class DockerLinuxSandbox(SandboxPort):
             merged_env.update(env)
         
         # Build docker command (image resolved lazily)
-        docker_command = await self._build_docker_command(command, cwd, merged_env)
+        docker_command = await self._build_docker_command(command, cwd, merged_env, memory_limit_mb)
         
         import time
         t_start = time.monotonic()
@@ -280,6 +284,7 @@ class DockerLinuxSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a shell script in Docker.
         
@@ -289,12 +294,13 @@ class DockerLinuxSandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult with execution details.
         """
         command = [shell, "-c", script]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     async def execute_python(
         self,
@@ -302,6 +308,7 @@ class DockerLinuxSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute Python code in Docker.
         
@@ -310,12 +317,13 @@ class DockerLinuxSandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult with execution details.
         """
         command = ["python", "-c", code]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     def _truncate(self, data: bytes) -> bytes:
         """Truncate data to max_output_bytes."""

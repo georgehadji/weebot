@@ -103,6 +103,7 @@ class WSL2Sandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a command in WSL2.
         
@@ -111,6 +112,7 @@ class WSL2Sandbox(SandboxPort):
             timeout: Timeout in seconds. Uses config default if None.
             cwd: Working directory (will be translated to WSL path if on Windows drive).
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB (not supported for runtime override in WSL2).
         
         Returns:
             SandboxResult with execution details.
@@ -201,6 +203,7 @@ class WSL2Sandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a shell script in WSL2.
         
@@ -210,12 +213,13 @@ class WSL2Sandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult with execution details.
         """
         command = [shell, "-c", script]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     async def execute_python(
         self,
@@ -223,6 +227,7 @@ class WSL2Sandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute Python code in WSL2.
         
@@ -231,12 +236,13 @@ class WSL2Sandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult with execution details.
         """
         command = ["python3", "-c", code]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     def _truncate(self, data: bytes) -> bytes:
         """Truncate data to max_output_bytes."""

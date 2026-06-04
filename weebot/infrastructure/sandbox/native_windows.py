@@ -114,6 +114,7 @@ class NativeWindowsSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a command with resource limits.
         
@@ -122,6 +123,7 @@ class NativeWindowsSandbox(SandboxPort):
             timeout: Timeout in seconds. Uses config default if None.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
@@ -144,6 +146,13 @@ class NativeWindowsSandbox(SandboxPort):
         
         # Determine working directory
         working_dir = cwd or self._config.working_dir
+        
+        # Determine memory limit
+        limit_bytes = (
+            memory_limit_mb * 1024 * 1024
+            if memory_limit_mb is not None
+            else self._memory_limit_bytes
+        )
         
         t_start = time.monotonic()
         
@@ -169,12 +178,12 @@ class NativeWindowsSandbox(SandboxPort):
         memory_killed: list[bool] = [False]
         monitor_task: Optional[asyncio.Task] = None
         
-        if self._memory_limit_bytes is not None:
+        if limit_bytes is not None:
             monitor_task = asyncio.create_task(
                 asyncio.to_thread(
                     _psutil_memory_monitor,
                     proc.pid,
-                    self._memory_limit_bytes,
+                    limit_bytes,
                     stop_event,
                     memory_killed,
                 )
@@ -226,6 +235,7 @@ class NativeWindowsSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a shell script.
         
@@ -235,6 +245,7 @@ class NativeWindowsSandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
@@ -260,7 +271,7 @@ class NativeWindowsSandbox(SandboxPort):
                 sandbox_type=self.sandbox_type,
             )
         
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     async def execute_python(
         self,
@@ -268,6 +279,7 @@ class NativeWindowsSandbox(SandboxPort):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute Python code.
         
@@ -276,6 +288,7 @@ class NativeWindowsSandbox(SandboxPort):
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
@@ -291,7 +304,7 @@ class NativeWindowsSandbox(SandboxPort):
             )
         
         command = [python_exe, "-c", code]
-        return await self.execute(command, timeout, cwd, env)
+        return await self.execute(command, timeout, cwd, env, memory_limit_mb)
     
     def _truncate(self, data: bytes) -> bytes:
         """Truncate data to max_output_bytes."""

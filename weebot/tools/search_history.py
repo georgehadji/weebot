@@ -10,6 +10,9 @@ from typing import Any
 from weebot.tools.base import BaseTool, ToolResult
 
 
+from pydantic import PrivateAttr
+
+
 class SearchHistoryTool(BaseTool):
     """Search past session events using full-text search."""
 
@@ -36,11 +39,11 @@ class SearchHistoryTool(BaseTool):
         "required": ["query"],
     }
 
-    _pool = None
+    _pool: Any = PrivateAttr(default=None)
 
     def __init__(self, pool=None, **data: Any) -> None:
         super().__init__(**data)
-        object.__setattr__(self, "_pool", pool)
+        self._pool = pool
 
     async def execute(self, query: str, limit: int = 10, **_: Any) -> ToolResult:
         from weebot.infrastructure.persistence.fts5_search import search_events

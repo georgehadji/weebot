@@ -243,6 +243,7 @@ class FallbackSandboxChain:
         timeout: Optional[float] = None,
         cwd: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute command with fallback.
         
@@ -254,6 +255,7 @@ class FallbackSandboxChain:
             timeout: Timeout in seconds.
             cwd: Working directory.
             env: Environment variables.
+            memory_limit_mb: Optional memory limit in MB.
         
         Returns:
             SandboxResult from the first successful sandbox, or the last
@@ -263,7 +265,7 @@ class FallbackSandboxChain:
         
         for sandbox in self._sandboxes:
             try:
-                result = await sandbox.execute(command, timeout, cwd, env)
+                result = await sandbox.execute(command, timeout, cwd, env, memory_limit_mb)
                 last_result = result
                 
                 if result.success:
@@ -294,13 +296,14 @@ class FallbackSandboxChain:
         timeout: Optional[float] = None,
         cwd: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute shell script with fallback."""
         last_result: Optional[SandboxResult] = None
         
         for sandbox in self._sandboxes:
             try:
-                result = await sandbox.execute_shell(script, shell, timeout, cwd, env)
+                result = await sandbox.execute_shell(script, shell, timeout, cwd, env, memory_limit_mb)
                 last_result = result
                 
                 if result.success:
@@ -325,13 +328,14 @@ class FallbackSandboxChain:
         timeout: Optional[float] = None,
         cwd: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute Python code with fallback."""
         last_result: Optional[SandboxResult] = None
         
         for sandbox in self._sandboxes:
             try:
-                result = await sandbox.execute_python(code, timeout, cwd, env)
+                result = await sandbox.execute_python(code, timeout, cwd, env, memory_limit_mb)
                 last_result = result
                 
                 if result.success:

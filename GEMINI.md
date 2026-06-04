@@ -55,11 +55,10 @@ Weebot is an advanced AI Agent Framework specifically designed for Windows 11, f
 - **Configuration**: Use `weebot.config.settings.WeebotSettings` for accessing environment variables and constants.
 - **UI/UX**: Use the `rich` library for all CLI output to maintain visual consistency.
 
-### Testing Practices
-- **Framework**: `pytest`
-- **Fixtures**: Shared fixtures are located in `tests/conftest.py`. Always use `monkeypatch` to mock API keys and environment variables.
-- **Isolation**: Use `tmp_db`, `tmp_cache`, and `workspace_path` fixtures to ensure tests don't leak state.
-- **Mocks**: Use `unittest.mock.AsyncMock` for mocking asynchronous functions and methods.
+### Efficiency & Focus
+- **Ignore Irrelevant Files**: The root directory contains some legacy or unrelated files (e.g., `thunderbird_addressbooks.json`, `abook-2_contacts.json`). **IGNORE** these unless specifically asked to perform a mail-related task. Stay focused on the primary task objectives.
+- **Prefer Powershell Tool**: When on Windows, prefer `powershell_tool` for complex scripts. `bash_tool` is optimized for simple cross-platform commands but uses PowerShell internally on Windows.
+- **Browser Timeouts**: If `advanced_browser` times out, fall back to `web_search` or try a different URL.
 
 ### Security Guidelines
 - **Command Execution**: Never execute shell commands directly. Use `weebot.tools.bash_tool` which includes multi-layer safety checks.

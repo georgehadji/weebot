@@ -64,7 +64,7 @@ class BrowserTool(BaseTool):
         if self._llm_port is not None:
             # Use Weebot's LLMPort via adapter
             from weebot.infrastructure.llm.langchain_adapter import LLMPortLangChainAdapter
-            return LLMPortLangChainAdapter(
+            llm = LLMPortLangChainAdapter(
                 llm_port=self._llm_port,
                 model=self._model,
                 temperature=0,
@@ -74,7 +74,12 @@ class BrowserTool(BaseTool):
             logger.debug("No LLMPort provided, using default ChatOpenAI")
             # Import here to handle case where browser-use is not installed
             from langchain_openai import ChatOpenAI
-            return ChatOpenAI(model="gpt-4", temperature=0)
+            llm = ChatOpenAI(model="gpt-4", temperature=0)
+        
+        # browser-use expects LLM to have a 'provider' attribute
+        if not hasattr(llm, 'provider'):
+            object.__setattr__(llm, 'provider', 'openai') # Defaulting to openai for compatibility
+        return llm
 
     async def _run_browser_task(self, task: str) -> str:
         """Execute browser task using browser-use."""

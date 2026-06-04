@@ -144,6 +144,7 @@ class SandboxPort(ABC):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a command in the sandboxed environment.
         
@@ -152,6 +153,7 @@ class SandboxPort(ABC):
             timeout: Seconds before the process is killed. Uses config default if None.
             cwd: Working directory. Uses config default if None.
             env: Additional environment variables. Merged with config env_vars.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
@@ -166,6 +168,7 @@ class SandboxPort(ABC):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute a shell script in the sandboxed environment.
         
@@ -175,6 +178,7 @@ class SandboxPort(ABC):
             timeout: Seconds before the process is killed.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
@@ -188,6 +192,7 @@ class SandboxPort(ABC):
         timeout: Optional[float] = None,
         cwd: Optional[str | Path] = None,
         env: Optional[dict[str, str]] = None,
+        memory_limit_mb: Optional[int] = None,
     ) -> SandboxResult:
         """Execute Python code in the sandboxed environment.
         
@@ -196,6 +201,7 @@ class SandboxPort(ABC):
             timeout: Seconds before the process is killed.
             cwd: Working directory.
             env: Additional environment variables.
+            memory_limit_mb: Optional memory limit override.
         
         Returns:
             SandboxResult with execution details.
