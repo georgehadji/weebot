@@ -1,4 +1,5 @@
 """Weebot domain models."""
+from weebot.domain.models.task_type import TaskType
 from weebot.domain.legacy_models import (
     TaskStatus,
     ProjectStatus,
@@ -29,4 +30,5 @@ __all__ = [
     "Message",
     "Memory",
     "AgentRelationship",
+    "TaskType",
 ]

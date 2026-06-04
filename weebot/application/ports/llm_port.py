@@ -23,17 +23,4 @@ class LLMPort(ABC):
         ...
 
 
-class LLMResponse:
-    """Normalized LLM response regardless of provider."""
-
-    def __init__(
-        self,
-        content: Optional[str] = None,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        model: Optional[str] = None,
-        usage: Optional[Dict[str, int]] = None,
-    ):
-        self.content = content or ""
-        self.tool_calls = tool_calls or []
-        self.model = model or "unknown"
-        self.usage = usage or {}
+from weebot.domain.models.llm_response import LLMResponse

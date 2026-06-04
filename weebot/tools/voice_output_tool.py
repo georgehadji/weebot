@@ -42,20 +42,15 @@ class VoiceOutputTool(BaseTool):
         "required": ["text"],
     }
 
-    _speech: Optional[SpeechPort] = None
+    _speech: SpeechPort
 
-    def __init__(self, speech: Optional[SpeechPort] = None, **data: Any) -> None:
+    def __init__(self, speech: SpeechPort, **data: Any) -> None:
         super().__init__(**data)
         object.__setattr__(self, "_speech", speech)
 
     async def execute(
         self, text: str, voice: str = "", output_path: str = "", **_: Any
     ) -> ToolResult:
-        if self._speech is None:
-            from weebot.infrastructure.adapters.speech.whisper_adapter import (
-                WhisperSpeechAdapter,
-            )
-            self._speech = WhisperSpeechAdapter()
 
         if not output_path:
             output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}.wav")

@@ -39,8 +39,20 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 _log = logging.getLogger(__name__)
 
 from weebot.core.activity_stream import ActivityStream
-from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.ports import EventPublisher
+
+
+# Minimal protocol for state repository access — defined here to avoid
+# a reverse dependency from core → application layer.  The DI container
+# supplies an adapter bound to StateRepositoryPort at runtime.
+from typing import Protocol
+
+
+class StateProvider(Protocol):
+    """Minimal state repository interface for agent context."""
+    async def save_session(self, session: object) -> None: ...
+    async def load_session(self, session_id: str) -> object | None: ...
+    async def list_sessions(self, user_id: str | None = None) -> list: ...
 
 
 # ============================================================================
@@ -214,7 +226,7 @@ class AgentContext:
     shared_data: Dict[str, Any] = field(default_factory=dict)
     event_broker: EventBroker = field(default_factory=EventBroker)
     activity_stream: ActivityStream = field(default_factory=ActivityStream)
-    state_repository: Optional[StateRepositoryPort] = None
+    state_repository: Optional[StateProvider] = None
     event_publisher: Optional[EventPublisher] = None
     
     # CONCURRENCY FIX: Shared lock for shared_data protection
@@ -236,7 +248,7 @@ class AgentContext:
     def create_orchestrator(
         cls,
         activity_stream: Optional[ActivityStream] = None,
-        state_repository: Optional[StateRepositoryPort] = None,
+        state_repository: Optional[StateProvider] = None,
         event_publisher: Optional[EventPublisher] = None,
     ) -> AgentContext:
         """Create a root orchestrator context."""

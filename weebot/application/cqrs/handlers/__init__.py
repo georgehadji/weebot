@@ -13,6 +13,9 @@ from weebot.application.cqrs.handlers.skill_edit_handler import (
 from weebot.application.cqrs.handlers.validation_handler import (
     ValidateSkillHandler,
 )
+from weebot.application.cqrs.handlers.transfer_handler import (
+    ValidateTransferHandler,
+)
 
 # Re-export base handlers from the sibling handlers.py module.
 import importlib as _il
@@ -33,12 +36,15 @@ GetSessionStatusHandler = _hdl.GetSessionStatusHandler
 ListSessionsHandler = _hdl.ListSessionsHandler
 UpdatePlanHandler = _hdl.UpdatePlanHandler
 register_default_handlers = _hdl.register_default_handlers
+register_skillopt_handlers = _hdl.register_skillopt_handlers
 
 __all__ = [
     "ScoreTrajectoryHandler",
     "BuildOptimizationBatchHandler",
     "ApplySkillEditsHandler",
     "ValidateSkillHandler",
+    "ValidateTransferHandler",
+    "register_skillopt_handlers",
     "ArchiveSessionHandler",
     "CancelSessionHandler",
     "CompactMemoryHandler",

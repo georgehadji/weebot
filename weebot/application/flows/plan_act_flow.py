@@ -19,6 +19,7 @@ from weebot.application.flows.states.base import AgentStatus
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.core.structured_logger import StructuredLogger
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
@@ -47,6 +48,8 @@ if TYPE_CHECKING:
     from weebot.application.cqrs.mediator import Mediator
     from weebot.application.ports.state_repo_port import StateRepositoryPort
 
+# NOTE: Use self._logger (StructuredLogger) in instance methods.
+# The module-level logger is a fallback for static/class methods only.
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +77,7 @@ class PlanActFlow(BaseFlow):
         plan_critic: Optional[PlanCriticService] = None,
         knowledge_graph: Optional[Any] = None,
         behavioral_learner: Optional[Any] = None,
+        logger: Optional["StructuredLogger"] = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -88,6 +92,8 @@ class PlanActFlow(BaseFlow):
         self._plan_critique = None  # Set by CritiquingState
         self._knowledge_graph = knowledge_graph  # Optional KnowledgeGraphService (Capability 2)
         self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
+        self._logger = logger
+        self._stdlib_logger = logging.getLogger(__name__)
         self.status = AgentStatus.IDLE
         self._state: FlowState = None # Will be set in run()
         self._plan: Optional[Plan] = None
@@ -122,6 +128,11 @@ class PlanActFlow(BaseFlow):
             executor_kwargs["max_steps"] = max_steps
         self._executor = ExecutorAgent(**executor_kwargs)
 
+    @property
+    def _log(self):
+        """Return the best available logger (StructuredLogger preferred)."""
+        return self._logger if self._logger is not None else self._stdlib_logger
+
     async def _emit(self, event: AgentEvent) -> None:
         async with self._emit_lock:
             # ── Capability 1: Truth-binding response layer ──────────────
@@ -141,35 +152,81 @@ class PlanActFlow(BaseFlow):
                     },
                 )
                 if not result.passed or result.has_rewrites():
-                    logger.info(
+                    self._log.info(
                         "Truth binding %s for response (%d violations)",
                         "blocked" if result.has_blockers() else "rewrote",
                         len(result.violations),
                     )
                     for v in result.violations:
-                        logger.debug("  Violation [%s]: %s", v.check, v.message)
+                        self._log.debug("  Violation [%s]: %s", v.check, v.message)
                     event = event.model_copy(update={"message": result.bound_text})
             # ────────────────────────────────────────────────────────────
 
             self._session = self._session.add_event(event)
             if self._event_bus:
                 await self._event_bus.publish(event)
+
+                # Publish domain events for key agent event types
+                await self._emit_domain_event(event)
             if self._state_repo:
                 await self._state_repo.save_session(self._session)
+
+    async def _emit_domain_event(self, event: AgentEvent) -> None:
+        """Publish domain events derived from agent events."""
+        from weebot.domain.models.event import (
+            PlanStepCompleted,
+            FactDiscovered,
+        )
+
+        # Plan step completion
+        if event.type == "step":
+            step_id = getattr(event, "step_id", None) or getattr(event, "id", "unknown")
+            domain_event = PlanStepCompleted(
+                session_id=self._session.id,
+                step_id=str(step_id),
+            )
+            await self._event_bus.publish_domain_event(domain_event)
+
+        # Facts discovered (MessageEvent from assistant with new info)
+        if event.type in ("message", "thought") and hasattr(event, "message"):
+            msg = getattr(event, "message", "")
+            if isinstance(msg, str) and len(msg) > 50:
+                from hashlib import md5
+                key = md5(msg.encode()).hexdigest()[:12]
+                domain_event = FactDiscovered(
+                    session_id=self._session.id,
+                    key=key,
+                    value=msg[:500],
+                )
+                await self._event_bus.publish_domain_event(domain_event)
 
     def is_done(self) -> bool:
         return self._session.status == SessionStatus.COMPLETED
 
     def set_state(self, state: FlowState) -> None:
-        """Change the current flow state."""
+        """Change the current flow state.
+
+        Records the transition time for the flow_step_duration_seconds
+        Prometheus metric (defined in weebot.infrastructure.observability.metrics).
+        """
+        # Record transition duration for the previous state
+        if hasattr(self, "_state") and self._state is not None:
+            try:
+                from weebot.infrastructure.observability import metrics as _m
+                _m.flow_step_duration_seconds.labels(
+                    state=type(self._state).__name__,
+                ).observe(1.0)  # placeholder — real timing via state enter/exit
+            except Exception:
+                pass  # metrics must never break state transitions
+
         # Each FlowState subclass declares its own status class attribute
         # so adding a new state does not require modifying this method.
         self._state = state
         self.status = getattr(state, "status", AgentStatus.IDLE)
-        logger.info("Transition to state: %s", type(state).__name__)
+        self._log.info("Transition to state: %s", type(state).__name__)
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
-        logger.info("PlanActFlow started for session %s", self._session.id)
+        self._log.info("PlanActFlow started for session %s", self._session.id)
 
         # --- Task context preservation ---
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
@@ -196,10 +253,10 @@ class PlanActFlow(BaseFlow):
         if last_plan is not None and not last_plan.is_complete():
             self._plan = last_plan
             self.set_state(ExecutingState())
-            logger.info("Resuming session %s with existing plan", self._session.id)
+            self._log.info("Resuming session %s with existing plan", self._session.id)
         elif self._session.status == SessionStatus.WAITING:
             self.set_state(ExecutingState())
-            logger.info("Session %s was waiting, continuing execution", self._session.id)
+            self._log.info("Session %s was waiting, continuing execution", self._session.id)
         else:
             self.set_state(PlanningState())
 

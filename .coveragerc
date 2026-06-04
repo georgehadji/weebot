@@ -1,0 +1,33 @@
+[run]
+source = weebot
+omit =
+    weebot/tests/*
+    weebot/GitNexus-main/*
+    weebot/qmd_integration/*
+    weebot/iterance-master/*
+    */__pycache__/*
+    *.egg-info/*
+
+[report]
+# Overall threshold
+fail_under = 60
+
+# Per-layer thresholds (enforced via CI, not ini)
+# domain: 90, application: 80, infrastructure: 70, tools: 65, interfaces: 50
+
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise NotImplementedError
+    if __name__ == "__main__":
+    pass
+    @abc.abstractmethod
+    @abstractmethod
+    def __post_init__
+    TYPE_CHECKING
+
+ignore_errors = True
+
+[html]
+directory = coverage_html

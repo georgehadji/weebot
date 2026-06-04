@@ -10,7 +10,6 @@ from weebot.application.ports.sandbox_port import SandboxPort, SandboxResult
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
-from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -60,12 +59,20 @@ class PythonExecuteTool(BaseTool):
     _sandbox: SandboxPort = PrivateAttr(default=None)
     _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
 
-    def model_post_init(self, __context: object) -> None:
-        """Initialise the sandbox and the approval policy.
+    def __init__(self, sandbox: Optional[SandboxPort] = None):
+        """Initialise with a sandbox port instance (injected by DI).
 
-        Timeout defaults to 30.0 unless set_config() is called.
+        Args:
+            sandbox: SandboxPort implementation for code execution.
+                When None, resolves from the DI container.
         """
-        self._sandbox = NativeWindowsSandbox()
+        super().__init__()
+        if sandbox is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            sandbox = container.get(SandboxPort)
+        self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard()
 

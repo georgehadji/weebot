@@ -23,7 +23,9 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.get("", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
+async def health_check(
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> HealthResponse:
     """
     Comprehensive health check including all system components.
     
@@ -52,16 +54,10 @@ async def health_check() -> HealthResponse:
         ))
         overall_status = "unhealthy"
     
-    # Check database with pool stats
+    # Check database
     try:
-        
         sessions = await state_repo.list_sessions(limit=1)
-        
-        # Get pool stats if available
-        pool_stats = repo.get_pool_stats()
-        pool_msg = "Database operational"
-        if pool_stats.get("initialized"):
-            pool_msg = f"Pool: {pool_stats.get('available_read_connections', 'N/A')} connections available"
+        pool_msg = f"Database operational ({len(sessions)} sessions found)" if sessions else "Database operational (no sessions)"
         
         components.append(HealthComponent(
             name="database",
@@ -155,14 +151,15 @@ async def health_check() -> HealthResponse:
 
 
 @router.get("/ready")
-async def readiness_check() -> dict:
+async def readiness_check(
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> dict:
     """Kubernetes-style readiness check."""
     checks = {}
     
     # Check database
     try:
-        
-        await repo.list_sessions(limit=1)
+        await state_repo.list_sessions(limit=1)
         checks["database"] = "ok"
     except Exception as e:
         checks["database"] = f"error: {e}"
@@ -198,7 +195,9 @@ async def prometheus_metrics():
 
 
 @router.get("/metrics")
-async def metrics_check() -> Dict[str, Any]:
+async def metrics_check(
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> Dict[str, Any]:
     """
     Detailed system metrics for monitoring.
     
@@ -230,9 +229,11 @@ async def metrics_check() -> Dict[str, Any]:
     
     # Database pool metrics
     try:
-        
-        pool_stats = repo.get_pool_stats()
-        metrics["components"]["database_pool"] = pool_stats
+        sessions = await state_repo.list_sessions(limit=1)
+        metrics["components"]["database_pool"] = {
+            "status": "operational",
+            "session_count": len(sessions),
+        }
     except Exception as e:
         metrics["components"]["database_pool"] = {"error": str(e)}
     

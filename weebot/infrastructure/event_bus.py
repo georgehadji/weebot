@@ -6,8 +6,12 @@ import logging
 import warnings
 from typing import List
 
-from weebot.application.ports.event_bus_port import EventBusPort, EventHandler
-from weebot.domain.models.event import AgentEvent
+from weebot.application.ports.event_bus_port import (
+    DomainEventHandler,
+    EventBusPort,
+    EventHandler,
+)
+from weebot.domain.models.event import AgentEvent, DomainEvent
 
 # Prometheus metrics — lazily imported to avoid circular import at module level
 _metrics = None
@@ -26,6 +30,7 @@ class AsyncEventBus(EventBusPort):
 
     def __init__(self) -> None:
         self._handlers: List[EventHandler] = []
+        self._domain_handlers: List[DomainEventHandler] = []
         self._lock = asyncio.Lock()
 
     async def publish(self, event: AgentEvent) -> None:
@@ -76,6 +81,46 @@ class AsyncEventBus(EventBusPort):
     def unsubscribe(self, handler: EventHandler) -> None:
         if handler in self._handlers:
             self._handlers.remove(handler)
+
+    # ── Domain event support ────────────────────────────────────────
+
+    async def publish_domain_event(self, event: DomainEvent) -> None:
+        """Publish a domain event to all domain subscribers.
+
+        Domain events are logged but use a separate subscriber list from
+        agent events, so they don't interfere with SSE/UI event streams.
+        """
+        logger.debug(
+            "Domain event: %s (session=%s)",
+            getattr(event, "type", type(event).__name__),
+            getattr(event, "session_id", "N/A"),
+        )
+        async with self._lock:
+            handlers = list(self._domain_handlers)
+        if not handlers:
+            return
+        results = await asyncio.gather(
+            *[self._safe_call_domain(h, event) for h in handlers],
+            return_exceptions=True,
+        )
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "Domain handler %s failed: %s", handlers[idx], result
+                )
+
+    @staticmethod
+    async def _safe_call_domain(
+        handler: DomainEventHandler, event: DomainEvent
+    ) -> None:
+        await handler(event)
+
+    def subscribe_domain(self, handler: DomainEventHandler) -> None:
+        self._domain_handlers.append(handler)
+
+    def unsubscribe_domain(self, handler: DomainEventHandler) -> None:
+        if handler in self._domain_handlers:
+            self._domain_handlers.remove(handler)
 
 
 # Global singleton instance

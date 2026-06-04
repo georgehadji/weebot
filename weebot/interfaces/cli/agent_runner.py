@@ -18,11 +18,6 @@ from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 from weebot.interfaces.factories import build_tools, create_flow, route_and_create_flow
 from weebot.tools.base import ToolCollection
-from weebot.core.behavior_integration import (
-    start_session_tracking_async,
-    stop_session_tracking_async,
-    get_behavior_integration,
-)
 
 
 class AgentRunner:
@@ -94,6 +89,7 @@ class AgentRunner:
             session = session.model_copy(update={"context": session.context.model_copy(update={"last_prompt": prompt})})
         
         # Start behavior tracking for this session
+        from weebot.core.behavior_integration import start_session_tracking_async
         behavior_tracker = await start_session_tracking_async(
             session_id=session.id,
             working_dir=Path.cwd(),
@@ -175,6 +171,7 @@ class AgentRunner:
         await self._state_repo.save_session(session)
         
         # Stop behavior tracking and show final report
+        from weebot.core.behavior_integration import stop_session_tracking_async
         final_stats = await stop_session_tracking_async(session.id, generate_report=True)
         if final_stats:
             self._print_behavior_summary(final_stats)
@@ -272,6 +269,7 @@ class AgentRunner:
     async def cancel_session(self, session_id: str) -> bool:
         """Cancel a running session."""
         # Stop behavior tracking on cancel
+        from weebot.core.behavior_integration import stop_session_tracking_async
         await stop_session_tracking_async(session_id, generate_report=False)
         return await self._task_runner.cancel_session(session_id)
     

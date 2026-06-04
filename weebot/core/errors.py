@@ -47,10 +47,10 @@ from weebot.core.error_system_user_messages import (
     format_error_for_json,
 )
 
-# Security errors
-from weebot.infrastructure.security.security_validators import (
-    SecurityError,
-    ValidationError as SecurityValidationError,
+# Security errors — imported from domain to maintain dependency direction
+from weebot.domain.exceptions import (
+    SecurityException as SecurityError,
+    ValidationException as SecurityValidationError,
     InjectionDetectedError,
     PathTraversalError,
     SandboxViolationError,

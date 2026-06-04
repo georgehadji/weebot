@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Type, TypeVar
 
+import logging
+
 from weebot.application.cqrs.base import (
     Command,
     CommandHandler,
@@ -12,6 +14,8 @@ from weebot.application.cqrs.base import (
     QueryHandler,
     QueryResult,
 )
+
+logger = logging.getLogger(__name__)
 
 TResult = TypeVar("TResult")
 
@@ -197,6 +201,12 @@ class Mediator:
             return CommandResult.ok(result)
 
         except Exception as e:
+            from weebot.core.error_classifier import ErrorClassifier
+            category = ErrorClassifier.classify(e).value
+            logger.warning(
+                "Command %s failed: %s (type=%s, category=%s)",
+                type(command).__name__, e, type(e).__name__, category,
+            )
             return CommandResult.fail(
                 error=str(e),
                 error_code=type(e).__name__,

@@ -78,18 +78,17 @@ class PersistentMemoryTool(BaseTool):
 
     def __init__(
         self,
-        memory: Optional[MemoryPort] = None,
+        memory: MemoryPort,
         **kwargs: Any,
     ) -> None:
         """Initialize the persistent memory tool.
 
         Args:
-            memory: A MemoryPort implementation. Defaults to
-                FileSystemMemoryAdapter (which stores in ~/.weebot/memory/).
+            memory: A MemoryPort implementation injected by DI.
             **kwargs: Passed through to BaseTool.
         """
         super().__init__(**kwargs)
-        self._memory: MemoryPort = memory or FileSystemMemoryAdapter()
+        self._memory = memory
 
     async def execute(
         self,

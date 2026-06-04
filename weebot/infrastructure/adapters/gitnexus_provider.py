@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
-from .ai_router import TaskType
+from weebot.domain.models.task_type import TaskType
 
 logger = logging.getLogger(__name__)
 

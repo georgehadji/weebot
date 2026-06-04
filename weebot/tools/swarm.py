@@ -18,6 +18,7 @@ import logging
 import time
 from typing import Any, Optional
 
+from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.domain.models.swarm import SwarmSpec
 
@@ -67,11 +68,13 @@ class SwarmTool(BaseTool):
         self,
         llm: Any = None,
         flow_factory: Any = None,
+        swarm_bus: Optional[SwarmEventBusPort] = None,
         **data: Any,
     ) -> None:
         super().__init__(**data)
         object.__setattr__(self, "_llm", llm)
         object.__setattr__(self, "_flow_factory", flow_factory)
+        object.__setattr__(self, "_swarm_bus", swarm_bus)
 
     async def execute(
         self,
@@ -107,9 +110,11 @@ class SwarmTool(BaseTool):
             len(spec.goals), spec.max_concurrency, spec.synthesis_strategy,
         )
 
-        # 2. Create swarm event bus and dispatch
-        from weebot.infrastructure.swarm_event_bus import SwarmEventBus
-        swarm_bus = SwarmEventBus()
+        # 2. Create swarm event bus (injected via DI or fallback) and dispatch
+        swarm_bus = self._swarm_bus
+        if swarm_bus is None:
+            from weebot.infrastructure.swarm_event_bus import SwarmEventBus
+            swarm_bus = SwarmEventBus()
         tasks = []
         for goal in spec.goals:
             tasks.append({

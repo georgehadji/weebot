@@ -13,6 +13,9 @@ from weebot.application.cqrs.commands.skill_edit_commands import (
 from weebot.application.cqrs.commands.validation_commands import (
     ValidateSkillCommand,
 )
+from weebot.application.cqrs.commands.transfer_commands import (
+    ValidateTransferCommand,
+)
 
 # Re-export base commands from the sibling commands.py module.
 # The sub-package `commands/` shadows `commands.py` in Python's import
@@ -41,6 +44,7 @@ __all__ = [
     "BuildOptimizationBatchCommand",
     "ApplySkillEditsCommand",
     "ValidateSkillCommand",
+    "ValidateTransferCommand",
     "ArchiveSessionCommand",
     "CancelSessionCommand",
     "CompactMemoryCommand",

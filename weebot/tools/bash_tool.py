@@ -7,29 +7,18 @@ from typing import Optional
 
 from pydantic import ConfigDict, PrivateAttr
 
+from weebot.application.ports.sandbox_port import SandboxPort, SandboxResult
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
-from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool, ToolResult
 
-# NEW: Multi-layer security analyzer
+# Multi-layer security analyzer
 from weebot.tools.bash_security import (
     CommandSecurityAnalyzer,
     RiskLevel,
     get_security_analyzer
 )
-
-# NEW: StateVerifier for false confidence detection (arXiv:2602.20021)
-from weebot.infrastructure.security.state_verifier import (
-    StateVerifier,
-    CommandExecutionClaim,
-    get_state_verifier,
-    VerificationStatus,
-)
-
-# RTK Integration for token economy
-from weebot.infrastructure.adapters.rtk_integration import execute_with_rtk_fallback, RTK_ENABLED, get_rtk_status
 
 def _wsl_available() -> bool:
     """Return True if WSL2 is installed and responsive on this machine."""
@@ -102,31 +91,34 @@ class BashTool(BaseTool):
     _policy: ExecApprovalPolicy = PrivateAttr(default=None)
     _bash_guard: BashGuard = PrivateAttr(default=None)
     _security_analyzer: CommandSecurityAnalyzer = PrivateAttr(default=None)
-    _state_verifier: StateVerifier = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
     _security_enabled: bool = PrivateAttr(default=True)
-    _verification_enabled: bool = PrivateAttr(default=True)
     _sandbox: SandboxPort = PrivateAttr(default=None)
     _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
 
-    def model_post_init(self, __context: object) -> None:
-        """Initialise the sandboxed executor, approval policy, and security analyzer.
+    def __init__(self, sandbox: Optional[SandboxPort] = None):
+        """Initialise with a sandbox port instance (injected by DI).
 
-        Timeout defaults to 30.0 unless set_config() is called.
+        Args:
+            sandbox: SandboxPort implementation for command execution.
+                When None (e.g., constructed by RoleBasedToolRegistry),
+                uses the default sandbox from weebot.application.di.
         """
-        self._sandbox = NativeWindowsSandbox(
-            config=None,
-        )
+        super().__init__()
+        if sandbox is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            sandbox = container.get(SandboxPort)
+        self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard()
 
-        # NEW: Initialize multi-layer security analyzer
+        # Initialize multi-layer security analyzer
         try:
             self._security_analyzer = get_security_analyzer()
             self._security_enabled = True
         except Exception as e:
-            # FALLBACK: If security analyzer fails to initialize,
-            # fall back to legacy mode but log the issue
             import logging
             logging.getLogger(__name__).warning(
                 f"Security analyzer initialization failed: {e}. "
@@ -135,19 +127,6 @@ class BashTool(BaseTool):
             self._security_analyzer = None
             self._security_enabled = False
 
-        # NEW: Initialize StateVerifier for false confidence detection
-        try:
-            self._state_verifier = get_state_verifier()
-            self._verification_enabled = True
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(
-                f"StateVerifier initialization failed: {e}. "
-                "Disabling post-execution verification."
-            )
-            self._state_verifier = None
-            self._verification_enabled = False
-
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig for settings.
 
@@ -155,8 +134,6 @@ class BashTool(BaseTool):
         """
         self._tool_config = config
         self._default_timeout = float(config.bash_timeout)
-        if hasattr(self, '_sandbox') and self._sandbox is not None:
-            self._sandbox = NativeWindowsSandbox()
 
     # LEGACY: Patterns for detecting encoded/obfuscated commands (fallback)
     _ENCODED_COMMAND_PATTERNS = [
@@ -412,61 +389,24 @@ class BashTool(BaseTool):
                 ),
             )
 
-        # --- RTK Integration for token economy ---
-        if RTK_ENABLED:
-            # Execute command through RTK if available and beneficial
-            stdout, stderr, returncode = await execute_with_rtk_fallback(
-                command, effective_timeout
+        # --- Run in sandbox (via SandboxPort, injected by DI) ---
+        shell_type = "bash" if use_wsl else "powershell"
+        result = await self._sandbox.execute_shell(
+            script=command,
+            shell=shell_type,
+            timeout=effective_timeout,
+            cwd=working_dir,
+        )
+
+        if result.timed_out:
+            return ToolResult(
+                output="",
+                error=f"Command timed out after {effective_timeout:.0f}s",
             )
-            
-            # Create result based on RTK execution
-            if returncode == -1 and "timed out" in stderr.lower():
-                return ToolResult(
-                    output="",
-                    error=stderr,
-                )
-            elif returncode != 0 and stderr:
-                return ToolResult(
-                    output=stdout,
-                    error=stderr or f"Exit code {returncode}",
-                )
-            else:
-                return ToolResult(output=stdout)
-        else:
-            # --- Run in sandbox (always via NativeWindowsSandbox) ---
-            shell_type = "bash" if use_wsl else "powershell"
-            result = await self._sandbox.execute_shell(
-                script=command,
-                shell=shell_type,
-                timeout=effective_timeout,
-                cwd=working_dir,
+        if not result.success:
+            return ToolResult(
+                output=result.stdout,
+                error=result.stderr or f"Exit code {result.returncode}",
             )
 
-            if result.timed_out:
-                return ToolResult(
-                    output="",
-                    error=f"Command timed out after {effective_timeout:.0f}s",
-                )
-            if not result.success:
-                return ToolResult(
-                    output=result.stdout,
-                    error=result.stderr or f"Exit code {result.returncode}",
-                )
-
-            # NEW: Post-execution verification for false confidence detection
-            if self._verification_enabled and self._state_verifier:
-                verification_result = await self._verify_command_execution(
-                    command=command,
-                    returncode=result.returncode,
-                    output=result.combined_output,
-                )
-                if verification_result and not verification_result.is_trusted:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        f"Command execution verification failed: {verification_result.discrepancies}"
-                    )
-                    # Add warning to output but don't block
-                    warning_msg = f"\n[WARNING: Execution verification confidence {verification_result.confidence_score:.2f}]"
-                    return ToolResult(output=result.combined_output + warning_msg)
-
-            return ToolResult(output=result.combined_output)
+        return ToolResult(output=result.combined_output)

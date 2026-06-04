@@ -38,14 +38,14 @@ class VoiceInputTool(BaseTool):
 
     def __init__(self, speech: Optional[SpeechPort] = None, **data: Any) -> None:
         super().__init__(**data)
+        if speech is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            speech = container.get(SpeechPort)
         object.__setattr__(self, "_speech", speech)
 
     async def execute(self, audio_path: str, language: str = "", **_: Any) -> ToolResult:
-        if self._speech is None:
-            from weebot.infrastructure.adapters.speech.whisper_adapter import (
-                WhisperSpeechAdapter,
-            )
-            self._speech = WhisperSpeechAdapter()
 
         try:
             text = await self._speech.transcribe(

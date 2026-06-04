@@ -88,6 +88,45 @@ class ValidationException(WeebotError):
     pass
 
 
+class InjectionDetectedError(SecurityException):
+    """Potential injection attack detected."""
+    def __init__(self, message: str, injection_type: str = "unknown", matched_pattern: str | None = None):
+        super().__init__(message)
+        self.injection_type = injection_type
+        self.matched_pattern = matched_pattern
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.ERROR
+
+
+class PathTraversalError(SecurityException):
+    """Attempted path traversal attack."""
+    def __init__(self, path: str):
+        super().__init__(f"Access denied: The specified path is outside the allowed workspace.")
+        self.path = path
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.ERROR
+
+
+class SandboxViolationError(SecurityException):
+    """Code attempted to violate sandbox restrictions."""
+    def __init__(self, message: str, violation_type: str = "unknown", blocked_operation: str | None = None):
+        super().__init__(message)
+        self.violation_type = violation_type
+        self.blocked_operation = blocked_operation
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.ERROR
+
+
+class UnauthorizedAccessError(SecurityException):
+    """Attempted access to unauthorized resource."""
+    def __init__(self, resource: str, required_permission: str | None = None):
+        super().__init__(f"Access denied to resource: {resource}")
+        self.resource = resource
+        self.required_permission = required_permission
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.ERROR
+
+
 # Convenience re-exports
 __all__ = [
     "ErrorCode",
@@ -100,4 +139,8 @@ __all__ = [
     "CheckpointError",
     "SecurityException",
     "ValidationException",
+    "InjectionDetectedError",
+    "PathTraversalError",
+    "SandboxViolationError",
+    "UnauthorizedAccessError",
 ]

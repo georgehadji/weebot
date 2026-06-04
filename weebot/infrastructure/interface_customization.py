@@ -16,7 +16,8 @@ import logging
 from abc import ABC, abstractmethod
 import uuid
 
-from weebot.domain.models.user_profile import UserProfile, UserProfileManager, PreferenceCategory
+from weebot.domain.models.user_profile import UserProfile, PreferenceCategory
+from weebot.application.services.profile_manager import UserProfileManager
 
 
 class ThemeType(Enum):
@@ -1139,7 +1140,8 @@ if __name__ == "__main__":
         # For demonstration, we'll create a simplified version
         
         # Create a basic customization engine
-        from weebot.domain.models.user_profile import InMemoryUserProfileStorage, UserProfileManager
+        from weebot.infrastructure.persistence.profile_storage import InMemoryUserProfileStorage
+        from weebot.application.services.profile_manager import UserProfileManager
         
         storage = InMemoryUserProfileStorage()
         profile_manager = UserProfileManager(storage)

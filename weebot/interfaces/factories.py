@@ -16,9 +16,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.session import Session
 from weebot.domain.models.task_route import TaskRoute
-from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
-from weebot.tools.base import BaseTool, ToolCollection
-from weebot.tools.tool_registry import RoleBasedToolRegistry
+from weebot.tools.base import ToolCollection
 
 
 async def route_and_create_flow(
@@ -103,14 +101,18 @@ def create_flow(
 async def build_tools(
     role: str = "admin",
     mcp_config: Optional[dict] = None,
-    extra_tools: Optional[list[BaseTool]] = None,
+    extra_tools: Optional[list] = None,
     llm_port: Optional[LLMPort] = None,
 ) -> ToolCollection:
     """Factory for building a ToolCollection for a given role and optional MCP config."""
+    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.tools.base import BaseTool
+
     registry = RoleBasedToolRegistry()
     combined: list[BaseTool] = list(registry.create_tool_collection(role, llm_port=llm_port))
 
     if mcp_config:
+        from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
         adapter = MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())

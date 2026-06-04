@@ -10,7 +10,7 @@ from pathlib import Path
 
 from weebot.config.model_refs import MODEL_RTK_CHEAP, MODEL_RTK_PREMIUM, MODEL_RTK_STANDARD
 from .rtk_provider import RTKProvider, get_rtk_provider
-from .ai_router import TaskType
+from weebot.domain.models.task_type import TaskType
 
 logger = logging.getLogger(__name__)
 

@@ -430,125 +430,15 @@ class InputSanitizer:
         return any(pattern.search(value) for pattern in cls.HTML_PATTERNS)
 
 # =============================================================================
-# Security Error Classes
+# Security Error Classes — re-exported from domain layer
 # =============================================================================
-
-class SecurityError(Exception):
-    """
-    Base class for security-related errors.
-    
-    Attributes:
-        message: Human-readable error description
-        error_code: Machine-readable error code for client handling
-        details: Additional context (not exposed to users in production)
-        remediation: Suggested fix for the user
-    """
-    
-    def __init__(
-        self,
-        message: str,
-        error_code: str = "SECURITY_VIOLATION",
-        details: dict | None = None,
-        remediation: str = "",
-    ):
-        super().__init__(message)
-        self.message = message
-        self.error_code = error_code
-        self.details = details or {}
-        self.remediation = remediation
-    
-    def __str__(self) -> str:
-        return f"[{self.error_code}] {self.message}"
-
-
-class ValidationError(SecurityError):
-    """Input validation failed."""
-    
-    def __init__(
-        self,
-        message: str,
-        field: str | None = None,
-        provided_value: str | None = None,
-        **kwargs
-    ):
-        super().__init__(
-            message=message,
-            error_code="VALIDATION_ERROR",
-            **kwargs
-        )
-        self.field = field
-        self.provided_value = provided_value
-
-
-class InjectionDetectedError(SecurityError):
-    """Potential injection attack detected."""
-    
-    def __init__(
-        self,
-        message: str,
-        injection_type: str = "unknown",
-        matched_pattern: str | None = None,
-        **kwargs
-    ):
-        super().__init__(
-            message=message,
-            error_code="INJECTION_DETECTED",
-            details={"injection_type": injection_type, "matched_pattern": matched_pattern},
-            remediation="Please review your input and remove special characters or scripting content.",
-            **kwargs
-        )
-        self.injection_type = injection_type
-        self.matched_pattern = matched_pattern
-
-
-class PathTraversalError(SecurityError):
-    """Attempted path traversal attack."""
-    
-    def __init__(self, path: str, **kwargs):
-        super().__init__(
-            message="Access denied: The specified path is outside the allowed workspace.",
-            error_code="PATH_TRAVERSAL_BLOCKED",
-            details={"attempted_path": path},
-            remediation="Use a path within the workspace directory.",
-            **kwargs
-        )
-
-
-class SandboxViolationError(SecurityError):
-    """Code attempted to violate sandbox restrictions."""
-    
-    def __init__(
-        self,
-        message: str,
-        violation_type: str = "unknown",
-        blocked_operation: str | None = None,
-        **kwargs
-    ):
-        super().__init__(
-            message=message,
-            error_code="SANDBOX_VIOLATION",
-            details={
-                "violation_type": violation_type,
-                "blocked_operation": blocked_operation
-            },
-            remediation="This operation is not permitted in the sandboxed environment.",
-            **kwargs
-        )
-
-
-class UnauthorizedAccessError(SecurityError):
-    """Attempted access to unauthorized resource."""
-    
-    def __init__(
-        self,
-        resource: str,
-        required_permission: str | None = None,
-        **kwargs
-    ):
-        super().__init__(
-            message=f"Access denied to resource: {resource}",
-            error_code="UNAUTHORIZED_ACCESS",
-            details={"required_permission": required_permission},
-            remediation="Contact your administrator if you need access to this resource.",
-            **kwargs
-        )
+# These classes are defined in weebot/domain/exceptions.py to maintain
+# domain purity and prevent reverse dependencies from core → infrastructure.
+from weebot.domain.exceptions import (
+    SecurityException as SecurityError,
+    ValidationException as ValidationError,
+    InjectionDetectedError,
+    PathTraversalError,
+    SandboxViolationError,
+    UnauthorizedAccessError,
+)

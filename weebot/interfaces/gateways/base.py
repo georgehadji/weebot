@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from weebot.core.safety import SafetyChecker
+# Lazy import: SafetyChecker imported inside validate_message
 
 
 @dataclass

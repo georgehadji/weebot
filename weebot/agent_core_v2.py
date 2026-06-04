@@ -5,7 +5,21 @@
 # Superseded by PlanActFlow / Session domain model.
 # Target sunset: 2027-03-01
 # ═══════════════════════════════════════════════════════════════════════
-"""agent_core_v2.py - Enhanced Agent με όλες τις νέες δυνατότητες
+"""DEPRECATED — agent_core_v2.py
+
+This module is frozen and scheduled for removal by 2026-09-01.
+Use ``weebot.application.di.Container.build_agent_runner()`` instead.
+
+See: docs/architecture/REMEDIATION_PLAN.md step-17
+"""
+import warnings
+warnings.warn(
+    "agent_core_v2 is deprecated. Use Container.build_agent_runner() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+"""agent_core_v2.py - Enhanced Agent (LEGACY — do not extend)
 
 Βελτιώσεις από v1:
 ------------------

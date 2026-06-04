@@ -10,17 +10,7 @@ from typing import List, Optional
 from weebot.application.ports.llm_port import LLMPort
 
 
-class TaskType(Enum):
-    CODE_GENERATION = "code_generation"
-    CODE_REVIEW = "code_review"
-    DEBUGGING = "debugging"
-    ARCHITECTURE = "architecture"
-    DOCUMENTATION = "documentation"
-    ANALYSIS = "analysis"
-    CREATIVE = "creative"
-    CHAT = "chat"
-    REASONING = "reasoning"
-    AGENTIC = "agentic"
+from weebot.domain.models.task_type import TaskType
 
 
 class ModelTier(Enum):

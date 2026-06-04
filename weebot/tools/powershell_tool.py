@@ -196,7 +196,6 @@ class PowerShellTool(BaseTool):
 from pydantic import ConfigDict, PrivateAttr  # noqa: E402
 from weebot.core.approval_policy import ExecApprovalPolicy  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort
-from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolResult  # noqa: E402
 
 
@@ -228,9 +227,15 @@ class PowerShellBaseTool(_WeebotBaseTool):
     _inner: PowerShellTool = PrivateAttr(default=None)
     _sandbox: SandboxPort = PrivateAttr(default=None)
 
-    def model_post_init(self, __context) -> None:
+    def __init__(self, sandbox: Optional[SandboxPort] = None):
+        super().__init__()
         self._inner = PowerShellTool()
-        self._sandbox = NativeWindowsSandbox()
+        if sandbox is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            sandbox = container.get(SandboxPort)
+        self._sandbox = sandbox
 
     async def execute(self, command: str, timeout: Optional[float] = None, **_) -> _ToolResult:  # type: ignore[override]
         # Coerce timeout and apply ceiling

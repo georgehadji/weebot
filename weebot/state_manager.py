@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+import warnings
+warnings.warn(
+    "state_manager is deprecated. Use "
+    "weebot.infrastructure.persistence.sqlite_state_repo instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 # ═══════════════════════════════════════════════════════════════════════
 # ⚠️ LEGACY — Frozen. No new features.
 # Superseded by PlanActFlow / Session domain model.

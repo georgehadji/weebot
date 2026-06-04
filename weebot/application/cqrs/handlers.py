@@ -498,6 +498,35 @@ from weebot.application.cqrs.handlers.query_handlers import (
     GetActiveTasksHandler,
 )
 
+# Subdirectory command/handler imports — registered separately
+# via register_skillopt_handlers() (called from di.py when SkillOpt is configured).
+from weebot.application.cqrs.commands.skill_edit_commands import (
+    ApplySkillEditsCommand,
+)
+from weebot.application.cqrs.commands.trajectory_commands import (
+    BuildOptimizationBatchCommand,
+    ScoreTrajectoryCommand,
+)
+from weebot.application.cqrs.commands.validation_commands import (
+    ValidateSkillCommand,
+)
+from weebot.application.cqrs.commands.transfer_commands import (
+    ValidateTransferCommand,
+)
+from weebot.application.cqrs.handlers.skill_edit_handler import (
+    ApplySkillEditsHandler,
+)
+from weebot.application.cqrs.handlers.trajectory_handler import (
+    BuildOptimizationBatchHandler,
+    ScoreTrajectoryHandler,
+)
+from weebot.application.cqrs.handlers.validation_handler import (
+    ValidateSkillHandler,
+)
+from weebot.application.cqrs.handlers.transfer_handler import (
+    ValidateTransferHandler,
+)
+
 
 # ---------------------------------------------------------------------------
 # Handler Registration Helper
@@ -510,6 +539,8 @@ def register_default_handlers(
     llm=None,
     tools=None,
     event_bus=None,
+    scoring_port=None,
+    trajectory_builder=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -520,6 +551,8 @@ def register_default_handlers(
         llm: LLMPort for agent handlers (required for CreatePlanHandler etc.).
         tools: ToolCollection for execution handler.
         event_bus: Optional EventBusPort for agent event publishing.
+        scoring_port: Optional ScoringPort for trajectory scoring (SkillOpt).
+        trajectory_builder: Optional TrajectoryBuilder for trajectory creation.
     """
     from weebot.application.cqrs.mediator import Mediator
 
@@ -572,6 +605,13 @@ def register_default_handlers(
             CancelSessionCommand, CancelSessionHandler(task_runner)
         )
 
+    # --- Optional: trajectory scoring (SkillOpt-aware) ---
+    if scoring_port is not None and trajectory_builder is not None:
+        mediator.register_command_handler(
+            ScoreTrajectoryCommand,
+            ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder),
+        )
+
     # --- Query handlers ---
     mediator.register_query_handler(
         GetSessionQuery, GetSessionHandler(state_repo)
@@ -599,4 +639,69 @@ def register_default_handlers(
         GetActiveTasksQuery,
         GetActiveTasksHandler(task_runner) if task_runner
         else GetActiveTasksHandler(TaskRunner(state_repo=state_repo)),
+    )
+
+
+def register_skillopt_handlers(
+    mediator,
+    *,
+    scoring_port,
+    state_repo,
+    trajectory_builder,
+    skill_store,
+    trajectory_repo,
+    validation_runner,
+    flow_factory,
+) -> None:
+    """Register SkillOpt-specific command handlers with a mediator.
+
+    These handlers are NOT registered by default — they require SkillOpt
+    infrastructure dependencies (SkillStore, TrajectoryRepository, etc.).
+    Call this after ``register_default_handlers()`` to add them.
+
+    Args:
+        mediator: The Mediator instance.
+        scoring_port: ScoringPort for trajectory evaluation.
+        state_repo: StateRepositoryPort for session persistence.
+        trajectory_builder: TrajectoryBuilder for trajectory creation.
+        skill_store: SkillStore for skill persistence.
+        trajectory_repo: TrajectoryRepository for trajectory storage.
+        validation_runner: ValidationRunner for skill validation.
+        flow_factory: Flow factory callable for transfer validation.
+    """
+    from weebot.application.cqrs.mediator import Mediator
+
+    if not isinstance(mediator, Mediator):
+        raise ValueError("mediator must be a Mediator instance")
+
+    # ScoreTrajectoryCommand — also callable from register_default_handlers()
+    # when scoring deps are available; this ensures it's always registered
+    # when SkillOpt is configured.
+    mediator.register_command_handler(
+        ScoreTrajectoryCommand,
+        ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder),
+    )
+
+    # Skill edits (from optimizer reflection → merge → rank pipeline)
+    mediator.register_command_handler(
+        ApplySkillEditsCommand,
+        ApplySkillEditsHandler(skill_store),
+    )
+
+    # Build optimization batches from collected trajectories
+    mediator.register_command_handler(
+        BuildOptimizationBatchCommand,
+        BuildOptimizationBatchHandler(trajectory_repo),
+    )
+
+    # Validate candidate skills on held-out tasks
+    mediator.register_command_handler(
+        ValidateSkillCommand,
+        ValidateSkillHandler(validation_runner),
+    )
+
+    # Cross-model transfer validation
+    mediator.register_command_handler(
+        ValidateTransferCommand,
+        ValidateTransferHandler(state_repo, flow_factory),
     )

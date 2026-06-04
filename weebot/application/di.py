@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 from weebot.application.cqrs.behaviors.save_policy import SavePolicyBehavior
 from weebot.application.cqrs.handlers import register_default_handlers
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior
+from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.mediator import Mediator
 from weebot.config.model_refs import MODEL_DI_DEFAULT
@@ -29,8 +30,10 @@ from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
+from weebot.application.ports.config_port import ConfigPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.scoring_port import ScoringPort
+from weebot.application.ports.speech_port import SpeechPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.steering_port import SteeringPort
 from weebot.application.ports.task_router_port import TaskRouterPort
@@ -130,6 +133,15 @@ class Container:
         # Personality manager — WEEBOT_CORE.md identity injection
         self.register("personality", self._create_personality)
 
+        # Structured logger — JSON-formatted operational logging
+        self.register("structured_logger", lambda: self._create_structured_logger())
+
+        # Config port — unified configuration access
+        self.register(ConfigPort, lambda: self._create_config_adapter())
+
+        # Speech port — voice I/O (Whisper on Windows, configurable)
+        self.register(SpeechPort, lambda: self._create_speech())
+
         # Event Store — append-only audit log
         self.register(EventStorePort, lambda: self._create_event_store())
 
@@ -163,6 +175,7 @@ class Container:
         mediator = Mediator()
         # Pipeline behaviours
         mediator.add_pipeline_behavior(LoggingBehavior())
+        mediator.add_pipeline_behavior(TelemetryBehavior())
         mediator.add_pipeline_behavior(
             SavePolicyBehavior(state_repo=self._maybe_get(StateRepositoryPort))
         )
@@ -186,9 +199,18 @@ class Container:
             except Exception:
                 tools = None
 
+        # Optional: scoring deps for trajectory scoring (registered by
+        # configure_skillopt()).  Passed through when available so that
+        # ScoreTrajectoryCommand works from the main PlanActFlow's
+        # CompletedState without needing a full SkillOpt setup.
+        scoring_port = self._maybe_get_str("scoring_port")
+        trajectory_builder = self._maybe_get_str("trajectory_builder")
+
         register_default_handlers(
             mediator, state_repo, task_runner,
             llm=llm, tools=tools, event_bus=event_bus,
+            scoring_port=scoring_port,
+            trajectory_builder=trajectory_builder,
         )
         return mediator
 
@@ -224,6 +246,26 @@ class Container:
             SQLiteToolRepository,
         )
         return SQLiteToolRepository()
+
+    @staticmethod
+    def _create_structured_logger():
+        """Create the StructuredLogger singleton."""
+        from weebot.core.structured_logger import StructuredLogger
+        return StructuredLogger("weebot")
+
+    @staticmethod
+    def _create_config_adapter():
+        """Create the default ConfigAdapter."""
+        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
+        return ConfigAdapter()
+
+    @staticmethod
+    def _create_speech():
+        """Create the default speech adapter."""
+        from weebot.infrastructure.adapters.speech.whisper_adapter import (
+            WhisperSpeechAdapter,
+        )
+        return WhisperSpeechAdapter()
 
     @staticmethod
     def _create_event_store():
@@ -424,6 +466,7 @@ class Container:
             event_bus=self._maybe_get(EventBusPort),
             session=session,
             max_steps=SUBAGENT_MAX_STEPS,
+            logger=self._maybe_get_str("structured_logger"),
         )
 
     # ═══════════════════════════════════════════════════════════════════
@@ -693,11 +736,45 @@ class Container:
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
 
         # Build a scoped mediator with the same default handlers +
-        # the validation gate for this specific SkillOptFlow instance.
+        # the validation gate + skillopt handlers for this flow.
         mediator = self.build_mediator()
         gate = self._maybe_get_str("validation_gate")
         if gate is not None:
             mediator.add_pipeline_behavior(gate)
+
+        # Register SkillOpt-specific command handlers
+        from weebot.application.cqrs.handlers import register_skillopt_handlers
+        from weebot.application.services.trajectory_builder import (
+            TrajectoryBuilder,
+        )
+
+        scoring_port = self.get(OptimizerPort)
+        llm = self._maybe_get(LLMPort)
+        trajectory_builder = TrajectoryBuilder(llm=llm)
+        skill_store = self.get("skill_store")
+        trajectory_repo = self.get("trajectory_repo")
+        validation_gate = self._maybe_get_str("validation_gate")
+        validation_runner = (
+            getattr(validation_gate, "_validation_runner", None)
+            if validation_gate else None
+        )
+        flow_factory = self._create_target_flow_factory()
+
+        # Also register scoring_port and trajectory_builder as string-keyed
+        # singletons so build_mediator picks them up on subsequent calls.
+        self.register_instance("scoring_port", scoring_port)
+        self.register_instance("trajectory_builder", trajectory_builder)
+
+        register_skillopt_handlers(
+            mediator,
+            scoring_port=scoring_port,
+            state_repo=self.get(StateRepositoryPort),
+            trajectory_builder=trajectory_builder,
+            skill_store=skill_store,
+            trajectory_repo=trajectory_repo,
+            validation_runner=validation_runner,
+            flow_factory=flow_factory,
+        )
 
         return SkillOptFlow(
             skill_name=skill_name,

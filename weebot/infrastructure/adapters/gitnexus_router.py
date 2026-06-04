@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .gitnexus_provider import GitNexusProvider, get_gitnexus_provider
 from .gitnexus_config import GitNexusConfig, get_gitnexus_config
-from .ai_router import TaskType
+from weebot.domain.models.task_type import TaskType
 
 logger = logging.getLogger(__name__)
 

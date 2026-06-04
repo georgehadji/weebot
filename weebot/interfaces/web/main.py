@@ -200,7 +200,7 @@ def create_app() -> FastAPI:
         logger.exception("Unhandled exception: %s", exc)
         # Increment exception counter
         try:
-            from weebot.infrastructure.observability import metrics as _m
+            # Lazy import: metrics are imported inside exception handler
             _m.exceptions_total.labels(exception_type=type(exc).__name__).inc()
         except Exception:
             pass

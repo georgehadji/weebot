@@ -21,7 +21,7 @@ from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.factories import build_tools, create_flow
 from weebot.interfaces.gateways.base import GatewayMessage, GatewayResponse
-from weebot.tools.base import ToolCollection
+# Lazy import: ToolCollection imported inside handler functions
 
 logger = logging.getLogger(__name__)
 
