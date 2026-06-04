@@ -134,42 +134,51 @@ class PlanActFlow(BaseFlow):
         return self._logger if self._logger is not None else self._stdlib_logger
 
     async def _emit(self, event: AgentEvent) -> None:
-        async with self._emit_lock:
-            # ── Capability 1: Truth-binding response layer ──────────────
-            # Before publishing, validate assistant responses against
-            # deterministic guards (no LLM in the policy path).
-            if (
-                self._truth_binder is not None
-                and isinstance(event, MessageEvent)
-                and event.role == "assistant"
-            ):
-                result = await self._truth_binder.bind(
-                    event.message,
-                    {
-                        "session_events": self._session.events,
-                        "step": self._plan.current_step if self._plan else None,
-                        "facts": self._session.get_facts(),
-                    },
+        # ── Capability 1: Truth-binding response layer ──────────────
+        # Before publishing, validate assistant responses against
+        # deterministic guards (no LLM in the policy path).
+        if (
+            self._truth_binder is not None
+            and isinstance(event, MessageEvent)
+            and event.role == "assistant"
+        ):
+            result = await self._truth_binder.bind(
+                event.message,
+                {
+                    "session_events": self._session.events,
+                    "step": self._plan.current_step if self._plan else None,
+                    "facts": self._session.get_facts(),
+                },
+            )
+            if not result.passed or result.has_rewrites():
+                self._log.info(
+                    "Truth binding %s for response (%d violations)",
+                    "blocked" if result.has_blockers() else "rewrote",
+                    len(result.violations),
                 )
-                if not result.passed or result.has_rewrites():
-                    self._log.info(
-                        "Truth binding %s for response (%d violations)",
-                        "blocked" if result.has_blockers() else "rewrote",
-                        len(result.violations),
+                for v in result.violations:
+                    self._log.debug("  Violation [%s]: %s", v.check, v.message)
+                event = event.model_copy(update={"message": result.bound_text})
+        # ────────────────────────────────────────────────────────────
+
+        # 1. Mutate in-memory session (fast, no I/O, no lock needed)
+        self._session = self._session.add_event(event)
+
+        # 2. Publish to event bus (async I/O, no lock needed)
+        if self._event_bus:
+            await self._event_bus.publish(event)
+            # Publish domain events for key agent event types
+            await self._emit_domain_event(event)
+
+        # 3. Persist to DB — lock held only for serial write
+        if self._state_repo:
+            async with self._emit_lock:
+                try:
+                    await self._state_repo.save_session(self._session)
+                except Exception as exc:
+                    self._log.warning(
+                        "Session persistence failed (retryable): %s", exc
                     )
-                    for v in result.violations:
-                        self._log.debug("  Violation [%s]: %s", v.check, v.message)
-                    event = event.model_copy(update={"message": result.bound_text})
-            # ────────────────────────────────────────────────────────────
-
-            self._session = self._session.add_event(event)
-            if self._event_bus:
-                await self._event_bus.publish(event)
-
-                # Publish domain events for key agent event types
-                await self._emit_domain_event(event)
-            if self._state_repo:
-                await self._state_repo.save_session(self._session)
 
     async def _emit_domain_event(self, event: AgentEvent) -> None:
         """Publish domain events derived from agent events."""
@@ -275,12 +284,15 @@ class PlanActFlow(BaseFlow):
             # where the prompt is the original task.
             state_prompt = effective_prompt if not prompt_consumed else ""
             
-            async for event in self._state.execute(self, state_prompt):
-                yield event
-                # Once we start receiving events, consider the prompt consumed
-                # for the current state transition logic.
-                if state_prompt:
-                    prompt_consumed = True
+            try:
+                async for event in self._state.execute(self, state_prompt):
+                    yield event
+                    # Once we start receiving events, consider the prompt consumed
+                    # for the current state transition logic.
+                    if state_prompt:
+                        prompt_consumed = True
+            finally:
+                pass  # Inner generator cleaned up by Python GC on outer generator finalization
 
             # If we reached COMPLETED state logic or it paused for HITL, we break
             if self._session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING):

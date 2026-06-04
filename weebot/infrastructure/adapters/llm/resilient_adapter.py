@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Callable
 
@@ -18,6 +19,25 @@ try:
     CACHE_AVAILABLE = True
 except ImportError:
     CACHE_AVAILABLE = False
+
+# Credential redaction patterns
+_CREDENTIAL_REDACTIONS = [
+    (re.compile(r'(api[_-]?key|token|secret|password)[=:]\s*\S+', re.IGNORECASE),
+     r'\1=***REDACTED***'),
+    (re.compile(r'(sk-[a-zA-Z0-9]{20,})'), 'sk-***REDACTED***'),
+]
+
+
+def _sanitize_error(exc: BaseException) -> None:
+    """Redact credential patterns from exception messages in-place."""
+    msg = str(exc)
+    for pattern, replacement in _CREDENTIAL_REDACTIONS:
+        msg = pattern.sub(replacement, msg)
+    if msg != str(exc):
+        try:
+            exc.args = (msg,) + exc.args[1:]
+        except (AttributeError, TypeError):
+            pass
     LLMCache = None
     CacheKey = None
 
@@ -107,9 +127,8 @@ class ResilientLLMAdapter(LLMPort):
             self._circuit = None
         
         logger.debug(
-            f"Initialized ResilientLLMAdapter for {model_name} "
-            f"(timeout={timeout}s, circuit_breaker={enable_circuit_breaker}, "
-            f"retry={enable_retry}, caching={enable_caching})"
+            "Initialized ResilientLLMAdapter for %s (timeout=%ss, circuit_breaker=%s, retry=%s, caching=%s)",
+            model_name, timeout, enable_circuit_breaker, enable_retry, enable_caching,
         )
     
     async def chat(
@@ -219,6 +238,7 @@ class ResilientLLMAdapter(LLMPort):
                     _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="auth_error").inc()
                 except Exception:
                     pass
+                _sanitize_error(e)
                 raise
             # Record failure if retryable
             if self._circuit and self._is_retryable_error(e):
@@ -227,6 +247,7 @@ class ResilientLLMAdapter(LLMPort):
                 _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="error").inc()
             except Exception:
                 pass
+            _sanitize_error(e)
             raise
     
     async def _execute_with_timeout(
@@ -266,7 +287,12 @@ class ResilientLLMAdapter(LLMPort):
         and would otherwise fail immediately.
         """
         cat = ErrorClassifier.classify(exc)
-        return cat not in (ErrorCategory.AUTH, ErrorCategory.CONTEXT_LENGTH, ErrorCategory.TOOL_ERROR)
+        return cat not in (
+            ErrorCategory.AUTH,
+            ErrorCategory.CONTEXT_LENGTH,
+            ErrorCategory.RATE_LIMIT,  # Retrying rate limits compounds the problem
+            ErrorCategory.TOOL_ERROR,
+        )
     
     def _should_cache(
         self,

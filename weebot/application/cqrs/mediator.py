@@ -122,6 +122,7 @@ class Mediator:
         """Add a pipeline behavior (middleware).
 
         Behaviors are executed in the order they are added.
+        NOT thread-safe — call at startup only, before any send()/query().
 
         Args:
             behavior: The behavior to add.
@@ -181,8 +182,9 @@ class Mediator:
         handler = self._command_handlers.get(command_type)
 
         if handler is None:
-            raise HandlerNotRegisteredError(
-                f"No handler registered for {command_type.__name__}"
+            return CommandResult.fail(
+                error=f"No handler registered for {command_type.__name__}",
+                error_code="HANDLER_NOT_REGISTERED",
             )
 
         try:
@@ -228,9 +230,7 @@ class Mediator:
         handler = self._query_handlers.get(query_type)
 
         if handler is None:
-            raise HandlerNotRegisteredError(
-                f"No handler registered for {query_type.__name__}"
-            )
+            return QueryResult.fail(error=f"No handler registered for {query_type.__name__}")
 
         try:
             # Build and execute pipeline

@@ -8,8 +8,11 @@ the tools layer as the stable tool contract.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from weebot.config.constants import MAX_TOOL_OUTPUT_CHARS
 from weebot.tools.base import BaseTool, ToolResult
@@ -120,6 +123,8 @@ class ToolCollection:
                 return result
 
             except Exception as exc:
+                # Log the full traceback before discarding it
+                logger.exception("Tool %s raised an unhandled exception", _name)
                 # Tool failure metric (best-effort)
                 m = _get_tool_metrics()
                 if m is not None:

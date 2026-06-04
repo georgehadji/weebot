@@ -257,6 +257,18 @@ class BashGuard:
             "C-style infinite loop",
             "Ensure this loop has a proper termination condition.",
         ),
+        (
+            r"\b__import__\s*\(.+\)\s*\.\s*system\b",
+            RiskLevel.DANGEROUS,
+            "Obfuscated Python system call",
+            "Use safe alternatives. This bypasses standard import detection.",
+        ),
+        (
+            r"\bgetattr\s*\(\s*__import__\s*\(.+\)\s*,\s*['\"](system|popen)['\"]\s*\)",
+            RiskLevel.DANGEROUS,
+            "Obfuscated Python dynamic call",
+            "Indirect system calls via getattr/__import__ are prohibited.",
+        ),
     ]
 
     # Windows-specific risks

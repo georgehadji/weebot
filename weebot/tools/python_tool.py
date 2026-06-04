@@ -129,6 +129,7 @@ class PythonExecuteTool(BaseTool):
         result = await self._sandbox.execute_python(
             code=code,
             timeout=effective_timeout,
+            memory_limit_mb=256,
         )
 
         if result.timed_out:

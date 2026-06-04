@@ -272,63 +272,6 @@ class BashTool(BaseTool):
         ).hexdigest()
         return hmac.compare_digest(expected, token)
 
-    async def _verify_command_execution(
-        self,
-        command: str,
-        returncode: int,
-        output: str,
-    ) -> Optional[Any]:
-        """
-        Verify command execution result to prevent false confidence.
-
-        Uses StateVerifier to check if the claimed execution result
-        matches the actual system state.
-
-        Args:
-            command: The command that was executed
-            returncode: The return code from execution
-            output: The output from execution
-
-        Returns:
-            VerificationResult if verification was performed, None otherwise
-        """
-        if not self._state_verifier:
-            return None
-
-        # Only verify critical commands
-        critical_patterns = [
-            r'delete', r'remove', r'rm\s',
-            r'mkdir', r'create', r'new-file',
-            r'download', r'curl', r'wget',
-            r'install', r'pip\s+install', r'npm\s+install',
-        ]
-
-        import re
-        is_critical = any(
-            re.search(pattern, command, re.IGNORECASE)
-            for pattern in critical_patterns
-        )
-
-        if not is_critical:
-            return None
-
-        # Create claim and verify
-        claim = CommandExecutionClaim(
-            command=command,
-            claimed_returncode=returncode,
-            claimed_output=output,
-        )
-
-        try:
-            result = await self._state_verifier.verify_command_execution(claim)
-            return result
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(
-                f"Command verification failed: {e}"
-            )
-            return None
-
     async def execute(
         self,
         command: str,
@@ -355,8 +298,12 @@ class BashTool(BaseTool):
             effective_timeout = float(timeout) if timeout is not None else float(self._default_timeout)
         except (TypeError, ValueError):
             effective_timeout = float(self._default_timeout)
+        # Clamp: minimum 1s prevents indefinite hangs; default ceiling 300s
+        effective_timeout = max(effective_timeout, 1.0)
         if self._tool_config is not None:
             effective_timeout = min(effective_timeout, float(self._tool_config.max_tool_timeout))
+        else:
+            effective_timeout = min(effective_timeout, 300.0)
 
         # --- Security check: multi-layer analysis (NEW) ---
         is_valid, error_msg = await self._validate_security(command, security_override)
@@ -384,8 +331,7 @@ class BashTool(BaseTool):
             return ToolResult(
                 output="",
                 error=(
-                    f"Command requires user confirmation before execution. "
-                    f"Hint: {approval.undo_hint}"
+                    f"Command blocked — requires user confirmation: {approval.undo_hint}"
                 ),
             )
 

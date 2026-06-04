@@ -52,7 +52,7 @@ class AsyncEventBus(EventBusPort):
         )
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.warning("Event handler %s failed: %s", handlers[idx], result)
+                logger.exception("Event handler %s failed", handlers[idx])
 
     @staticmethod
     async def _safe_call(handler: EventHandler, event: AgentEvent) -> None:

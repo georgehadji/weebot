@@ -213,7 +213,9 @@ class StrReplaceEditorTool(BaseTool):
             )
         new_content = content.replace(old_str, new_str, 1)
         try:
-            path.write_text(new_content, encoding="utf-8")
+            temp_path = path.with_suffix(path.suffix + ".tmp")
+            temp_path.write_text(new_content, encoding="utf-8")
+            temp_path.replace(path)  # Atomic on same filesystem
         except PermissionError:
             return ToolResult(output="", error=f"Permission denied writing file: {path}")
         return ToolResult(output=f"Replaced in {path}")
@@ -233,7 +235,9 @@ class StrReplaceEditorTool(BaseTool):
         new_lines = [ln if ln.endswith("\n") else ln + "\n" for ln in new_lines]
         lines[insert_line:insert_line] = new_lines
         try:
-            path.write_text("".join(lines), encoding="utf-8")
+            temp_path = path.with_suffix(path.suffix + ".tmp")
+            temp_path.write_text("".join(lines), encoding="utf-8")
+            temp_path.replace(path)  # Atomic on same filesystem
         except PermissionError:
             return ToolResult(output="", error=f"Permission denied writing file: {path}")
         return ToolResult(
