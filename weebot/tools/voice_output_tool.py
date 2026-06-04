@@ -42,10 +42,15 @@ class VoiceOutputTool(BaseTool):
         "required": ["text"],
     }
 
-    _speech: SpeechPort
+    _speech: Optional[SpeechPort] = None
 
-    def __init__(self, speech: SpeechPort, **data: Any) -> None:
+    def __init__(self, speech: Optional[SpeechPort] = None, **data: Any) -> None:
         super().__init__(**data)
+        if speech is None:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            speech = container.get(SpeechPort)
         object.__setattr__(self, "_speech", speech)
 
     async def execute(

@@ -30,7 +30,9 @@ from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
+from weebot.application.ports.audit_port import AuditPort
 from weebot.application.ports.config_port import ConfigPort
+from weebot.application.ports.memory_port import MemoryPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.application.ports.speech_port import SpeechPort
@@ -135,6 +137,12 @@ class Container:
 
         # Structured logger — JSON-formatted operational logging
         self.register("structured_logger", lambda: self._create_structured_logger())
+
+        # Audit port — output verification
+        self.register(AuditPort, lambda: self._create_audit_service())
+
+        # Memory port — cross-session persistent memory
+        self.register(MemoryPort, lambda: self._create_memory_adapter())
 
         # Config port — unified configuration access
         self.register(ConfigPort, lambda: self._create_config_adapter())
@@ -258,6 +266,20 @@ class Container:
         """Create the default ConfigAdapter."""
         from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
         return ConfigAdapter()
+
+    @staticmethod
+    def _create_audit_service():
+        """Create the default AuditService."""
+        from weebot.application.services.audit_service import AuditService
+        return AuditService()
+
+    @staticmethod
+    def _create_memory_adapter():
+        """Create the default FileSystemMemoryAdapter."""
+        from weebot.infrastructure.persistence.filesystem_memory import (
+            FileSystemMemoryAdapter,
+        )
+        return FileSystemMemoryAdapter()
 
     @staticmethod
     def _create_speech():
