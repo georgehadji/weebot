@@ -41,8 +41,8 @@ MODEL_CASCADE = {
     "coding": [
         # FREE Tier - Cost: $0
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6",
+            id="minimax/minimax-m3",
+            name="MiniMax M3",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -50,7 +50,7 @@ MODEL_CASCADE = {
             timeout_seconds=30,
             max_retries=2,
             use_for=["coding", "analysis", "chat"],
-            description="Kimi K2.6 - free, structured output, strong instruction following.",
+            description="MiniMax M3 - free, structured output, strong instruction following.",
             recommended=True,
         ),
         ModelConfig(
@@ -82,8 +82,8 @@ MODEL_CASCADE = {
     "analysis": [
         # FREE Tier
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6",
+            id="minimax/minimax-m3",
+            name="MiniMax M3",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -91,7 +91,7 @@ MODEL_CASCADE = {
             timeout_seconds=30,
             max_retries=2,
             use_for=["coding", "analysis", "chat"],
-            description="Kimi K2.6 - free, structured output, strong instruction following.",
+            description="MiniMax M3 - free, structured output, strong instruction following.",
             recommended=True,
         ),
         ModelConfig(
@@ -111,8 +111,8 @@ MODEL_CASCADE = {
     "chat": [
         # FREE Tier
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6",
+            id="minimax/minimax-m3",
+            name="MiniMax M3",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,

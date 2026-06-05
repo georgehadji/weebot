@@ -193,6 +193,15 @@ class ModelSelectionService:
             tier=ModelTier.FAST,
             api_key_env="OPENROUTER_API_KEY",
         ),
+        "moonshotai/kimi-k2.6:free": ModelConfig(  # alias for :free variant
+            name="Kimi K2.6 (free)",
+            provider="openrouter",
+            cost_per_1k_tokens=0,
+            context_window=262144,
+            strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
+            tier=ModelTier.FAST,
+            api_key_env="OPENROUTER_API_KEY",
+        ),
         "google/gemma-4-26b-a4b-it": ModelConfig(
             name="Gemma 4 26B A4B  (free)",
             provider="openrouter",

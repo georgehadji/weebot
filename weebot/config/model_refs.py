@@ -24,10 +24,10 @@ from __future__ import annotations
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6:free"
-"""Tier 1: Kimi K2.6 — FREE, structured output, strong instruction following."""
+MODEL_CASCADE_TIER1: str = "minimax/minimax-m3"
+"""Tier 1: MiniMax M3 — FREE, 1M context, multimodal, fast, cheapest."""
 
-MODEL_BUDGET: str = "moonshotai/kimi-k2.6:free"
+MODEL_BUDGET: str = "minimax/minimax-m3"
 """Budget/free model for non-critical operations (compression, curation, defaults)."""
 
 MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
@@ -42,8 +42,8 @@ MODEL_CASCADE_TIER4: str = "deepseek/deepseek-v4-pro"
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "moonshotai/kimi-k2.6:free"
-"""Planning: Kimi K2.6 — FREE, structured output, strong instruction following."""
+MODEL_PLANNER: str = "minimax/minimax-m3"
+"""Planning: MiniMax M3 — FREE, 1M context, multimodal, fast, cheapest."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
@@ -54,41 +54,41 @@ MODEL_SUMMARIZE: str = "minimax/minimax-m3"
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6:free"
+MODEL_DI_DEFAULT: str = "minimax/minimax-m3"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
-MODEL_FACTORY_OPENAI: str = "moonshotai/kimi-k2.6:free"
+MODEL_FACTORY_OPENAI: str = "minimax/minimax-m3"
 MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.7-max"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-pro"
-MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
+MODEL_FACTORY_OPENROUTER: str = "minimax/minimax-m3"
 
-MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6:free"
+MODEL_DEFAULT_OPENAI: str = "minimax/minimax-m3"
 MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.7-max"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
-MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
+MODEL_DEFAULT_OPENROUTER: str = "minimax/minimax-m3"
 
 # ========================================================================
 # Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
+    "minimax/minimax-m3",
     "openrouter/owl-alpha",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "minimax/minimax-m3",
     "moonshotai/kimi-k2.6:free",
     "z-ai/glm-5.1",
     "x-ai/grok-4.3",
     "deepseek/deepseek-v4-pro",
 ]
-MODEL_FALLBACK_NON_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
+MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"
 
 # ========================================================================
 # CQRS / deprecated
 # ========================================================================
-MODEL_COMMAND_DEFAULT: str = "moonshotai/kimi-k2.6:free"
-MODEL_DEPRECATED_AGENT: str = "moonshotai/kimi-k2.6:free"
-MODEL_DEPRECATED_TOOL_AGENT: str = "moonshotai/kimi-k2.6:free"
-MODEL_RTK_CHEAP: str = "moonshotai/kimi-k2.6:free"
+MODEL_COMMAND_DEFAULT: str = "minimax/minimax-m3"
+MODEL_DEPRECATED_AGENT: str = "minimax/minimax-m3"
+MODEL_DEPRECATED_TOOL_AGENT: str = "minimax/minimax-m3"
+MODEL_RTK_CHEAP: str = "minimax/minimax-m3"
 MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
 MODEL_RTK_STANDARD: str = "qwen/qwen3.7-max"
 
@@ -99,7 +99,7 @@ MODEL_MOA_REFERENCE: list[str] = [
     "openrouter/owl-alpha",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "moonshotai/kimi-k2.6:free",
+    "minimax/minimax-m3",
 ]
 
 # ========================================================================
@@ -109,8 +109,8 @@ MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.7-max"
 MODEL_PRICE_CLAUDE_OPUS: str = "x-ai/grok-4.3"
 MODEL_PRICE_CLAUDE_HAIKU: str = "minimax/minimax-m3"
 MODEL_PRICE_GPT4O: str = "qwen/qwen3.7-max"
-MODEL_PRICE_GPT4O_MINI: str = "moonshotai/kimi-k2.6:free"
-MODEL_PRICE_KIMI: str = "moonshotai/kimi-k2.6:free"
+MODEL_PRICE_GPT4O_MINI: str = "minimax/minimax-m3"
+MODEL_PRICE_KIMI: str = "minimax/minimax-m3"
 MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 
 # ========================================================================
@@ -124,7 +124,7 @@ def get_free_models() -> list[str]:
     mooonshotai/kimi-k2.6:free is the recommended default.
     """
     return [
-        "moonshotai/kimi-k2.6:free",
+        "minimax/minimax-m3",
         "qwen/qwen3-coder:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
         "nvidia/nemotron-3.5-content-safety:free",
