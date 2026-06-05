@@ -74,37 +74,62 @@ class BrowserTool:
             self._browser = Browser(headless=HEADLESS)
 
     def _get_llm(self):
-        """Get LLM for browser agent."""
+        """Get LLM for browser agent.
+
+        Priority:
+        1. ChatBrowserUse() — purpose-built for browser tasks (3-5x faster)
+        2. Weebot's LLMPort via DI (injected at construction time)
+        3. OpenRouter via langchain (OPENROUTER_API_KEY)
+        4. ChatOpenAI fallback (gpt-4)
+        """
+        import os as _os
+
+        # ── 1. ChatBrowserUse (best — purpose-built for browser) ────
+        if _os.environ.get("BROWSER_USE_API_KEY"):
+            try:
+                from browser_use import ChatBrowserUse
+                llm = ChatBrowserUse()
+                logger.debug("BrowserTool using ChatBrowserUse (purpose-built browser LLM)")
+                return llm
+            except ImportError:
+                logger.debug("ChatBrowserUse not available, falling through")
+            except Exception as exc:
+                logger.debug("ChatBrowserUse init failed: %s, falling through", exc)
+
+        # ── 2. Weebot LLMPort (DI-injected) ─────────────────────────
         if self._llm_port is not None:
-            # Use Weebot's LLMPort via adapter
             from weebot.infrastructure.llm.langchain_adapter import LLMPortLangChainAdapter
             llm = LLMPortLangChainAdapter(
                 llm_port=self._llm_port,
                 model=self._model,
                 temperature=0,
             )
-        else:
-            # Use OpenRouter via langchain (respects OPENROUTER_API_KEY)
-            import os as _os
-            or_key = _os.environ.get("OPENROUTER_API_KEY")
-            if or_key:
-                from langchain_openai import ChatOpenAI
-                llm = ChatOpenAI(
-                    model=_os.environ.get("OPENROUTER_MODEL", "openrouter/anthropic/claude-3.5-sonnet"),
-                    openai_api_key=or_key,
-                    openai_api_base="https://openrouter.ai/api/v1",
-                    temperature=0,
-                )
-                logger.debug("BrowserTool using OpenRouter: %s", llm.model)
-            else:
-                # Fallback to OpenAI
-                from langchain_openai import ChatOpenAI
-                llm = ChatOpenAI(model="gpt-4", temperature=0)
-                logger.debug("BrowserTool using OpenAI fallback (no OPENROUTER_API_KEY)")
-        
-        # browser-use expects LLM to have a 'provider' attribute
+            return self._add_provider_attr(llm)
+
+        # ── 3. OpenRouter (OPENROUTER_API_KEY) ──────────────────────
+        or_key = _os.environ.get("OPENROUTER_API_KEY")
+        if or_key:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                model=_os.environ.get("OPENROUTER_MODEL", "openrouter/anthropic/claude-sonnet-4-6"),
+                openai_api_key=or_key,
+                openai_api_base="https://openrouter.ai/api/v1",
+                temperature=0,
+            )
+            logger.debug("BrowserTool using OpenRouter: %s", llm.model)
+            return self._add_provider_attr(llm)
+
+        # ── 4. OpenAI fallback ──────────────────────────────────────
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        logger.debug("BrowserTool using OpenAI fallback (no BROWSER_USE_API_KEY or OPENROUTER_API_KEY)")
+        return self._add_provider_attr(llm)
+
+    @staticmethod
+    def _add_provider_attr(llm):
+        """browser-use expects LLM to have a 'provider' attribute."""
         if not hasattr(llm, 'provider'):
-            object.__setattr__(llm, 'provider', 'openai') # Defaulting to openai for compatibility
+            object.__setattr__(llm, 'provider', 'openai')
         return llm
 
     async def _run_browser_task(self, task: str) -> str:
