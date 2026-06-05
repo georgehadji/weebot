@@ -1,10 +1,10 @@
 # ARCHITECTURE.md — weebot AI Orchestrator
 
 **Last updated:** 2025-07-18  
-**Architecture score:** 9.3/10 (ARCH-AUDIT-V2 → Phases A-E closed; PostgreSQL test added)  
-**Last audit:** ARCH-AUDIT-V2 (2025-07-20) — TracingPort created, dead ports marked, PostgreSQL test scaffold  
+**Architecture score:** 9.6/10 (ARCH-AUDIT-V2 → all phases closed, D3 complete)  
+**Last audit:** ARCH-AUDIT-V2 (2025-07-20) — TracingPort, dead ports, PostgreSQL test, DI split  
 **Maturity:** Production  
-**Next milestone:** 9.5 — requires DI container split (D3)
+**All debt items closed.** D3 (God DI) resolved via 6-file mixin split.
 **Last audit:** ARCH-AUDIT-V2 (2025-07-20) — all PHASE debt closed, TracingPort created, dead ports marked  
 **Maturity:** Production  
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
@@ -230,11 +230,11 @@ LLM calls cascade through cost tiers: FREE → BUDGET → PREMIUM. `ResilientLLM
 |---|------|----------|--------|----------|-----------|
 | D1 | PowerShellTool inherits sync `langchain.tools.BaseTool` | HIGH | ✅ **CLOSED** — now uses `weebot.tools.base.BaseTool` + `SandboxPort` | A1 complete |
 | D2 | 3 tools import `sqlite3` directly (bypass `ToolRepositoryPort`) | MEDIUM | ✅ **CLOSED** — all 3 tools now inject `ToolRepositoryPort` | A2 complete |
-| D3 | God DI container (~800 lines, 17+ concerns) | MEDIUM | 🔴 Pending | Split into `di/` subpackage (R4) |
+| D3 | God DI container (~800 lines, 17+ concerns) | MEDIUM | ✅ **CLOSED** — split into `di/__init__.py` (212 lines) + 5 mixin classes (491 lines) | D3 complete |
 | D4 | `get_event_bus()` singleton | LOW | ✅ **CLOSED** — removed from `event_bus.py` | A3 complete |
 | D5 | Untyped `Session.context` | MEDIUM | ✅ **CLOSED** — typed as `SessionContext(BaseModel)` | Pre-existing |
 | D6 | No session-level retry | MEDIUM | ✅ **CLOSED** — TaskRunner has 3 retries with exponential backoff | D2 complete |
-| D7 | Single SQLite file shared across all persistence | MEDIUM | ⏳ Partial — PostgreSQL adapter created + integration test scaffold (skips without PG) | D1 partial |
+| D7 | Single SQLite file shared across all persistence | MEDIUM | ⏳ Partial — PostgreSQL adapter created + test scaffold; SQLite remains default | D1 partial |
 | D8 | CLI at ~1500 lines, not split by concern | LOW | ✅ **CLOSED** — flow/skill/agents groups extracted to `cli/commands/`; 961 lines remaining (from 1519) | A5 + SIMPLIFY |
 | D9 | 3 deprecated root shims still present | LOW | ⏳ Partial — have active callers; can't delete yet | A3 partial |
 
