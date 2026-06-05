@@ -184,7 +184,7 @@ class ChainOfVerificationService:
 
     async def _plan_verifications(self, query: str, response: str) -> list[str]:
         """Step 2: Generate verification questions from query + baseline."""
-        prompt = _PLAN_VERIFICATIONS_PROMPT.format(
+        prompt = _fmt(_PLAN_VERIFICATIONS_PROMPT,
             query=query, response=response
         )
         try:
@@ -214,7 +214,7 @@ class ChainOfVerificationService:
             try:
                 resp = await self._llm.chat(
                     messages=[
-                        {"role": "user", "content": _ANSWER_VERIFICATION_PROMPT.format(question=q)},
+                        {"role": "user", "content": _fmt(_ANSWER_VERIFICATION_PROMPT, question=q)},
                     ],
                     max_tokens=150,
                     temperature=0.1,
@@ -234,7 +234,7 @@ class ChainOfVerificationService:
             f"Q: {p['question']}\nA: {p['answer']}"
             for p in qa_pairs
         )
-        prompt = _CROSS_CHECK_PROMPT.format(
+        prompt = _fmt(_CROSS_CHECK_PROMPT,
             query=query, response=response, verification_qa=qa_text,
         )
         try:

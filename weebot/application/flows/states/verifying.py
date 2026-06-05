@@ -89,11 +89,6 @@ class VerifyingState(FlowState):
                         inc.get("correction", "?"),
                         inc.get("verification_question", "?"),
                     )
-                # Replace the last assistant message in the session in-place
-                # so SummarizingState picks up the corrected version.
-                # The original (pre-verification) response was already yielded
-                # by ExecutingState; this logs the delta and carries the fix
-                # forward for any downstream state that reads session events.
                 context._session = _replace_last_assistant_message(
                     context._session, corrected
                 )
@@ -110,11 +105,11 @@ class VerifyingState(FlowState):
         except Exception as exc:
             logger.warning("CoVe verification failed: %s", exc)
             yield ErrorEvent(error=f"Verification failed: {exc}")
-            # Still proceed with original response
             yield MessageEvent(role="assistant", message=baseline)
 
-        # ── Transition to summary ──
-        context.set_state(SummarizingState())
+        finally:
+            # ── Transition to summary (always, even if consumer breaks) ──
+            context.set_state(SummarizingState())
 
     @staticmethod
     def _collect_baseline(context: PlanActFlow) -> str:
