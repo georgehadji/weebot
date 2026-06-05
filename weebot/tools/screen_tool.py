@@ -3,9 +3,10 @@ import io
 from typing import Any, Dict, List, Optional
 
 try:
-    from mss import mss
-    import mss.tools
+    from mss import mss as _mss_class
+    import mss.tools as _mss_tools
     _MSS_AVAILABLE = True
+    mss = _mss_class  # avoid shadowing by mss package import
 except ImportError:
     _MSS_AVAILABLE = False
     mss = None

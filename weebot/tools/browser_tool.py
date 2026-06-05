@@ -84,7 +84,17 @@ class BrowserTool:
         """
         import os as _os
 
-        # ── 1. ChatBrowserUse (best — purpose-built for browser) ────
+        # ── 1. Weebot LLMPort (DI-injected, free via OpenRouter) ────
+        if self._llm_port is not None:
+            from weebot.infrastructure.llm.langchain_adapter import LLMPortLangChainAdapter
+            llm = LLMPortLangChainAdapter(
+                llm_port=self._llm_port,
+                model=self._model,
+                temperature=0,
+            )
+            return self._add_provider_attr(llm)
+
+        # ── 2.5 ChatBrowserUse fallback (purpose-built, requires paid key) ──
         if _os.environ.get("BROWSER_USE_API_KEY"):
             try:
                 from browser_use import ChatBrowserUse
@@ -95,16 +105,6 @@ class BrowserTool:
                 logger.debug("ChatBrowserUse not available, falling through")
             except Exception as exc:
                 logger.debug("ChatBrowserUse init failed: %s, falling through", exc)
-
-        # ── 2. Weebot LLMPort (DI-injected) ─────────────────────────
-        if self._llm_port is not None:
-            from weebot.infrastructure.llm.langchain_adapter import LLMPortLangChainAdapter
-            llm = LLMPortLangChainAdapter(
-                llm_port=self._llm_port,
-                model=self._model,
-                temperature=0,
-            )
-            return self._add_provider_attr(llm)
 
         # ── 3. OpenRouter (OPENROUTER_API_KEY) ──────────────────────
         or_key = _os.environ.get("OPENROUTER_API_KEY")

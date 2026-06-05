@@ -45,6 +45,11 @@ class PlaywrightAdapter(BrowserPort):
         self._config: BrowserConfig | None = None
     
     @property
+    def page(self):
+        """Raw Playwright page for direct tool access."""
+        return self._page
+
+    @property
     def browser_type(self) -> BrowserType:
         """Return the type of browser being used."""
         if self._config is None:

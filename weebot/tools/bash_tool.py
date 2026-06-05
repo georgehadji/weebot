@@ -13,6 +13,9 @@ from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
 from weebot.tools.base import BaseTool, ToolResult
 
+import logging
+logger = logging.getLogger(__name__)
+
 # Multi-layer security analyzer
 from weebot.tools.bash_security import (
     CommandSecurityAnalyzer,
