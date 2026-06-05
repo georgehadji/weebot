@@ -1,7 +1,10 @@
 # ARCHITECTURE.md — weebot AI Orchestrator
 
 **Last updated:** 2025-07-18  
-**Architecture score:** 9.0/10 (ARCH-AUDIT-V2 → Phase A-E closed)  
+**Architecture score:** 9.3/10 (ARCH-AUDIT-V2 → Phases A-E closed; PostgreSQL test added)  
+**Last audit:** ARCH-AUDIT-V2 (2025-07-20) — TracingPort created, dead ports marked, PostgreSQL test scaffold  
+**Maturity:** Production  
+**Next milestone:** 9.5 — requires DI container split (D3)
 **Last audit:** ARCH-AUDIT-V2 (2025-07-20) — all PHASE debt closed, TracingPort created, dead ports marked  
 **Maturity:** Production  
 **Paradigm:** Clean Architecture (Hexagonal Ports & Adapters) + CQRS Mediator + State-Machine Flows
@@ -231,7 +234,7 @@ LLM calls cascade through cost tiers: FREE → BUDGET → PREMIUM. `ResilientLLM
 | D4 | `get_event_bus()` singleton | LOW | ✅ **CLOSED** — removed from `event_bus.py` | A3 complete |
 | D5 | Untyped `Session.context` | MEDIUM | ✅ **CLOSED** — typed as `SessionContext(BaseModel)` | Pre-existing |
 | D6 | No session-level retry | MEDIUM | ✅ **CLOSED** — TaskRunner has 3 retries with exponential backoff | D2 complete |
-| D7 | Single SQLite file shared across all persistence | MEDIUM | 🔴 Pending | PostgreSQL adapter created, needs integration test |
+| D7 | Single SQLite file shared across all persistence | MEDIUM | ⏳ Partial — PostgreSQL adapter created + integration test scaffold (skips without PG) | D1 partial |
 | D8 | CLI at ~1500 lines, not split by concern | LOW | ✅ **CLOSED** — flow/skill/agents groups extracted to `cli/commands/`; 961 lines remaining (from 1519) | A5 + SIMPLIFY |
 | D9 | 3 deprecated root shims still present | LOW | ⏳ Partial — have active callers; can't delete yet | A3 partial |
 
@@ -278,4 +281,4 @@ Brought score from 8.2 to 9.0 by closing remaining structural gaps:
 | CoVe cost cap (`WEEBOT_COVE_ENABLED`) | MEDIUM | ✅ Env var guard in `VerifyingState` |
 | Session retry (D6) verified | MEDIUM | ✅ Already implemented — 3 retries with exponential backoff |
 
-Remaining: DI container split (D3), PostgreSQL integration test.
+Remaining: DI container split (D3) — the only open debt item preventing 9.5+.
