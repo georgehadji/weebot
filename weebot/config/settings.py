@@ -35,6 +35,7 @@ class WeebotSettings(BaseSettings):
     deepseek_api_key: str | None = None
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
+    openrouter_api_key: str | None = None   # env: OPENROUTER_API_KEY
 
     # Web API Auth
     weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
@@ -160,17 +161,21 @@ class WeebotSettings(BaseSettings):
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""
         keys = [self.kimi_api_key, self.deepseek_api_key,
-                self.anthropic_api_key, self.openai_api_key]
+                self.anthropic_api_key, self.openai_api_key,
+                self.openrouter_api_key]
         if not any(keys):
             raise ValueError(
                 "❌ weebot requires at least one AI API key.\n"
-                "   Set one of: KIMI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY\n"
+                "   Set one of: KIMI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY,\n"
+                "   OPENROUTER_API_KEY, or OPENAI_API_KEY\n"
                 "   in .env file or as environment variables."
             )
 
     def available_providers(self) -> list[str]:
         """List available AI providers."""
         providers = []
+        if self.openrouter_api_key:
+            providers.append("openrouter")
         if self.kimi_api_key:
             providers.append("kimi")
         if self.deepseek_api_key:
