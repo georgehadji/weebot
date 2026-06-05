@@ -33,11 +33,7 @@ def _replace_last_assistant_message(session, new_text: str):
     for i in range(len(events) - 1, -1, -1):
         event = events[i]
         if isinstance(event, MessageEvent) and event.role == "assistant":
-            events[i] = MessageEvent(
-                role="assistant",
-                message=new_text,
-                metadata=getattr(event, "metadata", None),
-            )
+            events[i] = event.model_copy(update={"message": new_text})
             return session.model_copy(update={"events": events})
     return session
 

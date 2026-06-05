@@ -155,8 +155,9 @@ class ResilientLLMAdapter(LLMPort):
         tracer = get_tracer(__name__)
         span_name = f"llm.chat.{self._model_name or 'unknown'}"
         with tracer.start_as_current_span(span_name) as span:
+            provider = self._model_name.split("/")[0] if "/" in (self._model_name or "") else "unknown"
             span.set_attribute("llm.model", self._model_name or "unknown")
-            span.set_attribute("llm.provider", self._provider_name or "unknown")
+            span.set_attribute("llm.provider", provider)
             return await self._chat_with_tracing(
                 messages, tools, tool_choice, response_format,
                 model, temperature, max_tokens,
