@@ -9,7 +9,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -220,6 +220,19 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(discord_router)
     
+    # Metrics endpoint — Prometheus scrape target
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint. Returns metrics in text format."""
+        from weebot.infrastructure.observability.prometheus_adapter import (
+            PrometheusMetricsAdapter,
+        )
+        adapter = PrometheusMetricsAdapter()
+        return Response(
+            content=adapter.render(),
+            media_type="text/plain; charset=utf-8",
+        )
+
     # Root endpoint - WebSocket test UI
     @app.get("/", response_class=HTMLResponse)
     async def root() -> str:

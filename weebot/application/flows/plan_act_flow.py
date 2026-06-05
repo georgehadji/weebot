@@ -28,6 +28,8 @@ from weebot.application.services.continuation_detector import (
 )
 from weebot.application.services.plan_critic import PlanCriticService
 from weebot.application.services.truth_binder import TruthBinder
+from weebot.infrastructure.observability.tracing import get_tracer
+
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -161,6 +163,17 @@ class PlanActFlow(BaseFlow):
                 event = event.model_copy(update={"message": result.bound_text})
         # ────────────────────────────────────────────────────────────
 
+        # ── Credential redaction for user-provided text ─────────────
+        # Mask passwords, tokens, and API keys BEFORE they hit
+        # session storage, the event bus, or the behavior ledger.
+        if isinstance(event, MessageEvent) and event.role == "user":
+            from weebot.core.credential_sanitizer import sanitize
+            sanitized = sanitize(event.message or "")
+            if sanitized != event.message:
+                event = event.model_copy(update={"message": sanitized})
+                self._log.info("Credential sanitizer redacted user input")
+        # ────────────────────────────────────────────────────────────
+
         # 1. Mutate in-memory session (fast, no I/O, no lock needed)
         self._session = self._session.add_event(event)
 
@@ -233,6 +246,12 @@ class PlanActFlow(BaseFlow):
         self._state = state
         self.status = getattr(state, "status", AgentStatus.IDLE)
         self._log.info("Transition to state: %s", type(state).__name__)
+        # Trace the state transition
+        tracer = get_tracer(__name__)
+        span = tracer.start_span(f"state.{type(state).__name__}")
+        span.set_attribute("flow.session_id", self._session.id)
+        span.set_attribute("state.name", type(state).__name__)
+        span.end()
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         self._log.info("PlanActFlow started for session %s", self._session.id)
@@ -285,12 +304,16 @@ class PlanActFlow(BaseFlow):
             state_prompt = effective_prompt if not prompt_consumed else ""
             
             try:
-                async for event in self._state.execute(self, state_prompt):
-                    yield event
-                    # Once we start receiving events, consider the prompt consumed
-                    # for the current state transition logic.
-                    if state_prompt:
-                        prompt_consumed = True
+                result = self._state.execute(self, state_prompt)
+                # States may be async generators (yield events) or regular
+                # coroutines (MetaAnalysisState does work then transitions).
+                if hasattr(result, '__aiter__'):
+                    async for event in result:
+                        yield event
+                        if state_prompt:
+                            prompt_consumed = True
+                else:
+                    await result  # coroutine — blocks until state transitions
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
 

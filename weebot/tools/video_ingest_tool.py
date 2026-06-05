@@ -1,14 +1,11 @@
-"""VideoIngestTool — ingest YouTube transcripts into the knowledge base.
+"""VideoIngestTool -- ingest YouTube transcripts into the knowledge base.
 
 Workflow
 --------
-1. ``ingest_youtube`` — fetch transcript via youtube-transcript-api, chunk it,
-   store each chunk in the shared ``kb_notes`` FTS5 table (same database used
-   by KnowledgeTool) and record the source in ``video_sources``.
-2. ``list_sources``  — browse ingested video sources per project.
-3. ``export_jsonl``  — export all project chunks as a fault-tolerant JSONL file.
-   If the file already exists the writer skips already-written lines so a
-   crashed run can resume from exactly where it stopped.
+1. ``ingest_youtube`` -- fetch transcript via youtube-transcript-api, chunk it,
+   store each chunk via ToolRepositoryPort and record the video source.
+2. ``list_sources``  -- browse ingested video sources per project.
+3. ``export_jsonl``  -- export all project chunks as a fault-tolerant JSONL file.
 
 Dependencies
 ------------
@@ -22,11 +19,13 @@ from __future__ import annotations
 import json
 import os
 import re
-import sqlite3
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
+from pydantic import PrivateAttr
+
+from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.tools.base import BaseTool, ToolResult
 
 # ---------------------------------------------------------------------------
@@ -45,7 +44,7 @@ except ImportError:
     NoTranscriptFound = Exception  # type: ignore[assignment,misc]
 
 # ---------------------------------------------------------------------------
-# Chunking helpers
+# Chunking helpers (pure functions, no DB)
 # ---------------------------------------------------------------------------
 
 def _try_tiktoken_encode(text: str) -> list[int] | None:
@@ -93,7 +92,7 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
 
 
 # ---------------------------------------------------------------------------
-# YouTube helpers
+# YouTube helpers (pure functions, no DB)
 # ---------------------------------------------------------------------------
 
 def _extract_video_id(url: str) -> str | None:
@@ -169,8 +168,8 @@ def _fetch_title(video_id: str) -> str:
 class VideoIngestTool(BaseTool):
     """Ingest YouTube videos into the persistent knowledge base.
 
-    Transcripts are chunked and stored in the shared ``kb_notes`` FTS5 table
-    so they are immediately searchable via ``KnowledgeTool.search``.
+    Transcripts are chunked and stored via ToolRepositoryPort so they are
+    immediately searchable via KnowledgeTool.search.
     A fault-tolerant JSONL exporter lets you build fine-tuning datasets that
     survive process crashes.
 
@@ -219,39 +218,16 @@ class VideoIngestTool(BaseTool):
         "required": ["action"],
     }
 
-    db_path: str = "projects.db"
+    _repo: ToolRepositoryPort = PrivateAttr()
 
-    def model_post_init(self, __context: Any) -> None:
-        self._ensure_tables()
-
-    def _ensure_tables(self) -> None:
-        with sqlite3.connect(self.db_path) as conn:
-            # kb_notes may already exist (shared with KnowledgeTool)
-            conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS kb_notes USING fts5(
-                    note_id    UNINDEXED,
-                    project_id UNINDEXED,
-                    created_at UNINDEXED,
-                    source     UNINDEXED,
-                    title,
-                    body,
-                    tags
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS video_sources (
-                    source_id   TEXT PRIMARY KEY,
-                    project_id  TEXT NOT NULL,
-                    url         TEXT NOT NULL,
-                    title       TEXT DEFAULT '',
-                    language    TEXT DEFAULT 'en',
-                    chunk_count INTEGER DEFAULT 0,
-                    status      TEXT DEFAULT 'done',
-                    error_msg   TEXT DEFAULT '',
-                    ingested_at TEXT NOT NULL
-                )
-            """)
-            conn.commit()
+    def __init__(self, repo: Optional[ToolRepositoryPort] = None):
+        super().__init__()
+        if repo is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            repo = c.get(ToolRepositoryPort)  # type: ignore[assignment]
+        self._repo = repo
 
     # ------------------------------------------------------------------
     # execute dispatcher
@@ -261,11 +237,11 @@ class VideoIngestTool(BaseTool):
         action = kwargs.get("action")
         try:
             if action == "ingest_youtube":
-                return self._ingest_youtube(kwargs)
+                return await self._ingest_youtube(kwargs)
             if action == "list_sources":
-                return self._list_sources(kwargs)
+                return await self._list_sources(kwargs)
             if action == "export_jsonl":
-                return self._export_jsonl(kwargs)
+                return await self._export_jsonl(kwargs)
             return ToolResult(output="", error=f"Unknown action: {action!r}")
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
@@ -274,7 +250,7 @@ class VideoIngestTool(BaseTool):
     # ingest_youtube
     # ------------------------------------------------------------------
 
-    def _ingest_youtube(self, kw: dict) -> ToolResult:
+    async def _ingest_youtube(self, kw: dict) -> ToolResult:
         url = (kw.get("url") or "").strip()
         project_id = (kw.get("project_id") or "").strip()
         language = (kw.get("language") or "en").strip()
@@ -289,48 +265,37 @@ class VideoIngestTool(BaseTool):
         if not video_id:
             return ToolResult(output="", error=f"Could not extract video ID from URL: {url!r}")
 
-        source_id = str(uuid.uuid4())[:8]
-        ingested_at = datetime.now().isoformat()
-
         try:
             title, full_text = _fetch_transcript(video_id, language)
         except (ImportError, ValueError) as exc:
             # Record the failed source so the user can see it in list_sources
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    "INSERT INTO video_sources "
-                    "(source_id, project_id, url, title, language, chunk_count, status, error_msg, ingested_at) "
-                    "VALUES (?, ?, ?, '', ?, 0, 'error', ?, ?)",
-                    (source_id, project_id, url, language, str(exc), ingested_at),
-                )
-                conn.commit()
+            await self._repo.save_video_source(
+                url=url, title=f"[FAILED] {video_id}",
+                project_id=project_id, metadata={"error": str(exc)},
+            )
             return ToolResult(output="", error=str(exc))
 
         chunks = _chunk_text(full_text, chunk_size=chunk_size)
         total = len(chunks)
 
-        with sqlite3.connect(self.db_path) as conn:
-            for n, chunk in enumerate(chunks, start=1):
-                note_id = f"vid-{source_id}-{n:03d}"
-                note_title = f"{title} [chunk {n}/{total}]"
-                conn.execute(
-                    "INSERT INTO kb_notes "
-                    "(note_id, project_id, created_at, source, title, body, tags) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (note_id, project_id, ingested_at, url, note_title, chunk, "video,youtube"),
-                )
-            conn.execute(
-                "INSERT INTO video_sources "
-                "(source_id, project_id, url, title, language, chunk_count, status, error_msg, ingested_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'done', '', ?)",
-                (source_id, project_id, url, title, language, total, ingested_at),
+        for n, chunk in enumerate(chunks, start=1):
+            note_title = f"{title} [chunk {n}/{total}]"
+            await self._repo.save_note(
+                title=note_title,
+                content=chunk,
+                tags=["video", "youtube"],
+                project_id=project_id,
             )
-            conn.commit()
+
+        await self._repo.save_video_source(
+            url=url, title=title,
+            project_id=project_id,
+            metadata={"chunk_count": total, "video_id": video_id},
+        )
 
         return ToolResult(
             output=json.dumps(
                 {
-                    "source_id": source_id,
                     "title": title,
                     "chunk_count": total,
                     "project_id": project_id,
@@ -343,32 +308,20 @@ class VideoIngestTool(BaseTool):
     # list_sources
     # ------------------------------------------------------------------
 
-    def _list_sources(self, kw: dict) -> ToolResult:
+    async def _list_sources(self, kw: dict) -> ToolResult:
         project_id = kw.get("project_id") or None
 
-        sql = (
-            "SELECT source_id, project_id, url, title, language, "
-            "chunk_count, status, error_msg, ingested_at "
-            "FROM video_sources"
+        rows = await self._repo.get_video_sources(
+            project_id=project_id or "",
+            limit=100,
         )
-        params: list = []
-        if project_id:
-            sql += " WHERE project_id = ?"
-            params.append(project_id)
-        sql += " ORDER BY ingested_at DESC LIMIT 100"
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(sql, params).fetchall()
-
-        sources = [dict(r) for r in rows]
-        return ToolResult(output=json.dumps({"count": len(sources), "sources": sources}, indent=2))
+        return ToolResult(output=json.dumps({"count": len(rows), "sources": rows}, indent=2))
 
     # ------------------------------------------------------------------
     # export_jsonl  (fault-tolerant, crash-resumable)
     # ------------------------------------------------------------------
 
-    def _export_jsonl(self, kw: dict) -> ToolResult:
+    async def _export_jsonl(self, kw: dict) -> ToolResult:
         project_id = (kw.get("project_id") or "").strip()
         output_path = (kw.get("output_path") or "").strip()
 
@@ -386,17 +339,12 @@ class VideoIngestTool(BaseTool):
             except OSError:
                 skipped = 0
 
-        # Fetch only video-sourced chunks for this project, skip already written.
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT note_id, title, body, source FROM kb_notes "
-                "WHERE project_id = ? AND tags LIKE '%video%' "
-                "ORDER BY note_id",
-                (project_id,),
-            ).fetchall()
+        # Fetch notes for this project
+        rows = await self._repo.list_notes(project_id=project_id, limit=10_000)
+        # Keep only video-sourced notes (tagged "video")
+        video_rows = [r for r in rows if "video" in r.get("tags", "")]
 
-        to_write = [dict(r) for r in rows][skipped:]
+        to_write = video_rows[skipped:]
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
@@ -405,10 +353,10 @@ class VideoIngestTool(BaseTool):
             for row in to_write:
                 line = json.dumps(
                     {
-                        "id": row["note_id"],
-                        "text": row["body"],
-                        "source": row["source"],
-                        "title": row["title"],
+                        "id": row.get("id", ""),
+                        "text": row.get("content", row.get("body", "")),
+                        "source": row.get("source", ""),
+                        "title": row.get("title", ""),
                     },
                     ensure_ascii=False,
                 )

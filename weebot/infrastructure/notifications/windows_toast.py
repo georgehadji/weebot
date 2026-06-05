@@ -228,11 +228,13 @@ class WindowsToastEventSubscriber:
     for important agent events like task completion, errors, or human input requests.
     
     Example:
-        from weebot.infrastructure.event_bus import get_event_bus
+        from weebot.application.di import Container
+        from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.infrastructure.notifications import WindowsToastEventSubscriber
         
+        bus = Container().get(EventBusPort)
         subscriber = WindowsToastEventSubscriber()
-        subscriber.subscribe_to(get_event_bus())
+        subscriber.subscribe_to(bus)
         
         # Now important events will show toast notifications
     """

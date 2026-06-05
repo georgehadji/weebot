@@ -1,23 +1,23 @@
-"""Unit tests for PowerShellBaseTool and ScreenCaptureBaseTool wrappers."""
+"""Unit tests for PowerShellTool and ScreenCaptureBaseTool wrappers."""
 import pytest
 from unittest.mock import patch
 
-from weebot.tools.powershell_tool import PowerShellBaseTool
+from weebot.tools.powershell_tool import PowerShellTool
 from weebot.tools.screen_tool import ScreenCaptureBaseTool
 
 
 # ---------------------------------------------------------------------------
-# PowerShellBaseTool
+# PowerShellTool
 # ---------------------------------------------------------------------------
 
 
-class TestPowerShellBaseTool:
+class TestPowerShellTool:
     def test_instantiates_without_error(self):
-        tool = PowerShellBaseTool()
+        tool = PowerShellTool()
         assert tool.name == "powershell"
 
     def test_to_param_shape(self):
-        tool = PowerShellBaseTool()
+        tool = PowerShellTool()
         param = tool.to_param()
         assert param["type"] == "function"
         assert param["function"]["name"] == "powershell"
@@ -25,24 +25,34 @@ class TestPowerShellBaseTool:
 
     @pytest.mark.asyncio
     async def test_execute_returns_output(self):
-        tool = PowerShellBaseTool()
-        with patch.object(tool._inner, "_run", return_value="Hello"):
+        tool = PowerShellTool()
+        with patch.object(tool._sandbox, "execute_shell") as mock:
+            from weebot.application.ports.sandbox_port import SandboxResult, SandboxType
+            mock.return_value = SandboxResult(
+                stdout="Hello", stderr="", returncode=0,
+                elapsed_ms=1.0, sandbox_type=SandboxType.NATIVE_WINDOWS,
+            )
             result = await tool.execute(command="echo Hello")
         assert not result.is_error
         assert "Hello" in result.output
 
     @pytest.mark.asyncio
-    async def test_execute_error_prefix_becomes_tool_error(self):
-        tool = PowerShellBaseTool()
-        with patch.object(tool._inner, "_run", return_value="Error: sandbox violation"):
+    async def test_execute_error_returns_error(self):
+        tool = PowerShellTool()
+        with patch.object(tool._sandbox, "execute_shell") as mock:
+            from weebot.application.ports.sandbox_port import SandboxResult, SandboxType
+            mock.return_value = SandboxResult(
+                stdout="", stderr="sandbox violation", returncode=1,
+                elapsed_ms=1.0, sandbox_type=SandboxType.NATIVE_WINDOWS,
+            )
             result = await tool.execute(command="bad command")
         assert result.is_error
         assert "sandbox violation" in result.error
 
     @pytest.mark.asyncio
     async def test_execute_exception_becomes_tool_error(self):
-        tool = PowerShellBaseTool()
-        with patch.object(tool._inner, "_run", side_effect=RuntimeError("crash")):
+        tool = PowerShellTool()
+        with patch.object(tool._sandbox, "execute_shell", side_effect=RuntimeError("crash")):
             result = await tool.execute(command="crash")
         assert result.is_error
         assert "crash" in result.error

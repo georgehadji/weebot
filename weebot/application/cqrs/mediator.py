@@ -5,6 +5,8 @@ from typing import Any, Callable, Type, TypeVar
 
 import logging
 
+from weebot.infrastructure.observability.tracing import get_tracer
+
 from weebot.application.cqrs.base import (
     Command,
     CommandHandler,
@@ -167,17 +169,21 @@ class Mediator:
         return await resolve_next()
 
     async def send(self, command: Command) -> CommandResult:
-        """Send a command to its handler.
+        """Send a command to its handler. Wraps execution in a trace span."""
+        tracer = get_tracer(__name__)
+        cmd_name = type(command).__name__
+        with tracer.start_as_current_span(f"command.{cmd_name}") as span:
+            span.set_attribute("command.type", cmd_name)
+            result = await self._send_inner(command)
+            if result.success:
+                span.set_attribute("command.success", True)
+            else:
+                span.set_attribute("command.success", False)
+                span.set_attribute("command.error", result.error or "")
+            return result
 
-        Args:
-            command: The command to execute.
-
-        Returns:
-            CommandResult with execution details.
-
-        Raises:
-            HandlerNotRegisteredError: If no handler is registered for this command.
-        """
+    async def _send_inner(self, command: Command) -> CommandResult:
+        """Inner send — no tracing wrapper (called by send)."""
         command_type = type(command)
         handler = self._command_handlers.get(command_type)
 
@@ -215,17 +221,21 @@ class Mediator:
             )
 
     async def query(self, query: Query) -> QueryResult:
-        """Send a query to its handler.
+        """Send a query to its handler. Wraps execution in a trace span."""
+        tracer = get_tracer(__name__)
+        qry_name = type(query).__name__
+        with tracer.start_as_current_span(f"query.{qry_name}") as span:
+            span.set_attribute("query.type", qry_name)
+            result = await self._query_inner(query)
+            if result.success:
+                span.set_attribute("query.success", True)
+            else:
+                span.set_attribute("query.success", False)
+                span.set_attribute("query.error", result.error or "")
+            return result
 
-        Args:
-            query: The query to execute.
-
-        Returns:
-            QueryResult with execution details.
-
-        Raises:
-            HandlerNotRegisteredError: If no handler is registered for this query.
-        """
+    async def _query_inner(self, query: Query) -> QueryResult:
+        """Inner query — no tracing wrapper."""
         query_type = type(query)
         handler = self._query_handlers.get(query_type)
 

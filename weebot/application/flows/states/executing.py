@@ -20,7 +20,7 @@ class ExecutingState(FlowState):
     async def execute(
         self, context: PlanActFlow, prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.summarizing import SummarizingState
+        from weebot.application.flows.states.verifying import VerifyingState
         from weebot.application.flows.states.updating import UpdatingState
 
         if context._plan is None:
@@ -29,8 +29,8 @@ class ExecutingState(FlowState):
 
         step = context._plan.get_next_step()
         if step is None:
-            logger.info("All steps complete, transitioning to SUMMARIZING")
-            context.set_state(SummarizingState())
+            logger.info("All steps complete, transitioning to VERIFYING")
+            context.set_state(VerifyingState())
             return
 
         # Check if step was already completed (prevent re-execution)
@@ -91,7 +91,7 @@ class ExecutingState(FlowState):
                 error=f"Step '{step.description}' repeated {step_exec_count} times. "
                       f"Agent may be stuck in a loop. Completing task."
             )
-            context.set_state(SummarizingState())
+            context.set_state(VerifyingState())
             return
 
         # Mark step as RUNNING before execution so the executor and
@@ -193,13 +193,13 @@ class ExecutingState(FlowState):
         # Check if terminate was called
         if inner_should_terminate:
             logger.info("Terminate detected, completing task")
-            context.set_state(SummarizingState())
+            context.set_state(VerifyingState())
             return
 
         # Check if all steps are now complete
         if context._auto_terminate_on_plan_complete and context._plan.is_complete():
             logger.info("All plan steps completed. Auto-terminating.")
-            context.set_state(SummarizingState())
+            context.set_state(VerifyingState())
             return
 
         # Compact memory after each step
@@ -209,7 +209,7 @@ class ExecutingState(FlowState):
         # Replanning is handled on failures/uncertainty elsewhere.
         next_step = context._plan.get_next_step()
         if next_step is None:
-            context.set_state(SummarizingState())
+            context.set_state(VerifyingState())
             return
 
         context.set_state(ExecutingState())

@@ -1,26 +1,29 @@
 """KnowledgeTool -- persistent full-text searchable knowledge base.
 
-Uses SQLite FTS5 to store and retrieve notes, findings, and decisions across
-agent sessions. Notes survive Memory._trim() and process restarts.
+Notes survive Memory._trim() and process restarts.  Uses ToolRepositoryPort
+for persistence.  Falls back to direct sqlite3 only when no repository is
+provided (deprecated — emits a warning).
 
 Author: Georgios-Chrysovalantis Chatzivantsidis
 """
 from __future__ import annotations
 
 import json
-import sqlite3
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
+from pydantic import PrivateAttr
+
+from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.tools.base import BaseTool, ToolResult
 
 
 class KnowledgeTool(BaseTool):
     """Persistent, searchable knowledge base that survives session restarts.
 
-    Stores notes in an SQLite FTS5 table so the agent can accumulate
-    research findings and retrieve them by keyword across sessions.
+    Persists notes via injected ToolRepositoryPort.  Falls back to direct
+    sqlite3 when no repository is available (deprecated).
 
     Actions
     -------
@@ -34,7 +37,7 @@ class KnowledgeTool(BaseTool):
     name: str = "knowledge"
     description: str = (
         "Persistent knowledge base for storing and retrieving notes, findings, "
-        "and decisions across agent sessions. Uses SQLite FTS5 full-text search. "
+        "and decisions across agent sessions. Uses full-text search. "
         "See the 'action' parameter for available operations."
     )
     parameters: dict = {
@@ -77,26 +80,16 @@ class KnowledgeTool(BaseTool):
         "required": ["action"],
     }
 
-    db_path: str = "projects.db"
+    _repo: ToolRepositoryPort = PrivateAttr()
 
-    def model_post_init(self, __context: Any) -> None:
-        self._ensure_table()
-
-    def _ensure_table(self) -> None:
-        """Create the FTS5 kb_notes table if it does not exist."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS kb_notes USING fts5(
-                    note_id    UNINDEXED,
-                    project_id UNINDEXED,
-                    created_at UNINDEXED,
-                    source     UNINDEXED,
-                    title,
-                    body,
-                    tags
-                )
-            """)
-            conn.commit()
+    def __init__(self, repo: Optional[ToolRepositoryPort] = None):
+        super().__init__()
+        if repo is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            repo = c.get(ToolRepositoryPort)  # type: ignore[assignment]
+        self._repo = repo
 
     # ------------------------------------------------------------------
     # Public execute dispatcher
@@ -106,24 +99,24 @@ class KnowledgeTool(BaseTool):
         action = kwargs.get("action")
         try:
             if action == "add_note":
-                return self._add_note(kwargs)
+                return await self._add_note(kwargs)
             if action == "search":
-                return self._search(kwargs)
+                return await self._search(kwargs)
             if action == "get_note":
-                return self._get_note(kwargs)
+                return await self._get_note(kwargs)
             if action == "list_notes":
-                return self._list_notes(kwargs)
+                return await self._list_notes(kwargs)
             if action == "delete_note":
-                return self._delete_note(kwargs)
+                return await self._delete_note(kwargs)
             return ToolResult(output="", error=f"Unknown action: {action!r}")
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 
     # ------------------------------------------------------------------
-    # Private action implementations
+    # Private action implementations (delegate to ToolRepositoryPort)
     # ------------------------------------------------------------------
 
-    def _add_note(self, kw: dict) -> ToolResult:
+    async def _add_note(self, kw: dict) -> ToolResult:
         title = (kw.get("title") or "").strip()
         body = (kw.get("body") or "").strip()
         if not title:
@@ -131,112 +124,67 @@ class KnowledgeTool(BaseTool):
         if not body:
             return ToolResult(output="", error="'body' is required for add_note")
 
-        note_id = str(uuid.uuid4())[:8]
         project_id = kw.get("project_id") or ""
-        tags = kw.get("tags") or ""
-        source = kw.get("source") or ""
-        created_at = datetime.now().isoformat()
+        tags_str = (kw.get("tags") or "").strip()
+        tags_list = [t.strip() for t in tags_str.split(",") if t.strip()]
+        source = (kw.get("source") or "").strip()
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """INSERT INTO kb_notes
-                   (note_id, project_id, created_at, source, title, body, tags)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (note_id, project_id, created_at, source, title, body, tags),
-            )
-            conn.commit()
+        # Prepend source to content if present
+        content = body
+        if source:
+            content = f"[source: {source}]\n{body}"
 
+        note_id = await self._repo.save_note(
+            title=title,
+            content=content,
+            tags=tags_list or None,
+            project_id=project_id,
+        )
         return ToolResult(output=json.dumps({"note_id": note_id, "title": title}))
 
-    def _search(self, kw: dict) -> ToolResult:
+    async def _search(self, kw: dict) -> ToolResult:
         query = (kw.get("query") or "").strip()
         if not query:
             return ToolResult(output="", error="'query' is required for search")
-        project_id = kw.get("project_id") or None
 
-        params: list = [query]
-        sql = (
-            "SELECT note_id, project_id, created_at, title, tags, source, "
-            "substr(body, 1, 200) AS excerpt "
-            "FROM kb_notes WHERE kb_notes MATCH ?"
-        )
-        if project_id:
-            sql += " AND project_id = ?"
-            params.append(project_id)
-        sql += " ORDER BY rank LIMIT 10"
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            try:
-                cursor = conn.execute(sql, params)
-                rows = cursor.fetchall()
-            except sqlite3.OperationalError as exc:
-                return ToolResult(output="", error=f"Search error: {exc}")
-
-        results = [dict(r) for r in rows]
+        rows = await self._repo.query_notes(search=query, limit=10)
         return ToolResult(
             output=json.dumps(
-                {"query": query, "count": len(results), "results": results},
+                {"query": query, "count": len(rows), "results": rows},
                 indent=2,
             )
         )
 
-    def _get_note(self, kw: dict) -> ToolResult:
+    async def _get_note(self, kw: dict) -> ToolResult:
         note_id = (kw.get("note_id") or "").strip()
         if not note_id:
             return ToolResult(output="", error="'note_id' is required for get_note")
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                "SELECT note_id, project_id, created_at, source, title, body, tags "
-                "FROM kb_notes WHERE note_id = ?",
-                (note_id,),
-            )
-            row = cursor.fetchone()
-
+        row = await self._repo.get_note(note_id)
         if row is None:
             return ToolResult(output="", error=f"Note {note_id!r} not found")
-        return ToolResult(output=json.dumps(dict(row), indent=2))
+        return ToolResult(output=json.dumps(row, indent=2))
 
-    def _list_notes(self, kw: dict) -> ToolResult:
+    async def _list_notes(self, kw: dict) -> ToolResult:
         project_id = kw.get("project_id") or None
         tags_filter = (kw.get("tags") or "").strip()
+        tags_list = [t.strip() for t in tags_filter.split(",") if t.strip()] if tags_filter else None
 
-        sql = (
-            "SELECT note_id, project_id, created_at, title, tags, source "
-            "FROM kb_notes"
+        rows = await self._repo.list_notes(
+            project_id=project_id or "",
+            tags=tags_list,
+            limit=50,
         )
-        params: list = []
-        conditions: list[str] = []
-
-        if project_id:
-            conditions.append("project_id = ?")
-            params.append(project_id)
-        if tags_filter:
-            conditions.append("tags LIKE ?")
-            params.append(f"%{tags_filter}%")
-
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-        sql += " LIMIT 50"
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(sql, params)
-            rows = cursor.fetchall()
-
-        notes = [dict(r) for r in rows]
         return ToolResult(
-            output=json.dumps({"count": len(notes), "notes": notes}, indent=2)
+            output=json.dumps({"count": len(rows), "notes": rows}, indent=2)
         )
 
-    def _delete_note(self, kw: dict) -> ToolResult:
+    async def _delete_note(self, kw: dict) -> ToolResult:
         note_id = (kw.get("note_id") or "").strip()
         if not note_id:
             return ToolResult(output="", error="'note_id' is required for delete_note")
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM kb_notes WHERE note_id = ?", (note_id,))
-            conn.commit()
+        deleted = await self._repo.delete_note(note_id)
+        if not deleted:
+            return ToolResult(output="", error=f"Note {note_id!r} not found")
         return ToolResult(output=json.dumps({"deleted": note_id}))

@@ -66,9 +66,9 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    # ── Sync methods ─────────────────────────────────────────────────
+    # ── Sync implementations (prefixed with _s_) called by async wrappers ──
 
-    def query_notes(self, search: str = "", limit: int = 20) -> list[dict]:
+    def _s_query_notes(self, search: str = "", limit: int = 20) -> list[dict]:
         conn = self._connect()
         try:
             if search:
@@ -88,7 +88,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def get_note(self, note_id: str) -> Optional[dict]:
+    def _s_get_note(self, note_id: str) -> Optional[dict]:
         conn = self._connect()
         try:
             row = conn.execute(
@@ -98,7 +98,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def list_notes(
+    def _s_list_notes(
         self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
     ) -> list[dict]:
         conn = self._connect()
@@ -119,7 +119,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def save_note(
+    def _s_save_note(
         self, title: str, content: str, tags: Optional[list[str]] = None,
         project_id: str = "",
     ) -> str:
@@ -143,7 +143,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def delete_note(self, note_id: str) -> bool:
+    def _s_delete_note(self, note_id: str) -> bool:
         conn = self._connect()
         try:
             cur = conn.execute("DELETE FROM kb_notes WHERE id = ?", (note_id,))
@@ -152,7 +152,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]:
+    def _s_get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]:
         conn = self._connect()
         try:
             if project_id:
@@ -169,7 +169,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def save_video_source(
+    def _s_save_video_source(
         self, url: str, title: str = "",
         project_id: str = "", metadata: Optional[dict] = None,
     ) -> str:
@@ -189,7 +189,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def get_requirements(
+    def _s_get_requirements(
         self, project_id: str = "",
         status: Optional[str] = None, priority: Optional[str] = None,
     ) -> list[dict]:
@@ -212,7 +212,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def save_requirement(
+    def _s_save_requirement(
         self, title: str, description: str, priority: str = "medium",
         project_id: str = "",
     ) -> str:
@@ -227,7 +227,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    def update_requirement_status(self, req_id: str, new_status: str) -> bool:
+    def _s_update_requirement_status(self, req_id: str, new_status: str) -> bool:
         conn = self._connect()
         try:
             cur = conn.execute(
@@ -239,48 +239,48 @@ class SQLiteToolRepository(ToolRepositoryPort):
         finally:
             conn.close()
 
-    # ── Async wrappers ───────────────────────────────────────────────
+    # ── Async wrappers (public API matching ToolRepositoryPort) ──
 
     async def query_notes(self, search: str = "", limit: int = 20) -> list[dict]:
-        return self.query_notes(search, limit)
+        return self._s_query_notes(search, limit)
 
     async def get_note(self, note_id: str) -> Optional[dict]:
-        return self.get_note(note_id)
+        return self._s_get_note(note_id)
 
     async def list_notes(
         self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
     ) -> list[dict]:
-        return self.list_notes(project_id, tags, limit)
+        return self._s_list_notes(project_id, tags, limit)
 
     async def save_note(
         self, title: str, content: str, tags: Optional[list[str]] = None,
         project_id: str = "",
     ) -> str:
-        return self.save_note(title, content, tags, project_id)
+        return self._s_save_note(title, content, tags, project_id)
 
     async def delete_note(self, note_id: str) -> bool:
-        return self.delete_note(note_id)
+        return self._s_delete_note(note_id)
 
     async def get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]:
-        return self.get_video_sources(project_id, limit)
+        return self._s_get_video_sources(project_id, limit)
 
     async def save_video_source(
         self, url: str, title: str = "",
         project_id: str = "", metadata: Optional[dict] = None,
     ) -> str:
-        return self.save_video_source(url, title, project_id, metadata)
+        return self._s_save_video_source(url, title, project_id, metadata)
 
     async def get_requirements(
         self, project_id: str = "",
         status: Optional[str] = None, priority: Optional[str] = None,
     ) -> list[dict]:
-        return self.get_requirements(project_id, status, priority)
+        return self._s_get_requirements(project_id, status, priority)
 
     async def save_requirement(
         self, title: str, description: str, priority: str = "medium",
         project_id: str = "",
     ) -> str:
-        return self.save_requirement(title, description, priority, project_id)
+        return self._s_save_requirement(title, description, priority, project_id)
 
     async def update_requirement_status(self, req_id: str, new_status: str) -> bool:
-        return self.update_requirement_status(req_id, new_status)
+        return self._s_update_requirement_status(req_id, new_status)

@@ -1,19 +1,19 @@
 """ProductTool -- product backlog and roadmap management.
 
-Stores requirements / user stories in an SQLite table so the agent can
-track features, bugs, and tech-debt across sessions.  Includes a markdown
-PRD generator and a structured JSON roadmap view.
+Stores requirements via ToolRepositoryPort.  Falls back to direct sqlite3
+only when no repository is provided (deprecated path).
 
 Author: Georgios-Chrysovalantis Chatzivantsidis
 """
 from __future__ import annotations
 
 import json
-import sqlite3
-import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
+from pydantic import PrivateAttr
+
+from weebot.application.ports.tool_repository_port import ToolRepositoryPort
 from weebot.tools.base import BaseTool, ToolResult
 
 _VALID_CATEGORIES = {"feature", "bug", "tech-debt", "epic"}
@@ -90,29 +90,16 @@ class ProductTool(BaseTool):
         "required": ["action"],
     }
 
-    db_path: str = "projects.db"
+    _repo: ToolRepositoryPort = PrivateAttr()
 
-    def model_post_init(self, __context: Any) -> None:
-        self._ensure_table()
-
-    def _ensure_table(self) -> None:
-        """Create the requirements table if it does not exist."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS requirements (
-                    req_id      TEXT PRIMARY KEY,
-                    project_id  TEXT NOT NULL,
-                    title       TEXT NOT NULL,
-                    description TEXT DEFAULT '',
-                    category    TEXT DEFAULT 'feature',
-                    priority    INTEGER DEFAULT 3,
-                    status      TEXT DEFAULT 'draft',
-                    tags        TEXT DEFAULT '',
-                    created_at  TEXT NOT NULL,
-                    updated_at  TEXT NOT NULL
-                )
-            """)
-            conn.commit()
+    def __init__(self, repo: Optional[ToolRepositoryPort] = None):
+        super().__init__()
+        if repo is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            repo = c.get(ToolRepositoryPort)  # type: ignore[assignment]
+        self._repo = repo
 
     # ------------------------------------------------------------------
     # Public execute dispatcher
@@ -122,24 +109,24 @@ class ProductTool(BaseTool):
         action = kwargs.get("action")
         try:
             if action == "add_requirement":
-                return self._add_requirement(kwargs)
+                return await self._add_requirement(kwargs)
             if action == "list_requirements":
-                return self._list_requirements(kwargs)
+                return await self._list_requirements(kwargs)
             if action == "update_status":
-                return self._update_status(kwargs)
+                return await self._update_status(kwargs)
             if action == "generate_prd":
-                return self._generate_prd(kwargs)
+                return await self._generate_prd(kwargs)
             if action == "get_roadmap":
-                return self._get_roadmap(kwargs)
+                return await self._get_roadmap(kwargs)
             return ToolResult(output="", error=f"Unknown action: {action!r}")
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 
     # ------------------------------------------------------------------
-    # Private action implementations
+    # Private action implementations (delegate to ToolRepositoryPort)
     # ------------------------------------------------------------------
 
-    def _add_requirement(self, kw: dict) -> ToolResult:
+    async def _add_requirement(self, kw: dict) -> ToolResult:
         project_id = (kw.get("project_id") or "").strip()
         title = (kw.get("title") or "").strip()
         if not project_id:
@@ -155,79 +142,48 @@ class ProductTool(BaseTool):
 
         raw_priority = kw.get("priority")
         try:
-            priority = int(raw_priority) if raw_priority is not None else 3
+            priority_int = int(raw_priority) if raw_priority is not None else 3
         except (TypeError, ValueError):
-            priority = 3
-        priority = max(1, min(5, priority))
+            priority_int = 3
+        priority_int = max(1, min(5, priority_int))
+        priority_label = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "trivial"}.get(priority_int, "medium")
 
-        req_id = str(uuid.uuid4())[:8]
-        now = datetime.now().isoformat()
+        description = (kw.get("description") or "").strip()
+        tags = (kw.get("tags") or "").strip()
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """INSERT INTO requirements
-                   (req_id, project_id, title, description, category,
-                    priority, status, tags, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)""",
-                (
-                    req_id,
-                    project_id,
-                    title,
-                    kw.get("description") or "",
-                    category,
-                    priority,
-                    kw.get("tags") or "",
-                    now,
-                    now,
-                ),
-            )
-            conn.commit()
+        # Prepend tags + category to description for storage
+        full_description = f"[category: {category}] [tags: {tags}] {description}".strip()
 
+        req_id = await self._repo.save_requirement(
+            title=title,
+            description=full_description,
+            priority=priority_label,
+            project_id=project_id,
+        )
         return ToolResult(output=json.dumps({"req_id": req_id, "title": title}))
 
-    def _list_requirements(self, kw: dict) -> ToolResult:
+    async def _list_requirements(self, kw: dict) -> ToolResult:
         project_id = kw.get("project_id") or None
         status = kw.get("status") or None
         raw_priority = kw.get("priority")
-        priority = None
+        priority_label = None
         if raw_priority is not None:
             try:
-                priority = int(raw_priority)
+                p = int(raw_priority)
+                priority_label = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "trivial"}.get(p, "medium")
             except (TypeError, ValueError):
                 pass
 
-        sql = (
-            "SELECT req_id, project_id, title, category, priority, status, tags, created_at "
-            "FROM requirements"
+        rows = await self._repo.get_requirements(
+            project_id=project_id or "",
+            status=status,
+            priority=priority_label,
         )
-        params: list = []
-        conditions: list[str] = []
-
-        if project_id:
-            conditions.append("project_id = ?")
-            params.append(project_id)
-        if status:
-            conditions.append("status = ?")
-            params.append(status)
-        if priority is not None:
-            conditions.append("priority = ?")
-            params.append(priority)
-
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
-        sql += " ORDER BY priority ASC, created_at ASC"
-
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(sql, params)
-            rows = cursor.fetchall()
-
-        reqs = [dict(r) for r in rows]
         return ToolResult(
-            output=json.dumps({"count": len(reqs), "requirements": reqs}, indent=2)
+            output=json.dumps({"count": len(rows), "requirements": rows}, indent=2)
         )
 
-    def _update_status(self, kw: dict) -> ToolResult:
+    async def _update_status(self, kw: dict) -> ToolResult:
         req_id = (kw.get("req_id") or "").strip()
         status = (kw.get("status") or "").strip()
         if not req_id:
@@ -240,107 +196,92 @@ class ProductTool(BaseTool):
                 error=f"Invalid status {status!r}. Choose from {sorted(_VALID_STATUSES)}",
             )
 
-        now = datetime.now().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute(
-                "UPDATE requirements SET status = ?, updated_at = ? WHERE req_id = ?",
-                (status, now, req_id),
-            )
-            conn.commit()
-            updated = cursor.rowcount
-
-        if updated == 0:
+        updated = await self._repo.update_requirement_status(req_id, status)
+        if not updated:
             return ToolResult(output="", error=f"Requirement {req_id!r} not found")
         return ToolResult(output=json.dumps({"req_id": req_id, "status": status}))
 
-    def _generate_prd(self, kw: dict) -> ToolResult:
+    async def _generate_prd(self, kw: dict) -> ToolResult:
         project_id = (kw.get("project_id") or "").strip()
         if not project_id:
             return ToolResult(output="", error="'project_id' is required for generate_prd")
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                """SELECT req_id, title, description, category, priority, status, tags
-                   FROM requirements
-                   WHERE project_id = ?
-                   ORDER BY priority ASC, category ASC""",
-                (project_id,),
-            )
-            rows = cursor.fetchall()
-
+        rows = await self._repo.get_requirements(project_id=project_id)
         if not rows:
-            return ToolResult(
-                output="", error=f"No requirements found for project {project_id!r}"
-            )
+            return ToolResult(output="", error=f"No requirements found for project {project_id!r}")
 
-        reqs = [dict(r) for r in rows]
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         lines = [
-            f"# Product Requirements Document",
-            f"",
+            "# Product Requirements Document",
+            "",
             f"**Project:** {project_id}  ",
             f"**Generated:** {now}  ",
-            f"**Total requirements:** {len(reqs)}",
-            f"",
-            f"---",
-            f"",
+            f"**Total requirements:** {len(rows)}",
+            "",
+            "---",
+            "",
         ]
 
-        # Group by category
+        # Group by extracted category from description
         by_category: dict[str, list[dict]] = {}
-        for req in reqs:
-            by_category.setdefault(req["category"], []).append(req)
+        for req in rows:
+            desc = req.get("description", "")
+            cat = "feature"
+            if "[category:" in desc:
+                import re as _re
+                m = _re.search(r"\[category:\s*(\w+)\]", desc)
+                if m:
+                    cat = m.group(1)
+            by_category.setdefault(cat, []).append(req)
 
         for category, items in sorted(by_category.items()):
             lines.append(f"## {category.title()}")
             lines.append("")
             for req in items:
-                status_badge = f"`{req['status']}`"
-                priority_label = f"P{req['priority']}"
-                tags = f" | **Tags:** {req['tags']}" if req["tags"] else ""
-                lines.append(f"### {req['req_id']}: {req['title']}")
+                # Extract clean description (strip metadata prefix)
+                desc = req.get("description", "")
+                import re as _re2
+                clean_desc = _re2.sub(r"\[.*?\]\s*", "", desc).strip()
+                status_badge = f"`{req.get('status', 'open')}`"
+                priority_label = f"P{req.get('priority', 'medium')}"
+                lines.append(f"### {req.get('id', '?')}: {req.get('title', '')}")
                 lines.append(
                     f"**Status:** {status_badge} | **Priority:** {priority_label}"
-                    f" | **Category:** {req['category']}{tags}"
+                    f" | **Category:** {category}"
                 )
                 lines.append("")
-                if req["description"]:
-                    lines.append(req["description"])
+                if clean_desc:
+                    lines.append(clean_desc)
                     lines.append("")
                 lines.append("---")
                 lines.append("")
 
         return ToolResult(output="\n".join(lines))
 
-    def _get_roadmap(self, kw: dict) -> ToolResult:
+    async def _get_roadmap(self, kw: dict) -> ToolResult:
         project_id = (kw.get("project_id") or "").strip()
         if not project_id:
             return ToolResult(output="", error="'project_id' is required for get_roadmap")
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(
-                """SELECT req_id, title, category, priority, status, tags
-                   FROM requirements
-                   WHERE project_id = ?
-                   ORDER BY priority ASC, category ASC""",
-                (project_id,),
-            )
-            rows = cursor.fetchall()
+        rows = await self._repo.get_requirements(project_id=project_id)
 
-        reqs = [dict(r) for r in rows]
-
-        # Group by category
+        # Group by extracted category
         by_category: dict[str, list[dict]] = {}
-        for req in reqs:
-            by_category.setdefault(req["category"], []).append(req)
+        for req in rows:
+            desc = req.get("description", "")
+            cat = "feature"
+            if "[category:" in desc:
+                import re as _re
+                m = _re.search(r"\[category:\s*(\w+)\]", desc)
+                if m:
+                    cat = m.group(1)
+            by_category.setdefault(cat, []).append(req)
 
         roadmap = {
             "project_id": project_id,
             "generated_at": datetime.now().isoformat(),
-            "total": len(reqs),
+            "total": len(rows),
             "by_category": by_category,
         }
         return ToolResult(output=json.dumps(roadmap, indent=2))

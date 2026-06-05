@@ -5,12 +5,14 @@ import json
 import pytest
 
 from weebot.tools.knowledge_tool import KnowledgeTool
+from weebot.infrastructure.persistence.sqlite_tool_repo import SQLiteToolRepository
 
 
 @pytest.fixture
 def kb(tmp_path):
-    """Fresh KnowledgeTool backed by a temp-file SQLite database."""
-    return KnowledgeTool(db_path=str(tmp_path / "kb_test.db"))
+    """Fresh KnowledgeTool backed by a temp-file ToolRepository."""
+    repo = SQLiteToolRepository(db_path=str(tmp_path / "kb_test.db"))
+    return KnowledgeTool(repo=repo)
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +102,7 @@ async def test_get_note_returns_full_note(kb):
     assert not result.is_error
     data = json.loads(result.output)
     assert data["title"] == "DB design"
-    assert data["body"] == "Use Postgres"
+    assert data["content"] == "Use Postgres"
 
 
 @pytest.mark.asyncio

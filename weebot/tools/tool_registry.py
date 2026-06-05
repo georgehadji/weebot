@@ -313,7 +313,7 @@ class RoleBasedToolRegistry:
         from weebot.tools.knowledge_tool import KnowledgeTool
         from weebot.tools.product_tool import ProductTool
         from weebot.tools.video_ingest_tool import VideoIngestTool
-        from weebot.tools.powershell_tool import PowerShellBaseTool
+        from weebot.tools.powershell_tool import PowerShellTool
         from weebot.tools.ocr import OCRTool
         from weebot.tools.weather_tool import WeatherTool
         from weebot.tools.design_system_tool import DesignSystemTool
@@ -345,7 +345,7 @@ class RoleBasedToolRegistry:
             "knowledge": KnowledgeTool,
             "product": ProductTool,
             "video_ingest": VideoIngestTool,
-            "powershell": PowerShellBaseTool,
+            "powershell": PowerShellTool,
             "ocr": OCRTool,
             "weather": WeatherTool,
             "design_system": DesignSystemTool,
@@ -418,18 +418,22 @@ class RoleBasedToolRegistry:
         tools: list = []
         # Tools that accept an injected LLMPort via their Pydantic field
         _llm_port_tools = {"browser_navigator", "mixture_of_agents"}
-
-        # Tools now initialize with NativeWindowsSandbox directly (no injection needed)
+        # Tools that share a single PlaywrightAdapter instance
+        _browser_adapter_tools = {"advanced_browser", "browser_inspector"}
+        _shared_browser_adapter = None
 
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
                 if name in _llm_port_tools and llm_port is not None:
                     tool = tool_cls(llm_port=llm_port)
+                elif name in _browser_adapter_tools:
+                    if _shared_browser_adapter is None:
+                        from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+                        _shared_browser_adapter = PlaywrightAdapter()
+                    tool = tool_cls(browser=_shared_browser_adapter)
                 else:
                     tool = tool_cls()
-                # Inject sandbox_port after construction if tool supports it
-                # SandboxPort is initialized directly in model_post_init (no injection needed)
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)

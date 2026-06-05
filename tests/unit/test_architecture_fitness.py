@@ -386,19 +386,6 @@ def test_tools_no_direct_db():
                 rel = path.relative_to(ROOT.parent)
                 violations.append(f"{rel}: imports {imp!r}")
 
-    # NOTE: All 3 tools can now be wired through ToolRepositoryPort.
-    # Remove this block after the tools call through the port.
-    # Tracked in docs/plans/FINAL_REMAINING_FIXES.md §A3.
-    known_exception_tools = {
-        "knowledge_tool",
-        "product_tool",
-        "video_ingest_tool",
-    }
-    violations = [
-        v for v in violations
-        if not any(e in v for e in known_exception_tools)
-    ]
-
     assert not violations, (
         "Tools must use ports for database access.\n"
         + "\n".join(violations)
@@ -563,16 +550,16 @@ def test_no_blocking_calls_in_async():
                 rel = path.relative_to(ROOT.parent)
                 violations.append(f"{rel}: contains {pattern}")
 
-    # Known exceptions — sync helpers, not called from async hot path
+    # Known exceptions — sync helpers, not called from async hot path.
+    # Each documented with its justification.  Track removal in ARCHITECTURE_9_PLAN.md.
     known_exceptions = {
         "bash_tool.py",            # _wsl_available() sync-only helper
         "behavior_tracker.py",     # all calls in sync methods
         "design_system_tool.py",   # sync subprocess in tools
-        "powershell_tool.py",      # _run() is sync wrapper → _run_async()
-        "gitnexus_provider.py",    # legacy adapter
-        "rtk_integration.py",      # legacy adapter
-        "rtk_provider.py",         # legacy adapter
-        "mcp_client.py",           # legacy module
+        "gitnexus_provider.py",    # legacy adapter (ADDR-004)
+        "rtk_integration.py",      # legacy adapter (ADR-004)
+        "rtk_provider.py",         # legacy adapter (ADR-004)
+        "mcp_client.py",           # legacy module (ADR-004)
     }
     violations = [
         v for v in violations

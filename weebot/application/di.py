@@ -226,6 +226,13 @@ class Container:
 
     @staticmethod
     def _create_state_repo(db_path: str) -> StateRepositoryPort:
+        import os
+        if os.environ.get("WEEBOT_DB_BACKEND", "").lower() == "postgresql":
+            from weebot.infrastructure.persistence.postgresql.state_repo import (
+                PostgreSQLStateRepository,
+            )
+            repo = PostgreSQLStateRepository()
+            return repo
         from weebot.infrastructure.persistence.sqlite_state_repo import (
             SQLiteStateRepository,
         )

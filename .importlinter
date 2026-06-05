@@ -38,12 +38,7 @@ source_modules = weebot.tools
 forbidden_modules =
     sqlite3
 ignore_imports =
-    # Intentional: knowledge_tool, product_tool, video_ingest_tool use
-    # projects.db with FTS5 virtual-tables — a different schema design
-    # from SQLiteToolRepository's weebot_tools.db. Both are valid.
-    weebot.tools.knowledge_tool -> sqlite3
-    weebot.tools.product_tool -> sqlite3
-    weebot.tools.video_ingest_tool -> sqlite3
+    # Scheduling uses its own sqlite3 connection for cron jobs.
     weebot.scheduling.scheduler -> sqlite3
 
 [importlinter:contract:infra-no-app-services]

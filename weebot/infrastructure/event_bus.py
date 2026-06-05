@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import warnings
 from typing import List
 
 from weebot.application.ports.event_bus_port import (
@@ -123,23 +122,4 @@ class AsyncEventBus(EventBusPort):
             self._domain_handlers.remove(handler)
 
 
-# Global singleton instance
-_event_bus: AsyncEventBus | None = None
 
-
-def get_event_bus() -> AsyncEventBus:
-    """Get the global event bus singleton.
-
-    DEPRECATED: Use ``Container.get(EventBusPort)`` instead.
-    See :class:`~weebot.application.di.Container` for the DI-based approach.
-    Scheduled for removal by 2026-09-01.
-    """
-    warnings.warn(
-        "get_event_bus() is deprecated. Use Container.get(EventBusPort) instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    global _event_bus
-    if _event_bus is None:
-        _event_bus = AsyncEventBus()
-    return _event_bus

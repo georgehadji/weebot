@@ -1,25 +1,62 @@
-"""PowerShell Tool for Windows 11 Sandbox operations."""
-import asyncio
+"""PowerShell Tool for Windows 11 Sandbox operations.
+
+Routes execution through SandboxPort.  No direct subprocess or langchain calls.
+"""
+from __future__ import annotations
+
 import json
 import re
 from typing import ClassVar, Dict, Any, Optional
-from pathlib import Path
-from langchain.tools import BaseTool
-from pydantic import Field
 
-# Configuration — use the canonical workspace from settings so the
-# PowerShell tool operates in the same directory as every other tool.
-# Respects the WEEBOT_WORKSPACE environment variable.
+from pydantic import ConfigDict, PrivateAttr
+
+from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.config.settings import WORKSPACE_ROOT as _WORKSPACE_ROOT
+from weebot.config.tool_config import ToolConfig
+from weebot.core.approval_policy import ExecApprovalPolicy
+from weebot.tools.base import BaseTool, ToolResult
 
 
 class PowerShellTool(BaseTool):
-    name: str = "powershell_executor"
-    description: str = """Execute PowerShell commands in Windows 11 Sandbox environment.
-    Use for: file operations, process management, system diagnostics, network testing.
-    Workspace is configured via WEEBOT_WORKSPACE env var (default: current directory).
-    Pass 'timeout' in seconds (default: 30, max: 300)."""
-    
+    """Execute PowerShell commands — routes through SandboxPort.
+
+    Accepts optional 'timeout' in seconds (default: 30, max: 300).
+    Diagnostic shortcuts: system_info, processes, network_test, list_workspace.
+    """
+
+    name: str = "powershell"
+    description: str = (
+        f"Execute a PowerShell command on Windows 11. "
+        f"Working directory / workspace root: {_WORKSPACE_ROOT}. "
+        "Accepts optional 'timeout' in seconds (default: 30, max: 300). "
+        "Diagnostic shortcuts: system_info, processes, network_test, list_workspace."
+    )
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "PowerShell command or diagnostic shortcut to execute",
+            }
+        },
+        "required": ["command"],
+    }
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    _sandbox: SandboxPort = PrivateAttr()
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+
+    def __init__(self, sandbox: Optional[SandboxPort] = None,
+                 tool_config: Optional[ToolConfig] = None):
+        super().__init__()
+        if sandbox is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            sandbox = c.get(SandboxPort)
+        self._sandbox = sandbox
+        self._tool_config = tool_config
+
     # Available diagnostic commands as requested
     DIAGNOSTIC_COMMANDS: ClassVar[Dict[str, str]] = {
         "system_info": "Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory, CsProcessors",
@@ -115,157 +152,43 @@ class PowerShellTool(BaseTool):
     
     def _get_max_timeout(self) -> float:
         """Read max timeout from ToolConfig if injected, otherwise default 300."""
-        if hasattr(self, '_tool_config') and self._tool_config is not None:
+        if self._tool_config is not None:
             return float(self._tool_config.max_tool_timeout)
         return 300.0
 
-    async def _run_async(self, command: str, timeout: float = 30.0) -> str:
-        """Execute PowerShell command with security validation (async)."""
-        # Check if it's a diagnostic shortcut
-        if command in self.DIAGNOSTIC_COMMANDS:
-            command = self.DIAGNOSTIC_COMMANDS[command]
+    def _resolve_command(self, command: str) -> str:
+        """Resolve diagnostic shortcut or pass through raw command."""
+        return self.DIAGNOSTIC_COMMANDS.get(command, command)
 
-        # Security validation: encoded commands
+    async def execute(self, command: str, timeout: Optional[float] = None, **_) -> ToolResult:  # type: ignore[override]
+        # Resolve diagnostic shortcut
+        command = self._resolve_command(command)
+
+        # ── Security validation ──
         is_valid, error_msg = self._validate_no_encoded_commands(command)
         if not is_valid:
-            return f"Error: {error_msg}"
-
-        # Security validation: path safety
+            return ToolResult(output="", error=error_msg)
         if not self._validate_path_safety(command):
-            return "Error: Command violates sandbox constraints"
+            return ToolResult(output="", error="Error: Command violates sandbox constraints")
 
-        effective_timeout = min(float(timeout), self._get_max_timeout())
-
-        try:
-            ps_cmd = await self._find_powershell()
-            proc = await asyncio.create_subprocess_exec(
-                ps_cmd, "-NoProfile", "-Command", command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=effective_timeout
-                )
-                stdout = stdout.decode("utf-8", errors="replace") if stdout else ""
-                stderr = stderr.decode("utf-8", errors="replace") if stderr else ""
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return f"Error: Command timed out after {effective_timeout:.0f} seconds"
-
-            if proc.returncode != 0:
-                return f"Error: {stderr}"
-            return stdout if stdout else "Success"
-
-        except Exception as e:
-            return f"Error: {str(e)}"
-    
-    async def _find_powershell(self) -> str:
-        """Find the powershell executable path asynchronously."""
-        import os as _os
-        system_root = _os.environ.get('SystemRoot', 'C:\\Windows')
-        paths = [
-            _os.path.join(system_root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-            _os.path.join(system_root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-        ]
-        for p in paths:
-            if _os.path.exists(p):
-                return p
-        return "powershell.exe"
-    
-    def _run(self, command: str) -> str:
-        """Synchronous execution — kept for backward compatibility.
-
-        Delegates to the async implementation via asyncio.run().
-        """
-        try:
-            return asyncio.run(self._run_async(command))
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-    async def _arun(self, command: str) -> str:
-        """Async execution via the async _run method."""
-        try:
-            return await self._run_async(command)
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-
-# --- weebot BaseTool wrapper -------------------------------------------------
-from pydantic import ConfigDict, PrivateAttr  # noqa: E402
-from weebot.core.approval_policy import ExecApprovalPolicy  # noqa: E402
-from weebot.application.ports.sandbox_port import SandboxPort
-from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolResult  # noqa: E402
-
-
-_POWERSHELL_DESC = (
-    f"Execute a PowerShell command on Windows 11. "
-    f"Working directory / workspace root: {_WORKSPACE_ROOT}. "
-    "Accepts optional 'timeout' in seconds (default: 30, max: 300). "
-    "Diagnostic shortcuts: system_info, processes, network_test, list_workspace."
-)
-
-
-class PowerShellBaseTool(_WeebotBaseTool):
-    """weebot BaseTool wrapper around PowerShellTool for use in the ReAct agent."""
-
-    name: str = "powershell"
-    description: str = _POWERSHELL_DESC
-    parameters: dict = {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "PowerShell command or diagnostic shortcut to execute",
-            }
-        },
-        "required": ["command"],
-    }
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    _inner: PowerShellTool = PrivateAttr(default=None)
-    _sandbox: SandboxPort = PrivateAttr(default=None)
-
-    def __init__(self, sandbox: Optional[SandboxPort] = None):
-        super().__init__()
-        self._inner = PowerShellTool()
-        if sandbox is None:
-            from weebot.application.di import Container
-            container = Container()
-            container.configure_defaults()
-            sandbox = container.get(SandboxPort)
-        self._sandbox = sandbox
-
-    async def execute(self, command: str, timeout: Optional[float] = None, **_) -> _ToolResult:  # type: ignore[override]
-        # Coerce timeout and apply ceiling
-        try:
-            effective_timeout = float(timeout) if timeout is not None else 30.0
-        except (TypeError, ValueError):
-            effective_timeout = 30.0
-        ceiling = self._inner._get_max_timeout()
-        effective_timeout = min(effective_timeout, ceiling)
-
-        # ── Security validation (applies to BOTH paths) ──
-        # Encoded command detection
-        is_valid, error_msg = self._inner._validate_no_encoded_commands(command)
-        if not is_valid:
-            return _ToolResult(output="", error=error_msg)
-        # Path safety validation
-        if not self._inner._validate_path_safety(command):
-            return _ToolResult(output="", error="Error: Command violates sandbox constraints")
-        # Approval policy gate
-        _policy = ExecApprovalPolicy()
-        approval = _policy.evaluate(command)
+        # ── Approval policy gate ──
+        policy = ExecApprovalPolicy()
+        approval = policy.evaluate(command)
         if not approval.approved:
-            return _ToolResult(output="", error=f"Command denied by policy: {approval.reason}")
+            return ToolResult(output="", error=f"Command denied by policy: {approval.reason}")
         if approval.requires_confirmation:
-            return _ToolResult(
+            return ToolResult(
                 output="",
                 error=f"Command requires confirmation: {approval.undo_hint}",
             )
 
-        # Route through SandboxPort (always via NativeWindowsSandbox)
+        # Coerce and clamp timeout
+        try:
+            effective_timeout = min(float(timeout), self._get_max_timeout()) if timeout is not None else 30.0
+        except (TypeError, ValueError):
+            effective_timeout = 30.0
+
+        # ── Route through SandboxPort (no direct subprocess) ──
         try:
             s_result = await self._sandbox.execute_shell(
                 script=command,
@@ -273,9 +196,9 @@ class PowerShellBaseTool(_WeebotBaseTool):
                 timeout=effective_timeout,
             )
             if s_result.timed_out:
-                return _ToolResult(output="", error=f"Command timed out after {effective_timeout:.0f}s")
+                return ToolResult(output="", error=f"Command timed out after {effective_timeout:.0f}s")
             if not s_result.success and s_result.stderr:
-                return _ToolResult(output=s_result.stdout, error=s_result.stderr)
-            return _ToolResult(output=s_result.combined_output)
+                return ToolResult(output=s_result.stdout, error=s_result.stderr)
+            return ToolResult(output=s_result.combined_output)
         except Exception as e:
-            return _ToolResult(output="", error=str(e))
+            return ToolResult(output="", error=str(e))

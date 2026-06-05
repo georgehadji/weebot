@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from weebot.tools.bash_tool import BashTool
-from weebot.tools.powershell_tool import PowerShellBaseTool
+from weebot.tools.powershell_tool import PowerShellTool
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -35,8 +35,8 @@ class _MockSandbox:
 
 @pytest.mark.asyncio
 async def test_powershell_encoded_command_blocked_via_sandbox_port():
-    """PowerShellBaseTool must block encoded commands (NativeWindowsSandbox always used)."""
-    tool = PowerShellBaseTool()
+    """PowerShellTool must block encoded commands via SandboxPort path."""
+    tool = PowerShellTool()
 
     # Encoded payloads that should be blocked
     encoded_payloads = [
@@ -53,8 +53,8 @@ async def test_powershell_encoded_command_blocked_via_sandbox_port():
 
 @pytest.mark.asyncio
 async def test_powershell_dangerous_command_blocked_via_sandbox_port():
-    """PowerShellBaseTool must block dangerous cmdlets (NativeWindowsSandbox always used)."""
-    tool = PowerShellBaseTool()
+    """PowerShellTool must block dangerous cmdlets via SandboxPort path."""
+    tool = PowerShellTool()
 
     dangerous_commands = [
         "Format-Volume -DriveLetter C",
@@ -75,8 +75,8 @@ async def test_powershell_dangerous_command_blocked_via_sandbox_port():
 
 @pytest.mark.asyncio
 async def test_powershell_diagnostic_shortcut_works():
-    """PowerShellBaseTool diagnostic shortcuts should still reach execution."""
-    tool = PowerShellBaseTool()
+    """PowerShellTool diagnostic shortcuts should still reach execution."""
+    tool = PowerShellTool()
 
     # Diagnostic shortcut — should pass security and reach the sandbox
     result = await tool.execute("system_info")

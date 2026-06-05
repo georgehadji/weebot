@@ -45,7 +45,7 @@ class TaskRunner:
         event_bus: Optional[EventBusPort] = None,
         archivist: Optional[MemoryArchivist] = None,
         max_pending: int = 100,
-        max_session_retries: int = 2,
+        max_session_retries: int = 3,
     ):
         self._state_repo = state_repo
         self._event_bus = event_bus

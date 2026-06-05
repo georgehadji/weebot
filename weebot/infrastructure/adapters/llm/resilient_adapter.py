@@ -11,6 +11,7 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.infrastructure.observability import metrics as _metrics
+from weebot.infrastructure.observability.tracing import get_tracer
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 # Optional caching support
@@ -151,6 +152,27 @@ class ResilientLLMAdapter(LLMPort):
         4. Record success/failure for circuit breaker
         5. Cache response (if enabled)
         """
+        tracer = get_tracer(__name__)
+        span_name = f"llm.chat.{self._model_name or 'unknown'}"
+        with tracer.start_as_current_span(span_name) as span:
+            span.set_attribute("llm.model", self._model_name or "unknown")
+            span.set_attribute("llm.provider", self._provider_name or "unknown")
+            return await self._chat_with_tracing(
+                messages, tools, tool_choice, response_format,
+                model, temperature, max_tokens,
+            )
+
+    async def _chat_with_tracing(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = "auto",
+        response_format: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LLMResponse:
+        """Inner chat implementation — called inside the trace span."""
         # Step 1: Circuit breaker check
         if self._circuit:
             result = await self._circuit.evaluate(self._model_name)

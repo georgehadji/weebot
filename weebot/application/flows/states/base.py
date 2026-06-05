@@ -16,6 +16,7 @@ class AgentStatus(str, Enum):
     PLANNING = "planning"
     EXECUTING = "executing"
     UPDATING = "updating"
+    VERIFYING = "verifying"
     SUMMARIZING = "summarizing"
     COMPLETED = "completed"
 
