@@ -16,7 +16,7 @@ MAX_RETRIES = 3
 CONFIRM_DELETE = True
 BROWSER_TIMEOUT = 30000  # ms
 HEADLESS = False
-MODEL_NAME = "meta-llama/llama-3.3-70b-instruct:free"
+MODEL_NAME = "qwen/qwen3.7-plus"
 TEMPERATURE = 0.2
 POWERSHELL_PRIORITY_KEYWORDS = [
     "file", "delete", "copy", "move", "directory",

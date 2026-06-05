@@ -525,6 +525,19 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
         ),
         
         # OpenRouter Models
+        "qwen/qwen3.7-plus": ModelInfo(
+            model_name="qwen/qwen3.7-plus",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1.5e-06,
+            output_cost_per_token=6e-06,
+            max_input_tokens=131072,
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Qwen 3.7 Plus — powerful reasoning model via OpenRouter (weebot default)"
+        ),
         "openrouter/google/gemini-2.5-flash": ModelInfo(
             model_name="openrouter/google/gemini-2.5-flash",
             provider=ModelProvider.OPENROUTER,
