@@ -232,7 +232,7 @@ LLM calls cascade through cost tiers: FREE → BUDGET → PREMIUM. `ResilientLLM
 | D5 | Untyped `Session.context` | MEDIUM | ✅ **CLOSED** — already typed as `SessionContext(BaseModel)` with facts eviction | Pre-existing |
 | D6 | No session-level retry when all LLM tiers fail | MEDIUM | 🔴 Pending | Add `max_session_retries` with backoff (R6) |
 | D7 | Single SQLite file shared across all persistence | MEDIUM | 🔴 Pending | Split per-domain; PostgreSQL for multi-user |
-| D8 | CLI at ~1500 lines, not split by concern | LOW | ⏳ Partial — `flow` group extracted to `cli/commands/flow.py` (1518 lines) | A5 partial |
+| D8 | CLI at ~1500 lines, not split by concern | LOW | ✅ **CLOSED** — flow/skill/agents groups extracted to `cli/commands/`; 961 lines remaining (from 1519) | A5 + SIMPLIFY |
 | D9 | 3 deprecated root shims still present | LOW | ⏳ Partial — have active callers; can't delete yet | A3 partial |
 
 ---
