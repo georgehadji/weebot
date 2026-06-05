@@ -37,9 +37,12 @@ class BrowserTool:
     """
 
     name: str = "browser_navigator"
-    description: str = """Navigate and interact with web pages using AI browser automation.
-    Use for: web scraping, form filling, clicking buttons, extracting data from websites.
-    Input should be a natural language description of the task."""
+    description: str = """Open a real Chrome browser and perform web tasks using AI.
+    Use for: logging into websites, filling login forms, posting content,
+    clicking buttons, navigating pages, extracting data, filling forms.
+    Can handle authentication, 2FA (manual intervention), and file uploads.
+    Opens a visible browser window — you'll see it working.
+    Input: describe what to do in natural language."""
 
     browser: Optional[Any] = None
 
@@ -152,7 +155,7 @@ class BrowserTool:
         "properties": {
             "task": {
                 "type": "string",
-                "description": "Natural language task for the browser agent",
+                "description": "What to do: navigate to URL, log in, fill forms, post content, click buttons, extract data",
             },
         },
         "required": ["task"],
