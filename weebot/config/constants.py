@@ -12,6 +12,7 @@ from weebot.config.settings import (
     LOG_FILE,
     MAX_RETRIES,
     REQUIRED_PATH_PREFIX,
+    SESSIONS_DB,
     TEMPERATURE,
     WORKSPACE_ROOT,
 )
@@ -43,8 +44,8 @@ MAX_TOKENS_DEFAULT: int = 16384
 MAX_EVENTS_JSON_BYTES: int = 10 * 1024 * 1024  # 10 MB
 """Max serialized events JSON before oldest events are dropped."""
 
-DB_SESSIONS_PATH: str = "./weebot_sessions.db"
-"""Default SQLite path for session storage."""
+DB_SESSIONS_PATH: str = SESSIONS_DB
+"""Default SQLite path for session storage (from WEEBOT_SESSIONS_DB)."""
 
 DB_PROJECTS_PATH: str = "./projects.db"
 """Default SQLite path for project storage."""

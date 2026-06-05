@@ -6,8 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Constants - Use environment variable or current working directory
 WORKSPACE_ROOT = Path(os.getenv("WEEBOT_WORKSPACE", os.getcwd()))
-LOGS_DIR = Path("logs")
+LOGS_DIR = Path(os.getenv("WEEBOT_LOGS_DIR", "logs"))
 LOG_FILE = LOGS_DIR / "agent.log"
+SESSIONS_DB = os.getenv("WEEBOT_SESSIONS_DB", "./weebot_sessions.db")
+MEMORY_DIR = Path(os.getenv("WEEBOT_MEMORY_DIR", str(Path.home() / ".weebot" / "memory")))
+PROFILES_DIR = Path(os.getenv("WEEBOT_PROFILES_DIR", "./user_profiles"))
 REQUIRED_PATH_PREFIX = str(WORKSPACE_ROOT)
 MAX_RETRIES = 3
 CONFIRM_DELETE = True
