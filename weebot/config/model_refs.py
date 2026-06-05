@@ -24,10 +24,10 @@ from __future__ import annotations
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "openrouter/owl-alpha"
-"""Tier 1: Owl Alpha — FREE, 1M context, natively supports tool use, agentic."""
+MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6:free"
+"""Tier 1: Kimi K2.6 — FREE, structured output, strong instruction following."""
 
-MODEL_BUDGET: str = "openrouter/owl-alpha"
+MODEL_BUDGET: str = "moonshotai/kimi-k2.6:free"
 """Budget/free model for non-critical operations (compression, curation, defaults)."""
 
 MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
@@ -42,8 +42,8 @@ MODEL_CASCADE_TIER4: str = "deepseek/deepseek-v4-pro"
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "openrouter/owl-alpha"
-"""Planning: Owl Alpha — FREE, agentic, tool use, task decomposition."""
+MODEL_PLANNER: str = "moonshotai/kimi-k2.6:free"
+"""Planning: Kimi K2.6 — FREE, structured output, strong instruction following."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
@@ -54,18 +54,18 @@ MODEL_SUMMARIZE: str = "minimax/minimax-m3"
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "openrouter/owl-alpha"
+MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6:free"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
-MODEL_FACTORY_OPENAI: str = "openrouter/owl-alpha"
+MODEL_FACTORY_OPENAI: str = "moonshotai/kimi-k2.6:free"
 MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.7-max"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-pro"
-MODEL_FACTORY_OPENROUTER: str = "openrouter/owl-alpha"
+MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
 
-MODEL_DEFAULT_OPENAI: str = "openrouter/owl-alpha"
+MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6:free"
 MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.7-max"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
-MODEL_DEFAULT_OPENROUTER: str = "openrouter/owl-alpha"
+MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
 
 # ========================================================================
 # Fallback chain
@@ -80,15 +80,15 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "x-ai/grok-4.3",
     "deepseek/deepseek-v4-pro",
 ]
-MODEL_FALLBACK_NON_OPENROUTER: str = "openrouter/owl-alpha"
+MODEL_FALLBACK_NON_OPENROUTER: str = "moonshotai/kimi-k2.6:free"
 
 # ========================================================================
 # CQRS / deprecated
 # ========================================================================
-MODEL_COMMAND_DEFAULT: str = "openrouter/owl-alpha"
-MODEL_DEPRECATED_AGENT: str = "openrouter/owl-alpha"
-MODEL_DEPRECATED_TOOL_AGENT: str = "openrouter/owl-alpha"
-MODEL_RTK_CHEAP: str = "openrouter/owl-alpha"
+MODEL_COMMAND_DEFAULT: str = "moonshotai/kimi-k2.6:free"
+MODEL_DEPRECATED_AGENT: str = "moonshotai/kimi-k2.6:free"
+MODEL_DEPRECATED_TOOL_AGENT: str = "moonshotai/kimi-k2.6:free"
+MODEL_RTK_CHEAP: str = "moonshotai/kimi-k2.6:free"
 MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
 MODEL_RTK_STANDARD: str = "qwen/qwen3.7-max"
 
@@ -109,6 +109,27 @@ MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.7-max"
 MODEL_PRICE_CLAUDE_OPUS: str = "x-ai/grok-4.3"
 MODEL_PRICE_CLAUDE_HAIKU: str = "minimax/minimax-m3"
 MODEL_PRICE_GPT4O: str = "qwen/qwen3.7-max"
-MODEL_PRICE_GPT4O_MINI: str = "openrouter/owl-alpha"
+MODEL_PRICE_GPT4O_MINI: str = "moonshotai/kimi-k2.6:free"
 MODEL_PRICE_KIMI: str = "moonshotai/kimi-k2.6:free"
 MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
+
+# ========================================================================
+# Free-tier models (canonical list)
+# ========================================================================
+
+def get_free_models() -> list[str]:
+    """Return the canonical list of free-tier model IDs.
+
+    These are referenced by model_cascade_config.py and model_selection.py.
+    mooonshotai/kimi-k2.6:free is the recommended default.
+    """
+    return [
+        "moonshotai/kimi-k2.6:free",
+        "qwen/qwen3-coder:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nvidia/nemotron-3.5-content-safety:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "qwen/qwen3.6-plus:free",
+        "google/gemini-2.0-flash-exp:free",
+    ]
