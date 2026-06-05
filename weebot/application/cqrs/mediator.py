@@ -5,8 +5,6 @@ from typing import Any, Callable, Type, TypeVar
 
 import logging
 
-from weebot.infrastructure.observability.tracing import get_tracer
-
 from weebot.application.cqrs.base import (
     Command,
     CommandHandler,
@@ -63,6 +61,17 @@ class Mediator:
         self._command_handlers: dict[Type[Command], CommandHandler] = {}
         self._query_handlers: dict[Type[Query], QueryHandler] = {}
         self._behaviors: list[IPipelineBehavior] = []
+        self._tracer = None  # lazily resolved via DI
+
+    def _get_tracer(self):
+        """Resolve tracing port lazily from DI container."""
+        if self._tracer is None:
+            from weebot.application.di import Container
+            from weebot.application.ports.tracing_port import TracingPort
+            c = Container()
+            c.configure_defaults()
+            self._tracer = c.get(TracingPort)
+        return self._tracer
 
     def register_command_handler(
         self,
@@ -170,9 +179,8 @@ class Mediator:
 
     async def send(self, command: Command) -> CommandResult:
         """Send a command to its handler. Wraps execution in a trace span."""
-        tracer = get_tracer(__name__)
         cmd_name = type(command).__name__
-        with tracer.start_as_current_span(f"command.{cmd_name}") as span:
+        with self._get_tracer().start_as_current_span(f"command.{cmd_name}") as span:
             span.set_attribute("command.type", cmd_name)
             result = await self._send_inner(command)
             if result.success:
@@ -222,9 +230,8 @@ class Mediator:
 
     async def query(self, query: Query) -> QueryResult:
         """Send a query to its handler. Wraps execution in a trace span."""
-        tracer = get_tracer(__name__)
         qry_name = type(query).__name__
-        with tracer.start_as_current_span(f"query.{qry_name}") as span:
+        with self._get_tracer().start_as_current_span(f"query.{qry_name}") as span:
             span.set_attribute("query.type", qry_name)
             result = await self._query_inner(query)
             if result.success:

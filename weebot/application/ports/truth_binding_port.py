@@ -1,3 +1,6 @@
+"""[DEPRECATED] No adapter implementation exists.
+Tracked in docs/plans/ARCHITECTURE_9_PLAN.md.
+"""
 """Truth-binding port — abstract interface for response-layer guards."""
 from __future__ import annotations
 

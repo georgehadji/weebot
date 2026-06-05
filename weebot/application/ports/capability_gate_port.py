@@ -1,3 +1,6 @@
+"""[DEPRECATED] No adapter implementation exists.
+Tracked in docs/plans/ARCHITECTURE_9_PLAN.md.
+"""
 """Capability gate port — abstract interface for tier-based access control."""
 from __future__ import annotations
 

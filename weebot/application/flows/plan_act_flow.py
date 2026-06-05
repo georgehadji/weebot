@@ -28,8 +28,6 @@ from weebot.application.services.continuation_detector import (
 )
 from weebot.application.services.plan_critic import PlanCriticService
 from weebot.application.services.truth_binder import TruthBinder
-from weebot.infrastructure.observability.tracing import get_tracer
-
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -111,6 +109,7 @@ class PlanActFlow(BaseFlow):
         self._emit_lock = asyncio.Lock()
 
         self._skill_prompt = skill_prompt
+        self._tracing_port = None  # lazily resolved
         self._planner = PlannerAgent(
             llm=self._llm,
             event_bus=self._event_bus,
@@ -247,8 +246,7 @@ class PlanActFlow(BaseFlow):
         self.status = getattr(state, "status", AgentStatus.IDLE)
         self._log.info("Transition to state: %s", type(state).__name__)
         # Trace the state transition
-        tracer = get_tracer(__name__)
-        span = tracer.start_span(f"state.{type(state).__name__}")
+        span = self._get_tracing_port().start_span(f"state.{type(state).__name__}")
         span.set_attribute("flow.session_id", self._session.id)
         span.set_attribute("state.name", type(state).__name__)
         span.end()
@@ -381,3 +379,13 @@ class PlanActFlow(BaseFlow):
     @property
     def can_redo(self) -> bool:
         return self._plan_history.can_redo
+
+    def _get_tracing_port(self):
+        """Resolve tracing port lazily from DI container."""
+        if self._tracing_port is None:
+            from weebot.application.di import Container
+            from weebot.application.ports.tracing_port import TracingPort
+            c = Container()
+            c.configure_defaults()
+            self._tracing_port = c.get(TracingPort)
+        return self._tracing_port

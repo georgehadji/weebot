@@ -1,3 +1,6 @@
+"""[DEPRECATED] No adapter implementation exists.
+Tracked in docs/plans/ARCHITECTURE_9_PLAN.md.
+"""
 """Swarm Event Bus port — abstract interface for inter-agent message routing.
 
 Created as part of architecture remediation (step-7f) to remove the

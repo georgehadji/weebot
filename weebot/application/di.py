@@ -28,6 +28,7 @@ from weebot.config.model_registry import ModelProvider
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
+from weebot.application.ports.tracing_port import TracingPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.application.ports.audit_port import AuditPort
@@ -95,6 +96,9 @@ class Container:
 
         # Event bus
         self.register(EventBusPort, self._create_event_bus)
+
+        # Tracing — OTEL or no-op fallback
+        self.register(TracingPort, self._create_tracing)
 
         # EventPublisher bridge — routes EventBroker-style calls to AsyncEventBus
         self.register(EventPublisher, self._create_event_bridge)
@@ -242,6 +246,11 @@ class Container:
     def _create_event_bus() -> EventBusPort:
         from weebot.infrastructure.event_bus import AsyncEventBus
         return AsyncEventBus()
+
+    @staticmethod
+    def _create_tracing():
+        from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+        return TracingAdapter()
 
     def _create_event_bridge(self) -> EventPublisher:
         """Create EventBrokerAdapter bridging to the global AsyncEventBus."""

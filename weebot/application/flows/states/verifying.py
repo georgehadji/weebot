@@ -58,6 +58,13 @@ class VerifyingState(FlowState):
             context.set_state(SummarizingState())
             return
 
+        # ── CoVe enabled check ──
+        import os as _os
+        if _os.environ.get("WEEBOT_COVE_ENABLED", "").lower() in ("false", "0", "no"):
+            logger.info("CoVe: disabled via WEEBOT_COVE_ENABLED — skipping")
+            context.set_state(SummarizingState())
+            return
+
         # ── Get LLM for verification ──
         llm = self._resolve_llm(context)
         if llm is None:
