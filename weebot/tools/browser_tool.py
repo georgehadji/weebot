@@ -5,7 +5,10 @@ import asyncio
 import logging
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from langchain.tools import BaseTool
+# NOTE: langchain BaseTool import is deferred to __init__ because
+# importing langchain triggers network calls at module load time.
+# BrowserTool provides name/description/parameters as class attributes
+# so the ToolRegistry can inspect them without instantiation.
 
 from weebot.tools.base import ToolResult
 
@@ -16,16 +19,18 @@ logger = logging.getLogger(__name__)
 
 try:
     from browser_use import Browser, Agent as BrowserAgent
-    from langchain_openai import ChatOpenAI
     BROWSER_USE_AVAILABLE = True
 except ImportError:
     BROWSER_USE_AVAILABLE = False
+
+# langchain_openai imports are deferred to _get_llm() because
+# they trigger network calls at import time.
 
 BROWSER_TIMEOUT = 30000
 HEADLESS = False
 
 
-class BrowserTool(BaseTool):
+class BrowserTool:
     """Navigate and interact with web pages using AI browser automation.
 
     Can use Weebot's LLMPort for model selection, or fallback to OpenAI.
@@ -42,11 +47,17 @@ class BrowserTool(BaseTool):
         """Initialize BrowserTool.
 
         Args:
-            llm_port: Weebot LLMPort for model selection. If None, uses ChatOpenAI.
+            llm_port: Weebot LLMPort for model selection. When None
+                (constructed by RoleBasedToolRegistry), _get_llm() will
+                attempt DI resolution at call time. Falls back to
+                ChatOpenAI (requires OPENAI_API_KEY env var).
             model: Model identifier to use with llm_port.
             use_vision: Whether to enable vision capabilities for the browser agent.
         """
-        super().__init__()
+        # BrowserTool does not extend langchain's BaseTool to avoid
+        # triggering network calls at import time.
+        # The _run / _arun interface is provided for langchain compatibility
+        # but init is plain object init.
         self._browser = None
         self._llm_port = llm_port
         self._model = model
@@ -70,11 +81,23 @@ class BrowserTool(BaseTool):
                 temperature=0,
             )
         else:
-            # Fallback to OpenAI
-            logger.debug("No LLMPort provided, using default ChatOpenAI")
-            # Import here to handle case where browser-use is not installed
-            from langchain_openai import ChatOpenAI
-            llm = ChatOpenAI(model="gpt-4", temperature=0)
+            # Use OpenRouter via langchain (respects OPENROUTER_API_KEY)
+            import os as _os
+            or_key = _os.environ.get("OPENROUTER_API_KEY")
+            if or_key:
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(
+                    model=_os.environ.get("OPENROUTER_MODEL", "openrouter/anthropic/claude-3.5-sonnet"),
+                    openai_api_key=or_key,
+                    openai_api_base="https://openrouter.ai/api/v1",
+                    temperature=0,
+                )
+                logger.debug("BrowserTool using OpenRouter: %s", llm.model)
+            else:
+                # Fallback to OpenAI
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(model="gpt-4", temperature=0)
+                logger.debug("BrowserTool using OpenAI fallback (no OPENROUTER_API_KEY)")
         
         # browser-use expects LLM to have a 'provider' attribute
         if not hasattr(llm, 'provider'):

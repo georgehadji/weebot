@@ -437,4 +437,3 @@ class RoleBasedToolRegistry:
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)
         return ToolCollection(*tools)
-ection(*tools)
