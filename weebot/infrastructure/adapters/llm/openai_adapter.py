@@ -64,8 +64,16 @@ class OpenAIAdapter(LLMPort):
             kwargs["tool_choice"] = tool_choice
         if response_format:
             kwargs["response_format"] = response_format
-        if temperature is not None:
+        
+        # GPT models and reasoning models (o1, o3) often do not support 
+        # the temperature parameter or use a fixed default of 1.
+        # As per user instruction, GPT models do not accept temperature argument.
+        model_id = kwargs["model"].lower()
+        is_gpt_or_reasoning = "gpt" in model_id or any(x in model_id for x in ["o1-", "o3-", "/o1", "/o3"])
+        
+        if not is_gpt_or_reasoning and temperature is not None:
             kwargs["temperature"] = temperature
+            
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
         else:

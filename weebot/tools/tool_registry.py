@@ -28,6 +28,7 @@ class RoleBasedToolRegistry:
     DEFAULT_ROLE_MAPPINGS = {
         "researcher": [
             "web_search",
+            "vane_search",
             "advanced_browser",
             "browser_inspector",
             "file_editor",
@@ -66,6 +67,7 @@ class RoleBasedToolRegistry:
         ],
         "admin": [
             "web_search",
+            "vane_search",
             "advanced_browser",
             "browser_navigator",
             "browser_inspector",
@@ -329,6 +331,7 @@ class RoleBasedToolRegistry:
         from weebot.tools.voice_output_tool import VoiceOutputTool
         from weebot.tools.browser_tool import BrowserTool
         from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
+        from weebot.tools.vane_search import VaneSearchTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -361,6 +364,7 @@ class RoleBasedToolRegistry:
             "voice_output": VoiceOutputTool,
             "browser_navigator": BrowserTool,
             "workflow_orchestrator": WorkflowOrchestratorTool,
+            "vane_search": VaneSearchTool,
         }
         return cls._TOOL_CLASS_MAP
 
@@ -433,3 +437,4 @@ class RoleBasedToolRegistry:
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)
         return ToolCollection(*tools)
+ection(*tools)

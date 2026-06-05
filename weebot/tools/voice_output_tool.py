@@ -56,6 +56,13 @@ class VoiceOutputTool(BaseTool):
     async def execute(
         self, text: str, voice: str = "", output_path: str = "", **_: Any
     ) -> ToolResult:
+        import sys as _sys
+        if _sys.platform == "win32":
+            pass  # Windows — pyttsx3 and speech APIs available
+        elif _sys.platform == "darwin":
+            pass  # macOS — may have NSSpeechSynthesizer
+        else:
+            return ToolResult(error=f"Voice output not supported on {_sys.platform}", output="")
 
         if not output_path:
             output_path = str(WORKSPACE_ROOT / f"speech_{uuid.uuid4().hex[:8]}.wav")

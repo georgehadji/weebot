@@ -45,7 +45,7 @@ class ExecutingState(FlowState):
         _dedup_window = 30.0
         if context._behavioral_learner is not None and prompt:
             import time as _time
-            now = _time.time()
+            now = _time.monotonic()
             last = getattr(context, "_last_blearn_ts", {}).get(context._session.id, 0)
             if now - last > _dedup_window:
                 try:

@@ -60,6 +60,9 @@ class CritiquingState(FlowState):
             context._plan.title, len(context._plan.steps),
         )
 
+        # Reset critique from previous cycle
+        context._plan_critique = None
+
         # Build critique context
         critique_context = {
             "task": prompt,

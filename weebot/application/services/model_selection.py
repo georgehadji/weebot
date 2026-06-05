@@ -3181,6 +3181,33 @@ class ModelSelectionService:
             tier=ModelTier.PREMIUM,
             api_key_env="OPENROUTER_API_KEY",
         ),
+        "qwen/qwen3.7-plus": ModelConfig(
+            name="Qwen 3.7 Plus",
+            provider="openrouter",
+            cost_per_1k_tokens=0.004,
+            context_window=128000,
+            strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.DEBUGGING],
+            tier=ModelTier.PREMIUM,
+            api_key_env="OPENROUTER_API_KEY",
+        ),
+        "nvidia/nemotron-3-ultra-550b-a55b:free": ModelConfig(
+            name="Nemotron 3 Ultra 550B (free)",
+            provider="openrouter",
+            cost_per_1k_tokens=0,
+            context_window=128000,
+            strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.REASONING],
+            tier=ModelTier.FAST,
+            api_key_env="OPENROUTER_API_KEY",
+        ),
+        "nvidia/nemotron-3.5-content-safety:free": ModelConfig(
+            name="Nemotron 3.5 Content Safety (free)",
+            provider="openrouter",
+            cost_per_1k_tokens=0,
+            context_window=128000,
+            strengths=[TaskType.ANALYSIS],
+            tier=ModelTier.FAST,
+            api_key_env="OPENROUTER_API_KEY",
+        ),
     }
 
     def available_models(self) -> List[str]:

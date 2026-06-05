@@ -89,6 +89,8 @@ class SQLiteConnectionPool:
         # Serialises concurrent writers so they don't share an uncommitted
         # transaction on the single write connection (which would cause one
         # writer's failure to roll back another's uncommitted work).
+        # WARNING: Never acquire _write_lock inside acquire_read() context
+        # or vice versa — this creates a deadlock (single-writer/multi-reader).
         self._write_lock = asyncio.Lock()
         
         # Ensure parent directory exists
