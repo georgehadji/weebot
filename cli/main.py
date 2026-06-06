@@ -556,6 +556,8 @@ def obsidian_sync(vault_path: str, experiment: str):
 # Register command groups extracted to cli/commands/
 cli.add_command(behavior_cli)
 cli.add_command(flow_group)
+from cli.commands.hyper import hyper as hyper_group
+cli.add_command(hyper_group)
 cli.add_command(skill_group)
 cli.add_command(agents_group)
 cli.add_command(benchmark)
@@ -565,25 +567,9 @@ cli.add_command(cron)
 cli.add_command(companion)
 
 
-# ── Benchmark commands ──────────────────────────────────────────────────────
-
-@cli.group()
-# benchmark + harness extracted to cli/commands/harness.py
-        )
-
-
-@cli.group()
-    asyncio.run(_run())
-
-
-@cli.group()
-# profile extracted to cli/commands/profile.py
-        console.print(f"[red]✗[/red] {exc}")
-
-
-@cli.group()
-# cron + companion extracted to cli/commands/scheduling.py
-    asyncio.run(_run())
+# ── Benchmark / profile / scheduling commands ─────────────────────────────
+# Extracted to cli/commands/harness.py, cli/commands/profile.py,
+# and cli/commands/scheduling.py — registered via cli.add_command() above.
 
 
 if __name__ == "__main__":

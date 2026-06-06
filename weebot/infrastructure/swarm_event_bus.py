@@ -22,12 +22,19 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+import logging
+from typing import Callable, Optional
 
 from weebot.domain.models.inter_agent import InterAgentMessage
+from weebot.application.ports.swarm_event_bus_port import (
+    SwarmEventBusPort,
+    SwarmEventHandler,
+)
+
+logger = logging.getLogger(__name__)
 
 
-class SwarmEventBus:
+class SwarmEventBus(SwarmEventBusPort):
     """Per-swarm event bus for agent-to-agent messaging.
 
     Each topic maintains an asyncio.Queue so subscriber coroutines can
@@ -37,7 +44,9 @@ class SwarmEventBus:
 
     def __init__(self) -> None:
         self._queues: dict[str, list[asyncio.Queue[InterAgentMessage]]] = {}
+        self._handlers: dict[str, list[SwarmEventHandler]] = {}
         self._history: dict[str, list[InterAgentMessage]] = {}
+        self._closed = False
 
     async def publish(self, message: InterAgentMessage) -> None:
         """Broadcast *message* to all subscribers of its topic.
@@ -97,6 +106,28 @@ class SwarmEventBus:
     def get_all_topics(self) -> list[str]:
         """Return all topics that have been published."""
         return list(self._history.keys())
+
+    # ── SwarmEventBusPort compliance ───────────────────────────────
+
+    async def subscribe_handler(self, topic: str, handler: SwarmEventHandler) -> None:
+        """Register an async handler for messages on *topic*.
+
+        This is the SwarmEventBusPort-compatible subscription method.
+        For async iteration, use subscribe() instead.
+        """
+        if topic not in self._handlers:
+            self._handlers[topic] = []
+        self._handlers[topic].append(handler)
+
+    async def close(self) -> None:
+        """Release all subscriptions and clear state."""
+        self._closed = True
+        self._handlers.clear()
+        self._history.clear()
+        for queues in self._queues.values():
+            for q in queues:
+                q.put_nowait(None)  # unblock waiting subscribers
+        self._queues.clear()
 
 
 class SwarmSubscription:

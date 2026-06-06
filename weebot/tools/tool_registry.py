@@ -68,6 +68,7 @@ class RoleBasedToolRegistry:
         "admin": [
             "web_search",
             "vane_search",
+            "image_gen",
             "advanced_browser",
             "browser_navigator",
             "browser_inspector",
@@ -97,6 +98,29 @@ class RoleBasedToolRegistry:
             "design_system",
             "persistent_memory",
             "mixture_of_agents",
+        ],
+        "coder": [
+            "bash",
+            "python_execute",
+            "file_editor",
+            "web_search",
+            "image_gen",
+        ],
+        "designer": [
+            "image_gen",
+            "file_editor",
+            "browser_inspector",
+            "web_search",
+        ],
+        "reviewer": [
+            "file_editor",
+            "web_search",
+            "knowledge",
+        ],
+        "planner_sub": [
+            "file_editor",
+            "knowledge",
+            "web_search",
         ],
         "custom": [],  # Custom roles have no default tools
     }
@@ -332,6 +356,7 @@ class RoleBasedToolRegistry:
         from weebot.tools.browser_tool import BrowserTool
         from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
         from weebot.tools.vane_search import VaneSearchTool
+        from weebot.tools.image_gen_tool import ImageGenTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -365,6 +390,7 @@ class RoleBasedToolRegistry:
             "browser_navigator": BrowserTool,
             "workflow_orchestrator": WorkflowOrchestratorTool,
             "vane_search": VaneSearchTool,
+            "image_gen": ImageGenTool,
         }
         return cls._TOOL_CLASS_MAP
 

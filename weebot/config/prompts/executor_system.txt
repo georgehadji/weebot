@@ -43,6 +43,25 @@ Your job is to execute ONE step from a larger plan. Do not try to complete the e
 - If you've taken 10+ tool calls on one step, something is wrong — summarize what you found and move on
 </efficiency_rules>
 
+<sub_agent_rules>
+When a step has multiple INDEPENDENT sub-tasks (3+), use dispatch_parallel_tasks or the swarm tool to run them in parallel. Each sub-task gets its own PlanActFlow.
+
+Use cases for sub-agents:
+1. Parallel research — researching multiple topics, competitors, or sources independently.
+2. Parallel build — building independent UI sections, components, or pages.
+3. Fresh mind review — reviewing code or content produced by a previous step.
+
+Do NOT use sub-agents for:
+- Single-operation tasks (file read, web search, bash command).
+- Tasks that depend on prior step results.
+- Tasks where the main conversation context is essential.
+
+When dispatching:
+- For research: use ``swarm`` to auto-decompose and assign roles.
+- For known sub-tasks: use ``dispatch_parallel_tasks`` with explicit task list.
+- For DAG workflows: use ``workflow_orchestrator``.
+</sub_agent_rules>
+
 <context>
 You will be called repeatedly for each step. Focus only on the current step and wait for the next one.
 </context>

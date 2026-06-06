@@ -38,7 +38,11 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.steering_port import SteeringPort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort
+from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
+from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
+from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.tracing_port import TracingPort
+from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
 from weebot.application.services.task_runner import TaskRunner
 from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.ports import EventPublisher
@@ -100,6 +104,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
     ) -> None:
         """Wire all defaults: LLM → OpenRouter, state → SQLite, etc."""
         self.register(StateRepositoryPort, lambda: self._create_state_repo(db_path))
+        self.register("session_persistence", lambda: self._create_session_persistence_adapter())
         self.register(EventBusPort, self._create_event_bus)
         self.register(TracingPort, self._create_tracing)
         self.register(EventPublisher, self._create_event_bridge)
@@ -120,6 +125,9 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
+        self.register(SwarmEventBusPort, self._create_swarm_bus)
+        self.register(SubAgentFactoryPort, self._create_sub_agent_factory)
+        self.register(SubAgentCostTrackerPort, lambda: SubAgentCostTracker(budget_usd=0.50))
 
     # ── high-level builders ─────────────────────────────────────────
 
@@ -191,6 +199,61 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             return self.get(key)
         except KeyError:
             return None
+
+    def _create_session_persistence_adapter(self):
+        """Create a SessionPersistenceAdapter wrapping the StateRepositoryPort."""
+        from weebot.infrastructure.persistence.session_persistence_adapter import (
+            SessionPersistenceAdapter,
+        )
+        from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
+
+        retry = RetryWithBackoff(
+            BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25)
+        )
+        return SessionPersistenceAdapter(
+            repo=self.get(StateRepositoryPort),
+            retry=retry,
+        )
+
+    def _create_swarm_bus(self):
+        """Create a SwarmEventBus."""
+        from weebot.infrastructure.swarm_event_bus import SwarmEventBus
+        return SwarmEventBus()
+
+    def _create_sub_agent_factory(self):
+        """Create a SubAgentFactory."""
+        from weebot.infrastructure.adapters.sub_agent_factory import SubAgentFactory
+        from weebot.application.models.tool_collection import ToolCollection
+        from weebot.tools.bash_tool import BashTool
+        from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
+        from weebot.tools.python_tool import PythonExecuteTool as PythonTool
+
+        tools = ToolCollection(
+            BashTool(),
+            FileEditorTool(),
+            PythonTool(),
+        )
+        return SubAgentFactory(
+            llm=self.get(LLMPort),
+            tools=tools,
+            cost_tracker=self.get(SubAgentCostTrackerPort),
+            swarm_bus=self._maybe_get(SwarmEventBusPort),
+        )
+
+    def build_hyper_agent_flow(self, session, model=None):
+        """Construct a HyperAgentFlow for multi-agent task execution."""
+        from weebot.application.flows.hyper_agent_flow import HyperAgentFlow
+
+        return HyperAgentFlow(
+            llm=self.get(LLMPort),
+            session=session,
+            event_bus=self.get(EventBusPort),
+            swarm_bus=self.get(SwarmEventBusPort),
+            sub_agent_factory=self.get(SubAgentFactoryPort),
+            cost_tracker=self.get(SubAgentCostTrackerPort),
+            model=model or self._maybe_get_model(),
+            mediator=self._maybe_get(Mediator),
+        )
 
     def _maybe_get_model(self) -> Optional[str]:
         """Return the default model string if LLM is bound."""
