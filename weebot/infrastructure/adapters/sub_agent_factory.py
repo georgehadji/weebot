@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import time
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
@@ -70,20 +70,26 @@ class SubAgentFactory(SubAgentFactoryPort):
             if spec.strategy == DispatchStrategy.FRESH_MIND:
                 prompt = f"[FRESH CONTEXT — no prior session history]\n\n{spec.prompt}"
 
-            async for event in flow.run(prompt):
+            gen = flow.run(prompt)
+            while True:
+                try:
+                    event = await asyncio.wait_for(gen.__anext__(), timeout=spec.timeout_seconds)
+                except StopAsyncIteration:
+                    break
                 if isinstance(event, MessageEvent) and event.role == "assistant":
                     summary_parts.append(event.message)
                 if isinstance(event, ErrorEvent):
                     elapsed = time.monotonic() - start
                     return SubAgentResult(
                         spec_id=spec.id, agent_id=session.id,
+                        role=spec.role.value,
                         status=SubAgentStatus.FAILED, error=event.error,
                         model_used=spec.model or _TIER_MODEL[spec.tier],
                         elapsed_seconds=elapsed,
                     )
-                # Accumulate token usage from the flow's executor
-                if hasattr(flow, "_executor") and hasattr(flow._executor, "token_usage"):
-                    tu = flow._executor.token_usage
+                # Accumulate token usage from the flow
+                if hasattr(flow, "token_usage"):
+                    tu = flow.token_usage
                     token_count = max(token_count, tu.get("total_tokens", 0))
 
             elapsed = time.monotonic() - start
@@ -92,6 +98,7 @@ class SubAgentFactory(SubAgentFactoryPort):
 
             return SubAgentResult(
                 spec_id=spec.id, agent_id=session.id,
+                role=spec.role.value,
                 status=SubAgentStatus.COMPLETED,
                 summary=summary,
                 model_used=spec.model or _TIER_MODEL[spec.tier],
@@ -102,6 +109,7 @@ class SubAgentFactory(SubAgentFactoryPort):
             elapsed = time.monotonic() - start
             return SubAgentResult(
                 spec_id=spec.id, agent_id=session.id,
+                role=spec.role.value,
                 status=SubAgentStatus.TIMED_OUT,
                 error=f"Timed out after {spec.timeout_seconds}s",
                 model_used=spec.model or _TIER_MODEL[spec.tier],
@@ -111,6 +119,7 @@ class SubAgentFactory(SubAgentFactoryPort):
             elapsed = time.monotonic() - start
             return SubAgentResult(
                 spec_id=spec.id, agent_id=session.id,
+                role=spec.role.value,
                 status=SubAgentStatus.FAILED,
                 error=str(exc),
                 model_used=spec.model or _TIER_MODEL[spec.tier],
@@ -128,31 +137,35 @@ class SubAgentFactory(SubAgentFactoryPort):
 
         return list(await asyncio.gather(*[_run_one(s) for s in specs]))
 
-    async def spawn_voted(
+    async def spawn_multi_model(
         self, spec: SubAgentSpec, models: list[str] | None = None
     ) -> SubAgentResult:
+        """Run the same spec on multiple models and return the best result.
+
+        Uses longest-summary heuristic — not true voting. Future: implement
+        majority-vote consensus when eval data shows improvement.
+        """
         models = models or [
             "minimax/minimax-m3",
             "qwen/qwen3.7-max",
             "deepseek/deepseek-v4-pro",
         ]
-        # Run three specs in parallel with different models
         specs = [spec.with_model(m) for m in models[:3]]
         results = await self.spawn_parallel(specs, max_concurrency=3)
-
-        # Use the majority or highest-confidence result
         successes = [r for r in results if r.is_success]
         if not successes:
             return results[0]
-        # Return the longest summary (most detailed)
         return max(successes, key=lambda r: len(r.summary))
 
     def _build_flow(self, session: Session, spec: SubAgentSpec):
         """Build a PlanActFlow for a sub-agent session."""
         from weebot.application.flows.plan_act_flow import PlanActFlow
-        from weebot.application.cqrs.mediator import Mediator
+        from weebot.application.di import Container
 
-        mediator = Mediator()
+        container = Container()
+        container.configure_defaults()
+        mediator = container.build_mediator()
+
         return PlanActFlow(
             llm=self._llm,
             tools=self._tools,
@@ -160,6 +173,7 @@ class SubAgentFactory(SubAgentFactoryPort):
             event_bus=None,
             model=spec.model or _TIER_MODEL[spec.tier],
             mediator=mediator,
+            state_repo=container._maybe_get("state_repo_port"),
             skill_prompt=None,
             max_steps=spec.max_tool_calls,
         )

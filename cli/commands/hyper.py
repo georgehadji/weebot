@@ -18,8 +18,6 @@ from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTr
 from weebot.domain.models.session import Session
 from weebot.application.flows.hyper_agent_flow import HyperAgentFlow
 from weebot.config.model_refs import MODEL_BUDGET
-from weebot.domain.models.event import AgentEvent
-
 console = Console()
 
 
@@ -72,7 +70,8 @@ def hyper_run(prompt: str, session_id: str | None, model: str | None,
         async for event in flow.run(prompt):
             etype = getattr(event, "type", "") or getattr(event, "event_type", "")
             if etype == "error":
-                console.print(f"[red]Error: {event.error}[/red]")
+                error_msg = getattr(event, "error", "") or str(event)
+                console.print(f"[red]Error: {error_msg}[/red]")
             elif etype == "message":
                 content = getattr(event, "message", "") or getattr(event, "content", "")
                 console.print(content[:2000])
@@ -95,7 +94,9 @@ def hyper_run(prompt: str, session_id: str | None, model: str | None,
 def hyper_list_costs(session_id: str | None):
     """List completed HyperAgent workflows and their costs."""
     async def _run() -> None:
-        state_repo = Container().get(StateRepositoryPort)
+        container = Container()
+        container.configure_defaults()
+        state_repo = container.get(StateRepositoryPort)
         sessions = await state_repo.list_sessions()
         table = Table(title="HyperAgent Sessions")
         table.add_column("ID", style="cyan")

@@ -20,7 +20,11 @@ class SubAgentFactoryPort(ABC):
         """Spawn multiple sub-agents with concurrency control."""
 
     @abstractmethod
-    async def spawn_voted(
+    async def spawn_multi_model(
         self, spec: SubAgentSpec, models: list[str] | None = None
     ) -> SubAgentResult:
-        """Run the same spec on 2-3 models and return the consensus result."""
+        """Run the same spec on multiple models and return the best result.
+
+        Currently uses longest-summary heuristic. Future: majority voting
+        when eval data confirms improvement over single-model.
+        """

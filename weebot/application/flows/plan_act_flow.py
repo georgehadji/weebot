@@ -110,6 +110,7 @@ class PlanActFlow(BaseFlow):
 
         self._skill_prompt = skill_prompt
         self._tracing_port = None  # lazily resolved
+        self._persistence_adapter = None  # lazily resolved (retry + dead-letter)
         self._planner = PlannerAgent(
             llm=self._llm,
             event_bus=self._event_bus,
@@ -182,15 +183,26 @@ class PlanActFlow(BaseFlow):
             # Publish domain events for key agent event types
             await self._emit_domain_event(event)
 
-        # 3. Persist to DB — lock held only for serial write
+        # 3. Persist to DB — lock held only for serial write.
+        #    Uses SessionPersistenceAdapter when available (retry + dead-letter);
+        #    falls back to raw repo for backward compatibility.
         if self._state_repo:
             async with self._emit_lock:
-                try:
-                    await self._state_repo.save_session(self._session)
-                except Exception as exc:
-                    self._log.warning(
-                        "Session persistence failed (retryable): %s", exc
-                    )
+                adapter = self._get_persistence_adapter()
+                if adapter is not None:
+                    ok = await adapter.save_session(self._session)
+                    if not ok:
+                        self._log.error(
+                            "Session %s dead-lettered — persistence exhausted retries",
+                            self._session.id,
+                        )
+                else:
+                    try:
+                        await self._state_repo.save_session(self._session)
+                    except Exception as exc:
+                        self._log.warning(
+                            "Session persistence failed (retryable): %s", exc
+                        )
 
     async def _emit_domain_event(self, event: AgentEvent) -> None:
         """Publish domain events derived from agent events."""
@@ -280,10 +292,12 @@ class PlanActFlow(BaseFlow):
             self._plan = last_plan
             self.set_state(ExecutingState())
             self._log.info("Resuming session %s with existing plan", self._session.id)
-        elif self._session.status == SessionStatus.WAITING:
+        elif self._session.status == SessionStatus.WAITING and last_plan is not None:
+            self._plan = last_plan
             self.set_state(ExecutingState())
-            self._log.info("Session %s was waiting, continuing execution", self._session.id)
+            self._log.info("Session %s was waiting, resuming execution", self._session.id)
         else:
+            # Fresh session, or WAITING with no plan (from a failed prior run)
             self.set_state(PlanningState())
 
         max_iterations = self._max_iterations
@@ -379,6 +393,27 @@ class PlanActFlow(BaseFlow):
     @property
     def can_redo(self) -> bool:
         return self._plan_history.can_redo
+
+    @property
+    def token_usage(self) -> dict[str, int]:
+        """Cumulative token usage for this flow's executor."""
+        if self._executor and hasattr(self._executor, "token_usage"):
+            return self._executor.token_usage
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    def _get_persistence_adapter(self):
+        """Resolve session persistence adapter lazily from DI container.
+
+        Returns None if the adapter is not registered (backward compat).
+        """
+        if self._persistence_adapter is None:
+            from weebot.application.di import Container
+            c = Container()
+            try:
+                self._persistence_adapter = c.get("session_persistence")
+            except KeyError:
+                return None
+        return self._persistence_adapter
 
     def _get_tracing_port(self):
         """Resolve tracing port lazily from DI container."""

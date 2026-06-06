@@ -74,6 +74,7 @@ class SubAgentResult(BaseModel):
 
     spec_id: str = Field(min_length=1)
     agent_id: str = Field(min_length=1)
+    role: str = Field(default="")
     status: SubAgentStatus = Field(default=SubAgentStatus.PENDING)
     summary: str = Field(default="")
     data: dict = Field(default_factory=dict)

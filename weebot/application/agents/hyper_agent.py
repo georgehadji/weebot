@@ -73,7 +73,7 @@ class HyperAgent:
         if strategy == DispatchStrategy.SEQUENTIAL:
             results = [await self._factory.spawn(s) for s in specs]
         elif strategy == DispatchStrategy.VOTED and len(specs) == 1:
-            results = [await self._factory.spawn_voted(specs[0])]
+            results = [await self._factory.spawn_multi_model(specs[0])]
         else:
             results = await self._factory.spawn_parallel(
                 specs, max_concurrency=self._max_concurrency
@@ -162,7 +162,7 @@ class HyperAgent:
     ) -> SwarmResult:
         """Call SynthesizerAgent with the actual signature it expects."""
         summaries = [
-            {"role": r.model_used, "summary": r.summary}
+            {"role": r.role, "summary": r.summary, "model_used": r.model_used}
             for r in results if r.is_success
         ]
         if not summaries:
