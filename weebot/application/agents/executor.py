@@ -33,6 +33,7 @@ from weebot.domain.models.event import (
     WaitForUserEvent,
 )
 from weebot.domain.models.plan import Plan, Step
+from weebot.domain.models.trajectory import TrajectoryHealth
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.tools.base import ToolResult
 
@@ -84,12 +85,26 @@ You will be called repeatedly for each step. Focus only on the current step and 
 
 
 def _load_executor_system_prompt() -> str:
-    """Load the executor system prompt from a file, falling back to inline constant."""
+    """Load the executor system prompt from the package or filesystem.
+
+    Priority: (1) importlib.resources (packaged), (2) filesystem path
+    (source checkout), (3) inline fallback constant.
+    """
+    # 1. Try importlib.resources (works when weebot is installed as a package)
+    try:
+        from importlib.resources import files as _resource_files
+        return _resource_files("weebot.config.prompts").joinpath("executor_system.txt").read_text(encoding="utf-8")
+    except Exception:
+        pass
+
+    # 2. Try filesystem path (works in development / source checkout)
     try:
         if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
             return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         pass
+
+    # 3. Inline fallback — kept in sync with executor_system.txt
     return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
 
 # ── Policy-error-loop detection constants (Fix 5) ──
@@ -114,6 +129,16 @@ def _classify_tool_error(error_output: str) -> Optional[str]:
     return None
 
 
+class AllModelsTrippedError(Exception):
+    """Raised when every model in the cascade has been circuit-broken.
+
+    This is a terminal condition — the executor cannot proceed without
+    at least one working LLM. The caller should stop the step and surface
+    the error to the user.
+    """
+    pass
+
+
 class ExecutorAgent:
     """Agent responsible for executing individual plan steps."""
 
@@ -131,6 +156,7 @@ class ExecutorAgent:
         skill_retriever=None,  # SkillRetrieverPort (Tier 1.2)
         personality=None,      # PersonalityManager (Phase 1.1)
         behavioral_learner=None,  # BehavioralLearner (Capability 5)
+        prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
     ):
         self._llm = llm
         self._tools = tools
@@ -141,6 +167,7 @@ class ExecutorAgent:
         self._skill_retriever = skill_retriever
         self._personality = personality
         self._behavioral_learner = behavioral_learner
+        self._prompt_variant_id = prompt_variant_id
         self._trajectory_monitor = None  # lazy-created in execute_step
         self._max_context_turns = max_context_turns
         self._system_prompt: Optional[str] = None
@@ -160,6 +187,19 @@ class ExecutorAgent:
     def should_terminate(self) -> bool:
         """Return True if the terminate tool was called."""
         return self._should_terminate
+
+    def _load_prompt(self) -> str:
+        """Load the executor system prompt, checking PromptRegistry first."""
+        if self._prompt_variant_id:
+            try:
+                from weebot.application.services.prompt_registry import PromptRegistry
+                registry = PromptRegistry()
+                content = registry.get_variant(self._prompt_variant_id)
+                if content and content.prompt_content:
+                    return content.prompt_content
+            except Exception:
+                pass
+        return _load_executor_system_prompt()
 
     async def _emit(self, event: AgentEvent) -> None:
         if self._event_bus:
@@ -295,90 +335,89 @@ class ExecutorAgent:
         """
         is_review = self._is_review_step(description)
         tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
-
-        # Select task-specific model as first attempt
         task_model = self._model_for_step(description)
-        skip_tier1 = (task_model != self._TIER1_MODEL)
+        model_to_use = task_model
 
-        # Attempt 1: TASK-SPECIFIC model (from task_model_router)
-        try:
-            resp = await self._llm.chat(
-                messages=messages,
-                tools=self._tools.to_params(),
-                tool_choice="auto",
-                model=task_model,
-                temperature=TEMPERATURE,
-            )
-            if resp and (resp.content or resp.tool_calls):
-                await self._track_usage_and_maybe_compress(resp)
-                return resp
-        except Exception as exc:
-            if ErrorClassifier.should_fail_fast(exc):
-                raise
-            logger.debug("Task model %s failed: %s", task_model, exc)
+        # ── Circuit breaker: skip models that failed 3+ times this session ──
+        if not hasattr(self, "_circuit_breaker_failures"):
+            self._circuit_breaker_failures: dict[str, int] = {}
+        _cb = self._circuit_breaker_failures
 
-        # Attempt 2: TIER 1 — Owl Alpha (skip if already tried as task-model)
-        if not skip_tier1:
+        def _is_tripped(model_id: str) -> bool:
+            return _cb.get(model_id, 0) >= 3
+
+        def _record_failure(model_id: str) -> None:
+            _cb[model_id] = _cb.get(model_id, 0) + 1
+            if _cb[model_id] >= 3:
+                logger.warning("Circuit breaker tripped for %s", model_id)
+
+        # First-error tracking per model for diagnostics (Fix 8)
+        _first_error: dict[str, str] = {}
+
+        # ── Single chat helper with tiered timeout (Fix 3) ──
+        async def _try_chat(model_id: str, timeout: float = 5.0) -> LLMResponse | None:
+            if _is_tripped(model_id):
+                return None
             try:
-                resp = await self._llm.chat(
-                    messages=messages,
-                    tools=self._tools.to_params(),
-                    tool_choice="auto",
-                    model=self._TIER1_MODEL,
-                    temperature=TEMPERATURE,
+                resp = await asyncio.wait_for(
+                    self._llm.chat(
+                        messages=messages,
+                        tools=self._tools.to_params(),
+                        tool_choice="auto",
+                        model=model_id,
+                        temperature=TEMPERATURE,
+                    ),
+                    timeout=timeout,
                 )
                 if resp and (resp.content or resp.tool_calls):
+                    return resp
+                _record_failure(model_id)
+                return None
+            except (asyncio.TimeoutError, Exception) as exc:
+                if isinstance(exc, Exception) and ErrorClassifier.should_fail_fast(exc):
+                    raise
+                if model_id not in _first_error:
+                    _first_error[model_id] = str(exc)[:200]
+                    logger.warning("Model %s first error: %s", model_id, _first_error[model_id])
+                else:
+                    logger.debug("Model %s failed (%.1fs timeout): %s", model_id, timeout, exc)
+                _record_failure(model_id)
+                return None
+
+        # ── Phase 1: fire task-model + tier1 in parallel (5s timeout) ──
+        parallel_models: list[str] = [task_model]
+        if task_model != self._TIER1_MODEL:
+            parallel_models.append(self._TIER1_MODEL)
+        if tier2_model not in parallel_models:
+            parallel_models.append(tier2_model)
+
+        tasks = {asyncio.ensure_future(_try_chat(m, timeout=5.0)): m for m in parallel_models}
+        if tasks:
+            done, _pending = await asyncio.wait(
+                tasks.keys(), return_when=asyncio.FIRST_COMPLETED
+            )
+            for fut in done:
+                resp = fut.result()
+                if resp is not None:
+                    for pending_fut in _pending:
+                        pending_fut.cancel()
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
-            except Exception as exc:
-                if ErrorClassifier.should_fail_fast(exc):
-                    raise
-                logger.debug("Tier1 model %s failed: %s", self._TIER1_MODEL, exc)
 
-        # Attempt 3: TIER 2 — Grok Build 0.1 (fast coding SWE)
-        try:
-            resp = await self._llm.chat(
-                messages=messages,
-                tools=self._tools.to_params(),
-                tool_choice="auto",
-                model=tier2_model,
-                temperature=TEMPERATURE,
-            )
-            if resp and (resp.content or resp.tool_calls):
+        # ── Phase 2: sequential fallback through remaining tiers (3s timeout) ──
+        remaining = [m for m in (self._TIER3_MODEL, self._TIER4_MODEL)
+                     if not _is_tripped(m)]
+        for model_id in remaining:
+            resp = await _try_chat(model_id, timeout=3.0)
+            if resp is not None:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
-        except Exception as exc:
-            if ErrorClassifier.should_fail_fast(exc):
-                raise
-            logger.debug("Tier2 model failed (%s), trying tier 3: %s", tier2_model, exc)
 
-        # Attempt 4: TIER 3 — Qwen 3.7 Max (flagship coding, 1M ctx)
-        try:
-            resp = await self._llm.chat(
-                messages=messages,
-                tools=self._tools.to_params(),
-                tool_choice="auto",
-                model=self._TIER3_MODEL,
-                temperature=TEMPERATURE,
-            )
-            if resp and (resp.content or resp.tool_calls):
-                await self._track_usage_and_maybe_compress(resp)
-                return resp
-        except Exception as exc:
-            if ErrorClassifier.should_fail_fast(exc):
-                raise
-            logger.debug("Tier3 model failed (%s), trying tier 4: %s", self._TIER3_MODEL, exc)
-
-        # Attempt 5: TIER 4 — DeepSeek V4 Pro (strongest reasoning)
-        resp = await self._llm.chat(
-            messages=messages,
-            tools=self._tools.to_params(),
-            tool_choice="auto",
-            model=self._TIER4_MODEL,
-            temperature=TEMPERATURE,
+        # ── All models tripped — raise terminal error (Fix 1) ──
+        raise AllModelsTrippedError(
+            f"All models in the cascade have tripped their circuit breakers. "
+            f"Check OpenRouter credits at https://openrouter.ai/credits"
         )
-        await self._track_usage_and_maybe_compress(resp)
-        return resp
 
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None
@@ -392,7 +431,7 @@ class ExecutorAgent:
         consecutive_error_class_counts: dict[str, int] = {}
         last_error_class: Optional[str] = None
 
-        system_prompt = _load_executor_system_prompt()
+        system_prompt = self._load_prompt()
         if self._skill_prompt:
             system_prompt = f"{system_prompt}\n\n{self._skill_prompt}"
 
@@ -496,9 +535,20 @@ class ExecutorAgent:
         while self._step_budget.consume():
             messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
             # Cost cascade: try budget model first, fall back to primary on failure.
-            # This saves ~50x tokens on routine calls while keeping premium for
-            # complex reasoning tasks.
-            response = await self._call_with_cascade(messages, description=step.description)
+            try:
+                response = await self._call_with_cascade(messages, description=step.description)
+            except AllModelsTrippedError as exc:
+                yield ErrorEvent(error=str(exc))
+                yield MessageEvent(
+                    role="assistant",
+                    message=(
+                        "All AI models are currently unavailable. Please:\n"
+                        "1. Check your OpenRouter credits at https://openrouter.ai/credits\n"
+                        "2. Verify your OPENROUTER_API_KEY is valid\n"
+                        "3. Wait a few minutes for circuit breakers to cool down and retry"
+                    ),
+                )
+                break
 
             assistant_content = response.content or ""
             assistant_msg: dict = {"role": "assistant", "content": assistant_content}
@@ -590,16 +640,22 @@ class ExecutorAgent:
                         used_budget=tool_calls_attempted,
                     )
                     if diagnosis.recovery_message:
-                        # Inject recovery into conversation buffer so the LLM
-                        # sees it on the next iteration
                         self._conversation_buffer.append({
                             "role": "system",
                             "content": f"[RECOVERY] {diagnosis.recovery_message}",
                         })
-                        logger.warning(
-                            "Trajectory %s for step %s: %s",
-                            diagnosis.health.value, step.id, diagnosis.detail,
+                    logger.warning(
+                        "Trajectory %s for step %s: %s",
+                        diagnosis.health.value, step.id, diagnosis.detail,
+                    )
+                    if diagnosis.health == TrajectoryHealth.TERMINAL:
+                        loop_error = (
+                            f"Terminal trajectory for step '{step.id}': {diagnosis.detail}. "
+                            "Stopping execution — check API availability."
                         )
+                        yield ErrorEvent(error=loop_error)
+                        abort_step = True
+                        break
 
                 # ═══ Policy-error-loop detection (Fix 5) ═══
                 if result.is_error:

@@ -81,6 +81,7 @@ class TrajectoryHealth(str, Enum):
     STAGNATING = "stagnating"        # No progress across multiple steps
     BUDGET_HOTSPOT = "budget_hotspot"  # One sub-goal consuming >40% budget
     EXHAUSTED = "exhausted"          # Budget at 90%+ with no completion
+    TERMINAL = "terminal"            # All tool calls failing — stop immediately
 
 
 class TrajectoryDiagnosis(BaseModel):

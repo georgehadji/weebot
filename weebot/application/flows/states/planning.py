@@ -12,6 +12,30 @@ from weebot.domain.models.plan import Plan, PlanStatus
 
 logger = logging.getLogger(__name__)
 
+
+def _infer_domain(prompt: str) -> str:
+    """Quick heuristic to infer a task domain from the prompt text.
+
+    Used by strategy transfer to find relevant prior experience.
+    Checks more specific domains first to avoid false matches.
+    """
+    lo = prompt.lower()
+    # Check robotics before coding — "reward function" is robotics, not coding
+    if any(kw in lo for kw in ("robot", "reward function", "reinforcement learning", "quadruped", "rl ", "physics sim")):
+        return "robotics"
+    if any(kw in lo for kw in ("code", "refactor", "debug", "implement", "python", "javascript", "typescript", "html", "css", "api endpoint", "rest api")):
+        return "coding"
+    if any(kw in lo for kw in ("review", "paper", "conference", "submission", "accept", "reject")):
+        return "review"
+    if any(kw in lo for kw in ("math", "proof", "theorem", "olympiad", "imo", "grade")):
+        return "math"
+    if any(kw in lo for kw in ("browser", "login", "navigate", "click", "fill", "form", "scrape")):
+        return "automation"
+    if any(kw in lo for kw in ("function", "class", "script", "deploy")):
+        return "coding"
+    return "general"
+
+
 class PlanningState(FlowState):
     """Handles the creation of the initial execution plan."""
     status = AgentStatus.PLANNING
@@ -30,47 +54,43 @@ class PlanningState(FlowState):
         if new_model:
             context._update_agents_with_model(new_model)
 
-        # --- CQRS: execute plan creation through mediator ---
-        if context._mediator:
-            from weebot.application.cqrs.commands import CreatePlanCommand
-            cmd_result = await context._mediator.send(
-                CreatePlanCommand(
-                    session_id=context._session.id,
-                    prompt=prompt,
-                    model=context._model or "default",
-                    context=context._session.context,
+        # --- CQRS: execute plan creation through mediator (REQUIRED) ---
+        if context._mediator is None:
+            yield EE(
+                error=(
+                    "PlanningState requires a Mediator to be configured on PlanActFlow. "
+                    "Construct PlanActFlow with mediator=container.get(Mediator) or "
+                    "use container.build_agent_runner()."
                 )
             )
-            if not cmd_result.success:
-                yield EE(error=f"Plan creation rejected: {cmd_result.error}")
-                return
+            return
 
-            # Consume events from the mediator result using shared reconstructor.
-            from weebot.application.cqrs.event_reconstructor import reconstruct_events
-            for event in reconstruct_events(cmd_result.data.get("events", [])):
-                await context._emit(event)
-                yield event
-                if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
-                    context._plan = Plan.model_validate(event.plan)
-                    logger.info("Plan created with %d steps", len(context._plan.steps))
-
-            # Also check for plan in result top-level
-            if context._plan is None and cmd_result.data.get("plan"):
-                context._plan = Plan.model_validate(cmd_result.data["plan"])
-        else:
-            # Fallback: direct agent call (no mediator available)
-            import warnings
-            warnings.warn(
-                "PlanningState: no mediator, using direct planner call. "
-                "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
-                DeprecationWarning, stacklevel=2,
+        from weebot.application.cqrs.commands import CreatePlanCommand
+        from weebot.config.model_refs import MODEL_BUDGET
+        cmd_result = await context._mediator.send(
+            CreatePlanCommand(
+                session_id=context._session.id,
+                prompt=prompt,
+                model=context._model or MODEL_BUDGET,
+                context=context._session.context.model_dump(mode="json"),
             )
-            async for event in context._planner.create_plan(prompt):
-                await context._emit(event)
-                yield event
-                if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
-                    context._plan = Plan.model_validate(event.plan)
-                    logger.info("Plan created with %d steps", len(context._plan.steps))
+        )
+        if not cmd_result.success:
+            yield EE(error=f"Plan creation rejected: {cmd_result.error}")
+            return
+
+        # Consume events from the mediator result using shared reconstructor.
+        from weebot.application.cqrs.event_reconstructor import reconstruct_events
+        for event in reconstruct_events(cmd_result.data.get("events", [])):
+            await context._emit(event)
+            yield event
+            if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
+                context._plan = Plan.model_validate(event.plan)
+                logger.info("Plan created with %d steps", len(context._plan.steps))
+
+        # Also check for plan in result top-level
+        if context._plan is None and cmd_result.data.get("plan"):
+            context._plan = Plan.model_validate(cmd_result.data["plan"])
 
         if context._plan is None or len(context._plan.steps) == 0:
             logger.info("No steps in plan, transitioning to SUMMARIZING")

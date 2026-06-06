@@ -134,4 +134,16 @@ class TrajectoryMonitor:
                     affected_step_ids=[step_id],
                 )
 
+        # 5. Terminal — all recent attempts are failing (models likely unavailable)
+        if used_budget > 5 and len(self._tool_signatures) >= 4:
+            recent_sigs = list(self._tool_signatures)[-4:]
+            if len(set(recent_sigs)) >= 3:
+                return TrajectoryDiagnosis(
+                    health=TrajectoryHealth.TERMINAL,
+                    detail="All recent tool calls have produced different errors — "
+                           "models or external services may be unavailable",
+                    recovery_message=None,
+                    affected_step_ids=[step_id],
+                )
+
         return TrajectoryDiagnosis(health=TrajectoryHealth.HEALTHY)

@@ -234,9 +234,11 @@ class BashTool(BaseTool):
                 elif assessment.risk_level == RiskLevel.SUSPICIOUS:
                     # Suspicious commands require explicit confirmation
                     # This is handled by the approval policy below
-                    import logging
-                    logging.getLogger(__name__).info(
-                        f"Suspicious command detected: {assessment.reason}"
+                    logger.info(
+                        "Suspicious command (%d operators): %s — %s",
+                        command.count("|") + command.count(";") + command.count("&"),
+                        command[:200],
+                        assessment.reason,
                     )
                 
                 return True, ""
@@ -329,9 +331,15 @@ class BashTool(BaseTool):
         from weebot.core.bash_guard import RiskLevel
         if risk_level == RiskLevel.BLOCKED:
             reasons = [c.description for c in checks if c.description]
+            logger.warning("Blocked command: %s", command[:200])
             return ToolResult(
                 output="",
-                error=f"Command blocked by BashGuard: {'; '.join(reasons)}",
+                error=(
+                    f"Command blocked by BashGuard: {'; '.join(reasons)}. "
+                    f"Tip: split complex commands into simpler single-operation calls. "
+                    f"Use file_editor to write multi-step scripts instead of chaining "
+                    f"commands with | ; &."
+                ),
             )
 
         # --- Safety gate (ExecApprovalPolicy) ---

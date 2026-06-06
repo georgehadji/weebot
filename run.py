@@ -14,6 +14,19 @@ from weebot.config.settings import WeebotSettings
 # override=True ensures .env takes precedence over stale system env vars
 load_dotenv(override=True)
 
+# Clear stale bytecode cache to prevent import errors from old .pyc files
+import shutil as _shutil
+_root = Path(__file__).parent
+_count = 0
+for _pyc in _root.rglob("__pycache__"):
+    try:
+        _shutil.rmtree(_pyc)
+        _count += 1
+    except OSError:
+        pass
+if _count:
+    print(f"  Cleared {_count} stale bytecode cache(s)")
+
 # Configure structured logging
 structlog.configure(
     processors=[
@@ -156,10 +169,12 @@ def run_interactive(
                 done = len([s for s in plan.steps if s.is_done()])
                 print(f"  Current Plan: {plan.title} ({done}/{len(plan.steps)} steps complete)")
 
+        from weebot.application.cqrs.mediator import Mediator
         runner = AgentRunner(
             llm=llm, state_repo=state_repo, model=model,
             use_rich=False, skill_prompt=skill_prompt,
             steering=steering,
+            mediator=_container.get(Mediator),
         )
 
         while True:
