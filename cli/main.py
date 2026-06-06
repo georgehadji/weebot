@@ -65,6 +65,8 @@ from cli.commands.agents import agents as agents_group
 from cli.commands.harness import benchmark, harness  # type: ignore[attr-defined]
 from cli.commands.profile import profile as profile_group
 from cli.commands.scheduling import cron, companion  # type: ignore[attr-defined]
+from cli.commands.guard import guard as guard_group
+from cli.commands.analytics import analytics as analytics_group
 
 console = Console()
 
@@ -267,24 +269,61 @@ def init(platform: str | None, tier: str | None, force: bool, no_env: bool, with
             console.print("[yellow]Hooks already initialized[/yellow]")
 
 
-@cli.command()
-@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def doctor(json_output: bool) -> None:
-    """Run diagnostics and environment checks."""
-    report = run_doctor(Path.cwd())
-    if json_output:
-        console.print_json(json.dumps(report.as_dict()))
-        return
-
+def _print_doctor_table(report: Any) -> None:
+    """Render a DoctorReport as a rich Table."""
     table = Table(title="weebot Doctor")
     table.add_column("Check", style="cyan")
     table.add_column("Status", style="magenta")
     table.add_column("Details", style="green")
-
     for check in report.checks:
         table.add_row(check.name, check.status, check.details)
-
     console.print(table)
+
+
+@cli.command()
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.option("--fix", is_flag=True, help="Auto-repair warnings (create dirs, init DBs)")
+@click.option("--dry-run", is_flag=True, help="Show what --fix would do without changing anything")
+def doctor(json_output: bool, fix: bool, dry_run: bool) -> None:
+    """Run diagnostics and environment checks."""
+    if dry_run:
+        # Show what would be fixed without applying changes
+        report_preview = run_doctor(Path.cwd(), fix=False)
+        _print_doctor_table(report_preview)
+        warn_count = report_preview.summary.get("warn", 0)
+        if warn_count > 0:
+            console.print()
+            console.print(
+                f"[dim]--dry-run: {warn_count} warning(s) would be candidates for --fix[/dim]"
+            )
+            for check in report_preview.checks:
+                if check.status == "warn":
+                    console.print(f"  [yellow]â\u00b0  {check.name}:[/yellow] {check.details}")
+        return
+
+    report = run_doctor(Path.cwd(), fix=fix)
+
+    if json_output:
+        data = report.as_dict()
+        if hasattr(report, "repairs"):
+            data["repairs"] = [
+                {"check": r.check_name, "repaired": r.repaired, "message": r.message}
+                for r in report.repairs
+            ]
+        console.print_json(json.dumps(data))
+        return
+
+    _print_doctor_table(report)
+
+    # Show repair results
+    if fix and hasattr(report, "repairs") and report.repairs:
+        console.print()
+        for r in report.repairs:
+            if r.repaired:
+                console.print(f"  [green]â\u0153\u201c {r.check_name}:[/green] {r.message}")
+            else:
+                console.print(f"  [yellow]â\u00b0  {r.check_name}:[/yellow] {r.message}")
+
     console.print(
         Panel(
             f"Summary: ok={report.summary['ok']} warn={report.summary['warn']} error={report.summary['error']}",
@@ -565,6 +604,8 @@ cli.add_command(harness)
 cli.add_command(profile_group)
 cli.add_command(cron)
 cli.add_command(companion)
+cli.add_command(guard_group)
+cli.add_command(analytics_group)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────

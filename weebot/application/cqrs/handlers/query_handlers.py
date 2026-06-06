@@ -14,6 +14,9 @@ from weebot.application.cqrs.queries import (
     SearchSessionsQuery,
     GetSimilarSessionsQuery,
     GetActiveTasksQuery,
+    GetActiveSessionsQuery,
+    GetPlanVisualizationQuery,
+    GetCostSummaryQuery,
 )
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.task_runner import TaskRunner
@@ -319,5 +322,124 @@ class GetActiveTasksHandler(QueryHandler):
                 "total": len(active_ids),
                 "limit": query.limit,
             })
+        except Exception as exc:
+            return QueryResult.fail(str(exc))
+
+
+# ── Operations Console handlers (Enhancement 4) ───────────────────────
+
+
+class GetActiveSessionsHandler(QueryHandler):
+    """List all running sessions with flow state, step count, and tool call count."""
+
+    def __init__(self, state_repo: StateRepositoryPort):
+        self._state_repo = state_repo
+
+    async def handle(self, query: GetActiveSessionsQuery) -> QueryResult:
+        try:
+            sessions = await self._state_repo.list_sessions(status="running")
+            limited = sessions[: query.limit]
+
+            active = []
+            for s in limited:
+                plan = s.get_last_plan() if hasattr(s, "get_last_plan") else None
+                step_count = len(plan.steps) if plan else 0
+                completed = sum(
+                    1 for st in plan.steps
+                    if hasattr(st.status, "value") and st.status.value == "completed"
+                ) if plan else 0
+
+                # Count tool calls from events
+                tool_calls = sum(
+                    1 for e in s.events
+                    if hasattr(e, "type") and e.type == "tool"
+                )
+
+                active.append({
+                    "session_id": s.id,
+                    "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                    "step_count": step_count,
+                    "steps_completed": completed,
+                    "tool_calls": tool_calls,
+                    "elapsed_events": len(s.events),
+                })
+
+            return QueryResult.ok({
+                "sessions": active,
+                "total": len(active),
+                "limit": query.limit,
+            })
+        except Exception as exc:
+            return QueryResult.fail(str(exc))
+
+
+class GetPlanVisualizationHandler(QueryHandler):
+    """Return plan DAG data for visualization."""
+
+    def __init__(self, state_repo: StateRepositoryPort):
+        self._state_repo = state_repo
+
+    async def handle(self, query: GetPlanVisualizationQuery) -> QueryResult:
+        try:
+            session = await self._state_repo.load_session(query.session_id)
+            if session is None:
+                return QueryResult.not_found("Session")
+
+            plan = session.get_last_plan() if hasattr(session, "get_last_plan") else None
+            if plan is None:
+                return QueryResult.ok({"session_id": query.session_id, "plan": None})
+
+            nodes = []
+            edges = []
+            for i, step in enumerate(plan.steps):
+                sid = step.id or f"step_{i}"
+                nodes.append({
+                    "id": sid,
+                    "label": (step.description or sid)[:60],
+                    "status": step.status.value if hasattr(step.status, "value") else str(step.status),
+                    "result": (step.result or "")[:200] if step.result else None,
+                })
+                if i > 0:
+                    prev_id = plan.steps[i - 1].id or f"step_{i - 1}"
+                    edges.append({"from": prev_id, "to": sid})
+
+            return QueryResult.ok({
+                "session_id": query.session_id,
+                "plan": {
+                    "status": plan.status.value if hasattr(plan.status, "value") else str(plan.status),
+                    "nodes": nodes,
+                    "edges": edges,
+                },
+            })
+        except Exception as exc:
+            return QueryResult.fail(str(exc))
+
+
+class GetCostSummaryHandler(QueryHandler):
+    """Aggregate cost/cascade stats from the cascade tracker."""
+
+    def __init__(self, state_repo: StateRepositoryPort):
+        self._state_repo = state_repo
+
+    async def handle(self, query: GetCostSummaryQuery) -> QueryResult:
+        try:
+            # Try to get cascade tracker from DI container
+            try:
+                from weebot.application.di import Container
+                c = Container()
+                c.configure_defaults()
+                tracker = c.get("cascade_tracker")
+                summary = tracker.summary() if tracker else {"total_decisions": 0}
+            except Exception:
+                summary = {
+                    "total_decisions": 0,
+                    "per_tier": {},
+                    "total_cost_estimate": 0.0,
+                    "avg_latency_ms": 0.0,
+                    "cascade_hit_rate": 1.0,
+                }
+
+            summary["window_hours"] = query.window_hours
+            return QueryResult.ok(summary)
         except Exception as exc:
             return QueryResult.fail(str(exc))

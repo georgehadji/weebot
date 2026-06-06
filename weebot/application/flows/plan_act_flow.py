@@ -46,6 +46,7 @@ from weebot.config.constants import DEFAULT_MAX_STEP_REPETITIONS, DEFAULT_MAX_FL
 
 if TYPE_CHECKING:
     from weebot.application.cqrs.mediator import Mediator
+    from weebot.application.ports.checkpoint_port import CheckpointPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 # NOTE: Use self._logger (StructuredLogger) in instance methods.
@@ -78,6 +79,7 @@ class PlanActFlow(BaseFlow):
         knowledge_graph: Optional[Any] = None,
         behavioral_learner: Optional[Any] = None,
         logger: Optional["StructuredLogger"] = None,
+        checkpoint_port: Optional["CheckpointPort"] = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -92,6 +94,7 @@ class PlanActFlow(BaseFlow):
         self._plan_critique = None  # Set by CritiquingState
         self._knowledge_graph = knowledge_graph  # Optional KnowledgeGraphService (Capability 2)
         self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
+        self._checkpoint_port = checkpoint_port  # Optional checkpoint persistence
         self._logger = logger
         self._stdlib_logger = logging.getLogger(__name__)
         self.status = AgentStatus.IDLE
@@ -176,6 +179,10 @@ class PlanActFlow(BaseFlow):
 
         # 1. Mutate in-memory session (fast, no I/O, no lock needed)
         self._session = self._session.add_event(event)
+
+        # 1a. Save checkpoint after step completions (best-effort, non-blocking)
+        if event.type == "step":
+            await self._maybe_save_checkpoint()
 
         # 2. Publish to event bus (async I/O, no lock needed)
         if self._event_bus:
@@ -414,6 +421,49 @@ class PlanActFlow(BaseFlow):
             except KeyError:
                 return None
         return self._persistence_adapter
+
+    async def _maybe_save_checkpoint(self) -> None:
+        """Save a flow checkpoint if a CheckpointPort is wired.
+
+        Called after each step event so that a crashed flow can resume
+        from the last completed step.
+        """
+        if self._checkpoint_port is None or self._plan is None:
+            return
+
+        try:
+            from weebot.domain.models.checkpoint import FlowCheckpoint, StepCheckpoint
+
+            # Build completed step snapshots from the plan
+            completed: list[StepCheckpoint] = []
+            for step in self._plan.steps:
+                if step.status.value in ("completed", "failed"):
+                    completed.append(
+                        StepCheckpoint(
+                            step_id=step.id,
+                            description=step.description,
+                            status=step.status.value,
+                            result=step.result,
+                        )
+                    )
+
+            checkpoint = FlowCheckpoint(
+                session_id=self._session.id,
+                flow_type="PlanActFlow",
+                current_state=type(self._state).__name__ if self._state else "planning",
+                plan_snapshot=self._plan,
+                completed_steps=completed,
+                conversation_summary="",
+                iteration_count=0,
+            )
+            await self._checkpoint_port.save(checkpoint)
+            self._log.debug("Checkpoint saved for session %s", self._session.id)
+        except Exception:
+            self._log.warning(
+                "Failed to save checkpoint for session %s",
+                self._session.id,
+                exc_info=True,
+            )
 
     def _get_tracing_port(self):
         """Resolve tracing port lazily from DI container."""

@@ -19,11 +19,25 @@ except ImportError as _mcp_err:
 from weebot.core.activity_stream import ActivityStream
 from weebot.mcp.resources import (
     build_activity_json,
+    build_costs_json,
     build_roadmap_json,
     build_schedule_json,
+    build_skills_json,
     build_state_json,
+    build_tools_json,
 )
 from weebot.utils.rate_limiter import RateLimitExceeded, check_rate_limit
+
+# Prometheus metrics — lazy import to avoid circular dependency at module level
+_metrics = None
+
+
+def _get_metrics():
+    global _metrics
+    if _metrics is None:
+        from weebot.infrastructure.observability import metrics as _m
+        _metrics = _m
+    return _metrics
 
 _SERVER_INSTRUCTIONS = (
     "weebot is an AI Agent Framework for Windows 11. "
@@ -61,12 +75,18 @@ class WeebotMCPServer:
         host: str = "127.0.0.1",
         port: int = 8765,
         dynamic_tools: Optional[list] = None,
+        tool_discovery: Optional[object] = None,
+        cascade_tracker: Optional[object] = None,
+        skill_registry: Optional[object] = None,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
         self._scheduler = scheduler
         self._product_db_path = product_db_path
         self._dynamic_tools = dynamic_tools or []
+        self._tool_discovery = tool_discovery
+        self._cascade_tracker = cascade_tracker
+        self._skill_registry = skill_registry
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
@@ -147,15 +167,25 @@ class WeebotMCPServer:
             working_dir: str | None = None,
             use_wsl: bool = False,
         ) -> str:
+            import time as _time
             # Rate limit check
             allowed, retry_after = check_rate_limit("bash")
             if not allowed:
+                _get_metrics().mcp_rate_limits_hit_total.labels(tool="bash").inc()
                 raise RateLimitExceeded("bash", retry_after)
-            
-            result = await _bash.execute(
-                command=command, timeout=timeout, working_dir=working_dir, use_wsl=use_wsl
-            )
+
+            _t0 = _time.monotonic()
+            try:
+                result = await _bash.execute(
+                    command=command, timeout=timeout, working_dir=working_dir, use_wsl=use_wsl
+                )
+            finally:
+                _get_metrics().tool_call_duration_seconds.labels(tool="bash").observe(
+                    _time.monotonic() - _t0
+                )
             activity.push("mcp", "tool", f"bash: {command[:60]}")
+            success = not result.is_error
+            _get_metrics().tool_calls_total.labels(tool="bash", success=str(success)).inc()
             if result.is_error:
                 raise ValueError(result.error)
             return result.output
@@ -169,13 +199,23 @@ class WeebotMCPServer:
             ),
         )
         async def python_execute(code: str, timeout: float = 30.0) -> str:
+            import time as _time
             # Rate limit check
             allowed, retry_after = check_rate_limit("python_execute")
             if not allowed:
+                _get_metrics().mcp_rate_limits_hit_total.labels(tool="python_execute").inc()
                 raise RateLimitExceeded("python_execute", retry_after)
-            
-            result = await _python.execute(code=code, timeout=timeout)
+
+            _t0 = _time.monotonic()
+            try:
+                result = await _python.execute(code=code, timeout=timeout)
+            finally:
+                _get_metrics().tool_call_duration_seconds.labels(tool="python_execute").observe(
+                    _time.monotonic() - _t0
+                )
             activity.push("mcp", "tool", f"python_execute: {code[:60]}")
+            success = not result.is_error
+            _get_metrics().tool_calls_total.labels(tool="python_execute", success=str(success)).inc()
             if result.is_error:
                 raise ValueError(result.error)
             return result.output
@@ -189,13 +229,23 @@ class WeebotMCPServer:
             ),
         )
         async def web_search(query: str, num_results: int = 5) -> str:
+            import time as _time
             # Rate limit check
             allowed, retry_after = check_rate_limit("web_search")
             if not allowed:
+                _get_metrics().mcp_rate_limits_hit_total.labels(tool="web_search").inc()
                 raise RateLimitExceeded("web_search", retry_after)
-            
-            result = await _search.execute(query=query, num_results=num_results)
+
+            _t0 = _time.monotonic()
+            try:
+                result = await _search.execute(query=query, num_results=num_results)
+            finally:
+                _get_metrics().tool_call_duration_seconds.labels(tool="web_search").observe(
+                    _time.monotonic() - _t0
+                )
             activity.push("mcp", "tool", f"web_search: {query[:60]}")
+            success = not result.is_error
+            _get_metrics().tool_calls_total.labels(tool="web_search", success=str(success)).inc()
             if result.is_error:
                 raise ValueError(result.error)
             return result.output
@@ -217,11 +267,13 @@ class WeebotMCPServer:
             new_str: str | None = None,
             insert_line: int | None = None,
         ) -> str:
+            import time as _time
             # Rate limit check
             allowed, retry_after = check_rate_limit("file_editor")
             if not allowed:
+                _get_metrics().mcp_rate_limits_hit_total.labels(tool="file_editor").inc()
                 raise RateLimitExceeded("file_editor", retry_after)
-            
+
             kwargs: dict = {}
             if file_text is not None:
                 kwargs["file_text"] = file_text
@@ -231,8 +283,16 @@ class WeebotMCPServer:
                 kwargs["new_str"] = new_str
             if insert_line is not None:
                 kwargs["insert_line"] = insert_line
-            result = await _editor.execute(command=command, path=path, **kwargs)
+            _t0 = _time.monotonic()
+            try:
+                result = await _editor.execute(command=command, path=path, **kwargs)
+            finally:
+                _get_metrics().tool_call_duration_seconds.labels(tool="file_editor").observe(
+                    _time.monotonic() - _t0
+                )
             activity.push("mcp", "tool", f"file_editor: {command} {path[:40]}")
+            success = not result.is_error
+            _get_metrics().tool_calls_total.labels(tool="file_editor", success=str(success)).inc()
             if result.is_error:
                 raise ValueError(result.error)
             return result.output
@@ -266,6 +326,17 @@ class WeebotMCPServer:
         state_manager = self._state_manager
         scheduler = self._scheduler
         product_db_path = self._product_db_path
+        tool_discovery = self._tool_discovery
+        cascade_tracker = self._cascade_tracker
+        skill_registry = self._skill_registry
+
+        @mcp.resource(
+            "weebot://skills",
+            mime_type="application/json",
+            description="Installed skills with descriptions, versions, and triggers.",
+        )
+        def skills_resource() -> str:
+            return build_skills_json(skill_registry)
 
         @mcp.resource(
             "weebot://activity",
@@ -298,3 +369,29 @@ class WeebotMCPServer:
         )
         def products_resource() -> str:
             return build_roadmap_json(product_db_path)
+
+        @mcp.resource(
+            "weebot://tools",
+            mime_type="application/json",
+            description=(
+                "Available agent tools with role access, safety flags, and "
+                "dependency requirements.  Supports ?role= filter query param "
+                "(e.g. weebot://tools?role=researcher)."
+            ),
+        )
+        async def tools_resource() -> str:
+            # FastMCP passes query params as kwargs when the resource is called
+            # with a URI like weebot://tools?role=admin
+            return await build_tools_json(tool_discovery)
+
+        @mcp.resource(
+            "weebot://costs",
+            mime_type="application/json",
+            description=(
+                "Current-session cost and model cascade statistics. "
+                "Includes per-tier success/failure/circuit_open counts, "
+                "total cost estimate, cascade hit rate, and recent decisions."
+            ),
+        )
+        def costs_resource() -> str:
+            return build_costs_json(cascade_tracker)

@@ -85,3 +85,42 @@ class GetSimilarSessionsQuery(Query):
     def validate(self) -> None:
         if self.limit < 1:
             raise ValueError("limit must be at least 1")
+
+
+# ── Operations Console queries (Enhancement 4) ────────────────────────
+
+
+class GetActiveSessionsQuery(Query):
+    """List all currently running sessions with status, flow state, and cost.
+
+    Used by the operations console dashboard (GET /api/sessions/active).
+    """
+    limit: int = 100
+
+    def validate(self) -> None:
+        if self.limit < 1:
+            raise ValueError("limit must be at least 1")
+        if self.limit > 500:
+            raise ValueError("limit cannot exceed 500")
+
+
+class GetPlanVisualizationQuery(Query):
+    """Return plan DAG node/edge data for a session's current plan.
+
+    Used by the plan visualizer (GET /api/sessions/{id}/plan-viz).
+    """
+    session_id: str = Field(min_length=1)
+
+
+class GetCostSummaryQuery(Query):
+    """Aggregate cost and cascade stats for a time window.
+
+    Used by the cost dashboard (GET /api/costs/summary).
+    """
+    window_hours: int = 24
+
+    def validate(self) -> None:
+        if self.window_hours < 1:
+            raise ValueError("window_hours must be at least 1")
+        if self.window_hours > 720:
+            raise ValueError("window_hours cannot exceed 720 (30 days)")

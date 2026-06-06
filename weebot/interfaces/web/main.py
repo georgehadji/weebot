@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.web.routers import sessions_router, models_router, health_router, dashboard_router, behavior_router
+from weebot.interfaces.web.routers.ops_router import router as ops_router
 from weebot.interfaces.web.routers.chat_router import router as chat_router
 from weebot.interfaces.web.routers.sse import router as sse_router
 from weebot.interfaces.web.routers.webhook import router as webhook_router
@@ -219,6 +220,7 @@ def create_app() -> FastAPI:
     app.include_router(sse_router)
     app.include_router(webhook_router)
     app.include_router(discord_router)
+    app.include_router(ops_router)
     
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")

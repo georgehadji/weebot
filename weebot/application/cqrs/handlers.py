@@ -496,6 +496,9 @@ from weebot.application.cqrs.handlers.query_handlers import (
     SearchSessionsHandler,
     GetSimilarSessionsHandler,
     GetActiveTasksHandler,
+    GetActiveSessionsHandler,
+    GetPlanVisualizationHandler,
+    GetCostSummaryHandler,
 )
 
 # Subdirectory command/handler imports — registered separately
@@ -639,6 +642,20 @@ def register_default_handlers(
         GetActiveTasksQuery,
         GetActiveTasksHandler(task_runner) if task_runner
         else GetActiveTasksHandler(TaskRunner(state_repo=state_repo)),
+    )
+
+    # ── Operations Console queries (Enhancement 4) ──────────────────
+    mediator.register_query_handler(
+        GetActiveSessionsQuery,
+        GetActiveSessionsHandler(state_repo),
+    )
+    mediator.register_query_handler(
+        GetPlanVisualizationQuery,
+        GetPlanVisualizationHandler(state_repo),
+    )
+    mediator.register_query_handler(
+        GetCostSummaryQuery,
+        GetCostSummaryHandler(state_repo),
     )
 
 

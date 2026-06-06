@@ -150,6 +150,26 @@ class FactoriesMixin:
         return KeywordTaskRouter()
 
     @staticmethod
+    def _create_tool_discovery():
+        from weebot.infrastructure.adapters.tool_discovery import ToolDiscoveryAdapter
+        return ToolDiscoveryAdapter()
+
+    @staticmethod
+    def _create_cascade_tracker():
+        from weebot.core.model_cascade_tracker import ModelCascadeTracker
+        return ModelCascadeTracker()
+
+    @staticmethod
+    def _create_checkpoint_store(db_path: str = "sessions.db"):
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+        return SQLiteCheckpointStore(db_path=db_path)
+
+    @staticmethod
+    def _create_flow_serializer():
+        from weebot.application.services.flow_serializer import FlowSerializer
+        return FlowSerializer()
+
+    @staticmethod
     def _create_personality():
         from weebot.core.personality_manager import PersonalityManager
         return PersonalityManager()

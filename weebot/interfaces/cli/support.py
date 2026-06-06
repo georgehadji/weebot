@@ -177,8 +177,17 @@ class DoctorCheck:
 
 
 @dataclass
+class RepairResult:
+    """Result of an auto-repair attempt."""
+    check_name: str
+    repaired: bool
+    message: str
+
+
+@dataclass
 class DoctorReport:
     checks: List[DoctorCheck]
+    repairs: List[RepairResult] | None = None
 
     @property
     def summary(self) -> Dict[str, int]:
@@ -200,8 +209,14 @@ class DoctorReport:
         }
 
 
-def run_doctor(root: Path) -> DoctorReport:
-    """Run diagnostics and return a structured report."""
+def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
+    """Run diagnostics and return a structured report.
+
+    Args:
+        root: Project root directory.
+        fix: When True, attempt to auto-repair warnings (e.g. create missing
+             directories, initialize missing databases).
+    """
     checks: List[DoctorCheck] = []
     root = root.resolve()
 
@@ -341,7 +356,82 @@ def run_doctor(root: Path) -> DoctorReport:
         )
     )
 
-    return DoctorReport(checks=checks)
+    repairs: list[RepairResult] = []
+
+    if fix:
+        for check in checks:
+            if check.status != "warn":
+                continue
+
+            if check.name == "workspace_root":
+                try:
+                    WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+                    check.status = "ok"
+                    check.details = f"{WORKSPACE_ROOT} (created)"
+                    repairs.append(RepairResult(check.name, True, "Created workspace directory"))
+                except OSError as exc:
+                    repairs.append(RepairResult(check.name, False, str(exc)))
+
+            elif check.name == "logs_dir":
+                logs_path = root / LOGS_DIR
+                try:
+                    logs_path.mkdir(parents=True, exist_ok=True)
+                    check.status = "ok"
+                    check.details = f"{logs_path} (created)"
+                    repairs.append(RepairResult(check.name, True, "Created logs directory"))
+                except OSError as exc:
+                    repairs.append(RepairResult(check.name, False, str(exc)))
+
+            elif check.name == "projects_db":
+                db_path_fix = root / "projects.db"
+                try:
+                    # Create a minimal projects.db with the expected schema
+                    with sqlite3.connect(str(db_path_fix)) as conn:
+                        conn.execute(
+                            "CREATE TABLE IF NOT EXISTS projects ("
+                            "  id TEXT PRIMARY KEY,"
+                            "  name TEXT NOT NULL,"
+                            "  description TEXT DEFAULT '',"
+                            "  status TEXT DEFAULT 'active',"
+                            "  created_at TEXT DEFAULT (datetime('now')),"
+                            "  updated_at TEXT DEFAULT (datetime('now'))"
+                            ")"
+                        )
+                        conn.commit()
+                    check.status = "ok"
+                    check.details = f"{db_path_fix} (created)"
+                    repairs.append(RepairResult(check.name, True, "Created projects.db with schema"))
+                except Exception as exc:
+                    repairs.append(RepairResult(check.name, False, str(exc)))
+
+            elif check.name == "browser_use":
+                repairs.append(
+                    RepairResult(
+                        check.name,
+                        False,
+                        "Run: pip install browser-use",
+                    )
+                )
+
+            elif check.name == "playwright":
+                repairs.append(
+                    RepairResult(
+                        check.name,
+                        False,
+                        "Run: pip install playwright && playwright install",
+                    )
+                )
+
+            elif check.name == "mcp":
+                repairs.append(
+                    RepairResult(
+                        check.name,
+                        False,
+                        "Run: pip install 'mcp>=1.5'",
+                    )
+                )
+
+    return DoctorReport(checks=checks, repairs=repairs if repairs else None)
 
 
 # ---------------------------------------------------------------------------
