@@ -89,8 +89,9 @@ class TrajectoryDiagnosis(BaseModel):
 
     health: TrajectoryHealth = Field(default=TrajectoryHealth.HEALTHY)
     detail: str = Field(default="")
-    recovery_message: str = Field(
-        default="",
-        description="Injected into the executor's conversation buffer",
+    recovery_message: str | None = Field(
+        default=None,
+        description="Injected into the executor's conversation buffer. "
+                    "None when no recovery is possible (e.g. TERMINAL health).",
     )
     affected_step_ids: list[str] = Field(default_factory=list)

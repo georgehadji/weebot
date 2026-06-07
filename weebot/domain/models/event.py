@@ -126,7 +126,7 @@ class TrajectoryDiagnosisEvent(BaseEvent):
     step_id: str = Field(default="")
     health: str = Field(default="")
     detail: str = Field(default="")
-    recovery_message: str = Field(default="")
+    recovery_message: str | None = Field(default=None)
 
 
 AgentEvent = Union[
