@@ -80,6 +80,7 @@ class PlanActFlow(BaseFlow):
         behavioral_learner: Optional[Any] = None,
         logger: Optional["StructuredLogger"] = None,
         checkpoint_port: Optional["CheckpointPort"] = None,
+        profile_name: Optional[str] = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -95,6 +96,7 @@ class PlanActFlow(BaseFlow):
         self._knowledge_graph = knowledge_graph  # Optional KnowledgeGraphService (Capability 2)
         self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
         self._checkpoint_port = checkpoint_port  # Optional checkpoint persistence
+        self._profile_name = profile_name  # SOUL.md profile (e.g. "coder", "researcher")
         self._logger = logger
         self._stdlib_logger = logging.getLogger(__name__)
         self.status = AgentStatus.IDLE
@@ -128,6 +130,7 @@ class PlanActFlow(BaseFlow):
             event_bus=self._event_bus,
             model=self._model,
             skill_prompt=skill_prompt,
+            profile_name=profile_name,
         )
         if max_steps is not None:
             executor_kwargs["max_steps"] = max_steps

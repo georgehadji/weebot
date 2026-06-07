@@ -157,6 +157,7 @@ class ExecutorAgent:
         personality=None,      # PersonalityManager (Phase 1.1)
         behavioral_learner=None,  # BehavioralLearner (Capability 5)
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
+        profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
     ):
         self._llm = llm
         self._tools = tools
@@ -166,6 +167,7 @@ class ExecutorAgent:
         self._skill_prompt = skill_prompt
         self._skill_retriever = skill_retriever
         self._personality = personality
+        self._profile_name = profile_name
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._trajectory_monitor = None  # lazy-created in execute_step
@@ -459,9 +461,11 @@ class ExecutorAgent:
             except Exception as exc:
                 logger.warning("Behavioral rules injection failed: %s", exc)
 
-        # ── Phase 1.1: Core Personality — inject WEEBOT_CORE.md ──
+        # ── Phase 1.1: Core Personality — inject WEEBOT_CORE.md + SOUL.md ──
         if self._personality is not None and self._personality.loaded:
-            system_prompt += self._personality.get_system_prompt()
+            system_prompt += self._personality.get_system_prompt(
+                profile_name=self._profile_name,
+            )
 
         self._system_prompt = system_prompt
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
