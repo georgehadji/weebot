@@ -59,7 +59,7 @@ class PersonalityManager:
         self._soul_provider = soul_provider
         self._profile_name = profile_name
         self._sections: dict[str, str] = {}  # tag_name → content (XML stripped)
-        self._soul_content: str | None = None  # cached SOUL.md content
+        self._soul_cache: dict[str, str] = {}  # profile_name → SOUL.md content
         self._load()
 
     def _load(self) -> None:
@@ -137,25 +137,28 @@ class PersonalityManager:
         return "\n\n".join(parts) + "\n\n"
 
     def _load_soul(self, profile_name: Optional[str] = None) -> str | None:
-        """Load SOUL.md content, with caching.
+        """Load SOUL.md content, with per-profile caching.
 
         Since ``SoulProviderPort.load()`` is async but ``get_system_prompt()``
         is synchronous, we bridge via ``asyncio.run()``.  This is acceptable
         because SOUL.md reads are fast local file I/O.
 
-        Content is cached in ``_soul_content``.  Call ``refresh()`` to
-        invalidate the cache (hot-reload).
+        Content is cached per-profile in ``_soul_cache``.  Call ``refresh()``
+        to invalidate the entire cache (hot-reload).
         """
         if self._soul_provider is None:
             return None
 
-        if self._soul_content is not None:
-            return self._soul_content if self._soul_content else None
+        effective_profile = profile_name or self._profile_name or "default"
+        cache_key = effective_profile
+
+        if cache_key in self._soul_cache:
+            cached = self._soul_cache[cache_key]
+            return cached if cached else None
 
         import asyncio
 
         async def _load():
-            effective_profile = profile_name or self._profile_name
             try:
                 profile = await self._soul_provider.load(effective_profile)
                 if profile and not profile.is_empty:
@@ -171,7 +174,7 @@ class PersonalityManager:
             logger.debug("Cannot load SOUL.md inside running event loop")
             return None
 
-        self._soul_content = result
+        self._soul_cache[cache_key] = result
         return result if result else None
 
     def _build_core_prompt(self, role: Optional[str] = None) -> str | None:
@@ -199,7 +202,7 @@ class PersonalityManager:
     def refresh(self) -> None:
         """Re-read both SOUL.md and WEEBOT_CORE.md (for hot-reload)."""
         self._load()
-        self._soul_content = None  # invalidate SOUL.md cache
+        self._soul_cache.clear()  # invalidate SOUL.md cache
 
     @property
     def loaded(self) -> bool:

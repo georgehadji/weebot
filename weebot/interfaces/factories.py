@@ -3,9 +3,14 @@
 Supports TaskRoute-based flow selection (Enhancement 6 — Neural Task Router).
 When a TaskRoute is provided, flow_type is derived from the route rather
 than being passed explicitly.
+
+SOUL.md identity is resolved from the DI container and injected into
+PlanActFlow.  The ``profile_name`` parameter maps to the SOUL.md profile
+under ``~/.weebot/profiles/<name>/SOUL.md``.
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from weebot.application.flows.base_flow import BaseFlow
@@ -17,6 +22,8 @@ from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.session import Session
 from weebot.domain.models.task_route import TaskRoute
 from weebot.tools.base import ToolCollection
+
+_log = logging.getLogger(__name__)
 
 
 async def route_and_create_flow(
@@ -31,6 +38,7 @@ async def route_and_create_flow(
     mediator = None,
     state_repo: Optional[StateRepositoryPort] = None,
     steering = None,
+    profile_name: str | None = None,
 ) -> tuple[BaseFlow, TaskRoute]:
     """Route *query* through *router*, then create the appropriate flow.
 
@@ -48,8 +56,21 @@ async def route_and_create_flow(
         mediator=mediator,
         state_repo=state_repo,
         steering=steering,
+        profile_name=profile_name,
     )
     return flow, task_route
+
+
+def _resolve_personality():
+    """Resolve PersonalityManager from the DI container, or None."""
+    try:
+        from weebot.application.di import Container
+        c = Container()
+        c.configure_defaults()
+        return c.get("personality")
+    except Exception:
+        _log.debug("PersonalityManager not available in DI", exc_info=True)
+        return None
 
 
 def create_flow(
@@ -64,17 +85,23 @@ def create_flow(
     state_repo: Optional[StateRepositoryPort] = None,
     steering = None,
     task_route: Optional[TaskRoute] = None,
+    profile_name: str | None = None,
 ) -> BaseFlow:
     """Factory for creating agent flows.
 
     When *task_route* is provided, it overrides *flow_type*.
     This allows the task router to determine the execution path
     while maintaining backward compatibility with direct callers.
+
+    *profile_name* selects the SOUL.md profile under
+    ``~/.weebot/profiles/<name>/SOUL.md``.  When provided, the
+    corresponding persona is injected as slot #1 of the system prompt.
     """
     if task_route is not None:
         flow_type = task_route.flow_type
 
     if flow_type == "plan_act":
+        personality = _resolve_personality()
         return PlanActFlow(
             llm=llm,
             tools=tools,
@@ -85,6 +112,8 @@ def create_flow(
             mediator=mediator,
             state_repo=state_repo,
             steering=steering,
+            profile_name=profile_name,
+            personality=personality,
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

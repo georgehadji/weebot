@@ -169,16 +169,10 @@ class FactoriesMixin:
         from weebot.application.services.flow_serializer import FlowSerializer
         return FlowSerializer()
 
-    @staticmethod
-    def _create_personality():
+    def _create_personality(self):
         from weebot.core.personality_manager import PersonalityManager
-        # Try to wire SoulProviderPort if available
-        try:
-            from weebot.application.di import Container
-            c = Container()
-            soul = c.get("soul_provider")
-        except Exception:
-            soul = None
+        # Resolve SoulProviderPort from the same container instance
+        soul = self._maybe_get_str("soul_provider")
         return PersonalityManager(soul_provider=soul)
 
     @staticmethod
