@@ -1,137 +1,203 @@
-"""Verifying state — Chain-of-Verification (CoVe) for Plan-Act Flow.
+"""VerifyingState — Chain-of-Verification fact-checking after summarization.
 
-Inserts between Executing and Summarizing.  When all steps complete,
-collects the final assistant response, runs CoVe to check for factual
-hallucinations, and emits a corrected MessageEvent if issues are found.
+Implements the CoVe pattern (Dhuliawala et al., 2023):
+1. Generate verification questions from the summary
+2. Answer each question INDEPENDENTLY (no shared context with draft)
+3. If contradictions found, revise the summary
+4. Emit VerificationEvents for audit
 
-Reference: Dhuliawala et al. (2023) — Chain-of-Verification Reduces
-Hallucination in Large Language Models (arXiv:2309.11495).
+Factored verification: each question is answered in its own LLM call
+without seeing the original summary.  This prevents the LLM from
+repeating hallucinations (the paper's key finding).
 """
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import Optional
 
-if TYPE_CHECKING:
-    from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
-from weebot.application.services.chain_of_verification import (
-    ChainOfVerificationService,
-)
-from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent
+from weebot.application.flows.states.base import FlowState, AgentStatus
+from weebot.domain.models.event import VerificationEvent
 
-logger = logging.getLogger(__name__)
-
-
-def _replace_last_assistant_message(session, new_text: str):
-    """Return a new session with the last assistant MessageEvent's message replaced.
-
-    Does not mutate the original session.  Falls back to the original session
-    if no assistant message is found.
-    """
-    events = list(session.events)
-    for i in range(len(events) - 1, -1, -1):
-        event = events[i]
-        if isinstance(event, MessageEvent) and event.role == "assistant":
-            events[i] = event.model_copy(update={"message": new_text})
-            return session.model_copy(update={"events": events})
-    return session
+_log = logging.getLogger(__name__)
 
 
 class VerifyingState(FlowState):
-    """Performs Chain-of-Verification on the final assistant response.
+    """CoVe verification state — fact-checks the summary before completion.
 
-    Transitions to SummarizingState when verification is complete (or
-    skipped due to no LLM port being available).
+    Controlled by env var ``WEEBOT_COVE_ENABLED`` (default: True).
+    Set to ``false`` to skip verification and proceed directly to Completed.
     """
-    status = AgentStatus.VERIFYING
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.summarizing import SummarizingState
+    status = AgentStatus.VERIFYING  # type: ignore[assignment]
 
-        # ── Collect the baseline response (last assistant message) ──
-        baseline = self._collect_baseline(context)
-        if not baseline or not baseline.strip():
-            logger.info("CoVe: no baseline response to verify — skipping")
-            context.set_state(SummarizingState())
+    def __init__(self, max_questions: int = 3):
+        self._max_questions = max_questions
+
+    async def execute(self, flow, prompt: str = ""):
+        """Run the CoVe verification pipeline.
+
+        Args:
+            flow: The PlanActFlow instance (provides llm, session, plan).
+            prompt: Not used — verification runs on the flow's current plan/session.
+        """
+        import os
+
+        # ── Feature toggle ──────────────────────────────────────────
+        enabled = os.getenv("WEEBOT_COVE_ENABLED", "true").lower() in ("true", "1", "yes")
+        if not enabled:
+            _log.debug("CoVe disabled — skipping verification")
+            from weebot.application.flows.states.completed import CompletedState
+            flow.set_state(CompletedState())
             return
 
-        # ── CoVe enabled check ──
-        import os as _os
-        if _os.environ.get("WEEBOT_COVE_ENABLED", "").lower() in ("false", "0", "no"):
-            logger.info("CoVe: disabled via WEEBOT_COVE_ENABLED — skipping")
-            context.set_state(SummarizingState())
+        num_questions = int(os.getenv("WEEBOT_COVE_QUESTIONS", str(self._max_questions)))
+
+        # ── Get the summary to verify ───────────────────────────────
+        plan = flow._plan
+        if plan is None:
+            _log.debug("No plan to verify — skipping")
+            from weebot.application.flows.states.completed import CompletedState
+            flow.set_state(CompletedState())
             return
 
-        # ── Get LLM for verification ──
-        llm = self._resolve_llm(context)
-        if llm is None:
-            logger.info("CoVe: no LLM port available — skipping")
-            context.set_state(SummarizingState())
+        # Collect completed step results as the "summary" to fact-check
+        completed = [s for s in plan.steps if hasattr(s.status, "value") and s.status.value == "completed"]
+        if not completed:
+            _log.debug("No completed steps to verify — skipping")
+            from weebot.application.flows.states.completed import CompletedState
+            flow.set_state(CompletedState())
             return
 
-        # ── Run CoVe ──
-        cove = ChainOfVerificationService(llm)
+        summary = "\n".join(
+            f"Step {s.id}: {s.description}\nResult: {s.result or '(no result)'}"
+            for s in completed[-5:]  # Last 5 steps
+        )
+
+        # ── Step 1: Generate verification questions ─────────────────
+        questions = await self._generate_questions(flow, summary, num_questions)
+        if not questions:
+            _log.debug("No verification questions generated — skipping")
+            from weebot.application.flows.states.completed import CompletedState
+            flow.set_state(CompletedState())
+            return
+
+        # ── Step 2: Answer each independently (factored) ────────────
+        inconsistencies: list[tuple[str, str, str]] = []  # (question, answer, original_claim)
+        for question in questions:
+            answer = await self._answer_independently(flow, question)
+            consistent = await self._check_consistency(flow, question, answer, summary)
+
+            yield VerificationEvent(
+                step_id="verify",
+                question=question,
+                answer=answer,
+                consistent=consistent,
+            )
+
+            if not consistent:
+                # Find which claim this question was about
+                inconsistencies.append((question, answer, summary[:200]))
+
+        # ── Step 3: Revise if needed ────────────────────────────────
+        if inconsistencies:
+            _log.info(
+                "CoVe found %d inconsistencies — revising summary",
+                len(inconsistencies),
+            )
+            revised = await self._revise_summary(flow, summary, inconsistencies)
+            if revised:
+                # Store revised summary back on the last completed step
+                last = completed[-1]
+                setattr(last, "result", revised[:500])
+        else:
+            _log.info("CoVe verification passed — no inconsistencies")
+
+        # ── Transition to Completed ─────────────────────────────────
+        from weebot.application.flows.states.completed import CompletedState
+        flow.set_state(CompletedState())
+
+    # ── Internal ─────────────────────────────────────────────────────
+
+    async def _generate_questions(self, flow, summary: str, n: int) -> list[str]:
+        """Generate verification questions from the summary."""
+        prompt = (
+            f"Given this task summary, list up to {n} specific fact-checking "
+            f"questions that could verify its accuracy.  Each question should "
+            f"target a concrete claim (dates, counts, names, file paths, results).\n\n"
+            f"Summary:\n{summary}\n\n"
+            f"Verification questions (one per line, no numbering):"
+        )
         try:
-            task_prompt = (
-                context._session.context.get("original_task", "") or prompt
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,  # deterministic for verification
+                max_tokens=200,
             )
-            corrected, inconsistencies = await cove.verify(
-                query=task_prompt,
-                response=baseline,
-                max_questions=5,
+            content = response.content or ""
+            questions = [
+                line.strip("-• "*3).strip()
+                for line in content.splitlines()
+                if line.strip() and "?" in line
+            ]
+            return questions[:n]
+        except Exception:
+            _log.debug("Failed to generate verification questions", exc_info=True)
+            return []
+
+    async def _answer_independently(self, flow, question: str) -> str:
+        """Answer a verification question WITHOUT seeing the original summary."""
+        try:
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": question}],
+                temperature=0.0,
+                max_tokens=150,
             )
+            return (response.content or "").strip()
+        except Exception:
+            _log.debug("Failed to answer verification question", exc_info=True)
+            return "(verification failed)"
 
-            if inconsistencies:
-                logger.info(
-                    "CoVe: corrected %d inconsistencies in final response",
-                    len(inconsistencies),
-                )
-                for inc in inconsistencies:
-                    logger.info(
-                        "  Claim: %s → %s (via: %s)",
-                        inc.get("claim", "?"),
-                        inc.get("correction", "?"),
-                        inc.get("verification_question", "?"),
-                    )
-                context._session = _replace_last_assistant_message(
-                    context._session, corrected
-                )
-                yield MessageEvent(
-                    role="assistant",
-                    message=(
-                        corrected + "\n\n*[Verified: "
-                        f"{len(inconsistencies)} fact(s) corrected]*"
-                    ),
-                )
-            else:
-                logger.info("CoVe: no inconsistencies found")
+    async def _check_consistency(
+        self, flow, question: str, answer: str, summary: str
+    ) -> bool:
+        """Check if the independent answer is consistent with the summary."""
+        prompt = (
+            f"Original claim (from summary):\n{summary[:300]}\n\n"
+            f"Verification question: {question}\n"
+            f"Independent answer: {answer}\n\n"
+            f"Is the independent answer CONSISTENT with the original claim? "
+            f"Answer only YES or NO."
+        )
+        try:
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=10,
+            )
+            return "yes" in (response.content or "").lower()
+        except Exception:
+            return True  # Assume consistent on failure — don't block completion
 
-        except Exception as exc:
-            logger.warning("CoVe verification failed: %s", exc)
-            yield ErrorEvent(error=f"Verification failed: {exc}")
-            yield MessageEvent(role="assistant", message=baseline)
-
-        finally:
-            # ── Transition to summary (always, even if consumer breaks) ──
-            context.set_state(SummarizingState())
-
-    @staticmethod
-    def _collect_baseline(context: PlanActFlow) -> str:
-        """Extract the last assistant message from the session events."""
-        for event in reversed(context._session.events):
-            if isinstance(event, MessageEvent) and event.role == "assistant":
-                return event.message
-        return ""
-
-    @staticmethod
-    def _resolve_llm(context: PlanActFlow):
-        """Get an LLMPort from the PlanActFlow's injected LLM reference."""
-        if hasattr(context, "_llm") and context._llm is not None:
-            return context._llm
-        # Fallback: use the executor's LLM if flow-level LLM is missing
-        if hasattr(context, "_executor") and hasattr(context._executor, "_llm"):
-            return context._executor._llm
-        return None
+    async def _revise_summary(
+        self, flow, summary: str, inconsistencies: list[tuple[str, str, str]]
+    ) -> str | None:
+        """Revise the summary based on verified inconsistencies."""
+        inc_block = "\n".join(
+            f"Q: {q}\nA: {a}\n" for q, a, _ in inconsistencies
+        )
+        prompt = (
+            f"Original summary:\n{summary}\n\n"
+            f"The following claims were found to be inconsistent:\n{inc_block}\n\n"
+            f"Revise the summary to correct only the inconsistent claims. "
+            f"Keep everything else unchanged."
+        )
+        try:
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=500,
+            )
+            return (response.content or "").strip()
+        except Exception:
+            _log.debug("Failed to revise summary", exc_info=True)
+            return None

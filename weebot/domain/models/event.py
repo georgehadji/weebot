@@ -120,6 +120,20 @@ class TodoEvent(BaseEvent):
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
+class VerificationEvent(BaseEvent):
+    """Emitted during Chain-of-Verification (CoVe) fact-checking.
+
+    Each event represents one verification question + answer pair.
+    ``consistent`` is True when the answer matches the original claim,
+    False when it contradicts.
+    """
+    type: Literal["verification"] = "verification"
+    step_id: str = Field(default="")
+    question: str = Field(default="")
+    answer: str = Field(default="")
+    consistent: bool = Field(default=True)
+
+
 class TrajectoryDiagnosisEvent(BaseEvent):
     """Emitted when TrajectoryMonitor detects a degenerate pattern (Tier 1.3)."""
     type: Literal["trajectory_diagnosis"] = "trajectory_diagnosis"
@@ -143,6 +157,7 @@ AgentEvent = Union[
     SteeringEvent,
     CanonicalizationEvent,
     TrajectoryDiagnosisEvent,
+    VerificationEvent,
     TodoEvent,
 ]
 
