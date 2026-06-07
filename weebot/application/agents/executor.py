@@ -357,7 +357,7 @@ class ExecutorAgent:
         _cb = self._circuit_breaker_failures
 
         def _is_tripped(model_id: str) -> bool:
-            return _cb.get(model_id, 0) >= 3
+            return _cb.get(model_id, 0) >= 5
 
         def _record_failure(model_id: str) -> None:
             _cb[model_id] = _cb.get(model_id, 0) + 1
@@ -386,9 +386,13 @@ class ExecutorAgent:
                     # Success — reset failure counter for this model
                     _cb[model_id] = 0
                     return resp
-                _record_failure(model_id)
+                # Empty response but no exception — don't count as failure
                 return None
-            except (asyncio.TimeoutError, Exception) as exc:
+            except asyncio.TimeoutError:
+                # Timeout is expected for thinking models — don't record failure
+                logger.debug("Model %s timed out (%.1fs) — retrying", model_id, timeout)
+                return None
+            except Exception as exc:
                 if isinstance(exc, Exception) and ErrorClassifier.should_fail_fast(exc):
                     raise
                 if model_id not in _first_error:
@@ -400,13 +404,13 @@ class ExecutorAgent:
                 _record_failure(model_id)
                 return None
 
-        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (15s) ──
+        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (45s) ──
         parallel_models: list[str] = []
         for m in (role_primary, task_model, role_fallback1):
             if m and m not in parallel_models:
                 parallel_models.append(m)
 
-        tasks = {asyncio.ensure_future(_try_chat(m, timeout=15.0)): m for m in parallel_models}
+        tasks = {asyncio.ensure_future(_try_chat(m, timeout=45.0)): m for m in parallel_models}
         if tasks:
             done, _pending = await asyncio.wait(
                 tasks.keys(), return_when=asyncio.FIRST_COMPLETED
@@ -419,11 +423,11 @@ class ExecutorAgent:
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
-        # ── Phase 2: sequential — role-fallback2 → tier4 (10s timeout) ──
+        # ── Phase 2: sequential — role-fallback2 → tier4 (30s timeout) ──
         remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
                      if m and not _is_tripped(m) and m not in parallel_models]
         for model_id in remaining:
-            resp = await _try_chat(model_id, timeout=10.0)
+            resp = await _try_chat(model_id, timeout=30.0)
             if resp is not None:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
