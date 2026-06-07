@@ -64,13 +64,20 @@ class MoonshotAdapter(OpenAIAdapter):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
-        """Override chat to force temperature=1.0 for Kimi K2.6 compatibility."""
+        """Override chat for Kimi K2.6 compatibility.
+
+        Kimi K2.6 thinking model: omit temperature entirely (use API default).
+        All other Kimi models: force temperature=1.0 (only accepted value).
+
+        Per https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
+        """
+        effective_temp = None  # Omit — let API use default for thinking models
         return await super().chat(
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
             response_format=response_format,
             model=model,
-            temperature=self._FORCED_TEMPERATURE,
+            temperature=effective_temp,
             max_tokens=max_tokens,
         )
