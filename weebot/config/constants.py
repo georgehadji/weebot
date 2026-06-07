@@ -118,3 +118,57 @@ MCP_RETRY_BASE_DELAY: float = 1.0
 MCP_RETRY_MAX_DELAY: float = 10.0
 EXTERNAL_SERVICE_TIMEOUT: int = 30
 EXTERNAL_SERVICE_RETRIES: int = 3
+
+# ========================================================================
+# Temperature presets — semantic names for agent-specific tuning
+# ========================================================================
+TEMPERATURE_DETERMINISTIC: float = 0.0
+"""Zero randomness — planning, compression, verification, skill curation."""
+
+TEMPERATURE_PRECISE: float = 0.1
+"""Very low randomness — code review, critique, trajectory building, CoVe."""
+
+# TEMPERATURE (imported from settings) = 0.2 — general-purpose default
+TEMPERATURE_BALANCED: float = 0.3
+"""Moderate creativity — summarization, synthesis, debate, memory operations."""
+
+TEMPERATURE_CREATIVE: float = 0.7
+"""High diversity — chat agent, mixture-of-agents reference calls."""
+
+TEMPERATURE_KIMI: float = 1.0
+"""Kimi K2.6 requirement — forced by MoonshotAdapter. Not for general use."""
+
+# ========================================================================
+# max_tokens presets — semantic names for agent-specific output limits
+# ========================================================================
+MAX_TOKENS_TINY: int = 128
+"""Short diagnostic output — layer diagnostics, skill curation."""
+
+MAX_TOKENS_COMPACT: int = 256
+"""Brief responses — meta self-improver."""
+
+MAX_TOKENS_CONCISE: int = 300
+"""Compact analysis — verifier scorer, evolution tracker."""
+
+MAX_TOKENS_SHORT: int = 500
+"""Compact output — optimizer reflection, CoVe, plan critic, trajectory builder."""
+
+MAX_TOKENS_MODERATE: int = 1000
+"""Moderate output — OpenRouter cascade, layer editor, meta critic."""
+
+MAX_TOKENS_STANDARD: int = 2000
+"""Standard agent response — optimizer proposals, CoVe synthesis."""
+
+MAX_TOKENS_EXTENDED: int = 2048
+"""Extended output — goal agent, debate, mixture-of-agents aggregator."""
+
+MAX_TOKENS_DETAILED: int = 3000
+"""Detailed output — optimizer ranking phase."""
+
+MAX_TOKENS_CHAT: int = 4000
+"""Conversational output — chat agent."""
+
+MAX_TOKENS_PLANNING: int = 4096
+"""Structured plan generation — planner agent."""
+
+# MAX_TOKENS_DEFAULT (defined above) = 16384 — API default cap

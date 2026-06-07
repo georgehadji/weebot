@@ -159,7 +159,7 @@ class DebateTool(BaseTool):
                         ),
                     },
                 ],
-                temperature=0.3,
+                temperature=TEMPERATURE_BALANCED,
                 max_tokens=2048,
             )
             data = self._parse_json(response.content or "")

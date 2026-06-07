@@ -70,7 +70,7 @@ class TrajectoryBuilder:
                     {"role": "user", "content": event_digest},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
+                temperature=TEMPERATURE_PRECISE,
                 max_tokens=500,
             )
             analysis = json.loads(response.content)

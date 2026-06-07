@@ -35,7 +35,7 @@ class SessionSummarizer:
         response = await self._llm.chat(
             messages=[{"role": "user", "content": prompt}],
             model=self._model,
-            temperature=0.3,
+            temperature=TEMPERATURE_BALANCED,
         )
         return response.content or "Previous activity occurred."
 

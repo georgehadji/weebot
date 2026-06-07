@@ -84,7 +84,7 @@ class VerifierScorer(ScoringPort):
                     {"role": "user", "content": user_content},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.0,
+                temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=300,
             )
             data = json.loads(response.content)

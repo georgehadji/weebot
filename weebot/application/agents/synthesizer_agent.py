@@ -97,7 +97,7 @@ class SynthesizerAgent:
                     },
                 ],
                 model=model,
-                temperature=0.3,
+                temperature=TEMPERATURE_BALANCED,
                 max_tokens=2048,
             )
 

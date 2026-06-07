@@ -122,7 +122,7 @@ if you performed any checks.
                 tools=self._tools.to_params(),
                 tool_choice="auto",
                 model=self._model,
-                temperature=0.2,
+                temperature=TEMPERATURE_DEFAULT,
             )
 
             # Process tool calls if any

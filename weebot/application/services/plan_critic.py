@@ -70,7 +70,7 @@ class PlanCriticService(PlanCriticPort):
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=500,
-                temperature=0.1,
+                temperature=TEMPERATURE_PRECISE,
             )
 
             raw = response.content.strip()

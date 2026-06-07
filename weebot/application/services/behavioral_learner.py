@@ -212,7 +212,7 @@ class BehavioralLearner(BehavioralLearnerPort):
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=100,
-                temperature=0.1,
+                temperature=TEMPERATURE_PRECISE,
             )
             rule = response.content.strip().strip('"').strip("'")
             return rule if rule.lower() != "null" else None

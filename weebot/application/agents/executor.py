@@ -14,7 +14,7 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.services.conversation_compressor import ConversationCompressor
 from weebot.application.services.step_budget import StepBudget
 from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
-from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE
+from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE_BALANCED
 from weebot.config.model_refs import (
     MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2,
     MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4,
@@ -378,7 +378,7 @@ class ExecutorAgent:
                         tools=self._tools.to_params(),
                         tool_choice="auto",
                         model=model_id,
-                        temperature=TEMPERATURE,
+                        temperature=TEMPERATURE_BALANCED,
                     ),
                     timeout=timeout,
                 )

@@ -95,7 +95,7 @@ class EvolutionTracker:
                     {"role": "user", "content": user_msg},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.3,
+                temperature=TEMPERATURE_BALANCED,
                 max_tokens=300,
             )
             data = json.loads(response.content)

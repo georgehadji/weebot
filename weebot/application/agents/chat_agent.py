@@ -10,7 +10,7 @@ import logging
 from typing import AsyncGenerator, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.config.constants import DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
+from weebot.config.constants import TEMPERATURE_CREATIVE, DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import AgentEvent, MessageEvent
 
@@ -70,7 +70,7 @@ class ChatAgent:
             response = await self._llm.chat(
                 messages=context_messages,
                 model=self._model,
-                temperature=0.7,
+                temperature=TEMPERATURE_CREATIVE,
                 max_tokens=4000,
             )
 

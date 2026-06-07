@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
-from weebot.config.constants import TEMPERATURE
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -189,7 +189,7 @@ class PlannerAgent:
         retry_response = await self._llm.chat(
             messages=retry_memory,
             response_format={"type": "json_object"},
-            temperature=0.0,
+            temperature=TEMPERATURE_DETERMINISTIC,
             max_tokens=4096,
         )
         return self._parse_json_content(retry_response.content)

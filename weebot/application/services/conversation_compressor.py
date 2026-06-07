@@ -133,7 +133,7 @@ class ConversationCompressor:
                 model=self._cheap_model,
                 tools=None,
                 tool_choice=None,
-                temperature=0.0,
+                temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=512,
             )
             return response.content or "(summary unavailable)"

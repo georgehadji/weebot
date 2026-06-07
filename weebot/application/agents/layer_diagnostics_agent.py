@@ -87,7 +87,7 @@ class LayerDiagnosticAgent:
                 },
             ],
             model=model,
-            temperature=0.1,
+            temperature=TEMPERATURE_PRECISE,
             max_tokens=128,
         )
 

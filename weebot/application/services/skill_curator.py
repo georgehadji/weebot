@@ -134,7 +134,7 @@ class SkillCurator:
                     {"role": "user", "content": prompt},
                 ],
                 model=self._cheap_model,
-                temperature=0.0,
+                temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=128,
             )
             recommendation = (response.content or "(no response)").strip()

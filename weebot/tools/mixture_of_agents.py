@@ -166,7 +166,7 @@ class MixtureOfAgentsTool(BaseTool):
                     model=model_id,
                     tools=None,
                     tool_choice=None,
-                    temperature=0.7,
+                    temperature=TEMPERATURE_CREATIVE,
                     max_tokens=1024,
                 )
                 return {"model": model_id, "response": response.content, "error": None}

@@ -74,7 +74,7 @@ class GoalAgent:
                 {"role": "user", "content": f"Decompose this task:\n\n{prompt}"},
             ],
             model=model,
-            temperature=0.2,
+            temperature=TEMPERATURE_DEFAULT,
             max_tokens=2048,
         )
 
