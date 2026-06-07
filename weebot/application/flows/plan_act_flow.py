@@ -41,6 +41,7 @@ from weebot.domain.models.event import (
 )
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session, SessionStatus
+from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.config.constants import DEFAULT_MAX_STEP_REPETITIONS, DEFAULT_MAX_FLOW_ITERATIONS
 
@@ -59,16 +60,20 @@ class PlanActFlow(BaseFlow):
 
     def __init__(
         self,
-        llm: LLMPort,
-        tools: ToolCollection,
-        session: Session,
+        config: PlanActFlowConfig = None,
+        *,
+        # ── Legacy kwargs — supported for backward compatibility ─────
+        # All call sites should migrate to PlanActFlowConfig.
+        llm: LLMPort = None,
+        tools: ToolCollection = None,
+        session: Session = None,
         event_bus: Optional[EventBusPort] = None,
         model: Optional[str] = None,
         skill_prompt: Optional[str] = None,
         episodic_memory = None,
         mediator: Optional[Mediator] = None,
         state_repo: Optional[StateRepositoryPort] = None,
-        steering = None,  # SteeringPort — mid-execution user feedback (Phase 5)
+        steering = None,
         max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
         max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
         auto_terminate_on_plan_complete: bool = True,
@@ -81,65 +86,96 @@ class PlanActFlow(BaseFlow):
         logger: Optional["StructuredLogger"] = None,
         checkpoint_port: Optional["CheckpointPort"] = None,
         profile_name: Optional[str] = None,
-        personality = None,  # PersonalityManager for SOUL.md + WEEBOT_CORE.md
-        agent_role: Optional[str] = None,  # Agent role for per-role model selection
+        personality = None,
+        agent_role: Optional[str] = None,
     ):
-        self._llm = llm
-        self._tools = tools
-        self._session = session
-        self._event_bus = event_bus
-        self._model = model
-        self._mediator = mediator
-        self._state_repo = state_repo
-        self._steering = steering  # May be None if not wired
-        self._truth_binder = truth_binder  # Optional truth-binding response validator
-        self._plan_critic = plan_critic  # Optional plan critic (Capability 3)
+        # Normalize: if config is given use it; otherwise build from legacy kwargs.
+        if config is not None:
+            cfg = config
+        else:
+            cfg = PlanActFlowConfig(
+                llm=llm,
+                tools=tools,
+                session=session,
+                event_bus=event_bus,
+                model=model,
+                skill_prompt=skill_prompt,
+                episodic_memory=episodic_memory,
+                mediator=mediator,
+                state_repo=state_repo,
+                steering=steering,
+                max_step_repetitions=max_step_repetitions,
+                max_iterations=max_iterations,
+                auto_terminate_on_plan_complete=auto_terminate_on_plan_complete,
+                context_aware_model_selection=context_aware_model_selection,
+                max_steps=max_steps,
+                truth_binder=truth_binder,
+                plan_critic=plan_critic,
+                knowledge_graph=knowledge_graph,
+                behavioral_learner=behavioral_learner,
+                logger=logger,
+                checkpoint_port=checkpoint_port,
+                profile_name=profile_name,
+                personality=personality,
+                agent_role=agent_role,
+            )
+
+        self._llm = cfg.llm
+        self._tools = cfg.tools
+        self._session = cfg.session
+        self._event_bus = cfg.event_bus
+        self._model = cfg.model
+        self._mediator = cfg.mediator
+        self._state_repo = cfg.state_repo
+        self._steering = cfg.steering
+        self._truth_binder = cfg.truth_binder
+        self._plan_critic = cfg.plan_critic
         self._plan_critique = None  # Set by CritiquingState
-        self._knowledge_graph = knowledge_graph  # Optional KnowledgeGraphService (Capability 2)
-        self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
-        self._checkpoint_port = checkpoint_port  # Optional checkpoint persistence
-        self._profile_name = profile_name  # SOUL.md profile (e.g. "coder", "researcher")
-        self._agent_role = agent_role  # Agent role for model selection
-        self._personality = personality  # PersonalityManager
-        self._logger = logger
+        self._knowledge_graph = cfg.knowledge_graph
+        self._behavioral_learner = cfg.behavioral_learner
+        self._checkpoint_port = cfg.checkpoint_port
+        self._profile_name = cfg.profile_name
+        self._agent_role = cfg.agent_role
+        self._personality = cfg.personality
+        self._logger = cfg.logger
         self._stdlib_logger = logging.getLogger(__name__)
         self.status = AgentStatus.IDLE
-        self._state: FlowState = None # Will be set in run()
+        self._state: FlowState = None  # Will be set in run()
         self._plan: Optional[Plan] = None
         self._compactor = MemoryCompactor()
         self._plan_history = PlanHistory()
         self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
-        self._episodic_memory = episodic_memory
-        self._max_step_repetitions = max_step_repetitions
-        self._auto_terminate_on_plan_complete = auto_terminate_on_plan_complete
-        self._context_aware_model_selection = context_aware_model_selection
-        self._max_iterations = max_iterations
-        self._step_execution_counts: dict[str, int] = {}  # Track step repetitions
+        self._episodic_memory = cfg.episodic_memory
+        self._max_step_repetitions = cfg.max_step_repetitions
+        self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
+        self._context_aware_model_selection = cfg.context_aware_model_selection
+        self._max_iterations = cfg.max_iterations
+        self._step_execution_counts: dict[str, int] = {}
         self._emit_lock = asyncio.Lock()
 
-        self._skill_prompt = skill_prompt
-        self._tracing_port = None  # lazily resolved
-        self._persistence_adapter = None  # lazily resolved (retry + dead-letter)
+        self._skill_prompt = cfg.skill_prompt
+        self._tracing_port = None
+        self._persistence_adapter = None
         self._planner = PlannerAgent(
             llm=self._llm,
             event_bus=self._event_bus,
             model=self._model,
-            skill_prompt=skill_prompt,
-            facts=session.get_facts(),
-            episodic_memory=episodic_memory,
+            skill_prompt=cfg.skill_prompt,
+            facts=cfg.session.get_facts(),
+            episodic_memory=cfg.episodic_memory,
         )
         executor_kwargs = dict(
             llm=self._llm,
             tools=self._tools,
             event_bus=self._event_bus,
             model=self._model,
-            skill_prompt=skill_prompt,
-            profile_name=profile_name,
-            personality=personality,
-            agent_role=agent_role,
+            skill_prompt=cfg.skill_prompt,
+            profile_name=cfg.profile_name,
+            personality=cfg.personality,
+            agent_role=cfg.agent_role,
         )
-        if max_steps is not None:
-            executor_kwargs["max_steps"] = max_steps
+        if cfg.max_steps is not None:
+            executor_kwargs["max_steps"] = cfg.max_steps
         self._executor = ExecutorAgent(**executor_kwargs)
 
     @property

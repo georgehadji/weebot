@@ -10,7 +10,7 @@ import logging
 from typing import AsyncGenerator, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.config.constants import TEMPERATURE_CREATIVE, MAX_TOKENS_CHAT, MAX_TOKENS_EXTENDED DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
+from weebot.config.constants import TEMPERATURE_CREATIVE, MAX_TOKENS_CHAT, MAX_TOKENS_EXTENDED, DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import AgentEvent, MessageEvent
 

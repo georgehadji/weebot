@@ -112,7 +112,7 @@ class MixtureOfAgentsTool(BaseTool):
             )
 
         aggregator_model = aggregator_model or (
-            MODEL_MOA_REFERENCE[0] if MODEL_MOA_REFERENCE else "moonshotai/kimi-k2.6:free"
+            MODEL_MOA_REFERENCE[0] if MODEL_MOA_REFERENCE else "nvidia/nemotron-3-ultra-550b-a55b:free"
         )
         models = reference_models or _DEFAULT_REFERENCE_MODELS
         semaphore = asyncio.Semaphore(max_concurrency)

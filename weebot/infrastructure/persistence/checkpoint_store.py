@@ -6,6 +6,7 @@ checkpoint per session is retained.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -55,8 +56,29 @@ class SQLiteCheckpointStore(CheckpointPort):
     # ── CheckpointPort implementation ─────────────────────────────────
 
     async def save(self, checkpoint: FlowCheckpoint) -> None:
-        """Persist a checkpoint (upsert — last-write-wins)."""
+        """Persist a checkpoint (upsert — last-write-wins).
+
+        Offloads blocking SQLite I/O to the default thread-pool executor
+        so the asyncio event loop is never blocked by disk writes.
+        """
         json_blob = checkpoint.model_dump_json()
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            self._save_sync,
+            checkpoint.session_id,
+            checkpoint.flow_type,
+            checkpoint.current_state,
+            json_blob,
+        )
+
+    def _save_sync(
+        self,
+        session_id: str,
+        flow_type: str,
+        current_state: str,
+        json_blob: str,
+    ) -> None:
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.execute(
                 """INSERT INTO flow_checkpoints (session_id, flow_type, current_state, checkpoint_json, updated_at)
@@ -66,28 +88,43 @@ class SQLiteCheckpointStore(CheckpointPort):
                      current_state = excluded.current_state,
                      checkpoint_json = excluded.checkpoint_json,
                      updated_at = datetime('now')""",
-                (checkpoint.session_id, checkpoint.flow_type, checkpoint.current_state, json_blob),
+                (session_id, flow_type, current_state, json_blob),
             )
             conn.commit()
 
     async def load(self, session_id: str) -> FlowCheckpoint | None:
-        """Load the checkpoint for a session, or None."""
+        """Load the checkpoint for a session, or None.
+
+        Offloads blocking SQLite I/O to the default thread-pool executor.
+        """
+        loop = asyncio.get_running_loop()
+        row_json = await loop.run_in_executor(None, self._load_sync, session_id)
+        if row_json is None:
+            return None
+        try:
+            return FlowCheckpoint.model_validate_json(row_json)
+        except Exception:
+            _log.exception("Failed to deserialize checkpoint for %s", session_id)
+            return None
+
+    def _load_sync(self, session_id: str) -> str | None:
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT checkpoint_json FROM flow_checkpoints WHERE session_id = ?",
                 (session_id,),
             ).fetchone()
-        if row is None:
-            return None
-        try:
-            return FlowCheckpoint.model_validate_json(row["checkpoint_json"])
-        except Exception:
-            _log.exception("Failed to deserialize checkpoint for %s", session_id)
-            return None
+        return row["checkpoint_json"] if row else None
 
     async def delete(self, session_id: str) -> bool:
-        """Delete a checkpoint. Returns True if one was deleted."""
+        """Delete a checkpoint. Returns True if one was deleted.
+
+        Offloads blocking SQLite I/O to the default thread-pool executor.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._delete_sync, session_id)
+
+    def _delete_sync(self, session_id: str) -> bool:
         with sqlite3.connect(str(self._db_path)) as conn:
             cursor = conn.execute(
                 "DELETE FROM flow_checkpoints WHERE session_id = ?",
@@ -97,7 +134,14 @@ class SQLiteCheckpointStore(CheckpointPort):
             return cursor.rowcount > 0
 
     async def list_checkpointed_sessions(self) -> list[str]:
-        """Return session IDs with saved checkpoints."""
+        """Return session IDs with saved checkpoints.
+
+        Offloads blocking SQLite I/O to the default thread-pool executor.
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._list_sync)
+
+    def _list_sync(self) -> list[str]:
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
                 "SELECT session_id FROM flow_checkpoints ORDER BY updated_at DESC",

@@ -37,6 +37,16 @@ def _get_state_repo() -> Any:
         _container = Container()
         _container.configure_defaults()
     return _container.get(StateRepositoryPort)
+
+
+def _get_llm() -> Any:
+    """Resolve LLMPort from the shared DI container for health checks."""
+    global _container
+    if _container is None:
+        _container = Container()
+        _container.configure_defaults()
+    from weebot.application.ports.llm_port import LLMPort
+    return _container.get(LLMPort)
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -343,9 +353,21 @@ def health(json_output: bool) -> None:
     async def _check() -> None:
         service = HealthCheckService()
         report = await service.check_all()
-        
+
+        # ── Model health ping ────────────────────────────────────
+        from weebot.core.model_health import check_default_model
+        from weebot.config.model_refs import MODEL_CASCADE_TIER1
+        model_ok = await check_default_model(
+            _get_llm(), MODEL_CASCADE_TIER1, timeout=10.0
+        )
+
         if json_output:
-            console.print_json(json.dumps(report.to_dict()))
+            data = report.to_dict()
+            data["model_health"] = {
+                "model": MODEL_CASCADE_TIER1,
+                "reachable": model_ok,
+            }
+            console.print_json(json.dumps(data))
             return
         
         # Color-coded status
@@ -370,6 +392,16 @@ def health(json_output: bool) -> None:
                 f"{comp.latency_ms:.1f}",
                 comp.message,
             )
+
+        # Model health row
+        model_status = HealthStatus.HEALTHY if model_ok else HealthStatus.UNHEALTHY
+        model_color = status_colors.get(model_status, "white")
+        table.add_row(
+            f"Model ({MODEL_CASCADE_TIER1})",
+            f"[{model_color}]{model_status.value}[/{model_color}]",
+            "—",
+            "Reachable" if model_ok else "UNREACHABLE — check API key and credits",
+        )
         
         console.print(table)
         

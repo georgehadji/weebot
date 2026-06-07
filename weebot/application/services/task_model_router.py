@@ -29,12 +29,12 @@ class TaskCategory(Enum):
 CATEGORY_MODEL: dict[TaskCategory, str] = {
     TaskCategory.CODING: "x-ai/grok-build-0.1",
     TaskCategory.FILE_OPS: "minimax/minimax-m3",
-    TaskCategory.RESEARCH: "moonshotai/kimi-k2.6:free",
+    TaskCategory.RESEARCH: "nvidia/nemotron-3-ultra-550b-a55b:free",
     TaskCategory.REVIEW: "x-ai/grok-4.3",
-    TaskCategory.PLANNING: "moonshotai/kimi-k2.6:free",
+    TaskCategory.PLANNING: "nvidia/nemotron-3-ultra-550b-a55b:free",
     TaskCategory.SECURITY: "x-ai/grok-4.3",
     TaskCategory.SUMMARIZATION: "minimax/minimax-m3",
-    TaskCategory.GENERAL: "moonshotai/kimi-k2.6:free",
+    TaskCategory.GENERAL: "nvidia/nemotron-3-ultra-550b-a55b:free",
 }
 
 # ── Keyword patterns ───────────────────────────────────────────────

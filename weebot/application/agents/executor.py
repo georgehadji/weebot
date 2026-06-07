@@ -367,10 +367,28 @@ class ExecutorAgent:
         # First-error tracking per model for diagnostics (Fix 8)
         _first_error: dict[str, str] = {}
 
+        # ── Fast-fail detection ─────────────────────────────────────
+        # If any model returns 404/401/403, the API key or credits are
+        # likely the problem — reduce timeouts for remaining models to
+        # avoid wasting 60-90s per model.
+        _fast_fail_detected: bool = False
+
+        @staticmethod
+        def _is_fast_fail_error(exc: Exception) -> bool:
+            """Return True if *exc* indicates an auth or not-found error."""
+            msg = str(exc).lower()
+            return any(kw in msg for kw in (
+                "404", "401", "403", "not found", "unauthorized",
+                "permission denied", "invalid api key", "resource_not_found",
+            ))
+
         # ── Single chat helper with tiered timeout ──────────────────
         async def _try_chat(model_id: str, timeout: float = 15.0) -> LLMResponse | None:
+            nonlocal _fast_fail_detected
             if _is_tripped(model_id):
                 return None
+            # If fast-fail was already detected, cap timeout at 15s
+            effective_timeout = min(timeout, 15.0) if _fast_fail_detected else timeout
             try:
                 resp = await asyncio.wait_for(
                     self._llm.chat(
@@ -380,7 +398,7 @@ class ExecutorAgent:
                         model=model_id,
                         temperature=TEMPERATURE_BALANCED,
                     ),
-                    timeout=timeout,
+                    timeout=effective_timeout,
                 )
                 if resp and (resp.content or resp.tool_calls):
                     # Success — reset failure counter for this model
@@ -389,23 +407,30 @@ class ExecutorAgent:
                 # Empty response but no exception — don't count as failure
                 return None
             except asyncio.TimeoutError:
-                # Timeout is expected for thinking models — don't record failure
-                logger.debug("Model %s timed out (%.1fs) — retrying", model_id, timeout)
+                logger.debug("Model %s timed out (%.1fs) — retrying", model_id, effective_timeout)
                 return None
             except Exception as exc:
                 if isinstance(exc, Exception) and ErrorClassifier.should_fail_fast(exc):
                     raise
+                # Detect fast-fail on first such error
+                if not _fast_fail_detected and _is_fast_fail_error(exc):
+                    _fast_fail_detected = True
+                    logger.warning(
+                        "Fast-fail detected (%s on %s) — reducing remaining cascade timeouts to 15s",
+                        type(exc).__name__, model_id,
+                    )
                 if model_id not in _first_error:
                     err_detail = str(exc)[:300] if str(exc) else type(exc).__name__
                     _first_error[model_id] = err_detail
                     logger.warning("Model %s first error: %s", model_id, err_detail)
                 else:
-                    logger.debug("Model %s failed (%.1fs timeout): %s", model_id, timeout, exc)
+                    logger.debug("Model %s failed (%.1fs timeout): %s", model_id, effective_timeout, exc)
                 _record_failure(model_id)
                 return None
 
         # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (90s) ──
-        # Thinking models (Kimi, DeepSeek, GLM) need 60-90s for tool-use turns
+        # Thinking models (Kimi, DeepSeek, GLM) need 60-90s for tool-use turns.
+        # If fast-fail was already triggered, these are capped to 15s internally.
         parallel_models: list[str] = []
         for m in (role_primary, task_model, role_fallback1):
             if m and m not in parallel_models:
@@ -425,6 +450,7 @@ class ExecutorAgent:
                     return resp
 
         # ── Phase 2: sequential — role-fallback2 → tier4 (60s timeout) ──
+        # If fast-fail was detected, these are capped to 15s internally.
         remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
                      if m and not _is_tripped(m) and m not in parallel_models]
         for model_id in remaining:
@@ -433,11 +459,98 @@ class ExecutorAgent:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
 
-        # ── All models tripped — raise terminal error (Fix 1) ──
+        # ── Live model refresh fallback (all-404 rescue) ──────────
+        # If every model returned 404/not-found, the model IDs may be stale.
+        # Try fetching current free models from OpenRouter as a last resort.
+        if _fast_fail_detected and _first_error and all(
+            any(kw in (err or "").lower() for kw in ("404", "not found"))
+            for err in _first_error.values()
+        ):
+            rescue_model = await _try_live_model_rescue(messages)
+            if rescue_model is not None:
+                await self._track_usage_and_maybe_compress(rescue_model)
+                return rescue_model
+
+        # ── All models tripped — raise terminal error ──
         raise AllModelsTrippedError(
             f"All models in the cascade have tripped their circuit breakers. "
             f"Check OpenRouter credits at https://openrouter.ai/credits"
         )
+
+    @staticmethod
+    async def _try_live_model_rescue(
+        messages: List[Dict[str, Any]],
+    ) -> LLMResponse | None:
+        """Last-resort: fetch current free models from OpenRouter and try the first.
+
+        Called when ALL configured models return 404 — the model IDs may be
+        globally stale.  Fetches from the OpenRouter API with a short timeout
+        to avoid blocking the cascade further.
+
+        Returns:
+            An ``LLMResponse`` if a live model responds, or ``None``.
+        """
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get("https://openrouter.ai/api/v1/models")
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Live model rescue: failed to fetch model list: %s", exc)
+            return None
+
+        # Prefer free models with tool support, sorted by context length desc
+        free_models: list[dict] = []
+        for m in data.get("data", []):
+            mid = m.get("id", "")
+            if ":free" not in mid:
+                continue
+            params = m.get("supported_parameters", [])
+            if "tools" not in params:
+                continue
+            ctx = m.get("context_length", 0)
+            free_models.append({"id": mid, "ctx": ctx})
+
+        if not free_models:
+            # Fall back to any free model even without tool support
+            for m in data.get("data", []):
+                if ":free" in m.get("id", ""):
+                    free_models.append({"id": m["id"], "ctx": m.get("context_length", 0)})
+
+        if not free_models:
+            logger.warning("Live model rescue: no free models found in OpenRouter listing")
+            return None
+
+        # Sort by context length descending — bigger context = more capable
+        free_models.sort(key=lambda m: m["ctx"], reverse=True)
+        rescue_id = free_models[0]["id"]
+        logger.warning(
+            "Live model rescue: trying %s (from %d live free models)",
+            rescue_id, len(free_models),
+        )
+
+        try:
+            from weebot.application.di import Container
+            from weebot.application.ports.llm_port import LLMPort
+            c = Container()
+            c.configure_defaults()
+            llm = c.get(LLMPort)
+            resp = await asyncio.wait_for(
+                llm.chat(
+                    messages=messages,
+                    model=rescue_id,
+                    temperature=TEMPERATURE_BALANCED,
+                ),
+                timeout=30.0,
+            )
+            if resp and (resp.content or resp.tool_calls):
+                logger.info("Live model rescue SUCCESS with %s", rescue_id)
+                return resp
+        except Exception as exc:
+            logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)
+
+        return None
 
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None

@@ -352,6 +352,16 @@ class BashGuard:
                 if risk_order.index(risk) > risk_order.index(max_risk):
                     max_risk = risk
 
+        # Emit Prometheus counter for security events (best-effort).
+        if max_risk != RiskLevel.SAFE:
+            try:
+                from weebot.infrastructure.observability import metrics as _m
+                _m.bash_guard_events_total.labels(
+                    risk_level=max_risk.value
+                ).inc()
+            except Exception:
+                pass  # metrics are best-effort — never break security evaluation
+
         return max_risk, checks
 
     def is_safe(self, command: str) -> bool:

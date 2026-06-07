@@ -7,6 +7,17 @@ Optimized model tiers for Weebot based on OpenRouter pricing and capabilities.
 Fetched from: https://openrouter.ai/api/v1/models
 Updated: 2026-04-05
 
+**This is the configuration source only.** The canonical cascade execution
+logic lives in ``ExecutorAgent._call_with_cascade()`` at
+``weebot/application/agents/executor.py``.  That method handles parallel
+Phase 1 dispatch, sequential Phase 2 fallback, per-model circuit breakers,
+and 2s timeouts — all driven by the tier constants defined here.
+
+The former ``ModelCascadeService`` in ``model_cascade_integration.py`` was
+removed (2026-04) — it contained a hardcoded placeholder that never called
+a real LLM.  If you need cascade execution, use ``ExecutorAgent`` or
+instantiate an ``OpenRouterAdapter`` directly via the DI container.
+
 Usage:
     from weebot.core.model_cascade_config import MODEL_CASCADE, get_model_for_task
 
@@ -39,18 +50,18 @@ class ModelConfig:
 
 MODEL_CASCADE = {
     "coding": [
-        # FREE Tier - Cost: $0
+        # FREE Tier - Cost: $0 (verified against OpenRouter API 2026-06-07)
         ModelConfig(
-            id="minimax/minimax-m3",
-            name="MiniMax M3",
+            id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            name="NVIDIA Nemotron 3 Ultra",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=131072,
-            timeout_seconds=30,
+            context_length=1000000,
+            timeout_seconds=45,
             max_retries=2,
-            use_for=["coding", "analysis", "chat"],
-            description="MiniMax M3 - free, structured output, strong instruction following.",
+            use_for=["coding", "analysis", "chat", "planning"],
+            description="Nemotron 3 Ultra — FREE, 1M ctx, reasoning, tools. 55B active/550B MoE.",
             recommended=True,
         ),
         ModelConfig(
@@ -82,16 +93,16 @@ MODEL_CASCADE = {
     "analysis": [
         # FREE Tier
         ModelConfig(
-            id="minimax/minimax-m3",
-            name="MiniMax M3",
+            id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            name="NVIDIA Nemotron 3 Ultra",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=131072,
-            timeout_seconds=30,
+            context_length=1000000,
+            timeout_seconds=45,
             max_retries=2,
-            use_for=["coding", "analysis", "chat"],
-            description="MiniMax M3 - free, structured output, strong instruction following.",
+            use_for=["coding", "analysis", "chat", "planning"],
+            description="Nemotron 3 Ultra — FREE, 1M ctx, reasoning. Recommended default.",
             recommended=True,
         ),
         ModelConfig(
@@ -111,25 +122,25 @@ MODEL_CASCADE = {
     "chat": [
         # FREE Tier
         ModelConfig(
-            id="minimax/minimax-m3",
-            name="MiniMax M3",
+            id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            name="NVIDIA Nemotron 3 Ultra",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=131072,
-            timeout_seconds=30,
+            context_length=1000000,
+            timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "analysis", "chat"],
-            description="Best overall free model on OpenRouter.",
+            description="Nemotron 3 Ultra — FREE, 1M ctx. Best overall free model on OpenRouter.",
             recommended=True,
         ),
     ],
 
     "long_context": [
-        # Extended context models
+        # Extended context models (verified against OpenRouter API 2026-06-07)
         ModelConfig(
-            id="google/gemini-2.0-flash-exp:free",
-            name="Gemini 2.0 Flash Exp",
+            id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            name="NVIDIA Nemotron 3 Ultra",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -137,7 +148,7 @@ MODEL_CASCADE = {
             timeout_seconds=60,
             max_retries=2,
             use_for=["long_context", "analysis"],
-            description="1M context window (if available).",
+            description="1M context window, reasoning, free.",
             recommended=True,
         ),
     ],

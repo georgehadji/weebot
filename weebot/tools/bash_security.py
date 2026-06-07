@@ -61,19 +61,31 @@ class CommandSecurityAnalyzer:
         (r'echo\s+[A-Za-z0-9+/]{40,}.*\|', "echo base64 to pipe"),
         (r'\b(echo|printf)\s+.*\|\s*(bash|sh|zsh)', "pipe to shell"),
         (r'<\(.*\)', "process substitution"),
-        
+
         # Remote code execution vectors
-        (r'\b(curl|wget|Invoke-WebRequest|iwr)\s+.*[\|\;\&]\s*\b(bash|sh|zsh|cmd|powershell|pwsh)', 
+        (r'\b(curl|wget|Invoke-WebRequest|iwr)\s+.*[\|\;\&]\s*\b(bash|sh|zsh|cmd|powershell|pwsh)',
          "download pipe to shell"),
         (r'\b(curl|wget)\s+.*\s+-o\s*-\s*\|', "curl/wget output to pipe"),
         (r'\b(source|\.)\s*<\(', "source process substitution"),
         (r'\bexec\s+\b(bash|sh|zsh)', "exec to new shell"),
-        
+
         # Obfuscation techniques
         (r'\\x[0-9a-fA-F]{2}', "hex escape sequences"),
         (r'\$\{.*:#.*\}', "parameter expansion obfuscation"),
         (r'`.*`.*`', "nested backticks"),
         (r'\$\(\$\(', "nested command substitution"),
+
+        # ── PowerShell-specific injection vectors ────────────────────
+        # These patterns cover PowerShell constructs that are NOT matched
+        # by the POSIX/bash patterns above but are equally dangerous.
+        (r'\bInvoke-Expression\b', "PowerShell Invoke-Expression (arbitrary code exec)"),
+        (r'\biex\s+', "PowerShell iex alias (arbitrary code exec)"),
+        (r'Net\.WebClient.*\.DownloadString', "PowerShell remote download+exec"),
+        (r'Start-Process\s+-WindowStyle\s+Hidden', "PowerShell hidden window execution"),
+        (r'New-Object\s+System\.Net\.Sockets\.TCPClient', "PowerShell reverse shell"),
+        (r'\[System\.Reflection\.Assembly\]::Load', "PowerShell reflective assembly load"),
+        (r'\bIWR?\s+.*\|.*iex', "PowerShell Invoke-WebRequest pipe to iex"),
+        (r'curl.*\.ps1.*\|.*iex', "PowerShell curl-to-iex (malware delivery)"),
     ]
     
     # Layer 2: Behavioral indicators

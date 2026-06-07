@@ -33,6 +33,7 @@ _ZERO_ADAPTER_PORTS = {
     "SwarmEventBusPort": "SwarmEventBus exists but does not inherit the port interface",
     "SpeechPort": "WhisperSpeechAdapter exists but is not found by conservative scan (nested package)",
     "TaskQueuePort": "InMemoryTaskQueue exists but is not found by conservative scan (nested package)",
+    "OptimizerPort": "OptimizerAgent inherits OptimizerPort but is not found by conservative scan (deep import path)",
 }
 
 

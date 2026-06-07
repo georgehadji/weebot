@@ -6,6 +6,7 @@ Transport options:
 """
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 try:
@@ -38,6 +39,21 @@ def _get_metrics():
         from weebot.infrastructure.observability import metrics as _m
         _metrics = _m
     return _metrics
+
+class _APIKeyTokenVerifier:
+    """Simple Bearer-token verifier that checks against a static API key.
+
+    Implements the ``TokenVerifier`` protocol expected by FastMCP so that
+    the SSE/HTTP transport rejects unauthenticated requests.
+    """
+
+    def __init__(self, api_key: str) -> None:
+        self._expected = api_key
+
+    async def verify_token(self, token: str) -> bool:
+        """Return True if *token* matches the configured API key."""
+        return token == self._expected
+
 
 _SERVER_INSTRUCTIONS = (
     "weebot is an AI Agent Framework for Windows 11. "
@@ -78,6 +94,7 @@ class WeebotMCPServer:
         tool_discovery: Optional[object] = None,
         cascade_tracker: Optional[object] = None,
         skill_registry: Optional[object] = None,
+        api_key: Optional[str] = None,
     ) -> None:
         self._activity: ActivityStream = activity_stream or ActivityStream()
         self._state_manager = state_manager
@@ -87,12 +104,26 @@ class WeebotMCPServer:
         self._tool_discovery = tool_discovery
         self._cascade_tracker = cascade_tracker
         self._skill_registry = skill_registry
+        # API key for SSE/HTTP transport auth.
+        # Falls back to WEEBOT_MCP_API_KEY env var; None = no auth (backward compat).
+        self._api_key = api_key or os.environ.get("WEEBOT_MCP_API_KEY")
+        # Build a FastMCP TokenVerifier if an API key is set.
+        _token_verifier = None
+        if self._api_key:
+            _token_verifier = _APIKeyTokenVerifier(self._api_key)
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
             host=host,
             port=port,
+            token_verifier=_token_verifier,
         )
+        if self._api_key:
+            import logging
+            logging.getLogger(__name__).info(
+                "MCP server auth enabled (API key from %s)",
+                "explicit param" if api_key else "WEEBOT_MCP_API_KEY env var",
+            )
         self._register_tools()
         self._register_dynamic_tools()
         self._register_resources()
@@ -378,10 +409,8 @@ class WeebotMCPServer:
                 "dependency requirements.  Returns all tools across all roles."
             ),
         )
-        async def tools_resource(**kwargs: object) -> str:
-            # Accept **kwargs so future FastMCP query-param forwarding doesn't crash.
-            role = kwargs.get("role") if kwargs else None
-            return await build_tools_json(tool_discovery, role=str(role) if role else None)
+        async def tools_resource() -> str:
+            return await build_tools_json(tool_discovery, role=None)
 
         @mcp.resource(
             "weebot://costs",

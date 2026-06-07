@@ -3,33 +3,33 @@
 9 allowed models — all explicit provider-qualified IDs.
 ``openrouter/auto`` is FORBIDDEN.
 
-Cascade (4-tier):
-  Tier 1: Kimi K2.6 — FREE, thinking mode, structured output, direct API via KIMI_API_KEY
-  Tier 2: MiniMax M3 — FREE, 1M ctx, multimodal, thinking toggle
+Cascade (4-tier) — verified against OpenRouter API 2026-06-07:
+  Tier 1: NVIDIA Nemotron 3 Ultra — FREE, 1M ctx, reasoning, tools, 55B active/550B MoE
+  Tier 2: MiniMax M3 — paid, 1M ctx, multimodal, thinking toggle
   Tier 3: Grok Build 0.1 — fast coding, agentic SWE
   Tier 4: Qwen 3.7 Max — flagship coding, 1M ctx
 
 Task-specific:
   CODING:        Qwen 3.7 Max + Grok Build 0.1
-  FILE_OPS:      MiniMax M3 (1M ctx, multimodal, cheapest)
-  RESEARCH:      Kimi K2.6 (free, thinking mode) — structured output
+  FILE_OPS:      MiniMax M3 (1M ctx, multimodal)
+  RESEARCH:      Nemotron 3 Ultra (free, reasoning) — structured output
   REVIEW:        Grok 4.3 — reasoning, high factual accuracy
-  PLANNING:      Kimi K2.6 (free, thinking mode) — structured planning
+  PLANNING:      Nemotron 3 Ultra (free, reasoning) — structured planning
   SECURITY:      Grok 4.3 + DeepSeek V4 Pro — reasoning, factual accuracy
   SUMMARIZATION: MiniMax M3 (fast, 1M ctx)
-  GENERAL:       Kimi K2.6 (free, thinking mode)
+  GENERAL:       Nemotron 3 Ultra (free, reasoning)
 """
 from __future__ import annotations
 
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6:free"
-"""Tier 1: Kimi K2.6 — FREE (OpenRouter), structured output, strong research/coding.
-Direct API via KIMI_API_KEY bypasses OpenRouter markup for lower latency.
-Docs: https://platform.kimi.ai/docs/api/"""
+MODEL_CASCADE_TIER1: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+"""Tier 1: NVIDIA Nemotron 3 Ultra — FREE, 1M context, reasoning, tool support.
+55B active parameters out of 550B total (MoE). Hybrid Transformer-Mamba architecture.
+Verified on OpenRouter API 2026-06-07."""
 
-MODEL_BUDGET: str = "moonshotai/kimi-k2.6:free"
+MODEL_BUDGET: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
 """Budget/free model for non-critical operations (compression, curation, defaults)."""
 
 MODEL_CASCADE_TIER2: str = "minimax/minimax-m3"
@@ -44,8 +44,8 @@ MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "moonshotai/kimi-k2.6:free"
-"""Planning: Kimi K2.6 — FREE, structured output, strong research/planning."""
+MODEL_PLANNER: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+"""Planning: Nemotron 3 Ultra — FREE, reasoning, structured planning."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
@@ -56,8 +56,8 @@ MODEL_SUMMARIZE: str = "minimax/minimax-m3"
 # ========================================================================
 # Per-Agent (Role) Model Selection
 # ========================================================================
-MODEL_ROLE_RESEARCHER: str = "moonshotai/kimi-k2.6:free"
-"""Researcher: Kimi K2.6 (thinking) — structured output, broad knowledge, source synthesis."""
+MODEL_ROLE_RESEARCHER: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+"""Researcher: Nemotron 3 Ultra (free, reasoning) — structured output, broad knowledge, source synthesis."""
 
 MODEL_ROLE_ANALYST: str = "deepseek/deepseek-v4-pro"
 """Analyst: DeepSeek V4 Pro — strongest math/reasoning, complex data analysis."""
@@ -68,8 +68,8 @@ MODEL_ROLE_CODER: str = "qwen/qwen3.7-max"
 MODEL_ROLE_REVIEWER: str = "x-ai/grok-4.3"
 """Reviewer: Grok 4.3 — highest factual accuracy, reasoning, security audit."""
 
-MODEL_ROLE_ADMIN: str = "moonshotai/kimi-k2.6:free"
-"""Admin: Kimi K2.6 (thinking) — orchestrates sub-agents, decomposes complex tasks."""
+MODEL_ROLE_ADMIN: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+"""Admin: Nemotron 3 Ultra (free, reasoning) — orchestrates sub-agents, decomposes complex tasks."""
 
 MODEL_ROLE_AUTOMATION: str = "z-ai/glm-5.1"
 """Automation: GLM-5.1 — best instruction following, safety-aware, reliable execution."""
@@ -81,58 +81,58 @@ MODEL_ROLE_DOCUMENTATION: str = "minimax/minimax-m3"
 
 _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
-        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — research synthesis
-        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — 1M ctx, multimodal
-        "qwen/qwen3.7-max",               # fallback 2: Qwen Max — strong comprehension
+        "nvidia/nemotron-3-ultra-550b-a55b:free",  # primary: Nemotron 3 Ultra — free, reasoning
+        "minimax/minimax-m3",                       # fallback 1: MiniMax M3 — 1M ctx, multimodal
+        "qwen/qwen3.7-max",                         # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
-        "deepseek/deepseek-v4-pro",        # primary: DeepSeek V4 — best math/reasoning
-        "moonshotai/kimi-k2.6:free",       # fallback 1: Kimi thinking — analysis
-        "x-ai/grok-4.3",                  # fallback 2: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-pro",                  # primary: DeepSeek V4 — best math/reasoning
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 1: Nemotron 3 Ultra — free, reasoning
+        "x-ai/grok-4.3",                            # fallback 2: Grok 4.3 — factual accuracy
     ],
     "coder": [
-        "qwen/qwen3.7-max",               # primary: Qwen 3.7 Max — flagship coding
-        "x-ai/grok-build-0.1",            # fallback 1: Grok Build — fast agentic SWE
-        "moonshotai/kimi-k2.6:free",       # fallback 2: Kimi thinking — strong coding
+        "qwen/qwen3.7-max",                          # primary: Qwen 3.7 Max — flagship coding
+        "x-ai/grok-build-0.1",                       # fallback 1: Grok Build — fast agentic SWE
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 2: Nemotron 3 Ultra — free
     ],
     "reviewer": [
-        "x-ai/grok-4.3",                  # primary: Grok 4.3 — factual accuracy
-        "deepseek/deepseek-v4-pro",        # fallback 1: DeepSeek V4 — reasoning
-        "z-ai/glm-5.1",                   # fallback 2: GLM-5.1 — instruction following
+        "x-ai/grok-4.3",                             # primary: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-pro",                  # fallback 1: DeepSeek V4 — reasoning
+        "z-ai/glm-5.1",                              # fallback 2: GLM-5.1 — instruction following
     ],
     "admin": [
-        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — orchestration
-        "qwen/qwen3.7-max",               # fallback 1: Qwen Max — broad capability
-        "minimax/minimax-m3",              # fallback 2: MiniMax M3 — free fallback
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # primary: Nemotron 3 Ultra — free, reasoning
+        "qwen/qwen3.7-max",                          # fallback 1: Qwen Max — broad capability
+        "minimax/minimax-m3",                        # fallback 2: MiniMax M3
     ],
     "automation": [
-        "z-ai/glm-5.1",                   # primary: GLM-5.1 — instruction following
-        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — reliable, free
-        "moonshotai/kimi-k2.6:free",       # fallback 2: Kimi thinking
+        "z-ai/glm-5.1",                              # primary: GLM-5.1 — instruction following
+        "minimax/minimax-m3",                        # fallback 1: MiniMax M3 — reliable
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 2: Nemotron 3 Ultra — free
     ],
     "documentation": [
-        "minimax/minimax-m3",              # primary: MiniMax M3 — fast, cheap, 1M ctx
-        "moonshotai/kimi-k2.6:free",       # fallback 1: Kimi thinking
-        "z-ai/glm-5.1",                   # fallback 2: GLM-5.1 — structured output
+        "minimax/minimax-m3",                        # primary: MiniMax M3 — fast, cheap, 1M ctx
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 1: Nemotron 3 Ultra — free
+        "z-ai/glm-5.1",                              # fallback 2: GLM-5.1 — structured output
     ],
     "product_manager": [
-        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
         "minimax/minimax-m3",
         "z-ai/glm-5.1",
     ],
     "planner": [
-        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — structured planning
-        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — free, capable
-        "x-ai/grok-build-0.1",            # fallback 2: Grok Build — agentic
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # primary: Nemotron 3 Ultra — free, reasoning
+        "minimax/minimax-m3",                        # fallback 1: MiniMax M3 — capable
+        "x-ai/grok-build-0.1",                       # fallback 2: Grok Build — agentic
     ],
     "planner_sub": [
-        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
         "minimax/minimax-m3",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
-        "minimax/minimax-m3",              # primary: fast, cheap
-        "moonshotai/kimi-k2.6:free",
+        "minimax/minimax-m3",                        # primary: fast, cheap
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
         "sourceful/riverflow-v2.5-pro:free",
     ],
 }
@@ -159,7 +159,7 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6:free"
+MODEL_DI_DEFAULT: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
 MODEL_FACTORY_OPENAI: str = "minimax/minimax-m3"
@@ -176,7 +176,7 @@ MODEL_DEFAULT_OPENROUTER: str = "minimax/minimax-m3"
 # Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
-    "moonshotai/kimi-k2.6:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
     "minimax/minimax-m3",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
@@ -342,7 +342,7 @@ def describe_image_cascade(use_case: str) -> str:
 # Mixture-of-Agents
 # ========================================================================
 MODEL_MOA_REFERENCE: list[str] = [
-    "moonshotai/kimi-k2.6:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
     "minimax/minimax-m3",
@@ -366,16 +366,16 @@ MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 def get_free_models() -> list[str]:
     """Return the canonical list of free-tier model IDs.
 
-    These are referenced by model_cascade_config.py and model_selection.py.
-    mooonshotai/kimi-k2.6:free is the recommended default.
+    Verified against OpenRouter API 2026-06-07.
+    ``nvidia/nemotron-3-ultra-550b-a55b:free`` is the recommended default.
     """
     return [
-        "minimax/minimax-m3",
-        "qwen/qwen3-coder:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nvidia/nemotron-3.5-content-safety:free",
         "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3.5-content-safety:free",
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "qwen/qwen3-coder:free",
         "qwen/qwen3.6-plus:free",
         "google/gemini-2.0-flash-exp:free",
+        "minimax/minimax-m3",
     ]

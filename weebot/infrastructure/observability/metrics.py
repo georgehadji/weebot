@@ -65,6 +65,31 @@ exceptions_total = Counter(
     ["exception_type"],
 )
 
+# ── MCP server ──
+mcp_connections_total = Counter(
+    "weebot_mcp_connections_total",
+    "Total MCP connections established",
+    ["transport"],  # "stdio" | "sse"
+)
+mcp_rate_limits_hit_total = Counter(
+    "weebot_mcp_rate_limits_hit_total",
+    "Total MCP rate limit rejections",
+    ["tool"],
+)
+
+# ── Security ──
+bash_guard_events_total = Counter(
+    "weebot_bash_guard_events_total",
+    "Commands flagged by BashGuard (suspicious / dangerous / blocked)",
+    ["risk_level"],
+)
+
+# ── Session persistence ──
+session_persistence_failures_total = Counter(
+    "weebot_session_persistence_failures_total",
+    "Session saves that exhausted retries and were dead-lettered",
+)
+
 
 def metrics_text() -> str:
     """Return the Prometheus exposition format text."""

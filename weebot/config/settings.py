@@ -16,7 +16,7 @@ MAX_RETRIES = 3
 CONFIRM_DELETE = True
 BROWSER_TIMEOUT = 30000  # ms
 HEADLESS = False
-MODEL_NAME = "moonshotai/kimi-k2.6:free"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
+MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b:free"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
 TEMPERATURE = 0.2
 POWERSHELL_PRIORITY_KEYWORDS = [
     "file", "delete", "copy", "move", "directory",

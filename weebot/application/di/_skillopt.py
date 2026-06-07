@@ -118,15 +118,17 @@ class SkillOptMixin:
                 return getattr(llm, name)
 
         def factory(session):
-            return PlanActFlow(
+            from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+            cfg = PlanActFlowConfig(
                 llm=self.get(LLMPort),
                 tools=None,
+                session=session,
                 state_repo=self._maybe_get(StateRepositoryPort),
                 event_bus=self._maybe_get(EventBusPort),
-                session=session,
                 max_steps=5,
                 logger=self._maybe_get_str("structured_logger"),
             )
+            return PlanActFlow(cfg)
         return factory
 
     def _create_scorer(self, harness: str):
