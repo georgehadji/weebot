@@ -11,7 +11,11 @@ from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAda
 from weebot.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from weebot.infrastructure.adapters.llm.anthropic_adapter import AnthropicAdapter
 from weebot.infrastructure.adapters.llm.deepseek_adapter import DeepSeekAdapter
+from weebot.infrastructure.adapters.llm.moonshot_adapter import MoonshotAdapter
 from weebot.infrastructure.adapters.llm.openrouter_adapter import OpenRouterAdapter
+from weebot.infrastructure.adapters.llm.direct_or_fallback_adapter import (
+    DirectOrFallbackAdapter,
+)
 
 
 class AdapterFactory:
@@ -210,9 +214,52 @@ class AdapterFactory:
         elif provider == "deepseek":
             # Strip provider prefix: "deepseek/deepseek-v4-flash" → "deepseek-v4-flash"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            return DeepSeekAdapter(
+            direct = DeepSeekAdapter(
                 api_key=api_key,
                 default_model=clean_model,
+            )
+            # If DEEPSEEK_API_KEY is set, try direct first; fall back to OpenRouter
+            if _has_direct_key("DEEPSEEK_API_KEY"):
+                fallback = OpenRouterAdapter(
+                    api_key=api_key,
+                    default_model=model,
+                )
+                return DirectOrFallbackAdapter(
+                    primary=direct,
+                    secondary=fallback,
+                    primary_label="deepseek-direct",
+                )
+            return direct
+
+        elif provider == "moonshot":
+            # Strip OpenRouter prefix: "moonshotai/kimi-k2.6:free" → "kimi-k2.6:free"
+            clean_model = model.split("/", 1)[-1] if "/" in model else model
+            # Drop the ":free" suffix for direct API calls
+            clean_model = clean_model.split(":")[0] if ":" in clean_model else clean_model
+            direct = MoonshotAdapter(
+                api_key=api_key,
+                default_model=clean_model,
+            )
+            # Use Kimi direct API exclusively — no OpenRouter fallback.
+            # KIMI_API_KEY or MOONSHOT_API_KEY is required.
+            if _has_direct_key("KIMI_API_KEY") or _has_direct_key("MOONSHOT_API_KEY"):
+                return direct
+            # No direct key — fall back to OpenRouter (will use OPENROUTER_API_KEY)
+            return OpenRouterAdapter(
+                api_key=api_key,
+                default_model=model,
+            )
+
+        elif provider == "minimax":
+            # Strip OpenRouter prefix: "minimax/minimax-m3" → "MiniMax-M3"
+            clean_model = model.split("/", 1)[-1] if "/" in model else model
+            # MiniMax API supports OpenAI SDK at https://api.minimax.io
+            # and Anthropic SDK at https://api.minimax.io/anthropic
+            # Route through OpenRouter by default (FREE tier).
+            # TODO: Add direct MiniMaxAdapter when MINIMAX_API_KEY is set.
+            return OpenRouterAdapter(
+                api_key=api_key,
+                default_model=model,
             )
 
         elif provider == "openrouter":
@@ -223,23 +270,30 @@ class AdapterFactory:
 
         else:
             raise ValueError(f"Unknown provider: {provider}")
-    
+
     def get_adapter(self, provider: str, model: Optional[str] = None) -> Optional[LLMPort]:
         """Get cached adapter if it exists."""
         cache_key = f"{provider}:{model}:None"
         return self._adapters.get(cache_key)
-    
+
     def clear_cache(self) -> None:
         """Clear the adapter cache."""
         self._adapters.clear()
-    
+
     def list_available_providers(self) -> list[str]:
         """List available provider names."""
         return list(self.DEFAULT_CONFIGS.keys())
-    
+
     def get_provider_config(self, provider: str) -> Dict[str, Any]:
         """Get default configuration for a provider."""
         return self.DEFAULT_CONFIGS.get(provider.lower(), {}).copy()
+
+
+def _has_direct_key(env_var: str) -> bool:
+    """Return True if the given API key env var is set to a non-empty value."""
+    import os as _os
+    val = _os.getenv(env_var, "")
+    return bool(val and val.strip())
 
 
 # Global factory instance for convenience
