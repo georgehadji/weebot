@@ -120,6 +120,27 @@ EXTERNAL_SERVICE_TIMEOUT: int = 30
 EXTERNAL_SERVICE_RETRIES: int = 3
 
 # ========================================================================
+# Verification (CoVe) — two-layer validation
+# ========================================================================
+VERIFICATION_SCORE_MIN: int = 3
+"""Minimum score (1-5) on each verification axis before gate sweep."""
+
+VERIFICATION_AXES: list[str] = ["correctness", "completeness", "specificity", "restraint"]
+"""Axes scored during self-critique. Each axis must score ≥ VERIFICATION_SCORE_MIN."""
+
+VERIFICATION_MAX_REVISION_PASSES: int = 2
+"""Maximum revision passes during self-critique before accepting the output as-is."""
+
+# ========================================================================
+# Plan diversification
+# ========================================================================
+PLAN_DIVERSIFICATION_WINDOW: int = 3
+"""Number of recent plans to check for structural similarity."""
+
+PLAN_SIMILARITY_THRESHOLD: float = 0.7
+"""Maximum allowed tool-sequence similarity (0-1) before diversification hint is triggered."""
+
+# ========================================================================
 # Temperature presets — semantic names for agent-specific tuning
 # ========================================================================
 TEMPERATURE_DETERMINISTIC: float = 0.0

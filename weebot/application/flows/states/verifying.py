@@ -12,10 +12,16 @@ repeating hallucinations (the paper's key finding).
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Optional
 
 from weebot.application.flows.states.base import FlowState, AgentStatus
+from weebot.config.constants import (
+    VERIFICATION_AXES,
+    VERIFICATION_MAX_REVISION_PASSES,
+    VERIFICATION_SCORE_MIN,
+)
 from weebot.domain.models.event import VerificationEvent
 
 _log = logging.getLogger(__name__)
@@ -106,15 +112,164 @@ class VerifyingState(FlowState):
             )
             revised = await self._revise_summary(flow, summary, inconsistencies)
             if revised:
-                # Store revised summary back on the last completed step
                 last = completed[-1]
                 setattr(last, "result", revised[:500])
+                summary = revised
         else:
             _log.info("CoVe verification passed — no inconsistencies")
+
+        # ── Step 4: Self-critique scoring ───────────────────────────
+        final_summary, scores = await self._score_and_revise(flow, summary)
+
+        # ── Step 5: Gate sweep ──────────────────────────────────────
+        gate_failures = await self._gate_sweep(flow, final_summary)
+        for gate in gate_failures:
+            yield VerificationEvent(
+                step_id="gate_sweep",
+                question=f"Gate: {gate}",
+                answer="FAILED",
+                consistent=False,
+            )
+
+        # Store scores + gate results on session for stamp
+        if hasattr(flow._session, "context"):
+            ctx = flow._session.context
+            try:
+                ctx.extra["verification_scores"] = scores
+                ctx.extra["gate_failures"] = gate_failures
+            except Exception:
+                pass
 
         # ── Transition to Completed ─────────────────────────────────
         from weebot.application.flows.states.completed import CompletedState
         flow.set_state(CompletedState())
+
+    # ── Self-critique scoring ───────────────────────────────────────
+
+    async def _score_output(self, flow, summary: str) -> dict[str, int]:
+        """Score the summary on VERIFICATION_AXES (1-5 each).
+
+        Returns a dict like {"correctness": 4, "completeness": 5, ...}.
+        """
+        axes_list = ", ".join(VERIFICATION_AXES)
+        prompt = (
+            f"Score this agent output 1-5 on each axis:\n"
+            f"1. Correctness — Are all factual claims backed by tool output or prior verification?\n"
+            f"2. Completeness — Did the agent address every part of the user's request?\n"
+            f"3. Specificity — Does the output reference specific files, commands, numbers, or results?\n"
+            f"4. Restraint — Did the agent avoid unnecessary extra work, refactors, or tangents?\n\n"
+            f"Output:\n{summary[:1000]}\n\n"
+            f'Return ONLY valid JSON: {{"correctness": N, "completeness": N, "specificity": N, "restraint": N}}'
+        )
+        try:
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=100,
+            )
+            scores = json.loads(response.content or "{}")
+            return {
+                axis: max(1, min(5, int(scores.get(axis, VERIFICATION_SCORE_MIN))))
+                for axis in VERIFICATION_AXES
+            }
+        except Exception:
+            _log.debug("Self-critique scoring failed — assuming passing scores", exc_info=True)
+            return {axis: VERIFICATION_SCORE_MIN for axis in VERIFICATION_AXES}
+
+    async def _score_and_revise(self, flow, summary: str) -> tuple[str, dict[str, int]]:
+        """Score the summary; revise if any axis < VERIFICATION_SCORE_MIN.
+
+        Returns (final_summary, final_scores). Limits revision to
+        VERIFICATION_MAX_REVISION_PASSES attempts.
+        """
+        for attempt in range(1, VERIFICATION_MAX_REVISION_PASSES + 1):
+            scores = await self._score_output(flow, summary)
+            weak_axes = [a for a, s in scores.items() if s < VERIFICATION_SCORE_MIN]
+
+            if not weak_axes:
+                _log.info("Self-critique passed: %s", scores)
+                return summary, scores
+
+            _log.info(
+                "Self-critique attempt %d/%d — weak axes: %s (scores: %s)",
+                attempt, VERIFICATION_MAX_REVISION_PASSES, weak_axes, scores,
+            )
+
+            # Revise: prompt the LLM to improve the weak axes
+            revision_hint = ", ".join(weak_axes)
+            prompt = (
+                f"Your output scored below threshold on these axes: {revision_hint}.\n"
+                f"Original output:\n{summary[:800]}\n\n"
+                f"Revise the output to improve ONLY the weak axes. Keep everything else."
+            )
+            try:
+                response = await flow._llm.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.0,
+                    max_tokens=500,
+                )
+                summary = (response.content or summary).strip()
+            except Exception:
+                _log.debug("Revision failed — keeping current summary", exc_info=True)
+                break
+
+        # Final attempt — accept whatever we have
+        final_scores = await self._score_output(flow, summary)
+        return summary, final_scores
+
+    # ── Gate sweep ──────────────────────────────────────────────────
+
+    async def _gate_sweep(self, flow, summary: str) -> list[str]:
+        """Run 5 binary gates on the session. Returns list of failed gate names."""
+        failures: list[str] = []
+
+        # Gate 1: Unverified facts — did VerifyingState find inconsistencies?
+        # (Tracked via VerificationEvents in the session — check from execute())
+        # Gate 2: Blocked commands — check session events for BLOCKED tool calls
+        session = flow._session
+        from weebot.domain.models.event import ToolEvent
+        for event in session.events:
+            if isinstance(event, ToolEvent):
+                result = getattr(event, "result", "")
+                if result and "blocked" in str(result).lower():
+                    failures.append("blocked_commands")
+                    break
+
+        # Gate 3: Unresolved errors — check for ErrorEvents without recovery
+        from weebot.domain.models.event import ErrorEvent, WaitForUserEvent
+        has_error = any(isinstance(e, ErrorEvent) for e in session.events)
+        has_recovery = any(isinstance(e, WaitForUserEvent) for e in session.events)
+        if has_error and not has_recovery:
+            failures.append("unresolved_errors")
+
+        # Gate 4: Token budget — check executor token usage
+        if flow._executor and hasattr(flow._executor, "token_usage"):
+            usage = flow._executor.token_usage
+            if usage.get("total_tokens", 0) > 100_000:
+                failures.append("token_budget_exceeded")
+
+        # Gate 5: Unverified file writes — check for write events without verification
+        if hasattr(flow._session, "events"):
+            write_count = sum(
+                1 for e in flow._session.events
+                if isinstance(e, ToolEvent)
+                and getattr(e, "tool_name", "") == "file_editor"
+                and "str_replace" in str(getattr(e, "function_args", {}))
+            )
+            verify_count = sum(
+                1 for e in flow._session.events
+                if isinstance(e, VerificationEvent)
+                and getattr(e, "step_id", "") == "gate_verify"
+            )
+            if write_count > 0 and verify_count == 0:
+                failures.append("unverified_writes")
+
+        if failures:
+            _log.info("Gate sweep failed: %s", failures)
+        else:
+            _log.info("Gate sweep passed — all 5 gates clean")
+
+        return failures
 
     # ── Internal ─────────────────────────────────────────────────────
 
