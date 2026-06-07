@@ -375,14 +375,13 @@ class WeebotMCPServer:
             mime_type="application/json",
             description=(
                 "Available agent tools with role access, safety flags, and "
-                "dependency requirements.  Supports ?role= filter query param "
-                "(e.g. weebot://tools?role=researcher)."
+                "dependency requirements.  Returns all tools across all roles."
             ),
         )
-        async def tools_resource() -> str:
-            # FastMCP passes query params as kwargs when the resource is called
-            # with a URI like weebot://tools?role=admin
-            return await build_tools_json(tool_discovery)
+        async def tools_resource(**kwargs: object) -> str:
+            # Accept **kwargs so future FastMCP query-param forwarding doesn't crash.
+            role = kwargs.get("role") if kwargs else None
+            return await build_tools_json(tool_discovery, role=str(role) if role else None)
 
         @mcp.resource(
             "weebot://costs",
