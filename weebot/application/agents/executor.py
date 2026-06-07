@@ -332,23 +332,24 @@ class ExecutorAgent:
     async def _call_with_cascade(
         self, messages: List[Dict[str, Any]], description: str = ""
     ) -> LLMResponse:
-        """4-tier cascade: role-model → tier1 → tier2 → tier3 → tier4.
+        """Per-role cascade: role-primary → role-fallback1 → role-fallback2 → tier3 → tier4.
 
         Priority:
-        1. Agent role model (per ``get_model_for_role()``) — e.g. DeepSeek V4 for analyst
-        2. Task-specific model (per ``_model_for_step()``) — e.g. Grok 4.3 for code review
-        3. Cascade tiers: tier1 → tier2 → tier3 → tier4
+        1. Role cascade (per ``get_model_cascade_for_role()``) — 3 models tailored to agent role
+        2. Task-specific model (per ``_model_for_step()``) — parallel candidate
+        3. Remaining cascade tiers: tier3 → tier4
         """
         is_review = self._is_review_step(description)
         tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
 
-        # ── Per-role model selection ─────────────────────────────────
-        from weebot.config.model_refs import get_model_for_role
-        role_model = get_model_for_role(self._agent_role)
+        # ── Per-role model cascade (primary + 2 fallbacks) ──────────
+        from weebot.config.model_refs import get_model_cascade_for_role
+        role_cascade = get_model_cascade_for_role(self._agent_role)
+        role_primary = role_cascade[0]
+        role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
+        role_fallback2 = role_cascade[2] if len(role_cascade) > 2 else self._TIER3_MODEL
 
         task_model = self._model_for_step(description)
-        # Use role model as primary; task model is an additional parallel candidate
-        model_to_use = role_model
 
         # ── Circuit breaker: skip models that failed 3+ times this session ──
         if not hasattr(self, "_circuit_breaker_failures"):
@@ -366,8 +367,8 @@ class ExecutorAgent:
         # First-error tracking per model for diagnostics (Fix 8)
         _first_error: dict[str, str] = {}
 
-        # ── Single chat helper with tiered timeout (Fix 3) ──
-        async def _try_chat(model_id: str, timeout: float = 5.0) -> LLMResponse | None:
+        # ── Single chat helper with tiered timeout ──────────────────
+        async def _try_chat(model_id: str, timeout: float = 15.0) -> LLMResponse | None:
             if _is_tripped(model_id):
                 return None
             try:
@@ -399,12 +400,11 @@ class ExecutorAgent:
                 _record_failure(model_id)
                 return None
 
-        # ── Phase 1: fire task-model + tier1 in parallel (15s timeout) ──
-        parallel_models: list[str] = [task_model]
-        if task_model != self._TIER1_MODEL:
-            parallel_models.append(self._TIER1_MODEL)
-        if tier2_model not in parallel_models:
-            parallel_models.append(tier2_model)
+        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (15s) ──
+        parallel_models: list[str] = []
+        for m in (role_primary, task_model, role_fallback1):
+            if m and m not in parallel_models:
+                parallel_models.append(m)
 
         tasks = {asyncio.ensure_future(_try_chat(m, timeout=15.0)): m for m in parallel_models}
         if tasks:
@@ -419,9 +419,9 @@ class ExecutorAgent:
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
-        # ── Phase 2: sequential fallback through remaining tiers (10s timeout) ──
-        remaining = [m for m in (self._TIER3_MODEL, self._TIER4_MODEL)
-                     if not _is_tripped(m)]
+        # ── Phase 2: sequential — role-fallback2 → tier4 (10s timeout) ──
+        remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
+                     if m and not _is_tripped(m) and m not in parallel_models]
         for model_id in remaining:
             resp = await _try_chat(model_id, timeout=10.0)
             if resp is not None:

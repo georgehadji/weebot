@@ -77,36 +77,84 @@ MODEL_ROLE_AUTOMATION: str = "z-ai/glm-5.1"
 MODEL_ROLE_DOCUMENTATION: str = "minimax/minimax-m3"
 """Documentation: MiniMax M3 — fast, 1M context, cheap, good for writing/formatting."""
 
-# ── Role → Model lookup ────────────────────────────────────────────
+# ── Role → Model cascade lookup (primary + 2 fallbacks) ────────────
 
-_ROLE_MODEL_MAP: dict[str, str] = {
-    "researcher": MODEL_ROLE_RESEARCHER,
-    "analyst": MODEL_ROLE_ANALYST,
-    "coder": MODEL_ROLE_CODER,
-    "reviewer": MODEL_ROLE_REVIEWER,
-    "admin": MODEL_ROLE_ADMIN,
-    "automation": MODEL_ROLE_AUTOMATION,
-    "documentation": MODEL_ROLE_DOCUMENTATION,
-    "product_manager": MODEL_ROLE_ADMIN,  # PM uses admin model
-    "planner": MODEL_ROLE_RESEARCHER,     # Planner uses Kimi thinking
-    "planner_sub": MODEL_ROLE_RESEARCHER,
-    "designer": MODEL_ROLE_DOCUMENTATION,  # Designer uses fast/cheap model
+_ROLE_MODEL_CASCADE: dict[str, list[str]] = {
+    "researcher": [
+        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — research synthesis
+        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — 1M ctx, multimodal
+        "qwen/qwen3.7-max",               # fallback 2: Qwen Max — strong comprehension
+    ],
+    "analyst": [
+        "deepseek/deepseek-v4-pro",        # primary: DeepSeek V4 — best math/reasoning
+        "moonshotai/kimi-k2.6:free",       # fallback 1: Kimi thinking — analysis
+        "x-ai/grok-4.3",                  # fallback 2: Grok 4.3 — factual accuracy
+    ],
+    "coder": [
+        "qwen/qwen3.7-max",               # primary: Qwen 3.7 Max — flagship coding
+        "x-ai/grok-build-0.1",            # fallback 1: Grok Build — fast agentic SWE
+        "moonshotai/kimi-k2.6:free",       # fallback 2: Kimi thinking — strong coding
+    ],
+    "reviewer": [
+        "x-ai/grok-4.3",                  # primary: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-pro",        # fallback 1: DeepSeek V4 — reasoning
+        "z-ai/glm-5.1",                   # fallback 2: GLM-5.1 — instruction following
+    ],
+    "admin": [
+        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — orchestration
+        "qwen/qwen3.7-max",               # fallback 1: Qwen Max — broad capability
+        "minimax/minimax-m3",              # fallback 2: MiniMax M3 — free fallback
+    ],
+    "automation": [
+        "z-ai/glm-5.1",                   # primary: GLM-5.1 — instruction following
+        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — reliable, free
+        "moonshotai/kimi-k2.6:free",       # fallback 2: Kimi thinking
+    ],
+    "documentation": [
+        "minimax/minimax-m3",              # primary: MiniMax M3 — fast, cheap, 1M ctx
+        "moonshotai/kimi-k2.6:free",       # fallback 1: Kimi thinking
+        "z-ai/glm-5.1",                   # fallback 2: GLM-5.1 — structured output
+    ],
+    "product_manager": [
+        "moonshotai/kimi-k2.6:free",
+        "minimax/minimax-m3",
+        "z-ai/glm-5.1",
+    ],
+    "planner": [
+        "moonshotai/kimi-k2.6:free",       # primary: Kimi thinking — structured planning
+        "minimax/minimax-m3",              # fallback 1: MiniMax M3 — free, capable
+        "x-ai/grok-build-0.1",            # fallback 2: Grok Build — agentic
+    ],
+    "planner_sub": [
+        "moonshotai/kimi-k2.6:free",
+        "minimax/minimax-m3",
+        "x-ai/grok-build-0.1",
+    ],
+    "designer": [
+        "minimax/minimax-m3",              # primary: fast, cheap
+        "moonshotai/kimi-k2.6:free",
+        "sourceful/riverflow-v2.5-pro:free",
+    ],
 }
 
 
-def get_model_for_role(role: str | None) -> str:
-    """Return the optimal model for an agent role.
+def get_model_cascade_for_role(role: str | None) -> list[str]:
+    """Return the model cascade (primary + 2 fallbacks) for an agent role.
 
     Args:
-        role: Agent role name (e.g. \"coder\", \"researcher\", \"admin\").
-              ``None`` or unknown roles fall back to ``MODEL_CASCADE_TIER1``.
+        role: Agent role name (e.g. \"coder\", \"researcher\").
+              ``None`` or unknown roles fall back to the default cascade.
 
     Returns:
-        OpenRouter-qualified model ID string.
+        List of 3 OpenRouter-qualified model IDs: [primary, fallback1, fallback2].
     """
-    if role and role in _ROLE_MODEL_MAP:
-        return _ROLE_MODEL_MAP[role]
-    return MODEL_CASCADE_TIER1
+    if role and role in _ROLE_MODEL_CASCADE:
+        return list(_ROLE_MODEL_CASCADE[role])
+    return [
+        MODEL_CASCADE_TIER1,
+        MODEL_CASCADE_TIER2,
+        MODEL_CASCADE_TIER3,
+    ]
 
 # ========================================================================
 # DI container + factory defaults
