@@ -404,13 +404,14 @@ class ExecutorAgent:
                 _record_failure(model_id)
                 return None
 
-        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (45s) ──
+        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (90s) ──
+        # Thinking models (Kimi, DeepSeek, GLM) need 60-90s for tool-use turns
         parallel_models: list[str] = []
         for m in (role_primary, task_model, role_fallback1):
             if m and m not in parallel_models:
                 parallel_models.append(m)
 
-        tasks = {asyncio.ensure_future(_try_chat(m, timeout=45.0)): m for m in parallel_models}
+        tasks = {asyncio.ensure_future(_try_chat(m, timeout=90.0)): m for m in parallel_models}
         if tasks:
             done, _pending = await asyncio.wait(
                 tasks.keys(), return_when=asyncio.FIRST_COMPLETED
@@ -423,11 +424,11 @@ class ExecutorAgent:
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
-        # ── Phase 2: sequential — role-fallback2 → tier4 (30s timeout) ──
+        # ── Phase 2: sequential — role-fallback2 → tier4 (60s timeout) ──
         remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
                      if m and not _is_tripped(m) and m not in parallel_models]
         for model_id in remaining:
-            resp = await _try_chat(model_id, timeout=30.0)
+            resp = await _try_chat(model_id, timeout=60.0)
             if resp is not None:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
