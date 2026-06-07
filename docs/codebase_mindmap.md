@@ -1,6 +1,6 @@
 # ARCHITECTURE MINDMAP
 
-> Last updated: 2026-03-04 — updated after 10-enhancement implementation (Sprints 1-6): MCP auto-registration, OTel/Parquet sinks, Flow Checkpoint/Resume, Flow Serializer, Cascade Tracker, Bash Guard CLI, Doctor --fix, Ops Console API, Skill Marketplace resource
+> Last updated: 2026-03-04 — updated after SOUL.md identity support (E11-E17): SoulProfile model, SoulProviderPort, FileSystemSoulProvider, PersonalityManager dual-source extension, CLI soul commands
 
 ---
 
@@ -65,6 +65,7 @@
   - `legacy_models.py` — Pre-Clean-Arch models: `Task`, `Project`, `Checkpoint`, `AgentConfig`, `Memory`, `Role`, `AgentState`, `ToolCallSpec`, `Message` (kept for backward compat)
   - `checkpoint.py` — `FlowCheckpoint`, `StepCheckpoint` (mid-flow state serialization for crash recovery)
   - `tool_manifest.py` — `ToolManifest` (tool metadata: name, description, roles, mcp_safe, mcp_requires_confirm)
+  - `soul.py` — `SoulProfile` (free-form agent identity loaded from SOUL.md; Hermes-compatible persona files)
   - `exceptions.py` — Typed domain exceptions
 - **Dependencies:**
   - → External: pydantic v2 (model validation and serialisation only)
@@ -93,6 +94,7 @@
   - `analytics_port.py` — `AnalyticsSinkPort` ABC (`push(event)`, `flush()`) — Enhancement 6 (10-enhancements)
   - `checkpoint_port.py` — `CheckpointPort` ABC (`save()`, `load()`, `delete()`, `list_checkpointed_sessions()`) — Enhancement 8
   - `tool_discovery_port.py` — `ToolDiscoveryPort` ABC (`list_tools(role)`, `get_tool(name)`) — Enhancement 1
+  - `soul_provider_port.py` — `SoulProviderPort` ABC (`load(profile)`, `list_profiles()`, `seed(profile)`) — Enhancement 11 (SOUL.md)
 - **Dependencies:**
   - → Domain: `AgentEvent`, `Session`, `LLMResponse`
 
@@ -278,6 +280,7 @@
 - **New — `skill_index_github.py`:** `GitHubSkillIndexAdapter` implements `SkillIndexPort`; fetches JSON index from configurable URL; client-side search; streaming download with `_MAX_DOWNLOAD_BYTES=50MB` ceiling; SHA-256 verification and tarball extraction. Enhancement 6 (OpenClaw).
 - **New — `speech/whisper_adapter.py`:** `WhisperSpeechAdapter` implements `SpeechPort`; Whisper STT + pyttsx3 TTS; lazy dependency loading. Enhancement 1 (OpenClaw).
 - **New — `tool_discovery.py`:** `ToolDiscoveryAdapter` implements `ToolDiscoveryPort`; introspects all `BaseTool.__subclasses__()`; merges class-level metadata with manual manifest overrides; applies role filtering via `RoleBasedToolRegistry`. — Enhancement 1 (10-enhancements)
+- **New — `soul_provider.py`:** `FileSystemSoulProvider` implements `SoulProviderPort`; loads SOUL.md from `~/.weebot/profiles/<name>/SOUL.md` or `./SOUL.md`; auto-seeds from template on first run; scans for prompt injection patterns before injection. — Enhancement 11 (SOUL.md)
 
 ---
 
@@ -495,6 +498,7 @@
   - `main.py` — Commands: `create` (deprecated), `list`, `status`, `run`, `resume`, `checkpoint`, `delete`, `export`, `costs`, `monitor`, `init`, `doctor` (with `--fix`/`--dry-run`), `health`, `flow` (sub-group: run/list/resume/cancel), `agents` (sub-group: list/route/sync-claude), `behavior`, `guard`, `analytics`.
   - `commands/guard.py` — `guard check` command: evaluates shell commands via `BashGuard`; exits 0 (SAFE), 1 (SUSPICIOUS), 2 (DANGEROUS), 3 (BLOCKED); supports `--json`, `--verbose`, stdin pipe.
   - `commands/analytics.py` — `analytics query <sql>` / `analytics dashboard`: DuckDB queries over Parquet event exports with Rich table/dashboard output.
+  - `commands/soul.py` — `soul show/edit/seed/list`: manage SOUL.md agent identity files. `show` displays current persona; `edit` opens in $EDITOR; `seed` creates from template; `list` shows all profiles. — Enhancement 14
 - **Dependencies:**
   - → Application: `Container`, `get_container()`, `TaskRunner`
   - → Core: `AgentFactory`, `AgentContext`
@@ -521,6 +525,7 @@
   - `workflow_tracer.py` — Records tool-call traces for observability.
   - `alerting.py` — Alert rule evaluation.
   - `model_cascade_tracker.py` — `ModelCascadeTracker`: thread-safe ring buffer of `CascadeDecision` records (model_name, tier, outcome, latency_ms, token_count, cost_estimate); `summary()` returns per-tier stats and cascade hit rate. Used by `weebot://costs` MCP resource. — Enhancement 9
+  - `personality_manager.py` — `PersonalityManager`: dual-source identity assembly. Slot #1: SOUL.md (free-form persona via `SoulProviderPort`, hot-reloaded). Slot #2: WEEBOT_CORE.md (XML-tagged safeguards, role-filtered via `RoleSectionMapping`). `refresh()` invalidates both caches. — Enhancement 13 (SOUL.md)
 - **Dependencies:**
   - → Domain: `AgentEvent` (only for emission)
   - → Utils: `RetryWithBackoff`
@@ -998,13 +1003,14 @@ graph TD
 | **E2E Persistence Tests** | 2026-07 | 5 tests in `tests/e2e/test_persistence.py`, all passing |
 | **Security Penetration Tests** | 2026-07 | 5 tests in `tests/integration/test_security_penetration.py`, all passing |
 | **Event Bridge Contract Tests** | 2026-07 | 6 tests in `tests/integration/test_event_bridge_contract.py`, all passing |
+| **SOUL.md Identity Support** | 2026-03 | E11-E17 — `SoulProfile` model, `SoulProviderPort`, `FileSystemSoulProvider`, dual-source `PersonalityManager` (Slot #1 SOUL.md + Slot #2 WEEBOT_CORE.md), CLI `soul` commands, per-profile SOUL.md with auto-seed and injection scanning |
 
 ### Key Metrics
 
 | Metric | Value |
 |--------|-------|
 | Tests total | ~1,050+ (72 files) |
-| New enhancement tests | 11 pass (bash guard CLI) |
+| New enhancement tests | 11 pass (bash guard CLI) + SOUL.md identity pipeline |
 | Architecture fitness tests | 18 pass, 1 skip |
 | E2E persistence tests | 5 pass |
 | Security penetration tests | 5 pass |
