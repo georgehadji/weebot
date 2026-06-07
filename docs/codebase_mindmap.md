@@ -1,6 +1,6 @@
 # ARCHITECTURE MINDMAP
 
-> Last updated: 2025-07-17 — updated after OpenClaw enhancements (1-6), Harness integration (H1-H6), and audit bug fixes (B1-B10)
+> Last updated: 2026-03-04 — updated after 10-enhancement implementation (Sprints 1-6): MCP auto-registration, OTel/Parquet sinks, Flow Checkpoint/Resume, Flow Serializer, Cascade Tracker, Bash Guard CLI, Doctor --fix, Ops Console API, Skill Marketplace resource
 
 ---
 
@@ -63,6 +63,8 @@
   - `services/working_memory.py` — `WorkingMemory` (key-value fact store for session context)
   - `services/human_interaction.py` — `HumanInteraction` service
   - `legacy_models.py` — Pre-Clean-Arch models: `Task`, `Project`, `Checkpoint`, `AgentConfig`, `Memory`, `Role`, `AgentState`, `ToolCallSpec`, `Message` (kept for backward compat)
+  - `checkpoint.py` — `FlowCheckpoint`, `StepCheckpoint` (mid-flow state serialization for crash recovery)
+  - `tool_manifest.py` — `ToolManifest` (tool metadata: name, description, roles, mcp_safe, mcp_requires_confirm)
   - `exceptions.py` — Typed domain exceptions
 - **Dependencies:**
   - → External: pydantic v2 (model validation and serialisation only)
@@ -88,6 +90,9 @@
   - `speech_port.py` — `SpeechPort` ABC (`transcribe()`, `synthesize()`) — Enhancement 1 (OpenClaw)
   - `desktop_port.py` — `DesktopPort` ABC (`start()`, `stop()`, `set_status()`, `show_overlay()`, `show_response()`) — Enhancement 4 (OpenClaw)
   - `skill_index_port.py` — `SkillIndexPort` ABC (`fetch_index()`, `search()`, `download()`) — Enhancement 6 (OpenClaw)
+  - `analytics_port.py` — `AnalyticsSinkPort` ABC (`push(event)`, `flush()`) — Enhancement 6 (10-enhancements)
+  - `checkpoint_port.py` — `CheckpointPort` ABC (`save()`, `load()`, `delete()`, `list_checkpointed_sessions()`) — Enhancement 8
+  - `tool_discovery_port.py` — `ToolDiscoveryPort` ABC (`list_tools(role)`, `get_tool(name)`) — Enhancement 1
 - **Dependencies:**
   - → Domain: `AgentEvent`, `Session`, `LLMResponse`
 
@@ -180,6 +185,7 @@
   - `trajectory_exporter.py` — `TrajectoryExporter`: serialises trajectories for external consumption.
   - `lr_scheduler.py` — `LearningRateScheduler`: CosineAnnealing-style edit acceptance decay for SkillOpt.
   - `complex_task_executor.py`, `information_synthesis.py`, `multi_source_research.py`, `nlp_understanding.py`, `strategy_adaptation.py`, `source_credibility_assessment.py` — Domain services ported from hermes-agent patterns (June 2026).
+  - `flow_serializer.py` — `FlowSerializer`: converts completed sessions to Mermaid diagrams, JSON execution traces, and LangGraph definitions — Enhancement 3
 - **Dependencies:**
   - → Ports: `LLMPort`, `StateRepositoryPort`, `EventBusPort`
   - → Domain: `Session`, `Skill`, `TrajectorySummary`
@@ -271,6 +277,7 @@
 - **New — `windows_desktop.py`:** `WindowsDesktopAdapter` implements `DesktopPort`; uses pystray (tray icon), tkinter (overlay window), keyboard (global hotkey Win+Alt+W); thread-safe via `_icon_lock` + `_icon_ready` event. Enhancement 4 (OpenClaw).
 - **New — `skill_index_github.py`:** `GitHubSkillIndexAdapter` implements `SkillIndexPort`; fetches JSON index from configurable URL; client-side search; streaming download with `_MAX_DOWNLOAD_BYTES=50MB` ceiling; SHA-256 verification and tarball extraction. Enhancement 6 (OpenClaw).
 - **New — `speech/whisper_adapter.py`:** `WhisperSpeechAdapter` implements `SpeechPort`; Whisper STT + pyttsx3 TTS; lazy dependency loading. Enhancement 1 (OpenClaw).
+- **New — `tool_discovery.py`:** `ToolDiscoveryAdapter` implements `ToolDiscoveryPort`; introspects all `BaseTool.__subclasses__()`; merges class-level metadata with manual manifest overrides; applies role filtering via `RoleBasedToolRegistry`. — Enhancement 1 (10-enhancements)
 
 ---
 
@@ -303,9 +310,9 @@
 ---
 
 ### Infrastructure — Persistence `weebot/infrastructure/persistence/`
-- **Responsibility:** All SQLite-backed storage (sessions, skills, trajectories, summaries, tool definitions, responses).
+- **Responsibility:** All SQLite-backed storage (sessions, skills, trajectories, summaries, tool definitions, responses, checkpoints).
 - **Type:** Infrastructure
-- **Exports:** `SQLiteStateRepository`, `SkillStore`, `TrajectoryRepository`, `SQLiteConnectionPool`, `ResponseCache`
+- **Exports:** `SQLiteStateRepository`, `SkillStore`, `TrajectoryRepository`, `SQLiteConnectionPool`, `ResponseCache`, `SQLiteCheckpointStore`
 - **Internal Structure:**
   - `connection_pool.py` — `SQLiteConnectionPool`: 1 write connection (exclusive) + N read connections; WAL mode; async context managers `acquire_read()` / `acquire_write()`.
   - `sqlite_state_repo.py` — `SQLiteStateRepository` implements `StateRepositoryPort`; table: `sessions (id, user_id, agent_id, status, title, events_json, context_json, created_at, updated_at)`.
@@ -316,6 +323,7 @@
   - `response_cache.py` — `ResponseCache`: caches raw tool/LLM responses.
   - `in_memory_state_repo.py` — `InMemoryStateRepository`: test double.
   - `legacy_project_adapter.py` — bridges old `Project` model to new `Session` model.
+  - `checkpoint_store.py` — `SQLiteCheckpointStore` implements `CheckpointPort`; table: `flow_checkpoints (session_id, flow_type, current_state, checkpoint_json)`; WAL mode, upsert on conflict. — Enhancement 8
 - **Dependencies:**
   - → Port: `StateRepositoryPort`, `SummaryRepoPort`, `ToolRepositoryPort`
   - → Domain: `Session`, `Skill`, `TrajectorySummary`
@@ -398,14 +406,27 @@
 ---
 
 ### Infrastructure — Observability `weebot/infrastructure/observability/`
-- **Responsibility:** Health checks and Prometheus metrics.
+- **Responsibility:** Health checks, Prometheus metrics, and OpenTelemetry export.
 - **Type:** Infrastructure
-- **Exports:** `HealthCheckService`, `HealthReport`, Prometheus counters/gauges
+- **Exports:** `HealthCheckService`, `HealthReport`, Prometheus counters/gauges, `OtelActivitySink`
 - **Internal Structure:**
   - `health_checks.py` — `HealthCheckService`: per-component `ComponentHealth`; aggregate `HealthReport`; status enum: HEALTHY / DEGRADED / UNHEALTHY / UNKNOWN.
   - `metrics.py` — Prometheus counters: `events_published_total`, `tool_calls_total`, `llm_requests_total`, `task_runner_sessions_active`, `circuit_breaker_state`.
+  - `otel_sink.py` — `OtelActivitySink` implements `AnalyticsSinkPort`; converts `ActivityEvent` → OTel spans via OTLP gRPC. Graceful no-op when `opentelemetry` not installed or `WEEBOT_OTEL_ENDPOINT` unset. — Enhancement 2
 - **Dependencies:**
   - → External: `prometheus_client`
+
+---
+
+### Infrastructure — Analytics `weebot/infrastructure/analytics/`
+- **Responsibility:** Long-term event analytics via Parquet export.
+- **Type:** Infrastructure
+- **Exports:** `ParquetActivitySink`
+- **Internal Structure:**
+  - `parquet_sink.py` — `ParquetActivitySink` implements `AnalyticsSinkPort`; buffers events in-memory, flushes to partitioned Parquet (`{dir}/{project_id}/date={ds}/events.parquet`). Graceful no-op when `pyarrow` not installed. — Enhancement 6
+- **Dependencies:**
+  - → Port: `AnalyticsSinkPort`
+  - → External: `pyarrow` (optional)
 
 ---
 
@@ -447,6 +468,7 @@
   - `routers/chat_router.py` — Chat endpoint (non-planning flows).
   - `websocket.py` — `ConnectionManager`: broadcasts session events to all subscribed WebSocket clients.
   - `routers/discord_webhook.py` — `POST /api/gateway/discord/interactions`; Ed25519 signature verification; PING/PONG; `DiscordAdapter` integration — Enhancement 3 (OpenClaw)
+  - `routers/ops_router.py` — `GET /api/sessions/active` (running sessions with step/tool progress), `GET /api/sessions/{id}/plan-viz` (DAG node/edge plan data), `GET /api/costs/summary` (cascade stats via `GetCostSummaryQuery`). Dispatches through Mediator CQRS. — Enhancement 4
   - `schemas/` — Pydantic request/response schemas for API contracts.
 - **Dependencies:**
   - → Application: `Container`, `TaskRunner`, `StateRepositoryPort`
@@ -466,11 +488,13 @@
 
 ### Interfaces — CLI (top-level) `cli/`
 - **Responsibility:** Primary Click CLI with all user-facing commands.
-- **New commands:** `companion` (system tray + hotkey), `skill list` / `skill install` / `skill update` (Enhancement 2+6), `skill test` (H4 trigger validation), `harness generate` (H3 team architecture generation).
+- **New commands:** `companion` (system tray + hotkey), `skill list` / `skill install` / `skill update` (Enhancement 2+6), `skill test` (H4 trigger validation), `harness generate` (H3 team architecture generation), **`guard check`** (shell safety evaluator, 3 output modes — Enhancement 5), **`analytics query`/`dashboard`** (DuckDB over Parquet — Enhancement 6), **`doctor --fix`/`--dry-run`** (auto-repair workspace/DB/.env — Enhancement 10).
 - **Type:** Interface
 - **Exports:** `cli` Click group
 - **Internal Structure:**
-  - `main.py` — Commands: `create` (deprecated), `list`, `status`, `run`, `resume`, `checkpoint`, `delete`, `export`, `costs`, `monitor`, `init`, `doctor`, `health`, `flow` (sub-group: run/list/resume/cancel), `agents` (sub-group: list/route/sync-claude), `behavior`.
+  - `main.py` — Commands: `create` (deprecated), `list`, `status`, `run`, `resume`, `checkpoint`, `delete`, `export`, `costs`, `monitor`, `init`, `doctor` (with `--fix`/`--dry-run`), `health`, `flow` (sub-group: run/list/resume/cancel), `agents` (sub-group: list/route/sync-claude), `behavior`, `guard`, `analytics`.
+  - `commands/guard.py` — `guard check` command: evaluates shell commands via `BashGuard`; exits 0 (SAFE), 1 (SUSPICIOUS), 2 (DANGEROUS), 3 (BLOCKED); supports `--json`, `--verbose`, stdin pipe.
+  - `commands/analytics.py` — `analytics query <sql>` / `analytics dashboard`: DuckDB queries over Parquet event exports with Rich table/dashboard output.
 - **Dependencies:**
   - → Application: `Container`, `get_container()`, `TaskRunner`
   - → Core: `AgentFactory`, `AgentContext`
@@ -496,6 +520,7 @@
   - `dashboard.py` — Live metrics dashboard (Rich TUI).
   - `workflow_tracer.py` — Records tool-call traces for observability.
   - `alerting.py` — Alert rule evaluation.
+  - `model_cascade_tracker.py` — `ModelCascadeTracker`: thread-safe ring buffer of `CascadeDecision` records (model_name, tier, outcome, latency_ms, token_count, cost_estimate); `summary()` returns per-tier stats and cascade hit rate. Used by `weebot://costs` MCP resource. — Enhancement 9
 - **Dependencies:**
   - → Domain: `AgentEvent` (only for emission)
   - → Utils: `RetryWithBackoff`
@@ -556,8 +581,8 @@
 - **Type:** Interface
 - **Exports:** `WeebotMCPServer`
 - **Internal Structure:**
-  - `server.py` — `WeebotMCPServer`: wraps `FastMCP`; registers tools (`bash`, `python_execute`, `web_search`, `file_editor`, `ping`) and resources (`weebot://activity`, `weebot://state`, `weebot://schedule`, `weebot://products`).
-  - `resources.py` — `build_activity_json()`, `build_roadmap_json()`, `build_schedule_json()`, `build_state_json()`.
+  - `server.py` — `WeebotMCPServer`: wraps `FastMCP`; auto-registers 36 tools via `ToolDiscoveryAdapter`; serves 7 resources: (`weebot://activity`, `weebot://state`, `weebot://schedule`, `weebot://products`, **`weebot://tools`**, **`weebot://costs`**, **`weebot://skills`**).
+  - `resources.py` — `build_activity_json()`, `build_roadmap_json()`, `build_schedule_json()`, `build_state_json()`, `build_tools_json()`, `build_costs_json()`, `build_skills_json()`.
 - **Dependencies:**
   - → Tools: `BashTool`, `PythonExecuteTool`, `WebSearchTool`, `FileEditorTool`
   - → Core: `ActivityStream`, `RateLimiter`
@@ -978,7 +1003,8 @@ graph TD
 
 | Metric | Value |
 |--------|-------|
-| Tests total | ~1,000+ (71 files) |
+| Tests total | ~1,050+ (72 files) |
+| New enhancement tests | 11 pass (bash guard CLI) |
 | Architecture fitness tests | 18 pass, 1 skip |
 | E2E persistence tests | 5 pass |
 | Security penetration tests | 5 pass |

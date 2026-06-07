@@ -33,6 +33,9 @@ from weebot.application.cqrs.queries import (
     SearchSessionsQuery,
     GetSimilarSessionsQuery,
     GetActiveTasksQuery,
+    GetActiveSessionsQuery,
+    GetPlanVisualizationQuery,
+    GetCostSummaryQuery,
 )
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.models.tool_collection import ToolCollection
