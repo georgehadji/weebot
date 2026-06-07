@@ -54,6 +54,8 @@ class OpenAIAdapter(LLMPort):
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> LLMResponse:
         kwargs: Dict[str, Any] = {
             "model": model or self._default_model,
@@ -80,6 +82,12 @@ class OpenAIAdapter(LLMPort):
             # Default cap to stay within OpenRouter free/credit limits.
             # Raise if your OpenRouter account has more credits, lower for tighter budget.
             kwargs["max_tokens"] = 16384
+
+        # DeepSeek thinking mode: extra_body and reasoning_effort
+        if extra_body is not None:
+            kwargs["extra_body"] = extra_body
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
 
         response = None
         try:
