@@ -85,7 +85,7 @@ class VerifierScorer(ScoringPort):
                 ],
                 response_format={"type": "json_object"},
                 temperature=TEMPERATURE_DETERMINISTIC,
-                max_tokens=300,
+                max_tokens=MAX_TOKENS_CONCISE,
             )
             data = json.loads(response.content)
             score = float(data.get("score", 0.0))

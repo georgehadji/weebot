@@ -71,7 +71,7 @@ class TrajectoryBuilder:
                 ],
                 response_format={"type": "json_object"},
                 temperature=TEMPERATURE_PRECISE,
-                max_tokens=500,
+                max_tokens=MAX_TOKENS_SHORT,
             )
             analysis = json.loads(response.content)
         except Exception as exc:

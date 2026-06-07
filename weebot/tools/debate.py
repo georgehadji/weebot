@@ -160,7 +160,7 @@ class DebateTool(BaseTool):
                     },
                 ],
                 temperature=TEMPERATURE_BALANCED,
-                max_tokens=2048,
+                max_tokens=MAX_TOKENS_EXTENDED,
             )
             data = self._parse_json(response.content or "")
         except Exception as exc:

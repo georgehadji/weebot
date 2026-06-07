@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
-from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC, MAX_TOKENS_PLANNING
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -190,7 +190,7 @@ class PlannerAgent:
             messages=retry_memory,
             response_format={"type": "json_object"},
             temperature=TEMPERATURE_DETERMINISTIC,
-            max_tokens=4096,
+            max_tokens=MAX_TOKENS_PLANNING,
         )
         return self._parse_json_content(retry_response.content)
 
@@ -242,8 +242,8 @@ class PlannerAgent:
         response = await self._llm.chat(
             messages=self._memory,
             response_format={"type": "json_object"},
-            temperature=TEMPERATURE,
-            max_tokens=4096,
+            temperature=TEMPERATURE_DETERMINISTIC,
+            max_tokens=MAX_TOKENS_PLANNING,
         )
 
         self._memory.append({"role": "assistant", "content": response.content})
@@ -285,8 +285,8 @@ class PlannerAgent:
         response = await self._llm.chat(
             messages=update_memory,
             response_format={"type": "json_object"},
-            temperature=TEMPERATURE,
-            max_tokens=4096,
+            temperature=TEMPERATURE_DETERMINISTIC,
+            max_tokens=MAX_TOKENS_PLANNING,
         )
 
         try:

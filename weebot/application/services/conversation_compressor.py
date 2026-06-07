@@ -134,7 +134,7 @@ class ConversationCompressor:
                 tools=None,
                 tool_choice=None,
                 temperature=TEMPERATURE_DETERMINISTIC,
-                max_tokens=512,
+                max_tokens=MAX_TOKENS_SHORT,
             )
             return response.content or "(summary unavailable)"
         except Exception as exc:

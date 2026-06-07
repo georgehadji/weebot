@@ -96,7 +96,7 @@ class EvolutionTracker:
                 ],
                 response_format={"type": "json_object"},
                 temperature=TEMPERATURE_BALANCED,
-                max_tokens=300,
+                max_tokens=MAX_TOKENS_CONCISE,
             )
             data = json.loads(response.content)
             narrative = data.get("narrative", "")

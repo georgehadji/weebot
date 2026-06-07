@@ -105,7 +105,7 @@ class LayerEditorAgent:
             ],
             model=model,
             temperature=TEMPERATURE_DEFAULT,
-            max_tokens=512,
+            max_tokens=MAX_TOKENS_SHORT,
         )
 
         try:

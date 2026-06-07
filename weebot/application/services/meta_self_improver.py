@@ -102,7 +102,7 @@ class MetaSelfImprover:
                 ],
                 model=MODEL_BUDGET,
                 temperature=TEMPERATURE_DEFAULT,
-                max_tokens=256,
+                max_tokens=MAX_TOKENS_COMPACT,
             )
 
             import json

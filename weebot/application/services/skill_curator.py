@@ -135,7 +135,7 @@ class SkillCurator:
                 ],
                 model=self._cheap_model,
                 temperature=TEMPERATURE_DETERMINISTIC,
-                max_tokens=128,
+                max_tokens=MAX_TOKENS_TINY,
             )
             recommendation = (response.content or "(no response)").strip()
         except Exception as exc:

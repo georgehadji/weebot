@@ -75,7 +75,7 @@ class GoalAgent:
             ],
             model=model,
             temperature=TEMPERATURE_DEFAULT,
-            max_tokens=2048,
+            max_tokens=MAX_TOKENS_EXTENDED,
         )
 
         content = response.content or ""

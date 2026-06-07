@@ -211,7 +211,7 @@ class BehavioralLearner(BehavioralLearnerPort):
                     {"role": "system", "content": "You extract concise behavioral rules from user corrections."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=100,
+                max_tokens=MAX_TOKENS_TINY,
                 temperature=TEMPERATURE_PRECISE,
             )
             rule = response.content.strip().strip('"').strip("'")

@@ -134,7 +134,7 @@ class MetaCritic:
                 messages=messages,
                 model=MODEL_BUDGET,
                 temperature=TEMPERATURE_DEFAULT,
-                max_tokens=512,
+                max_tokens=MAX_TOKENS_SHORT,
             )
             parsed = self._parse_response(resp.content or "")
             if parsed:

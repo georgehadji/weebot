@@ -88,7 +88,7 @@ class LayerDiagnosticAgent:
             ],
             model=model,
             temperature=TEMPERATURE_PRECISE,
-            max_tokens=128,
+            max_tokens=MAX_TOKENS_TINY,
         )
 
         content = (response.content or "").strip()

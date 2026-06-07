@@ -69,7 +69,7 @@ class PlanCriticService(PlanCriticPort):
                     {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=500,
+                max_tokens=MAX_TOKENS_SHORT,
                 temperature=TEMPERATURE_PRECISE,
             )
 

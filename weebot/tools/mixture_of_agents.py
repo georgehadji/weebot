@@ -29,6 +29,7 @@ from weebot.utils.prompt_loader import load_prompt_with_fallback
 logger = logging.getLogger(__name__)
 
 from weebot.config.model_refs import MODEL_MOA_REFERENCE
+from weebot.config.constants import TEMPERATURE_CREATIVE, TEMPERATURE_BALANCED, MAX_TOKENS_STANDARD, MAX_TOKENS_EXTENDED
 
 _DEFAULT_REFERENCE_MODELS: List[str] = MODEL_MOA_REFERENCE
 
@@ -167,7 +168,7 @@ class MixtureOfAgentsTool(BaseTool):
                     tools=None,
                     tool_choice=None,
                     temperature=TEMPERATURE_CREATIVE,
-                    max_tokens=1024,
+                    max_tokens=MAX_TOKENS_STANDARD,
                 )
                 return {"model": model_id, "response": response.content, "error": None}
             except Exception as exc:
@@ -200,7 +201,7 @@ class MixtureOfAgentsTool(BaseTool):
                 tools=None,
                 tool_choice=None,
                 temperature=0.3,
-                max_tokens=2048,
+                max_tokens=MAX_TOKENS_EXTENDED,
             )
             return response.content or "(aggregator returned empty response)"
         except Exception as exc:
