@@ -31,10 +31,10 @@ CATEGORY_MODEL: dict[TaskCategory, str] = {
     TaskCategory.FILE_OPS: "minimax/minimax-m3",
     TaskCategory.RESEARCH: "moonshotai/kimi-k2.6:free",
     TaskCategory.REVIEW: "x-ai/grok-4.3",
-    TaskCategory.PLANNING: "openrouter/owl-alpha",
+    TaskCategory.PLANNING: "moonshotai/kimi-k2.6:free",
     TaskCategory.SECURITY: "x-ai/grok-4.3",
-    TaskCategory.SUMMARIZATION: "openrouter/owl-alpha",
-    TaskCategory.GENERAL: "openrouter/owl-alpha",
+    TaskCategory.SUMMARIZATION: "minimax/minimax-m3",
+    TaskCategory.GENERAL: "moonshotai/kimi-k2.6:free",
 }
 
 # ── Keyword patterns ───────────────────────────────────────────────

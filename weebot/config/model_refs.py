@@ -176,11 +176,10 @@ MODEL_DEFAULT_OPENROUTER: str = "minimax/minimax-m3"
 # Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
+    "moonshotai/kimi-k2.6:free",
     "minimax/minimax-m3",
-    "openrouter/owl-alpha",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "moonshotai/kimi-k2.6:free",
     "z-ai/glm-5.1",
     "x-ai/grok-4.3",
     "deepseek/deepseek-v4-pro",
@@ -343,7 +342,7 @@ def describe_image_cascade(use_case: str) -> str:
 # Mixture-of-Agents
 # ========================================================================
 MODEL_MOA_REFERENCE: list[str] = [
-    "openrouter/owl-alpha",
+    "moonshotai/kimi-k2.6:free",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
     "minimax/minimax-m3",
