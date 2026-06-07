@@ -33,12 +33,14 @@ class TelegramAdapter(GatewayAdapter):
         token: str,
         state_repo: StateRepositoryPort,
         llm: LLMPort,
+        profile_name: str | None = None,
     ) -> None:
         super().__init__()
         self._token = token
         self._api = f"https://api.telegram.org/bot{token}"
         self._state_repo = state_repo
         self._llm = llm
+        self._profile_name = profile_name
         self._offset = 0
         self._running = False
 
@@ -128,6 +130,7 @@ class TelegramAdapter(GatewayAdapter):
             llm=self._llm,
             tools=tools,
             state_repo=self._state_repo,
+            profile_name=self._profile_name,
         )
 
         response = ""

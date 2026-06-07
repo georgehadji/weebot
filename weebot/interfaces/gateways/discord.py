@@ -50,6 +50,7 @@ class DiscordAdapter(GatewayAdapter):
         application_id: str,
         state_repo: StateRepositoryPort,
         llm: LLMPort,
+        profile_name: str | None = None,
     ) -> None:
         super().__init__()
         self._public_key = public_key
@@ -57,6 +58,7 @@ class DiscordAdapter(GatewayAdapter):
         self._application_id = application_id
         self._state_repo = state_repo
         self._llm = llm
+        self._profile_name = profile_name
         self._verify_key = VerifyKey(bytes.fromhex(public_key))
 
     # ── lifecycle ───────────────────────────────────────────────────
@@ -204,6 +206,7 @@ class DiscordAdapter(GatewayAdapter):
             llm=self._llm,
             tools=tools,
             state_repo=self._state_repo,
+            profile_name=self._profile_name,
         )
 
         response_text = ""

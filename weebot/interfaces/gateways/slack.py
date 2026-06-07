@@ -34,12 +34,14 @@ class SlackAdapter(GatewayAdapter):
         bot_token: str,
         state_repo: StateRepositoryPort,
         llm: LLMPort,
+        profile_name: str | None = None,
     ) -> None:
         super().__init__()
         self._signing_secret = signing_secret
         self._bot_token = bot_token
         self._state_repo = state_repo
         self._llm = llm
+        self._profile_name = profile_name
 
     async def start(self) -> None:
         logger.info("SlackAdapter started (webhook-mode, no polling needed)")
@@ -123,6 +125,7 @@ class SlackAdapter(GatewayAdapter):
             llm=self._llm,
             tools=tools,
             state_repo=self._state_repo,
+            profile_name=self._profile_name,
         )
 
         response = ""

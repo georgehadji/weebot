@@ -24,26 +24,28 @@ from __future__ import annotations
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "minimax/minimax-m3"
-"""Tier 1: MiniMax M3 — FREE, 1M context, multimodal, fast, cheapest."""
+MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.6:free"
+"""Tier 1: Kimi K2.6 — FREE (OpenRouter), structured output, strong research/coding.
+Direct API via KIMI_API_KEY bypasses OpenRouter markup for lower latency.
+Docs: https://platform.kimi.ai/docs/api/"""
 
-MODEL_BUDGET: str = "minimax/minimax-m3"
+MODEL_BUDGET: str = "moonshotai/kimi-k2.6:free"
 """Budget/free model for non-critical operations (compression, curation, defaults)."""
 
-MODEL_CASCADE_TIER2: str = "x-ai/grok-build-0.1"
-"""Tier 2: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
+MODEL_CASCADE_TIER2: str = "minimax/minimax-m3"
+"""Tier 2: MiniMax M3 — FREE, 1M context, multimodal, thinking toggle."""
 
-MODEL_CASCADE_TIER3: str = "qwen/qwen3.7-max"
-"""Tier 3: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
+MODEL_CASCADE_TIER3: str = "x-ai/grok-build-0.1"
+"""Tier 3: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
 
-MODEL_CASCADE_TIER4: str = "deepseek/deepseek-v4-pro"
-"""Tier 4: DeepSeek V4 Pro — strongest reasoning, logic, math, multi-step."""
+MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
+"""Tier 4: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
 
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "minimax/minimax-m3"
-"""Planning: MiniMax M3 — FREE, 1M context, multimodal, fast, cheapest."""
+MODEL_PLANNER: str = "moonshotai/kimi-k2.6:free"
+"""Planning: Kimi K2.6 — FREE, structured output, strong research/planning."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
@@ -54,7 +56,7 @@ MODEL_SUMMARIZE: str = "minimax/minimax-m3"
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "minimax/minimax-m3"
+MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6:free"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
 MODEL_FACTORY_OPENAI: str = "minimax/minimax-m3"
@@ -91,6 +93,148 @@ MODEL_DEPRECATED_TOOL_AGENT: str = "minimax/minimax-m3"
 MODEL_RTK_CHEAP: str = "minimax/minimax-m3"
 MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
 MODEL_RTK_STANDARD: str = "qwen/qwen3.7-max"
+
+# ========================================================================
+# Image Generation Models (text → image via OpenRouter)
+# ========================================================================
+MODEL_IMAGE_FREE: str = "sourceful/riverflow-v2.5-pro:free"
+"""Default free image generation: Sourceful Riverflow V2.5 Pro — FREE, high quality."""
+
+MODEL_IMAGE_FAST: str = "sourceful/riverflow-v2.5-fast:free"
+"""Fast free image generation: Sourceful Riverflow V2.5 Fast — FREE, 2-3x faster."""
+
+MODEL_IMAGE_VECTOR: str = "recraft/recraft-v4.1-pro-vector"
+"""Professional vector/SVG generation: Recraft V4.1 Pro Vector — logos, icons, brand assets."""
+
+MODEL_IMAGE_PHOTOREALISTIC: str = "black-forest-labs/flux.2-pro"
+"""Photorealistic image generation: Flux.2 Pro — highest quality photorealism."""
+
+MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
+"""Website image generation: Gemini 2.5 Flash Image — diagrams, UI mockups, illustrations."""
+
+def get_image_models() -> list[str]:
+    """Return the canonical list of image generation model IDs."""
+    return [
+        "sourceful/riverflow-v2.5-pro:free",
+        "sourceful/riverflow-v2.5-fast:free",
+        "black-forest-labs/flux.2-pro",
+        "black-forest-labs/flux.2-flex",
+        "black-forest-labs/flux.2-klein-4b",
+        "recraft/recraft-v4.1-pro-vector",
+        "recraft/recraft-v4.1-pro",
+        "google/gemini-2.5-flash-image",
+        "x-ai/grok-imagine-image-quality",
+        "bytedance-seed/seedream-4.5",
+        "microsoft/mai-image-2.5",
+    ]
+
+
+# ========================================================================
+# Image Generation Cascade — use-case → primary → fallback → free → SVG
+# ========================================================================
+
+IMAGE_CASCADE: dict[str, list[str]] = {
+    # ── Website hero banners — photorealistic, high impact ──────────
+    "hero": [
+        "black-forest-labs/flux.2-pro",         # primary: photorealistic
+        "x-ai/grok-imagine-image-quality",       # fallback: also photorealistic
+        "sourceful/riverflow-v2.5-pro:free",     # free: good general quality
+    ],
+
+    # ── Logos, brand assets, icons — vector output preferred ────────
+    "logo": [
+        "recraft/recraft-v4.1-pro-vector",       # primary: professional SVG
+        "recraft/recraft-v4.1-pro",               # fallback: raster if vector fails
+        "sourceful/riverflow-v2.5-pro:free",     # free: decent logos
+    ],
+
+    # ── Small icons, favicons, UI elements ──────────────────────────
+    "icon": [
+        "recraft/recraft-v4.1-pro-vector",       # primary: clean vector
+        "black-forest-labs/flux.2-klein-4b",     # fallback: cheap, fast
+        "sourceful/riverflow-v2.5-fast:free",    # free: fast
+    ],
+
+    # ── Photorealistic — products, people, places ───────────────────
+    "photo": [
+        "black-forest-labs/flux.2-max",           # primary: max quality
+        "black-forest-labs/flux.2-pro",           # fallback: still excellent
+        "x-ai/grok-imagine-image-quality",        # fallback 2: photorealism focus
+        "sourceful/riverflow-v2.5-pro:free",     # free
+    ],
+
+    # ── Diagrams, charts, UI mockups, technical illustrations ───────
+    "diagram": [
+        "google/gemini-2.5-flash-image",          # primary: specialized for this
+        "recraft/recraft-v4.1-pro-vector",        # fallback: vector output
+        "google/gemini-3.1-flash-image-preview",  # free: experimental Gemini
+    ],
+
+    # ── Social media, thumbnails — fast, cheap, decent ──────────────
+    "social": [
+        "sourceful/riverflow-v2.5-fast:free",     # primary: FREE + fast
+        "black-forest-labs/flux.2-flex",           # fallback: batch-optimized
+        "black-forest-labs/flux.2-klein-4b",      # fallback 2: cheapest paid
+    ],
+
+    # ── Text-heavy images — signs, banners with text ────────────────
+    "text": [
+        "bytedance-seed/seedream-4.5",             # primary: best text rendering
+        "recraft/recraft-v4.1-pro-vector",         # fallback: vector text
+        "sourceful/riverflow-v2.5-pro:free",      # free
+    ],
+
+    # ── Branded / enterprise — safety, consistency ──────────────────
+    "brand": [
+        "microsoft/mai-image-2.5",                 # primary: enterprise safety
+        "recraft/recraft-v4.1-pro",                # fallback: consistent output
+        "black-forest-labs/flux.2-pro",            # fallback 2: quality
+    ],
+
+    # ── General / catch-all ────────────────────────────────────────
+    "general": [
+        "sourceful/riverflow-v2.5-pro:free",      # primary: FREE, good
+        "black-forest-labs/flux.2-pro",            # fallback: quality
+        "google/gemini-2.5-flash-image",           # fallback 2: versatile
+    ],
+}
+
+
+def get_image_model_for(use_case: str, tier: int = 0, free_only: bool = False) -> str:
+    """Return the best image model for *use_case* at the given cascade tier.
+
+    Args:
+        use_case: One of 'hero', 'logo', 'icon', 'photo', 'diagram',
+                  'social', 'text', 'brand', 'general'.
+        tier: 0 = primary, 1 = first fallback, 2 = second fallback, etc.
+        free_only: If True, skip paid models and return the first free one.
+
+    Returns:
+        Model ID string, or the SVG template fallback marker 'svg:hero',
+        'svg:logo', etc. when no API model is appropriate.
+
+    Raises:
+        KeyError: If *use_case* is not recognized.
+    """
+    cascade = IMAGE_CASCADE.get(use_case, IMAGE_CASCADE["general"])
+    if free_only:
+        for m in cascade:
+            if ":free" in m:
+                return m
+        return "svg:" + use_case  # ultimate fallback: template SVG
+    if tier < len(cascade):
+        return cascade[tier]
+    return cascade[-1]  # clamp to last available
+
+
+def describe_image_cascade(use_case: str) -> str:
+    """Return a human-readable description of the cascade for *use_case*."""
+    cascade = IMAGE_CASCADE.get(use_case, IMAGE_CASCADE["general"])
+    labels = ["Primary", "Fallback 1", "Fallback 2", "Fallback 3", "Fallback 4"]
+    lines = [f"  {labels[i] if i < len(labels) else f'Tier {i}'}: {m}"
+             for i, m in enumerate(cascade)]
+    lines.append(f"  Ultimate: SVG template ({use_case})")
+    return "\n".join(lines)
 
 # ========================================================================
 # Mixture-of-Agents
