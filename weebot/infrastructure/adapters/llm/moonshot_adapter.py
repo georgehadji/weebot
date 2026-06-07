@@ -18,6 +18,13 @@ from typing import Any, Dict, List, Optional
 from .openai_adapter import OpenAIAdapter
 from weebot.application.ports.llm_port import LLMResponse
 from weebot.config.api_endpoints import MOONSHOT_API_BASE
+from weebot.config.model_refs import MODEL_CASCADE_TIER1 as _MODEL_CASCADE_TIER1
+
+# Strip OpenRouter prefix + ":free" suffix for direct API:
+# "moonshotai/kimi-k2.6:free" → "kimi-k2.6"
+_tmp = _MODEL_CASCADE_TIER1.split("/", 1)[-1] if "/" in _MODEL_CASCADE_TIER1 else _MODEL_CASCADE_TIER1
+_MODEL_CASCADE_TIER1_STRIPPED = _tmp.split(":")[0] if ":" in _tmp else _tmp
+del _MODEL_CASCADE_TIER1, _tmp
 
 _log = logging.getLogger(__name__)
 
@@ -40,7 +47,7 @@ class MoonshotAdapter(OpenAIAdapter):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "kimi-k2.6",
+        default_model: str = _MODEL_CASCADE_TIER1_STRIPPED,
     ):
         key = (
             api_key

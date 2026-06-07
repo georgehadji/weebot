@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from weebot.config.model_refs import MODEL_DI_SKILLOPT
+
 
 class SkillOptMixin:
     """SkillOpt flow builder + scorer + optimizer bindings."""
 
     def configure_skillopt(
         self, *, db_path="./weebot_sessions.db",
-        optimizer_model="anthropic/claude-sonnet-4.6",
+        optimizer_model=MODEL_DI_SKILLOPT,
         target_model=None, harness="direct_chat",
     ):
         self.configure_defaults(db_path=db_path, default_model=target_model)

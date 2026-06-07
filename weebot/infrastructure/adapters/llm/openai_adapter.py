@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from openai import AsyncOpenAI, RateLimitError
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
+from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
 
 
 class OpenAIAdapter(LLMPort):
@@ -16,7 +17,7 @@ class OpenAIAdapter(LLMPort):
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        default_model: str = "gpt-4o-mini",  # see config.model_refs.MODEL_DEFAULT_OPENAI
+        default_model: str = MODEL_DEFAULT_OPENAI,
     ):
         # API key recovery chain
         key = (
@@ -38,7 +39,7 @@ class OpenAIAdapter(LLMPort):
                 or key.startswith("sk-or-v1-")
                 or os.getenv("OPENROUTER_API_KEY") == key
             ):
-                url = "https://openrouter.ai/api/v1"
+                url = "https://openrouter.ai/api/v1"  # kept inline — OPENROUTER_API_BASE in api_endpoints
             elif model_lower.startswith("deepseek/") or os.getenv("DEEPSEEK_API_KEY") == key:
                 url = "https://api.deepseek.com"
 

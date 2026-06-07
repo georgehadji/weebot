@@ -80,9 +80,8 @@ class MixtureOfAgentsTool(BaseTool):
                 "type": "string",
                 "description": (
                     "OpenRouter model ID for the aggregator synthesis step. "
-                    "Defaults to anthropic/claude-sonnet-4.6."
+                    "Defaults to the first model in MODEL_MOA_REFERENCE."
                 ),
-                "default": "anthropic/claude-sonnet-4.6",
             },
             "max_concurrency": {
                 "type": "integer",
@@ -100,7 +99,7 @@ class MixtureOfAgentsTool(BaseTool):
         self,
         query: str,
         reference_models: Optional[List[str]] = None,
-        aggregator_model: str = "anthropic/claude-sonnet-4.6",
+        aggregator_model: str = "",
         max_concurrency: int = 4,
         **_: Any,
     ) -> ToolResult:
@@ -111,6 +110,9 @@ class MixtureOfAgentsTool(BaseTool):
                 "when creating this tool."
             )
 
+        aggregator_model = aggregator_model or (
+            MODEL_MOA_REFERENCE[0] if MODEL_MOA_REFERENCE else "moonshotai/kimi-k2.6:free"
+        )
         models = reference_models or _DEFAULT_REFERENCE_MODELS
         semaphore = asyncio.Semaphore(max_concurrency)
 

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from anthropic import AsyncAnthropic
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
+from weebot.config.model_refs import MODEL_FACTORY_ANTHROPIC
 
 
 class AnthropicAdapter(LLMPort):
@@ -15,7 +16,7 @@ class AnthropicAdapter(LLMPort):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "claude-3-5-sonnet-20241022",
+        default_model: str = MODEL_FACTORY_ANTHROPIC,
     ):
         key = api_key or os.getenv("ANTHROPIC_API_KEY") or "no-key"
         self._client = AsyncAnthropic(api_key=key)

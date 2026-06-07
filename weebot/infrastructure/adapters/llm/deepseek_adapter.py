@@ -17,6 +17,12 @@ from typing import Any, Dict, List, Optional
 from .openai_adapter import OpenAIAdapter
 from weebot.application.ports.llm_port import LLMResponse
 from weebot.config.api_endpoints import DEEPSEEK_API_BASE
+from weebot.config.model_refs import MODEL_FACTORY_DEEPSEEK as _MODEL_FACTORY_DEEPSEEK
+
+# Strip provider prefix for direct API: "deepseek/deepseek-v4-pro" → "deepseek-v4-pro"
+_MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK.split("/", 1)[-1] if "/" in _MODEL_FACTORY_DEEPSEEK else _MODEL_FACTORY_DEEPSEEK
+del _MODEL_FACTORY_DEEPSEEK
+MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK_STRIPPED
 
 _log = logging.getLogger(__name__)
 
@@ -33,7 +39,7 @@ class DeepSeekAdapter(OpenAIAdapter):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "deepseek-v4-pro",
+        default_model: str = MODEL_FACTORY_DEEPSEEK_STRIPPED,
     ):
         key = api_key or os.getenv("DEEPSEEK_API_KEY") or "no-key"
         super().__init__(

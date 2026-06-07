@@ -4,20 +4,20 @@
 ``openrouter/auto`` is FORBIDDEN.
 
 Cascade (4-tier):
-  Tier 1: Owl Alpha (FREE, 1M ctx, agentic, tool use)
-  Tier 2: Grok Build 0.1 (fast coding, agentic SWE)
-  Tier 3: Qwen 3.7 Max (flagship coding, 1M ctx)
-  Tier 4: DeepSeek V4 Pro (strongest reasoning)
+  Tier 1: Kimi K2.6 — FREE, thinking mode, structured output, direct API via KIMI_API_KEY
+  Tier 2: MiniMax M3 — FREE, 1M ctx, multimodal, thinking toggle
+  Tier 3: Grok Build 0.1 — fast coding, agentic SWE
+  Tier 4: Qwen 3.7 Max — flagship coding, 1M ctx
 
 Task-specific:
   CODING:        Qwen 3.7 Max + Grok Build 0.1
   FILE_OPS:      MiniMax M3 (1M ctx, multimodal, cheapest)
-  RESEARCH:      Kimi K2.6 (free) — structured output
-  REVIEW:        GLM-5.1 — strong instruction following
-  PLANNING:      Owl Alpha (FREE, agentic, tool use)
+  RESEARCH:      Kimi K2.6 (free, thinking mode) — structured output
+  REVIEW:        Grok 4.3 — reasoning, high factual accuracy
+  PLANNING:      Kimi K2.6 (free, thinking mode) — structured planning
   SECURITY:      Grok 4.3 + DeepSeek V4 Pro — reasoning, factual accuracy
   SUMMARIZATION: MiniMax M3 (fast, 1M ctx)
-  GENERAL:       Owl Alpha (FREE, agentic)
+  GENERAL:       Kimi K2.6 (free, thinking mode)
 """
 from __future__ import annotations
 

@@ -28,11 +28,13 @@ from weebot.domain.models.event import MessageEvent, ErrorEvent
 
 logger = logging.getLogger(__name__)
 
+from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER
+
 # Default models per tier when spec.model is not set
 _TIER_MODEL: dict[AgentTier, str] = {
-    AgentTier.BUDGET: "minimax/minimax-m3",
-    AgentTier.STANDARD: "qwen/qwen3.7-max",
-    AgentTier.PREMIUM: "deepseek/deepseek-v4-pro",
+    AgentTier.BUDGET: MODEL_CASCADE_TIER2,
+    AgentTier.STANDARD: MODEL_ROLE_CODER,
+    AgentTier.PREMIUM: MODEL_CASCADE_TIER4,
 }
 
 
@@ -146,9 +148,9 @@ class SubAgentFactory(SubAgentFactoryPort):
         majority-vote consensus when eval data shows improvement.
         """
         models = models or [
-            "minimax/minimax-m3",
-            "qwen/qwen3.7-max",
-            "deepseek/deepseek-v4-pro",
+            MODEL_CASCADE_TIER2,
+            MODEL_ROLE_CODER,
+            MODEL_CASCADE_TIER4,
         ]
         specs = [spec.with_model(m) for m in models[:3]]
         results = await self.spawn_parallel(specs, max_concurrency=3)

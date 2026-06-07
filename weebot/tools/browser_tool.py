@@ -110,8 +110,9 @@ class BrowserTool:
         or_key = _os.environ.get("OPENROUTER_API_KEY")
         if or_key:
             from langchain_openai import ChatOpenAI
+            from weebot.config.model_refs import MODEL_DI_DEFAULT
             llm = ChatOpenAI(
-                model=_os.environ.get("OPENROUTER_MODEL", "openrouter/anthropic/claude-sonnet-4-6"),
+                model=_os.environ.get("OPENROUTER_MODEL", MODEL_DI_DEFAULT),
                 openai_api_key=or_key,
                 openai_api_base="https://openrouter.ai/api/v1",
                 temperature=0,
@@ -121,7 +122,8 @@ class BrowserTool:
 
         # ── 4. OpenAI fallback ──────────────────────────────────────
         from langchain_openai import ChatOpenAI
-        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        from weebot.config.model_refs import MODEL_FACTORY_OPENAI
+        llm = ChatOpenAI(model=MODEL_FACTORY_OPENAI, temperature=0)
         logger.debug("BrowserTool using OpenAI fallback (no BROWSER_USE_API_KEY or OPENROUTER_API_KEY)")
         return self._add_provider_attr(llm)
 

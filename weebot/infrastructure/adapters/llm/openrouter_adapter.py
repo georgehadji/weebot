@@ -7,6 +7,7 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from .openai_adapter import OpenAIAdapter
+from weebot.config.model_refs import MODEL_FACTORY_OPENROUTER
 from weebot.config.api_endpoints import OPENROUTER_API_BASE
 
 
@@ -16,7 +17,7 @@ class OpenRouterAdapter(OpenAIAdapter):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = "deepseek/deepseek-r1",
+        default_model: str = MODEL_FACTORY_OPENROUTER,
         http_referer: Optional[str] = None,
         x_title: Optional[str] = None,
     ):
