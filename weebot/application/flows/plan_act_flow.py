@@ -82,6 +82,7 @@ class PlanActFlow(BaseFlow):
         checkpoint_port: Optional["CheckpointPort"] = None,
         profile_name: Optional[str] = None,
         personality = None,  # PersonalityManager for SOUL.md + WEEBOT_CORE.md
+        agent_role: Optional[str] = None,  # Agent role for per-role model selection
     ):
         self._llm = llm
         self._tools = tools
@@ -98,6 +99,7 @@ class PlanActFlow(BaseFlow):
         self._behavioral_learner = behavioral_learner  # Optional BehavioralLearner (Capability 5)
         self._checkpoint_port = checkpoint_port  # Optional checkpoint persistence
         self._profile_name = profile_name  # SOUL.md profile (e.g. "coder", "researcher")
+        self._agent_role = agent_role  # Agent role for model selection
         self._personality = personality  # PersonalityManager
         self._logger = logger
         self._stdlib_logger = logging.getLogger(__name__)
@@ -134,6 +136,7 @@ class PlanActFlow(BaseFlow):
             skill_prompt=skill_prompt,
             profile_name=profile_name,
             personality=personality,
+            agent_role=agent_role,
         )
         if max_steps is not None:
             executor_kwargs["max_steps"] = max_steps

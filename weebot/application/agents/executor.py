@@ -158,6 +158,7 @@ class ExecutorAgent:
         behavioral_learner=None,  # BehavioralLearner (Capability 5)
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
+        agent_role: str | None = None,  # Agent role for per-role model selection
     ):
         self._llm = llm
         self._tools = tools
@@ -168,6 +169,7 @@ class ExecutorAgent:
         self._skill_retriever = skill_retriever
         self._personality = personality
         self._profile_name = profile_name
+        self._agent_role = agent_role
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._trajectory_monitor = None  # lazy-created in execute_step
@@ -330,15 +332,23 @@ class ExecutorAgent:
     async def _call_with_cascade(
         self, messages: List[Dict[str, Any]], description: str = ""
     ) -> LLMResponse:
-        """4-tier cascade: task-model → tier1 → tier2 → tier3 → tier4.
+        """4-tier cascade: role-model → tier1 → tier2 → tier3 → tier4.
 
-        Code-review steps use Grok 4.3 directly.
-        Other steps: task-specific → Owl Alpha → Grok Build → Qwen 3.7 → DeepSeek V4.
+        Priority:
+        1. Agent role model (per ``get_model_for_role()``) — e.g. DeepSeek V4 for analyst
+        2. Task-specific model (per ``_model_for_step()``) — e.g. Grok 4.3 for code review
+        3. Cascade tiers: tier1 → tier2 → tier3 → tier4
         """
         is_review = self._is_review_step(description)
         tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
+
+        # ── Per-role model selection ─────────────────────────────────
+        from weebot.config.model_refs import get_model_for_role
+        role_model = get_model_for_role(self._agent_role)
+
         task_model = self._model_for_step(description)
-        model_to_use = task_model
+        # Use role model as primary; task model is an additional parallel candidate
+        model_to_use = role_model
 
         # ── Circuit breaker: skip models that failed 3+ times this session ──
         if not hasattr(self, "_circuit_breaker_failures"):

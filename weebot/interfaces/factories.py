@@ -114,6 +114,7 @@ def create_flow(
             steering=steering,
             profile_name=profile_name,
             personality=personality,
+            agent_role=profile_name,  # SOUL.md profile doubles as agent role
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

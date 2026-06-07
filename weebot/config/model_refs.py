@@ -54,6 +54,61 @@ MODEL_SUMMARIZE: str = "minimax/minimax-m3"
 """Summary: MiniMax M3 — fast, 1M context, multimodal."""
 
 # ========================================================================
+# Per-Agent (Role) Model Selection
+# ========================================================================
+MODEL_ROLE_RESEARCHER: str = "moonshotai/kimi-k2.6:free"
+"""Researcher: Kimi K2.6 (thinking) — structured output, broad knowledge, source synthesis."""
+
+MODEL_ROLE_ANALYST: str = "deepseek/deepseek-v4-pro"
+"""Analyst: DeepSeek V4 Pro — strongest math/reasoning, complex data analysis."""
+
+MODEL_ROLE_CODER: str = "qwen/qwen3.7-max"
+"""Coder: Qwen 3.7 Max — flagship coding, 1M context for large codebases."""
+
+MODEL_ROLE_REVIEWER: str = "x-ai/grok-4.3"
+"""Reviewer: Grok 4.3 — highest factual accuracy, reasoning, security audit."""
+
+MODEL_ROLE_ADMIN: str = "moonshotai/kimi-k2.6:free"
+"""Admin: Kimi K2.6 (thinking) — orchestrates sub-agents, decomposes complex tasks."""
+
+MODEL_ROLE_AUTOMATION: str = "z-ai/glm-5.1"
+"""Automation: GLM-5.1 — best instruction following, safety-aware, reliable execution."""
+
+MODEL_ROLE_DOCUMENTATION: str = "minimax/minimax-m3"
+"""Documentation: MiniMax M3 — fast, 1M context, cheap, good for writing/formatting."""
+
+# ── Role → Model lookup ────────────────────────────────────────────
+
+_ROLE_MODEL_MAP: dict[str, str] = {
+    "researcher": MODEL_ROLE_RESEARCHER,
+    "analyst": MODEL_ROLE_ANALYST,
+    "coder": MODEL_ROLE_CODER,
+    "reviewer": MODEL_ROLE_REVIEWER,
+    "admin": MODEL_ROLE_ADMIN,
+    "automation": MODEL_ROLE_AUTOMATION,
+    "documentation": MODEL_ROLE_DOCUMENTATION,
+    "product_manager": MODEL_ROLE_ADMIN,  # PM uses admin model
+    "planner": MODEL_ROLE_RESEARCHER,     # Planner uses Kimi thinking
+    "planner_sub": MODEL_ROLE_RESEARCHER,
+    "designer": MODEL_ROLE_DOCUMENTATION,  # Designer uses fast/cheap model
+}
+
+
+def get_model_for_role(role: str | None) -> str:
+    """Return the optimal model for an agent role.
+
+    Args:
+        role: Agent role name (e.g. \"coder\", \"researcher\", \"admin\").
+              ``None`` or unknown roles fall back to ``MODEL_CASCADE_TIER1``.
+
+    Returns:
+        OpenRouter-qualified model ID string.
+    """
+    if role and role in _ROLE_MODEL_MAP:
+        return _ROLE_MODEL_MAP[role]
+    return MODEL_CASCADE_TIER1
+
+# ========================================================================
 # DI container + factory defaults
 # ========================================================================
 MODEL_DI_DEFAULT: str = "moonshotai/kimi-k2.6:free"
