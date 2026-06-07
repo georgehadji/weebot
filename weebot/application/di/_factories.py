@@ -172,7 +172,19 @@ class FactoriesMixin:
     @staticmethod
     def _create_personality():
         from weebot.core.personality_manager import PersonalityManager
-        return PersonalityManager()
+        # Try to wire SoulProviderPort if available
+        try:
+            from weebot.application.di import Container
+            c = Container()
+            soul = c.get("soul_provider")
+        except Exception:
+            soul = None
+        return PersonalityManager(soul_provider=soul)
+
+    @staticmethod
+    def _create_soul_provider():
+        from weebot.infrastructure.adapters.soul_provider import FileSystemSoulProvider
+        return FileSystemSoulProvider()
 
     @staticmethod
     def _create_harness_config():

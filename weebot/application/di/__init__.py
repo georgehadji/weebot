@@ -129,6 +129,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(SubAgentFactoryPort, self._create_sub_agent_factory)
         self.register(SubAgentCostTrackerPort, lambda: SubAgentCostTracker(budget_usd=0.50))
         self.register("cascade_tracker", lambda: self._create_cascade_tracker())
+        self.register("soul_provider", lambda: self._create_soul_provider())
 
     # ── high-level builders ─────────────────────────────────────────
 

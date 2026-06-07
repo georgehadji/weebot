@@ -63,6 +63,13 @@ node_modules/
 graphify-out/.graphify_*.json
 graphify-out/cache/
 
+# Test artifacts
+.test-work/
+
+# PowerShell redirect artifacts
+$null
+nul;
+
 # Word / Office temp & source files
 *.docx
 ~$*.docx
@@ -71,3 +78,7 @@ graphify-out/cache/
 /stripe-landing
 /Notion
 /logs
+
+# User persona files (auto-seeded, should not be committed)
+SOUL.md
+~/.weebot/profiles/*/SOUL.md

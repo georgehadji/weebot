@@ -1,23 +1,30 @@
-"""PersonalityManager — loads WEEBOT_CORE.md and injects it into agent context.
+"""PersonalityManager — loads WEEBOT_CORE.md and SOUL.md, injects into agent context.
 
-Provides a centralized identity and instruction system.  The global
-WEEBOT_CORE.md defines invariant rules, base behaviors, and the agent's
-core persona across all roles and profiles.
+Provides a centralized identity and instruction system.  Supports two
+identity sources, assembled in Hermes-compatible order:
 
-The core file uses XML-scoped tags (<identity>, <invariant_rules>, etc.)
-for deterministic section extraction.  Tags are stripped before injection
-— the LLM sees clean markdown.
+1. **SOUL.md** (slot #1) — free-form markdown persona.  Injected verbatim
+   as the agent's core identity.  Per-profile via ``~/.weebot/profiles/<name>/SOUL.md``
+   or project-root ``./SOUL.md``.  Hot-reloaded every turn.
 
-Maps to Hermes Evolution Phase 1.1 (Enhancement 1 — XML-scoped prompts).
+2. **WEEBOT_CORE.md** (slot #2) — XML-scoped invariant rules and safeguards.
+   Sections are filtered by role via ``RoleSectionMapping``.  Tags are stripped
+   before injection — the LLM sees clean markdown.
+
+Maps to Hermes Evolution Phase 1.1 (Enhancement 1 — XML-scoped prompts)
+and SOUL.md support (Enhancement 11).
 """
 from __future__ import annotations
 
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from weebot.domain.models.personality import RoleSectionMapping
+
+if TYPE_CHECKING:
+    from weebot.application.ports.soul_provider_port import SoulProviderPort
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +38,28 @@ class PersonalityManager:
     Parses WEEBOT_CORE.md into XML-tagged sections and returns only
     the sections relevant to the active role.
 
+    When a ``SoulProviderPort`` is injected, SOUL.md content is loaded
+    and prepended to the system prompt as the agent's primary identity (slot #1).
+
     Args:
         core_path: Path to the WEEBOT_CORE.md file.
                    Defaults to project-root / WEEBOT_CORE.md.
+        soul_provider: Optional SoulProviderPort for loading SOUL.md identities.
+        profile_name: Default profile name for SOUL.md loading (can be
+                      overridden per-call in ``get_system_prompt()``).
     """
 
-    def __init__(self, core_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        core_path: Optional[Path] = None,
+        soul_provider: Optional["SoulProviderPort"] = None,
+        profile_name: Optional[str] = None,
+    ) -> None:
         self._core_path = core_path or _CORE_FILE
+        self._soul_provider = soul_provider
+        self._profile_name = profile_name
         self._sections: dict[str, str] = {}  # tag_name → content (XML stripped)
+        self._soul_content: str | None = None  # cached SOUL.md content
         self._load()
 
     def _load(self) -> None:
@@ -78,26 +99,91 @@ class PersonalityManager:
                 sections[tag] = content
         return sections
 
-    def get_system_prompt(self, role: Optional[str] = None) -> str:
-        """Return the core personality block for system prompt injection.
+    def get_system_prompt(
+        self,
+        role: Optional[str] = None,
+        profile_name: Optional[str] = None,
+    ) -> str:
+        """Return the assembled system prompt: SOUL.md (slot #1) + WEEBOT_CORE.md (slot #2).
+
+        Assembly order follows the Hermes pattern:
+        1. SOUL.md content — the agent's identity/persona (free-form markdown)
+        2. WEEBOT_CORE.md sections — invariant rules and safeguards (XML-tag-filtered by role)
 
         Args:
-            role: Optional role name.  Only sections mapped to this role
-                  via RoleSectionMapping will be included.
+            role: Optional role name.  Only WEEBOT_CORE.md sections mapped to
+                  this role via RoleSectionMapping will be included.
+            profile_name: Override the default profile for SOUL.md loading.
+                          When ``None``, uses the profile set at construction time.
 
         Returns:
-            Markdown-formatted core instruction block, or empty string.
+            Markdown-formatted system prompt block, or empty string.
         """
-        if not self._sections:
+        parts: list[str] = []
+
+        # ── Slot 1: SOUL.md identity ────────────────────────────────
+        soul = self._load_soul(profile_name)
+        if soul:
+            parts.append(soul)
+
+        # ── Slot 2: WEEBOT_CORE.md safeguards ────────────────────────
+        core = self._build_core_prompt(role)
+        if core:
+            parts.append(core)
+
+        if not parts:
             return ""
 
-        # Determine which sections to include
+        return "\n\n".join(parts) + "\n\n"
+
+    def _load_soul(self, profile_name: Optional[str] = None) -> str | None:
+        """Load SOUL.md content, with caching.
+
+        Since ``SoulProviderPort.load()`` is async but ``get_system_prompt()``
+        is synchronous, we bridge via ``asyncio.run()``.  This is acceptable
+        because SOUL.md reads are fast local file I/O.
+
+        Content is cached in ``_soul_content``.  Call ``refresh()`` to
+        invalidate the cache (hot-reload).
+        """
+        if self._soul_provider is None:
+            return None
+
+        if self._soul_content is not None:
+            return self._soul_content if self._soul_content else None
+
+        import asyncio
+
+        async def _load():
+            effective_profile = profile_name or self._profile_name
+            try:
+                profile = await self._soul_provider.load(effective_profile)
+                if profile and not profile.is_empty:
+                    return profile.content
+            except Exception:
+                logger.debug("SOUL.md load failed — using fallback", exc_info=True)
+            return ""
+
+        try:
+            result = asyncio.run(_load())
+        except RuntimeError:
+            # Already inside an event loop — skip SOUL.md for this call
+            logger.debug("Cannot load SOUL.md inside running event loop")
+            return None
+
+        self._soul_content = result
+        return result if result else None
+
+    def _build_core_prompt(self, role: Optional[str] = None) -> str | None:
+        """Build the WEEBOT_CORE.md section of the system prompt."""
+        if not self._sections:
+            return None
+
         if role:
             section_tags = RoleSectionMapping.sections_for_role(role)
         else:
             section_tags = list(self._sections.keys())
 
-        # Build the prompt from selected sections
         parts: list[str] = ["## Core Identity & Safeguards"]
         if role:
             parts[0] += f" (role: {role})"
@@ -105,15 +191,15 @@ class PersonalityManager:
         for tag in section_tags:
             content = self._sections.get(tag)
             if content:
-                # Derive section header from tag name
                 header = tag.replace("_", " ").title()
                 parts.append(f"\n### {header}\n{content}")
 
-        return "\n\n".join(parts) + "\n\n"
+        return "\n\n".join(parts)
 
     def refresh(self) -> None:
-        """Re-read the core file (for hot-reload)."""
+        """Re-read both SOUL.md and WEEBOT_CORE.md (for hot-reload)."""
         self._load()
+        self._soul_content = None  # invalidate SOUL.md cache
 
     @property
     def loaded(self) -> bool:

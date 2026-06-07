@@ -67,6 +67,7 @@ from cli.commands.profile import profile as profile_group
 from cli.commands.scheduling import cron, companion  # type: ignore[attr-defined]
 from cli.commands.guard import guard as guard_group
 from cli.commands.analytics import analytics as analytics_group
+from cli.commands.soul import soul as soul_group
 
 console = Console()
 
@@ -606,6 +607,7 @@ cli.add_command(cron)
 cli.add_command(companion)
 cli.add_command(guard_group)
 cli.add_command(analytics_group)
+cli.add_command(soul_group)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────
