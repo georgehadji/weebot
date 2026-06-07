@@ -389,7 +389,26 @@ class PlanActFlow(BaseFlow):
         )
 
     def _snapshot_plan(self) -> None:
-        """Push current plan onto the PlanHistory undo stack."""
+        """Push current plan onto the PlanHistory undo stack.
+
+        Also checks for structural similarity to recent plans (Hallmark-inspired
+        diversification).  If the new plan is too similar, logs a warning so the
+        operator can intervene — does NOT block execution.
+        """
+        from weebot.config.constants import PLAN_DIVERSIFICATION_WINDOW, PLAN_SIMILARITY_THRESHOLD
+
+        if self._plan is not None and self._plan_history.is_too_similar(
+            self._plan,
+            threshold=PLAN_SIMILARITY_THRESHOLD,
+            window=PLAN_DIVERSIFICATION_WINDOW,
+        ):
+            fp = self._plan_history.plan_fingerprint(self._plan)
+            self._log.warning(
+                "Plan fingerprint %s is too similar to recent plans — "
+                "consider diversifying the task decomposition strategy.",
+                fp,
+            )
+
         self._plan_history.snapshot(self._plan)
 
     def undo(self) -> Optional[Plan]:

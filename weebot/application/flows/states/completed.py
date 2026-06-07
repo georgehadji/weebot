@@ -56,6 +56,58 @@ class CompletedState(FlowState):
                     exc,
                 )
 
+        # ── SessionStamp emission (Hallmark-inspired) ──────────────────
+        try:
+            from datetime import datetime, timezone
+            from weebot.domain.models.stamp import SessionStamp, VerificationScores
+            from weebot.application.services.plan_history import PlanHistory
+
+            # Collect verification scores + gate failures from session context
+            extra = getattr(context._session.context, "extra", {}) or {}
+            scores_raw = extra.get("verification_scores", {})
+            gate_failures = extra.get("gate_failures", [])
+
+            verif_scores = VerificationScores(
+                correctness=scores_raw.get("correctness", 3),
+                completeness=scores_raw.get("completeness", 3),
+                specificity=scores_raw.get("specificity", 3),
+                restraint=scores_raw.get("restraint", 3),
+            ) if scores_raw else None
+
+            # Count tool calls and errors from session events
+            from weebot.domain.models.event import ToolEvent, ErrorEvent
+            tool_count = sum(1 for e in context._session.events if isinstance(e, ToolEvent))
+            error_count = sum(1 for e in context._session.events if isinstance(e, ErrorEvent))
+
+            # Build fingerprint from plan
+            fingerprint = ""
+            if context._plan:
+                fingerprint = PlanHistory.plan_fingerprint(context._plan)
+
+            stamp = SessionStamp(
+                flow_type="PlanActFlow",
+                model_used=getattr(context._executor, "_model", "") or "",
+                plan_fingerprint=fingerprint,
+                verification=verif_scores,
+                gate_failures=gate_failures,
+                tool_calls=tool_count,
+                errors=error_count,
+                duration_ms=0,
+                completed_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+            # Store stamp on session context
+            context._session = context._session.model_copy(
+                update={
+                    "context": context._session.context.model_copy(
+                        update={"stamp": stamp.model_dump()}
+                    )
+                }
+            )
+            logger.debug("SessionStamp emitted for %s: %s", context._session.id, stamp.plan_fingerprint)
+        except Exception:
+            logger.debug("SessionStamp emission failed — non-blocking", exc_info=True)
+
         logger.info("PlanActFlow completed for session %s", context._session.id)
 
         # Reset to IDLE for potential future runs in same session object

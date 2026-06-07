@@ -74,6 +74,10 @@ class PlanHistory:
             self._undo_stack.append(current_plan)
         return self._redo_stack.pop()
 
+    def get_all(self) -> list[TPlan]:
+        """Return all plans in the undo stack (historical snapshots)."""
+        return list(self._undo_stack)
+
     @property
     def can_undo(self) -> bool:
         """Whether an undo operation is available."""
@@ -98,3 +102,68 @@ class PlanHistory:
         """Clear both undo and redo stacks."""
         self._undo_stack.clear()
         self._redo_stack.clear()
+
+    # ── Diversification (Hallmark-inspired) ─────────────────────────
+
+    @staticmethod
+    def plan_fingerprint(plan: TPlan) -> str:
+        """Return a hash of the plan's structural fingerprint.
+
+        Captures: step count and tool sequence pattern (which tools
+        appear in which order). Does NOT capture content — two plans
+        with different content but the same structure produce the
+        same fingerprint.
+        """
+        import hashlib
+        import re
+
+        steps = getattr(plan, "steps", [])
+        if not steps:
+            return "empty"
+
+        # Infer likely tools from step descriptions
+        tool_keywords = {
+            "bash": r"\b(bash|powershell|shell|command|terminal|run|execute)\b",
+            "web_search": r"\b(search|find|lookup|research|browse|google)\b",
+            "file_editor": r"\b(file|edit|write|read|open|create|delete|rename|move|copy)\b",
+            "python_execute": r"\b(python|script|code|analyze|process|compute)\b",
+        }
+
+        parts = [str(len(steps))]
+        for step in steps:
+            desc = getattr(step, "description", "") or ""
+            tools = [t for t, pat in tool_keywords.items() if re.search(pat, desc, re.I)]
+            parts.append("+".join(tools) if tools else "unknown")
+
+        return hashlib.sha256(":".join(parts).encode()).hexdigest()[:8]
+
+    def is_too_similar(
+        self,
+        new_plan: TPlan,
+        threshold: float = 0.7,
+        window: int = 3,
+    ) -> bool:
+        """Check if *new_plan* is too similar to recent plans.
+
+        Compares the fingerprint of *new_plan* against the last *window*
+        plans in the undo stack.  Two plans are similar if they share
+        the same fingerprint.
+
+        Args:
+            new_plan: The newly generated plan to check.
+            threshold: Similarity threshold (0-1).  Currently binary:
+                       same fingerprint = 1.0, different = 0.0.
+            window: Number of recent plans to compare against.
+
+        Returns:
+            True if the plan is too similar to any recent plan.
+        """
+        new_fp = self.plan_fingerprint(new_plan)
+        recent = self._undo_stack[-window:] if len(self._undo_stack) >= window else self._undo_stack
+
+        for old_plan in recent:
+            old_fp = self.plan_fingerprint(old_plan)
+            if old_fp == new_fp:
+                return True
+
+        return False
