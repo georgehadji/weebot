@@ -372,6 +372,8 @@ class ExecutorAgent:
                     timeout=timeout,
                 )
                 if resp and (resp.content or resp.tool_calls):
+                    # Success — reset failure counter for this model
+                    _cb[model_id] = 0
                     return resp
                 _record_failure(model_id)
                 return None
@@ -387,14 +389,14 @@ class ExecutorAgent:
                 _record_failure(model_id)
                 return None
 
-        # ── Phase 1: fire task-model + tier1 in parallel (5s timeout) ──
+        # ── Phase 1: fire task-model + tier1 in parallel (15s timeout) ──
         parallel_models: list[str] = [task_model]
         if task_model != self._TIER1_MODEL:
             parallel_models.append(self._TIER1_MODEL)
         if tier2_model not in parallel_models:
             parallel_models.append(tier2_model)
 
-        tasks = {asyncio.ensure_future(_try_chat(m, timeout=5.0)): m for m in parallel_models}
+        tasks = {asyncio.ensure_future(_try_chat(m, timeout=15.0)): m for m in parallel_models}
         if tasks:
             done, _pending = await asyncio.wait(
                 tasks.keys(), return_when=asyncio.FIRST_COMPLETED
@@ -407,11 +409,11 @@ class ExecutorAgent:
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
-        # ── Phase 2: sequential fallback through remaining tiers (3s timeout) ──
+        # ── Phase 2: sequential fallback through remaining tiers (10s timeout) ──
         remaining = [m for m in (self._TIER3_MODEL, self._TIER4_MODEL)
                      if not _is_tripped(m)]
         for model_id in remaining:
-            resp = await _try_chat(model_id, timeout=3.0)
+            resp = await _try_chat(model_id, timeout=10.0)
             if resp is not None:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
