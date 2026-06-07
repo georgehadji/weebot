@@ -23,6 +23,7 @@ from weebot.domain.models.skill import Skill
 from weebot.domain.models.skill_edit import SkillEdit
 from weebot.domain.models.trajectory import OptimizationBatch, TrajectorySummary
 from weebot.application.skills.builtin.loader import load_optimizer_prompt
+from weebot.config.constants import TEMPERATURE_DEFAULT, TEMPERATURE_PRECISE, MAX_TOKENS_SHORT, MAX_TOKENS_STANDARD, MAX_TOKENS_DETAILED
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +168,8 @@ class OptimizerAgent(OptimizerPort):
                 },
             ],
             response_format={"type": "json_object"},
-            temperature=0.1,
-            max_tokens=2000,
+            temperature=TEMPERATURE_PRECISE,
+            max_tokens=MAX_TOKENS_STANDARD,
         )
 
         try:
@@ -212,8 +213,8 @@ class OptimizerAgent(OptimizerPort):
                     {"role": "user", "content": user_content},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=500,
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_SHORT,
             )
             json.loads(response.content)  # validate parseable
             return response.content
@@ -282,8 +283,8 @@ class OptimizerAgent(OptimizerPort):
                     {"role": "user", "content": user_content},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=3000,
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_DETAILED,
             )
             return self._parse_edits(response.content)
         except Exception as exc:
@@ -326,8 +327,8 @@ class OptimizerAgent(OptimizerPort):
                     {"role": "user", "content": edits_json},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=2000,
+                temperature=TEMPERATURE_PRECISE,
+                max_tokens=MAX_TOKENS_STANDARD,
             )
             return self._parse_edits(response.content)
         except Exception as exc:
@@ -353,8 +354,8 @@ class OptimizerAgent(OptimizerPort):
                     {"role": "user", "content": payload},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=2000,
+                temperature=TEMPERATURE_PRECISE,
+                max_tokens=MAX_TOKENS_STANDARD,
             )
             return self._parse_edits(response.content)
         except Exception as exc:
@@ -389,8 +390,8 @@ class OptimizerAgent(OptimizerPort):
                     {"role": "user", "content": user_content},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=2000,
+                temperature=TEMPERATURE_DEFAULT,
+                max_tokens=MAX_TOKENS_STANDARD,
             )
             data = json.loads(response.content)
             field = data.get("slow_update_content") or data.get("meta_skill_content") or data.get("content", "")
