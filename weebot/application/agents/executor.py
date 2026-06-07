@@ -379,8 +379,9 @@ class ExecutorAgent:
                 if isinstance(exc, Exception) and ErrorClassifier.should_fail_fast(exc):
                     raise
                 if model_id not in _first_error:
-                    _first_error[model_id] = str(exc)[:200]
-                    logger.warning("Model %s first error: %s", model_id, _first_error[model_id])
+                    err_detail = str(exc)[:300] if str(exc) else type(exc).__name__
+                    _first_error[model_id] = err_detail
+                    logger.warning("Model %s first error: %s", model_id, err_detail)
                 else:
                     logger.debug("Model %s failed (%.1fs timeout): %s", model_id, timeout, exc)
                 _record_failure(model_id)
