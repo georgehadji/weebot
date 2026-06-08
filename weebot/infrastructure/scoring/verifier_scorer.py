@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Optional
 
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.domain.models.event import TrajectoryScored

@@ -16,6 +16,7 @@ from weebot.infrastructure.adapters.llm.openrouter_adapter import OpenRouterAdap
 from weebot.infrastructure.adapters.llm.direct_or_fallback_adapter import (
     DirectOrFallbackAdapter,
 )
+from weebot.config.api_endpoints import XAI_API_BASE
 
 
 class AdapterFactory:
@@ -57,8 +58,16 @@ class AdapterFactory:
             "timeout": 120.0,  # DeepSeek often has high latency
             "default_model": MODEL_FACTORY_DEEPSEEK,
         },
+        "moonshot": {
+            "timeout": 180.0,  # Kimi K2.6 planning can take 3+ minutes
+            "default_model": "kimi-k2.6",
+        },
+        "xai": {
+            "timeout": 120.0,  # Grok via xAI direct API
+            "default_model": "grok-build-0.1",
+        },
         "openrouter": {
-            "timeout": 90.0,
+            "timeout": 180.0,  # Complex planning via OpenRouter can exceed 90s
             "default_model": MODEL_FACTORY_OPENROUTER,
         },
     }
@@ -240,11 +249,18 @@ class AdapterFactory:
                 api_key=api_key,
                 default_model=clean_model,
             )
-            # Use Kimi direct API exclusively — no OpenRouter fallback.
-            # KIMI_API_KEY or MOONSHOT_API_KEY is required.
+            # If KIMI_API_KEY or MOONSHOT_API_KEY is set, try direct first; fall back to OpenRouter.
             if _has_direct_key("KIMI_API_KEY") or _has_direct_key("MOONSHOT_API_KEY"):
-                return direct
-            # No direct key — fall back to OpenRouter (will use OPENROUTER_API_KEY)
+                fallback = OpenRouterAdapter(
+                    api_key=api_key,
+                    default_model=model,
+                )
+                return DirectOrFallbackAdapter(
+                    primary=direct,
+                    secondary=fallback,
+                    primary_label="kimi-direct",
+                )
+            # No direct key — OpenRouter only
             return OpenRouterAdapter(
                 api_key=api_key,
                 default_model=model,
@@ -257,6 +273,43 @@ class AdapterFactory:
             # and Anthropic SDK at https://api.minimax.io/anthropic
             # Route through OpenRouter by default (FREE tier).
             # TODO: Add direct MiniMaxAdapter when MINIMAX_API_KEY is set.
+            return OpenRouterAdapter(
+                api_key=api_key,
+                default_model=model,
+            )
+
+        elif provider == "xai":
+            # Strip prefix: "x-ai/grok-build-0.1" → "grok-build-0.1"
+            clean_model = model.split("/", 1)[-1] if "/" in model else model
+            # Prefer explicit api_key param, then .env-backed settings (which
+            # overrides stale system env vars), then raw env as last resort.
+            _xai_key = api_key
+            if not _xai_key:
+                try:
+                    from weebot.config.settings import WeebotSettings
+                    _xai_key = WeebotSettings().xai_api_key
+                except Exception:
+                    _xai_key = os.getenv("XAI_API_KEY")
+            if not _xai_key:
+                _xai_key = os.getenv("XAI_API_KEY")
+            xai_key = _xai_key
+            direct = OpenAIAdapter(
+                api_key=xai_key,
+                base_url=XAI_API_BASE,
+                default_model=clean_model,
+            )
+            # If XAI_API_KEY is set, try direct first; fall back to OpenRouter
+            if _has_direct_key("XAI_API_KEY"):
+                fallback = OpenRouterAdapter(
+                    api_key=api_key,
+                    default_model=model,
+                )
+                return DirectOrFallbackAdapter(
+                    primary=direct,
+                    secondary=fallback,
+                    primary_label="xai-direct",
+                )
+            # No direct key — OpenRouter only
             return OpenRouterAdapter(
                 api_key=api_key,
                 default_model=model,
@@ -290,8 +343,36 @@ class AdapterFactory:
 
 
 def _has_direct_key(env_var: str) -> bool:
-    """Return True if the given API key env var is set to a non-empty value."""
+    """Return True if the given API key env var is set to a non-empty value.
+
+    Checks .env-backed settings first (which overrides stale system env vars),
+    then falls back to raw os.getenv.
+    """
     import os as _os
+
+    # Try pydantic-settings first (prefers .env over system env per our config)
+    try:
+        from weebot.config.settings import WeebotSettings
+        settings = WeebotSettings()
+        # Map env var name → settings field name
+        _field_map: dict = {
+            "XAI_API_KEY": "xai_api_key",
+            "DEEPSEEK_API_KEY": "deepseek_api_key",
+            "KIMI_API_KEY": "kimi_api_key",
+            "MOONSHOT_API_KEY": "kimi_api_key",  # both map to kimi
+            "OPENROUTER_API_KEY": "openrouter_api_key",
+            "OPENAI_API_KEY": "openai_api_key",
+            "ANTHROPIC_API_KEY": "anthropic_api_key",
+        }
+        field = _field_map.get(env_var)
+        if field:
+            val = getattr(settings, field, None)
+            if val and val.strip():
+                return True
+    except Exception:
+        pass
+
+    # Fallback: raw environment variable
     val = _os.getenv(env_var, "")
     return bool(val and val.strip())
 

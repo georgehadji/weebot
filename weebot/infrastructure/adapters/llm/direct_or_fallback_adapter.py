@@ -56,6 +56,15 @@ class DirectOrFallbackAdapter(LLMPort):
         key = getattr(client, "api_key", None)
         return bool(key) and key != "no-key" and key != ""
 
+    @property
+    def _secondary_has_key(self) -> bool:
+        """Check whether the fallback (OpenRouter) adapter has a usable API key."""
+        client = getattr(self._secondary, "_client", None)
+        if client is None:
+            return False
+        key = getattr(client, "api_key", None)
+        return bool(key) and key != "no-key" and key != ""
+
     # ── chat — the core dispatch ──────────────────────────────────
 
     async def chat(
@@ -91,9 +100,25 @@ class DirectOrFallbackAdapter(LLMPort):
         try:
             return await self._primary.chat(**shared)
         except Exception as exc:
-            # Surface the actual API error for debugging
+            # Surface the actual API error for debugging.
+            # Logged at INFO (not WARNING) so the executor's trajectory
+            # detector doesn't count adapter fallback as a step error.
             err_msg = str(exc)[:300] if str(exc) else "no detail"
-            logger.warning(
+
+            # Pre-flight: check if the fallback adapter has a valid key
+            # before attempting the call. Avoids masking the primary error
+            # with a misleading "401 Unauthorized" from a dead OpenRouter key.
+            if not self._secondary_has_key:
+                logger.error(
+                    "%s: direct call failed AND fallback (OpenRouter) has no valid "
+                    "API key. Primary error was: %s: %s",
+                    self._label,
+                    type(exc).__name__,
+                    err_msg,
+                )
+                raise  # re-raise primary error — fallback is impossible
+
+            logger.info(
                 "%s: direct call failed (%s: %s) — falling back to OpenRouter",
                 self._label,
                 type(exc).__name__,

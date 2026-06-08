@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
@@ -93,6 +93,18 @@ class OpenAIAdapter(LLMPort):
         response = None
         try:
             response = await self._client.chat.completions.create(**kwargs)
+        except AuthenticationError:
+            # 401/403 — API key is invalid, expired, or lacks permissions.
+            # Log clearly so the operator can rotate the key.
+            key_prefix = (self._client.api_key or "")[:12]
+            logger.error(
+                "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
+                "by the provider (base_url=%s). Check that the key is valid, "
+                "not expired, and has the required model permissions.",
+                key_prefix,
+                self._client.base_url,
+            )
+            raise
         except RateLimitError:
             # OpenRouter free models are often rate-limited upstream.
             # Use provider-safe fallbacks first.

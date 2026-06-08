@@ -42,6 +42,7 @@ from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.tracing_port import TracingPort
+from weebot.application.ports.rerank_port import RerankPort
 from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
 from weebot.application.services.task_runner import TaskRunner
 from weebot.config.harness.schema import HarnessConfig
@@ -130,6 +131,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(SubAgentCostTrackerPort, lambda: SubAgentCostTracker(budget_usd=0.50))
         self.register("cascade_tracker", lambda: self._create_cascade_tracker())
         self.register("soul_provider", lambda: self._create_soul_provider())
+        self.register(RerankPort, lambda: self._create_rerank_adapter())
+        self.register("skill_retriever", lambda: self._create_skill_retriever())
 
     # ── high-level builders ─────────────────────────────────────────
 
@@ -163,8 +166,9 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             from weebot.tools.bash_tool import BashTool
             from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
             from weebot.tools.python_tool import PythonExecuteTool as PythonTool
+            from weebot.tools.image_gen_tool import ImageGenTool
             try:
-                tools = ToolCollection(BashTool(), FileEditorTool(), PythonTool())
+                tools = ToolCollection(BashTool(), FileEditorTool(), PythonTool(), ImageGenTool())
             except Exception:
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
@@ -229,11 +233,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.tools.bash_tool import BashTool
         from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
         from weebot.tools.python_tool import PythonExecuteTool as PythonTool
+        from weebot.tools.image_gen_tool import ImageGenTool
 
         tools = ToolCollection(
             BashTool(),
             FileEditorTool(),
             PythonTool(),
+            ImageGenTool(),
         )
         return SubAgentFactory(
             llm=self.get(LLMPort),

@@ -16,6 +16,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC, MAX_TOKENS_SHORT
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class ConversationCompressor:
 
         compressed = head + [summary_msg] + tail
         logger.info(
-            "Compressed conversation buffer: %d → %d messages (%d summarized)",
+            "Compressed conversation buffer: %d -> %d messages (%d summarized)",
             total,
             len(compressed),
             len(middle),

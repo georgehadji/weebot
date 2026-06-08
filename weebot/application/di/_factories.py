@@ -160,6 +160,13 @@ class FactoriesMixin:
         return ModelCascadeTracker()
 
     @staticmethod
+    def _create_rerank_adapter():
+        from weebot.infrastructure.adapters.openrouter_rerank_adapter import (
+            OpenRouterRerankAdapter,
+        )
+        return OpenRouterRerankAdapter()
+
+    @staticmethod
     def _create_checkpoint_store(db_path: str = "sessions.db"):
         from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
         return SQLiteCheckpointStore(db_path=db_path)

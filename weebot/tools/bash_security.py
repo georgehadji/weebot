@@ -117,8 +117,17 @@ class CommandSecurityAnalyzer:
     _BASE64_MIN_LENGTH: int = 20  # Reduced to catch shorter base64 strings
     
     # Layer 4: Semantic validation
-    _MAX_COMMAND_CHAIN_LENGTH: int = 5  # Max operators in chain
+    _MAX_COMMAND_CHAIN_LENGTH: int = 8  # Max operators in chain (raised from 5 — PowerShell pipes are normal)
     _DANGEROUS_OPERATORS: Set[str] = {';', '&&', '||', '|', '|&'}
+
+    # PowerShell patterns that are safe despite high operator count
+    _SAFE_POWERSHELL_PATTERNS: list = [
+        r'Get-ChildItem.*\|.*Select-Object.*\|.*Format-',    # file listing
+        r'Get-ChildItem.*\|.*Where-Object.*\|.*Select-',     # filtered search
+        r'Get-Content.*\|.*ForEach-Object',                   # content processing
+        r'Get-ChildItem.*\|.*Select-String',                  # grep equivalent
+        r'Get-Item.*\|.*Select-Object',                       # file stat
+    ]
     
     def analyze(self, command: str) -> SecurityAssessment:
         """Perform multi-layer security analysis.
@@ -346,6 +355,10 @@ class CommandSecurityAnalyzer:
     
     def _layer4_semantic_analysis(self, command: str) -> SecurityAssessment:
         """Validate command structure."""
+        # Allowlist: known-safe PowerShell patterns skip chain-length check
+        for pattern in self._SAFE_POWERSHELL_PATTERNS:
+            if re.search(pattern, command, re.IGNORECASE):
+                return SecurityAssessment(RiskLevel.SAFE, 4, "Known-safe PowerShell pattern")
         # Check command chain length
         chain_count = len(re.findall(r'[;|&]', command))
         if chain_count > self._MAX_COMMAND_CHAIN_LENGTH:

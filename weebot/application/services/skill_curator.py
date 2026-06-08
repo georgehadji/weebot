@@ -19,6 +19,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import EvolutionEntry, Skill

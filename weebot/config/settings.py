@@ -16,7 +16,7 @@ MAX_RETRIES = 3
 CONFIRM_DELETE = True
 BROWSER_TIMEOUT = 30000  # ms
 HEADLESS = False
-MODEL_NAME = "nvidia/nemotron-3-ultra-550b-a55b:free"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
+MODEL_NAME = "x-ai/grok-build-0.1"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
 TEMPERATURE = 0.2
 POWERSHELL_PRIORITY_KEYWORDS = [
     "file", "delete", "copy", "move", "directory",
@@ -25,7 +25,12 @@ POWERSHELL_PRIORITY_KEYWORDS = [
 
 
 class WeebotSettings(BaseSettings):
-    """weebot configuration with validation."""
+    """weebot configuration with validation.
+
+    Source priority: .env file > system environment > defaults.
+    This ensures the .env file (committed config) takes precedence
+    over potentially stale system environment variables.
+    """
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
@@ -33,9 +38,27 @@ class WeebotSettings(BaseSettings):
         extra="ignore",
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """Put .env file FIRST so it overrides system environment variables."""
+        return (
+            dotenv_settings,      # .env file — highest priority
+            env_settings,         # system environment
+            init_settings,        # constructor kwargs
+            file_secret_settings, # secrets dir
+        )
+
     # AI API Keys (at least one required)
     kimi_api_key: str | None = None
     deepseek_api_key: str | None = None
+    xai_api_key: str | None = None          # env: XAI_API_KEY
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     openrouter_api_key: str | None = None   # env: OPENROUTER_API_KEY
