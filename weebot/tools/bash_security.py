@@ -355,13 +355,23 @@ class CommandSecurityAnalyzer:
     
     def _layer4_semantic_analysis(self, command: str) -> SecurityAssessment:
         """Validate command structure."""
+        # PowerShell heuristic: if command contains PowerShell cmdlets or starts with "$",
+        # use a much higher operator threshold (20 vs 8).
+        _powershell_cmdlet_re = re.compile(
+            r'\b(Get-|Write-|ForEach-Object|Select-Object|Sort-Object|Where-Object|'
+            r'New-Item|Test-Path|Remove-Item|Set-Content|Add-Content|Out-File|'
+            r'Format-Table|Format-List|Measure-Object)\b',
+            re.IGNORECASE,
+        )
+        _powershell_threshold = 20 if (_powershell_cmdlet_re.search(command) or command.strip().startswith('$')) else self._MAX_COMMAND_CHAIN_LENGTH
+
         # Allowlist: known-safe PowerShell patterns skip chain-length check
         for pattern in self._SAFE_POWERSHELL_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
                 return SecurityAssessment(RiskLevel.SAFE, 4, "Known-safe PowerShell pattern")
-        # Check command chain length
+        # Check command chain length (PowerShell-aware threshold)
         chain_count = len(re.findall(r'[;|&]', command))
-        if chain_count > self._MAX_COMMAND_CHAIN_LENGTH:
+        if chain_count > _powershell_threshold:
             return SecurityAssessment(
                 risk_level=RiskLevel.SUSPICIOUS,
                 layer_triggered=4,
