@@ -99,80 +99,120 @@ class ExecutingState(FlowState):
         context._plan = context._plan.update_step_status(step.id, StepStatus.RUNNING)
         logger.info("Executing step %s: %s", step.id, step.description)
 
+        if getattr(context, "_hooks", None) is not None:
+            _step_idx = next(
+                (i for i, s in enumerate(context._plan.steps) if s.id == step.id), 0
+            )
+            await context._hooks.execute_hooks("pre_task", {
+                "session_id": context._session.id,
+                "step_id": step.id,
+                "step_description": step.description,
+                "step_index": _step_idx,
+                "total_steps": len(context._plan.steps),
+                "plan": context._plan,
+            })
+
         # Initialize flags before the event consumption paths
         hitl_paused = False
         execution_failed = False
         inner_facts = {}
         inner_should_terminate = False
 
-        # --- CQRS: execute step through mediator ---
-        if context._mediator:
-            from weebot.application.cqrs.commands import ExecuteStepCommand
-            cmd_result = await context._mediator.send(
-                ExecuteStepCommand(
-                    session_id=context._session.id,
-                    step_id=step.id,
-                    model=context._model or "",
-                    tools=[t.name for t in context._tools],
+        # --- CQRS: execute step through mediator (REQUIRED) ---
+        if context._mediator is None:
+            yield ErrorEvent(
+                error=(
+                    "ExecutingState requires a Mediator to be configured on PlanActFlow. "
+                    "Construct PlanActFlow with mediator=container.get(Mediator) or "
+                    "use container.build_agent_runner()."
                 )
             )
-            if not cmd_result.success:
-                yield ErrorEvent(
-                    error=f"Step execution rejected: {cmd_result.error}"
-                )
-                context.set_state(UpdatingState())
-                return
+            context.set_state(UpdatingState())
+            return
 
-            # Consume events from the mediator result.
-            # inner_facts and inner_should_terminate are already
-            # initialised above; the direct-call path fills them in.
-            # Consume events via shared reconstructor.
-            from weebot.application.cqrs.event_reconstructor import reconstruct_events
-            for event in reconstruct_events(cmd_result.data.get("events", [])):
-                await context._emit(event)
-                yield event
-                if isinstance(event, WaitForUserEvent):
-                    hitl_paused = True
-                elif isinstance(event, ErrorEvent):
-                    execution_failed = True
-                # Reconstruct shutdown signals from the serialised events
-                if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
-                    inner_should_terminate = True
-        else:
-            # Fallback: direct agent call.
-            import warnings
-            warnings.warn(
-                "ExecutingState: no mediator, using direct executor call. "
-                "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
-                DeprecationWarning, stacklevel=2,
+        import time as _time
+        _step_t0 = _time.monotonic()
+        from weebot.application.cqrs.commands import ExecuteStepCommand
+        from weebot.config.model_refs import MODEL_BUDGET
+        cmd_result = await context._mediator.send(
+            ExecuteStepCommand(
+                session_id=context._session.id,
+                step_id=step.id,
+                model=context._model or MODEL_BUDGET,
+                tools=[t.name for t in context._tools],
             )
-            # Pass prompt (with any steering) as user_input so resume
-            # answers and mid-execution feedback reach the LLM.
-            async for event in context._executor.execute_step(
-                context._plan, step, user_input=effective_prompt
-            ):
-                await context._emit(event)
-                yield event
-                if isinstance(event, WaitForUserEvent):
-                    hitl_paused = True
-                elif isinstance(event, ErrorEvent):
-                    execution_failed = True
-            # Use the flow's executor state only in direct-call path
-            inner_facts = context._executor.facts
-            inner_should_terminate = context._executor.should_terminate
+        )
+        _step_elapsed = _time.monotonic() - _step_t0
+        if not cmd_result.success:
+            yield ErrorEvent(
+                error=f"Step execution rejected: {cmd_result.error}"
+            )
+            context.set_state(UpdatingState())
+            return
+
+        # Consume events from the mediator result via shared reconstructor.
+        from weebot.application.cqrs.event_reconstructor import reconstruct_events
+        for event in reconstruct_events(cmd_result.data.get("events", [])):
+            await context._emit(event)
+            yield event
+            if isinstance(event, WaitForUserEvent):
+                hitl_paused = True
+            elif isinstance(event, ErrorEvent):
+                execution_failed = True
+            # Reconstruct shutdown signals from the serialised events
+            if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
+                inner_should_terminate = True
 
         if hitl_paused:
-            logger.info("Step %s paused for human input", step.id)
+            logger.info("Step %s paused for human input after %.1fs",
+                        step.id, _step_elapsed)
             context._session = context._session.set_status(SessionStatus.WAITING)
             return
 
         if execution_failed:
-            logger.warning("Step %s failed during execution; transitioning to UPDATING", step.id)
+            if getattr(context, "_hooks", None) is not None:
+                await context._hooks.execute_hooks("on_error", {
+                    "session_id": context._session.id,
+                    "step_id": step.id,
+                    "error": "step execution failed",
+                    "error_type": "step_failure",
+                    "plan": context._plan,
+                })
+            # If ALL models are circuit-broken, replanning will also fail.
+            # Skip the replan cycle and go straight to terminal state.
+            _all_tripped = any(
+                "All models in the cascade have tripped" in getattr(e, "error", "")
+                for e in cmd_result.data.get("events", [])
+                if isinstance(e, dict) and e.get("type") == "error"
+            )
+            if _all_tripped:
+                logger.warning(
+                    "Step %s: all models tripped — skipping replan, forcing completion (%.1fs)",
+                    step.id, _step_elapsed,
+                )
+                context._plan = context._plan.update_step_status(
+                    step.id, StepStatus.COMPLETED
+                )
+                context.set_state(VerifyingState())
+                return
+
+            logger.warning("Step %s failed during execution in %.1fs; transitioning to UPDATING",
+                           step.id, _step_elapsed)
             context.set_state(UpdatingState())
             return
 
         # Update step as completed
         context._plan = context._plan.update_step_status(step.id, StepStatus.COMPLETED)
+        logger.info("Step %s completed in %.1fs", step.id, _step_elapsed)
+
+        if getattr(context, "_hooks", None) is not None:
+            await context._hooks.execute_hooks("post_task", {
+                "session_id": context._session.id,
+                "step_id": step.id,
+                "step_description": step.description,
+                "elapsed_ms": _step_elapsed * 1000,
+                "plan": context._plan,
+            })
 
         # Persist any facts extracted by the executor BEFORE checking termination
         for key, value in inner_facts.items():

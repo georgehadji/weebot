@@ -143,6 +143,7 @@ class PlanActFlow(BaseFlow):
         self._knowledge_graph = cfg.knowledge_graph
         self._behavioral_learner = cfg.behavioral_learner
         self._checkpoint_port = cfg.checkpoint_port
+        self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
         self._profile_name = cfg.profile_name
         self._agent_role = cfg.agent_role
         self._personality = cfg.personality
@@ -379,9 +380,16 @@ class PlanActFlow(BaseFlow):
             # Fresh session, or WAITING with no plan (from a failed prior run)
             self.set_state(PlanningState())
 
+        if self._hooks is not None:
+            await self._hooks.execute_hooks("pre_execute", {
+                "session_id": self._session.id,
+                "prompt": effective_prompt,
+                "plan": None,
+            })
+
         max_iterations = self._max_iterations
         iteration_count = 0
-        
+
         # Track if the prompt has been "consumed" by a state that needs it.
         # This prevents an answer to step 1 from being injected as a prompt to step 2.
         prompt_consumed = False
@@ -407,6 +415,14 @@ class PlanActFlow(BaseFlow):
                     await result  # coroutine — blocks until state transitions
             except PlanStuckError as stuck:
                 self._log.error("Plan stuck: %s — terminating flow", stuck)
+                if self._hooks is not None:
+                    await self._hooks.execute_hooks("on_error", {
+                        "session_id": self._session.id,
+                        "step_id": None,
+                        "error": f"PLAN_STUCK: {stuck}",
+                        "error_type": "plan_stuck",
+                        "plan": self._plan,
+                    })
                 yield ErrorEvent(
                     error=(
                         f"Plan is stuck after {self._similar_plan_count} identical plans. "
@@ -425,6 +441,17 @@ class PlanActFlow(BaseFlow):
             # If we are IDLE after state execution, we might be finished
             if self.status == AgentStatus.IDLE:
                 break
+
+        if self._hooks is not None:
+            _post_elapsed = (time.monotonic() - self._flow_started_at) * 1000
+            _total_tokens = 0
+            await self._hooks.execute_hooks("post_execute", {
+                "session_id": self._session.id,
+                "plan": self._plan,
+                "status": self._session.status.value,
+                "elapsed_ms": _post_elapsed,
+                "total_tokens": _total_tokens,
+            })
 
         if iteration_count > max_iterations:
             yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")

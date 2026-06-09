@@ -48,7 +48,10 @@ class UpdatingState(FlowState):
 
         # --- CQRS: execute plan update through mediator ---
         if context._mediator:
+            import time as _time
+            _update_t0 = _time.monotonic()
             from weebot.application.cqrs.commands import UpdatePlanCommand
+            from weebot.config.model_refs import MODEL_BUDGET
             cmd_result = await context._mediator.send(
                 UpdatePlanCommand(
                     session_id=context._session.id,
@@ -60,9 +63,10 @@ class UpdatingState(FlowState):
                         f"Step {last_step.id} {last_step.status.value}{failure_msg}. "
                         "Generate a NEW approach that does not repeat the same strategy."
                     ),
-                    model=context._model or "",
+                    model=context._model or MODEL_BUDGET,
                 )
             )
+            _update_elapsed = _time.monotonic() - _update_t0
             if not cmd_result.success:
                 yield ErrorEvent(
                     error=f"Plan update rejected: {cmd_result.error}"
@@ -70,6 +74,7 @@ class UpdatingState(FlowState):
                 context.set_state(ExecutingState())
                 return
 
+            logger.info("Plan updated in %.1fs", _update_elapsed)
             # Consume events from the mediator result.
             # Consume events via shared reconstructor.
             from weebot.application.cqrs.event_reconstructor import reconstruct_events
@@ -79,6 +84,15 @@ class UpdatingState(FlowState):
                 if isinstance(event, PlanEvent) and event.status == PlanStatus.UPDATED:
                     context._plan = Plan.model_validate(event.plan)
                     update_success = True
+                    # Hook: post_plan_updated
+                    if getattr(context, "_hooks", None) is not None:
+                        await context._hooks.execute_hooks("post_plan_updated", {
+                            "session_id": context._session.id,
+                            "plan": context._plan,
+                            "step_count": len(context._plan.steps),
+                            "elapsed_ms": _update_elapsed * 1000,
+                            "reason": f"Step {last_step.id} {last_step.status.value}",
+                        })
 
             # Also check for plan in result top-level
             if not update_success and cmd_result.data.get("plan"):
@@ -92,8 +106,18 @@ class UpdatingState(FlowState):
                 "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
                 DeprecationWarning, stacklevel=2,
             )
+            # ── HyperAgents Enhancement 3: inject avoidance prompt ──
+            from weebot.application.services.plan_novelty import PlanNoveltyTracker
+            tracker = PlanNoveltyTracker()
+            plans = context._plan_history.get_all()  # snapshot history
+            avoidance = tracker.avoidance_prompt(plans) if plans else ""
+
+            fc = str(last_step.result or "")
+            if avoidance:
+                fc = f"{fc}\n{avoidance}"
+
             async for event in context._planner.update_plan(
-                context._plan, last_step, failure_context=str(last_step.result or ""),
+                context._plan, last_step, failure_context=fc,
             ):
                 await context._emit(event)
                 yield event

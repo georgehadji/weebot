@@ -65,8 +65,10 @@ class PlanningState(FlowState):
             )
             return
 
+        import time as _time
         from weebot.application.cqrs.commands import CreatePlanCommand
         from weebot.config.model_refs import MODEL_BUDGET
+        _plan_t0 = _time.monotonic()
         cmd_result = await context._mediator.send(
             CreatePlanCommand(
                 session_id=context._session.id,
@@ -75,6 +77,7 @@ class PlanningState(FlowState):
                 context=context._session.context.model_dump(mode="json"),
             )
         )
+        _plan_elapsed = _time.monotonic() - _plan_t0
         if not cmd_result.success:
             yield EE(error=f"Plan creation rejected: {cmd_result.error}")
             return
@@ -86,7 +89,16 @@ class PlanningState(FlowState):
             yield event
             if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
                 context._plan = Plan.model_validate(event.plan)
-                logger.info("Plan created with %d steps", len(context._plan.steps))
+                logger.info("Plan created with %d steps in %.1fs",
+                            len(context._plan.steps), _plan_elapsed)
+                # Hook: post_plan_created
+                if getattr(context, "_hooks", None) is not None:
+                    await context._hooks.execute_hooks("post_plan_created", {
+                        "session_id": context._session.id,
+                        "plan": context._plan,
+                        "step_count": len(context._plan.steps),
+                        "elapsed_ms": _plan_elapsed * 1000,
+                    })
 
         # Also check for plan in result top-level
         if context._plan is None and cmd_result.data.get("plan"):

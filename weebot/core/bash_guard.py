@@ -11,7 +11,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
+
+# Optional global hook registry for post_bash_guard events.
+_bash_guard_hooks: Any = None
+
+
+def set_bash_guard_hooks(registry: Any) -> None:
+    global _bash_guard_hooks
+    _bash_guard_hooks = registry
 
 
 class RiskLevel(str, Enum):

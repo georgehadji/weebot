@@ -108,7 +108,31 @@ class CompletedState(FlowState):
         except Exception:
             logger.debug("SessionStamp emission failed — non-blocking", exc_info=True)
 
-        logger.info("PlanActFlow completed for session %s", context._session.id)
+        import time as _time
+        _total_elapsed = _time.monotonic() - context._flow_started_at
+        logger.info("PlanActFlow completed for session %s in %.1fs",
+                    context._session.id, _total_elapsed)
+
+        # ── Hook: post_complete ────────────────────────────────────
+        if getattr(context, "_hooks", None) is not None:
+            from weebot.application.services.plan_history import PlanHistory
+            _fp = PlanHistory.plan_fingerprint(context._plan) if context._plan else ""
+            _tool_count = sum(
+                1 for e in context._session.events
+                if type(e).__name__ == "ToolEvent"
+            )
+            _error_count = sum(
+                1 for e in context._session.events
+                if type(e).__name__ == "ErrorEvent"
+            )
+            await context._hooks.execute_hooks("post_complete", {
+                "session_id": context._session.id,
+                "plan": context._plan,
+                "tool_count": _tool_count,
+                "error_count": _error_count,
+                "total_elapsed_ms": _total_elapsed * 1000,
+                "plan_fingerprint": _fp,
+            })
 
         # Reset to IDLE for potential future runs in same session object
         # but the run loop in PlanActFlow will pick this up.

@@ -173,6 +173,15 @@ class VerifyingState(FlowState):
             except Exception:
                 pass
 
+        # ── Hook: post_verification ─────────────────────────────────
+        if getattr(flow, "_hooks", None) is not None:
+            await flow._hooks.execute_hooks("post_verification", {
+                "session_id": flow._session.id,
+                "scores": scores,
+                "gate_failures": gate_failures,
+                "inconsistency_count": len(inconsistencies) if 'inconsistencies' in dir() else 0,
+            })
+
         # ── Transition to Completed ─────────────────────────────────
         from weebot.application.flows.states.completed import CompletedState
         flow.set_state(CompletedState())

@@ -328,7 +328,22 @@ class BashTool(BaseTool):
 
         # --- BashGuard security (second layer, defense in depth) ---
         risk_level, checks = self._bash_guard.evaluate(command)
-        from weebot.core.bash_guard import RiskLevel
+        from weebot.core.bash_guard import RiskLevel, _bash_guard_hooks
+
+        # Fire post_bash_guard hook asynchronously via fire-and-forget
+        if _bash_guard_hooks is not None:
+            import asyncio as _aio
+            try:
+                _loop = _aio.get_running_loop()
+                _loop.create_task(_bash_guard_hooks.execute_hooks("post_bash_guard", {
+                    "session_id": "bash_tool",
+                    "command": command[:200],
+                    "risk_level": risk_level.value,
+                    "allowed": risk_level not in (RiskLevel.BLOCKED, RiskLevel.DANGEROUS),
+                }))
+            except RuntimeError:
+                pass
+
         if risk_level == RiskLevel.BLOCKED:
             reasons = [c.description for c in checks if c.description]
             logger.warning("Blocked command: %s", command[:200])

@@ -150,6 +150,7 @@ class ExecutorAgent:
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
         agent_role: str | None = None,  # Agent role for per-role model selection
+        hooks: Optional[Any] = None,  # HookRegistryPort for pre/post tool call events
     ):
         self._llm = llm
         self._tools = tools
@@ -161,6 +162,7 @@ class ExecutorAgent:
         self._personality = personality
         self._profile_name = profile_name
         self._agent_role = agent_role
+        self._hooks = hooks
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._trajectory_monitor = None  # lazy-created in execute_step
@@ -567,6 +569,8 @@ class ExecutorAgent:
         self._facts.clear()
         self._should_terminate = False
         self._conversation_buffer.clear()
+        self._current_step_id = step.id
+        self._current_session_id = getattr(user_input, 'session_id', 'unknown')
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
@@ -935,6 +939,9 @@ class ExecutorAgent:
 
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.COMPLETED)
 
+    def _get_step_id(self) -> str:
+        return getattr(self, '_current_step_id', 'unknown')
+
     async def execute_tool(self, name: str, arguments: str | dict[str, Any] | None = None) -> ToolResult:
         """Public helper to execute a single tool call."""
         if isinstance(arguments, str):
@@ -965,6 +972,15 @@ class ExecutorAgent:
             except (ValueError, TypeError):
                 pass
         
+        # Pre-tool hook
+        if self._hooks is not None:
+            await self._hooks.execute_hooks("pre_tool_call", {
+                "session_id": getattr(self, '_current_session_id', 'unknown'),
+                "step_id": self._get_step_id(),
+                "tool_name": name,
+                "tool_args": args,
+            })
+        _t0 = time.monotonic()
         try:
             result = await asyncio.wait_for(self._tools.execute(_name=name, **args), timeout=timeout)
         except asyncio.TimeoutError:
@@ -975,6 +991,18 @@ class ExecutorAgent:
                 timeout_seconds=timeout,
                 tool_name=name,
             )
+        _elapsed = (time.monotonic() - _t0) * 1000
+        # Post-tool hook
+        if self._hooks is not None:
+            await self._hooks.execute_hooks("post_tool_call", {
+                "session_id": getattr(self, '_current_session_id', 'unknown'),
+                "step_id": self._get_step_id(),
+                "tool_name": name,
+                "tool_args": args,
+                "result": result,
+                "elapsed_ms": _elapsed,
+                "success": not isinstance(result, Exception),
+            })
         return result
 
     async def _execute_tool_call(self, tc: Dict[str, Any]) -> ToolResult:
