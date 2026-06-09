@@ -32,6 +32,7 @@ from weebot.domain.models.event import (
     ToolStatus,
     WaitForUserEvent,
 )
+from weebot.domain.exceptions import AllModelsTrippedError
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.trajectory import TrajectoryHealth
 from weebot.application.models.tool_collection import ToolCollection
@@ -127,16 +128,6 @@ def _classify_tool_error(error_output: str) -> Optional[str]:
     if "access denied" in lo or "permission" in lo:
         return "permission_denied"
     return None
-
-
-class AllModelsTrippedError(Exception):
-    """Raised when every model in the cascade has been circuit-broken.
-
-    This is a terminal condition — the executor cannot proceed without
-    at least one working LLM. The caller should stop the step and surface
-    the error to the user.
-    """
-    pass
 
 
 class ExecutorAgent:
@@ -446,6 +437,24 @@ class ExecutorAgent:
                 if resp is not None:
                     for pending_fut in _pending:
                         pending_fut.cancel()
+                    # ── Silently retrieve exceptions from cancelled tasks ──
+                    # If a pending task raised before being cancelled, its
+                    # exception is "never retrieved" and Python logs a noisy
+                    # warning.  Calling .exception() on each cancelled future
+                    # suppresses that warning without losing diagnostic info.
+                    for pfut in _pending:
+                        if pfut.cancelled():
+                            continue
+                        try:
+                            exc = pfut.exception()
+                        except asyncio.InvalidStateError:
+                            # Task hasn't completed yet — skip
+                            continue
+                        if exc is not None:
+                            logger.debug(
+                                "Suppressed exception from cancelled cascade task: %s",
+                                exc,
+                            )
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
@@ -769,7 +778,11 @@ class ExecutorAgent:
                     diagnosis = self._trajectory_monitor.diagnose(
                         step_id=step.id,
                         tool_signature=signature,
-                        tool_output=result.output if not result.is_error else None,
+                        # Always pass output so the monitor can track
+                        # error patterns — even error outputs help
+                        # distinguish "all models down" from healthy
+                        # multi-tool exploration.
+                        tool_output=result.output or "",
                         step_result=step_result if step_result else None,
                         total_budget=self._max_steps,
                         used_budget=tool_calls_attempted,
@@ -783,10 +796,17 @@ class ExecutorAgent:
                         "Trajectory %s for step %s: %s",
                         diagnosis.health.value, step.id, diagnosis.detail,
                     )
-                    if diagnosis.health == TrajectoryHealth.TERMINAL:
+                    # Terminal, semantic loop, and stagnation all warrant
+                    # auto-abort — continuing only burns tokens.
+                    _auto_abort_health = {
+                        TrajectoryHealth.TERMINAL,
+                        TrajectoryHealth.SEMANTIC_LOOP,
+                        TrajectoryHealth.STAGNATING,
+                    }
+                    if diagnosis.health in _auto_abort_health:
                         loop_error = (
-                            f"Terminal trajectory for step '{step.id}': {diagnosis.detail}. "
-                            "Stopping execution — check API availability."
+                            f"Trajectory {diagnosis.health.value} for step '{step.id}': "
+                            f"{diagnosis.detail}. Auto-aborting step."
                         )
                         yield ErrorEvent(error=loop_error)
                         abort_step = True

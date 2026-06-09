@@ -79,7 +79,12 @@ class PlannerAgent:
         self._model = model
         self._episodic_memory = episodic_memory
         self._prompt_variant_id = prompt_variant_id
-        system_prompt = self._get_system_prompt() + SPEC_FILE_RULE
+        system_prompt = self._get_system_prompt()
+        # Only inject the spec-file rule for complex multi-section UI tasks
+        # where explicit spec files genuinely reduce executor context pressure.
+        # For simple tasks, this rule causes over-decomposition and executor loops.
+        if skill_prompt and any(kw in skill_prompt.lower() for kw in ("multi-section", "multi-page", "5+ sections")):
+            system_prompt += SPEC_FILE_RULE
         if skill_prompt:
             system_prompt = f"{system_prompt}\n\n{skill_prompt}"
         if facts:
@@ -298,15 +303,37 @@ class PlannerAgent:
             logger.exception("Failed to update plan")
             yield ErrorEvent(error=f"Plan update failed: {exc}")
 
+    # Patterns for steps that write spec files — these cause executor loops
+    # when the conversation buffer fills up and the LLM can't complete the file.
+    _SPEC_STEP_PATTERNS: list = [
+        r'tasks/specs/',
+        r'write.*spec.*to.*tasks/specs',
+        r'file_editor.*tasks/specs',
+        r'section spec.*tasks/specs',
+    ]
+
     @staticmethod
     def _parse_plan(data: Dict[str, Any]) -> Plan:
+        import re as _re
         steps_data = data.get("steps", [])
         steps = []
+        spec_count = 0
         for idx, s in enumerate(steps_data):
             step_id = s.get("id") or f"step-{idx + 1}"
+            desc = s.get("description", "")
+            # Filter: drop spec-writing steps that cause executor loops.
+            # Allow at most 1 spec step per plan (some tasks genuinely need one).
+            is_spec_step = any(
+                _re.search(pat, desc, _re.IGNORECASE)
+                for pat in PlannerAgent._SPEC_STEP_PATTERNS
+            )
+            if is_spec_step:
+                spec_count += 1
+                if spec_count > 1:
+                    continue  # drop excessive spec steps
             steps.append(Step(
                 id=step_id,
-                description=s.get("description", ""),
+                description=desc,
                 status="pending",
             ))
         return Plan(
