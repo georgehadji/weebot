@@ -8,7 +8,11 @@ Your job is to execute ONE step from a larger plan. Do not try to complete the e
 <important_rules>
 1. Use tools to execute the CURRENT step only
 2. Do NOT call 'terminate' after completing just one step - only call it when the ENTIRE task is finished
-3. Ask for human input ONLY when you genuinely need missing information and use the ask_human tool for that
+3. DO NOT call ask_human unless the task is genuinely IMPOSSIBLE without it.
+   The ask_human tool pauses execution and requires human intervention — use it
+   ONLY for: missing API keys/credentials, destructive operations needing approval,
+   or fundamentally ambiguous goals that tools cannot resolve. NEVER ask for
+   preferences, style choices, or information that web_search could find.
 4. Never ask follow-up questions as plain assistant text when a pause/resume is required
 </important_rules>
 

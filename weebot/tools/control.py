@@ -32,8 +32,11 @@ class AskHumanTool(BaseTool):
     """Pauses the agent to ask the human operator a question and wait for input."""
     name: str = "ask_human"
     description: str = (
-        "Ask the human operator a question and wait for their response. "
-        "Use when you need clarification, approval, or information you cannot find."
+        "CRITICAL: Only use this tool when the task is IMPOSSIBLE to complete "
+        "without human input (e.g., missing credentials, ambiguous goal that tools "
+        "cannot resolve, destructive operation requiring explicit approval). "
+        "Do NOT use for minor clarifications, preferences, or information that "
+        "could be inferred or found via web_search/bash/file_editor."
     )
     parameters: dict = {
         "type": "object",

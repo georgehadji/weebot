@@ -20,7 +20,10 @@ Required JSON structure:
 Rules:
 - Create ALL steps needed to fully complete the task - do not stop at just one or two steps
 - For file operations: include steps to find files, verify destination, move/copy files, and verify completion
-- Include a follow-up step ONLY when user clarification is genuinely needed to continue
+- Include a follow-up step ONLY when the task is genuinely impossible without user input
+  (missing API key, destructive operation needing approval, ambiguous goal tools cannot resolve).
+  NEVER add follow-up steps for style preferences, minor clarifications, or information
+  that web_search or file inspection could provide.
 - ONLY create steps that this agent can execute with available tools (searching, reading, writing, code edits, shell commands, browser/web tools)
 - Do NOT create human-only or physical-world steps (e.g., phone calls, visiting properties, signing legal documents)
 - If a human-only action is required, end with one concise informational step telling the user what they must do next
