@@ -3,40 +3,44 @@
 9 allowed models — all explicit provider-qualified IDs.
 ``openrouter/auto`` is FORBIDDEN.
 
-Cascade (4-tier) — verified against OpenRouter API 2026-06-07:
-  Tier 1: NVIDIA Nemotron 3 Ultra — FREE, 1M ctx, reasoning, tools, 55B active/550B MoE
-  Tier 2: MiniMax M3 — paid, 1M ctx, multimodal, thinking toggle
-  Tier 3: Grok Build 0.1 — fast coding, agentic SWE
-  Tier 4: Qwen 3.7 Max — flagship coding, 1M ctx
+Cascade (2-tier direct API + 2-tier OpenRouter):
+  Tier 1: Kimi K2.6 — via KIMI_API_KEY (direct), OpenRouter fallback
+  Tier 2: DeepSeek V4 Flash — via DEEPSEEK_API_KEY (direct), OpenRouter fallback
+  Tier 3: Grok Build 0.1 — fast coding, agentic SWE (OpenRouter)
+  Tier 4: Qwen 3.7 Max — flagship coding, 1M ctx (OpenRouter)
 
 Task-specific:
-  CODING:        Qwen 3.7 Max + Grok Build 0.1
-  FILE_OPS:      MiniMax M3 (1M ctx, multimodal)
-  RESEARCH:      Nemotron 3 Ultra (free, reasoning) — structured output
+  CODING:        DeepSeek V4 Flash + Grok Build 0.1
+  FILE_OPS:      DeepSeek V4 Flash
+  RESEARCH:      Kimi K2.6 (direct API, structured output)
   REVIEW:        Grok 4.3 — reasoning, high factual accuracy
-  PLANNING:      Nemotron 3 Ultra (free, reasoning) — structured planning
-  SECURITY:      Grok 4.3 + DeepSeek V4 Pro — reasoning, factual accuracy
-  SUMMARIZATION: MiniMax M3 (fast, 1M ctx)
-  GENERAL:       Nemotron 3 Ultra (free, reasoning)
+  PLANNING:      Kimi K2.6 (direct API, structured planning)
+  SECURITY:      Grok 4.3 + DeepSeek V4 Flash — reasoning
+  SUMMARIZATION: DeepSeek V4 Flash (fast, cheap)
+  GENERAL:       Kimi K2.6 (direct API preferred)
 """
 from __future__ import annotations
 
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-"""Tier 1: NVIDIA Nemotron 3 Ultra — FREE, 1M context, reasoning, tool support.
-55B active parameters out of 550B total (MoE). Hybrid Transformer-Mamba architecture.
-Verified on OpenRouter API 2026-06-07."""
+MODEL_CASCADE_TIER1: str = "x-ai/grok-build-0.1"
+"""Tier 1: Grok Build 0.1 — primary model.
+Direct API via XAI_API_KEY (preferred, lower latency).
+OpenRouter fallback if XAI_API_KEY not set.
+Native model ID: ``grok-build-0.1`` (OpenAI-compatible endpoint)."""
 
-MODEL_BUDGET: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-"""Budget/free model for non-critical operations (compression, curation, defaults)."""
+MODEL_BUDGET: str = "x-ai/grok-build-0.1"
+"""Budget model for non-critical operations (compression, curation, defaults).
+Same as Tier 1 — fast coding model via direct XAI_API_KEY."""
 
-MODEL_CASCADE_TIER2: str = "minimax/minimax-m3"
-"""Tier 2: MiniMax M3 — FREE, 1M context, multimodal, thinking toggle."""
+MODEL_CASCADE_TIER2: str = "deepseek/deepseek-v4-flash"
+"""Tier 2: DeepSeek V4 Flash — fast fallback.
+Direct API via DEEPSEEK_API_KEY (preferred). OpenRouter fallback.
+Native model ID: ``deepseek-v4-flash`` (stripped by DeepSeekAdapter)."""
 
-MODEL_CASCADE_TIER3: str = "x-ai/grok-build-0.1"
-"""Tier 3: Grok Build 0.1 — fast coding model for agentic SWE workflows."""
+MODEL_CASCADE_TIER3: str = "moonshotai/kimi-k2.6"
+"""Tier 3: Kimi K2.6 — structured output, broad knowledge, 256K context."""
 
 MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 """Tier 4: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
@@ -44,95 +48,95 @@ MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-"""Planning: Nemotron 3 Ultra — FREE, reasoning, structured planning."""
+MODEL_PLANNER: str = "x-ai/grok-build-0.1"
+"""Planning: Grok Build 0.1 — fast coding model for agentic planning via direct XAI_API_KEY."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
 
-MODEL_SUMMARIZE: str = "minimax/minimax-m3"
-"""Summary: MiniMax M3 — fast, 1M context, multimodal."""
+MODEL_SUMMARIZE: str = "deepseek/deepseek-v4-flash"
+"""Summary: DeepSeek V4 Flash — fast, cheap, good summarization via DEEPSEEK_API_KEY."""
 
 # ========================================================================
 # Per-Agent (Role) Model Selection
 # ========================================================================
-MODEL_ROLE_RESEARCHER: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-"""Researcher: Nemotron 3 Ultra (free, reasoning) — structured output, broad knowledge, source synthesis."""
+MODEL_ROLE_RESEARCHER: str = "x-ai/grok-build-0.1"
+"""Researcher: Grok Build 0.1 via XAI_API_KEY — fast coding, broad knowledge, source synthesis."""
 
-MODEL_ROLE_ANALYST: str = "deepseek/deepseek-v4-pro"
-"""Analyst: DeepSeek V4 Pro — strongest math/reasoning, complex data analysis."""
+MODEL_ROLE_ANALYST: str = "deepseek/deepseek-v4-flash"
+"""Analyst: DeepSeek V4 Flash via DEEPSEEK_API_KEY — fast math/reasoning, complex data analysis."""
 
-MODEL_ROLE_CODER: str = "qwen/qwen3.7-max"
-"""Coder: Qwen 3.7 Max — flagship coding, 1M context for large codebases."""
+MODEL_ROLE_CODER: str = "deepseek/deepseek-v4-flash"
+"""Coder: DeepSeek V4 Flash — fast coding, low latency via DEEPSEEK_API_KEY."""
 
 MODEL_ROLE_REVIEWER: str = "x-ai/grok-4.3"
 """Reviewer: Grok 4.3 — highest factual accuracy, reasoning, security audit."""
 
-MODEL_ROLE_ADMIN: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
-"""Admin: Nemotron 3 Ultra (free, reasoning) — orchestrates sub-agents, decomposes complex tasks."""
+MODEL_ROLE_ADMIN: str = "x-ai/grok-build-0.1"
+"""Admin: Kimi K2.6 via KIMI_API_KEY — orchestrates sub-agents, decomposes complex tasks."""
 
-MODEL_ROLE_AUTOMATION: str = "z-ai/glm-5.1"
-"""Automation: GLM-5.1 — best instruction following, safety-aware, reliable execution."""
+MODEL_ROLE_AUTOMATION: str = "deepseek/deepseek-v4-flash"
+"""Automation: DeepSeek V4 Flash via DEEPSEEK_API_KEY — instruction following, reliable execution."""
 
-MODEL_ROLE_DOCUMENTATION: str = "minimax/minimax-m3"
-"""Documentation: MiniMax M3 — fast, 1M context, cheap, good for writing/formatting."""
+MODEL_ROLE_DOCUMENTATION: str = "deepseek/deepseek-v4-flash"
+"""Documentation: DeepSeek V4 Flash — fast, cheap, good for writing/formatting."""
 
 # ── Role → Model cascade lookup (primary + 2 fallbacks) ────────────
 
 _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",  # primary: Nemotron 3 Ultra — free, reasoning
-        "minimax/minimax-m3",                       # fallback 1: MiniMax M3 — 1M ctx, multimodal
-        "qwen/qwen3.7-max",                         # fallback 2: Qwen Max — strong comprehension
+        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — direct API, structured output
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast
+        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
-        "deepseek/deepseek-v4-pro",                  # primary: DeepSeek V4 — best math/reasoning
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 1: Nemotron 3 Ultra — free, reasoning
-        "x-ai/grok-4.3",                            # fallback 2: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast math/reasoning
+        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
+        "x-ai/grok-4.3",                          # fallback 2: Grok 4.3 — factual accuracy
     ],
     "coder": [
-        "qwen/qwen3.7-max",                          # primary: Qwen 3.7 Max — flagship coding
-        "x-ai/grok-build-0.1",                       # fallback 1: Grok Build — fast agentic SWE
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 2: Nemotron 3 Ultra — free
+        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast coding
+        "x-ai/grok-build-0.1",                    # fallback 1: Grok Build — fast agentic SWE
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
     ],
     "reviewer": [
-        "x-ai/grok-4.3",                             # primary: Grok 4.3 — factual accuracy
-        "deepseek/deepseek-v4-pro",                  # fallback 1: DeepSeek V4 — reasoning
-        "z-ai/glm-5.1",                              # fallback 2: GLM-5.1 — instruction following
+        "x-ai/grok-4.3",                          # primary: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — reasoning
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
     ],
     "admin": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # primary: Nemotron 3 Ultra — free, reasoning
-        "qwen/qwen3.7-max",                          # fallback 1: Qwen Max — broad capability
-        "minimax/minimax-m3",                        # fallback 2: MiniMax M3
+        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — orchestration
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash
+        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max — broad capability
     ],
     "automation": [
-        "z-ai/glm-5.1",                              # primary: GLM-5.1 — instruction following
-        "minimax/minimax-m3",                        # fallback 1: MiniMax M3 — reliable
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 2: Nemotron 3 Ultra — free
+        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — instruction following
+        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
+        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max
     ],
     "documentation": [
-        "minimax/minimax-m3",                        # primary: MiniMax M3 — fast, cheap, 1M ctx
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # fallback 1: Nemotron 3 Ultra — free
-        "z-ai/glm-5.1",                              # fallback 2: GLM-5.1 — structured output
+        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast, cheap
+        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
+        "minimax/minimax-m3",                     # fallback 2: MiniMax M3
     ],
     "product_manager": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "moonshotai/kimi-k2.6",
+        "deepseek/deepseek-v4-flash",
         "minimax/minimax-m3",
-        "z-ai/glm-5.1",
     ],
     "planner": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # primary: Nemotron 3 Ultra — free, reasoning
-        "minimax/minimax-m3",                        # fallback 1: MiniMax M3 — capable
-        "x-ai/grok-build-0.1",                       # fallback 2: Grok Build — agentic
+        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — structured planning
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash
+        "x-ai/grok-build-0.1",                    # fallback 2: Grok Build — agentic
     ],
     "planner_sub": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "minimax/minimax-m3",
+        "moonshotai/kimi-k2.6",
+        "deepseek/deepseek-v4-flash",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
-        "minimax/minimax-m3",                        # primary: fast, cheap
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash",             # primary: fast, cheap
+        "moonshotai/kimi-k2.6",
         "sourceful/riverflow-v2.5-pro:free",
     ],
 }
@@ -159,30 +163,29 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
 # ========================================================================
 # DI container + factory defaults
 # ========================================================================
-MODEL_DI_DEFAULT: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
+MODEL_DI_DEFAULT: str = "x-ai/grok-build-0.1"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
-MODEL_FACTORY_OPENAI: str = "minimax/minimax-m3"
+MODEL_FACTORY_OPENAI: str = "moonshotai/kimi-k2.6"
 MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.7-max"
-MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-pro"
-MODEL_FACTORY_OPENROUTER: str = "minimax/minimax-m3"
+MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
+MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
-MODEL_DEFAULT_OPENAI: str = "minimax/minimax-m3"
+MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6"
 MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.7-max"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
-MODEL_DEFAULT_OPENROUTER: str = "minimax/minimax-m3"
+MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
 # ========================================================================
 # Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "minimax/minimax-m3",
+    "moonshotai/kimi-k2.6",
+    "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "z-ai/glm-5.1",
     "x-ai/grok-4.3",
-    "deepseek/deepseek-v4-pro",
+    "minimax/minimax-m3",
 ]
 MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"
 
@@ -238,66 +241,66 @@ def get_image_models() -> list[str]:
 IMAGE_CASCADE: dict[str, list[str]] = {
     # ── Website hero banners — photorealistic, high impact ──────────
     "hero": [
-        "black-forest-labs/flux.2-pro",         # primary: photorealistic
-        "x-ai/grok-imagine-image-quality",       # fallback: also photorealistic
-        "sourceful/riverflow-v2.5-pro:free",     # free: good general quality
+        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — good general quality
+        "x-ai/grok-imagine-image-quality",       # 2nd: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",           # 3rd: paid — photorealistic
     ],
 
     # ── Logos, brand assets, icons — vector output preferred ────────
     "logo": [
-        "recraft/recraft-v4.1-pro-vector",       # primary: professional SVG
-        "recraft/recraft-v4.1-pro",               # fallback: raster if vector fails
-        "sourceful/riverflow-v2.5-pro:free",     # free: decent logos
+        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — decent logos
+        "recraft/recraft-v4.1-pro-vector",       # 2nd: paid — professional SVG
+        "recraft/recraft-v4.1-pro",               # 3rd: paid — raster fallback
     ],
 
     # ── Small icons, favicons, UI elements ──────────────────────────
     "icon": [
-        "recraft/recraft-v4.1-pro-vector",       # primary: clean vector
-        "black-forest-labs/flux.2-klein-4b",     # fallback: cheap, fast
-        "sourceful/riverflow-v2.5-fast:free",    # free: fast
+        "sourceful/riverflow-v2.5-fast:free",    # 1st: FREE — fast
+        "black-forest-labs/flux.2-klein-4b",     # 2nd: cheap — fastest paid
+        "recraft/recraft-v4.1-pro-vector",       # 3rd: paid — clean vector
     ],
 
     # ── Photorealistic — products, people, places ───────────────────
     "photo": [
-        "black-forest-labs/flux.2-max",           # primary: max quality
-        "black-forest-labs/flux.2-pro",           # fallback: still excellent
-        "x-ai/grok-imagine-image-quality",        # fallback 2: photorealism focus
-        "sourceful/riverflow-v2.5-pro:free",     # free
+        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE
+        "x-ai/grok-imagine-image-quality",       # 2nd: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",           # 3rd: paid — excellent quality
+        "black-forest-labs/flux.2-max",           # 4th: paid — max quality
     ],
 
     # ── Diagrams, charts, UI mockups, technical illustrations ───────
     "diagram": [
-        "google/gemini-2.5-flash-image",          # primary: specialized for this
-        "recraft/recraft-v4.1-pro-vector",        # fallback: vector output
-        "google/gemini-3.1-flash-image-preview",  # free: experimental Gemini
+        "google/gemini-3.1-flash-image-preview", # 1st: FREE — experimental Gemini
+        "google/gemini-2.5-flash-image",          # 2nd: cheap — specialized
+        "recraft/recraft-v4.1-pro-vector",        # 3rd: paid — vector output
     ],
 
     # ── Social media, thumbnails — fast, cheap, decent ──────────────
     "social": [
-        "sourceful/riverflow-v2.5-fast:free",     # primary: FREE + fast
-        "black-forest-labs/flux.2-flex",           # fallback: batch-optimized
-        "black-forest-labs/flux.2-klein-4b",      # fallback 2: cheapest paid
+        "sourceful/riverflow-v2.5-fast:free",     # 1st: FREE + fast
+        "black-forest-labs/flux.2-klein-4b",      # 2nd: cheapest paid
+        "black-forest-labs/flux.2-flex",           # 3rd: batch-optimized
     ],
 
     # ── Text-heavy images — signs, banners with text ────────────────
     "text": [
-        "bytedance-seed/seedream-4.5",             # primary: best text rendering
-        "recraft/recraft-v4.1-pro-vector",         # fallback: vector text
-        "sourceful/riverflow-v2.5-pro:free",      # free
+        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE
+        "recraft/recraft-v4.1-pro-vector",        # 2nd: paid — vector text
+        "bytedance-seed/seedream-4.5",             # 3rd: paid — best text rendering
     ],
 
     # ── Branded / enterprise — safety, consistency ──────────────────
     "brand": [
-        "microsoft/mai-image-2.5",                 # primary: enterprise safety
-        "recraft/recraft-v4.1-pro",                # fallback: consistent output
-        "black-forest-labs/flux.2-pro",            # fallback 2: quality
+        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — try first
+        "recraft/recraft-v4.1-pro",               # 2nd: paid — consistent output
+        "microsoft/mai-image-2.5",                # 3rd: paid — enterprise safety
     ],
 
     # ── General / catch-all ────────────────────────────────────────
     "general": [
-        "sourceful/riverflow-v2.5-pro:free",      # primary: FREE, good
-        "black-forest-labs/flux.2-pro",            # fallback: quality
-        "google/gemini-2.5-flash-image",           # fallback 2: versatile
+        "sourceful/riverflow-v2.5-pro:free",      # 1st: FREE — high quality
+        "x-ai/grok-imagine-image-quality",        # 2nd: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",            # 3rd: paid — photorealistic
     ],
 }
 
@@ -342,10 +345,10 @@ def describe_image_cascade(use_case: str) -> str:
 # Mixture-of-Agents
 # ========================================================================
 MODEL_MOA_REFERENCE: list[str] = [
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "moonshotai/kimi-k2.6",
+    "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
-    "minimax/minimax-m3",
 ]
 
 # ========================================================================
@@ -368,10 +371,10 @@ def get_free_models() -> list[str]:
 
     Verified against OpenRouter API 2026-06-07.
     ``nvidia/nemotron-3-ultra-550b-a55b:free`` is the recommended default.
+    ``nvidia/nemotron-3.5-content-safety:free`` excluded — too slow at inference.
     """
     return [
         "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3.5-content-safety:free",
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
         "qwen/qwen3-coder:free",
@@ -379,3 +382,49 @@ def get_free_models() -> list[str]:
         "google/gemini-2.0-flash-exp:free",
         "minimax/minimax-m3",
     ]
+
+
+# ========================================================================
+# Rerank Models (Cohere via OpenRouter — text->rerank modality)
+# ========================================================================
+# These are NOT chat models. They use a dedicated rerank endpoint
+# (POST /rerank) proxied by OpenRouter.  They cannot be called via
+# LLMPort.chat().  A dedicated RerankPort + adapter is required.
+# See docs/plans/rerank-integration.md for the integration plan.
+
+RERANK_MODEL_PRO: str = "cohere/rerank-4-pro"
+"""Cohere Rerank 4 Pro — 32K context, 100+ languages, $0.0025/search.
+Best quality. Use for high-value reranking: multi-source research synthesis,
+skill retrieval, staged evaluator probe ordering."""
+
+RERANK_MODEL_FAST: str = "cohere/rerank-4-fast"
+"""Cohere Rerank 4 Fast — 32K context, 100+ languages, lower latency/cost.
+Use for latency-sensitive paths: web search result reordering,
+conversation compressor turn selection."""
+
+RERANK_MODEL_V35: str = "cohere/rerank-v3.5"
+"""Cohere Rerank v3.5 — 4K context, 100+ languages, lowest cost.
+Use for high-throughput paths: memory archivist event scoring,
+knowledge graph FTS5 result reordering."""
+
+
+def get_rerank_model_for(use_case: str) -> str:
+    """Return the recommended rerank model for a given use case.
+
+    Args:
+        use_case: One of 'research', 'search', 'skills', 'memory',
+                  'evaluation', 'knowledge'.
+
+    Returns:
+        OpenRouter-qualified model ID.
+    """
+    _rerank_map = {
+        "research": RERANK_MODEL_PRO,      # multi-source synthesis — quality matters
+        "skills": RERANK_MODEL_PRO,        # BM25 → semantic — quality matters
+        "evaluation": RERANK_MODEL_PRO,    # staged evaluator — quality matters
+        "search": RERANK_MODEL_FAST,       # web search — latency-sensitive
+        "compressor": RERANK_MODEL_FAST,   # conversation compressor — latency-sensitive
+        "memory": RERANK_MODEL_V35,        # memory archivist — high-throughput
+        "knowledge": RERANK_MODEL_V35,     # knowledge graph FTS5 — high-throughput
+    }
+    return _rerank_map.get(use_case, RERANK_MODEL_FAST)
