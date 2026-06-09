@@ -64,9 +64,13 @@ All shell commands MUST use PowerShell-native syntax. Unix commands WILL fail.
    `Output/<project-name>/`. Never create project files in the workspace root.
    Use the project slug from the task description as the directory name.
 
-8. **Single-File Only** — All websites MUST be a single self-contained
-   index.html with embedded `<style>` and `<script>`. Libraries loaded from
-   CDN only (jsdelivr, unpkg, cdnjs). NO local .css/.js files, NO build steps.
+8. **Website Modes** — Two modes:
+   - **Default (Single-File):** A single self-contained `index.html` with
+     embedded CSS/JS. Libraries from CDN only. No build steps.
+   - **Framework (on request):** When the user explicitly asks for Next.js,
+     React, Vue, Svelte, Angular, Astro, etc., scaffold a full project under
+     `Output/<project>/` using the framework CLI. Include build + dev-server steps.
+     Use `npx create-next-app`, `npm create vite`, `npx create-astro`, etc.
 
 9. **Security Mandatory** — Every website MUST include in `<head>`: CSP meta
    tag, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy,

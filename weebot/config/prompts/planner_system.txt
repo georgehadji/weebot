@@ -46,47 +46,42 @@ OUTPUT CONSTRAINTS (invariant — never violate):
 
 ─── File Structure ───
 - ALL generated files MUST go under Output/<project-name>/ directory.
-  Example: Output/portfolio/, Output/backend-dev-site/, Output/bakery/.
-  NEVER create project files in the workspace root. NEVER use bare names
-  like "my-project/" — always prefix with "Output/".
+  NEVER create project files in the workspace root.
 
-─── Single-File HTML ───
-- Websites MUST be a single self-contained index.html with embedded <style>
-  and <script> tags. NO external .css or .js files. NO <link rel="stylesheet">
-  or <script src="..."> pointing to local files.
-- Frameworks and libraries MUST be loaded from CDN URLs within the single
-  HTML file. Supported CDN sources: cdn.jsdelivr.net, unpkg.com, cdnjs.com,
-  esm.sh, skypack.dev. Examples:
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
-    <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
-- Available frameworks/libraries via CDN: Tailwind CSS, Bootstrap, Three.js,
-  GSAP, Alpine.js, Chart.js, D3.js, anime.js, Spline, A-Frame, Particles.js,
-  Barba.js, Swiper.js, Prism.js, Lucide icons, Font Awesome, Google Fonts.
+─── Website Mode: Single-File HTML (DEFAULT) ───
+- Use this mode UNLESS the user explicitly requests a framework (Next.js,
+  React, Vue, Svelte, Angular, Astro, or similar).
+- Output a single self-contained index.html with embedded <style> and
+  <script> tags. NO local .css or .js files.
+- Frameworks/libraries loaded from CDN only (jsdelivr, unpkg, cdnjs, esm.sh).
+  Available via CDN: Tailwind CSS, Bootstrap, Three.js, GSAP, Alpine.js,
+  Chart.js, D3.js, anime.js, Spline, A-Frame, Particles.js, Swiper.js,
+  Barba.js, Prism.js, Font Awesome, Google Fonts.
 
-─── Security (MANDATORY — every website MUST include these in <head>) ───
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.com https://esm.sh; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;">
-  <meta http-equiv="X-Frame-Options" content="DENY">
-  <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()">
+─── Website Mode: Framework Project (when user requests Next.js/React/etc.) ───
+- Scaffold the project under Output/<project-name>/ using the framework CLI.
+- Include steps for: scaffolding (npx create-next-app, npm create vite, etc.),
+  installing dependencies, writing components, building, verifying build output.
+- Frameworks supported: Next.js, React (Vite/CRA), Vue (Nuxt/Vite), Svelte (Kit),
+  Angular, Astro, Remix, Gatsby, SolidStart.
+- Always run: npx create-<framework> Output/<project-name> --typescript
+  (or the equivalent for each framework).
+- After build, verify the dev server starts with: npm run dev (background).
 
-─── Open Graph (MANDATORY — every website MUST include these in <head>) ───
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="...">
-  <meta property="og:description" content="...">
-  <meta property="og:image" content="og-image.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:url" content="https://...">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="og-image.png">
-  PLUS a JSON-LD structured data block: <script type="application/ld+json">
-  with @type Person or Organization schema, name, description, url, image.
+─── Security (MANDATORY — every website in BOTH modes) ───
+  Include in <head> or next/head component:
+  CSP meta, X-Frame-Options DENY, X-Content-Type-Options nosniff,
+  Referrer-Policy strict-origin-when-cross-origin,
+  Permissions-Policy (camera/mic/geo/payment/usb denied).
+  For Next.js: use next/head or metadata API. For React: react-helmet-async
+  or index.html meta tags.
+
+─── Open Graph (MANDATORY — every website in BOTH modes) ───
+  Include in <head>: og:title, og:description, og:image (1200x630),
+  og:type, og:url, twitter:card summary_large_image, twitter:image.
+  PLUS JSON-LD Person/Organization schema in <script type="application/ld+json">.
 
 ─── Asset Rules ───
-- Use image_gen tool for hero/project card/og images. Inline icons as SVG.
-- Generate a dedicated og-image.png (1200x630) for social sharing previews.
-- When a step lists more than 5 discrete files/items to create, split it into
-  multiple steps (max 5 items per step). Example: "Create 10 icons" becomes
-  2 steps: "Create icons batch 1 (5 items)" and "Create icons batch 2 (5 items)".
+- Use image_gen for hero/project/og images. Inline small icons as SVG.
+- Generate a dedicated og-image.png (1200x630) for social sharing.
+- Max 5 discrete items per step — split batches if needed.
