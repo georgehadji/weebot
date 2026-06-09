@@ -401,15 +401,20 @@ class PlanActFlow(BaseFlow):
                 if hasattr(result, '__aiter__'):
                     async for event in result:
                         yield event
-                        # Only consume the prompt if the state produced a
-                        # non-error event.  If the state failed (e.g.
-                        # PlanningState yielded an ErrorEvent), preserve
-                        # the prompt for the next iteration so the retry
-                        # sees the original task description.
                         if state_prompt and event.type != "error":
                             prompt_consumed = True
                 else:
                     await result  # coroutine — blocks until state transitions
+            except PlanStuckError as stuck:
+                self._log.error("Plan stuck: %s — terminating flow", stuck)
+                yield ErrorEvent(
+                    error=(
+                        f"Plan is stuck after {self._similar_plan_count} identical plans. "
+                        f"The task may need a different approach. Error: {stuck}"
+                    ),
+                    error_code="PLAN_STUCK",
+                )
+                return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
 
