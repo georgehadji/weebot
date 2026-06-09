@@ -37,6 +37,10 @@ class DirectOrFallbackAdapter(LLMPort):
         primary_label: Human-readable label for logging (e.g. "kimi-direct").
     """
 
+    # Maximum consecutive fallback failures before we refuse to route
+    # further traffic to a dead endpoint. Prevents the silent 401 cascade.
+    _MAX_FALLBACK_FAILURES: int = 3
+
     def __init__(
         self,
         primary: LLMPort,
@@ -46,6 +50,7 @@ class DirectOrFallbackAdapter(LLMPort):
         self._primary = primary
         self._secondary = secondary
         self._label = primary_label
+        self._fallback_failure_count = 0
 
     @property
     def _primary_has_key(self) -> bool:
@@ -118,6 +123,19 @@ class DirectOrFallbackAdapter(LLMPort):
                 )
                 raise  # re-raise primary error — fallback is impossible
 
+            # Health-gate: if the fallback has been failing repeatedly,
+            # refuse to route further traffic to a dead endpoint.
+            if self._fallback_failure_count >= self._MAX_FALLBACK_FAILURES:
+                logger.error(
+                    "%s: fallback (OpenRouter) has failed %d consecutive times. "
+                    "Refusing further fallback — re-raising primary error: %s: %s",
+                    self._label,
+                    self._fallback_failure_count,
+                    type(exc).__name__,
+                    err_msg,
+                )
+                raise
+
             logger.info(
                 "%s: direct call failed (%s: %s) — falling back to OpenRouter",
                 self._label,
@@ -126,4 +144,10 @@ class DirectOrFallbackAdapter(LLMPort):
             )
 
         # Fall back to OpenRouter with the caller's model name
-        return await self._secondary.chat(model=model, **shared)
+        try:
+            result = await self._secondary.chat(model=model, **shared)
+            self._fallback_failure_count = 0  # success → reset counter
+            return result
+        except Exception:
+            self._fallback_failure_count += 1
+            raise

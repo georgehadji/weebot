@@ -16,6 +16,8 @@ import json
 import logging
 from typing import Optional
 
+from openai import AuthenticationError
+
 from weebot.application.flows.states.base import FlowState, AgentStatus
 from weebot.config.constants import (
     VERIFICATION_AXES,
@@ -25,6 +27,9 @@ from weebot.config.constants import (
 from weebot.domain.models.event import VerificationEvent
 
 _log = logging.getLogger(__name__)
+
+# Number of consecutive auth errors before skipping verification.
+_MAX_AUTH_RETRIES = 2
 
 
 class VerifyingState(FlowState):
@@ -79,8 +84,21 @@ class VerifyingState(FlowState):
             for s in completed[-5:]  # Last 5 steps
         )
 
+        # ── Auth error guard: if the LLM is unreachable (circuit breaker
+        # open + dead fallback), skip verification instead of retrying 7+ times.
+        _auth_error_count = 0
+
         # ── Step 1: Generate verification questions ─────────────────
-        questions = await self._generate_questions(flow, summary, num_questions)
+        try:
+            questions = await self._generate_questions(flow, summary, num_questions)
+        except AuthenticationError:
+            _log.warning(
+                "Verification skipped: authentication error on question generation. "
+                "Check OPENROUTER_API_KEY and XAI_API_KEY."
+            )
+            from weebot.application.flows.states.completed import CompletedState
+            flow.set_state(CompletedState())
+            return
         if not questions:
             _log.debug("No verification questions generated — skipping")
             from weebot.application.flows.states.completed import CompletedState
@@ -90,8 +108,23 @@ class VerifyingState(FlowState):
         # ── Step 2: Answer each independently (factored) ────────────
         inconsistencies: list[tuple[str, str, str]] = []  # (question, answer, original_claim)
         for question in questions:
-            answer = await self._answer_independently(flow, question)
-            consistent = await self._check_consistency(flow, question, answer, summary)
+            try:
+                answer = await self._answer_independently(flow, question)
+                consistent = await self._check_consistency(flow, question, answer, summary)
+            except AuthenticationError:
+                _auth_error_count += 1
+                if _auth_error_count >= _MAX_AUTH_RETRIES:
+                    _log.warning(
+                        "Verification skipped: %d consecutive auth errors. "
+                        "Circuit breaker may be open or API keys are invalid.",
+                        _auth_error_count,
+                    )
+                    from weebot.application.flows.states.completed import CompletedState
+                    flow.set_state(CompletedState())
+                    return
+                # Skip this question, continue with others
+                continue
+            _auth_error_count = 0  # reset on success
 
             yield VerificationEvent(
                 step_id="verify",
