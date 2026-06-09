@@ -49,6 +49,14 @@ class AgentRunner:
         self._router = router  # Enhancement 6
         self._task_runner = TaskRunner(state_repo=state_repo, event_bus=event_bus)
         self._tools: Optional[ToolCollection] = None
+        self._retention_agent = None
+        try:
+            from weebot.application.di import Container
+            _c = Container()
+            _c.configure_defaults()
+            self._retention_agent = _c.get("retention_agent")
+        except Exception:
+            pass
 
         if event_bus and use_rich:
             CLIEventSubscriber(use_rich=use_rich).subscribe_to(event_bus)
@@ -57,6 +65,27 @@ class AgentRunner:
         if self._tools is None:
             self._tools = await build_tools(role=self._role, mcp_config=self._mcp_config)
         return self._tools
+
+    async def _run_retention(
+        self, session_id: str, session_summary: str,
+    ) -> None:
+        """Run RetentionAgent as a background task — never blocks."""
+        if self._retention_agent is None:
+            return
+        try:
+            review = await self._retention_agent.review(
+                session_id=session_id,
+                session_summary=session_summary,
+                trust_report=None,
+                error_count=0,
+                tool_count=0,
+            )
+            _log.info(
+                "RetentionReview %s: %s — %s",
+                session_id, review.verdict.value, review.reasoning[:120],
+            )
+        except Exception:
+            _log.debug("RetentionReview background task failed", exc_info=True)
 
     async def run_prompt(
         self,
@@ -76,6 +105,18 @@ class AgentRunner:
         session: Optional[Session] = None
         if session_id:
             session = await self._state_repo.load_session(session_id)
+
+        # ── RetentionReview for stale pending sessions ──────────────
+        if session is not None and session.status in (
+            SessionStatus.PENDING, SessionStatus.WAITING,
+        ):
+            import time as _time
+            if hasattr(session.updated_at, 'timestamp'):
+                age_hours = (_time.time() - session.updated_at.timestamp()) / 3600
+                if age_hours > 24 and self._retention_agent:
+                    import asyncio as _aio
+                    _session_summary = session.title or session.id
+                    _aio.ensure_future(self._run_retention(session.id, _session_summary))
 
         if session is None:
             session = Session(
@@ -99,9 +140,10 @@ class AgentRunner:
         if behavior_tracker:
             self._print_behavior_notice(session.id)
 
-        # ── Enhancement 7: Append language instruction if non-English ──
+        # ── Enhancement 7: Prepend language instruction if non-English ──
         if language_injection:
-            prompt = prompt + language_injection
+            # Prepend [LANGUAGE: XX] block so the planner sees it first
+            prompt = f"[LANGUAGE: {lang}]  {prompt}"
 
         tools = await self._ensure_tools()
 
@@ -198,8 +240,15 @@ class AgentRunner:
                 f"Session {session_id} is not waiting (status: {session.status.value})"
             )
 
+        # Sanitize credentials from the user's answer before persisting
+        from weebot.core.credential_sanitizer import sanitize
+        answer = sanitize(answer)
+
         session = session.add_user_message(answer)
-        session = session.set_status(SessionStatus.RUNNING)
+        # Keep status as WAITING — the flow's run() method detects
+        # the incomplete plan and resumes execution from the current
+        # step.  Setting RUNNING here would bypass the WAITING check
+        # and cause a full re-plan.
         await self._state_repo.save_session(session)
 
         # Run the flow inline — wait for completion
@@ -280,14 +329,18 @@ class AgentRunner:
             from rich.panel import Panel
             console = Console()
             console.print(Panel(
-                f"🔍 Behavior tracking active for session: {session_id[:8]}...\n"
+                f"[Behavior] Tracking active for session: {session_id[:8]}...\n"
                 f"   All file changes are being recorded to ~/.weebot/ledger/",
                 style="dim",
                 border_style="blue"
             ))
         except Exception:
-            print(f"\n🔍 Behavior tracking active: {session_id[:8]}...")
-            print(f"   Recording to ~/.weebot/ledger/\n")
+            try:
+                print(f"\n🔍 Behavior tracking active: {session_id[:8]}...")
+                print(f"   Recording to ~/.weebot/ledger/\n")
+            except UnicodeEncodeError:
+                print(f"\n[Behavior] Tracking active for session: {session_id[:8]}...")
+                print(f"   Recording to ~/.weebot/ledger/\n")
     
     def _print_behavior_summary(self, stats: dict) -> None:
         """Print behavior tracking summary."""
@@ -310,4 +363,7 @@ class AgentRunner:
         except Exception:
             trust = stats.get('trust_score', 100)
             total = stats.get('trust_details', {}).get('total_actions', 0)
-            print(f"\n📊 Behavior Report: Trust={trust}%, Actions={total}\n")
+            try:
+                print(f"\n📊 Behavior Report: Trust={trust}%, Actions={total}\n")
+            except UnicodeEncodeError:
+                print(f"\n[Report] Trust={trust}%, Actions={total}\n")

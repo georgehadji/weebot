@@ -217,6 +217,10 @@ MODEL_IMAGE_PHOTOREALISTIC: str = "black-forest-labs/flux.2-pro"
 MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
 """Website image generation: Gemini 2.5 Flash Image — diagrams, UI mockups, illustrations."""
 
+
+MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
+"""Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
+
 def get_image_models() -> list[str]:
     """Return the canonical list of image generation model IDs."""
     return [
@@ -231,6 +235,9 @@ def get_image_models() -> list[str]:
         "x-ai/grok-imagine-image-quality",
         "bytedance-seed/seedream-4.5",
         "microsoft/mai-image-2.5",
+        "ideogram/ideogram-v3-turbo",
+        "ideogram/ideogram-v3-default",
+        "ideogram/ideogram-v4-turbo",
     ]
 
 
@@ -248,7 +255,7 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Logos, brand assets, icons — vector output preferred ────────
     "logo": [
-        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — decent logos
+        "ideogram/ideogram-v3-turbo",             # 1st: paid — best text/logo rendering
         "recraft/recraft-v4.1-pro-vector",       # 2nd: paid — professional SVG
         "recraft/recraft-v4.1-pro",               # 3rd: paid — raster fallback
     ],
@@ -284,14 +291,14 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Text-heavy images — signs, banners with text ────────────────
     "text": [
-        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE
+        "ideogram/ideogram-v3-turbo",             # 1st: paid — industry-leading text rendering
         "recraft/recraft-v4.1-pro-vector",        # 2nd: paid — vector text
         "bytedance-seed/seedream-4.5",             # 3rd: paid — best text rendering
     ],
 
     # ── Branded / enterprise — safety, consistency ──────────────────
     "brand": [
-        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — try first
+        "ideogram/ideogram-v3-turbo",             # 1st: paid — brand-accurate text + logos
         "recraft/recraft-v4.1-pro",               # 2nd: paid — consistent output
         "microsoft/mai-image-2.5",                # 3rd: paid — enterprise safety
     ],

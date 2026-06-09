@@ -182,6 +182,19 @@ class WeebotMCPServer:
         _bash = BashTool()
         _python = PythonExecuteTool()
         _search = WebSearchTool()
+
+        # Inject reranker into WebSearchTool if available
+        try:
+            from weebot.application.di import Container
+            from weebot.application.ports.rerank_port import RerankPort
+            c = Container()
+            c.configure_defaults()
+            rerank = c._maybe_get(RerankPort)
+            if rerank is not None:
+                _search.set_rerank(rerank)
+        except Exception:
+            pass  # RerankPort not configured — use engine-order results
+
         _editor = StrReplaceEditorTool()
 
         @mcp.tool(

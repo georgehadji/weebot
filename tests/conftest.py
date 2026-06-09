@@ -8,6 +8,18 @@ from typing import Any
 
 
 # ---------------------------------------------------------------------------
+# Marker registration
+# ---------------------------------------------------------------------------
+
+def pytest_configure(config):
+    """Register custom markers so --strict-markers doesn't warn."""
+    config.addinivalue_line(
+        "markers",
+        "real_api: marks tests that require a real API key (skipped when key is not set)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Environment helpers
 # ---------------------------------------------------------------------------
 
@@ -17,9 +29,9 @@ def clean_env(monkeypatch):
 
     Tests that need a key must set it explicitly via monkeypatch.
     """
-    for var in ("KIMI_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
-                "OPENAI_API_KEY", "OPENROUTER_API_KEY", "TELEGRAM_BOT_TOKEN",
-                "TELEGRAM_CHAT_ID", "SLACK_WEBHOOK_URL"):
+    for var in ("KIMI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY",
+                "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY",
+                "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SLACK_WEBHOOK_URL"):
         monkeypatch.delenv(var, raising=False)
 
 

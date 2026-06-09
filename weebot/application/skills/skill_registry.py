@@ -46,6 +46,18 @@ class SkillRegistry:
                     if skill:
                         self._skills[skill.name] = skill
 
+    def list_names(self) -> list[str]:
+        """Return all loaded skill names."""
+        return list(self._skills.keys())
+
+    def list_all(self) -> dict[str, "Skill"]:
+        """Return all loaded skills as a dict."""
+        return dict(self._skills)
+
+    def get(self, name: str) -> "Skill | None":
+        """Get a skill by name, or None if not loaded."""
+        return self._skills.get(name)
+
     @staticmethod
     def _parse_skill(filepath: Path) -> Optional[Skill]:
         try:

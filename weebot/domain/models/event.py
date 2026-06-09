@@ -83,6 +83,10 @@ class ThoughtEvent(BaseEvent):
     step_id: str = Field(default="")
     thought: str = Field(default="")
     iteration: int = Field(default=0)
+    code_review_result: Optional[dict] = Field(
+        default=None,
+        description="Structured CodeReviewResult dict, set by ReviewingState when verdict is present",
+    )
 
 
 class SteeringEvent(BaseEvent):

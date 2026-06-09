@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import Any, AsyncGenerator, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -12,6 +12,43 @@ from weebot.domain.models.plan import StepStatus
 from weebot.domain.models.session import SessionStatus
 
 logger = logging.getLogger(__name__)
+
+# ── Code step detection helpers (Phase 8: per-step code review) ────
+# Tool names whose presence indicates a code-producing step
+_CODE_TOOL_NAMES: frozenset[str] = frozenset({
+    "file_editor", "edit_file", "write_file", "create_file",
+    "bash", "shell", "execute_command", "run_command",
+    "write", "edit", "patch",
+})
+
+# Step description keywords that indicate code production
+_CODE_KEYWORDS: frozenset[str] = frozenset({
+    "implement", "write", "create file", "edit file", "modify",
+    "add function", "add method", "add class", "fix bug",
+    "refactor", "update file", "generate", "scaffold", "build",
+    "code", "script", "patch",
+})
+
+# Reviewer retries gate — must match _MAX_REVIEW_RETRIES in ReviewingState
+_MAX_REVIEW_RETRIES_GATE: int = 2
+
+
+def _is_code_step(step: "Step", events: list[Any] | None = None) -> bool:
+    """Return True if this step likely produced or modified code.
+
+    Uses both keyword matching on the step description and, when available,
+    tool-name inspection from captured execution events.
+    """
+    desc_lower = step.description.lower()
+    if any(kw in desc_lower for kw in _CODE_KEYWORDS):
+        return True
+    if events:
+        for e in events:
+            if isinstance(e, dict):
+                if e.get("tool_name", "") in _CODE_TOOL_NAMES:
+                    return True
+    return False
+
 
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
@@ -152,7 +189,9 @@ class ExecutingState(FlowState):
 
         # Consume events from the mediator result via shared reconstructor.
         from weebot.application.cqrs.event_reconstructor import reconstruct_events
+        _current_step_events: list[Any] = []
         for event in reconstruct_events(cmd_result.data.get("events", [])):
+            _current_step_events.append(event)
             await context._emit(event)
             yield event
             if isinstance(event, WaitForUserEvent):
@@ -210,6 +249,36 @@ class ExecutingState(FlowState):
             context.set_state(UpdatingState())
             return
 
+        # ── Phase 3: Step-result quality check ──────────────────────
+        # Gated on task_preset.enable_step_validation (default True).
+        _sv_enabled = getattr(
+            getattr(context, "_task_preset", None),
+            "enable_step_validation", True,
+        )
+        if _sv_enabled and step.retry_count < 1:
+            from weebot.application.services.step_result_validator import StepResultValidator
+            _validator = StepResultValidator()
+            validation = _validator.validate(
+                result=str(step.result or ""),
+                step_description=step.description,
+                previous_result=None,
+            )
+            if not validation.passed:
+                logger.info(
+                    "Step '%s' failed quality check (%s) — retrying with hint",
+                    step.id, validation.reason,
+                )
+                # Inject quality hint into step description and retry
+                updated_step = step.model_copy(update={
+                    "description": f"{step.description}\n[Quality hint: {validation.quality_hint}]",
+                    "retry_count": 1,
+                    "status": StepStatus.PENDING,
+                })
+                context._plan = context._plan.replace_step(step.id, updated_step)
+                # Stay in ExecutingState to retry the same step
+                context.set_state(ExecutingState())
+                return
+
         # Update step as completed
         context._plan = context._plan.update_step_status(step.id, StepStatus.COMPLETED)
         logger.info("Step %s completed in %.1fs", step.id, _step_elapsed)
@@ -261,4 +330,21 @@ class ExecutingState(FlowState):
             context.set_state(VerifyingState())
             return
 
-        context.set_state(ExecutingState())
+        # ── Phase 8: Per-step code review gate ──────────────────────
+        # If a code reviewer is configured and this step produced code,
+        # transition to ReviewingState instead of continuing directly.
+        if (
+            getattr(context, "_code_reviewer", None) is not None
+            and _is_code_step(step, events=_current_step_events)
+            and step.retry_count < _MAX_REVIEW_RETRIES_GATE
+        ):
+            from weebot.application.flows.states.reviewing import ReviewingState
+            context.set_state(
+                ReviewingState(
+                    step=step,
+                    reviewer=context._code_reviewer,
+                    step_events=list(_current_step_events),
+                )
+            )
+        else:
+            context.set_state(ExecutingState())

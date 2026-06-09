@@ -25,6 +25,32 @@ from weebot.tools.base import ToolCollection
 
 _log = logging.getLogger(__name__)
 
+# Shared DI container — initialized once and cached for all flow creation.
+import threading
+_shared_container = None
+_shared_container_lock = threading.Lock()
+
+
+def _cached(key: str):
+    """Resolve a DI service by key, caching the container across calls.
+
+    Thread-safe: uses a lock for container initialization.
+    """
+    global _shared_container
+    if _shared_container is None:
+        with _shared_container_lock:
+            if _shared_container is None:
+                try:
+                    from weebot.application.di import Container
+                    _shared_container = Container()
+                    _shared_container.configure_defaults()
+                except Exception:
+                    return None
+    try:
+        return _shared_container.get(key)
+    except Exception:
+        return None
+
 
 async def route_and_create_flow(
     query: str,
@@ -102,6 +128,8 @@ def create_flow(
 
     if flow_type == "plan_act":
         personality = _resolve_personality()
+        # Resolve optional services from DI container (cached per-process)
+        _code_reviewer = _cached("code_reviewer")
         return PlanActFlow(
             llm=llm,
             tools=tools,
@@ -115,6 +143,7 @@ def create_flow(
             profile_name=profile_name,
             personality=personality,
             agent_role=profile_name,  # SOUL.md profile doubles as agent role
+            code_reviewer=_code_reviewer,
         )
     if flow_type == "chat":
         from weebot.application.flows.chat_flow import ChatFlow

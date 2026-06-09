@@ -1,8 +1,6 @@
 """Advanced browser automation tools using Playwright."""
 from __future__ import annotations
 
-import asyncio
-import atexit
 import base64
 import logging
 from io import BytesIO
@@ -13,41 +11,24 @@ from weebot.infrastructure.browser.session_manager import BrowserSessionManager
 
 logger = logging.getLogger(__name__)
 
-# Module-level browser state (persists across tool calls)
-_browser = None
-_page = None
-_context = None
-_playwright_instance = None
 
-
-def _atexit_cleanup_playwright() -> None:
-    """Fallback cleanup: terminate Playwright subprocess on process exit.
-
-    This handles cases where _close_browser() was never called (crashes,
-    SIGKILL, unhandled exceptions). Running async code in atexit requires
-    a fresh event loop since the main loop is likely closed at this point.
-    """
-    global _playwright_instance
-    if _playwright_instance is None:
-        return
-    try:
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_playwright_instance.stop())
-            logger.debug("atexit: Playwright subprocess stopped")
-        finally:
-            loop.close()
-    except Exception as exc:
-        logger.warning("atexit: failed to stop Playwright subprocess: %r", exc)
-    _playwright_instance = None
-
-
-atexit.register(_atexit_cleanup_playwright)
+# ── wait_type → Playwright wait_until mapping ──
+_WAIT_TYPE_MAP: dict[str, str] = {
+    "navigation": "domcontentloaded",
+    "function": "load",
+    "selector": "domcontentloaded",  # navigate fast, then wait for selector
+}
 
 
 class AdvancedBrowserTool(BaseTool):
-    """Full browser automation using Playwright."""
+    """Full browser automation using Playwright.
 
+    Receives a shared PlaywrightAdapter via DI (injected by tool_registry)
+    so BrowserInspectorTool and other tools share the same browser session.
+    """
+
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 120
     name: str = "advanced_browser"
     description: str = (
         "Full browser automation: navigate, interact, extract data, execute JavaScript. "
@@ -113,7 +94,7 @@ class AdvancedBrowserTool(BaseTool):
             "wait_type": {
                 "type": "string",
                 "enum": ["selector", "navigation", "function"],
-                "description": "Type of wait condition",
+                "description": "Type of wait condition for goto (selector waits for selector after navigation)",
             },
             "session_name": {
                 "type": "string",
@@ -126,6 +107,32 @@ class AdvancedBrowserTool(BaseTool):
         },
         "required": ["action"],
     }
+
+    max_concurrent: int = 1
+
+    # Injected by tool_registry via DI
+    browser: object | None = None  # PlaywrightAdapter
+
+    def _page(self):
+        """Return the current Playwright page, or None if not launched."""
+        if self.browser is None:
+            return None
+        return self.browser.page
+
+    def _context(self):
+        """Return the current browser context, or None."""
+        p = self._page()
+        return p.context if p else None
+
+    async def health_check(self) -> bool:
+        """Check if Playwright is available on this system."""
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                _ = p.chromium
+            return True
+        except Exception:
+            return False
 
     async def execute(
         self,
@@ -143,16 +150,13 @@ class AdvancedBrowserTool(BaseTool):
         **_,
     ) -> ToolResult:
         """Execute browser action."""
-        global _page
-
         try:
-            from playwright.async_api import async_playwright
-
             if action == "launch":
                 await self._launch_browser(headless, session_name=session_name)
-                if save_session and session_name and _context:
+                ctx = self._context()
+                if save_session and session_name and ctx:
                     session_manager = BrowserSessionManager()
-                    await session_manager.save_session(session_name, _context)
+                    await session_manager.save_session(session_name, ctx)
                 return ToolResult(output="Browser launched successfully")
 
             elif action == "close":
@@ -162,76 +166,93 @@ class AdvancedBrowserTool(BaseTool):
             elif action == "goto":
                 if not url:
                     return ToolResult(output="", error="url required for goto action")
-                if not _page:
+                page = self._page()
+                if not page:
                     await self._launch_browser(headless, session_name=session_name)
-                await _page.goto(url, wait_until="networkidle", timeout=timeout)
-                if save_session and session_name and _context:
+                    page = self._page()
+                # Map wait_type to Playwright wait_until
+                wait_until = _WAIT_TYPE_MAP.get(wait_type, "domcontentloaded")
+                await page.goto(url, wait_until=wait_until, timeout=timeout)
+                # If wait_type is "selector", additionally wait for the selector
+                if wait_type == "selector" and selector:
+                    await page.wait_for_selector(selector, timeout=timeout)
+                ctx = self._context()
+                if save_session and session_name and ctx:
                     session_manager = BrowserSessionManager()
-                    await session_manager.save_session(session_name, _context)
+                    await session_manager.save_session(session_name, ctx)
                 return ToolResult(output=f"Navigated to {url}")
 
             elif action == "back":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.go_back(timeout=timeout)
+                await page.go_back(timeout=timeout)
                 return ToolResult(output="Navigated back")
 
             elif action == "forward":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.go_forward(timeout=timeout)
+                await page.go_forward(timeout=timeout)
                 return ToolResult(output="Navigated forward")
 
             elif action == "reload":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.reload(timeout=timeout)
+                await page.reload(timeout=timeout)
                 return ToolResult(output="Page reloaded")
 
             elif action == "click":
                 if not selector:
                     return ToolResult(output="", error="selector required for click")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.click(selector, timeout=timeout)
+                await page.click(selector, timeout=timeout)
                 return ToolResult(output=f"Clicked element: {selector}")
 
             elif action == "fill":
                 if not selector or value is None:
                     return ToolResult(output="", error="selector and value required for fill")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.fill(selector, value, timeout=timeout)
+                await page.fill(selector, value, timeout=timeout)
                 return ToolResult(output=f"Filled field: {selector}")
 
             elif action == "select":
                 if not selector or value is None:
                     return ToolResult(output="", error="selector and value required for select")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.select_option(selector, value, timeout=timeout)
+                await page.select_option(selector, value, timeout=timeout)
                 return ToolResult(output=f"Selected option: {value} in {selector}")
 
             elif action == "type":
                 if not text:
                     return ToolResult(output="", error="text required for type")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.keyboard.type(text)
+                await page.keyboard.type(text)
                 return ToolResult(output=f"Typed text: {text[:50]}...")
 
             elif action == "evaluate":
                 if not script:
                     return ToolResult(output="", error="script required for evaluate")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                result = await _page.evaluate(script)
+                result = await page.evaluate(script)
                 return ToolResult(output=f"JavaScript result: {result}")
 
             elif action == "screenshot":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                screenshot_bytes = await _page.screenshot()
+                screenshot_bytes = await page.screenshot()
                 img_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
                 return ToolResult(
                     output="Screenshot captured",
@@ -239,49 +260,54 @@ class AdvancedBrowserTool(BaseTool):
                 )
 
             elif action == "get_content":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                content = await _page.content()
+                content = await page.content()
                 return ToolResult(output=f"HTML content: {content[:500]}...")
 
             elif action == "get_title":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                title = await _page.title()
+                title = await page.title()
                 return ToolResult(output=f"Page title: {title}")
 
             elif action == "wait_for_selector":
                 if not selector:
                     return ToolResult(output="", error="selector required for wait_for_selector")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                await _page.wait_for_selector(selector, timeout=timeout)
+                await page.wait_for_selector(selector, timeout=timeout)
                 return ToolResult(output=f"Element appeared: {selector}")
 
             elif action == "get_cookies":
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
-                cookies = await _page.context.cookies()
+                cookies = await page.context.cookies()
                 return ToolResult(output=f"Cookies: {cookies}")
 
             elif action == "set_cookies":
                 if not value:
                     return ToolResult(output="", error="value (JSON string) required for set_cookies")
-                if not _page:
+                page = self._page()
+                if not page:
                     return ToolResult(output="", error="Browser not launched")
                 import json
-
                 cookies = json.loads(value)
-                await _page.context.add_cookies(cookies)
+                await page.context.add_cookies(cookies)
                 return ToolResult(output=f"Set {len(cookies)} cookies")
 
             elif action == "save_session":
                 if not session_name:
                     return ToolResult(output="", error="session_name required for save_session")
-                if not _context:
+                ctx = self._context()
+                if not ctx:
                     return ToolResult(output="", error="Browser not launched")
                 session_manager = BrowserSessionManager()
-                success = await session_manager.save_session(session_name, _context)
+                success = await session_manager.save_session(session_name, ctx)
                 return ToolResult(
                     output=f"Session '{session_name}' saved" if success else f"Failed to save session '{session_name}'"
                 )
@@ -314,54 +340,28 @@ class AdvancedBrowserTool(BaseTool):
             return ToolResult(output="", error=str(exc))
 
     async def _launch_browser(self, headless: bool = True, session_name: Optional[str] = None) -> None:
-        """Launch browser if not already running."""
-        global _browser, _page, _context, _playwright_instance
-
-        if _page is not None:
+        """Launch browser via the injected PlaywrightAdapter."""
+        if self.browser is None:
+            from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+            self.browser = PlaywrightAdapter()
+        if self._page() is not None:
             return  # Already launched
-
-        from playwright.async_api import async_playwright
-
-        pw = await async_playwright().start()
-        _playwright_instance = pw
-        b = await pw.chromium.launch(headless=headless)
-        _browser = b
-        c = await b.new_context()
-        _context = c
-
+        from weebot.application.ports.browser_port import BrowserConfig
+        config = BrowserConfig(headless=headless)
+        await self.browser.start(config)
         # Load session if specified
         if session_name:
             session_manager = BrowserSessionManager()
-            loaded = await session_manager.load_session(session_name, c)
-            if loaded:
-                logger.info(f"Restored session '{session_name}'")
-
-        p = await c.new_page()
-        _page = p
+            ctx = self._context()
+            if ctx:
+                loaded = await session_manager.load_session(session_name, ctx)
+                if loaded:
+                    logger.info("Restored session '%s'", session_name)
 
     async def _close_browser(self) -> None:
-        """Close browser and stop the Playwright subprocess.
-
-        Conservative fix: capture-and-zero all globals BEFORE any await so
-        that concurrent _close_browser() calls or a stop() exception can never
-        leave a non-None global that the atexit handler would double-stop.
-        Pattern: local_ref = global; global = None; await local_ref.close()
-        """
-        global _browser, _page, _context, _playwright_instance
-
-        # Zero-out-first: snapshot locals, clear globals atomically before
-        # any await so no concurrent coroutine or atexit handler races us.
-        page, ctx, browser, pw = _page, _context, _browser, _playwright_instance
-        _page = _context = _browser = _playwright_instance = None
-
-        if page:
-            await page.close()
-        if ctx:
-            await ctx.close()
-        if browser:
-            await browser.close()
-        if pw:
-            await pw.stop()
+        """Close browser via the injected PlaywrightAdapter."""
+        if self.browser is not None:
+            await self.browser.close()
 
 
 class WebScraperTool(BaseTool):

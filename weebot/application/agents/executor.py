@@ -166,7 +166,9 @@ class ExecutorAgent:
         self._hooks = hooks
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
-        self._trajectory_monitor = None  # lazy-created in execute_step
+        # Phase 6: Cross-step trajectory monitor — created once, persists across steps
+        from weebot.application.services.trajectory_monitor import TrajectoryMonitor
+        self._trajectory_monitor = TrajectoryMonitor()
         self._max_context_turns = max_context_turns
         self._system_prompt: Optional[str] = None
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
@@ -690,9 +692,9 @@ class ExecutorAgent:
         tool_calls_attempted: int = 0
         tool_calls_succeeded: int = 0
 
-        # ── Tier 1.3: TrajectoryMonitor ──
-        from weebot.application.services.trajectory_monitor import TrajectoryMonitor
-        self._trajectory_monitor = TrajectoryMonitor()
+        # ── Tier 1.3: TrajectoryMonitor — reset per-step windows, preserve cross-step ──
+        if self._trajectory_monitor is not None:
+            self._trajectory_monitor.reset_step()
 
         self._step_budget.reset()
         while self._step_budget.consume():
@@ -755,6 +757,11 @@ class ExecutorAgent:
                 break
 
             abort_step = False
+            # ── Phase 2: Pre-flight checks (sequential) ─────────
+            # Check for repeated tool signatures before executing
+            # anything, so we don't waste parallel execution on a
+            # stuck sequence.
+            _batch_tool_calls: list[dict] = []
             for tc in response.tool_calls:
                 tool_name = tc["function"]["name"]
                 raw_arguments = tc["function"].get("arguments", "{}")
@@ -786,8 +793,26 @@ class ExecutorAgent:
                     function_args=event_args,
                     status=ToolStatus.CALLING,
                 )
+                _batch_tool_calls.append(tc)
 
-                result = await self._execute_tool_call(tc)
+            if abort_step:
+                break
+
+            # ── Phase 2: Execute all tool calls in parallel ─────
+            results = await self._execute_tool_batch(_batch_tool_calls)
+
+            # Guard: must have same length as input
+            assert len(results) == len(_batch_tool_calls), (
+                f"Mismatched result count {len(results)} vs "
+                f"tool call count {len(_batch_tool_calls)}"
+            )
+
+            # ── Process results in declared order ───────────────
+            for tc, result in zip(_batch_tool_calls, results):
+                tool_name = tc["function"]["name"]
+                raw_arguments = tc["function"].get("arguments", "{}")
+                event_args = self._parse_args_for_event(raw_arguments)
+                signature = self._tool_signature(tool_name, raw_arguments)
                 tool_calls_attempted += 1
                 if not result.is_error:
                     tool_calls_succeeded += 1
@@ -797,10 +822,6 @@ class ExecutorAgent:
                     diagnosis = self._trajectory_monitor.diagnose(
                         step_id=step.id,
                         tool_signature=signature,
-                        # Always pass output so the monitor can track
-                        # error patterns — even error outputs help
-                        # distinguish "all models down" from healthy
-                        # multi-tool exploration.
                         tool_output=result.output or "",
                         step_result=step_result if step_result else None,
                         total_budget=self._max_steps,
@@ -815,8 +836,6 @@ class ExecutorAgent:
                         "Trajectory %s for step %s: %s",
                         diagnosis.health.value, step.id, diagnosis.detail,
                     )
-                    # Terminal, semantic loop, and stagnation all warrant
-                    # auto-abort — continuing only burns tokens.
                     _auto_abort_health = {
                         TrajectoryHealth.TERMINAL,
                         TrajectoryHealth.SEMANTIC_LOOP,
@@ -888,7 +907,6 @@ class ExecutorAgent:
                     self._should_terminate = True
                     step_result = result.output or "Task completed"
                     yield MessageEvent(role="assistant", message=step_result)
-                    # Refund remaining budget so parent flow tracks accurately
                     self._step_budget.refund(self._step_budget.remaining)
                     abort_step = True
                     break
@@ -941,6 +959,40 @@ class ExecutorAgent:
 
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.COMPLETED)
 
+    # ── Phase 2: Parallel tool execution ─────────────────────────
+    # Per-tool semaphore gating is handled by ToolCollection.execute().
+    # The executor simply fires all tool calls concurrently via gather.
+
+    async def _execute_tool_batch(
+        self,
+        tool_calls: list[dict],
+    ) -> list[ToolResult]:
+        """Execute tool calls concurrently; return results in declared order.
+
+        Per-tool concurrency capping (``max_concurrent``) is enforced by
+        ``ToolCollection.execute()`` via its per-tool semaphore registry.
+        One failure does not cancel the batch — error results are placed
+        in the correct slot.
+        """
+        tasks: list[asyncio.Task[ToolResult]] = []
+        for tc in tool_calls:
+            tasks.append(asyncio.ensure_future(self._execute_tool_call(tc)))
+
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+
+        results: list[ToolResult] = []
+        for i, r in enumerate(raw):
+            if isinstance(r, Exception):
+                tc = tool_calls[i]
+                t_name = tc["function"]["name"]
+                results.append(ToolResult.error_result(
+                    error=f"Tool '{t_name}' raised: {r}",
+                    tool_name=t_name,
+                ))
+            else:
+                results.append(r)
+        return results
+
     def _get_step_id(self) -> str:
         return getattr(self, '_current_step_id', 'unknown')
 
@@ -966,7 +1018,9 @@ class ExecutorAgent:
         # Determine effective timeout for the asyncio safety net.
         # Tools like bash/powershell have their own internal timeouts, but
         # this provides a hard ceiling for the awaitable itself.
-        timeout = 60.0
+        # Phase 3: Use per-tool default if available, fall back to 60s.
+        tool_obj = self._tools.get_tool(name)
+        timeout = float(getattr(tool_obj, "default_timeout_seconds", 60) if tool_obj else 60)
         if "timeout" in args:
             try:
                 # Allow up to 300s (max) if explicitly requested

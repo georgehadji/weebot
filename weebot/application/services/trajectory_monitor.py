@@ -6,6 +6,11 @@ pattern is detected, produces a TrajectoryDiagnosis with a recovery message
 for the LLM.
 
 Maps to LIFE-HARNESS "Trajectory Regulation Layer" (Section 4.3.4).
+
+Phase 6 enhancement: cross-step trajectory tracking.  ``reset_step()``
+clears per-step rolling windows while preserving cross-step accumulators,
+so the monitor can detect multi-step degenerate patterns (e.g. 3+
+consecutive error-producing steps).
 """
 from __future__ import annotations
 
@@ -27,6 +32,7 @@ class TrajectoryMonitor:
         stagnation_window: Steps without result change before flagging.
         budget_hotspot_ratio: Fraction of budget a single step can consume.
         exhaustion_ratio: Budget consumed before flagging exhaustion.
+        cross_step_failure_threshold: Consecutive error-producing steps before flagging.
     """
 
     def __init__(
@@ -35,16 +41,35 @@ class TrajectoryMonitor:
         stagnation_window: int = 3,
         budget_hotspot_ratio: float = 0.4,
         exhaustion_ratio: float = 0.9,
+        cross_step_failure_threshold: int = 3,
     ) -> None:
         self._repetition_threshold = repetition_threshold
         self._stagnation_window = stagnation_window
         self._budget_hotspot_ratio = budget_hotspot_ratio
         self._exhaustion_ratio = exhaustion_ratio
+        self._cross_step_failure_threshold = cross_step_failure_threshold
 
         # Rolling window across a single plan step
         self._tool_signatures: deque[str] = deque(maxlen=repetition_threshold + 2)
         self._output_hashes: deque[str] = deque(maxlen=stagnation_window + 2)
         self._step_results: deque[str] = deque(maxlen=stagnation_window + 2)
+
+        # Phase 6: Cross-step accumulators (preserved across reset_step())
+        self._consecutive_failed_steps: int = 0
+        self._cross_step_error_outputs: deque[str] = deque(maxlen=5)
+
+    def reset_step(self) -> None:
+        """Clear per-step rolling windows; preserve cross-step accumulators.
+
+        Call at the beginning of each new plan step so that per-step
+        detectors (repetition, semantic loop) start fresh while the
+        cross-step failure counter accumulates across the full session.
+        """
+        self._tool_signatures.clear()
+        self._output_hashes.clear()
+        # NOTE: _step_results is cross-step by design — do NOT clear it here.
+        # _consecutive_failed_steps and _cross_step_error_outputs are also
+        # cross-step — preserved.
 
     def diagnose(
         self,
@@ -71,7 +96,7 @@ class TrajectoryMonitor:
         """
         if tool_signature:
             self._tool_signatures.append(tool_signature)
-        if tool_output:
+        if tool_output is not None:
             h = hashlib.md5(tool_output.encode()).hexdigest()
             self._output_hashes.append(h)
         if step_result:
@@ -134,16 +159,52 @@ class TrajectoryMonitor:
                     affected_step_ids=[step_id],
                 )
 
-        # 5. Terminal — all recent attempts are failing (models likely unavailable)
-        if used_budget > 5 and len(self._tool_signatures) >= 4:
+        # 5. Terminal — all recent tool calls are producing errors
+        # (models or external services may be unavailable).
+        # Only trigger when the recent output hashes are ALL from
+        # error outputs — different healthy outputs should NOT trigger
+        # this detector.  Previously used tool *signature* diversity
+        # which flagged normal multi-tool exploration as terminal.
+        if used_budget > 5 and len(self._output_hashes) >= 4:
+            recent_outputs = list(self._output_hashes)[-4:]
             recent_sigs = list(self._tool_signatures)[-4:]
-            if len(set(recent_sigs)) >= 3:
+            # Only flag when ALL recent outputs are identical (errors
+            # produce similar/nil output) AND the signatures are all
+            # different (model is frantically trying different things).
+            outputs_stuck = len(set(recent_outputs)) <= 1
+            sigs_different = len(set(recent_sigs)) >= 3
+            if outputs_stuck and sigs_different:
                 return TrajectoryDiagnosis(
                     health=TrajectoryHealth.TERMINAL,
-                    detail="All recent tool calls have produced different errors — "
-                           "models or external services may be unavailable",
+                    detail="All recent tool calls have produced identical (error) "
+                           "output despite different approaches — models or "
+                           "external services may be unavailable",
                     recovery_message=None,
                     affected_step_ids=[step_id],
                 )
+
+        # 6. Phase 6: Cross-step failure accumulation — 3+ consecutive
+        #    error-producing steps indicate a systemic failure.
+        if tool_output and "ERROR" in tool_output.upper():
+            self._cross_step_error_outputs.append(tool_output[:100])
+            self._consecutive_failed_steps += 1
+        else:
+            self._consecutive_failed_steps = 0
+
+        if self._consecutive_failed_steps >= self._cross_step_failure_threshold:
+            return TrajectoryDiagnosis(
+                health=TrajectoryHealth.TERMINAL,
+                detail=(
+                    f"{self._cross_step_failure_threshold} consecutive steps "
+                    f"produced errors — possible systemic failure"
+                ),
+                recovery_message=(
+                    "Multiple consecutive steps have produced errors. "
+                    "This may indicate a systemic problem (API outage, "
+                    "missing dependencies, or configuration issue). "
+                    "Consider pausing and reassessing rather than retrying."
+                ),
+                affected_step_ids=[step_id],
+            )
 
         return TrajectoryDiagnosis(health=TrajectoryHealth.HEALTHY)

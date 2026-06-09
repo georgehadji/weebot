@@ -1,7 +1,7 @@
 """Unit tests for ActivityStream."""
 import pytest
 from datetime import datetime
-from weebot.activity_stream import ActivityStream, ActivityEvent
+from weebot.core.activity_stream import ActivityStream, ActivityEvent
 
 
 class TestActivityStream:

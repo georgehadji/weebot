@@ -24,6 +24,8 @@ class PowerShellTool(BaseTool):
     Diagnostic shortcuts: system_info, processes, network_test, list_workspace.
     """
 
+    default_timeout_seconds: int = 300
+    truncation_strategy: str = "tail"
     name: str = "powershell"
     description: str = (
         f"Execute a PowerShell command on Windows 11. "

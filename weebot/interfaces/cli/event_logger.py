@@ -24,8 +24,11 @@ def _format_event(event: AgentEvent) -> str:
     if isinstance(event, PlanEvent):
         return "[dim]Plan created/updated[/dim]"
     if isinstance(event, StepEvent):
-        icon = "✅" if event.status.value == "completed" else "▶️"
-        return f"  {icon} Step {event.step_id}: {event.description} ({event.status.value})"
+        if event.status.value == "completed":
+            return f"  ✅ Step {event.step_id}: {event.description} (completed)"
+        elif event.status.value == "failed":
+            return f"  ❌ Step {event.step_id}: {event.description} (failed)"
+        return f"  ▶️ Step {event.step_id}: {event.description} ({event.status.value})"
     if isinstance(event, ToolEvent):
         if event.status.value == "calling":
             return f"    🔧 Calling {event.tool_name}({event.function_args})"

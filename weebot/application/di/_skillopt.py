@@ -127,6 +127,8 @@ class SkillOptMixin:
                 event_bus=self._maybe_get(EventBusPort),
                 max_steps=5,
                 logger=self._maybe_get_str("structured_logger"),
+                skill_retriever=self._maybe_get_str("skill_retriever"),
+                code_reviewer=self._maybe_get_str("code_reviewer"),
             )
             return PlanActFlow(cfg)
         return factory

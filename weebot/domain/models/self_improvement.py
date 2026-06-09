@@ -1,7 +1,9 @@
-"""Controlled self-improvement domain model — patches to skill/config files.
+"""Self-improvement domain models — patches + cross-domain transfer strategies.
 
-Patches are validated through AST parsing + sandbox execution before apply.
-Only skills, contracts, rules, and harness configs are editable.
+Contains:
+- SelfImprovementPatch: a proposed edit to skill/config files (pre-existing)
+- ImprovementStrategy: cross-domain transfer of meta-improvement knowledge
+  (HyperAgents Enhancement 6)
 """
 from __future__ import annotations
 
@@ -41,3 +43,35 @@ class SelfImprovementPatch(BaseModel):
     )
     applied_at: Optional[datetime] = Field(default=None)
     reverted_at: Optional[datetime] = Field(default=None)
+
+
+# ── HyperAgents Enhancement 6 ────────────────────────────────────────────────
+
+class ImprovementStrategy(BaseModel):
+    """A meta-level improvement strategy learned from one domain.
+
+    Strategies are domain-agnostic descriptions of how the meta-agent
+    improved a skill.  They are transferred across domains when a new
+    domain flow starts, providing the planner with prior experience.
+    """
+
+    strategy_id: str = Field(default="")
+    source_domain: str = Field(default="")
+    target_domain: Optional[str] = Field(default=None)
+    meta_agent_prompt_snippet: str = Field(default="")
+    effectiveness_score: float = Field(default=0.0)
+    transfer_count: int = Field(default=0)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+    @property
+    def composite_score(self) -> float:
+        """Composite score favoring high-effectiveness, frequently-transferred strategies.
+
+        Formula: score × (1 + transfer_count)
+        This is the inverse of the DGM-H parent selection formula because
+        for strategy transfer we WANT strategies that have been validated
+        across multiple domains.
+        """
+        return self.effectiveness_score * (1.0 + self.transfer_count)

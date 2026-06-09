@@ -640,6 +640,8 @@ cli.add_command(companion)
 cli.add_command(guard_group)
 cli.add_command(analytics_group)
 cli.add_command(soul_group)
+from cli.commands.dream import dream as dream_group
+cli.add_command(dream_group)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────

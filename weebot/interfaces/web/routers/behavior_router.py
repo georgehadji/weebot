@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
+from weebot.core.behavior_reporting import BehaviorReporter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/behavior", tags=["behavior"])

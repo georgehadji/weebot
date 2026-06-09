@@ -34,6 +34,7 @@ class KnowledgeTool(BaseTool):
     delete_note -- Remove a stale note by note_id
     """
 
+    truncation_strategy: str = "boundary"
     name: str = "knowledge"
     description: str = (
         "Persistent knowledge base for storing and retrieving notes, findings, "

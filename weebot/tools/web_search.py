@@ -1,10 +1,17 @@
-"""WebSearchTool — multi-engine web search with DuckDuckGo primary, Bing fallback."""
+"""WebSearchTool — multi-engine web search with DuckDuckGo primary, Bing fallback.
+
+Supports optional cross-encoder reranking via ``RerankPort``.  When a reranker
+is injected, search results from all engines are deduplicated and reranked
+against the original query before being returned.
+"""
 from __future__ import annotations
+import logging
 import os
 import re
 from typing import Any
 
 import aiohttp
+from pydantic import PrivateAttr
 
 from weebot.config.api_endpoints import SEARCH_DDG_URL, SEARCH_BING_URL
 from weebot.tools.base import BaseTool, ToolResult
@@ -12,8 +19,12 @@ from weebot.tools.base import BaseTool, ToolResult
 _DDG_URL = SEARCH_DDG_URL
 _BING_URL = SEARCH_BING_URL
 
+logger = logging.getLogger(__name__)
+
 
 class WebSearchTool(BaseTool):
+    default_timeout_seconds: int = 25
+    truncation_strategy: str = "boundary"
     name: str = "web_search"
     description: str = (
         "Search the web for current information. "
@@ -32,28 +43,75 @@ class WebSearchTool(BaseTool):
         "required": ["query"],
     }
 
+    # Optional reranker — injected by DI after construction.
+    _rerank: Any = PrivateAttr(default=None)
+
+    def set_rerank(self, rerank: Any) -> None:
+        """Inject a ``RerankPort`` instance for cross-encoder reranking.
+
+        Called by the DI container after tool construction.
+        Pass ``None`` to disable reranking.
+        """
+        self._rerank = rerank
+
     async def execute(self, query: str, num_results: int = 5, **kwargs: Any) -> ToolResult:
         num_results = min(max(1, num_results), 10)
         errors: list[str] = []
+        all_results: list[dict[str, str]] = []
 
         # Primary: DuckDuckGo (no API key required)
+        ddg_ok = False
         try:
-            results = await self._search_duckduckgo(query, num_results)
-            return ToolResult(output=self._format(results))
+            ddg_results = await self._search_duckduckgo(query, num_results * 2)
+            all_results.extend(ddg_results)
+            ddg_ok = True
         except Exception as e:
             errors.append(f"DuckDuckGo: {e}")
 
         # Fallback: Bing Web Search API (requires BING_API_KEY)
         try:
-            results = await self._search_bing(query, num_results)
-            return ToolResult(output=self._format(results))
+            bing_results = await self._search_bing(query, num_results)
+            # Deduplicate by URL
+            seen_urls = {r.get("url", "") for r in all_results}
+            for r in bing_results:
+                if r.get("url", "") not in seen_urls:
+                    all_results.append(r)
         except Exception as e:
             errors.append(f"Bing: {e}")
 
-        return ToolResult(
-            output="",
-            error=f"All search engines failed: {'; '.join(errors)}",
-        )
+        if not all_results:
+            return ToolResult(
+                output="",
+                error=f"All search engines failed: {'; '.join(errors)}",
+            )
+
+        # ── Rerank against the query (or keep engine order) ─────
+        if self._rerank is not None and len(all_results) > num_results:
+            try:
+                from weebot.config.model_refs import RERANK_MODEL_FAST
+                documents = [
+                    f"{r.get('title', '')}: {r.get('snippet', '')[:300]}"
+                    for r in all_results
+                ]
+                reranked = await self._rerank.rerank(
+                    query=query,
+                    documents=documents,
+                    model=RERANK_MODEL_FAST,
+                    top_n=num_results,
+                )
+                results = [
+                    all_results[rr.index]
+                    for rr in reranked
+                    if rr.index < len(all_results)
+                ][:num_results]
+                logger.debug(
+                    "Search reranked: %d results → top %d", len(all_results), len(results)
+                )
+                return ToolResult(output=self._format(results))
+            except Exception as exc:
+                logger.warning("Search rerank failed, using engine order: %s", exc)
+
+        return ToolResult(output=self._format(all_results[:num_results]))
 
     async def _search_duckduckgo(
         self, query: str, num_results: int

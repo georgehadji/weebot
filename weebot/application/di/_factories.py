@@ -188,6 +188,76 @@ class FactoriesMixin:
         return FileSystemSoulProvider()
 
     @staticmethod
+    def _create_llm_for_role(role: str) -> "LLMPort":
+        """Create an LLMPort for a specific role from ROLE_MODEL_CONFIG.
+
+        Falls back to the default model if the role is not configured.
+        """
+        from weebot.core.model_cascade_config import ROLE_MODEL_CONFIG
+        models = ROLE_MODEL_CONFIG.get(role, [])
+        model = models[0] if models else None
+        return FactoriesMixin._create_llm(model)
+
+    @staticmethod
+    def _create_intent_review_service() -> "IntentReviewService":
+        from weebot.application.services.intent_review_service import IntentReviewService
+        llm = FactoriesMixin._create_llm_for_role("critic")
+        return IntentReviewService(llm=llm)
+
+    @staticmethod
+    def _create_main_review_service() -> "MainReviewService":
+        from weebot.application.services.main_review_service import MainReviewService
+        llm = FactoriesMixin._create_llm_for_role("verifier")
+        return MainReviewService(llm=llm)
+
+    @staticmethod
+    def _create_idea_gate() -> "IdeaGate":
+        from weebot.application.services.idea_gate import IdeaGate
+        from weebot.application.services.intent_review_service import IntentReviewService
+        from weebot.application.services.main_review_service import MainReviewService
+        critic_llm = FactoriesMixin._create_llm_for_role("critic")
+        verifier_llm = FactoriesMixin._create_llm_for_role("verifier")
+        intent_reviewer = IntentReviewService(llm=critic_llm)
+        main_reviewer = MainReviewService(llm=verifier_llm)
+        return IdeaGate(intent_reviewer=intent_reviewer, main_reviewer=main_reviewer)
+
+    @staticmethod
+    def _create_dreamer_agent() -> "DreamerAgent":
+        from weebot.application.agents.dreamer import DreamerAgent
+        llm = FactoriesMixin._create_llm_for_role("dreamer")
+        return DreamerAgent(llm=llm, max_contracts=5)
+
+    @staticmethod
+    def _create_code_reviewer() -> "CodeReviewerService":
+        from weebot.application.services.code_reviewer_service import CodeReviewerService
+        from weebot.application.di._factories import FactoriesMixin
+        llm = FactoriesMixin._create_llm_for_role("reviewer")
+        return CodeReviewerService(llm=llm, timeout_seconds=8.0)
+
+    @staticmethod
+    def _create_retention_agent() -> "RetentionAgent":
+        from weebot.application.agents.retention_agent import RetentionAgent
+        llm = FactoriesMixin._create_llm_for_role("subagent")
+        return RetentionAgent(llm=llm)
+
+    @staticmethod
+    def _create_trust_report_service() -> "TrustReportService":
+        from weebot.application.services.trust_report_service import TrustReportService
+        return TrustReportService()
+
+    @staticmethod
+    def _create_backend():
+        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
+        from weebot.application.di import Container
+        try:
+            c = Container()
+            c.configure_defaults()
+            sandbox = c.get(SandboxPort)
+            return SandboxBackendAdapter(sandbox=sandbox)
+        except Exception:
+            return SandboxBackendAdapter(sandbox=None)
+
+    @staticmethod
     def _create_harness_config():
         from pathlib import Path
         version = _os.getenv("WEEBOT_HARNESS_VERSION", "v0.1.0")

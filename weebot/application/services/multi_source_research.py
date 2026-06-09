@@ -277,18 +277,29 @@ class DocumentResearchProvider(ResearchProvider):
 
 
 class MultiSourceResearchEngine:
-    """Engine for conducting research across multiple sources."""
-    
+    """Engine for conducting research across multiple sources.
+
+    Args:
+        web_search_tool: Optional ``WebSearchTool`` for web searches.
+        browser_tool: Optional ``AdvancedBrowserTool`` for browser-based research.
+        service_registry: Optional ``ServiceRegistry`` for external services.
+        rerank: Optional ``RerankPort`` for cross-encoder result reranking.
+                When provided, results are reranked against the query instead of
+                being sorted by a single metadata field.
+    """
+
     def __init__(
         self,
         web_search_tool: Optional[WebSearchTool] = None,
         browser_tool: Optional[AdvancedBrowserTool] = None,
-        service_registry: Optional[ServiceRegistry] = None
+        service_registry: Optional[ServiceRegistry] = None,
+        rerank: Any = None,  # RerankPort — avoids import at module level
     ):
         self.providers: List[ResearchProvider] = []
         self.web_search_tool = web_search_tool
         self.browser_tool = browser_tool
         self.service_registry = service_registry
+        self._rerank = rerank
         self.logger = logging.getLogger(f"{__name__}.MultiSourceResearchEngine")
         
         # Add default providers
@@ -340,13 +351,42 @@ class MultiSourceResearchEngine:
                 self.logger.error(f"Error with provider {provider.__class__.__name__}: {e}")
                 continue
         
-        # Sort results by some relevance metric (simplified)
-        # In a real implementation, this would use more sophisticated ranking
-        sorted_results = sorted(
-            all_results,
-            key=lambda x: x.get('confidence', x.get('reliability_score', 0.5)),
-            reverse=True
-        )[:max_sources * max_results_per_source]
+        # ── Rerank results against the query (or fall back to metadata sort) ──
+        if self._rerank is not None and all_results:
+            try:
+                from weebot.config.model_refs import RERANK_MODEL_PRO
+                documents = [
+                    f"{r.get('title', '')}: {r.get('snippet', '')[:500]}"
+                    for r in all_results
+                ]
+                reranked = await self._rerank.rerank(
+                    query=query,
+                    documents=documents,
+                    model=RERANK_MODEL_PRO,
+                    top_n=max_sources * max_results_per_source,
+                )
+                sorted_results = [
+                    all_results[rr.index]
+                    for rr in reranked
+                    if rr.index < len(all_results)
+                ]
+                self.logger.debug(
+                    "Research reranked: %d results → top %d (model=%s)",
+                    len(all_results), len(sorted_results), RERANK_MODEL_PRO,
+                )
+            except Exception as exc:
+                self.logger.warning("Research rerank failed, falling back to metadata sort: %s", exc)
+                sorted_results = sorted(
+                    all_results,
+                    key=lambda x: x.get('confidence', x.get('reliability_score', 0.5)),
+                    reverse=True
+                )[:max_sources * max_results_per_source]
+        else:
+            sorted_results = sorted(
+                all_results,
+                key=lambda x: x.get('confidence', x.get('reliability_score', 0.5)),
+                reverse=True
+            )[:max_sources * max_results_per_source]
         
         # Generate a summary of the research
         summary = await self._generate_summary(query, sorted_results)

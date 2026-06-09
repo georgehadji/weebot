@@ -61,12 +61,14 @@ class PlanActFlowConfig:
     # ── Critique & validation ───────────────────────────────────────
     truth_binder: Optional[Any] = None  # TruthBinder
     plan_critic: Optional[Any] = None  # PlanCriticService
+    code_reviewer: Optional[Any] = None  # CodeReviewerPort — per-step code review
 
     # ── Learning & memory ───────────────────────────────────────────
     episodic_memory: Optional[Any] = None
     behavioral_learner: Optional[Any] = None
     knowledge_graph: Optional[Any] = None
     skill_prompt: Optional[str] = None
+    skill_retriever: Optional[Any] = None  # SkillRetrieverPort — Tier 1.2
 
     # ── Identity ────────────────────────────────────────────────────
     model: Optional[str] = None
@@ -75,5 +77,24 @@ class PlanActFlowConfig:
     personality: Optional[Any] = None  # PersonalityManager
     context_aware_model_selection: bool = True
 
+    # ── Enhancement 4: Trust report ─────────────────────────────────
+    trust_report_service: Optional[Any] = None  # TrustReportPort
+
+    # ── Enhancement 5: Retention agent ─────────────────────────────
+    retention_agent: Optional[Any] = None  # RetentionAgentPort
+    """Service computing TrustReport from code review + CoVe evidence."""
+
+    # ── Phase 5: Task preset (cost/quality tier) ────────────────────
+    task_preset: Optional[Any] = None  # TaskPreset — avoids domain model import
+    """Optional task preset controlling quality gates and model selection.
+    If None, flow uses its hardcoded defaults (backward-compatible)."""
+
     # ── Cross-cutting ───────────────────────────────────────────────
     logger: Optional[StructuredLogger] = None
+    hooks: Optional[Any] = None  # HookRegistryPort
+    """Optional hook registry for PlanActFlow lifecycle callbacks.
+
+    Pass any object satisfying ``weebot.application.ports.hook_registry_port.HookRegistryPort``
+    (e.g. ``weebot.templates.hooks.HookRegistry``).  Typed as ``Optional[Any]`` to avoid
+    importing the templates layer into the application models module.
+    """

@@ -21,13 +21,33 @@ from weebot.domain.models.self_improvement import SelfImprovementPatch
 
 logger = logging.getLogger(__name__)
 
-# Allowlist of directories that self-improvement can edit
+# Allowlist of directories that self-improvement can edit (Tier 1 — always allowed)
 _ALLOWED_TARGET_DIRS = [
     "weebot/skills/builtin",
     "weebot/config/contracts",
     "weebot/config/prompts/rules",
+    "weebot/config/prompts/variants",  # HyperAgents Enhancement 5
     "weebot/config/harness",
 ]
+
+# Tier 2 allowlist — only active when METACOGNITIVE_IMPROVEMENT_ENABLED.
+# These directories contain the self-improvement machinery itself.
+_META_ALLOWED_TARGET_DIRS = [
+    "weebot/application/services/self_improver.py",
+    "weebot/application/services/meta_self_improver.py",
+]
+
+
+def _get_effective_allowlist() -> list[str]:
+    """Return the current allowlist, including meta-tier if the feature flag is on."""
+    effective = list(_ALLOWED_TARGET_DIRS)
+    try:
+        from weebot.config.feature_flags import METACOGNITIVE_IMPROVEMENT_ENABLED
+        if METACOGNITIVE_IMPROVEMENT_ENABLED:
+            effective.extend(_META_ALLOWED_TARGET_DIRS)
+    except ImportError:
+        pass
+    return effective
 
 # Allowlist of file extensions
 _ALLOWED_EXTENSIONS = {".md", ".yaml", ".yml", ".json", ".txt"}
@@ -223,8 +243,14 @@ class SelfImprover(SelfImprovementPort):
 
     # ── Internal helpers ────────────────────────────────────────────
 
-    def _is_allowed_target(self, target_file: str) -> bool:
+    @staticmethod
+    def _is_allowed_target(target_file: str) -> bool:
         """Check if a target file is in the allowlist.
+
+        Uses the effective allowlist which includes meta-tier directories
+        when METACOGNITIVE_IMPROVEMENT_ENABLED is True.
+
+        Meta-tier files may have .py extension (the SelfImprover itself).
 
         Args:
             target_file: Relative path from project root.
@@ -234,6 +260,14 @@ class SelfImprover(SelfImprovementPort):
         """
         path = Path(target_file).as_posix()
         ext = Path(target_file).suffix
+
+        effective = _get_effective_allowlist()
+        # Check meta-tier first (allows .py files for self-improvement)
+        for allowed in _META_ALLOWED_TARGET_DIRS:
+            if path.startswith(allowed):
+                return True
+
+        # Tier-1 check: normal extensions only
         if ext not in _ALLOWED_EXTENSIONS:
             return False
         return any(path.startswith(allowed) for allowed in _ALLOWED_TARGET_DIRS)

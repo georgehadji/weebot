@@ -51,6 +51,12 @@ class TaskRoute(BaseModel):
         default_factory=list,
         description="Rule files from config/prompts/rules/ to inject",
     )
+    parallel_subtasks: list[dict] = Field(
+        default_factory=list,
+        description="Sub-task descriptors for parallel execution (Phase 6). "
+                    "Each entry has 'index', 'description', and 'result' keys.",
+    )
+
     confidence: float = Field(
         default=0.0, ge=0.0, le=1.0,
         description="Classification confidence",

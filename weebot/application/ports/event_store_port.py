@@ -40,3 +40,15 @@ class EventStorePort(ABC):
     async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
         """Get cost summary for a session."""
         ...
+
+    @abstractmethod
+    async def query_recent_events(
+        self,
+        event_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Query recent events across all sessions, optionally filtered by type.
+
+        Used by DreamerAgent to collect recent failure signals for ideation.
+        """
+        ...

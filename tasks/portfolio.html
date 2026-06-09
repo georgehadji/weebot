@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maya Rivera • Web Designer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #1a1a2e;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      max-width: 960px;
+      width: 100%;
+      padding: 0 24px;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%;
+      text-align: center;
+      padding: 60px 0 20px;
+    }
+
+    header h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: 1px;
+    }
+
+    header .tagline {
+      font-size: 1.2rem;
+      color: #FF6B6B;
+      margin-top: 8px;
+      font-weight: 300;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 60px 0;
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      max-width: 640px;
+      margin: 0 auto;
+      color: #b0b0c8;
+    }
+
+    .hero .accent-line {
+      width: 60px;
+      height: 3px;
+      background: #FF6B6B;
+      margin: 24px auto;
+      border-radius: 2px;
+    }
+
+    /* ── Skills ── */
+    .skills {
+      padding: 60px 0;
+    }
+
+    .skills h2 {
+      text-align: center;
+      font-size: 1.8rem;
+      color: #ffffff;
+      margin-bottom: 40px;
+    }
+
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px;
+    }
+
+    .skill-card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 32px 20px;
+      text-align: center;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      border: 1px solid #2a2a4a;
+    }
+
+    .skill-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 8px 24px rgba(255, 107, 107, 0.15);
+      border-color: #FF6B6B;
+    }
+
+    .skill-card .icon {
+      font-size: 2.5rem;
+      margin-bottom: 16px;
+    }
+
+    .skill-card h3 {
+      font-size: 1.25rem;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .skill-card p {
+      font-size: 0.9rem;
+      color: #a0a0b8;
+    }
+
+    .skill-card .accent-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #FF6B6B;
+      border-radius: 50%;
+      margin-top: 12px;
+    }
+
+    /* ── Footer / Contact ── */
+    footer {
+      width: 100%;
+      padding: 60px 0 40px;
+      text-align: center;
+      border-top: 1px solid #2a2a4a;
+      margin-top: 40px;
+    }
+
+    footer h2 {
+      font-size: 1.8rem;
+      color: #ffffff;
+      margin-bottom: 16px;
+    }
+
+    footer p {
+      color: #b0b0c8;
+      margin-bottom: 6px;
+    }
+
+    footer a {
+      color: #FF6B6B;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    footer a:hover {
+      opacity: 0.8;
+      text-decoration: underline;
+    }
+
+    .contact-links {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .contact-links a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 1rem;
+    }
+
+    .copyright {
+      margin-top: 32px;
+      font-size: 0.85rem;
+      color: #6a6a88;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      header h1 { font-size: 2.2rem; }
+      .skills-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <h1>Maya Rivera</h1>
+      <p class="tagline">web designer</p>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="accent-line"></div>
+      <p>
+        I craft clean, human-centered digital experiences — blending thoughtful
+        design with modern front-end development to bring ideas to life on the web.
+      </p>
+      <div class="accent-line"></div>
+    </section>
+
+    <!-- Skills -->
+    <section class="skills">
+      <h2>Skills &amp; Expertise</h2>
+      <div class="skills-grid">
+        <div class="skill-card">
+          <div class="icon">🎨</div>
+          <h3>UI/UX</h3>
+          <p>User research, wireframing, prototyping, and intuitive interface design.</p>
+          <span class="accent-dot"></span>
+        </div>
+        <div class="skill-card">
+          <div class="icon">💻</div>
+          <h3>HTML/CSS</h3>
+          <p>Semantic markup, responsive layouts, CSS Grid, Flexbox, and animations.</p>
+          <span class="accent-dot"></span>
+        </div>
+        <div class="skill-card">
+          <div class="icon">✏️</div>
+          <h3>Figma</h3>
+          <p>Component libraries, design systems, auto-layout, and developer handoff.</p>
+          <span class="accent-dot"></span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Footer / Contact -->
+  <footer>
+    <div class="container">
+      <h2>Let's Connect</h2>
+      <p>Have a project in mind? I'd love to hear from you.</p>
+      <div class="contact-links">
+        <a href="mailto:hello@mayarivera.design">✉️ hello@mayarivera.design</a>
+        <a href="#">🔗 LinkedIn</a>
+        <a href="#">🐦 Twitter</a>
+      </div>
+      <p class="copyright">&copy; 2025 Maya Rivera. All rights reserved.</p>
+    </div>
+  </footer>
+</body>
+</html>

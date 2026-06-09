@@ -202,8 +202,16 @@ class ExecuteStepHandler(CommandHandler):
                 }
             )
         except Exception as exc:
+            import traceback
+            detail = traceback.format_exc()
+            # Log at module level — handler may not have a logger wired
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "ExecuteStepHandler failed: %s\n%s",
+                exc, detail,
+            )
             return CommandResult.fail(
-                error=str(exc), error_code="STEP_EXECUTION_ERROR"
+                error=f"{type(exc).__name__}: {exc}", error_code="STEP_EXECUTION_ERROR"
             )
 
 

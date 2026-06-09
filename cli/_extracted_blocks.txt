@@ -1,0 +1,383 @@
+=== LINES 563-685 ===
+def benchmark() -> None:
+    """Run weebot agents against SIA-compatible benchmark tasks."""
+
+
+@benchmark.command("list")
+@click.argument("tasks_dir", type=click.Path(exists=True))
+def benchmark_list(tasks_dir: str) -> None:
+    """List all benchmark tasks found in TASKS_DIR."""
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+
+    tasks = TaskLoader.load_all_from_dir(Path(tasks_dir))
+    if not tasks:
+        console.print("[yellow]No tasks found.[/yellow]")
+        return
+    for task in tasks:
+        tags = ", ".join(task.tags) if task.tags else "—"
+        console.print(
+            f"[bold]{task.task_id}[/bold]  "
+            f"({len(task.samples)} samples, tags: {tags})"
+        )
+
+
+@benchmark.command("run")
+@click.argument("task_path", type=click.Path(exists=True))
+@click.option("--skill-name", default="general", show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--sample", "sample_idx", default=0, type=int, show_default=True)
+@click.option("--db", default="./weebot_sessions.db", show_default=True)
+def benchmark_run(task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str) -> None:
+    """Run one sample from a benchmark task at TASK_PATH."""
+    import asyncio
+    import json
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+    from weebot.application.harness.runner import BenchmarkRunner
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.application.di import Container
+
+    async def _run() -> None:
+        task = TaskLoader.load_from_dir(Path(task_path))
+        container = Container()
+        container.configure_defaults(db_path=db, default_model=model)
+        runner = BenchmarkRunner(
+            flow_factory=container._create_target_flow_factory(),
+            scorer=TaskScorer(),
+            skill_name=skill_name,
+        )
+        result = await runner.run_task(task, sample_idx)
+        console.print(json.dumps(result.to_dict(), indent=2))
+        status = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+        console.print(f"Score: {result.score:.3f}  {status}")
+
+    asyncio.run(_run())
+
+
+@benchmark.command("batch")
+@click.argument("tasks_dir", type=click.Path(exists=True))
+@click.option("--skill-name", default="general", show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--concurrency", default=4, type=int, show_default=True)
+@click.option("--output", "-o", default="benchmark_results.json", show_default=True)
+@click.option("--db", default="./weebot_sessions.db", show_default=True)
+def benchmark_batch(
+    tasks_dir: str, skill_name: str, model: str | None,
+    concurrency: int, output: str, db: str,
+) -> None:
+    """Run all samples in all tasks under TASKS_DIR and write results to OUTPUT."""
+    import asyncio
+    import json
+    from pathlib import Path
+    from weebot.application.harness.loader import TaskLoader
+    from weebot.application.harness.runner import BenchmarkRunner
+    from weebot.application.harness.scorer import TaskScorer
+    from weebot.application.di import Container
+
+    async def _run() -> None:
+        tasks = TaskLoader.load_all_from_dir(Path(tasks_dir))
+        if not tasks:
+            console.print("[yellow]No tasks found.[/yellow]")
+            return
+
+        container = Container()
+        container.configure_defaults(db_path=db, default_model=model)
+        runner = BenchmarkRunner(
+            flow_factory=container._create_target_flow_factory(),
+            scorer=TaskScorer(),
+            skill_name=skill_name,
+        )
+        results = await runner.run_batch(tasks, concurrency=concurrency)
+        records = [r.to_dict() for r in results]
+        Path(output).write_text(json.dumps(records, indent=2), encoding="utf-8")
+
+        passed = sum(1 for r in results if r.passed)
+        console.print(f"[green]{passed}[/green]/{len(results)} passed. Results → {output}")
+
+    asyncio.run(_run())
+
+
+@benchmark.command("report")
+@click.argument("results_file", type=click.Path(exists=True))
+def benchmark_report(results_file: str) -> None:
+    """Pretty-print a benchmark results JSON file."""
+    import json
+    from pathlib import Path
+
+    records = json.loads(Path(results_file).read_text(encoding="utf-8"))
+    if not records:
+        console.print("[yellow]Empty results file.[/yellow]")
+        return
+
+    passed = sum(1 for r in records if r.get("passed"))
+    avg_score = sum(r.get("score", 0.0) for r in records) / len(records)
+    console.print(f"[bold]Results:[/bold] {passed}/{len(records)} passed, avg score {avg_score:.3f}")
+    console.print("")
+
+    for r in records:
+        status = "[green]✓[/green]" if r.get("passed") else "[red]✗[/red]"
+        console.print(
+            f"  {status} {r['task_id']}[{r['sample_idx']}]  "
+            f"score={r['score']:.3f}  "
+            f"answer={r.get('answer', '')!r}"
+
+=== LINES 689-740 ===
+def harness() -> None:
+    """Generate and manage agent team harnesses for domain-specific workflows."""
+    pass
+
+
+@harness.command("generate")
+@click.argument("domain")
+@click.option("--output-dir", default=".", help="Output directory (default: current)")
+@click.option("--dry-run", is_flag=True, help="Show what would be generated without writing")
+def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
+    """Generate an agent team harness for a domain description.
+
+    DOMAIN is a natural language description of the work, e.g.
+    "deep research with web scraping and academic sources".
+
+    Creates agent definitions in .claude/agents/ and skills in
+    .claude/skills/ tailored to the domain.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.application.flows.harness_generation_flow import (
+            HarnessGenerationFlow,
+        )
+        from rich.console import Console
+
+        console = Console()
+
+        if dry_run:
+            flow = HarnessGenerationFlow(output_dir=output_dir)
+            arch = await flow.generate(domain)
+
+            console.print(f"[bold]Domain:[/bold] {arch.domain}")
+            console.print(f"[bold]Pattern:[/bold] {arch.pattern.value}")
+            console.print(f"\n[bold]Agents ({len(arch.agents)}):[/bold]")
+            for a in arch.agents:
+                console.print(f"  [cyan]{a.name}[/cyan] — {a.role}")
+            console.print(f"\n[bold]Skills ({len(arch.skills)}):[/bold]")
+            for s in arch.skills:
+                console.print(f"  [green]{s.name}[/green] — {s.description[:60]}")
+            console.print(f"\n[dim]Dry run — no files written.[/dim]")
+            return
+
+        flow = HarnessGenerationFlow(output_dir=output_dir)
+        arch = await flow.generate_and_write(domain)
+
+        console.print(f"[green]✓[/green] Generated [bold]{arch.pattern.value}[/bold] harness for '[cyan]{arch.domain}[/cyan]'")
+        console.print(f"  Agents: {len(arch.agents)}")
+        console.print(f"  Skills: {len(arch.skills)}")
+        console.print(f"  Output: {Path(output_dir).resolve() / '.claude'}")
+
+
+=== LINES 744-817 ===
+def profile() -> None:
+    """Manage named profiles with isolated configuration."""
+    pass
+
+
+@profile.command("create")
+@click.argument("name")
+@click.option("--from-profile", default=None, help="Copy settings from an existing profile")
+def profile_create(name: str, from_profile: str | None) -> None:
+    """Create a new profile with isolated config."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    try:
+        p = mgr.create(name, from_profile=from_profile)
+        console.print(f"[green]✓[/green] Created profile '[cyan]{p.name}[/cyan]' at {p.path}")
+    except ValueError as exc:
+        console.print(f"[red]✗[/red] {exc}")
+
+
+@profile.command("list")
+def profile_list() -> None:
+    """List all available profiles."""
+    from weebot.application.services.profile_manager import ProfileManager
+    from rich.table import Table
+
+    mgr = ProfileManager()
+    profiles = mgr.list_profiles()
+
+    if not profiles:
+        console.print("[dim]No profiles found. Run 'weebot profile create <name>' to create one.[/dim]")
+        return
+
+    active = ProfileManager.active_profile_name()
+    table = Table(title="Profiles")
+    table.add_column("Name", style="cyan")
+    table.add_column("Path", style="dim")
+    table.add_column("Active", style="green")
+
+    for p in profiles:
+        is_active = "✓" if p.name == active else ""
+        table.add_row(p.name, str(p.path), is_active)
+    console.print(table)
+
+
+@profile.command("switch")
+@click.argument("name")
+def profile_switch(name: str) -> None:
+    """Switch to an existing profile."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    profile = mgr.switch(name)
+    if profile is None:
+        console.print(f"[red]✗[/red] Profile '{name}' not found.")
+        return
+    console.print(f"[green]✓[/green] Switched to profile '[cyan]{profile.name}[/cyan]'")
+
+
+@profile.command("delete")
+@click.argument("name")
+@click.confirmation_option(prompt=f"Delete profile '{{name}}'?")
+def profile_delete(name: str) -> None:
+    """Delete a profile and its directory."""
+    from weebot.application.services.profile_manager import ProfileManager
+
+    mgr = ProfileManager()
+    try:
+        if mgr.delete(name):
+            console.print(f"[green]✓[/green] Deleted profile '[cyan]{name}[/cyan]'")
+        else:
+            console.print(f"[yellow]Profile '{name}' not found.[/yellow]")
+    except ValueError as exc:
+
+=== LINES 821-950 ===
+def cron() -> None:
+    """Schedule recurring tasks with natural language."""
+    pass
+
+
+@cron.command("schedule")
+@click.argument("schedule_text", nargs=-1, required=True)
+@click.option("--task", required=True, help="Task description to execute")
+@click.option("--name", default=None, help="Job name (default: auto-generated)")
+def cron_schedule(schedule_text: tuple[str, ...], task: str, name: str | None) -> None:
+    """Schedule a recurring task using natural language.
+
+    SCHEDULE_TEXT is a natural-language schedule like
+    "every Friday at 2pm" or "every 3 hours".
+
+    Example:
+        weebot cron schedule "every day at 9am" --task "Run daily report"
+        weebot cron schedule "every Monday" --task "Weekly security audit"
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.nl_cron import parse_schedule
+        from weebot.scheduling.scheduler import SchedulingManager
+        import uuid
+
+        text = " ".join(schedule_text)
+        parsed = parse_schedule(text)
+
+        if parsed is None:
+            console.print(
+                f"[red]✗[/red] Could not parse schedule: '{text}'. "
+                "Try: 'every day at 9am', 'every Monday at 2pm', "
+                "'every 3 hours'."
+            )
+            return
+
+        job_id = f"cron-{uuid.uuid4().hex[:8]}"
+        job_name = name or f"Scheduled: {task[:40]}"
+
+        # Store the schedule in jobs.yaml or create an in-memory job
+        mgr = SchedulingManager()
+        try:
+            from apscheduler.triggers.cron import CronTrigger
+            trigger = CronTrigger.from_crontab(parsed["cron_expression"])
+            await mgr.create_job(
+                job_id=job_id,
+                name=job_name,
+                description=task,
+                trigger_type="cron",
+                trigger_config={"cron_expression": parsed["cron_expression"]},
+                callable_name="_nl_cron_executor",
+            )
+            console.print(
+                f"[green]✓[/green] Scheduled: [cyan]{job_name}[/cyan]\n"
+                f"  Schedule: {parsed['description']} ({parsed['cron_expression']})\n"
+                f"  Task: {task}"
+            )
+        except Exception as exc:
+            console.print(f"[red]✗[/red] Failed to schedule: {exc}")
+
+    asyncio.run(_run())
+
+
+@cron.command("list")
+def cron_list() -> None:
+    """List all scheduled cron jobs."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.scheduler import SchedulingManager
+        from rich.table import Table
+
+        mgr = SchedulingManager()
+        jobs = await mgr.list_jobs()
+
+        if not jobs:
+            console.print("[dim]No scheduled jobs.[/dim]")
+            return
+
+        table = Table(title="Scheduled Jobs")
+        table.add_column("ID", style="cyan")
+        table.add_column("Name")
+        table.add_column("Schedule")
+        table.add_column("Enabled", style="green")
+
+        for j in jobs:
+            schedule = j.trigger_config.get("cron_expression", j.trigger_type) if hasattr(j, "trigger_config") else j.trigger_type
+            enabled = "✓" if getattr(j, "enabled", True) else "✗"
+            table.add_row(
+                getattr(j, "job_id", "?")[:12],
+                getattr(j, "name", "?")[:40],
+                str(schedule)[:20],
+                enabled,
+            )
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@cron.command("remove")
+@click.argument("job_id")
+def cron_remove(job_id: str) -> None:
+    """Remove a scheduled job by ID."""
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.scheduling.scheduler import SchedulingManager
+
+        mgr = SchedulingManager()
+        await mgr.remove_job(job_id)
+        console.print(f"[green]✓[/green] Removed job '[cyan]{job_id}[/cyan]'")
+
+    asyncio.run(_run())
+
+
+@cli.command()
+def companion() -> None:
+    """Start the Windows desktop companion (system tray + global hotkey).
+
+    Requires optional dependencies: pystray, keyboard, and tkinter.
+    """
+    import asyncio
+
+    async def _run() -> None:
+        from weebot.interfaces.windows import run_companion
+
+        await run_companion()
+
+

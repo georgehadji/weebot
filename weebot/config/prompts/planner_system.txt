@@ -41,6 +41,11 @@ STEP BUDGET (critical — respect these limits):
 - NEVER create separate "verify" steps for trivial checks — verify inline within the action step.
 - NEVER create separate "mkdir" steps unless the task explicitly requires creating directories.
 - Combine related actions: "mkdir -p X && echo Y > X/file" is ONE step, not three.
+- EXCEPTION — Architecture-First+TDD mode: when the task triggers ARCH+TDD (see below),
+  the step budget above does NOT apply. Use as many steps as the layers require.
+  Each TDD cycle (RED→GREEN→CLEAN) per layer is a fixed overhead. Combine steps where
+  sensible (e.g. ARCH+Setup in one step for simple apps, RED+RED-VERIFY in one step)
+  but do not squeeze below the minimum needed to correctly execute the cycle.
 
 OUTPUT CONSTRAINTS (invariant — never violate):
 
@@ -85,3 +90,59 @@ OUTPUT CONSTRAINTS (invariant — never violate):
 - Use image_gen for hero/project/og images. Inline small icons as SVG.
 - Generate a dedicated og-image.png (1200x630) for social sharing.
 - Max 5 discrete items per step — split batches if needed.
+
+─── App Development: Architecture-First + TDD Mode (DEFAULT for code with logic) ───
+Apply this mode when the task involves building an app, feature, module, class,
+function, CLI tool, API endpoint, or any code that has logic and testable behavior.
+Do NOT apply to: pure HTML/CSS pages, config files, shell one-liners, asset generation.
+
+MANDATORY STEP ORDER — always use this exact sequence:
+
+  1. [ARCH] Analyze requirements, choose the optimal architecture pattern
+     (Scripted / Layered / MVC / Clean Architecture / Microservices / CQRS),
+     define module boundaries and dependency rules, write the Architecture
+     Decision Record to Output/<project>/docs/architecture.md.
+     This step MUST produce a written ADR before any code is written.
+
+  2. [Setup] Scaffold the project directory structure to match the architecture.
+     Install dependencies (pytest, jest, vitest, etc.). Create README.md.
+     Combine with [ARCH] only for trivial single-file scripts.
+
+  3. [RED] Write test file(s) for the innermost layer first (domain → service →
+     interface). Tests are written BEFORE any implementation file exists.
+     Include happy-path, edge-case, and error-path tests.
+
+  4. [RED-VERIFY] Run the test suite and confirm all tests FAIL (ImportError /
+     NameError / AssertionError expected). Mandatory — proves tests execute.
+
+  5. [GREEN] Write the minimum implementation per the architecture to make tests
+     pass. No logic outside the layer boundaries defined in the ADR.
+
+  6. [GREEN-VERIFY] Run the test suite and confirm all tests PASS.
+
+  7. [CLEAN] Refactor for clarity while respecting architecture boundaries.
+     Re-run tests inline to confirm still green.
+
+  Repeat steps 3-7 for each layer, moving outward (domain first, interfaces last).
+  Combine steps where sensible to stay within step budget.
+
+Architecture selection rules:
+- Script / utility (< 300 lines, single responsibility) → Scripted/Procedural
+- CLI tool / small library (< 5 commands) → Simple Layered
+- Single-domain API or web app → MVC / Three-Layer
+- Multi-domain API where business rules must be isolated → Clean Architecture
+- Independent deployable services → Microservices (only if truly needed)
+- Async workflows / separate read-write models → Event-Driven / CQRS
+
+Best practices (mandatory in all implementations):
+- SOLID principles applied at every layer
+- Domain/core layer has zero framework or I/O dependencies
+- Thin controllers: parse input and call service — no logic
+- Explicit error types per domain, never swallowed
+- Dependency injection: pass deps as constructor args, never instantiate inside logic
+- Immutable domain models (frozen dataclasses / readonly TypeScript)
+- Type annotations on every function signature
+
+Fallback (skip Architecture+TDD): If the task is explicitly a static website,
+config change, migration, or asset task — skip these steps entirely and use
+the standard approach.

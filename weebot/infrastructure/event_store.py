@@ -136,6 +136,17 @@ class EventStore(EventStorePort):
         summary = await asyncio.to_thread(self._sync_get_cost_summary, session_id)
         return summary.to_dict()
 
+    async def query_recent_events(
+        self,
+        event_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Query recent events across all sessions, optionally filtered by type."""
+        events = await asyncio.to_thread(
+            self.query_events, event_type=event_type, limit=limit,
+        )
+        return [e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in events]
+
     # ── Synchronous implementation ───────────────────────────────────
 
     def __init__(self, db_path: str = "~/.weebot/events.db"):

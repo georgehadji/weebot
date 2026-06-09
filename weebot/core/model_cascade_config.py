@@ -5,7 +5,7 @@ OpenRouter Model Cascade Configuration
 
 Optimized model tiers for Weebot based on OpenRouter pricing and capabilities.
 Fetched from: https://openrouter.ai/api/v1/models
-Updated: 2026-04-05
+Updated: 2026-06-09
 
 **This is the configuration source only.** The canonical cascade execution
 logic lives in ``ExecutorAgent._call_with_cascade()`` at
@@ -22,6 +22,11 @@ Usage:
     from weebot.core.model_cascade_config import MODEL_CASCADE, get_model_for_task
 
     model = get_model_for_task("coding", tier="free")
+
+Pricing notes (2026-06-09, per 1M tokens):
+  - Models without the :free suffix route to paid endpoints even if they have
+    a free variant. Always use model_id:free to hit the free tier.
+  - deepseek/deepseek-v4-flash has NO free variant; use it as a budget model.
 """
 
 from dataclasses import dataclass
@@ -50,106 +55,349 @@ class ModelConfig:
 
 MODEL_CASCADE = {
     "coding": [
-        # FREE Tier - Cost: $0 (verified against OpenRouter API 2026-06-07)
+        # --- FREE tier ---
         ModelConfig(
-            id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="NVIDIA Nemotron 3 Ultra",
+            id="qwen/qwen3-coder:free",
+            name="Qwen3 Coder 480B (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=1000000,
-            timeout_seconds=45,
+            context_length=1049000,
+            timeout_seconds=60,
             max_retries=2,
-            use_for=["coding", "analysis", "chat", "planning"],
-            description="Nemotron 3 Ultra — FREE, 1M ctx, reasoning, tools. 55B active/550B MoE.",
+            use_for=["coding", "refactoring", "debugging", "analysis"],
+            description="Qwen3-Coder-480B MoE — purpose-built coding specialist, 1M context.",
             recommended=True,
         ),
         ModelConfig(
-            id="qwen/qwen3-coder:free",
-            name="Qwen3 Coder 480B A35B",
+            id="poolside/laguna-m.1:free",
+            name="Poolside Laguna M.1 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=262000,
-            timeout_seconds=45,
+            context_length=262144,
+            timeout_seconds=60,
             max_retries=2,
             use_for=["coding", "refactoring", "debugging"],
-            description="Best free coding model. 480B MoE specialized for code generation.",
+            description="Poolside flagship coding-agent model — optimised for complex SWE tasks.",
         ),
         ModelConfig(
-            id="nvidia/nemotron-3-super-120b-a12b:free",
-            name="NVIDIA Nemotron 3 Super",
+            id="moonshotai/kimi-k2.6:free",
+            name="Kimi K2.6 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
             context_length=262144,
             timeout_seconds=45,
             max_retries=2,
+            use_for=["coding", "analysis", "chat", "planning"],
+            description="Kimi K2.6 free tier — long-horizon coding, planning, 256K context.",
+        ),
+        ModelConfig(
+            id="poolside/laguna-xs.2:free",
+            name="Poolside Laguna XS.2 (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["coding", "subagent"],
+            description="Poolside efficient coding model — fast, for subagent/inline tasks.",
+        ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="deepseek/deepseek-v4-flash",
+            name="DeepSeek V4 Flash",
+            tier="budget",
+            prompt_price=0.0983,
+            completion_price=0.1966,
+            context_length=1049000,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["coding", "refactoring", "debugging", "analysis"],
+            description="DeepSeek V4 Flash — $0.10/1M, 1M context, reliable coding fallback.",
+        ),
+        ModelConfig(
+            id="qwen/qwen3-coder-30b-a3b-instruct",
+            name="Qwen3 Coder 30B",
+            tier="budget",
+            prompt_price=0.07,
+            completion_price=0.27,
+            context_length=160000,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["coding", "refactoring"],
+            description="Qwen3 Coder 30B — cheapest dedicated coding model at $0.07/1M.",
+        ),
+        ModelConfig(
+            id="x-ai/grok-build-0.1",
+            name="Grok Build 0.1",
+            tier="budget",
+            prompt_price=1.0,
+            completion_price=2.0,
+            context_length=256000,
+            timeout_seconds=45,
+            max_retries=2,
             use_for=["coding", "analysis"],
-            description="120B MoE model with 12B active parameters. Excellent for coding.",
+            description="Grok Build 0.1 — xAI agentic SWE model, $1/1M.",
         ),
     ],
 
     "analysis": [
-        # FREE Tier
+        # --- FREE tier ---
         ModelConfig(
-            id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="NVIDIA Nemotron 3 Ultra",
+            id="moonshotai/kimi-k2.6:free",
+            name="Kimi K2.6 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
-            context_length=1000000,
+            context_length=262144,
             timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "analysis", "chat", "planning"],
-            description="Nemotron 3 Ultra — FREE, 1M ctx, reasoning. Recommended default.",
+            description="Kimi K2.6 free tier — recommended default for analysis.",
             recommended=True,
         ),
         ModelConfig(
-            id="qwen/qwen3.6-plus:free",
-            name="Qwen 3.6 Plus",
+            id="nex-agi/nex-n2-pro:free",
+            name="Nex N2 Pro (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["analysis", "chat", "planning"],
+            description="Nex N2 Pro — 397B MoE, agentic-tuned, cross-lab diversity.",
+        ),
+        ModelConfig(
+            id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            name="Nemotron 3 Ultra 550B (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
             context_length=1000000,
-            timeout_seconds=45,
+            timeout_seconds=90,
+            max_retries=2,
+            use_for=["analysis", "planning", "long_context"],
+            description="NVIDIA 550B frontier reasoning/orchestration model, 1M context.",
+        ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="deepseek/deepseek-v4-flash",
+            name="DeepSeek V4 Flash",
+            tier="budget",
+            prompt_price=0.0983,
+            completion_price=0.1966,
+            context_length=1049000,
+            timeout_seconds=30,
             max_retries=2,
             use_for=["analysis", "chat", "summarization"],
-            description="1M context window. Great for document analysis.",
+            description="DeepSeek V4 Flash — $0.10/1M, 1M context, fast analysis fallback.",
         ),
     ],
 
     "chat": [
-        # FREE Tier
+        # --- FREE tier ---
+        ModelConfig(
+            id="moonshotai/kimi-k2.6:free",
+            name="Kimi K2.6 (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=45,
+            max_retries=2,
+            use_for=["coding", "analysis", "chat"],
+            description="Kimi K2.6 free tier — best overall model for chat.",
+            recommended=True,
+        ),
+        ModelConfig(
+            id="nex-agi/nex-n2-pro:free",
+            name="Nex N2 Pro (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["chat"],
+            description="Nex N2 Pro — cross-lab diversity for chat.",
+        ),
+        ModelConfig(
+            id="meta-llama/llama-3.3-70b-instruct:free",
+            name="Llama 3.3 70B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=131000,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["chat", "summarization"],
+            description="Meta Llama 3.3 70B — battle-tested, reliable, multilingual.",
+        ),
+    ],
+
+    "planning": [
+        # --- FREE tier ---
+        ModelConfig(
+            id="moonshotai/kimi-k2.6:free",
+            name="Kimi K2.6 (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=45,
+            max_retries=2,
+            use_for=["coding", "analysis", "planning"],
+            description="Kimi K2.6 free tier — long-horizon planning and coding.",
+            recommended=True,
+        ),
         ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="NVIDIA Nemotron 3 Ultra",
+            name="Nemotron 3 Ultra 550B (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
             context_length=1000000,
+            timeout_seconds=90,
+            max_retries=2,
+            use_for=["planning", "analysis", "long_context"],
+            description="NVIDIA 550B frontier orchestration model — deep reasoning for plans.",
+        ),
+        ModelConfig(
+            id="nousresearch/hermes-3-llama-3.1-405b:free",
+            name="Hermes 3 405B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=131000,
+            timeout_seconds=60,
+            max_retries=2,
+            use_for=["planning", "analysis"],
+            description="Hermes 3 405B — advanced agentic capabilities, tool use, planning.",
+        ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="deepseek/deepseek-v4-flash",
+            name="DeepSeek V4 Flash",
+            tier="budget",
+            prompt_price=0.0983,
+            completion_price=0.1966,
+            context_length=1049000,
             timeout_seconds=45,
             max_retries=2,
-            use_for=["coding", "analysis", "chat"],
-            description="Nemotron 3 Ultra — FREE, 1M ctx. Best overall free model on OpenRouter.",
+            use_for=["planning", "analysis"],
+            description="DeepSeek V4 Flash — fast, 1M context planning fallback.",
+        ),
+    ],
+
+    "subagent": [
+        # Lightweight models for frequent, short-lived subagent calls
+        ModelConfig(
+            id="openai/gpt-oss-20b:free",
+            name="GPT OSS 20B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=131000,
+            timeout_seconds=20,
+            max_retries=3,
+            use_for=["subagent", "chat", "analysis"],
+            description="OpenAI 21B MoE — fast, Apache 2.0, ideal for subagent dispatch.",
             recommended=True,
+        ),
+        ModelConfig(
+            id="poolside/laguna-xs.2:free",
+            name="Poolside Laguna XS.2 (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=262144,
+            timeout_seconds=20,
+            max_retries=3,
+            use_for=["subagent", "coding"],
+            description="Poolside efficient coding subagent — fast, 262K context.",
+        ),
+        ModelConfig(
+            id="meta-llama/llama-3.3-70b-instruct:free",
+            name="Llama 3.3 70B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=131000,
+            timeout_seconds=25,
+            max_retries=3,
+            use_for=["subagent", "chat"],
+            description="Meta Llama 3.3 70B — reliable, versatile subagent fallback.",
+        ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="openai/gpt-4.1-nano",
+            name="GPT-4.1 Nano",
+            tier="budget",
+            prompt_price=0.1,
+            completion_price=0.4,
+            context_length=1048000,
+            timeout_seconds=20,
+            max_retries=3,
+            use_for=["subagent", "chat"],
+            description="OpenAI GPT-4.1 Nano — $0.10/1M, 1M context, reliable quality.",
         ),
     ],
 
     "long_context": [
-        # Extended context models (verified against OpenRouter API 2026-06-07)
+        # Models with >= 500K context for very large inputs
         ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            name="NVIDIA Nemotron 3 Ultra",
+            name="Nemotron 3 Ultra 550B (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
             context_length=1000000,
-            timeout_seconds=60,
+            timeout_seconds=120,
+            max_retries=2,
+            use_for=["long_context", "analysis", "planning"],
+            description="NVIDIA 550B frontier model — 1M context, best for giant inputs.",
+            recommended=True,
+        ),
+        ModelConfig(
+            id="qwen/qwen3-coder:free",
+            name="Qwen3 Coder 480B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=1049000,
+            timeout_seconds=90,
+            max_retries=2,
+            use_for=["long_context", "coding"],
+            description="Qwen3 Coder 480B — 1M context, ideal for large codebases.",
+        ),
+        ModelConfig(
+            id="nvidia/nemotron-3-super-120b-a12b:free",
+            name="Nemotron 3 Super 120B (free)",
+            tier="free",
+            prompt_price=0.0,
+            completion_price=0.0,
+            context_length=1000000,
+            timeout_seconds=90,
             max_retries=2,
             use_for=["long_context", "analysis"],
-            description="1M context window, reasoning, free.",
-            recommended=True,
+            description="NVIDIA 120B hybrid MoE — 1M context, efficient long-context fallback.",
+        ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="meta-llama/llama-4-scout",
+            name="Llama 4 Scout",
+            tier="budget",
+            prompt_price=0.1,
+            completion_price=0.3,
+            context_length=10000000,
+            timeout_seconds=120,
+            max_retries=2,
+            use_for=["long_context", "analysis"],
+            description="Meta Llama 4 Scout — $0.10/1M, 10M context, extreme long-context tasks.",
         ),
     ],
 }
@@ -161,34 +409,30 @@ MODEL_CASCADE = {
 
 # Token thresholds based on MEMORY_ARTICLE insights
 TOKEN_THRESHOLDS = {
-    "short_context": 4000,      # < 4K: Full precision standard attention
-    "medium_context": 32000,    # 4K-32K: Standard models with good context
-    "long_context": 50000,      # 32K-50K: Extended context models
-    "very_long_context": 100000,  # 50K+: Sparse attention models (DeepSeek DSA)
+    "short_context": 4000,        # < 4K: Full precision standard attention
+    "medium_context": 32000,      # 4K-32K: Standard models with good context
+    "long_context": 50000,        # 32K-50K: Extended context models
+    "very_long_context": 100000,  # 50K+: Sparse attention / giant-context models
 }
 
 
 def select_model_by_tokens(task_type: str, estimated_tokens: int) -> ModelConfig:
     """Select optimal model based on estimated token count."""
-    # For very long contexts (50K+), use sparse attention models
     if estimated_tokens >= TOKEN_THRESHOLDS["long_context"]:
         models = MODEL_CASCADE.get("long_context", [])
         if models:
-            return models[0]  # Return recommended model
+            return models[0]
 
-    # For medium-long contexts (32K-50K), prefer extended context models
     if estimated_tokens >= TOKEN_THRESHOLDS["medium_context"]:
         models = MODEL_CASCADE.get(task_type, [])
         for model in models:
             if model.context_length >= 128000:
                 return model
 
-    # Default: use standard cascade for the task
     recommended = get_recommended_model(task_type)
     if recommended:
         return recommended
 
-    # Ultimate fallback
     return get_recommended_model("coding")
 
 
@@ -213,13 +457,9 @@ def get_models_for_task(task_type: str, tier: Optional[str] = None) -> list[Mode
 def get_recommended_model(task_type: str, tier: Optional[str] = None) -> Optional[ModelConfig]:
     """Get the recommended model for a task."""
     models = get_models_for_task(task_type, tier)
-
-    # First try to find a recommended model
     for model in models:
         if model.recommended:
             return model
-
-    # Fallback to first available
     return models[0] if models else None
 
 
@@ -227,8 +467,6 @@ def get_cascade_for_task(task_type: str) -> list[ModelConfig]:
     """Get the full cascade for a task (ordered by tier)."""
     models = MODEL_CASCADE.get(task_type, [])
     tier_order = ["free", "budget", "standard", "premium"]
-
-    # Sort by tier order
     return sorted(models, key=lambda m: tier_order.index(m.tier))
 
 
@@ -251,25 +489,109 @@ def get_model_stats() -> dict:
         "by_task": {},
         "recommended": 0,
     }
-
     for task, models in MODEL_CASCADE.items():
         stats["by_task"][task] = len(models)
         stats["total_models"] += len(models)
-
         for model in models:
             stats["by_tier"][model.tier] += 1
             if model.recommended:
                 stats["recommended"] += 1
-
     return stats
 
 
 # ============================================================================
-# PRINT CONFIGURATION
+# Phase 4: Cross-Lab Role Model Config
 # ============================================================================
+# Maps functional agent roles to ordered model lists.
+# Design rule: "planner" and "critic" must use models from *different* labs
+# to prevent echo-chamber plan validation.
+#
+# Lab diversity map:
+#   Qwen (Alibaba) · Moonshot · NVIDIA · OpenAI · Meta · Poolside · DeepSeek
+#   NousResearch · Nex AGI · xAI · Google
+#
+# Each entry: [primary, fallback1, fallback2, ...]
+# Falls back to the flow's default model if the role is not configured.
+
+AGENT_ROLES = frozenset({
+    "planner",    # generates initial plans
+    "critic",     # validates plans (PlanCriticService, MetaCritic)
+    "executor",   # executes steps (ExecutorAgent)
+    "verifier",   # CoVe verification (VerifyingState)
+    "summarizer", # SummarizingState
+    "subagent",   # lightweight parallel sub-tasks
+})
+
+ROLE_MODEL_CONFIG: dict[str, list[str]] = {
+    # Moonshot (primary) → NVIDIA frontier (deep plan) → DeepSeek (budget)
+    "planner": [
+        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+
+    # Cross-lab diversity: OpenAI OSS → NousResearch → xAI (paid fallback)
+    # Intentionally avoids Moonshot/DeepSeek used in planner/executor.
+    "critic": [
+        "openai/gpt-oss-120b:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-build-0.1",
+    ],
+
+    # Qwen Coder (coding-specialist MoE) → Poolside (coding agent) → Kimi → DeepSeek
+    "executor": [
+        "qwen/qwen3-coder:free",
+        "poolside/laguna-m.1:free",
+        "moonshotai/kimi-k2.6:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+
+    # NVIDIA reasoning models purpose-built for sub-agent/verification roles
+    "verifier": [
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nex-agi/nex-n2-pro:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+
+    # Meta Llama (battle-tested) → Google Gemma → Kimi
+    "summarizer": [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "moonshotai/kimi-k2.6:free",
+    ],
+
+    # Fast, disposable: OpenAI OSS 20B → Poolside XS → GPT-4.1 Nano (budget)
+    "subagent": [
+        "openai/gpt-oss-20b:free",
+        "poolside/laguna-xs.2:free",
+        "openai/gpt-4.1-nano",
+    ],
+
+    # Independent code review: cross-lab from executor's Qwen Coder
+    "reviewer": [
+        "openai/gpt-oss-120b:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-build-0.1",
+    ],
+
+    # Idea synthesis: Kimi for multi-signal reasoning
+    "dreamer": [
+        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+}
+
 
 if __name__ == "__main__":
-    import sys
     print("OPENROUTER MODEL CASCADE CONFIGURATION")
     stats = get_model_stats()
-    print(f"Total models: {stats['total_models']}")
+    print(f"Total models configured: {stats['total_models']}")
+    print(f"By tier: {stats['by_tier']}")
+    print(f"By task: {stats['by_task']}")
+    print(f"Recommended models: {stats['recommended']}")
+    print()
+    print("ROLE -> PRIMARY MODEL")
+    for role, models in ROLE_MODEL_CONFIG.items():
+        print(f"  {role:<12} -> {models[0]}")

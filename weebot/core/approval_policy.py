@@ -1,12 +1,11 @@
-"""Granular command execution approval policy (ported from OpenClaw)."""
-from __future__ import annotations
-import logging
-import re
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, List, Optional
+"""Granular command execution approval policy (ported from OpenClaw).
 
-_log = logging.getLogger(__name__)
+CRITICAL: This policy runs on Windows 11 + PowerShell 5.1.
+- ALL shell commands MUST use PowerShell-native syntax (Get-ChildItem, not ls).
+- Safe display cmdlets (Format-Table, Format-List, Format-Wide) are AUTO_APPROVED.
+- Disk formatting (format C:, Format-Volume) remains DENIED.
+- Python str.format() and similar are NO LONGER blanket-denied (false-positive source).
+"""
 
 
 class ApprovalMode(Enum):

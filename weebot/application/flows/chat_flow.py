@@ -51,6 +51,7 @@ class ChatFlow(BaseFlow):
         self._current_state = None
         self._next_state = None
         self._emit_lock = asyncio.Lock()
+        self._persistence_adapter = None  # lazily resolved
 
     def is_done(self) -> bool:
         return self._done
@@ -58,12 +59,27 @@ class ChatFlow(BaseFlow):
     def set_state(self, state) -> None:
         self._next_state = state
 
+    def _get_persistence_adapter(self):
+        """Resolve session persistence adapter lazily."""
+        if self._persistence_adapter is None:
+            from weebot.application.di import Container
+            c = Container()
+            try:
+                self._persistence_adapter = c.get("session_persistence")
+            except KeyError:
+                return None
+        return self._persistence_adapter
+
     async def _emit(self, event: AgentEvent) -> None:
         """Persist and publish an event."""
         async with self._emit_lock:
             self._session = self._session.add_event(event)
             if self._state_repo:
-                await self._state_repo.save_session(self._session)
+                adapter = self._get_persistence_adapter()
+                if adapter is not None:
+                    await adapter.save_session(self._session)
+                else:
+                    await self._state_repo.save_session(self._session)
             if self._event_bus:
                 await self._event_bus.publish(event)
 

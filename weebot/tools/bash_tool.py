@@ -54,6 +54,8 @@ class BashTool(BaseTool):
     - Layer 4: Semantic validation (command structure)
     """
 
+    default_timeout_seconds: int = 300
+    truncation_strategy: str = "tail"
     name: str = "bash"
     description: str = (
         "Execute a shell command. "

@@ -16,6 +16,8 @@ from weebot.tools.base import BaseTool, ToolResult
 class ComputerUseTool(BaseTool):
     """Interactive computer control: mouse, keyboard, pointer tracking."""
 
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 30
     name: str = "computer_use"
     description: str = (
         "Control the computer: move mouse, click, type, press keys. "
@@ -88,6 +90,14 @@ class ComputerUseTool(BaseTool):
         *[chr(i) for i in range(ord('a'), ord('z') + 1)],  # a-z
         *[str(i) for i in range(10)],  # 0-9
     }
+
+    async def health_check(self) -> bool:
+        """Check if pyautogui is available."""
+        try:
+            import pyautogui  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     async def execute(
         self,

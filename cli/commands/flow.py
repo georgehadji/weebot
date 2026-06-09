@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from weebot.application.di import Container
+from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.model_selection import ModelSelectionService
 from weebot.domain.models.event import WaitForUserEvent
@@ -29,6 +30,13 @@ def _get_state_repo() -> StateRepositoryPort:
     return _container.get(StateRepositoryPort)
 
 
+def _get_mediator():
+    """Return the shared CQRS Mediator (requires _get_state_repo called first)."""
+    global _container
+    assert _container is not None, "Container must be initialized — call _get_state_repo() first"
+    return _container.get(Mediator)
+
+
 @click.group()
 def flow() -> None:
     """PlanActFlow commands (new architecture)."""
@@ -42,11 +50,13 @@ def flow() -> None:
 def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
     """Run a one-shot PlanActFlow with the given prompt."""
     async def _run() -> None:
+        from weebot.config.model_refs import MODEL_BUDGET
         model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter(model or "gpt-4o-mini")
+        llm = model_service.create_llm_adapter(model or MODEL_BUDGET)
         state_repo = _get_state_repo()
+        mediator = _get_mediator()
         run_session_id = session_id or str(uuid.uuid4())
-        runner = AgentRunner(llm=llm, state_repo=state_repo, model=model, use_rich=False)
+        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, model=model, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
 
         async for event in runner.run_prompt(prompt, session_id=run_session_id):
@@ -66,8 +76,9 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
 def flow_resume(session_id: str, answer: str) -> None:
     """Resume a waiting session with a user answer."""
     async def _run() -> None:
+        from weebot.config.model_refs import MODEL_BUDGET
         model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
@@ -83,8 +94,9 @@ def flow_resume(session_id: str, answer: str) -> None:
 def flow_list(user_id: str | None) -> None:
     """List active/waiting sessions."""
     async def _run() -> None:
+        from weebot.config.model_refs import MODEL_BUDGET
         model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         sessions = await runner.list_sessions(user_id=user_id)
@@ -105,8 +117,9 @@ def flow_list(user_id: str | None) -> None:
 def flow_cancel(session_id: str) -> None:
     """Cancel a running session."""
     async def _run() -> None:
+        from weebot.config.model_refs import MODEL_BUDGET
         model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         ok = await runner.cancel_session(session_id)

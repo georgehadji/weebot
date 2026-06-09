@@ -81,13 +81,19 @@ def get_tracer(module_name: str = __name__) -> Any:
     if _trace is not None:
         return _trace.get_tracer(module_name)
     # Return a minimal no-op that satisfies the context manager protocol
+    _register_noop_span()
     return _NoOpTracer()
 
 
 # ── No-op fallback when OTEL is absent ────────────────────────────────
 
 class _NoOpSpan:
-    """Minimal span that satisfies ``start_as_current_span`` without OTEL."""
+    """Minimal span that satisfies the context manager protocol without OTEL.
+
+    Implements the same surface as ``Span`` from ``tracing_port`` so that
+    ``isinstance(raw, Span)`` in ``TracingAdapter`` passes and the wrapper
+    is skipped entirely.
+    """
 
     def set_attribute(self, key: str, value: Any) -> None:
         pass
@@ -116,3 +122,14 @@ class _NoOpTracer:
 
     def start_span(self, name: str, **kwargs: Any) -> _NoOpSpan:
         return _NoOpSpan()
+
+
+# Register _NoOpSpan as a virtual subclass of Span so that
+# TracingAdapter's isinstance check passes without importing
+# the port module at module level (avoids circular imports).
+def _register_noop_span() -> None:
+    try:
+        from weebot.application.ports.tracing_port import Span
+        Span.register(_NoOpSpan)
+    except Exception:
+        pass

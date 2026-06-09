@@ -27,8 +27,14 @@ class ModelProvider(Enum):
     OLLAMA = "ollama"
     HUGGINGFACE = "huggingface"
     DEEPSEEK = "deepseek"
+    MINIMAX = "minimax"
     MOONSHOT = "moonshot"
     XAI = "xai"
+    RECRAFT = "recraft"
+    SOURCEFUL = "sourceful"
+    BLACK_FOREST_LABS = "black_forest_labs"
+    BYTEDANCE = "bytedance"
+    MICROSOFT = "microsoft"
     NVIDIA = "nvidia_nim"
     FIREWORKS_AI = "fireworks_ai"
     LEONARDO_AI = "leonardo_ai"
@@ -85,19 +91,37 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
     (``deepseek-chat``, ``claude-3.5-sonnet``, ``kimi-k2-0905``).
     """
     name = model_name.lower()
-    # Prefixed names (from OpenRouter routing)
-    if name.startswith("openrouter/") or "/" in name:
-        return ModelProvider.OPENROUTER
-    if name.startswith("azure/"):
-        return ModelProvider.AZURE
-    if name.startswith("bedrock/"):
-        return ModelProvider.AWS_BEDROCK
+    # Known direct-provider prefixes (checked BEFORE the generic OpenRouter catch-all).
+    # These have direct API adapters with provider-specific API keys.
     if name.startswith("deepseek/"):
         return ModelProvider.DEEPSEEK
+    if name.startswith("moonshotai/") or name.startswith("moonshot/"):
+        return ModelProvider.MOONSHOT
+    if name.startswith("minimax/"):
+        return ModelProvider.MINIMAX
+    if name.startswith("recraft/"):
+        return ModelProvider.RECRAFT
+    if name.startswith("sourceful/"):
+        return ModelProvider.SOURCEFUL
+    if name.startswith("black-forest-labs/"):
+        return ModelProvider.BLACK_FOREST_LABS
+    if name.startswith("bytedance-seed/"):
+        return ModelProvider.BYTEDANCE
+    if name.startswith("microsoft/"):
+        return ModelProvider.MICROSOFT
+    if name.startswith("x-ai/"):
+        return ModelProvider.XAI
     if name.startswith("claude/"):
         return ModelProvider.ANTHROPIC
     if name.startswith("gemini/") or name.startswith("google/"):
         return ModelProvider.GOOGLE
+    if name.startswith("azure/"):
+        return ModelProvider.AZURE
+    if name.startswith("bedrock/"):
+        return ModelProvider.AWS_BEDROCK
+    # Remaining prefixed names → OpenRouter
+    if name.startswith("openrouter/") or "/" in name:
+        return ModelProvider.OPENROUTER
     # Bare names (direct provider model IDs)
     if name.startswith("gpt-"):
         return ModelProvider.OPENAI
@@ -123,6 +147,28 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
     """Get a default model registry with common models."""
     return {
         # Frontier/Reasoning Models
+        "minimax/minimax-m3": ModelInfo(
+            model_name="minimax/minimax-m3",
+            provider=ModelProvider.MINIMAX,
+            input_cost_per_token=0.0,          # FREE via OpenRouter
+            output_cost_per_token=0.0,         # FREE via OpenRouter
+            max_input_tokens=1_000_000,        # 1M context (MSA architecture)
+            max_output_tokens=32768,
+            supports_function_calling=True,
+            supports_vision=True,              # native multimodal (image + video)
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description=(
+                "MiniMax M3 — open-weight frontier model, FREE via OpenRouter. "
+                "1M context via MSA (MiniMax Sparse Attention), 59% SWE-Bench Pro "
+                "(beats GPT-5.5), native multimodal (image/video), interleaved "
+                "thinking between tool calls, 24h+ autonomous execution. "
+                "Direct API: MINIMAX_API_KEY + https://api.minimax.io (OpenAI SDK) "
+                "or /anthropic (Anthropic SDK), native model 'MiniMax-M3'. "
+                "MCP: minimax-coding-plan-mcp (web_search). "
+                "Docs: https://platform.minimax.io/docs/guides/text-m3-function-call"
+            ),
+        ),
         "claude-4.6-opus": ModelInfo(
             model_name="claude-4.6-opus",
             provider=ModelProvider.ANTHROPIC,
@@ -174,6 +220,19 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             supports_response_schema=False,
             description="xAI's Grok 4.1 - Frontier model for pure reasoning with 2M context window and ~4% hallucination rate. #1 LMArena Elo (1483)."
+        ),
+        "grok-build-0.1": ModelInfo(
+            model_name="grok-build-0.1",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=0.0,       # pricing TBD
+            output_cost_per_token=0.0,      # pricing TBD
+            max_input_tokens=131072,        # 128K context
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            supports_response_schema=False,
+            description="xAI Grok Build 0.1 — fast coding model for agentic SWE workflows. Direct API: XAI_API_KEY + https://api.x.ai/v1."
         ),
         
         # Performance/Best Value Models
@@ -473,7 +532,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek's efficient chat model"
+            description="DeepSeek's efficient chat model (legacy)"
         ),
         "deepseek-coder": ModelInfo(
             model_name="deepseek-coder",
@@ -484,10 +543,45 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek's code generation model"
+            description="DeepSeek's code generation model (legacy)"
+        ),
+        "deepseek-v4-pro": ModelInfo(
+            model_name="deepseek-v4-pro",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=5.5e-07,     # $0.55/M input
+            output_cost_per_token=2.19e-06,   # $2.19/M output
+            max_input_tokens=163840,           # 160K context (per OpenRouter listing)
+            max_output_tokens=8192,
+            supports_function_calling=True,    # confirmed: tool-calls docs
+            supports_system_messages=True,
+            supports_response_schema=True,     # confirmed: json_mode docs
+            description=(
+                "DeepSeek V4 Pro — strongest reasoning model with chain-of-thought "
+                "thinking mode (thinking parameter via extra_body, reasoning_effort: "
+                "high/max).  Supports tool calls in thinking mode (≥V3.2), strict "
+                "function calling (beta), JSON mode, and KV-cache for >1MB prefixes. "
+                "Note: temperature/top_p have no effect in thinking mode. "
+                "Docs: https://api-docs.deepseek.com/"
+            ),
+        ),
+        "deepseek-v4-flash": ModelInfo(
+            model_name="deepseek-v4-flash",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=2.7e-07,     # $0.27/M input
+            output_cost_per_token=1.1e-06,    # $1.10/M output
+            max_input_tokens=163840,           # 160K context
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description=(
+                "DeepSeek V4 Flash — fast, cost-efficient variant of V4 Pro. "
+                "Supports thinking mode, tool calls, JSON mode. "
+                "Docs: https://api-docs.deepseek.com/"
+            ),
         ),
         
-        # Moonshot Models
+        # Moonshot / Kimi Models
         "moonshot-v1-8k": ModelInfo(
             model_name="moonshot-v1-8k",
             provider=ModelProvider.MOONSHOT,
@@ -497,7 +591,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Moonshot's 8K context model"
+            description="Moonshot's 8K context model (legacy)"
         ),
         "moonshot-v1-32k": ModelInfo(
             model_name="moonshot-v1-32k",
@@ -508,7 +602,25 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=32768,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Moonshot's 32K context model"
+            description="Moonshot's 32K context model (legacy)"
+        ),
+        "kimi-k2.6": ModelInfo(
+            model_name="kimi-k2.6",
+            provider=ModelProvider.MOONSHOT,
+            input_cost_per_token=1.0e-06,   # $1.0/M input (approximate — check pricing page)
+            output_cost_per_token=4.0e-06,  # $4.0/M output
+            max_input_tokens=262144,         # 256K context
+            max_output_tokens=32768,         # 32K output (1024*32 from docs example)
+            supports_function_calling=True,  # confirmed: tool-use docs
+            supports_vision=True,            # confirmed: model comparison shows vision support
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description=(
+                "Kimi K2.6 — Moonshot's flagship model with improved long-context "
+                "coding stability, tool use, vision, and optional deep-thinking mode "
+                "(thinking parameter via extra_body). 256K context, 32K output. "
+                "Docs: https://platform.kimi.ai/docs/api/"
+            ),
         ),
         
         # XAI Models
@@ -711,6 +823,269 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             supports_response_schema=True,
             description="Moonshot Kimi K2.5 via OpenRouter"
+        ),
+
+        # ═══════════════════════════════════════════════════════════════
+        # Image Generation Models (text → image, via OpenRouter)
+        # ═══════════════════════════════════════════════════════════════
+
+        # ── Sourceful Riverflow (FREE tier) ──────────────────────────
+        "sourceful/riverflow-v2.5-pro:free": ModelInfo(
+            model_name="sourceful/riverflow-v2.5-pro:free",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2.5 Pro (FREE) — high-quality text-to-image. Best free image gen on OpenRouter."
+        ),
+        "sourceful/riverflow-v2.5-fast:free": ModelInfo(
+            model_name="sourceful/riverflow-v2.5-fast:free",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2.5 Fast (FREE) — fast text-to-image generation. Lower quality than Pro, 2-3x faster."
+        ),
+
+        # ── Sourceful Riverflow (Paid) ───────────────────────────────
+        "sourceful/riverflow-v2-pro": ModelInfo(
+            model_name="sourceful/riverflow-v2-pro",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2 Pro — premium text-to-image generation, max quality."
+        ),
+        "sourceful/riverflow-v2-fast": ModelInfo(
+            model_name="sourceful/riverflow-v2-fast",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=4e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2 Fast — fast, cost-effective text-to-image."
+        ),
+        "sourceful/riverflow-v2-max-preview": ModelInfo(
+            model_name="sourceful/riverflow-v2-max-preview",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2 Max Preview (FREE) — max resolution preview."
+        ),
+        "sourceful/riverflow-v2-standard-preview": ModelInfo(
+            model_name="sourceful/riverflow-v2-standard-preview",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2 Standard Preview (FREE) — standard quality preview."
+        ),
+        "sourceful/riverflow-v2-fast-preview": ModelInfo(
+            model_name="sourceful/riverflow-v2-fast-preview",
+            provider=ModelProvider.SOURCEFUL,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Sourceful Riverflow V2 Fast Preview (FREE) — fastest preview generation."
+        ),
+
+        # ── Recraft (professional design, vector + raster) ───────────
+        "recraft/recraft-v4.1-pro-vector": ModelInfo(
+            model_name="recraft/recraft-v4.1-pro-vector",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=1e-05, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 Pro Vector — professional SVG/vector design generation. Best for logos, icons, brand assets."
+        ),
+        "recraft/recraft-v4.1-vector": ModelInfo(
+            model_name="recraft/recraft-v4.1-vector",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 Vector — standard vector design generation."
+        ),
+        "recraft/recraft-v4.1-utility-pro": ModelInfo(
+            model_name="recraft/recraft-v4.1-utility-pro",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=1e-05, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 Utility Pro — image editing, upscaling, background removal, style transfer."
+        ),
+        "recraft/recraft-v4.1-utility": ModelInfo(
+            model_name="recraft/recraft-v4.1-utility",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 Utility — standard image editing and manipulation."
+        ),
+        "recraft/recraft-v4.1-pro": ModelInfo(
+            model_name="recraft/recraft-v4.1-pro",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=1e-05, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 Pro — premium raster image generation, highest quality."
+        ),
+        "recraft/recraft-v4.1": ModelInfo(
+            model_name="recraft/recraft-v4.1",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4.1 — standard raster image generation."
+        ),
+        "recraft/recraft-v4-pro-vector": ModelInfo(
+            model_name="recraft/recraft-v4-pro-vector",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=1e-05, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4 Pro Vector — premium vector generation (previous generation)."
+        ),
+        "recraft/recraft-v4-vector": ModelInfo(
+            model_name="recraft/recraft-v4-vector",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4 Vector — standard vector generation (previous generation)."
+        ),
+        "recraft/recraft-v4-pro": ModelInfo(
+            model_name="recraft/recraft-v4-pro",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=1e-05, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4 Pro — premium raster (previous generation)."
+        ),
+        "recraft/recraft-v4": ModelInfo(
+            model_name="recraft/recraft-v4",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V4 — standard raster (previous generation)."
+        ),
+        "recraft/recraft-v3": ModelInfo(
+            model_name="recraft/recraft-v3",
+            provider=ModelProvider.RECRAFT,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Recraft V3 — legacy image generation model."
+        ),
+
+        # ── Black Forest Labs Flux ──────────────────────────────────
+        "black-forest-labs/flux.2-pro": ModelInfo(
+            model_name="black-forest-labs/flux.2-pro",
+            provider=ModelProvider.BLACK_FOREST_LABS,
+            input_cost_per_token=5e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Flux.2 Pro — Black Forest Labs' highest-quality text-to-image. Photorealistic output, excellent prompt adherence."
+        ),
+        "black-forest-labs/flux.2-max": ModelInfo(
+            model_name="black-forest-labs/flux.2-max",
+            provider=ModelProvider.BLACK_FOREST_LABS,
+            input_cost_per_token=8e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Flux.2 Max — maximum resolution and detail. For print-ready, high-DPI outputs."
+        ),
+        "black-forest-labs/flux.2-flex": ModelInfo(
+            model_name="black-forest-labs/flux.2-flex",
+            provider=ModelProvider.BLACK_FOREST_LABS,
+            input_cost_per_token=3e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Flux.2 Flex — balanced quality/speed for batch generation and iterations."
+        ),
+        "black-forest-labs/flux.2-klein-4b": ModelInfo(
+            model_name="black-forest-labs/flux.2-klein-4b",
+            provider=ModelProvider.BLACK_FOREST_LABS,
+            input_cost_per_token=1e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Flux.2 Klein 4B — lightweight 4B-param variant. Fast, cheap, good for thumbnails and icons."
+        ),
+
+        # ── Google Gemini Image ─────────────────────────────────────
+        "google/gemini-2.5-flash-image": ModelInfo(
+            model_name="google/gemini-2.5-flash-image",
+            provider=ModelProvider.GEMINI,
+            input_cost_per_token=1e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Gemini 2.5 Flash Image — Google's fast text-to-image via Gemini. Good for diagrams, UI mockups, illustrations."
+        ),
+        "google/gemini-3.1-flash-image-preview": ModelInfo(
+            model_name="google/gemini-3.1-flash-image-preview",
+            provider=ModelProvider.GEMINI,
+            input_cost_per_token=0.0, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Gemini 3.1 Flash Image Preview (FREE) — next-gen Gemini image generation. Experimental."
+        ),
+
+        # ── xAI Grok Imagine ────────────────────────────────────────
+        "x-ai/grok-imagine-image-quality": ModelInfo(
+            model_name="x-ai/grok-imagine-image-quality",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=5e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Grok Imagine (Quality) — xAI's text-to-image model with photorealism focus. High prompt adherence."
+        ),
+
+        # ── ByteDance Seedream ──────────────────────────────────────
+        "bytedance-seed/seedream-4.5": ModelInfo(
+            model_name="bytedance-seed/seedream-4.5",
+            provider=ModelProvider.BYTEDANCE,
+            input_cost_per_token=4e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Seedream 4.5 — ByteDance's text-to-image model. Strong in Asian aesthetics, text rendering, and character consistency."
+        ),
+
+        # ── Microsoft MAI Image ──────────────────────────────────────
+        "microsoft/mai-image-2.5": ModelInfo(
+            model_name="microsoft/mai-image-2.5",
+            provider=ModelProvider.MICROSOFT,
+            input_cost_per_token=5e-06, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Microsoft MAI Image 2.5 — enterprise-grade text-to-image. Strong in safety, branding, and consistency."
         ),
     }
 

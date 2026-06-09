@@ -15,6 +15,7 @@ class AgentStatus(str, Enum):
     IDLE = "idle"
     PLANNING = "planning"
     EXECUTING = "executing"
+    REVIEWING = "reviewing"   # Per-step code review after execution
     UPDATING = "updating"
     VERIFYING = "verifying"
     SUMMARIZING = "summarizing"

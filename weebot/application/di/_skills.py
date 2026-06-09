@@ -7,10 +7,36 @@ logger = logging.getLogger(__name__)
 
 
 class SkillsMixin:
-    """SkillCurator + weekly cron job registration."""
+    """SkillCurator + skill retriever + weekly cron job registration."""
 
     def configure_skill_curator(self):
         self.register("skill_curator", self._create_skill_curator)
+
+    def _create_skill_retriever(self):
+        """Create a skill retriever with optional reranking.
+
+        Returns a ``BM25SkillRetriever`` wrapped with ``RerankingSkillRetriever``
+        if ``RerankPort`` is available, otherwise returns the raw BM25 retriever.
+        """
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
+        from weebot.application.ports.rerank_port import RerankPort
+
+        registry = SkillRegistry()
+        registry.load_all()
+        base = BM25SkillRetriever(registry)
+
+        # Wrap with reranking if available
+        rerank = self._maybe_get(RerankPort)
+        if rerank is not None:
+            from weebot.application.services.reranking_skill_retriever import (
+                RerankingSkillRetriever,
+            )
+            logger.info("Skill retriever: BM25 + Cohere rerank")
+            return RerankingSkillRetriever(base, rerank)
+
+        logger.info("Skill retriever: BM25 only (RerankPort not configured)")
+        return base
 
     def _create_skill_curator(self):
         from weebot.application.skills.skill_registry import SkillRegistry

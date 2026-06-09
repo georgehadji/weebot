@@ -17,6 +17,8 @@ from weebot.tools.base import BaseTool, ToolResult
 class VoiceOutputTool(BaseTool):
     """Synthesize text to speech and save to a file."""
 
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 30
     name: str = "voice_output"
     description: str = (
         "Convert text to speech and save as a WAV audio file. "
@@ -52,6 +54,14 @@ class VoiceOutputTool(BaseTool):
             container.configure_defaults()
             speech = container.get(SpeechPort)
         object.__setattr__(self, "_speech", speech)
+
+    async def health_check(self) -> bool:
+        """Check if TTS dependencies are available."""
+        try:
+            import pyttsx3  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     async def execute(
         self, text: str, voice: str = "", output_path: str = "", **_: Any

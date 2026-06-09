@@ -16,7 +16,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from weebot.activity_stream import ActivityStream
+from weebot.core.activity_stream import ActivityStream
 from weebot.mcp.resources import (
     build_activity_json,
     build_roadmap_json,

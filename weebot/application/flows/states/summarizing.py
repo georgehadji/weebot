@@ -18,17 +18,21 @@ class SummarizingState(FlowState):
     async def execute(
         self, context: PlanActFlow, prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.completed import CompletedState
+        from weebot.application.flows.states.meta_analysis import MetaAnalysisState
 
         # Prefer CQRS mediator path; fallback to direct agent call
         if context._mediator:
+            import time as _time
+            _summarize_t0 = _time.monotonic()
             from weebot.application.cqrs.commands import SummarizeCommand
             from weebot.application.cqrs.event_reconstructor import reconstruct_events
 
             result = await context._mediator.send(
                 SummarizeCommand(session_id=context._session.id)
             )
+            _summarize_elapsed = _time.monotonic() - _summarize_t0
             if result.success:
+                logger.info("Summary generated in %.1fs", _summarize_elapsed)
                 for event in reconstruct_events(result.data.get("events", [])):
                     await context._emit(event)
                     yield event
@@ -44,4 +48,4 @@ class SummarizingState(FlowState):
                 await context._emit(event)
                 yield event
 
-        context.set_state(CompletedState())
+        context.set_state(MetaAnalysisState())

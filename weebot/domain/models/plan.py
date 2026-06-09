@@ -28,6 +28,7 @@ class Step(BaseModel):
     description: str = Field(default="", description="What this step does")
     status: StepStatus = Field(default=StepStatus.PENDING)
     result: Optional[str] = Field(default=None, description="Summary of execution result")
+    retry_count: int = 0  # Phase 3: tracks retries for step validation (cap at 1)
 
     def is_done(self) -> bool:
         return self.status in (StepStatus.COMPLETED, StepStatus.FAILED)

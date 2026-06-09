@@ -36,20 +36,32 @@ class TracingAdapter(TracingPort):
 
 
 class _OtelSpanWrapper(Span):
-    """Wraps a raw OTEL span object into the Span port interface."""
+    """Wraps a raw OTEL span/context-manager into the Span port interface."""
 
     def __init__(self, inner: Any):
         self._inner = inner
+        self._active_span: Any = None  # set by __enter__
+
+    def _target(self):
+        """Return the best object for delegating span operations to."""
+        if self._active_span is not None and hasattr(self._active_span, "set_attribute"):
+            return self._active_span
+        return self._inner
 
     def set_attribute(self, key: str, value: Any) -> None:
-        self._inner.set_attribute(key, value)
+        t = self._target()
+        if hasattr(t, "set_attribute"):
+            t.set_attribute(key, value)
 
     def end(self) -> None:
-        self._inner.end()
+        t = self._target()
+        if hasattr(t, "end"):
+            t.end()
 
     def __enter__(self) -> Span:
-        self._inner.__enter__()
+        self._active_span = self._inner.__enter__()
         return self
 
     def __exit__(self, *args: Any) -> None:
         self._inner.__exit__(*args)
+        self._active_span = None

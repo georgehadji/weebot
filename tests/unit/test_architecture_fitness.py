@@ -291,6 +291,10 @@ def test_ports_have_adapters():
         "SelfImprovementPort": ["SelfImprover"],
         "SkillRetrieverPort": ["BM25SkillRetriever"],
         "TaskRouterPort": ["KeywordTaskRouter"],
+        "DreamerPort": ["DreamerAgent"],
+        "RetentionAgentPort": ["RetentionAgent"],
+        "IntentReviewPort": ["IntentReviewService"],
+        "MainReviewPort": ["MainReviewService"],
     }
 
     # Ports documented as [DEPRECATED] — no adapter expected.

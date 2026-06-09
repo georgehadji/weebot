@@ -19,7 +19,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.api_endpoints import XAI_IMAGE_GENERATION_URL
+from weebot.config.api_endpoints import IDEOGRAM_GENERATION_URL, XAI_IMAGE_GENERATION_URL
 
 _SVG_SANITIZE_RE = re.compile(r'[<>"\']')
 
@@ -242,13 +242,16 @@ class ImageGenTool(BaseTool):
     For raster image generation (PNG/JPG), requires REPLICATE_API_TOKEN to
     be configured — falls back to SVG generation otherwise.
     """
+    default_timeout_seconds: int = 90
     name: str = "image_gen"
     description: str = (
         "Generate images for websites: hero banners, cards, icons, logos, "
-        "testimonial avatars, custom SVGs, and AI-generated images via OpenRouter. "
+        "testimonial avatars, custom SVGs, and AI-generated images via OpenRouter "
+        "or direct APIs (xAI, Ideogram). "
         "Use kind='openrouter' with a prompt and model to call text-to-image models "
         "like Sourceful Riverflow (FREE), Flux.2 Pro (photorealistic), Recraft (vectors), "
-        "or Gemini Flash Image (diagrams/UI). For template SVGs, use kind='hero', 'card', "
+        "Ideogram (text/logos, best typography), or Gemini Flash Image (diagrams/UI). "
+        "For template SVGs, use kind='hero', 'card', "
         "'icon', 'logo', or 'testimonial'. "
         "Parameters: kind, output_path (required), prompt, model, "
         "primary_color, secondary_color, accent_color, title, subtitle, "
@@ -405,6 +408,92 @@ class ImageGenTool(BaseTool):
             initials=init,
         )
 
+    async def _execute_ideogram_direct(
+        self,
+        prompt: str,
+        output_path: str,
+        ideogram_key: str,
+        rendering_speed: str = "TURBO",
+    ) -> ToolResult | None:
+        """Call Ideogram's native image generation API.
+
+        Endpoint: POST https://api.ideogram.ai/v1/ideogram-v3/generate
+        Auth: Api-Key header. Returns URL that expires — downloads immediately.
+
+        Args:
+            prompt: Text description.
+            output_path: File path for the output image.
+            ideogram_key: IDEOGRAM_API_KEY value.
+            rendering_speed: "TURBO" (fast, $0.03), "DEFAULT" ($0.06), "QUALITY" ($0.10).
+
+        Returns:
+            ToolResult on success, None on failure (caller should fall back).
+        """
+        import aiohttp
+
+        headers = {
+            "Api-Key": ideogram_key,
+            "Content-Type": "application/json",
+        }
+        payload: dict = {
+            "prompt": prompt,
+            "rendering_speed": rendering_speed,
+            "style_type": "AUTO",
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    IDEOGRAM_GENERATION_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=120),
+                ) as resp:
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        logger.info(
+                            "Ideogram direct image gen failed: HTTP %s — %s",
+                            resp.status, error_text[:150],
+                        )
+                        return None
+
+                    result = await resp.json()
+                    data = result.get("data", [])
+                    if not data:
+                        return None
+
+                    image_url = data[0].get("url", "")
+                    if not image_url:
+                        return None
+
+                    path = Path(output_path)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+
+                    async with session.get(image_url) as img_resp:
+                        if img_resp.status == 200:
+                            path.write_bytes(await img_resp.read())
+                        else:
+                            return None
+
+                    size = path.stat().st_size
+                    return ToolResult(
+                        output=(
+                            f"Generated image via Ideogram: {output_path} ({size} bytes)"
+                        ),
+                        data={
+                            "path": str(path.resolve()),
+                            "model": "ideogram/ideogram-v3-turbo",
+                            "kind": "ideogram-direct",
+                            "size_bytes": size,
+                            "format": path.suffix.lstrip("."),
+                            "prompt": prompt,
+                        },
+                    )
+
+        except Exception as exc:
+            logger.info("Ideogram direct image gen failed: %s", exc)
+            return None
+
     async def _execute_xai_direct(
         self,
         xai_model: str,
@@ -517,6 +606,7 @@ class ImageGenTool(BaseTool):
 
         api_key = os.getenv("OPENROUTER_API_KEY", "")
         xai_key = os.getenv("XAI_API_KEY", "")
+        ideogram_key = os.getenv("IDEOGRAM_API_KEY", "")
         prompt = params.prompt or params.title or "A beautiful, professional image"
         output_path = params.output_path
 
@@ -546,6 +636,17 @@ class ImageGenTool(BaseTool):
 
         last_error = None
 
+        # ── Helper: try Ideogram direct for ideogram/* models ──────
+        async def _try_ideogram_direct(model: str) -> ToolResult | None:
+            """Try Ideogram direct image generation."""
+            if not ideogram_key or not model.startswith("ideogram/"):
+                return None
+            return await self._execute_ideogram_direct(
+                prompt=prompt,
+                output_path=output_path,
+                ideogram_key=ideogram_key,
+            )
+
         # ── Helper: try xAI direct for x-ai/* models ───────────────
         async def _try_xai_direct(model: str) -> ToolResult | None:
             """Try xAI direct image generation. Returns result on success, None to fall through."""
@@ -560,7 +661,12 @@ class ImageGenTool(BaseTool):
             )
 
         for model in models_to_try:
-            # ── Try xAI direct first for x-ai/* models ─────────────
+            # ── Try Ideogram direct first for ideogram/* models ─────
+            ideogram_result = await _try_ideogram_direct(model)
+            if ideogram_result is not None:
+                return ideogram_result
+
+            # ── Try xAI direct for x-ai/* models ────────────────────
             xai_result = await _try_xai_direct(model)
             if xai_result is not None:
                 return xai_result
@@ -696,6 +802,10 @@ class ImageGenTool(BaseTool):
 
         # Fallback: prompt-driven themed SVG
         return _render_themed_svg(params)
+
+    async def health_check(self) -> bool:
+        """ImageGenTool has no hard optional deps — always ready."""
+        return True
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = ImageGenParams(**{k: v for k, v in kwargs.items() if v is not None})

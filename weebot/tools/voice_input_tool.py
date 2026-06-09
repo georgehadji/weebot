@@ -13,6 +13,8 @@ from weebot.tools.base import BaseTool, ToolResult
 class VoiceInputTool(BaseTool):
     """Transcribe an audio file to text using Whisper."""
 
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 20
     name: str = "voice_input"
     description: str = (
         "Transcribe an audio file to text using Whisper speech recognition. "
@@ -44,6 +46,14 @@ class VoiceInputTool(BaseTool):
             container.configure_defaults()
             speech = container.get(SpeechPort)
         object.__setattr__(self, "_speech", speech)
+
+    async def health_check(self) -> bool:
+        """Check if speech transcription dependencies are available."""
+        try:
+            import whisper  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     async def execute(self, audio_path: str, language: str = "", **_: Any) -> ToolResult:
 

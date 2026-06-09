@@ -36,6 +36,8 @@ class BrowserTool:
     Can use Weebot's LLMPort for model selection, or fallback to OpenAI.
     """
 
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 60
     name: str = "browser_navigator"
     description: str = """Open a real Chrome browser and perform web tasks using AI.
     Use for: logging into websites, filling login forms, posting content,

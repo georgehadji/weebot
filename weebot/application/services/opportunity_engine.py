@@ -128,9 +128,9 @@ class OpportunityEngine:
         Args:
             proposal_id: The proposal to mark.
         """
-        for p in self._store:
+        for i, p in enumerate(self._store):
             if p.id == proposal_id:
-                p.presented = True
+                self._store[i] = p.model_copy(update={"presented": True})
                 break
 
     async def accept(self, proposal_id: str) -> Optional[OpportunityProposal]:
@@ -142,10 +142,11 @@ class OpportunityEngine:
         Returns:
             The accepted OpportunityProposal, or None if not found.
         """
-        for p in self._store:
+        for i, p in enumerate(self._store):
             if p.id == proposal_id:
-                p.accepted = True
-                return p
+                accepted = p.model_copy(update={"accepted": True})
+                self._store[i] = accepted
+                return accepted
         return None
 
     # ── Internal scan methods ───────────────────────────────────────

@@ -60,6 +60,19 @@ class TaskExecutionError(WeebotError):
         self.severity = ErrorSeverity.ERROR
 
 
+class AllModelsTrippedError(WeebotError):
+    """Raised when every model in the LLM cascade has tripped its circuit breaker.
+
+    This is a terminal condition — the executor cannot proceed without
+    at least one working LLM.  The flow should stop and surface the error
+    rather than retrying.
+    """
+    def __init__(self, message: str = "All models in the cascade have tripped", **kwargs):
+        super().__init__(message, **kwargs)
+        self.code = ErrorCode.RESOURCE_EXHAUSTED
+        self.severity = ErrorSeverity.CRITICAL
+
+
 class ProjectNotFoundError(WeebotError):
     """Raised when a project ID is not found in the repository."""
     def __init__(self, project_id: str, **kwargs):

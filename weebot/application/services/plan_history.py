@@ -107,12 +107,18 @@ class PlanHistory:
 
     @staticmethod
     def plan_fingerprint(plan: TPlan) -> str:
-        """Return a hash of the plan's structural fingerprint.
+        """Return a hash of the plan's structural + semantic fingerprint.
 
-        Captures: step count and tool sequence pattern (which tools
-        appear in which order). Does NOT capture content — two plans
-        with different content but the same structure produce the
-        same fingerprint.
+        Captures:
+        - Step count
+        - **Normalised step descriptions** (lowercased, whitespace-collapsed)
+        - Tool sequence pattern (which tools appear in which order)
+
+        Includes content so that two plans with the same structure but
+        different step descriptions produce **different** fingerprints.
+        This is critical for detecting update loops: if the planner
+        regenerates the exact same descriptions, the fingerprint
+        changes; if descriptions differ, the fingerprint differs.
         """
         import hashlib
         import re
@@ -132,8 +138,11 @@ class PlanHistory:
         parts = [str(len(steps))]
         for step in steps:
             desc = getattr(step, "description", "") or ""
+            # Normalise: lowercase + collapse whitespace
+            norm_desc = re.sub(r"\s+", " ", desc.strip().lower())
             tools = [t for t, pat in tool_keywords.items() if re.search(pat, desc, re.I)]
-            parts.append("+".join(tools) if tools else "unknown")
+            tool_str = "+".join(tools) if tools else "unknown"
+            parts.append(f"{norm_desc}::{tool_str}")
 
         return hashlib.sha256(":".join(parts).encode()).hexdigest()[:8]
 

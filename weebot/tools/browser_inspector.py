@@ -16,7 +16,6 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
-from weebot.tools.advanced_browser import AdvancedBrowserTool
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -180,12 +179,16 @@ _JS_GET_STRUCTURE = """
 class BrowserInspectorTool(BaseTool):
     """Read-only structured inspection of live web pages via Playwright.
 
-    Shares the browser session with AdvancedBrowserTool — call
-    advanced_browser(action='launch') or advanced_browser(action='goto') first.
+    Shares the browser session with AdvancedBrowserTool via a DI-injected
+    PlaywrightAdapter — call advanced_browser(action='launch') or
+    advanced_browser(action='goto') first.
     All results are returned in ToolResult.data for downstream consumption.
     """
 
     name: str = "browser_inspector"
+
+    # Injected by tool_registry via DI — shared with AdvancedBrowserTool
+    browser: object | None = None  # PlaywrightAdapter
     description: str = (
         "Inspect a live page: extract design tokens (CSS custom properties), "
         "computed CSS for any element, full asset inventory (images/SVG/video), "
@@ -238,13 +241,10 @@ class BrowserInspectorTool(BaseTool):
         except ImportError:
             return ToolResult.error_result("playwright is not installed; run: pip install playwright && playwright install chromium")
 
-        # Import shared browser state from advanced_browser module
-        import weebot.tools.advanced_browser as _ab
-
         if action == "navigate":
-            return await self._navigate(url, _ab)
+            return await self._navigate(url)
 
-        page = _ab._page
+        page = self.browser.page if self.browser else None
         if page is None:
             return ToolResult.error_result(
                 "No browser session active. Call advanced_browser(action='launch') first, "
@@ -270,14 +270,17 @@ class BrowserInspectorTool(BaseTool):
 
     # ── action implementations ───────────────────────────────────────
 
-    async def _navigate(self, url: Optional[str], _ab) -> ToolResult:
-        """Launch browser if needed and navigate to url."""
+    async def _navigate(self, url: Optional[str]) -> ToolResult:
+        """Launch browser via shared adapter if needed and navigate to url."""
         if not url:
             return ToolResult.error_result("url is required for 'navigate' action")
-        advanced = AdvancedBrowserTool()
-        result = await advanced.execute(action="goto", url=url)
-        if result.is_error:
-            return result
+        if self.browser is None or self.browser.page is None:
+            if self.browser is None:
+                from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+                self.browser = PlaywrightAdapter()
+            from weebot.application.ports.browser_port import BrowserConfig
+            await self.browser.start(BrowserConfig(headless=True))
+        await self.browser.page.goto(url, wait_until="domcontentloaded", timeout=30000)
         return ToolResult.success_result(
             output=f"Navigated to {url}",
             data={"url": url, "action": "navigate"},

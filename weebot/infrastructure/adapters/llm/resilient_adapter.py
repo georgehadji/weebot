@@ -174,12 +174,17 @@ class ResilientLLMAdapter(LLMPort):
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
         """Inner chat implementation — called inside the trace span."""
+        # Use the runtime model parameter for circuit breaker key.
+        # This ensures each cascade tier gets its own breaker, preventing
+        # one model's failure from poisoning all others.
+        _breaker_key: str = model or self._model_name
+
         # Step 1: Circuit breaker check
         if self._circuit:
-            result = await self._circuit.evaluate(self._model_name)
+            result = await self._circuit.evaluate(_breaker_key)
             if not result.allowed:
                 raise CircuitBreakerOpen(
-                    f"Circuit open for {self._model_name}: {result.reason}"
+                    f"Circuit open for {_breaker_key}: {result.reason}"
                 )
         
         # Step 2: Check cache
@@ -230,9 +235,9 @@ class ResilientLLMAdapter(LLMPort):
             except Exception:
                 pass
 
-            # Step 4: Record success
+            # Step 4: Record success (per-model breaker key)
             if self._circuit:
-                await self._circuit.record_success(self._model_name)
+                await self._circuit.record_success(_breaker_key)
 
             # Step 5: Cache response
             if cache_key and self._cache:
@@ -245,7 +250,7 @@ class ResilientLLMAdapter(LLMPort):
 
         except asyncio.TimeoutError as e:
             if self._circuit:
-                await self._circuit.record_failure(self._model_name)
+                await self._circuit.record_failure(_breaker_key)
             try:
                 _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="timeout").inc()
             except Exception:
@@ -263,9 +268,9 @@ class ResilientLLMAdapter(LLMPort):
                     pass
                 _sanitize_error(e)
                 raise
-            # Record failure if retryable
+            # Record failure if retryable (per-model breaker key)
             if self._circuit and self._is_retryable_error(e):
-                await self._circuit.record_failure(self._model_name)
+                await self._circuit.record_failure(_breaker_key)
             try:
                 _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="error").inc()
             except Exception:

@@ -50,5 +50,6 @@ class AgentToolsMixin:
             event_bus=self._maybe_get("event_bus"),
             max_steps=SUBAGENT_MAX_STEPS,
             logger=self._maybe_get_str("structured_logger"),
+            skill_retriever=self._maybe_get_str("skill_retriever"),
         )
         return PlanActFlow(cfg)

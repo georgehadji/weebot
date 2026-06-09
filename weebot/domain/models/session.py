@@ -42,6 +42,10 @@ class SessionContext(BaseModel):
         default="",
         description="ISO 639-1 language code detected from user input (Enhancement 7)",
     )
+    meta_notes: list[str] = Field(
+        default_factory=list,
+        description="Post-task meta-analysis notes injected into future planning cycles (HyperAgents Enhancement 1)",
+    )
     extra: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(populate_by_name=True)
@@ -69,7 +73,8 @@ class SessionContext(BaseModel):
             return data
         known = {"skill_name", "skill_content", "skill_version", "_original_task",
                  "original_task", "last_prompt", "facts",
-                 "archived", "archived_at", "archive_ttl_days", "extra"}
+                 "archived", "archived_at", "archive_ttl_days",
+                 "detected_language", "meta_notes", "extra"}
         result: dict[str, Any] = {}
         # Preserve any pre-existing extra dict (from a roundtrip dump)
         existing_extra = data.get("extra", {}) if isinstance(data.get("extra"), dict) else {}
@@ -221,6 +226,16 @@ class Session(BaseModel):
     def add_user_message(self, text: str) -> "Session":
         from .event import MessageEvent
         return self.add_event(MessageEvent(role="user", message=text))
+
+    def add_meta_note(self, note: str) -> "Session":
+        """Append a meta-analysis note for future planning cycles."""
+        notes = list(self.context.meta_notes)
+        notes.append(note)
+        # Keep last 20 notes to prevent unbounded growth
+        if len(notes) > 20:
+            notes = notes[-20:]
+        new_ctx = self.context.model_copy(update={"meta_notes": notes})
+        return self.model_copy(update={"context": new_ctx})
 
     def set_fact(self, key: str, value: Any) -> "Session":
         facts = dict(self.context.facts)

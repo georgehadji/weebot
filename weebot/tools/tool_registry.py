@@ -463,6 +463,18 @@ class RoleBasedToolRegistry:
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)
+                # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine)
+                if hasattr(tool, "set_rerank"):
+                    try:
+                        from weebot.application.di import Container
+                        from weebot.application.ports.rerank_port import RerankPort
+                        c = Container()
+                        c.configure_defaults()
+                        rerank = c.get(RerankPort)
+                        tool.set_rerank(rerank)
+                        logger.debug("Injected RerankPort into %s", name)
+                    except Exception:
+                        pass  # RerankPort not configured — fall back to engine order
                 tools.append(tool)
             else:
                 logger.warning("Tool %r not found in class map, skipping", name)

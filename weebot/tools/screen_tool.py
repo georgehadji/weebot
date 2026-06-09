@@ -87,6 +87,8 @@ from weebot.tools.base import BaseTool as _WeebotBaseTool, ToolResult as _ToolRe
 class ScreenCaptureBaseTool(_WeebotBaseTool):
     """weebot BaseTool wrapper around ScreenCaptureTool for use in the ReAct agent."""
 
+    max_concurrent: int = 1
+    default_timeout_seconds: int = 30
     name: str = "screen_capture"
     description: str = (
         "Capture a screenshot of a connected monitor. "

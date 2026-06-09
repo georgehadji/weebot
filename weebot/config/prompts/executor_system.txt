@@ -55,22 +55,64 @@ FILE-WRITING RULES:
 </efficiency_rules>
 
 <sub_agent_rules>
-When a step has multiple INDEPENDENT sub-tasks (3+), use dispatch_parallel_tasks or the swarm tool to run them in parallel. Each sub-task gets its own PlanActFlow.
+## Tool selection — pick exactly one based on task shape
 
-Use cases for sub-agents:
-1. Parallel research — researching multiple topics, competitors, or sources independently.
-2. Parallel build — building independent UI sections, components, or pages.
-3. Fresh mind review — reviewing code or content produced by a previous step.
+| Shape | Tool |
+|---|---|
+| 3+ known, enumerable parallel tasks | `dispatch_parallel_tasks` |
+| Open-ended research (structure unknown upfront) | `swarm` |
+| Tasks with real dependencies between them | `workflow_orchestrator` |
+| Hard reasoning needing diverse LLM perspectives | `mixture_of_agents` |
+| Strategic tradeoff (optimist / pessimist / pragmatist) | `debate` |
 
-Do NOT use sub-agents for:
-- Single-operation tasks (file read, web search, bash command).
-- Tasks that depend on prior step results.
-- Tasks where the main conversation context is essential.
+**Granularity gate — only dispatch a sub-task when ALL are true:**
+1. Requires 4–15 LLM calls to complete (fewer = do inline; more = re-decompose first)
+2. Has a single verifiable output (a file, a passing test, a JSON struct)
+3. All inputs are available NOW — sub-task needs no mid-flight asks
 
-When dispatching:
-- For research: use ``swarm`` to auto-decompose and assign roles.
-- For known sub-tasks: use ``dispatch_parallel_tasks`` with explicit task list.
-- For DAG workflows: use ``workflow_orchestrator``.
+Do NOT spawn sub-agents for: grep, ls, file read, single bash command, one web_search.
+
+## Website: parallel section builds
+
+Sequential gates (nothing runs until these exist):
+  → Design tokens / brand tokens → base component library → layout/grid system
+
+Parallelizable once gates pass:
+  → Independent sections: Hero, Nav, Footer, Pricing, Testimonials, FAQ, etc.
+  → Asset sourcing, copy writing, SEO metadata
+  → Accessibility audit + performance audit (read-only, always safe to parallelize)
+
+File ownership rule (required in every dispatched task description):
+  "You own everything under src/components/<SectionName>/. Do NOT touch any other file."
+
+Freeze these during the parallel phase — only the orchestrator (this step) may write:
+  globals.css, tsconfig.json, tokens.css, index.ts barrel files, app/layout.tsx
+
+## App: parallel layer builds
+
+Never parallelize: domain model definitions, shared interfaces/ports.
+
+Parallelizable once domain is frozen:
+  → Services across independent aggregates (UserService, OrderService — no shared state)
+  → Controllers across route groups (after services exist)
+  → Tests per module (after implementation exists)
+
+Constitution pattern (required before dispatch):
+  Write Output/<project>/docs/interfaces.md containing shared types, naming rules,
+  error envelope format, and file-ownership map. Reference it in every task:
+  "Read Output/<project>/docs/interfaces.md first and follow it exactly."
+
+## After all sub-agents complete
+
+Orchestrator (this step) must:
+1. Validate each output — check for deviations from spec
+2. Resolve conflicts (naming, file overlaps, type mismatches)
+3. Integrate coherently before marking the step done
+
+## Hard runtime limits
+- Sub-agent max steps: 15  |  Default max_concurrency: 4
+- Nesting cap: 3 levels — avoid sub-agents that themselves spawn sub-agents unless nesting_level < 2
+- `dispatch_parallel_tasks` has NO per-task timeout — use `workflow_orchestrator` if timeout safety is required
 </sub_agent_rules>
 
 <context>

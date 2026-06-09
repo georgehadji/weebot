@@ -127,8 +127,27 @@ class BaseTool(ABC, BaseModel):
     description: str
     parameters: dict  # JSON Schema object
 
+    # Phase 2: Concurrency cap (0 = unlimited). Set to 1 for tools that
+    # share a resource (browser, screen, voice, computer_use).
+    max_concurrent: int = 0
+
+    # Phase 3: Per-tool timeout in seconds (default 60).
+    default_timeout_seconds: int = 60
+
+    # Phase 4: Truncation strategy for oversized output.
+    # "head" = keep start (default), "tail" = keep end, "boundary" = last record boundary.
+    truncation_strategy: str = "head"
+
     @abstractmethod
     async def execute(self, **kwargs: Any) -> ToolResult: ...
+
+    async def health_check(self) -> bool:
+        """Return False if this tool's runtime dependencies are unavailable.
+
+        Default implementation returns True (healthy). Override in tools
+        that depend on external services or system-level packages.
+        """
+        return True
 
     def to_param(self) -> dict:
         """Convert to OpenAI function spec for tool calling."""

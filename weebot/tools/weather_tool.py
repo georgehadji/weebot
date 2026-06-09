@@ -42,6 +42,14 @@ class WeatherTool(BaseTool):
         "week": "j2",    # JSON 2-day (gives today + tomorrow)
     }
 
+    async def health_check(self) -> bool:
+        """Check if aiohttp is available."""
+        try:
+            import aiohttp  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
     async def execute(
         self, location: str, forecast: str = "now", **kwargs: Any
     ) -> ToolResult:

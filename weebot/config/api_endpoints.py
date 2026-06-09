@@ -14,6 +14,7 @@ OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
 OPENAI_API_BASE: str = "https://api.openai.com/v1"
 XAI_API_BASE: str = "https://api.x.ai/v1"
 XAI_IMAGE_GENERATION_URL: str = "https://api.x.ai/v1/images/generations"
+IDEOGRAM_GENERATION_URL: str = "https://api.ideogram.ai/v1/ideogram-v3/generate"
 
 # ── Search / External API URLs ─────────────────────────────────────
 

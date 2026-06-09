@@ -90,6 +90,14 @@ class ScheduleTool(BaseTool):
         "required": ["action"],
     }
 
+    async def health_check(self) -> bool:
+        """Check if schedule library is available."""
+        try:
+            import schedule  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
     async def execute(
         self,
         action: str,

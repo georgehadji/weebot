@@ -1,9 +1,47 @@
-"""Domain models for weebot — zero external dependencies."""
+"""Legacy domain models — DEPRECATED.
+
+⚠️  This module is **deprecated** and will be removed in a future version.
+    All new code MUST use the Pydantic v2 models in ``weebot.domain.models.*``.
+
+Migration guide:
+    ┌─────────────────────────────┬──────────────────────────────────────┐
+    │ Legacy (this module)        │ New (weebot.domain.models.*)         │
+    ├─────────────────────────────┼──────────────────────────────────────┤
+    │ Task / TaskStatus           │ Step / StepStatus (models/plan.py)   │
+    │ Project / ProjectStatus     │ Session / SessionStatus              │
+    │                             │   (models/session.py)                │
+    │ Checkpoint                  │ WaitForUserEvent (models/event.py)   │
+    │ Requirement                 │ No direct replacement — use          │
+    │                             │   OpportunityProposal (opportunity)  │
+    │ AgentConfig                 │ WeebotSettings (config/settings.py)  │
+    │ Message / Memory / Role     │ MessageEvent / Session.events        │
+    │                             │   (models/event.py)                  │
+    │ AgentState                  │ AgentStatus (flows/states/base.py)   │
+    │ ToolCallSpec                │ ToolEvent (models/event.py)          │
+    │ AgentRelationship           │ InterAgentMessage (inter_agent.py)   │
+    └─────────────────────────────┴──────────────────────────────────────┘
+
+Key differences:
+    - Legacy classes are mutable ``@dataclass`` with in-place mutators.
+    - New models are immutable ``pydantic.BaseModel`` with
+      ``model_copy(update={...})`` for state transitions.
+    - Legacy relies on ``Project.tasks`` list; new uses ``Session.events``
+      event-sourced stream with ``get_last_plan()``.
+"""
 from __future__ import annotations
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
+warnings.warn(
+    "weebot.domain.legacy_models is deprecated. "
+    "Use weebot.domain.models.* (Pydantic v2) instead. "
+    "See module docstring for migration table.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 # ---------------------------------------------------------------------------

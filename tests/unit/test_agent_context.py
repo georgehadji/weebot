@@ -4,7 +4,7 @@ import asyncio
 import pytest
 
 from weebot.core.agent_context import AgentContext, EventBroker, ContextEvent
-from weebot.activity_stream import ActivityStream
+from weebot.core.activity_stream import ActivityStream
 
 
 class TestEventBroker:

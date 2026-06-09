@@ -27,6 +27,7 @@ from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior
 from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.audit_port import AuditPort
+from weebot.application.ports.backend_port import BackendPort
 from weebot.application.ports.config_port import ConfigPort
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
@@ -133,6 +134,14 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("soul_provider", lambda: self._create_soul_provider())
         self.register(RerankPort, lambda: self._create_rerank_adapter())
         self.register("skill_retriever", lambda: self._create_skill_retriever())
+        self.register("code_reviewer", self._create_code_reviewer)
+        self.register("dreamer_agent", self._create_dreamer_agent)
+        self.register("intent_review", self._create_intent_review_service)
+        self.register("main_review", self._create_main_review_service)
+        self.register("idea_gate", self._create_idea_gate)
+        self.register("trust_report_service", self._create_trust_report_service)
+        self.register("retention_agent", self._create_retention_agent)
+        self.register(BackendPort, self._create_backend)
 
     # ── high-level builders ─────────────────────────────────────────
 

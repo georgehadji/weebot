@@ -79,13 +79,22 @@ class CritiquingState(FlowState):
             critique.verdict, critique.overall_confidence, len(critique.flaws),
         )
 
-        # ── Route based on confidence ──
-        if critique.overall_confidence >= ConfidentThresholds.WARN_THRESHOLD:
-            # High confidence — proceed normally
-            logger.info("Plan approved with high confidence")
-            context.set_state(ExecutingState())
+        # ── Phase 5: Override thresholds from task_preset if provided ──
+        _warn = ConfidentThresholds.WARN_THRESHOLD
+        _revise = ConfidentThresholds.REVISE_THRESHOLD
+        _preset = getattr(context, "_task_preset", None)
+        if _preset is not None:
+            _warn = getattr(_preset, "critique_warn_threshold", _warn)
+            _revise = getattr(_preset, "critique_revise_threshold", _revise)
 
-        elif critique.overall_confidence >= ConfidentThresholds.REVISE_THRESHOLD:
+        # ── Route based on confidence ──
+        if critique.overall_confidence >= _warn:
+            # High confidence — proceed to pre-mortem then execution
+            logger.info("Plan approved with high confidence")
+            from weebot.application.flows.states.premortem import PremortmState
+            context.set_state(PremortmState())
+
+        elif critique.overall_confidence >= _revise:
             # Medium confidence — proceed but inject warnings
             logger.info(
                 "Plan approved with warnings (%d flaws)",
@@ -93,7 +102,8 @@ class CritiquingState(FlowState):
             )
             # Store critique on the flow for executor prompt injection
             context._plan_critique = critique
-            context.set_state(ExecutingState())
+            from weebot.application.flows.states.premortem import PremortmState
+            context.set_state(PremortmState())
 
         else:
             # Low confidence — send back to planning

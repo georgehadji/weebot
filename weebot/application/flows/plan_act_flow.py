@@ -90,6 +90,7 @@ class PlanActFlow(BaseFlow):
         max_steps: Optional[int] = None,
         truth_binder: Optional[TruthBinder] = None,
         plan_critic: Optional[PlanCriticService] = None,
+        code_reviewer: Optional[Any] = None,  # CodeReviewerPort
         knowledge_graph: Optional[Any] = None,
         behavioral_learner: Optional[Any] = None,
         logger: Optional["StructuredLogger"] = None,
@@ -120,6 +121,7 @@ class PlanActFlow(BaseFlow):
                 max_steps=max_steps,
                 truth_binder=truth_binder,
                 plan_critic=plan_critic,
+                code_reviewer=code_reviewer,
                 knowledge_graph=knowledge_graph,
                 behavioral_learner=behavioral_learner,
                 logger=logger,
@@ -140,6 +142,10 @@ class PlanActFlow(BaseFlow):
         self._truth_binder = cfg.truth_binder
         self._plan_critic = cfg.plan_critic
         self._plan_critique = None  # Set by CritiquingState
+        self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
+        self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
+        self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
+        self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
         self._knowledge_graph = cfg.knowledge_graph
         self._behavioral_learner = cfg.behavioral_learner
         self._checkpoint_port = cfg.checkpoint_port

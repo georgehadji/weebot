@@ -61,6 +61,80 @@ class MoonshotAdapter(OpenAIAdapter):
             default_model=default_model,
         )
 
+    @staticmethod
+    def _sanitize_messages_for_kimi(
+        messages: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Return a copy of *messages* with Kimi K2.6-incompatible fields fixed.
+
+        Kimi's API rejects shapes that OpenAI / OpenRouter accept:
+
+        1. Assistant messages with ``tool_calls`` but ``content: null`` →
+           set content to ``""`` (Kimi requires non-null content).
+        2. ``reasoning_content: null`` → strip (Kimi rejects explicit null).
+        3. Assistant messages with ``tool_calls`` but no ``reasoning_content``
+           at all → add ``reasoning_content: ""`` (Kimi thinking model
+           requires this field on every assistant message with tool_calls,
+           even when the content is empty).
+        4. **Tool-call ID chain integrity** — Kimi validates that every
+           ``tool_call_id`` in a ``tool``-role message references an ``id``
+           inside ``tool_calls`` on the **immediately preceding** assistant
+           message.  If the chain is broken (e.g. after conversation
+           compression, model-cascade switching, or message re-ordering),
+           orphan ``tool`` messages are stripped to avoid a 400 error.
+        """
+        import uuid
+
+        sanitized: List[Dict[str, Any]] = []
+        # Track valid tool_call_ids from the most recent assistant message
+        valid_tool_call_ids: set[str] = set()
+
+        for msg in messages:
+            m = dict(msg)  # shallow copy — don't mutate caller's list
+            role = m.get("role", "")
+            has_tool_calls = bool(m.get("tool_calls"))
+
+            # ── Track valid IDs from the most recent assistant ──
+            if role == "assistant" and has_tool_calls:
+                valid_tool_call_ids.clear()
+                for tc in m["tool_calls"]:
+                    tid = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if tid:
+                        valid_tool_call_ids.add(tid)
+
+            # ── Strip orphan tool messages ──────────────────────
+            if role == "tool":
+                tcid = m.get("tool_call_id", "")
+                if tcid and tcid not in valid_tool_call_ids:
+                    # Orphaned tool_call_id — skip this message and log
+                    _log.warning(
+                        "Stripping orphan tool message with tool_call_id=%s "
+                        "(not found in preceding assistant tool_calls)",
+                        tcid,
+                    )
+                    continue
+
+            # Fix 1: null content on assistant tool-call messages
+            if role == "assistant" and has_tool_calls and m.get("content") is None:
+                m["content"] = ""
+
+            # Fix 2: explicit null reasoning_content
+            if "reasoning_content" in m and m["reasoning_content"] is None:
+                del m["reasoning_content"]
+
+            # Fix 3: Kimi thinking model requires reasoning_content on
+            # every assistant message that has tool_calls.  If absent
+            # entirely, add an empty placeholder.
+            if (
+                role == "assistant"
+                and has_tool_calls
+                and "reasoning_content" not in m
+            ):
+                m["reasoning_content"] = ""
+
+            sanitized.append(m)
+        return sanitized
+
     async def chat(
         self,
         messages: List[Dict[str, Any]],
@@ -73,11 +147,13 @@ class MoonshotAdapter(OpenAIAdapter):
     ) -> LLMResponse:
         """Override chat for Kimi K2.6 compatibility.
 
-        Kimi K2.6 thinking model: omit temperature entirely (use API default).
-        All other Kimi models: force temperature=1.0 (only accepted value).
+        Sanitizes messages for Kimi API quirks (null content, null
+        reasoning_content), then delegates to OpenAIAdapter.  Temperature
+        is omitted so the API uses its default (required for K2.6 thinking).
 
         Per https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model
         """
+        messages = self._sanitize_messages_for_kimi(messages)
         effective_temp = None  # Omit — let API use default for thinking models
         return await super().chat(
             messages=messages,
