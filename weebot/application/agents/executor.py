@@ -980,7 +980,8 @@ class ExecutorAgent:
                 "tool_name": name,
                 "tool_args": args,
             })
-        _t0 = time.monotonic()
+        import time as _timer
+        _t0 = _timer.monotonic()
         try:
             result = await asyncio.wait_for(self._tools.execute(_name=name, **args), timeout=timeout)
         except asyncio.TimeoutError:
@@ -991,7 +992,7 @@ class ExecutorAgent:
                 timeout_seconds=timeout,
                 tool_name=name,
             )
-        _elapsed = (time.monotonic() - _t0) * 1000
+        _elapsed = (_timer.monotonic() - _t0) * 1000
         # Post-tool hook
         if self._hooks is not None:
             await self._hooks.execute_hooks("post_tool_call", {

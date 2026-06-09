@@ -443,7 +443,8 @@ class PlanActFlow(BaseFlow):
                 break
 
         if self._hooks is not None:
-            _post_elapsed = (time.monotonic() - self._flow_started_at) * 1000
+            import time as _post_timer
+            _post_elapsed = (_post_timer.monotonic() - self._flow_started_at) * 1000
             _total_tokens = 0
             await self._hooks.execute_hooks("post_execute", {
                 "session_id": self._session.id,
