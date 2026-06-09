@@ -54,9 +54,24 @@ class HookRegistry:
     PRE_TASK = "pre_task"
     POST_TASK = "post_task"
     ON_ERROR = "on_error"
+    PRE_TOOL_CALL = "pre_tool_call"
+    POST_TOOL_CALL = "post_tool_call"
+    POST_PLAN_CREATED = "post_plan_created"
+    POST_PLAN_UPDATED = "post_plan_updated"
+    POST_VERIFICATION = "post_verification"
+    POST_BASH_GUARD = "post_bash_guard"
+    POST_COMPLETE = "post_complete"
+
+    VALID_STAGES: frozenset[str] = frozenset({
+        PRE_EXECUTE, POST_EXECUTE, PRE_TASK, POST_TASK, ON_ERROR,
+        PRE_TOOL_CALL, POST_TOOL_CALL,
+        POST_PLAN_CREATED, POST_PLAN_UPDATED,
+        POST_VERIFICATION, POST_BASH_GUARD, POST_COMPLETE,
+    })
     
-    VALID_STAGES = {PRE_EXECUTE, POST_EXECUTE, PRE_TASK, POST_TASK, ON_ERROR}
-    
+    def get_valid_stages(self) -> frozenset[str]:
+        return self.VALID_STAGES
+
     def __init__(self):
         self._hooks: Dict[str, List[Hook]] = {
             stage: [] for stage in self.VALID_STAGES
@@ -172,12 +187,8 @@ class HookRegistry:
                     context.update(result)
                 
             except Exception as e:
-                _log.error(f"Hook '{hook.name}' failed: {e}")
-                if stage == self.ON_ERROR:
-                    # Don't fail error handlers
-                    pass
-                else:
-                    raise
+                # Hooks are observers — their failures must never crash the host.
+                _log.error(f"Hook '{hook.name}' failed at stage '{stage}': {e}")
         
         return context
 
@@ -206,10 +217,17 @@ def hook(stage: str, priority: int = 0, condition: Optional[Callable] = None):
 
 
 class HookedTemplateEngine(TemplateEngine):
-    """
-    TemplateEngine with hook support.
-    
-    Extends base engine to call hooks at various stages.
+    """TemplateEngine with hook support for synchronous template execution.
+
+    .. warning::
+        **Not safe for async contexts.**  ``execute()`` is synchronous and
+        internally calls ``asyncio.run()`` inside a ``ThreadPoolExecutor`` to
+        invoke async hooks.  This pattern causes deadlocks when called from
+        within a running event loop (e.g. FastAPI, PlanActFlow).
+
+        When you need lifecycle hooks inside an async pipeline, instantiate
+        ``HookRegistry`` directly and call ``await registry.execute_hooks(...)``
+        — do **not** use this class.
     """
     
     def __init__(self):
@@ -388,6 +406,107 @@ class HookConditions:
                 return result.execution_time_ms > ms
             return False
         return condition
+
+    # ── PlanActFlow-specific conditions ──────────────────────────────────
+
+    @staticmethod
+    def tool_name_is(*names: str):
+        """Condition that matches when tool_name is one of the given names."""
+        def condition(context: dict) -> bool:
+            return context.get("tool_name", "") in names
+        return condition
+
+    @staticmethod
+    def risk_level_at_least(level: str):
+        """Fires when bash_guard risk_level >= the given level."""
+        _order = {"SAFE": 0, "SUSPICIOUS": 1, "DANGEROUS": 2, "BLOCKED": 3}
+        threshold = _order.get(level.upper(), 0)
+        def condition(context: dict) -> bool:
+            actual = _order.get(context.get("risk_level", "SAFE").upper(), 0)
+            return actual >= threshold
+        return condition
+
+    @staticmethod
+    def step_elapsed_exceeds(ms: int):
+        """Fires when a step took longer than `ms` milliseconds."""
+        def condition(context: dict) -> bool:
+            return context.get("elapsed_ms", 0) > ms
+        return condition
+
+    @staticmethod
+    def token_total_exceeds(n: int):
+        """Fires when post_execute total_tokens > n."""
+        def condition(context: dict) -> bool:
+            return context.get("total_tokens", 0) > n
+        return condition
+
+    @staticmethod
+    def gate_failed(gate_name: str):
+        """Fires when post_verification gate_failures contains gate_name."""
+        def condition(context: dict) -> bool:
+            return gate_name in context.get("gate_failures", [])
+        return condition
+
+
+class BuiltinPlanActHooks:
+    """Ready-made hook functions for PlanActFlow lifecycle stages.
+
+    Usage::
+
+        registry = HookRegistry()
+        BuiltinPlanActHooks.register_all(registry)
+    """
+
+    @staticmethod
+    def log_plan_created(session_id: str, step_count: int, elapsed_ms: float, **_):
+        _log.info("[Hook] Plan created: %d steps in %.0fms (session=%s)",
+                  step_count, elapsed_ms, session_id)
+
+    @staticmethod
+    def log_step_start(session_id: str, step_id: str, step_description: str,
+                       step_index: int, total_steps: int, **_):
+        _log.info("[Hook] Step %d/%d starting: %s (session=%s)",
+                  step_index + 1, total_steps, step_description[:80], session_id)
+
+    @staticmethod
+    def log_step_done(session_id: str, step_id: str, elapsed_ms: float, **_):
+        _log.info("[Hook] Step %s done in %.0fms (session=%s)",
+                  step_id, elapsed_ms, session_id)
+
+    @staticmethod
+    def log_verification(session_id: str, scores: dict, gate_failures: list, **_):
+        _log.info("[Hook] Verification: scores=%s gates_failed=%s (session=%s)",
+                  scores, gate_failures, session_id)
+
+    @staticmethod
+    def log_complete(session_id: str, tool_count: int, error_count: int,
+                     total_elapsed_ms: float, **_):
+        _log.info("[Hook] Flow complete: %d tools, %d errors, %.0fms (session=%s)",
+                  tool_count, error_count, total_elapsed_ms, session_id)
+
+    @staticmethod
+    def alert_on_blocked_command(session_id: str, command: str,
+                                  risk_level: str, allowed: bool, **_):
+        if not allowed:
+            _log.warning("[SECURITY] Blocked command '%s...' (session=%s)",
+                         command[:60], session_id)
+
+    @staticmethod
+    def register_all(registry: "HookRegistry") -> None:
+        """Register all built-in hooks at sensible priorities."""
+        registry.register("post_plan_created", BuiltinPlanActHooks.log_plan_created,
+                          priority=0, name="log_plan_created")
+        registry.register("pre_task", BuiltinPlanActHooks.log_step_start,
+                          priority=0, name="log_step_start")
+        registry.register("post_task", BuiltinPlanActHooks.log_step_done,
+                          priority=0, name="log_step_done")
+        registry.register("post_verification", BuiltinPlanActHooks.log_verification,
+                          priority=0, name="log_verification")
+        registry.register("post_complete", BuiltinPlanActHooks.log_complete,
+                          priority=0, name="log_complete")
+        registry.register("post_bash_guard", BuiltinPlanActHooks.alert_on_blocked_command,
+                          priority=100, name="alert_blocked_command",
+                          condition=HookConditions.risk_level_at_least("BLOCKED"))
 
 
 # Example Usage
