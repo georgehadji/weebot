@@ -135,6 +135,103 @@ class ImageGenParams(BaseModel):
     height: int = Field(default=600, description="SVG height")
 
 
+# ── Prompt-driven SVG themes (used when APIs are unavailable) ────────
+_SVG_THEMES: dict = {
+        "hero": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}"/>'
+            '<rect x="40" y="40" width="{w_minus}" height="{h_minus}" fill="none" stroke="{accent}" stroke-width="6"/>'
+            '<rect x="60" y="60" width="{w_minus2}" height="{h_minus2}" fill="none" stroke="{fg}" stroke-width="2" opacity="0.3"/>'
+            '<circle cx="{cx}" cy="{cy}" r="60" fill="none" stroke="{accent}" stroke-width="3" opacity="0.4"/>'
+            '<text x="{cx}" y="{cy_plus}" text-anchor="middle" fill="{fg}" font-family="Impact,sans-serif" font-size="48" font-weight="700">{title}</text>'
+            '<text x="{cx}" y="{sub_y}" text-anchor="middle" fill="{fg}" font-family="monospace" font-size="16" opacity="0.7">{subtitle}</text>'
+            '</svg>'
+        ),
+        "card": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}"/>'
+            '<rect x="20" y="20" width="{w_minus}" height="{h_minus}" fill="{fg}" opacity="0.05" stroke="{accent}" stroke-width="3" rx="0"/>'
+            '<rect x="20" y="20" width="8" height="{h_minus}" fill="{accent}"/>'
+            '<text x="50" y="{h_half}" fill="{fg}" font-family="Impact,sans-serif" font-size="24" font-weight="700">{title}</text>'
+            '<text x="50" y="{sub_y}" fill="{fg}" font-family="monospace" font-size="12" opacity="0.6">{subtitle}</text>'
+            '</svg>'
+        ),
+        "icon": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}" rx="16"/>'
+            '<circle cx="{cx}" cy="{cx}" r="{r}" fill="none" stroke="{accent}" stroke-width="4"/>'
+            '<text x="{cx}" y="{cy_plus}" text-anchor="middle" fill="{fg}" font-family="Impact,sans-serif" font-size="24" font-weight="700">{title}</text>'
+            '</svg>'
+        ),
+        "logo": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}"/>'
+            '<rect x="20" y="20" width="{w_minus}" height="{h_minus}" fill="none" stroke="{accent}" stroke-width="4" rx="2"/>'
+            '<text x="{cx}" y="{cy_plus}" text-anchor="middle" fill="{fg}" font-family="Georgia,serif" font-size="22" font-weight="700" letter-spacing="2">{title}</text>'
+            '</svg>'
+        ),
+        "profile": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}"/>'
+            '<circle cx="{cx}" cy="{cx}" r="{r}" fill="{accent}" opacity="0.15"/>'
+            '<text x="{cx}" y="{cy_plus}" text-anchor="middle" fill="{fg}" font-family="Impact,sans-serif" font-size="16" font-weight="700">{title}</text>'
+            '</svg>'
+        ),
+        "og": (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">'
+            '<rect width="100%" height="100%" fill="{bg}"/>'
+            '<rect x="0" y="{h_minus_60}" width="100%" height="60" fill="{accent}" opacity="0.8"/>'
+            '<text x="{cx}" y="{cx}" text-anchor="middle" fill="{fg}" font-family="Impact,sans-serif" font-size="42" font-weight="700">{title}</text>'
+            '<text x="{cx}" y="{sub_y}" text-anchor="middle" fill="{fg}" font-family="monospace" font-size="18" opacity="0.7">{subtitle}</text>'
+            '</svg>'
+        ),
+    }
+
+def _render_themed_svg(
+    params,
+    theme: str = "hero",
+    extra: dict | None = None,
+) -> str:
+    """Render a prompt-appropriate SVG from a theme template.
+
+    Detects the best theme from the prompt if not explicitly given.
+    Falls back to 'hero' for unrecognized keywords.
+    """
+    prompt = (params.prompt or "").lower()
+    _extra = extra or {}
+    title = ImageGenTool._sanitize(params.title or _extra.get("title", ""), 40) or "Image"
+    subtitle = ImageGenTool._sanitize(params.subtitle or _extra.get("subtitle", ""), 60) or prompt[:60]
+
+    # Auto-detect theme from prompt keywords
+    if "avatar" in prompt or "portrait" in prompt or "profile" in prompt:
+            theme = "profile"
+    elif "icon" in prompt or "favicon" in prompt or "badge" in prompt:
+            theme = "icon"
+    elif "logo" in prompt or "brand" in prompt:
+            theme = "logo"
+    elif "og" in prompt or "open graph" in prompt or "social" in prompt or "card" in prompt:
+            theme = "og"
+    elif "project" in prompt or "thumbnail" in prompt or "card" in prompt:
+            theme = "card"
+
+    template = _SVG_THEMES.get(theme, _SVG_THEMES["hero"])
+    w, h = params.width or 400, params.height or 400
+    return template.format(
+            w=w, h=h,
+            w_minus=w - 40, w_minus2=w - 120,
+            h_minus=h - 40, h_minus2=h - 120,
+            h_half=h // 2 - 10, h_minus_60=h - 60,
+            cx=w // 2, cy=h // 2 - 20, cy_plus=h // 2 + 10,
+            r=min(w, h) // 3,
+            sub_y=h // 2 + 40,
+            bg=params.primary_color or "#1a1a2e",
+            fg=params.accent_color or "#ffffff",
+            accent=params.accent_color or "#e94560",
+            title=title,
+            subtitle=subtitle,
+    )
+
+
 class ImageGenTool(BaseTool):
     """Generate images as SVG for websites, icons, logos, and hero graphics.
 
@@ -257,13 +354,13 @@ class ImageGenTool(BaseTool):
     def generate_hero(cls, params: ImageGenParams) -> str:
         """Generate a hero banner SVG."""
         return _HERO_SVG.format(
-            primary=cls._sanitize(params.primary_color, 7),
-            secondary=cls._sanitize(params.secondary_color, 7),
-            accent_color=cls._sanitize(params.accent_color, 7),
-            icon=cls._sanitize(params.icon, 4) or "★",
-            label=cls._sanitize(params.label, 20) or params.title[:20],
-            title=cls._sanitize(params.title, 50) or "Your Title Here",
-            subtitle=cls._sanitize(params.subtitle, 70) or "Your subtitle goes here",
+            primary=ImageGenTool._sanitize(params.primary_color, 7),
+            secondary=ImageGenTool._sanitize(params.secondary_color, 7),
+            accent_color=ImageGenTool._sanitize(params.accent_color, 7),
+            icon=ImageGenTool._sanitize(params.icon, 4) or "★",
+            label=ImageGenTool._sanitize(params.label, 20) or params.title[:20],
+            title=ImageGenTool._sanitize(params.title, 50) or "Your Title Here",
+            subtitle=ImageGenTool._sanitize(params.subtitle, 70) or "Your subtitle goes here",
         )
 
     @classmethod
@@ -271,40 +368,40 @@ class ImageGenTool(BaseTool):
         """Generate a feature card SVG."""
         desc_lines = cls._wrap_text(params.subtitle or "Feature description", 35)
         return _CARD_SVG.format(
-            primary=cls._sanitize(params.primary_color, 7),
-            secondary=cls._sanitize(params.secondary_color, 7),
-            accent_color=cls._sanitize(params.accent_color, 7),
-            icon=cls._sanitize(params.icon, 4) or "★",
-            title=cls._sanitize(params.title, 25) or "Feature",
-            desc_line1=cls._sanitize(desc_lines[0] if len(desc_lines) > 0 else "", 35),
-            desc_line2=cls._sanitize(desc_lines[1] if len(desc_lines) > 1 else "", 35),
-            desc_line3=cls._sanitize(desc_lines[2] if len(desc_lines) > 2 else "", 35),
+            primary=ImageGenTool._sanitize(params.primary_color, 7),
+            secondary=ImageGenTool._sanitize(params.secondary_color, 7),
+            accent_color=ImageGenTool._sanitize(params.accent_color, 7),
+            icon=ImageGenTool._sanitize(params.icon, 4) or "★",
+            title=ImageGenTool._sanitize(params.title, 25) or "Feature",
+            desc_line1=ImageGenTool._sanitize(desc_lines[0] if len(desc_lines) > 0 else "", 35),
+            desc_line2=ImageGenTool._sanitize(desc_lines[1] if len(desc_lines) > 1 else "", 35),
+            desc_line3=ImageGenTool._sanitize(desc_lines[2] if len(desc_lines) > 2 else "", 35),
         )
 
     @classmethod
     def generate_icon(cls, params: ImageGenParams) -> str:
         """Generate an icon SVG."""
         return _ICON_SVG.format(
-            primary=cls._sanitize(params.primary_color, 7),
-            accent_color=cls._sanitize(params.accent_color, 7),
-            icon=cls._sanitize(params.icon, 4) or "●",
+            primary=ImageGenTool._sanitize(params.primary_color, 7),
+            accent_color=ImageGenTool._sanitize(params.accent_color, 7),
+            icon=ImageGenTool._sanitize(params.icon, 4) or "●",
         )
 
     @classmethod
     def generate_logo(cls, params: ImageGenParams) -> str:
         """Generate a logo SVG."""
         return _LOGO_SVG.format(
-            primary=cls._sanitize(params.primary_color, 7),
-            text=cls._sanitize(params.text.upper(), 20) or "LOGO",
+            primary=ImageGenTool._sanitize(params.primary_color, 7),
+            text=ImageGenTool._sanitize(params.text.upper(), 20) or "LOGO",
         )
 
     @classmethod
     def generate_testimonial(cls, params: ImageGenParams) -> str:
         """Generate a testimonial avatar SVG."""
-        init = cls._sanitize(params.initials.upper(), 2) or "AB"
+        init = ImageGenTool._sanitize(params.initials.upper(), 2) or "AB"
         return _TESTIMONIAL_SVG.format(
-            primary=cls._sanitize(params.primary_color, 7),
-            secondary=cls._sanitize(params.secondary_color, 7),
+            primary=ImageGenTool._sanitize(params.primary_color, 7),
+            secondary=ImageGenTool._sanitize(params.secondary_color, 7),
             initials=init,
         )
 
@@ -569,22 +666,9 @@ class ImageGenTool(BaseTool):
         return ""
 
     async def _fallback_svg(self, params: ImageGenParams, output_path: str, reason: str) -> ToolResult:
-        """Generate an SVG placeholder as ultimate fallback."""
+        """Generate a prompt-driven themed SVG placeholder as ultimate fallback."""
         svg_path = Path(output_path).with_suffix(".svg")
-        svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:{params.primary_color or '#1a1a2e'}" />
-      <stop offset="100%" style="stop-color:{params.secondary_color or '#16213e'}" />
-    </linearGradient>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#g)" />
-  <circle cx="600" cy="260" r="80" fill="{params.accent_color or '#e94560'}" opacity="0.15" />
-  <text x="600" y="275" text-anchor="middle" fill="white" font-size="48">{params.icon or '🖼'}</text>
-  <text x="600" y="360" text-anchor="middle" fill="white" font-family="Georgia,serif" font-size="36" font-weight="700">{self._sanitize(params.title, 60) or 'Image Placeholder'}</text>
-  <text x="600" y="410" text-anchor="middle" fill="white" font-family="sans-serif" font-size="14" opacity="0.5">{self._sanitize(params.subtitle, 80) or 'Generated offline (no API available)'}</text>
-  <text x="600" y="550" text-anchor="middle" fill="white" font-family="monospace" font-size="10" opacity="0.25">{self._sanitize(reason, 100)}</text>
-</svg>'''
+        svg = _render_themed_svg(params)
         svg_path.write_text(svg, encoding="utf-8")
         return ToolResult(
             output=f"SVG fallback: {svg_path} (all API models unavailable: {reason[:80]})",
@@ -610,18 +694,8 @@ class ImageGenTool(BaseTool):
             except Exception as exc:
                 return f"<!-- Replicate failed: {exc} -->\n<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {params.width} {params.height}'><rect width='100%' height='100%' fill='{params.primary_color}'/><text x='50%' y='50%' text-anchor='middle' fill='white' font-family='sans-serif' font-size='20'>AI image generation unavailable</text></svg>"
 
-        # Fallback: generate a clean placeholder SVG
-        return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {params.width} {params.height}" width="{params.width}" height="{params.height}">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:{params.primary_color}" />
-      <stop offset="100%" style="stop-color:{params.secondary_color}" />
-    </linearGradient>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#g)" />
-  <text x="50%" y="45%" text-anchor="middle" fill="white" font-family="Georgia,serif" font-size="32" opacity="0.9">{self._sanitize(params.title, 60) or "Image"}</text>
-  <text x="50%" y="55%" text-anchor="middle" fill="white" font-family="sans-serif" font-size="14" opacity="0.55">{self._sanitize(params.subtitle, 80) or params.prompt[:80] if params.prompt else ""}</text>
-</svg>'''
+        # Fallback: prompt-driven themed SVG
+        return _render_themed_svg(params)
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         params = ImageGenParams(**{k: v for k, v in kwargs.items() if v is not None})

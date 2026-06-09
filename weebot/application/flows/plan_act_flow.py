@@ -23,6 +23,15 @@ from weebot.core.structured_logger import StructuredLogger
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
+
+
+class PlanStuckError(RuntimeError):
+    """Raised when the planner generates too many consecutive similar plans.
+
+    This breaks the replanning loop and surfaces the stuck state to the
+    operator rather than silently retrying with identical plans.
+    """
+    pass
 from weebot.application.services.continuation_detector import (
     ContinuationDetector,
 )
@@ -156,6 +165,10 @@ class PlanActFlow(BaseFlow):
         self._skill_prompt = cfg.skill_prompt
         self._tracing_port = None
         self._persistence_adapter = None
+        # ── Timing bookkeeping ────────────────────────────────────
+        self._state_entered_at: float | None = None
+        self._flow_started_at: float = 0.0
+        # ──────────────────────────────────────────────────────────
         self._planner = PlannerAgent(
             llm=self._llm,
             event_bus=self._event_bus,
@@ -170,6 +183,7 @@ class PlanActFlow(BaseFlow):
             event_bus=self._event_bus,
             model=self._model,
             skill_prompt=cfg.skill_prompt,
+            skill_retriever=cfg.skill_retriever,
             profile_name=cfg.profile_name,
             personality=cfg.personality,
             agent_role=cfg.agent_role,
@@ -292,23 +306,34 @@ class PlanActFlow(BaseFlow):
         """Change the current flow state.
 
         Records the transition time for the flow_step_duration_seconds
-        Prometheus metric (defined in weebot.infrastructure.observability.metrics).
+        Prometheus metric and logs per-state duration.
         """
+        import time as _time
+        now = _time.monotonic()
+        prev_name = type(self._state).__name__ if self._state is not None else "start"
+        prev_duration = (now - self._state_entered_at) if self._state_entered_at else 0.0
+
         # Record transition duration for the previous state
         if hasattr(self, "_state") and self._state is not None:
             try:
                 from weebot.infrastructure.observability import metrics as _m
                 _m.flow_step_duration_seconds.labels(
                     state=type(self._state).__name__,
-                ).observe(1.0)  # placeholder — real timing via state enter/exit
+                ).observe(prev_duration)
             except Exception:
                 pass  # metrics must never break state transitions
 
         # Each FlowState subclass declares its own status class attribute
         # so adding a new state does not require modifying this method.
         self._state = state
+        self._state_entered_at = now
         self.status = getattr(state, "status", AgentStatus.IDLE)
-        self._log.info("Transition to state: %s", type(state).__name__)
+
+        if prev_duration > 0.001:
+            self._log.info("Transition to state: %s (was in %s for %.1fs)",
+                            type(state).__name__, prev_name, prev_duration)
+        else:
+            self._log.info("Transition to state: %s", type(state).__name__)
         # Trace the state transition
         span = self._get_tracing_port().start_span(f"state.{type(state).__name__}")
         span.set_attribute("flow.session_id", self._session.id)
@@ -316,6 +341,8 @@ class PlanActFlow(BaseFlow):
         span.end()
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
+        import time as _time
+        self._flow_started_at = _time.monotonic()
         self._log.info("PlanActFlow started for session %s", self._session.id)
 
         # --- Task context preservation ---
@@ -374,7 +401,12 @@ class PlanActFlow(BaseFlow):
                 if hasattr(result, '__aiter__'):
                     async for event in result:
                         yield event
-                        if state_prompt:
+                        # Only consume the prompt if the state produced a
+                        # non-error event.  If the state failed (e.g.
+                        # PlanningState yielded an ErrorEvent), preserve
+                        # the prompt for the next iteration so the retry
+                        # sees the original task description.
+                        if state_prompt and event.type != "error":
                             prompt_consumed = True
                 else:
                     await result  # coroutine — blocks until state transitions
@@ -424,12 +456,16 @@ class PlanActFlow(BaseFlow):
             episodic_memory=self._episodic_memory,
         )
 
+    # Maximum consecutive similar plans before raising PlanStuckError.
+    _MAX_SIMILAR_PLANS: int = 3
+
     def _snapshot_plan(self) -> None:
         """Push current plan onto the PlanHistory undo stack.
 
         Also checks for structural similarity to recent plans (Hallmark-inspired
-        diversification).  If the new plan is too similar, logs a warning so the
-        operator can intervene — does NOT block execution.
+        diversification).  If the new plan is too similar, logs a warning.  After
+        _MAX_SIMILAR_PLANS consecutive similar plans, raises PlanStuckError to
+        break the replanning loop.
         """
         from weebot.config.constants import PLAN_DIVERSIFICATION_WINDOW, PLAN_SIMILARITY_THRESHOLD
 
@@ -439,11 +475,21 @@ class PlanActFlow(BaseFlow):
             window=PLAN_DIVERSIFICATION_WINDOW,
         ):
             fp = self._plan_history.plan_fingerprint(self._plan)
+            self._similar_plan_count = getattr(self, '_similar_plan_count', 0) + 1
+            if self._similar_plan_count >= self._MAX_SIMILAR_PLANS:
+                raise PlanStuckError(
+                    f"Plan is stuck: {self._similar_plan_count} consecutive plans "
+                    f"with fingerprint similarity > {PLAN_SIMILARITY_THRESHOLD}. "
+                    f"Last fingerprint: {fp}. The task may need a different approach "
+                    f"or human intervention."
+                )
             self._log.warning(
-                "Plan fingerprint %s is too similar to recent plans — "
-                "consider diversifying the task decomposition strategy.",
-                fp,
+                "Plan fingerprint %s is too similar to recent plans "
+                "(attempt %d/%d) — consider diversifying.",
+                fp, self._similar_plan_count, self._MAX_SIMILAR_PLANS,
             )
+        else:
+            self._similar_plan_count = 0  # reset on a fresh plan
 
         self._plan_history.snapshot(self._plan)
 

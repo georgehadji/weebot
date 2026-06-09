@@ -303,6 +303,11 @@ class PlannerAgent:
             logger.exception("Failed to update plan")
             yield ErrorEvent(error=f"Plan update failed: {exc}")
 
+    # Maximum discrete items (files, images, operations) a single step
+    # should generate.  Steps listing more items than this are automatically
+    # split into sub-steps.
+    _MAX_ITEMS_PER_STEP: int = 5
+
     # Patterns for steps that write spec files — these cause executor loops
     # when the conversation buffer fills up and the LLM can't complete the file.
     _SPEC_STEP_PATTERNS: list = [
@@ -331,11 +336,25 @@ class PlannerAgent:
                 spec_count += 1
                 if spec_count > 1:
                     continue  # drop excessive spec steps
-            steps.append(Step(
-                id=step_id,
-                description=desc,
-                status="pending",
-            ))
+
+            # Heuristic: count discrete items (files, images) in the step.
+            # If there are more than MAX_ITEMS_PER_STEP, split into batches.
+            _item_keywords = r'\b(?:hero|project\d|skill-|icon-|og-|profile|avatar|logo|favicon|banner|thumb)[\w.-]*'
+            items = _re.findall(_item_keywords, desc, _re.IGNORECASE)
+            unique_items = list(dict.fromkeys(items))  # dedup preserving order
+            if len(unique_items) > PlannerAgent._MAX_ITEMS_PER_STEP:
+                batch_size = PlannerAgent._MAX_ITEMS_PER_STEP
+                for batch_num, i in enumerate(range(0, len(unique_items), batch_size)):
+                    batch_items = unique_items[i:i + batch_size]
+                    batch_desc = desc + f" (batch {batch_num + 1}: {', '.join(batch_items)})"
+                    batch_id = f"{step_id}-b{batch_num + 1}" if batch_num > 0 else step_id
+                    steps.append(Step(id=batch_id, description=batch_desc, status="pending"))
+            else:
+                steps.append(Step(
+                    id=step_id,
+                    description=desc,
+                    status="pending",
+                ))
         return Plan(
             title=data.get("title", "Untitled Plan"),
             message=data.get("message", ""),

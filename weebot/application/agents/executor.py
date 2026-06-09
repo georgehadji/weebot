@@ -574,6 +574,19 @@ class ExecutorAgent:
         last_error_class: Optional[str] = None
 
         system_prompt = self._load_prompt()
+
+        # ═══ BOOT: PowerShell environment reminder (before everything else) ═══
+        system_prompt = (
+            "CRITICAL: You are running on Windows 11 with PowerShell 5.1. "
+            "ALL shell commands MUST use PowerShell-native syntax:\n"
+            "  ls -la <dir>  →  Get-ChildItem <dir>\n"
+            "  mkdir -p <dir> →  New-Item -ItemType Directory -Force -Path <dir>\n"
+            "  rm -rf <dir>  →  Remove-Item -Recurse -Force <dir>\n"
+            "  cat <file>    →  Get-Content <file>\n"
+            "  && chains     →  ; (semicolons)\n"
+            "  Never use Unix commands — they WILL fail.\n"
+        ) + system_prompt
+
         if self._skill_prompt:
             system_prompt = f"{system_prompt}\n\n{self._skill_prompt}"
 

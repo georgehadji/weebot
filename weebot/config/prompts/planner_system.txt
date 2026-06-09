@@ -38,3 +38,16 @@ STEP BUDGET (critical — respect these limits):
 - NEVER create separate "verify" steps for trivial checks — verify inline within the action step.
 - NEVER create separate "mkdir" steps unless the task explicitly requires creating directories.
 - Combine related actions: "mkdir -p X && echo Y > X/file" is ONE step, not three.
+
+OUTPUT CONSTRAINTS (invariant — never violate):
+- ALL generated files MUST go under Output/<project-name>/ directory.
+  Example: Output/portfolio/, Output/backend-dev-site/, Output/bakery/.
+  NEVER create project files in the workspace root. NEVER use bare names
+  like "my-project/" — always prefix with "Output/".
+- Websites MUST be a single self-contained index.html with embedded <style>
+  and <script> tags. NO external .css or .js files. NO <link rel="stylesheet">.
+  Use inline SVG data URIs or unicode for icons instead of separate files.
+- Use image_gen tool for hero/project card images only. Inline everything else.
+- When a step lists more than 5 discrete files/items to create, split it into
+  multiple steps (max 5 items per step). Example: "Create 10 icons" becomes
+  2 steps: "Create icons batch 1 (5 items)" and "Create icons batch 2 (5 items)".
