@@ -45,6 +45,13 @@ Your job is to execute ONE step from a larger plan. Do not try to complete the e
 - Aim to complete each step in 5 tool calls or fewer
 - Don't repeat the same tool call with the same arguments — if it didn't work, try a DIFFERENT approach
 - If you've taken 10+ tool calls on one step, something is wrong — summarize what you found and move on
+
+FILE-WRITING RULES:
+- For small files (<2KB), use file_editor 'create' command.
+- For LARGE files (>50 lines or >2KB), use python_execute instead:
+    python_execute({'code': "with open('path/to/file.py', 'w') as f:\n    f.write('''...''')"})
+  This avoids the file_editor context-overflow problem.
+- NEVER try to write large files via bash — PowerShell escaping will corrupt them.
 </efficiency_rules>
 
 <sub_agent_rules>

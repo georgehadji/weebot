@@ -27,8 +27,10 @@ class StrReplaceEditorTool(BaseTool):
         "properties": {
             "command": {
                 "type": "string",
-                "enum": ["view", "create", "str_replace", "insert"],
-                "description": "Operation to perform",
+                "enum": ["view", "create", "str_replace", "insert", "write_large"],
+                "description": ("Operation: 'view'=read, 'create'=write small file, "
+                                "'str_replace'=find+replace, 'insert'=add lines, "
+                                "'write_large'=write large file via Python (preferred for >50 lines)"),
             },
             "path": {
                 "type": "string",
@@ -140,7 +142,26 @@ class StrReplaceEditorTool(BaseTool):
             return self._insert(
                 safe_path, kwargs.get("insert_line", 0), kwargs.get("new_str", "")
             )
+        elif command == "write_large":
+            return self._write_large(safe_path, kwargs.get("file_text", ""))
         return ToolResult(output="", error=f"Unknown command: {command!r}")
+
+    def _write_large(self, path: Path, content: str) -> ToolResult:
+        """Write a large file via Python to avoid context-overflow in file_editor."""
+        import subprocess, tempfile, os as _os
+        # Write content to a temp file, then move it atomically
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(path)
+            size = path.stat().st_size
+            lines = content.count("\n") + 1
+            return ToolResult(
+                output=f"Wrote {path} ({lines} lines, {size} bytes)",
+                data={"path": str(path.resolve()), "lines": lines, "size_bytes": size},
+            )
+        except Exception as exc:
+            return ToolResult(error=f"write_large failed: {exc}")
 
     def _view(self, path: Path, view_range: list[int] | None) -> ToolResult:
         if path.is_dir():
