@@ -119,11 +119,11 @@ class CompletedState(FlowState):
             _fp = PlanHistory.plan_fingerprint(context._plan) if context._plan else ""
             _tool_count = sum(
                 1 for e in context._session.events
-                if type(e).__name__ == "ToolEvent"
+                if getattr(e, "type", "") == "tool"
             )
             _error_count = sum(
                 1 for e in context._session.events
-                if type(e).__name__ == "ErrorEvent"
+                if getattr(e, "type", "") == "error"
             )
             await context._hooks.execute_hooks("post_complete", {
                 "session_id": context._session.id,

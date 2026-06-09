@@ -166,6 +166,15 @@ class ExecutingState(FlowState):
         if hitl_paused:
             logger.info("Step %s paused for human input after %.1fs",
                         step.id, _step_elapsed)
+            # Fire post_task on pause so observers track step timing
+            if getattr(context, "_hooks", None) is not None:
+                await context._hooks.execute_hooks("post_task", {
+                    "session_id": context._session.id,
+                    "step_id": step.id,
+                    "step_description": step.description,
+                    "elapsed_ms": _step_elapsed * 1000,
+                    "plan": context._plan,
+                })
             context._session = context._session.set_status(SessionStatus.WAITING)
             return
 

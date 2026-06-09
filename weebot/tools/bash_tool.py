@@ -339,7 +339,8 @@ class BashTool(BaseTool):
                     "session_id": "bash_tool",
                     "command": command[:200],
                     "risk_level": risk_level.value,
-                    "allowed": risk_level not in (RiskLevel.BLOCKED, RiskLevel.DANGEROUS),
+                    "allowed": risk_level == RiskLevel.SAFE,
+                "requires_approval": risk_level == RiskLevel.SUSPICIOUS,
                 }))
             except RuntimeError:
                 pass

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.hook_registry_port import HookRegistryPort
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.services.conversation_compressor import ConversationCompressor
 from weebot.application.services.step_budget import StepBudget
@@ -150,7 +151,7 @@ class ExecutorAgent:
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
         agent_role: str | None = None,  # Agent role for per-role model selection
-        hooks: Optional[Any] = None,  # HookRegistryPort for pre/post tool call events
+        hooks: "Optional[HookRegistryPort]" = None,  # HookRegistryPort for pre/post tool call events
     ):
         self._llm = llm
         self._tools = tools
@@ -564,13 +565,14 @@ class ExecutorAgent:
         return None
 
     async def execute_step(
-        self, plan: Plan, step: Step, user_input: str | None = None
+        self, plan: Plan, step: Step, user_input: str | None = None,
+        session_id: str = "",
     ) -> AsyncGenerator[AgentEvent, None]:
         self._facts.clear()
         self._should_terminate = False
         self._conversation_buffer.clear()
         self._current_step_id = step.id
-        self._current_session_id = getattr(user_input, 'session_id', 'unknown')
+        self._current_session_id = session_id or getattr(self, '_current_session_id', 'unknown')
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
