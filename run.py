@@ -7,12 +7,15 @@ import argparse
 from pathlib import Path
 import structlog
 from dotenv import load_dotenv
-from weebot.config.settings import WeebotSettings
 
-
-# Load .env into os.environ so os.getenv() works everywhere.
-# override=True ensures .env takes precedence over stale system env vars
+# ═══ Load .env BEFORE any weebot imports ═══
+# WORKSPACE_ROOT in settings.py is evaluated at import time from
+# os.getenv("WEEBOT_WORKSPACE", os.getcwd()).  load_dotenv MUST run first
+# so the .env value takes effect, otherwise the workspace defaults to cwd
+# and path validation inconsistently rejects valid workspace paths.
 load_dotenv(override=True)
+
+from weebot.config.settings import WeebotSettings
 
 # Clear stale bytecode cache to prevent import errors from old .pyc files
 import shutil as _shutil
