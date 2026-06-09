@@ -63,6 +63,19 @@ All shell commands MUST use PowerShell-native syntax. Unix commands WILL fail.
 7. **Output Convention** — ALL generated websites and project files go under
    `Output/<project-name>/`. Never create project files in the workspace root.
    Use the project slug from the task description as the directory name.
+
+8. **Single-File Only** — All websites MUST be a single self-contained
+   index.html with embedded `<style>` and `<script>`. Libraries loaded from
+   CDN only (jsdelivr, unpkg, cdnjs). NO local .css/.js files, NO build steps.
+
+9. **Security Mandatory** — Every website MUST include in `<head>`: CSP meta
+   tag, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy,
+   Permissions-Policy (camera/mic/geo denied).
+
+10. **Open Graph Mandatory** — Every website MUST include: og:title, og:description,
+    og:image (1200x630), og:type, og:url, twitter:card summary_large_image,
+    and JSON-LD structured data (Person or Organization schema). Generate
+    an og-image.png using image_gen.
 </invariant_rules>
 
 <operating_principles>
