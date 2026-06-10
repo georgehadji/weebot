@@ -11,9 +11,10 @@ meta-improvement knowledge.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from weebot.infrastructure.persistence.strategy_store import StrategyStore
+if TYPE_CHECKING:
+    from weebot.infrastructure.persistence.strategy_store import StrategyStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,15 @@ class StrategyTransferService:
 
     def __init__(
         self,
-        store: StrategyStore,
+        store: "StrategyStore | None" = None,
         min_score: float = 0.7,
         max_strategies: int = 3,
     ) -> None:
-        self._store = store
+        if store is not None:
+            self._store = store
+        else:
+            from weebot.infrastructure.persistence.strategy_store import StrategyStore as _SS
+            self._store = _SS()
         self._min_score = min_score
         self._max_strategies = max_strategies
 

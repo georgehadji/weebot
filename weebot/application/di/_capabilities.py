@@ -66,8 +66,10 @@ class CapabilitiesMixin:
         async def integrity_check():
             issues = []
             try:
-                result = subprocess.run(
-                    ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10,
+                result = await asyncio.to_thread(
+                    lambda: subprocess.run(
+                        ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10,
+                    )
                 )
                 if result.stdout.strip():
                     issues.append(f"Uncommitted changes: {result.stdout.count(chr(10))} files")

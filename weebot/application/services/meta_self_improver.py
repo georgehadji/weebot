@@ -14,12 +14,14 @@ and this wrapper, enabling true self-referential improvement.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config import feature_flags
 from weebot.config.model_refs import MODEL_BUDGET
-from weebot.infrastructure.persistence.meta_improvement_log import MetaImprovementLog
+
+if TYPE_CHECKING:
+    from weebot.infrastructure.persistence.meta_improvement_log import MetaImprovementLog
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +60,14 @@ class MetaSelfImprover:
     def __init__(
         self,
         llm: LLMPort,
-        audit_log: MetaImprovementLog | None = None,
+        audit_log: "MetaImprovementLog | None" = None,
     ) -> None:
         self._llm = llm
-        self._audit_log = audit_log or MetaImprovementLog()
+        if audit_log is not None:
+            self._audit_log = audit_log
+        else:
+            from weebot.infrastructure.persistence.meta_improvement_log import MetaImprovementLog as _MIL
+            self._audit_log = _MIL()
 
     @property
     def is_enabled(self) -> bool:

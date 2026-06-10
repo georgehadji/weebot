@@ -1,7 +1,6 @@
 import os
 from typing import Any, Dict, List, Optional
 import httpx
-from weebot.config.settings import WeebotSettings
 from weebot.tools.base import BaseTool, ToolResult
 
 
