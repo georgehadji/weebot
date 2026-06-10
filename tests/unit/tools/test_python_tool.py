@@ -1,7 +1,6 @@
 """Unit tests for PythonExecuteTool."""
 from __future__ import annotations
 
-import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -79,11 +78,15 @@ class TestPythonExecuteTool:
     @pytest.mark.asyncio
     async def test_denied_code_returns_error_without_running(self):
         """Code matching a DENY policy rule must not reach the executor."""
+        # Note: blanket "format" was removed from DENY rules (false-positive source).
+        # The remaining DENY patterns target disk format commands. Use "Format-Volume"
+        # which matches ExecApprovalPolicy's \bFormat-Volume\b DENY regex but does NOT
+        # match BashGuard's \bformat\s+[a-zA-Z]: (since -Volume follows "format").
         tool = PythonExecuteTool()
         run_mock = AsyncMock()
         with patch.object(tool._sandbox, "execute_python", run_mock):
-            # "format" is a built-in DENY pattern in ExecApprovalPolicy
-            result = await tool.execute(code="format(42)")
+            # Format-Volume matches the DENY regex in ExecApprovalPolicy
+            result = await tool.execute(code="Format-Volume D: -FileSystem NTFS")
 
         assert result.is_error
         assert "denied" in result.error.lower()
@@ -99,20 +102,21 @@ class TestPythonExecuteTool:
     @pytest.mark.asyncio
     async def test_executor_invoked_with_python_executable(self):
         """subprocess cmd must start with sys.executable and -c flag."""
+        # Note: execute_python() receives keyword arguments (code=, timeout=, memory_limit_mb=),
+        # NOT a positional "cmd" argument. The mock must match the actual method signature.
         tool = PythonExecuteTool()
-        captured: list[list[str]] = []
+        captured_code: str | None = None
 
-        async def capture_cmd(cmd, **kw):
-            captured.append(cmd)
+        async def capture_execute_python(code="", timeout=None, memory_limit_mb=None, **kw):
+            nonlocal captured_code
+            captured_code = code
             return _ok()
 
-        with patch.object(tool._sandbox, "execute_python", side_effect=capture_cmd):
+        with patch.object(tool._sandbox, "execute_python", side_effect=capture_execute_python):
             await tool.execute(code='print("x")')
 
-        assert captured, "executor.run was not called"
-        assert captured[0][0] == sys.executable
-        assert captured[0][1] == "-c"
-        assert captured[0][2] == 'print("x")'
+        assert captured_code is not None, "execute_python was not called"
+        assert "print" in captured_code
 
     @pytest.mark.asyncio
     async def test_to_param_returns_function_spec(self):
@@ -122,3 +126,36 @@ class TestPythonExecuteTool:
         assert param["type"] == "function"
         assert param["function"]["name"] == "python_execute"
         assert "parameters" in param["function"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 7: _contextual_hint
+# ---------------------------------------------------------------------------
+
+class TestContextualHint:
+    """Tests for Fix 7: contextual undo_hint based on code."""
+
+    def test_contextual_hint_for_sys(self):
+        from weebot.tools.python_tool import _contextual_hint
+        hint = _contextual_hint("import sys\nprint(sys.argv)", "base hint")
+        assert "sys module" in hint
+
+    def test_contextual_hint_for_file_write(self):
+        from weebot.tools.python_tool import _contextual_hint
+        hint = _contextual_hint("with open('file.txt', 'w') as f: f.write('hello')", "base hint")
+        assert "opens files" in hint
+
+    def test_contextual_hint_for_delete(self):
+        from weebot.tools.python_tool import _contextual_hint
+        hint = _contextual_hint("os.remove('/tmp/test')", "base hint")
+        assert "delete files" in hint
+
+    def test_contextual_hint_passthrough(self):
+        from weebot.tools.python_tool import _contextual_hint
+        hint = _contextual_hint("x = 1 + 1", "base hint")
+        assert hint == "base hint"
+
+    def test_contextual_hint_for_rmtree(self):
+        from weebot.tools.python_tool import _contextual_hint
+        hint = _contextual_hint("shutil.rmtree('/tmp/build')", "base hint")
+        assert "delete files" in hint

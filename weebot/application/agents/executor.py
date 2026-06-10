@@ -832,19 +832,34 @@ class ExecutorAgent:
                             "role": "system",
                             "content": f"[RECOVERY] {diagnosis.recovery_message}",
                         })
-                    logger.warning(
-                        "Trajectory %s for step %s: %s",
-                        diagnosis.health.value, step.id, diagnosis.detail,
-                    )
+                    if diagnosis.health == TrajectoryHealth.HEALTHY:
+                        logger.debug(
+                            "Trajectory %s for step %s: %s",
+                            diagnosis.health.value, step.id, diagnosis.detail,
+                        )
+                    else:
+                        logger.warning(
+                            "Trajectory %s for step %s: %s",
+                            diagnosis.health.value, step.id, diagnosis.detail,
+                        )
                     _auto_abort_health = {
                         TrajectoryHealth.TERMINAL,
                         TrajectoryHealth.SEMANTIC_LOOP,
                         TrajectoryHealth.STAGNATING,
                     }
                     if diagnosis.health in _auto_abort_health:
+                        # Enrich the abort message with policy context if the trajectory
+                        # degenerated due to security blocks rather than true semantic repetition
+                        security_context = ""
+                        if last_error_class in ("security_blocked", "policy_denied", "confirmation_required"):
+                            count = consecutive_error_class_counts.get(last_error_class, 0)
+                            security_context = (
+                                f" (underlying cause: {count}× consecutive '{last_error_class}' "
+                                f"errors — check security_validators.py allowlists)"
+                            )
                         loop_error = (
                             f"Trajectory {diagnosis.health.value} for step '{step.id}': "
-                            f"{diagnosis.detail}. Auto-aborting step."
+                            f"{diagnosis.detail}{security_context}. Auto-aborting step."
                         )
                         yield ErrorEvent(error=loop_error)
                         abort_step = True

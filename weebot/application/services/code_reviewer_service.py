@@ -67,49 +67,64 @@ class CodeReviewerService(CodeReviewerPort):
 
     async def review(self, step: Step, context: dict[str, Any]) -> CodeReviewResult:
         """Review a completed step's output. Never raises — returns approved on failure."""
-        try:
-            prompt = self._build_prompt(step, context)
-            response = await asyncio.wait_for(
-                self._llm.chat(
-                    messages=[
-                        {"role": "system", "content": _REVIEWER_SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=_MAX_TOKENS,
-                    temperature=_TEMPERATURE,
-                ),
-                timeout=self._timeout_seconds,
-            )
+        for attempt in range(2):  # retry once on parse failure
+            try:
+                prompt = self._build_prompt(step, context)
+                response = await asyncio.wait_for(
+                    self._llm.chat(
+                        messages=[
+                            {"role": "system", "content": _REVIEWER_SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        max_tokens=_MAX_TOKENS,
+                        temperature=_TEMPERATURE,
+                    ),
+                    timeout=self._timeout_seconds,
+                )
 
-            raw = (response.content or "").strip()
-            # Strip markdown fences — handles both multi-line and one-liner forms
-            import re
-            raw = re.sub(r"^```(?:json)?\s*", "", raw)
-            raw = re.sub(r"\s*```$", "", raw)
+                raw = (response.content or "").strip()
+                # Strip markdown fences — handles both multi-line and one-liner forms
+                import re
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
 
-            data = json.loads(raw)
-            # Clamp confidence to [0.0, 1.0] before constructing the model
-            conf = min(1.0, max(0.0, float(data.get("confidence", 1.0))))
-            result = CodeReviewResult(
-                step_id=step.id,
-                verdict=data.get("verdict", "approved"),
-                issues=data.get("issues", []),
-                hint=data.get("hint", ""),
-                confidence=conf,
-                severity=data.get("severity", "info"),
-            )
-            logger.info(
-                "Code review step=%s verdict=%s confidence=%.2f issues=%d",
-                step.id, result.verdict, result.confidence, len(result.issues),
-            )
-            return result
+                data = json.loads(raw)
+                # Clamp confidence to [0.0, 1.0] before constructing the model
+                conf = min(1.0, max(0.0, float(data.get("confidence", 1.0))))
+                result = CodeReviewResult(
+                    step_id=step.id,
+                    verdict=data.get("verdict", "approved"),
+                    issues=data.get("issues", []),
+                    hint=data.get("hint", ""),
+                    confidence=conf,
+                    severity=data.get("severity", "info"),
+                )
+                logger.info(
+                    "Code review step=%s verdict=%s confidence=%.2f issues=%d",
+                    step.id, result.verdict, result.confidence, len(result.issues),
+                )
+                return result
 
-        except Exception as exc:
-            logger.warning(
-                "Code reviewer failed for step %s (%s). Proceeding as approved.",
-                step.id, exc,
-            )
-            return CodeReviewResult(step_id=step.id, verdict="approved")
+            except (ValueError, KeyError, json.JSONDecodeError) as parse_exc:
+                logger.warning(
+                    "CodeReviewerService: parse error on attempt %d/2 — %s",
+                    attempt + 1, parse_exc,
+                )
+                if attempt == 1:
+                    # Both attempts failed — fail open but log the traceback
+                    logger.error(
+                        "CodeReviewerService: failed to parse review after 2 attempts; "
+                        "auto-approving.",
+                        exc_info=True,
+                    )
+                    return CodeReviewResult(step_id=step.id, verdict="approved")
+            except Exception as exc:
+                # LLM error (timeout, network, rate limit) — fail open immediately
+                logger.warning(
+                    "Code reviewer failed for step %s (%s). Proceeding as approved.",
+                    step.id, exc,
+                )
+                return CodeReviewResult(step_id=step.id, verdict="approved")
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -121,7 +136,7 @@ class CodeReviewerService(CodeReviewerPort):
         n_complete = context.get("completed_steps", 0)
         step_events = context.get("step_events", [])
 
-        tool_lines = self._render_tool_events(step_events, max_events=10)
+        tool_lines = self._render_tool_events(step_events, max_events=20)
 
         result_section = (
             f"Result reported: {step.result}"
@@ -139,15 +154,40 @@ class CodeReviewerService(CodeReviewerPort):
 
     @staticmethod
     def _render_tool_events(events: list[Any], max_events: int) -> str:
-        """Extract tool-call summaries from raw serialised event dicts."""
-        lines = []
-        for e in events:
-            if not isinstance(e, dict):
-                continue
-            if e.get("type") == "tool":
-                tool_name = e.get("tool_name", "?")
-                tool_input = str(e.get("tool_input", ""))[:200]
-                lines.append(f"- {tool_name}({tool_input})")
-            if len(lines) >= max_events:
+        """Render tool events for the reviewer LLM.
+
+        Prioritizes write operations and explicit completions over
+        chronological recency so the reviewer sees what the step
+        actually accomplished, not just the last N tool calls.
+        """
+        tool_events = [e for e in events if isinstance(e, dict) and e.get("type") == "tool"]
+        if not tool_events:
+            return "(no tool calls)"
+
+        # Tier 1: write operations (file_editor, python_execute, terminate, bash)
+        WRITE_TOOLS = {"file_editor", "python_execute", "terminate", "bash"}
+        significant = [
+            e for e in tool_events
+            if e.get("tool_name", "") in WRITE_TOOLS
+        ]
+
+        # Tier 2: recent events (last N of all remaining)
+        recent = tool_events[-(max_events):]
+
+        # Merge: significant first, then fill with recent (dedup by tool_input)
+        seen_inputs: set[str] = set()
+        merged: list[dict] = []
+        for e in significant + recent:
+            tool_input = str(e.get("tool_input", ""))[:100]
+            if tool_input not in seen_inputs:
+                seen_inputs.add(tool_input)
+                merged.append(e)
+            if len(merged) >= max_events * 2:
                 break
+
+        lines = []
+        for e in merged:
+            tool_name = e.get("tool_name", "?")
+            tool_input = str(e.get("tool_input", ""))[:200]
+            lines.append(f"- {tool_name}({tool_input})")
         return "\n".join(lines)

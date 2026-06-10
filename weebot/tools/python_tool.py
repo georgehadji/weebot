@@ -13,6 +13,18 @@ from weebot.core.bash_guard import BashGuard
 from weebot.tools.base import BaseTool, ToolResult
 
 
+def _contextual_hint(code: str, base_hint: str) -> str:
+    """Derive a contextual message from the code being evaluated."""
+    code_lower = code.lower()
+    if "import sys" in code_lower or "sys.argv" in code_lower:
+        return f"{base_hint} (code uses sys module — review argv/path access)"
+    if "open(" in code_lower and ("'w'" in code or '"w"' in code):
+        return f"{base_hint} (code opens files for writing)"
+    if "shutil.rmtree" in code_lower or "os.remove" in code_lower:
+        return f"{base_hint} (code may delete files — verify target paths first)"
+    return base_hint
+
+
 class PythonExecuteTool(BaseTool):
     """Execute Python code in an isolated subprocess.
 
@@ -68,6 +80,11 @@ class PythonExecuteTool(BaseTool):
         """
         super().__init__()
         if sandbox is None:
+            import logging
+            logging.getLogger(__name__).warning(
+                "PythonExecuteTool: no SandboxPort injected — creating "
+                "ad-hoc Container. Inject through DI to share connections."
+            )
             from weebot.application.di import Container
             container = Container()
             container.configure_defaults()
@@ -117,11 +134,12 @@ class PythonExecuteTool(BaseTool):
                 error=f"Code denied by policy: {approval.reason}",
             )
         if approval.requires_confirmation:
+            hint = _contextual_hint(code, approval.undo_hint)
             return ToolResult(
                 output="",
                 error=(
                     f"Code requires user confirmation before execution. "
-                    f"Hint: {approval.undo_hint}"
+                    f"Hint: {hint}"
                 ),
             )
 

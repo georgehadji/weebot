@@ -53,10 +53,20 @@ class PathValidator:
     
     # Allowed file extensions for write operations
     ALLOWED_EXTENSIONS: set[str] = {
-        ".txt", ".md", ".py", ".json", ".yaml", ".yml",
+        # Source and config
+        ".txt", ".md", ".py", ".pyi", ".json", ".yaml", ".yml",
         ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".xml", ".csv",
         ".log", ".ini", ".cfg", ".conf", ".sql", ".sh",
-        ".ps1", ".bat", ".cmd"
+        ".ps1", ".bat", ".cmd",
+        # Scaffolding and tooling files
+        ".toml", ".lock", ".env", ".example",
+        ".gitignore", ".gitkeep", ".gitattributes",
+        ".dockerignore", ".editorconfig",
+        ".prettierrc", ".eslintrc",
+        ".flake8", ".mypy", ".pylintrc",
+        ".nvmrc", ".node-version",
+        ".rst", ".tex",       # documentation
+        ".tf", ".tfvars",     # Terraform
     }
     
     def __init__(self, workspace_root: Path | None = None) -> None:
@@ -245,7 +255,9 @@ class CommandValidator:
         re.compile(r'\bNew-LocalUser\b|\bSet-LocalUser\b', re.IGNORECASE),
         re.compile(r'\bAdd-WindowsCapability\b|\bRemove-WindowsFeature\b', re.IGNORECASE),
         re.compile(r'-EncodedCommand', re.IGNORECASE),
-        re.compile(r'bypass', re.IGNORECASE),
+        # Narrowed: target explicit execution-policy bypass, not the word 'bypass' anywhere
+        re.compile(r'-ExecutionPolicy\s+Bypass', re.IGNORECASE),
+        re.compile(r'-ep\s+bypass', re.IGNORECASE),
     ]
     
     # Bash dangerous commands
@@ -256,7 +268,9 @@ class CommandValidator:
         re.compile(r'\beval\s+\$'),
         re.compile(r'\bbase64\s+-d.*\|'),
         re.compile(r'`.*`'),  # Backtick command substitution
-        re.compile(r'\$\(.*\)'),  # $() command substitution
+        # Narrowed: require non-whitespace content of 3+ chars to avoid flagging
+        # PowerShell subexpressions like $($items.Count) or $() (empty)
+        re.compile(r'\$\([^)]{3,}\)'),  # $() with at least 3 non-')' chars content
     ]
     
     # Python dangerous patterns
@@ -301,7 +315,24 @@ class CommandValidator:
         )
     
     def validate_bash(self, command: str) -> ValidationReport:
-        """Validate Bash command for dangerous patterns."""
+        """Validate Bash command for dangerous patterns.
+
+        PowerShell commands should NOT be validated against bash patterns.
+        Detects PowerShell via common cmdlet prefixes and skips bash checks.
+        """
+        # PowerShell commands should not be validated against bash patterns.
+        # Detect via common PowerShell cmdlet prefixes.
+        _POWERSHELL_INDICATORS = (
+            'get-', 'set-', 'new-', 'remove-', 'invoke-',
+            'write-output', 'write-host', 'get-childitem',
+        )
+        cmd_lower = command.lower()
+        if any(ind in cmd_lower for ind in _POWERSHELL_INDICATORS):
+            return ValidationReport(
+                result=ValidationResult.VALID,
+                message="Skipping bash validation for PowerShell command",
+            )
+
         for pattern in self.BASH_DANGEROUS:
             if pattern.search(command):
                 return ValidationReport(
@@ -326,12 +357,22 @@ class CommandValidator:
                 )
         
         # Check for imports that could be dangerous
-        dangerous_imports = {'socket', 'ctypes', 'mmap', 'sys', 'builtins'}
+        # Split into two tiers:
+        # - _BLOCKED_IMPORTS: always blocked (DANGEROUS_PATTERN, "not allowed")
+        # - _CONFIRM_IMPORTS: requires confirmation (DANGEROUS_PATTERN, "requires confirmation")
+        _BLOCKED_IMPORTS: set[str] = {'ctypes', 'mmap', 'builtins'}
+        _CONFIRM_IMPORTS: set[str] = {'socket', 'sys'}
         import_pattern = re.compile(r'^\s*import\s+(\w+)|^\s*from\s+(\w+)\s+import', re.MULTILINE)
         
         for match in import_pattern.finditer(code):
             module = match.group(1) or match.group(2)
-            if module in dangerous_imports:
+            if module in _BLOCKED_IMPORTS:
+                return ValidationReport(
+                    result=ValidationResult.DANGEROUS_PATTERN,
+                    message=f"Import of '{module}' is not allowed",
+                    matched_pattern=f"import {module}"
+                )
+            if module in _CONFIRM_IMPORTS:
                 return ValidationReport(
                     result=ValidationResult.DANGEROUS_PATTERN,
                     message=f"Import of '{module}' requires confirmation",

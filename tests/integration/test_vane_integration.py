@@ -46,8 +46,10 @@ async def test_vane_integration_academic_search(vane_base_url):
     assert result.success is True
     assert len(result.output) > 50 # Expect a substantial answer
     assert "sources" in result.metadata
-    assert any("arxiv.org" in s.get("url", "") for s in result.metadata["sources"]) or 
-           any("ieee.org" in s.get("url", "") for s in result.metadata["sources"])
+    assert (
+        any("arxiv.org" in s.get("url", "") for s in result.metadata["sources"])
+        or any("ieee.org" in s.get("url", "") for s in result.metadata["sources"])
+    )
 
 
 @pytest.mark.asyncio

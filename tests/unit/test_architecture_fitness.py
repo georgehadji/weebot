@@ -163,11 +163,11 @@ def test_every_command_has_handler():
     # Collect all handler registration content
     handlers_content = ""
     if handlers_py.exists():
-        handlers_content += handlers_py.read_text()
+        handlers_content += handlers_py.read_text(encoding="utf-8")
     if handlers_dir.exists():
         for hp in _walk_py(handlers_dir):
             if hp.name != "__init__.py":
-                handlers_content += hp.read_text()
+                handlers_content += hp.read_text(encoding="utf-8")
 
     if not handlers_content:
         pytest.skip("No handler files found")
@@ -201,7 +201,7 @@ def test_every_query_has_handler():
         pytest.skip("queries.py or handlers.py not found")
 
     queries_tree = _parse(queries_py)
-    handlers_content = handlers_py.read_text()
+    handlers_content = handlers_py.read_text(encoding="utf-8")
 
     missing: list[str] = []
     for node in ast.iter_child_nodes(queries_tree):
@@ -327,7 +327,7 @@ def test_ports_have_adapters():
                     if not search_dir.exists():
                         continue
                     for adapter_path in _walk_py(search_dir):
-                        content = adapter_path.read_text()
+                        content = adapter_path.read_text(encoding="utf-8")
                         if pc in content and (
                             f"({pc})" in content or f"class {pc}" in content
                         ):
@@ -526,7 +526,7 @@ def test_no_dynamic_imports():
     pattern = re.compile(r"__import__\(")
 
     for path in _walk_py(ROOT / "application"):
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         if pattern.search(content):
             rel = path.relative_to(ROOT.parent)
             violations.append(str(rel))
@@ -547,7 +547,7 @@ def test_persistence_at_emit():
     violations: list[str] = []
 
     for path in _walk_py(ROOT / "application" / "flows"):
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         # Flows that accept state_repo in __init__
         if "state_repo" in content:
             # Must call save_session somewhere
@@ -577,7 +577,7 @@ def test_no_blocking_calls_in_async():
     for path in _walk_py(ROOT):
         if "test_" in path.name:
             continue
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         # Only check files that contain async functions
         if "async def" not in content:
             continue
@@ -622,7 +622,7 @@ def test_no_settings_import_in_tools():
     )
 
     for path in _walk_py(ROOT / "tools"):
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         for imp in settings_imports:
             if imp in content:
                 # Check if it's behind TYPE_CHECKING (acceptable)
@@ -664,7 +664,7 @@ def test_repository_constructed_only_in_di():
     for path in _walk_py(ROOT):
         if "test_" in path.name or path.name == "__init__.py":
             continue
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         if "SQLiteStateRepository(" in content and "SQLiteStateRepository()" in content:
             rel = path.relative_to(ROOT.parent)
             if "di.py" not in str(rel):
@@ -690,7 +690,7 @@ def test_global_exception_handlers_registered():
     if not web_main.exists():
         pytest.skip("web/main.py not found")
 
-    content = web_main.read_text()
+    content = web_main.read_text(encoding="utf-8")
     has_handler = "exception_handler" in content
 
     assert has_handler, (
@@ -711,7 +711,7 @@ def test_all_event_types_documented():
     if not catalog.exists():
         pytest.skip("EVENT_CATALOG.md not found — run Phase C.3 first")
 
-    catalog_content = catalog.read_text()
+    catalog_content = catalog.read_text(encoding="utf-8")
     missing: list[str] = []
 
     for path in [event_model]:
