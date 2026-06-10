@@ -1,6 +1,7 @@
 """AgentWasp capabilities + scheduler bindings mixin for Container."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)

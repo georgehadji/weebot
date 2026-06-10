@@ -6,6 +6,15 @@ CRITICAL: This policy runs on Windows 11 + PowerShell 5.1.
 - Disk formatting (format C:, Format-Volume) remains DENIED.
 - Python str.format() and similar are NO LONGER blanket-denied (false-positive source).
 """
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ApprovalMode(Enum):
@@ -69,7 +78,7 @@ class ExecApprovalPolicy:
                 try:
                     self._compiled[i] = re.compile(rule.pattern, re.IGNORECASE)
                 except re.error as exc:
-                    _log.error(
+                    logger.error(
                         "ExecApprovalPolicy: invalid regex pattern %r "
                         "(rule index %d) will be SKIPPED — %s",
                         rule.pattern, i, exc,
