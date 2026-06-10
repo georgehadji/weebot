@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.domain.models.event import MemoryPressureEvent, SessionStalenessEvent
+from weebot.domain.models.event import MemoryPressureEvent, SessionStalenessEvent, LLMHealthEvent
 from .base import Monitor, MonitorReport, MonitorState
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,15 @@ class HeartbeatManager:
                 level=report.state.value,
                 rss_mb=report.metadata.get("rss_mb", 0.0),
                 percent=report.metadata.get("percent", 0.0),
+            )
+        elif name == "llm_health":
+            event = LLMHealthEvent(
+                state=report.state.value,
+                affected_providers=(
+                    report.metadata.get("unhealthy", []) +
+                    report.metadata.get("degraded", [])
+                ),
+                message=report.message,
             )
 
         if event is not None:

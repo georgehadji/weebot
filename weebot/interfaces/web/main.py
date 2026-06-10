@@ -137,7 +137,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Scheduler startup ──────────────────────────────────────
     scheduler = container.build_scheduler()
     from weebot.scheduling.default_jobs import register_default_jobs
-    register_default_jobs(scheduler, container)
+    await register_default_jobs(scheduler, container)
     await scheduler.start()
     app.state.scheduler = scheduler
 

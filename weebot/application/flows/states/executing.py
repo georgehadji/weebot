@@ -7,7 +7,7 @@ from typing import Any, AsyncGenerator, TYPE_CHECKING
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
-from weebot.domain.models.event import AgentEvent, ErrorEvent, WaitForUserEvent
+from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolEvent, WaitForUserEvent
 from weebot.domain.models.plan import StepStatus
 from weebot.domain.models.session import SessionStatus
 
@@ -202,6 +202,20 @@ class ExecutingState(FlowState):
             if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
                 inner_should_terminate = True
 
+        # ── Extract step result from execution events for quality validation ──
+        _last_result_text = ""
+        for event in _current_step_events:
+            if isinstance(event, MessageEvent) and getattr(event, 'role', '') == 'assistant':
+                msg = getattr(event, 'message', '') or ''
+                if msg and len(msg) > len(_last_result_text):
+                    _last_result_text = msg
+            elif isinstance(event, ToolEvent):
+                tr = getattr(event, 'result', '') or ''
+                if tr and len(tr) > len(_last_result_text):
+                    _last_result_text = tr
+        if _last_result_text:
+            step = step.model_copy(update={"result": _last_result_text})
+
         if hitl_paused:
             logger.info("Step %s paused for human input after %.1fs",
                         step.id, _step_elapsed)
@@ -262,6 +276,7 @@ class ExecutingState(FlowState):
                 result=str(step.result or ""),
                 step_description=step.description,
                 previous_result=None,
+                step_events=_current_step_events,
             )
             if not validation.passed:
                 logger.info(
@@ -279,8 +294,10 @@ class ExecutingState(FlowState):
                 context.set_state(ExecutingState())
                 return
 
-        # Update step as completed
-        context._plan = context._plan.update_step_status(step.id, StepStatus.COMPLETED)
+        # Update step as completed, carrying the extracted result through
+        context._plan = context._plan.update_step_status(
+            step.id, StepStatus.COMPLETED, result=step.result or None,
+        )
         logger.info("Step %s completed in %.1fs", step.id, _step_elapsed)
 
         if getattr(context, "_hooks", None) is not None:
