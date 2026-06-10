@@ -142,8 +142,16 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         self.register(BackendPort, self._create_backend)
+        # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
+        from weebot.scheduling.scheduler import SchedulingManager
+        self.register("scheduler", lambda: SchedulingManager())
 
     # ── high-level builders ─────────────────────────────────────────
+
+    def build_scheduler(self) -> "SchedulingManager":
+        """Return the DI-managed SchedulingManager singleton."""
+        from weebot.scheduling.scheduler import SchedulingManager
+        return self.get("scheduler")
 
     def build_agent_runner(self, role="admin", mcp_config=None, use_rich=True):
         """Construct a ready-to-use AgentRunner."""

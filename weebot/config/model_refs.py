@@ -409,10 +409,23 @@ RERANK_MODEL_FAST: str = "cohere/rerank-4-fast"
 Use for latency-sensitive paths: web search result reordering,
 conversation compressor turn selection."""
 
+RERANK_MODEL_FREE: str = "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
+"""NVIDIA Nemotron Rerank VL 1B — free tier via OpenRouter.
+Use for high-throughput, low-criticality paths (search, memory, knowledge graph).
+NOTE: Not confirmed against the Cohere-compatible rerank endpoint.  The
+adapter falls back to RERANK_MODEL_VERIFIED if this model returns a non-200
+response."""
+
 RERANK_MODEL_V35: str = "cohere/rerank-v3.5"
 """Cohere Rerank v3.5 — 4K context, 100+ languages, lowest cost.
 Use for high-throughput paths: memory archivist event scoring,
 knowledge graph FTS5 result reordering."""
+
+RERANK_MODEL_VERIFIED: str = "cohere/rerank-v3.5"
+"""Verified to work with OpenRouter POST /v1/rerank (Cohere-compatible interface).
+Fallback model used when the primary rerank model returns a non-200 response.
+Identical to RERANK_MODEL_V35 — kept as a separate semantic constant so
+infrastructure code can reference the verified-fallback concept explicitly."""
 
 
 def get_rerank_model_for(use_case: str) -> str:
@@ -429,9 +442,9 @@ def get_rerank_model_for(use_case: str) -> str:
         "research": RERANK_MODEL_PRO,      # multi-source synthesis — quality matters
         "skills": RERANK_MODEL_PRO,        # BM25 → semantic — quality matters
         "evaluation": RERANK_MODEL_PRO,    # staged evaluator — quality matters
-        "search": RERANK_MODEL_FAST,       # web search — latency-sensitive
-        "compressor": RERANK_MODEL_FAST,   # conversation compressor — latency-sensitive
-        "memory": RERANK_MODEL_V35,        # memory archivist — high-throughput
-        "knowledge": RERANK_MODEL_V35,     # knowledge graph FTS5 — high-throughput
+        "search": RERANK_MODEL_FREE,       # web search — high-throughput, free tier
+        "compressor": RERANK_MODEL_FREE,   # conversation compressor — high-throughput
+        "memory": RERANK_MODEL_FREE,       # memory archivist — high-throughput
+        "knowledge": RERANK_MODEL_FREE,    # knowledge graph FTS5 — high-throughput
     }
-    return _rerank_map.get(use_case, RERANK_MODEL_FAST)
+    return _rerank_map.get(use_case, RERANK_MODEL_FREE)

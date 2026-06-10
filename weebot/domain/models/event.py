@@ -147,6 +147,40 @@ class TrajectoryDiagnosisEvent(BaseEvent):
     recovery_message: str | None = Field(default=None)
 
 
+# ── Phase 2+6: Cron & Heartbeat domain events ────────────────────
+
+class SessionStalenessEvent(BaseEvent):
+    """Emitted when a RUNNING session has had no update for > threshold minutes."""
+    type: Literal["session_staleness"] = "session_staleness"
+    session_id: str = ""
+    staleness_minutes: float = 0.0
+    status: str = ""  # SessionStatus value as string
+
+class MemoryPressureEvent(BaseEvent):
+    """Emitted when process memory crosses warning or critical threshold."""
+    type: Literal["memory_pressure"] = "memory_pressure"
+    level: str = ""  # "warning" | "critical"
+    rss_mb: float = 0.0
+    percent: float = 0.0
+
+class ScheduledJobEvent(BaseEvent):
+    """Emitted on scheduled job completion (success or failure)."""
+    type: Literal["scheduled_job"] = "scheduled_job"
+    job_id: str = ""
+    job_name: str = ""
+    outcome: str = ""  # "success" | "failure"
+    duration_seconds: float = 0.0
+    error: str | None = None
+
+class LLMHealthEvent(BaseEvent):
+    """Emitted when LLM provider health transitions between states."""
+    type: Literal["llm_health"] = "llm_health"
+    state: str = ""  # "healthy" | "degraded" | "critical"
+    affected_providers: list[str] = []
+    message: str = ""
+
+# ── AgentEvent union ───────────────────────────────────────────────
+
 AgentEvent = Union[
     ErrorEvent,
     PlanEvent,

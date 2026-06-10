@@ -1087,6 +1087,18 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             description="Microsoft MAI Image 2.5 — enterprise-grade text-to-image. Strong in safety, branding, and consistency."
         ),
+        "nvidia/llama-nemotron-rerank-vl-1b-v2:free": ModelInfo(
+            model_name="nvidia/llama-nemotron-rerank-vl-1b-v2:free",
+            provider=ModelProvider.NVIDIA,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=True,
+            supports_system_messages=False,
+            description="NVIDIA Nemotron Rerank VL 1B — free-tier rerank model via OpenRouter."
+        ),
     }
 
 

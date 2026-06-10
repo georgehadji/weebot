@@ -102,7 +102,7 @@ class CommandSecurityAnalyzer:
     _SUSPICIOUS_COMBINATIONS: List[Tuple[Set[str], Set[str], str]] = [
         # (indicators, targets, description)
         ({'curl', 'wget', 'Invoke-WebRequest', 'iwr'}, 
-         {'bash', 'sh', 'zsh', '|'}, 
+         {'bash', 'sh', 'zsh', '|', 'chmod'}, 
          "download to shell execution"),
         ({'base64', 'openssl'}, 
          {'eval', 'exec', 'source', '.'}, 
@@ -117,7 +117,7 @@ class CommandSecurityAnalyzer:
     _BASE64_MIN_LENGTH: int = 20  # Reduced to catch shorter base64 strings
     
     # Layer 4: Semantic validation
-    _MAX_COMMAND_CHAIN_LENGTH: int = 8  # Max operators in chain (raised from 5 — PowerShell pipes are normal)
+    _MAX_COMMAND_CHAIN_LENGTH: int = 5  # Max operators for non-PowerShell commands; PowerShell threshold is 20 (was 8 — PowerShell pipes are normal)
     _DANGEROUS_OPERATORS: Set[str] = {';', '&&', '||', '|', '|&'}
 
     # PowerShell patterns that are safe despite high operator count
@@ -252,6 +252,8 @@ class CommandSecurityAnalyzer:
             r'(curl|wget|Invoke-WebRequest|iwr).*\|\s*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b',
             r'\b(download|fetch|get-content|get).*\s+.*\s+.*\|\s*\b(execute|run|start|bash|sh|zsh)\b',
             r'(chmod\s+\+x|\.\/|\./).*(&&|\||;).*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b',
+            # download -> chmod+x -> execute (no explicit shell name required)
+            r'(curl|wget|Invoke-WebRequest|iwr).+(&&|\|).+(chmod\s+\+x).+(&&|\|).+(\./|\w+\.sh)',
         ]
 
         for pattern in download_execute_patterns:

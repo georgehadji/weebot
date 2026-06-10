@@ -90,6 +90,31 @@ session_persistence_failures_total = Counter(
     "Session saves that exhausted retries and were dead-lettered",
 )
 
+# ── Scheduling ──
+scheduled_jobs_active = Gauge(
+    "weebot_scheduled_jobs_active",
+    "Number of scheduled jobs currently executing",
+)
+scheduled_jobs_runs_total = Counter(
+    "weebot_scheduled_jobs_runs_total",
+    "Scheduled job run completions",
+    ["job_id", "outcome"],  # outcome: "success" | "failure"
+)
+
+# ── Monitors / Heartbeat ──
+session_stale_count = Gauge(
+    "weebot_sessions_stale_count",
+    "RUNNING sessions with no update beyond the staleness threshold",
+)
+memory_rss_mb = Gauge(
+    "weebot_memory_rss_mb",
+    "Process RSS memory in megabytes",
+)
+memory_percent = Gauge(
+    "weebot_memory_percent",
+    "Process memory as a percentage of the configured limit",
+)
+
 
 def metrics_text() -> str:
     """Return the Prometheus exposition format text."""

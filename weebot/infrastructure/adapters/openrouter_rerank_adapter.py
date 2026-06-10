@@ -17,7 +17,7 @@ from typing import Optional
 import httpx
 
 from weebot.application.ports.rerank_port import RerankPort
-from weebot.config.model_refs import RERANK_MODEL_FAST
+from weebot.config.model_refs import RERANK_MODEL_FAST, RERANK_MODEL_VERIFIED
 from weebot.domain.models.rerank import RerankResult
 from weebot.utils.backoff import BackoffConfig, RetryWithBackoff
 
@@ -72,7 +72,37 @@ class OpenRouterRerankAdapter(RerankPort):
             logger.warning("Rerank skipped: no API key configured")
             return self._identity_results(documents)
 
-        model_id = model or self._default_model
+        effective_model = model or self._default_model
+        try:
+            return await self._call_rerank(query, documents, top_n, effective_model)
+        except Exception as exc:
+            if effective_model != RERANK_MODEL_VERIFIED:
+                logger.warning(
+                    "Rerank with model %s failed (%s) — retrying with verified fallback %s",
+                    effective_model, exc, RERANK_MODEL_VERIFIED,
+                )
+                try:
+                    return await self._call_rerank(query, documents, top_n, RERANK_MODEL_VERIFIED)
+                except Exception as fallback_exc:
+                    logger.warning(
+                        "Rerank fallback to %s also failed (%d docs): %s",
+                        RERANK_MODEL_VERIFIED, len(documents), fallback_exc,
+                    )
+            else:
+                logger.warning(
+                    "Rerank failed after retries for model %s (%d docs): %s",
+                    effective_model, len(documents), exc,
+                )
+            return self._identity_results(documents)
+
+    async def _call_rerank(
+        self,
+        query: str,
+        documents: list[str],
+        top_n: int | None,
+        model_id: str,
+    ) -> list[RerankResult]:
+        """Call the rerank API with retry backoff for a specific model."""
         body: dict = {
             "model": model_id,
             "query": query,
@@ -81,19 +111,8 @@ class OpenRouterRerankAdapter(RerankPort):
         if top_n is not None:
             body["top_n"] = top_n
 
-        retry = RetryWithBackoff(
-            BackoffConfig(delays=[1, 2, 4], jitter=0.25)
-        )
-
-        try:
-            result = await retry.call(self._call_api, body)
-            return result
-        except Exception as exc:
-            logger.warning(
-                "Rerank failed after retries for model %s (%d docs): %s",
-                model_id, len(documents), exc,
-            )
-            return self._identity_results(documents)
+        retry = RetryWithBackoff(BackoffConfig(delays=[1, 2, 4], jitter=0.25))
+        return await retry.call(self._call_api, body)
 
     async def _call_api(self, body: dict) -> list[RerankResult]:
         """Single API call with timeout."""

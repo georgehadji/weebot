@@ -133,7 +133,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container = Container()
     container.configure_defaults()
     app.state.container = container
+
+    # ── Scheduler startup ──────────────────────────────────────
+    scheduler = container.build_scheduler()
+    from weebot.scheduling.default_jobs import register_default_jobs
+    register_default_jobs(scheduler, container)
+    await scheduler.start()
+    app.state.scheduler = scheduler
+
     yield
+
+    # ── Graceful shutdown ──────────────────────────────────────
+    if hasattr(app.state, "heartbeat"):
+        await app.state.heartbeat.stop()
+    await scheduler.stop()
     logger.info("Shutting down Weebot Web Server...")
 
 
