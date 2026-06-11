@@ -71,6 +71,17 @@ class PythonExecuteTool(BaseTool):
     _sandbox: SandboxPort = PrivateAttr(default=None)
     _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
 
+    @staticmethod
+    def _make_prometheus_counter():
+        """Build the on_security_event callback that increments Prometheus counter."""
+        try:
+            from weebot.infrastructure.observability import metrics as _m
+            def _counter(risk_level):
+                _m.bash_guard_events_total.labels(risk_level=risk_level.value).inc()
+            return _counter
+        except Exception:
+            return None
+
     def __init__(self, sandbox: Optional[SandboxPort] = None):
         """Initialise with a sandbox port instance (injected by DI).
 
@@ -91,7 +102,9 @@ class PythonExecuteTool(BaseTool):
             sandbox = container.get(SandboxPort)
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
-        self._bash_guard = BashGuard()
+        self._bash_guard = BashGuard(
+            on_security_event=self._make_prometheus_counter(),
+        )
 
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig for settings."""

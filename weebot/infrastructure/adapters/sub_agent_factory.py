@@ -47,11 +47,13 @@ class SubAgentFactory(SubAgentFactoryPort):
         tools: ToolCollection,
         cost_tracker: SubAgentCostTrackerPort,
         swarm_bus: Optional[SwarmEventBusPort] = None,
+        flow_factory: Optional[callable] = None,
     ) -> None:
         self._llm = llm
         self._tools = tools
         self._cost_tracker = cost_tracker
         self._swarm_bus = swarm_bus
+        self._flow_factory = flow_factory
 
     async def spawn(self, spec: SubAgentSpec) -> SubAgentResult:
         session = Session(
@@ -161,6 +163,9 @@ class SubAgentFactory(SubAgentFactoryPort):
 
     def _build_flow(self, session: Session, spec: SubAgentSpec):
         """Build a PlanActFlow for a sub-agent session."""
+        if self._flow_factory is not None:
+            return self._flow_factory(session, spec, self._llm, self._tools)
+        # Fallback if no factory injected (backward compat)
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.di import Container
 

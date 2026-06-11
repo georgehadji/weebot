@@ -162,6 +162,7 @@ async def build_tools(
     mcp_config: Optional[dict] = None,
     extra_tools: Optional[list] = None,
     llm_port: Optional[LLMPort] = None,
+    mcp_adapter: Optional[object] = None,
 ) -> ToolCollection:
     """Factory for building a ToolCollection for a given role and optional MCP config."""
     from weebot.tools.tool_registry import RoleBasedToolRegistry
@@ -171,8 +172,11 @@ async def build_tools(
     combined: list[BaseTool] = list(registry.create_tool_collection(role, llm_port=llm_port))
 
     if mcp_config:
-        from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
-        adapter = MCPToolkitAdapter()
+        if mcp_adapter is not None:
+            adapter = mcp_adapter
+        else:
+            from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
+            adapter = MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())
 

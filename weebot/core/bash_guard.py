@@ -301,11 +301,15 @@ class BashGuard:
         ),
     ]
 
-    def __init__(self, custom_patterns: Optional[list[tuple[str, RiskLevel, str, str]]] = None):
+    def __init__(self, custom_patterns: Optional[list[tuple[str, RiskLevel, str, str]]] = None,
+                 on_security_event: Optional[callable] = None):
         """Initialize the BashGuard.
 
         Args:
             custom_patterns: Optional list of custom patterns to add
+            on_security_event: Optional callback invoked with (risk_level: RiskLevel) when
+                a non-safe command is detected. The core layer does not depend on any
+                infrastructure; wire Prometheus counters from the composition root.
         """
         self._all_patterns: list[tuple[str, RiskLevel, str, str]] = []
         self._all_patterns.extend(self.DESTRUCTIVE_PATTERNS)
@@ -320,6 +324,7 @@ class BashGuard:
 
         # Compile patterns for performance
         self._compiled_patterns: list[tuple[re.Pattern, RiskLevel, str, str]] = []
+        self._on_security_event = on_security_event
         for pattern, risk, desc, suggestion in self._all_patterns:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
@@ -360,15 +365,12 @@ class BashGuard:
                 if risk_order.index(risk) > risk_order.index(max_risk):
                     max_risk = risk
 
-        # Emit Prometheus counter for security events (best-effort).
-        if max_risk != RiskLevel.SAFE:
+        # Emit security event callback (e.g. Prometheus counter, audit log).
+        if max_risk != RiskLevel.SAFE and self._on_security_event is not None:
             try:
-                from weebot.infrastructure.observability import metrics as _m
-                _m.bash_guard_events_total.labels(
-                    risk_level=max_risk.value
-                ).inc()
+                self._on_security_event(max_risk)
             except Exception:
-                pass  # metrics are best-effort — never break security evaluation
+                pass  # callback is best-effort — never break security evaluation
 
         return max_risk, checks
 

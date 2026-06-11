@@ -268,3 +268,11 @@ class FactoriesMixin:
         if config_path.exists():
             return HarnessConfig.load(str(config_path))
         return HarnessConfig.default()
+
+    @staticmethod
+    def _create_metrics_port():
+        """Create a MetricsPort (PrometheusMetricsAdapter)."""
+        from weebot.infrastructure.observability.prometheus_adapter import (
+            PrometheusMetricsAdapter,
+        )
+        return PrometheusMetricsAdapter()

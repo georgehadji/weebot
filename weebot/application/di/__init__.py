@@ -33,6 +33,7 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.memory_port import MemoryPort
+from weebot.application.ports.metrics_port import MetricsPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -142,6 +143,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         self.register(BackendPort, self._create_backend)
+        self.register(MetricsPort, self._create_metrics_port)
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
         from weebot.scheduling.scheduler import SchedulingManager
         self.register("scheduler", lambda: SchedulingManager())
@@ -246,6 +248,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
     def _create_sub_agent_factory(self):
         """Create a SubAgentFactory."""
         from weebot.infrastructure.adapters.sub_agent_factory import SubAgentFactory
+        from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.models.tool_collection import ToolCollection
         from weebot.tools.bash_tool import BashTool
         from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
@@ -258,11 +261,35 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             PythonTool(),
             ImageGenTool(),
         )
+
+        from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER
+        from weebot.domain.models.sub_agent import AgentTier
+        _TIER_MODEL: dict[AgentTier, str] = {
+            AgentTier.BUDGET: MODEL_CASCADE_TIER2,
+            AgentTier.STANDARD: MODEL_ROLE_CODER,
+            AgentTier.PREMIUM: MODEL_CASCADE_TIER4,
+        }
+
+        def _build_sub_flow(session, spec, llm, tools):
+            mediator = self._build_mediator()
+            return PlanActFlow(
+                llm=llm,
+                tools=tools,
+                session=session,
+                event_bus=None,
+                model=spec.model or _TIER_MODEL.get(spec.tier, MODEL_CASCADE_TIER2),
+                mediator=mediator,
+                state_repo=self._maybe_get("state_repo_port"),
+                skill_prompt=None,
+                max_steps=spec.max_tool_calls,
+            )
+
         return SubAgentFactory(
             llm=self.get(LLMPort),
             tools=tools,
             cost_tracker=self.get(SubAgentCostTrackerPort),
             swarm_bus=self._maybe_get(SwarmEventBusPort),
+            flow_factory=_build_sub_flow,
         )
 
     def build_hyper_agent_flow(self, session, model=None):

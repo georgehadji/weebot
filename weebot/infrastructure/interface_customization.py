@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 import uuid
 
 from weebot.domain.models.user_profile import UserProfile, PreferenceCategory
-from weebot.application.services.profile_manager import UserProfileManager
+from weebot.application.ports.profile_storage_port import ProfileStoragePort
 
 
 class ThemeType(Enum):
@@ -641,8 +641,8 @@ class DomainBasedCustomizer(InterfaceCustomizer):
 class InterfaceCustomizationEngine:
     """Main engine for interface customization."""
     
-    def __init__(self, profile_manager: UserProfileManager):
-        self.profile_manager = profile_manager
+    def __init__(self, storage: ProfileStoragePort):
+        self.storage = storage
         self.customizers = [
             AccessibilityBasedCustomizer(),
             ExpertiseBasedCustomizer(),
@@ -654,7 +654,7 @@ class InterfaceCustomizationEngine:
     async def get_customized_interface(self, user_id: str) -> Optional[CustomizedInterface]:
         """Get a customized interface for a user."""
         # Get user profile
-        profile = await self.profile_manager.get_profile(user_id)
+        profile = await self.storage.load_profile(user_id)
         if not profile:
             self.logger.warning(f"No profile found for user {user_id}")
             return None
