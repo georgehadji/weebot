@@ -389,7 +389,9 @@ class BashTool(BaseTool):
             )
 
         # --- Run in sandbox (via SandboxPort, injected by DI) ---
-        shell_type = "bash" if use_wsl else "powershell"
+        import os
+        is_windows = os.name == "nt"
+        shell_type = "powershell" if (not use_wsl and is_windows) else "bash"
         result = await self._sandbox.execute_shell(
             script=command,
             shell=shell_type,

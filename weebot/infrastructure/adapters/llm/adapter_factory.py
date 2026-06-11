@@ -238,7 +238,11 @@ class AdapterFactory:
                     secondary=fallback,
                     primary_label="deepseek-direct",
                 )
-            return direct
+            # No direct key — OpenRouter only
+            return OpenRouterAdapter(
+                api_key=api_key,
+                default_model=model,
+            )
 
         elif provider == "moonshot":
             # Strip OpenRouter prefix: "moonshotai/kimi-k2.6:free" → "kimi-k2.6:free"

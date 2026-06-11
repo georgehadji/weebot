@@ -350,7 +350,7 @@ class PlanActFlow(BaseFlow):
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         import time as _time
         self._flow_started_at = _time.monotonic()
-        self._log.info("PlanActFlow started for session %s", self._session.id)
+        self._log.info(f"PlanActFlow started for session {self._session.id}")
 
         # --- Task context preservation ---
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
