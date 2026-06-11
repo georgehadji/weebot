@@ -109,3 +109,28 @@ class TestInvalidRegexHandling:
         # All three custom rules are invalid and skipped; built-in defaults still apply.
         result = policy.evaluate("ls -la")
         assert result.approved is True
+
+
+class TestOutputDirectoryAllowlist:
+    """Remove-Item inside Output\\ must be auto-approved; outside must still ask."""
+
+    def setup_method(self):
+        self.policy = ExecApprovalPolicy()
+
+    def test_remove_item_in_output_dir_auto_approved(self):
+        result = self.policy.evaluate("Remove-Item 'E:\\Output\\marina-kotsi\\temp'")
+        assert result.approved is True
+        assert result.requires_confirmation is False
+
+    def test_remove_item_in_output_dir_case_insensitive(self):
+        result = self.policy.evaluate("Remove-Item C:/output/project/node_modules")
+        assert result.approved is True
+        assert result.requires_confirmation is False
+
+    def test_remove_item_outside_output_dir_still_asks(self):
+        result = self.policy.evaluate("Remove-Item 'C:\\Windows\\System32\\cmd.exe'")
+        assert result.requires_confirmation is True
+
+    def test_remove_item_bare_path_still_asks(self):
+        result = self.policy.evaluate("Remove-Item old_logs")
+        assert result.requires_confirmation is True

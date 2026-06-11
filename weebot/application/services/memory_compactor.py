@@ -39,7 +39,8 @@ class MemoryCompactor:
         # Extract constraints BEFORE any compaction
         extracted_constraints: List[Constraint] = []
         if self.preserve_constraints and self._constraint_extractor:
-            all_event_text = "\n".join(str(e) for e in session.events)
+            _tail = session.events[-200:]
+            all_event_text = "\n".join(str(e) for e in _tail)
             extracted_constraints = self._constraint_extractor.extract(all_event_text)
         
         # Perform compaction

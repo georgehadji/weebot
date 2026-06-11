@@ -77,6 +77,12 @@ class UpdatingState(FlowState):
             if _tot_alternative:
                 _fc = f"{_fc}\n\n[Suggested alternative approach: {_tot_alternative}]"
 
+            _completed_steps = context._plan.get_completed_steps()
+            _completed_summary = (
+                "Already completed (DO NOT repeat): "
+                + "; ".join(f"[{s.id}] {s.description[:60]}" for s in _completed_steps)
+            ) if _completed_steps else ""
+
             cmd_result = await context._mediator.send(
                 UpdatePlanCommand(
                     session_id=context._session.id,
@@ -85,8 +91,10 @@ class UpdatingState(FlowState):
                         "failure_context": _fc,
                     },
                     reason=(
+                        f"{_completed_summary}\n"
                         f"Step {last_step.id} {last_step.status.value}{failure_msg}. "
-                        "Generate a NEW approach that does not repeat the same strategy."
+                        "Generate a NEW approach for the remaining work only. "
+                        "Do NOT re-scaffold or re-install what is already done."
                     ),
                     model=context._model or MODEL_BUDGET,
                 )

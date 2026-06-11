@@ -55,7 +55,7 @@ class CodeReviewerService(CodeReviewerPort):
     def __init__(
         self,
         llm: LLMPort,
-        timeout_seconds: float = 8.0,
+        timeout_seconds: float = 30.0,
     ) -> None:
         """
         Args:
@@ -64,6 +64,7 @@ class CodeReviewerService(CodeReviewerPort):
         """
         self._llm = llm
         self._timeout_seconds = timeout_seconds
+        self._consecutive_failures: int = 0
 
     async def review(self, step: Step, context: dict[str, Any]) -> CodeReviewResult:
         """Review a completed step's output. Never raises — returns approved on failure."""
@@ -103,6 +104,7 @@ class CodeReviewerService(CodeReviewerPort):
                     "Code review step=%s verdict=%s confidence=%.2f issues=%d",
                     step.id, result.verdict, result.confidence, len(result.issues),
                 )
+                self._consecutive_failures = 0
                 return result
 
             except (ValueError, KeyError, json.JSONDecodeError) as parse_exc:
@@ -120,9 +122,11 @@ class CodeReviewerService(CodeReviewerPort):
                     return CodeReviewResult(step_id=step.id, verdict="approved")
             except Exception as exc:
                 # LLM error (timeout, network, rate limit) — fail open immediately
-                logger.warning(
-                    "Code reviewer failed for step %s (%s). Proceeding as approved.",
-                    step.id, exc,
+                self._consecutive_failures += 1
+                log_fn = logger.error if self._consecutive_failures >= 3 else logger.warning
+                log_fn(
+                    "Code reviewer failed for step %s (%s) [consecutive=%d]. Proceeding as approved.",
+                    step.id, exc, self._consecutive_failures,
                 )
                 return CodeReviewResult(step_id=step.id, verdict="approved")
 

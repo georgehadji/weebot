@@ -593,6 +593,9 @@ class ExecutorAgent:
             "  cat <file>    →  Get-Content <file>\n"
             "  && chains     →  ; (semicolons)\n"
             "  Never use Unix commands — they WILL fail.\n"
+            "WORKING DIRECTORY: The working directory does NOT persist between tool calls. "
+            "Always use absolute paths or chain the directory change inline: "
+            "  Set-Location E:\\Output\\<project>; <command>\n"
         ) + system_prompt
 
         if self._skill_prompt:
@@ -691,6 +694,8 @@ class ExecutorAgent:
         thought_iteration: int = 0
         tool_calls_attempted: int = 0
         tool_calls_succeeded: int = 0
+        semantic_loop_recoveries: int = 0
+        _MAX_SEMANTIC_LOOP_RECOVERIES = 2
 
         # ── Tier 1.3: TrajectoryMonitor — reset per-step windows, preserve cross-step ──
         if self._trajectory_monitor is not None:
@@ -842,12 +847,26 @@ class ExecutorAgent:
                             "Trajectory %s for step %s: %s",
                             diagnosis.health.value, step.id, diagnosis.detail,
                         )
+                    # Give SEMANTIC_LOOP up to 2 recovery attempts before aborting.
+                    # The monitor already injected a recovery_message above.
+                    if diagnosis.health == TrajectoryHealth.SEMANTIC_LOOP:
+                        if semantic_loop_recoveries < _MAX_SEMANTIC_LOOP_RECOVERIES:
+                            semantic_loop_recoveries += 1
+                            logger.warning(
+                                "SEMANTIC_LOOP for step %s — injecting recovery hint (attempt %d/%d)",
+                                step.id, semantic_loop_recoveries, _MAX_SEMANTIC_LOOP_RECOVERIES,
+                            )
+                            continue
+
                     _auto_abort_health = {
                         TrajectoryHealth.TERMINAL,
-                        TrajectoryHealth.SEMANTIC_LOOP,
                         TrajectoryHealth.STAGNATING,
+                        TrajectoryHealth.EXHAUSTED,
                     }
-                    if diagnosis.health in _auto_abort_health:
+                    if diagnosis.health in _auto_abort_health or (
+                        diagnosis.health == TrajectoryHealth.SEMANTIC_LOOP
+                        and semantic_loop_recoveries >= _MAX_SEMANTIC_LOOP_RECOVERIES
+                    ):
                         # Enrich the abort message with policy context if the trajectory
                         # degenerated due to security blocks rather than true semantic repetition
                         security_context = ""

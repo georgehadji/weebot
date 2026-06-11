@@ -42,6 +42,16 @@ class ApprovalResult:
 
 # Built-in defaults: destructive → ask, format → deny, rest → auto
 _DEFAULT_RULES: List[CommandRule] = [
+    # Allow Remove-Item / python writes inside the Output\ working directory
+    # (checked before the blanket remove-item rule because longest-match wins)
+    CommandRule(
+        r"remove-item\s+['\"]?[A-Za-z]:[\\\/].*[Oo]utput[\\\/]",
+        ApprovalMode.AUTO_APPROVE, is_regex=True,
+    ),
+    CommandRule(
+        r"open\s*\(\s*['\"].*[Oo]utput[\\\/].*['\"],\s*['\"]w",
+        ApprovalMode.AUTO_APPROVE, is_regex=True,
+    ),
     CommandRule(r"\bformat\s+[a-zA-Z]:", ApprovalMode.DENY, is_regex=True,
                 undo_hint="Formatting is irreversible. Use Diskpart carefully."),
     CommandRule(r"\bFormat-Volume\b", ApprovalMode.DENY, is_regex=True,

@@ -120,13 +120,19 @@ class Plan(BaseModel):
         """Merge an updated plan with this one.
 
         Keeps completed steps from the original and appends new pending steps
-        from the updated plan. Filters out any steps from updated that have
-        the same ID as already-completed steps (prevents duplicates).
+        from the updated plan. Deduplicates by both step ID and description
+        prefix (first 80 chars) to prevent the LLM from re-adding already-done
+        work under fresh IDs.
         """
         completed = [s for s in self.steps if s.is_done()]
         completed_ids = {s.id for s in completed}
-        # Only add fresh steps that aren't already completed
-        fresh = [s for s in updated.steps if not s.is_done() and s.id not in completed_ids]
+        completed_descs = {s.description.strip().lower()[:80] for s in completed}
+        fresh = [
+            s for s in updated.steps
+            if not s.is_done()
+            and s.id not in completed_ids
+            and s.description.strip().lower()[:80] not in completed_descs
+        ]
         return self.model_copy(update={"steps": completed + fresh, "status": PlanStatus.UPDATED})
 
     def is_complete(self) -> bool:
