@@ -271,7 +271,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         }
 
         def _build_sub_flow(session, spec, llm, tools):
-            mediator = self._build_mediator()
+            mediator = self.build_mediator()
             return PlanActFlow(
                 llm=llm,
                 tools=tools,

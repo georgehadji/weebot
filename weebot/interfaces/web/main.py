@@ -240,10 +240,8 @@ def create_app() -> FastAPI:
     @app.get("/metrics")
     async def metrics(request: Request):
         """Prometheus metrics endpoint. Returns metrics in text format."""
-        from weebot.infrastructure.observability.prometheus_adapter import (
-            PrometheusMetricsAdapter,
-        )
-        adapter = PrometheusMetricsAdapter()
+        container: Container = request.app.state.container
+        adapter = container.get(MetricsPort)
         return Response(
             content=adapter.render(),
             media_type="text/plain; charset=utf-8",

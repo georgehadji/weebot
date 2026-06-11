@@ -26,7 +26,7 @@ class WindowsToastSubscriber:
         if self._channel is None:
             return
 
-        from weebot.application.ports.notification_port import Notification, NotificationLevel
+        from weebot.infrastructure.notifications.notifications import Notification, NotificationLevel
 
         notification: Optional[Notification] = None
 
