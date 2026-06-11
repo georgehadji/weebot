@@ -11,21 +11,22 @@ from weebot.domain.models.event import AgentEvent, DoneEvent, ErrorEvent, StepEv
 class WindowsToastSubscriber:
     """Subscribes to agent events and shows Windows toast notifications for key milestones."""
 
-    def __init__(self, app_name: str = "weebot") -> None:
+    def __init__(self, app_name: str = "weebot", channel: Optional[object] = None) -> None:
         self._app_name = app_name
-        self._channel = None
-        try:
-            from weebot.infrastructure.notifications.notifications import WindowsToastChannel
-            self._channel = WindowsToastChannel(app_name=app_name)
-        except Exception:
-            pass
+        self._channel = channel
+        if self._channel is None:
+            try:
+                from weebot.infrastructure.notifications.notifications import WindowsToastChannel
+                self._channel = WindowsToastChannel(app_name=app_name)
+            except Exception:
+                pass
 
     async def on_event(self, event: AgentEvent) -> None:
         """Handle an agent event and show a toast if relevant."""
         if self._channel is None:
             return
 
-        from weebot.infrastructure.notifications.notifications import Notification, NotificationLevel
+        from weebot.application.ports.notification_port import Notification, NotificationLevel
 
         notification: Optional[Notification] = None
 

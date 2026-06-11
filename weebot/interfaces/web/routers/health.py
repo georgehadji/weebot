@@ -187,11 +187,13 @@ async def liveness_check() -> dict:
 
 
 @router.get("/prometheus")
-async def prometheus_metrics():
+async def prometheus_metrics(request: Request):
     """Prometheus exposition format — consumed by Prometheus / Grafana."""
-    from weebot.infrastructure.observability.metrics import metrics_text
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(metrics_text(), media_type="text/plain")
+    container: Container = request.app.state.container
+    from weebot.application.ports.metrics_port import MetricsPort
+    adapter = container.get(MetricsPort)
+    return PlainTextResponse(adapter.render(), media_type="text/plain")
 
 
 @router.get("/metrics")
