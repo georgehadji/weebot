@@ -11,7 +11,6 @@ import time as _timer
 from typing import Any, Dict, Optional
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.application.ports.llm_port import LLMPort
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.tools.base import ToolResult
 
