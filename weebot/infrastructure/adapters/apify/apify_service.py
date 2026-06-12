@@ -16,10 +16,27 @@ import asyncio
 import json
 import logging
 import os
+import re as _re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
+
+# Apify identifier format constraints (from Apify API documentation).
+# actor_id: "{owner}/{name}" — both segments alphanumeric, dashes, underscores, dots.
+_ACTOR_ID_RE = _re.compile(r'^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$')
+# run_id and dataset_id: alphanumeric strings, 15–30 chars.
+_RESOURCE_ID_RE = _re.compile(r'^[a-zA-Z0-9]{15,30}$')
+
+
+def _validate_actor_id(actor_id: str) -> None:
+    if not _ACTOR_ID_RE.match(actor_id):
+        raise ValueError(f"Invalid actor_id format: {actor_id!r}")
+
+
+def _validate_resource_id(rid: str, name: str) -> None:
+    if not _RESOURCE_ID_RE.match(rid):
+        raise ValueError(f"Invalid {name} format: {rid!r}")
 
 from weebot.infrastructure.external_service_integration import (
     ExternalService,
@@ -102,7 +119,10 @@ class ApifyService(ExternalService):
         handler = handlers.get(operation)
         if handler is None:
             return ServiceResponse(success=False, error=f"Unknown operation: {operation}")
-        return await handler(**kwargs)
+        try:
+            return await handler(**kwargs)
+        except ValueError as exc:
+            return ServiceResponse(success=False, error=str(exc), status_code=400)
 
     # ── operations ─────────────────────────────────────────────────────────
 
@@ -113,6 +133,7 @@ class ApifyService(ExternalService):
         memory_mbytes: int = 256,
     ) -> ServiceResponse:
         """POST to sync endpoint — blocks until actor finishes, returns items."""
+        _validate_actor_id(actor_id)
         # Apify uses ~ instead of / in actor IDs for URL embedding
         url_id = actor_id.replace("/", "~")
         url = f"{_APIFY_BASE}/acts/{url_id}/runs/sync-get-dataset-items"
@@ -128,6 +149,7 @@ class ApifyService(ExternalService):
         memory_mbytes: int = 256,
     ) -> ServiceResponse:
         """Start an async actor run; returns run metadata (run_id, dataset_id)."""
+        _validate_actor_id(actor_id)
         url_id = actor_id.replace("/", "~")
         url = f"{_APIFY_BASE}/acts/{url_id}/runs"
         params = {"memory": memory_mbytes}
@@ -136,12 +158,14 @@ class ApifyService(ExternalService):
         )
 
     async def _get_run(self, run_id: str) -> ServiceResponse:
+        _validate_resource_id(run_id, "run_id")
         url = f"{_APIFY_BASE}/actor-runs/{run_id}"
         return await self._get(url, params=None, session=self._fast_session)
 
     async def _get_dataset_items(
         self, dataset_id: str, limit: int = 100
     ) -> ServiceResponse:
+        _validate_resource_id(dataset_id, "dataset_id")
         url = f"{_APIFY_BASE}/datasets/{dataset_id}/items"
         return await self._get(url, params={"limit": limit}, session=self._fast_session)
 

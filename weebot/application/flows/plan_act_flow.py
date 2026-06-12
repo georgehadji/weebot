@@ -345,11 +345,12 @@ class PlanActFlow(BaseFlow):
                             type(state).__name__, prev_name, prev_duration)
         else:
             self._log.info("Transition to state: %s", type(state).__name__)
-        # Trace the state transition
-        span = self._get_tracing_port().start_span(f"state.{type(state).__name__}")
-        span.set_attribute("flow.session_id", self._session.id)
-        span.set_attribute("state.name", type(state).__name__)
-        span.end()
+        # Trace the state transition (no-op if tracing port not wired)
+        if self._tracing_port is not None:
+            span = self._tracing_port.start_span(f"state.{type(state).__name__}")
+            span.set_attribute("flow.session_id", self._session.id)
+            span.set_attribute("state.name", type(state).__name__)
+            span.end()
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         import time as _time
@@ -562,17 +563,11 @@ class PlanActFlow(BaseFlow):
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     def _get_persistence_adapter(self):
-        """Resolve session persistence adapter lazily from DI container.
+        """Return the session persistence adapter injected at construction time.
 
-        Returns None if the adapter is not registered (backward compat).
+        Returns None when no adapter was provided (backward-compat: caller already
+        guards with ``if adapter is not None``).
         """
-        if self._persistence_adapter is None:
-            from weebot.application.di import Container
-            c = Container()
-            try:
-                self._persistence_adapter = c.get("session_persistence")
-            except KeyError:
-                return None
         return self._persistence_adapter
 
     async def _maybe_save_checkpoint(self) -> None:
@@ -619,11 +614,5 @@ class PlanActFlow(BaseFlow):
             )
 
     def _get_tracing_port(self):
-        """Resolve tracing port lazily from DI container."""
-        if self._tracing_port is None:
-            from weebot.application.di import Container
-            from weebot.application.ports.tracing_port import TracingPort
-            c = Container()
-            c.configure_defaults()
-            self._tracing_port = c.get(TracingPort)
+        """Return the tracing port injected at construction time, or None."""
         return self._tracing_port

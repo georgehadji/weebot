@@ -15,8 +15,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from weebot.application.di import Container
-from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.metrics_port import MetricsPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.web.routers import sessions_router, models_router, health_router, dashboard_router, behavior_router
 from weebot.interfaces.web.routers.ops_router import router as ops_router
 from weebot.interfaces.web.routers.chat_router import router as chat_router
@@ -117,7 +118,13 @@ WEBSOCKET_TEST_HTML = """
         function addMessage(type, content) {
             const div = document.createElement('div');
             div.className = 'message';
-            div.innerHTML = `<strong>${type}:</strong> <pre>${content}</pre>`;
+            const strong = document.createElement('strong');
+            strong.textContent = type + ':';
+            const pre = document.createElement('pre');
+            pre.textContent = content;
+            div.appendChild(strong);
+            div.appendChild(document.createTextNode(' '));
+            div.appendChild(pre);
             document.getElementById('messages').appendChild(div);
             document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
         }
@@ -250,7 +257,7 @@ def create_app() -> FastAPI:
         logger.exception("Unhandled exception: %s", exc)
         # Increment exception counter
         try:
-            # Lazy import: metrics are imported inside exception handler
+            from weebot.infrastructure.observability import metrics as _m
             _m.exceptions_total.labels(exception_type=type(exc).__name__).inc()
         except Exception:
             pass
@@ -302,17 +309,17 @@ def create_app() -> FastAPI:
                 await websocket.close(code=4001, reason="Unauthorized")
                 return
 
-        logger.info(f"WebSocket /ws connection from {client_host}")
+        logger.info("WebSocket /ws connection from %s", client_host)
         
         await manager.connect(websocket)
         try:
             while True:
                 data = await websocket.receive_text()
-                logger.debug(f"Received: {data}")
+                logger.debug("Received: %s", data)
         except WebSocketDisconnect:
-            logger.info(f"WebSocket /ws disconnected from {client_host}")
+            logger.info("WebSocket /ws disconnected from %s", client_host)
         except Exception as e:
-            logger.warning(f"WebSocket /ws error: {e}")
+            logger.warning("WebSocket /ws error: %s", e)
         finally:
             await manager.disconnect(websocket)
     
@@ -329,17 +336,17 @@ def create_app() -> FastAPI:
                 await websocket.close(code=4001, reason="Unauthorized")
                 return
 
-        logger.info(f"WebSocket /ws/sessions/{session_id} connection from {client_host}")
+        logger.info("WebSocket /ws/sessions/%s connection from %s", session_id, client_host)
         
         await manager.connect(websocket, session_id)
         try:
             while True:
                 data = await websocket.receive_text()
-                logger.debug(f"Received for session {session_id}: {data}")
+                logger.debug("Received for session %s: %s", session_id, data)
         except WebSocketDisconnect:
-            logger.info(f"WebSocket /ws/sessions/{session_id} disconnected from {client_host}")
+            logger.info("WebSocket /ws/sessions/%s disconnected from %s", session_id, client_host)
         except Exception as e:
-            logger.warning(f"WebSocket /ws/sessions/{session_id} error: {e}")
+            logger.warning("WebSocket /ws/sessions/%s error: %s", session_id, e)
         finally:
             await manager.disconnect(websocket, session_id)
     

@@ -47,11 +47,9 @@ async def list_sessions(
     status: Optional[str] = Query(default=None, description="Filter by status"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    state_repo: StateRepositoryPort = Depends(get_state_repo),  # TODO: proper DI
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionListResponse:
     """List all sessions with optional filtering."""
-    # TODO: Implement proper dependency injection
-    
     sessions = await state_repo.list_sessions(
         user_id=user_id, status=status, limit=limit, offset=offset
     )
@@ -79,8 +77,8 @@ async def create_session(
     )
     
     await state_repo.save_session(session)
-    logger.info(f"Created session {session.id}")
-    
+    logger.info("Created session %s", session.id)
+
     return _session_to_response(session)
 
 
@@ -110,26 +108,27 @@ async def delete_session(
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
     await state_repo.delete_session(session_id)
-    logger.info(f"Deleted session {session_id}")
-    
+    logger.info("Deleted session %s", session_id)
+
     return {"message": f"Session {session_id} deleted"}
 
 
 @router.post("/{session_id}/cancel")
 async def cancel_session(
     session_id: str,
+    http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionResponse:
     """Cancel a running session."""
-    
+
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    
+
     # Cancel via TaskRunner if available, otherwise just mark status.
     # The TaskRunner owns the running asyncio.Task — we must stop it
     # or it will overwrite the FAILED status when it finishes.
-    container = request.app.state.container
+    container = http_request.app.state.container
     try:
         from weebot.application.services.task_runner import TaskRunner
         task_runner = container.get(TaskRunner)
@@ -148,7 +147,7 @@ async def cancel_session(
         if session is None:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
-    logger.info(f"Cancelled session {session_id}")
+    logger.info("Cancelled session %s", session_id)
     return _session_to_response(session)
 
 
@@ -176,7 +175,7 @@ async def resume_session(
     session = session.set_status(SessionStatus.RUNNING)
     await state_repo.save_session(session)
 
-    logger.info(f"Resumed session {session_id}")
+    logger.info("Resumed session %s", session_id)
     return _session_to_response(session)
 
 
@@ -219,11 +218,14 @@ async def run_session(
 
         from weebot.interfaces.factories import build_tools
         tools = await build_tools(role="admin")
-
-        factory = task_runner.create_plan_act_factory(
-            llm=llm, tools=tools, event_bus=event_bus, model=model
-        )
-        session = await task_runner.start_session(session, factory)
+        try:
+            factory = task_runner.create_plan_act_factory(
+                llm=llm, tools=tools, event_bus=event_bus, model=model
+            )
+            session = await task_runner.start_session(session, factory)
+        except Exception:
+            await tools.teardown()
+            raise
     except Exception as exc:
         logger.exception("Failed to start session %s: %s", session_id, exc)
         raise HTTPException(status_code=500, detail=f"Failed to start task: {exc}")

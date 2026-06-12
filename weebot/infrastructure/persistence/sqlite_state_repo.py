@@ -29,30 +29,32 @@ class SQLiteStateRepository(StateRepositoryPort):
     def __init__(self, db_path: str = "./weebot_sessions.db"):
         """
         Initialize repository with connection pool.
-        
+
         Args:
             db_path: Path to SQLite database file
         """
         self._db_path = Path(db_path)
         self._pool: Optional[SQLiteConnectionPool] = None
         self._initialized = False
-    
+        # Per-instance FTS5 index tracker (session_id → event count indexed).
+        # Must be instance-level to avoid cross-instance pollution in tests.
+        self._fts5_indexed: dict[str, int] = {}
+
     async def _get_pool(self) -> SQLiteConnectionPool:
         """Get or initialize the connection pool."""
         if self._pool is None:
-            self._pool = await get_or_create_pool(
+            pool = await get_or_create_pool(
                 self._db_path,
                 max_read_connections=5,
-                enable_wal=True
+                enable_wal=True,
             )
-            if not self._initialized:
-                await self._ensure_schema()
-                self._initialized = True
+            await self._ensure_schema(pool)
+            self._pool = pool  # only assign after schema is confirmed ready
+            self._initialized = True
         return self._pool
-    
-    async def _ensure_schema(self) -> None:
+
+    async def _ensure_schema(self, pool: SQLiteConnectionPool) -> None:
         """Create tables if they don't exist."""
-        pool = await self._get_pool()
         
         async with pool.acquire_write() as conn:
             await conn.execute(
@@ -109,11 +111,25 @@ class SQLiteStateRepository(StateRepositoryPort):
                 ON pending_opportunities(presented)
                 """
             )
-            # ── FTS5 event search table (M2) ──────────────
+            # ── FTS5 event search table ──────────────────
             await ensure_fts5_table(conn)
 
-            # ────────────────────────────────────────────────
-            
+            # ── Behavioral rules ─────────────────────────
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS behavioral_rules (
+                    id TEXT PRIMARY KEY,
+                    rule_text TEXT NOT NULL,
+                    source_session_id TEXT NOT NULL DEFAULT '',
+                    source_message TEXT NOT NULL DEFAULT '',
+                    scope TEXT NOT NULL DEFAULT 'global',
+                    created_at TEXT NOT NULL,
+                    applied_count INTEGER NOT NULL DEFAULT 0,
+                    last_applied_at TEXT
+                )
+                """
+            )
+
             logger.debug("Database schema ensured")
     
     async def save_session(self, session: Session) -> None:
@@ -260,47 +276,35 @@ class SQLiteStateRepository(StateRepositoryPort):
         
         async with pool.acquire_write() as conn:
             cursor = await conn.execute(
-                """
-                UPDATE sessions 
-                SET status = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (status.value, datetime.now(timezone.utc).isoformat(), session_id)
+                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
+                (status.value, datetime.now(timezone.utc).isoformat(), session_id),
             )
-            await cursor.close()
-            
-            # Check if any row was updated
-            # Note: aiosqlite doesn't expose rowcount easily, so we check via SELECT
-            # This is a bit inefficient but keeps the API clean
-        
-        # Verify the update by loading the session
-        session = await self.load_session(session_id)
-        if session and session.status == status:
-            logger.debug(f"Session {session_id} status updated to {status.value}")
-            return True
-        return False
+            updated = cursor.rowcount > 0
+        if updated:
+            logger.debug("Session %s status updated to %s", session_id, status.value)
+        return updated
     
     async def delete_session(self, session_id: str) -> bool:
         """
         Delete a session.
-        
+
         Returns:
             True if session was found and deleted, False otherwise
         """
         pool = await self._get_pool()
-        
-        # Check if exists first
-        existing = await self.load_session(session_id)
-        if not existing:
+
+        row = await pool.execute_read(
+            "SELECT COUNT(*) as cnt FROM sessions WHERE id = ?",
+            (session_id,),
+            fetch_all=False,
+        )
+        if not row or row["cnt"] == 0:
             return False
-        
+
         async with pool.acquire_write() as conn:
-            await conn.execute(
-                "DELETE FROM sessions WHERE id = ?",
-                (session_id,)
-            )
-        
-        logger.debug(f"Session deleted: {session_id}")
+            await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+        logger.debug("Session deleted: %s", session_id)
         # Clear FTS5 index for this session
         try:
             from weebot.infrastructure.persistence.fts5_search import clear_session_events
@@ -308,12 +312,12 @@ class SQLiteStateRepository(StateRepositoryPort):
                 await clear_session_events(conn, session_id)
         except Exception:
             pass
+        self._fts5_indexed.pop(session_id, None)
         return True
 
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
-        """Full-text search across all indexed sessions (M2)."""
-        from weebot.infrastructure.persistence.fts5_search import search_events
-
+        """Full-text search across all indexed sessions."""
+        query = query[:500]  # prevent FTS5 tokeniser overload on unbounded input
         pool = await self._get_pool()
         return await search_events(pool, query, limit=limit)
 
@@ -337,8 +341,6 @@ class SQLiteStateRepository(StateRepositoryPort):
     
     # Lazily-initialized TypeAdapter for AgentEvent union
     _event_adapter = None
-    # Tracks how many events have been FTS5-indexed per session (avoids re-index)
-    _fts5_indexed: dict[str, int] = {}
 
     @classmethod
     def _get_event_adapter(cls):
@@ -394,20 +396,6 @@ class SQLiteStateRepository(StateRepositoryPort):
         async with pool.acquire_write() as conn:
             await conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS behavioral_rules (
-                    id TEXT PRIMARY KEY,
-                    rule_text TEXT NOT NULL,
-                    source_session_id TEXT NOT NULL DEFAULT '',
-                    source_message TEXT NOT NULL DEFAULT '',
-                    scope TEXT NOT NULL DEFAULT 'global',
-                    created_at TEXT NOT NULL,
-                    applied_count INTEGER NOT NULL DEFAULT 0,
-                    last_applied_at TEXT
-                )
-                """,
-            )
-            await conn.execute(
-                """
                 INSERT OR REPLACE INTO behavioral_rules
                     (id, rule_text, source_session_id, source_message, scope,
                      created_at, applied_count, last_applied_at)
@@ -429,22 +417,6 @@ class SQLiteStateRepository(StateRepositoryPort):
         """Load all persisted behavioral rules."""
         from weebot.domain.models.behavioral_rule import BehavioralRule
         pool = await self._get_pool()
-        # Ensure table exists (may not if never written to)
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS behavioral_rules (
-                    id TEXT PRIMARY KEY,
-                    rule_text TEXT NOT NULL,
-                    source_session_id TEXT NOT NULL DEFAULT '',
-                    source_message TEXT NOT NULL DEFAULT '',
-                    scope TEXT NOT NULL DEFAULT 'global',
-                    created_at TEXT NOT NULL,
-                    applied_count INTEGER NOT NULL DEFAULT 0,
-                    last_applied_at TEXT
-                )
-                """,
-            )
         rows = await pool.execute_read(
             "SELECT * FROM behavioral_rules ORDER BY created_at DESC",
         )

@@ -109,15 +109,15 @@ class AsyncEventStore(EventStorePort):
         """Lazy-init connection pool."""
         if self._pool is None:
             from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
-            self._pool = await get_or_create_pool(
+            pool = await get_or_create_pool(
                 self.db_path, max_read_connections=3, enable_wal=True,
             )
-            await self._ensure_schema()
+            await self._ensure_schema(pool)
+            self._pool = pool  # only assign after schema is confirmed ready
         return self._pool
 
-    async def _ensure_schema(self) -> None:
+    async def _ensure_schema(self, pool) -> None:
         """Create tables if they don't exist."""
-        pool = await self._get_pool()
         async with pool.acquire_write() as conn:
             await conn.executescript(
                 """
@@ -173,6 +173,12 @@ class AsyncEventStore(EventStorePort):
         """
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
+            # Ensure a parent sessions row exists so the UPDATE below is never a no-op.
+            await conn.execute(
+                "INSERT OR IGNORE INTO sessions (id, started_at, status) "
+                "VALUES (?, datetime('now'), 'active')",
+                (session_id,),
+            )
             cursor = await conn.execute(
                 """INSERT INTO events
                    (session_id, event_type, data_json, cost, model, tokens_used)
@@ -407,15 +413,17 @@ class AsyncEventStore(EventStorePort):
 
         pool = await self._get_pool()
         modifier = f"-{days} days"
-        rows = await pool.execute_read(
-            "SELECT id FROM sessions WHERE started_at < datetime('now', ?)",
-            (modifier,),
-        )
-        count = 0
-        for row in rows:
-            if await self.delete_session(row["id"]):
-                count += 1
-        return count
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                "DELETE FROM events WHERE session_id IN "
+                "(SELECT id FROM sessions WHERE started_at < datetime('now', ?))",
+                (modifier,),
+            )
+            cursor = await conn.execute(
+                "DELETE FROM sessions WHERE started_at < datetime('now', ?)",
+                (modifier,),
+            )
+            return cursor.rowcount
 
     async def get_stats(self) -> dict[str, Any]:
         """Get database statistics."""

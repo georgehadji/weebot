@@ -375,7 +375,10 @@ class CircuitBreaker:
                 "state": entry.state.value,
                 "failure_count": entry.failure_count,
                 "success_count": entry.success_count,
-                "last_failure_time": entry.last_failure_time,
+                # Store both timestamps as offsets from now so they survive restarts.
+                "last_failure_time_offset": (
+                    now - entry.last_failure_time if entry.last_failure_time else None
+                ),
                 "last_state_change_offset": now - entry.last_state_change,
             })
         return states
@@ -388,11 +391,14 @@ class CircuitBreaker:
         """
         now = time.monotonic()
         for s in states:
+            lft_offset = s.get("last_failure_time_offset")
+            # Backward-compat: old files used raw "last_failure_time" key — treat as 0.
+            last_failure_time = now - lft_offset if lft_offset is not None else 0.0
             entry = _BreakerEntry(
                 state=BreakerState(s["state"]),
                 failure_count=s["failure_count"],
                 success_count=s.get("success_count", 0),
-                last_failure_time=s.get("last_failure_time", 0.0),
+                last_failure_time=last_failure_time,
                 last_state_change=now - s.get("last_state_change_offset", 0.0),
             )
             self._breakers[s["entity_id"]] = entry
