@@ -35,6 +35,8 @@ coverage.xml
 # Logs / SQLite
 *.log
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 logs/
 
@@ -82,3 +84,18 @@ nul;
 # User persona files (auto-seeded, should not be committed)
 SOUL.md
 ~/.weebot/profiles/*/SOUL.md
+
+# Generated outputs and runtime artifacts
+/Output/
+/chrome_profile_copy/
+/playwright_profile/
+*.png
+*.pdf
+screen*.png
+desktop_screenshot.png
+
+# Research / paper text files (not source code)
+arxiv_*.xml
+arxiv_*.html
+paper_*.html
+skills-lock.json
