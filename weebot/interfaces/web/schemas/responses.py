@@ -58,6 +58,10 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Overall system status")
     components: List[HealthComponent] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    ws_token: Optional[str] = Field(
+        default=None,
+        description="WebSocket auth token (present when API key auth is enabled)",
+    )
 
 
 class MetricsResponse(BaseModel):

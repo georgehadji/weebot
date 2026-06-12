@@ -54,6 +54,16 @@ async def health_check(
         ))
         overall_status = "unhealthy"
     
+    # Resolve WebSocket token (for frontend auth)
+    ws_token: Optional[str] = None
+    try:
+        from weebot.config.settings import WeebotSettings
+        _ws_settings = WeebotSettings()
+        if _ws_settings.weebot_api_key:
+            ws_token = _ws_settings.weebot_api_key
+    except Exception:
+        pass
+
     # Check database
     try:
         sessions = await state_repo.list_sessions(limit=1)
@@ -147,6 +157,7 @@ async def health_check(
         status=overall_status,
         components=components,
         timestamp=datetime.utcnow(),
+        ws_token=ws_token,
     )
 
 
