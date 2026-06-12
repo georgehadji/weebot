@@ -7,7 +7,13 @@ import time
 from io import BytesIO
 from typing import ClassVar, Literal, Optional
 
-import pyautogui
+try:
+    import pyautogui
+    _PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    pyautogui = None  # type: ignore[assignment]
+    _PYAUTOGUI_AVAILABLE = False
+
 from PIL import Image, ImageDraw
 
 from weebot.tools.base import BaseTool, ToolResult
