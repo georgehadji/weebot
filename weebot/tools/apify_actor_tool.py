@@ -86,7 +86,6 @@ class ApifyActorTool(BaseTool):
         )
 
     async def health_check(self) -> bool:
-        from weebot.infrastructure.external_service_integration import ServiceStatus
-
+        # Compare by .value to avoid importing ServiceStatus from infrastructure
         status = await self.apify_service.health_check()
-        return status == ServiceStatus.HEALTHY
+        return getattr(status, "value", "") == "healthy"

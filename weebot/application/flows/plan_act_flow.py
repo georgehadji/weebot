@@ -309,6 +309,10 @@ class PlanActFlow(BaseFlow):
     def is_done(self) -> bool:
         return self._session.status == SessionStatus.COMPLETED
 
+    async def teardown(self) -> None:
+        if self._tools is not None:
+            await self._tools.teardown()
+
     def set_state(self, state: FlowState) -> None:
         """Change the current flow state.
 

@@ -195,6 +195,10 @@ class TaskRunner:
             await self._state_repo.save_session(session)
         finally:
             try:
+                await flow.teardown()
+            except Exception:
+                logger.debug("Flow teardown error for session %s", session_id, exc_info=True)
+            try:
                 _get_tr_metrics().session_active.dec()
             except Exception:
                 pass
@@ -258,8 +262,8 @@ class TaskRunner:
             sessions = [s for s in sessions if s.status == status_filter]
         return sessions
 
-    @staticmethod
     def create_plan_act_factory(
+        self,
         llm: LLMPort,
         tools: ToolCollection,
         event_bus: Optional[EventBusPort] = None,
@@ -267,6 +271,7 @@ class TaskRunner:
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances."""
         from weebot.application.flows.plan_act_flow import PlanActFlow
+        state_repo = self._state_repo
 
         def _factory(session: Session) -> BaseFlow:
             return PlanActFlow(
@@ -275,6 +280,6 @@ class TaskRunner:
                 session=session,
                 event_bus=event_bus,
                 model=model,
-                state_repo=self._state_repo,
+                state_repo=state_repo,
             )
         return _factory

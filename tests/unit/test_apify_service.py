@@ -172,6 +172,29 @@ class TestApifyServiceExecute:
         )
         assert not resp.success
         assert "401" in resp.error
+        # 4xx must NOT be retried — exactly one attempt
+        assert mock_session.request.call_count == 1
+        await service.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_server_error_is_retried(self, service):
+        """5xx responses should trigger the retry loop (call_count > 1)."""
+        mock_resp = _make_response(503, {"error": "Service Unavailable"})
+        mock_session = _make_session(mock_resp)
+
+        await service.initialize()
+        service._fast_session = mock_session
+        service._sync_session = mock_session
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            resp = await service.execute(
+                "run_actor_sync",
+                actor_id="apify/web-scraper",
+                run_input={},
+            )
+        assert not resp.success
+        # retry_attempts=2 means one retry → 2 total calls
+        assert mock_session.request.call_count == service.config.retry_attempts
         await service.shutdown()
 
     @pytest.mark.asyncio

@@ -19,3 +19,6 @@ class BaseFlow(ABC):
     def is_done(self) -> bool:
         """Return True if the flow has completed."""
         ...
+
+    async def teardown(self) -> None:
+        """Release resources held by the flow (e.g. tool service connections)."""
