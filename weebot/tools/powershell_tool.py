@@ -50,12 +50,13 @@ class PowerShellTool(BaseTool):
 
     def __init__(self, sandbox: Optional[SandboxPort] = None,
                  tool_config: Optional[ToolConfig] = None):
+        import logging as _logging
         super().__init__()
         if sandbox is None:
-            from weebot.application.di import Container
-            c = Container()
-            c.configure_defaults()
-            sandbox = c.get(SandboxPort)
+            _logging.getLogger(__name__).warning(
+                "PowerShellTool: no SandboxPort injected — "
+                "execution calls will return an error until a sandbox is set"
+            )
         self._sandbox = sandbox
         self._tool_config = tool_config
 
@@ -191,6 +192,11 @@ class PowerShellTool(BaseTool):
             effective_timeout = 30.0
 
         # ── Route through SandboxPort (no direct subprocess) ──
+        if self._sandbox is None:
+            return ToolResult(
+                output="",
+                error="powershell_execute is unavailable: no SandboxPort was injected at construction.",
+            )
         try:
             s_result = await self._sandbox.execute_shell(
                 script=command,

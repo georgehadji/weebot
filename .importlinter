@@ -43,10 +43,8 @@ ignore_imports =
     # Tools use lazy DI fallbacks to resolve services at runtime.
     # These are accepted patterns — the DI container itself owns the sqlite3 connection.
     weebot.tools.audit_tool -> weebot.application.di
-    weebot.tools.bash_tool -> weebot.application.di
     weebot.tools.knowledge_tool -> weebot.application.di
     weebot.tools.persistent_memory -> weebot.application.di
-    weebot.tools.powershell_tool -> weebot.application.di
     weebot.tools.tool_registry -> weebot.application.di
     weebot.tools.video_ingest_tool -> weebot.application.di
     weebot.tools.voice_input_tool -> weebot.application.di

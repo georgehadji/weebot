@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 from weebot.infrastructure.notifications import Notification, NotificationLevel
+from weebot.infrastructure.notifications.notifications import WindowsToastChannel
 
 
 class Test:
@@ -21,7 +22,7 @@ class Test:
         mock_toast = MagicMock()
         mock_toast_cls.return_value = mock_toast
         with patch.dict("sys.modules", {"winotify": MagicMock(Notification=mock_toast_cls)}):
-            ch = (app_name="weebot-test")
+            ch = WindowsToastChannel(app_name="weebot-test")
             result = await ch.send(self._make_notification())
         assert result is True
         mock_toast.show.assert_called_once()
@@ -30,7 +31,7 @@ class Test:
     async def test_send_returns_false_when_winotify_missing(self):
         # None sentinel causes ImportError on `import winotify` in CPython
         with patch.dict("sys.modules", {"winotify": None}):
-            ch = (app_name="weebot-test")
+            ch = WindowsToastChannel(app_name="weebot-test")
             result = await ch.send(self._make_notification())
         assert result is False
 
@@ -41,11 +42,11 @@ class Test:
         mock_winotify.Notification.return_value = mock_toast
         mock_winotify.audio = MagicMock()
         with patch.dict("sys.modules", {"winotify": mock_winotify}):
-            ch = (app_name="weebot-test")
+            ch = WindowsToastChannel(app_name="weebot-test")
             await ch.send(self._make_notification(category="urgent"))
         mock_toast.set_audio.assert_called_once_with(mock_winotify.audio.Default, loop=True)
 
     def test_category_to_icon_mapping(self):
-        ch = (app_name="weebot-test")
+        ch = WindowsToastChannel(app_name="weebot-test")
         assert ch._icon_for_category("urgent") == "ms-appx:///Assets/StoreLogo.png"
         assert ch._icon_for_category("info") == ch._icon_for_category("unknown_cat")

@@ -120,19 +120,13 @@ class BashTool(BaseTool):
                 When None (e.g., constructed by RoleBasedToolRegistry),
                 uses the default sandbox from weebot.application.di.
         """
+        import logging as _logging
         super().__init__()
         if sandbox is None:
-            try:
-                from weebot.application.di import Container
-                container = Container()
-                container.configure_defaults()
-                sandbox = container.get(SandboxPort)
-            except Exception as _exc:
-                raise RuntimeError(
-                    f"BashTool requires a SandboxPort. "
-                    f"Inject via __init__(sandbox=...) or configure DI container. "
-                    f"Fallback failed: {_exc}"
-                ) from _exc
+            _logging.getLogger(__name__).warning(
+                "BashTool: no SandboxPort injected — "
+                "execution calls will return an error until a sandbox is set"
+            )
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(
@@ -396,6 +390,11 @@ class BashTool(BaseTool):
             )
 
         # --- Run in sandbox (via SandboxPort, injected by DI) ---
+        if self._sandbox is None:
+            return ToolResult(
+                output="",
+                error="bash_execute is unavailable: no SandboxPort was injected at construction.",
+            )
         import os
         is_windows = os.name == "nt"
         shell_type = "powershell" if (not use_wsl and is_windows) else "bash"
