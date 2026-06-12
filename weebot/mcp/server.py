@@ -193,7 +193,10 @@ class WeebotMCPServer:
             if rerank is not None:
                 _search.set_rerank(rerank)
         except Exception:
-            pass  # RerankPort not configured — use engine-order results
+            import logging as _log
+            _log.getLogger(__name__).debug(
+                "RerankPort not configured — search results use engine order", exc_info=True
+            )
 
         _editor = StrReplaceEditorTool()
 

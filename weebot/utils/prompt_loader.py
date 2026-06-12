@@ -5,7 +5,10 @@ hardcoding inline prompts.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "config" / "prompts"
 
@@ -21,5 +24,5 @@ def load_prompt_with_fallback(filename: str, default: str) -> str:
         if path.exists():
             return path.read_text(encoding="utf-8")
     except Exception:
-        pass
+        logger.debug("Failed to read prompt file %s — using inline fallback", path, exc_info=True)
     return default

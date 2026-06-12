@@ -39,7 +39,7 @@ class AsyncEventBus(EventBusPort):
                 event_type=getattr(event, "type", "unknown")
             ).inc()
         except Exception:
-            pass  # metrics must never break event delivery
+            logger.debug("Metrics increment failed — event delivery continues", exc_info=True)
 
         async with self._lock:
             handlers = list(self._handlers)

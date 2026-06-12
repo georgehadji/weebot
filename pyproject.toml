@@ -1,0 +1,50 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [
+    ".venv",
+    "Output/",
+    "weebot/GitNexus-main/",
+    "scripts/",
+    "examples/",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "B",    # flake8-bugbear (includes B110 try-except-pass)
+    "SIM",  # flake8-simplify
+    "UP",   # pyupgrade
+]
+ignore = [
+    # B006: mutable default argument — too noisy in existing code
+    "B006",
+    # SIM102: collapsible if — style preference
+    "SIM102",
+    # SIM108: ternary — sometimes less readable
+    "SIM108",
+    # UP007: X | Y union syntax — requires Python 3.10+ call sites
+    "UP007",
+]
+
+# B110: try-except-pass without logging.
+# All bare `except: pass` blocks must log at least at DEBUG level.
+# Violations are errors (not warnings) to block commits via pre-commit.
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed to use broad catches without logging
+"tests/**/*.py" = ["B110", "SIM"]
+
+[tool.bandit]
+skips = []
+exclude_dirs = [".venv", "Output", "weebot/GitNexus-main"]
+# B110: try-except-pass  — require logging in all except blocks
+tests = ["B110"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

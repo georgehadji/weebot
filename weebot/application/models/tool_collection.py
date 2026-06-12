@@ -109,6 +109,21 @@ class ToolCollection:
         """Look up a tool by name. Returns None if not found."""
         return self._tools.get(name)
 
+    async def teardown(self) -> None:
+        """Shut down all tools that expose a shutdown() coroutine.
+
+        Call this when the session or executor that owns this collection ends,
+        so that tools backed by external service connections (e.g. ApifyService
+        aiohttp sessions) can release their resources cleanly.
+        """
+        for tool in self._tools.values():
+            svc = getattr(tool, "apify_service", None)
+            if svc is not None and callable(getattr(svc, "shutdown", None)):
+                try:
+                    await svc.shutdown()
+                except Exception:
+                    logger.debug("Error shutting down service for tool %r", tool.name, exc_info=True)
+
     async def check_health(self) -> dict[str, bool]:
         """Run health checks for all tools; cache results for this session.
 

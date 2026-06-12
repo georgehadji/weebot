@@ -4,8 +4,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+import logging
+
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import AgentEvent, DoneEvent, ErrorEvent, StepEvent, WaitForUserEvent
+
+logger = logging.getLogger(__name__)
 
 
 class WindowsToastSubscriber:
@@ -19,7 +23,7 @@ class WindowsToastSubscriber:
                 from weebot.infrastructure.notifications.notifications import WindowsToastChannel
                 self._channel = WindowsToastChannel(app_name=app_name)
             except Exception:
-                pass
+                logger.debug("WindowsToastChannel unavailable — toast notifications disabled", exc_info=True)
 
     async def on_event(self, event: AgentEvent) -> None:
         """Handle an agent event and show a toast if relevant."""

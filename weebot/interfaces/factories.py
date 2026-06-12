@@ -183,4 +183,20 @@ async def build_tools(
     if extra_tools:
         combined.extend(extra_tools)
 
+    # Apify preset tools — opt-in via APIFY_API_KEY env var
+    import os
+    import logging as _logging
+    _apify_logger = _logging.getLogger("weebot.interfaces.factories")
+    if os.getenv("APIFY_API_KEY"):
+        try:
+            from weebot.infrastructure.adapters.apify import ApifyService
+            from weebot.tools.apify_presets import create_apify_preset_tools
+            apify_service = ApifyService()
+            await apify_service.initialize()
+            combined.extend(create_apify_preset_tools(apify_service))
+        except Exception:
+            _apify_logger.warning(
+                "Apify integration skipped — initialization failed", exc_info=True
+            )
+
     return ToolCollection(*combined)

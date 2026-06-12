@@ -193,8 +193,9 @@ class APIService(ExternalService):
                         if self.circuit_breaker:
                             await self.circuit_breaker.record_failure(entity_id)
                         
-                        if attempt < self.config.retry_attempts - 1:
-                            # Wait before retry
+                        is_client_error = 400 <= response.status < 500
+                        if attempt < self.config.retry_attempts - 1 and not is_client_error:
+                            # Wait before retry (4xx client errors are never retried)
                             await asyncio.sleep(2 ** attempt)  # Exponential backoff
                             continue
                         else:
