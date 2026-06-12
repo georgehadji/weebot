@@ -52,14 +52,10 @@ async def list_sessions(
     """List all sessions with optional filtering."""
     # TODO: Implement proper dependency injection
     
-    sessions = await state_repo.list_sessions(user_id=user_id)
-    
-    # Filter by status if provided
-    if status:
-        sessions = [s for s in sessions if s.status.value == status]
-    
-    total = len(sessions)
-    sessions = sessions[offset:offset + limit]
+    sessions = await state_repo.list_sessions(
+        user_id=user_id, status=status, limit=limit, offset=offset
+    )
+    total = await state_repo.count_sessions(user_id=user_id)
     
     return SessionListResponse(
         sessions=[_session_to_response(s) for s in sessions],
@@ -179,6 +175,58 @@ async def resume_session(
     session = session.add_event(MessageEvent(role="user", message=request.answer))
     session = session.set_status(SessionStatus.RUNNING)
     await state_repo.save_session(session)
-    
+
     logger.info(f"Resumed session {session_id}")
+    return _session_to_response(session)
+
+
+@router.post("/{session_id}/run", response_model=SessionResponse)
+async def run_session(
+    session_id: str,
+    http_request: Request,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> SessionResponse:
+    """Start executing a session's task via the PlanActFlow TaskRunner.
+
+    Called immediately after creating a session to kick off the background
+    Plan-Act loop. Returns immediately — the flow runs asynchronously and
+    events are streamed via WebSocket /ws/sessions/{session_id}.
+    """
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    if session.status not in (SessionStatus.IDLE, SessionStatus.FAILED):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session {session_id} is already {session.status.value}",
+        )
+
+    prompt = session.context.get("last_prompt", "")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Session has no prompt to execute")
+
+    container = http_request.app.state.container
+    try:
+        from weebot.application.services.task_runner import TaskRunner
+        from weebot.application.ports.llm_port import LLMPort
+        from weebot.application.ports.event_bus_port import EventBusPort
+
+        task_runner: TaskRunner = container.get(TaskRunner)
+        llm = container.get(LLMPort)
+        event_bus = container.get(EventBusPort)
+        model = session.context.get("model") or None
+
+        from weebot.interfaces.factories import build_tools
+        tools = await build_tools(role="admin")
+
+        factory = task_runner.create_plan_act_factory(
+            llm=llm, tools=tools, event_bus=event_bus, model=model
+        )
+        session = await task_runner.start_session(session, factory)
+    except Exception as exc:
+        logger.exception("Failed to start session %s: %s", session_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to start task: {exc}")
+
+    logger.info("Started background task for session %s", session_id)
     return _session_to_response(session)

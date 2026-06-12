@@ -160,14 +160,18 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     
-    # CORS middleware
+    # CORS middleware — allow only known origins, never wildcard with credentials
+    _allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    _extra_origin = os.getenv("WEEBOT_CORS_ORIGIN")
+    if _extra_origin:
+        _allowed_origins.append(_extra_origin)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "*",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ],
+        allow_origins=_allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -185,12 +189,10 @@ def create_app() -> FastAPI:
                 # Skip auth for health endpoint and WebSocket test UI
                 if request.url.path in ("/api/health", "/", "/api/prometheus"):
                     return await call_next(request)
-                # Skip auth for WebSocket upgrade
-                if request.url.path.startswith("/ws"):
-                    return await call_next(request)
 
                 api_key = request.headers.get("X-API-Key")
-                if api_key != _ws.weebot_api_key:
+                import hmac as _hmac
+                if not _hmac.compare_digest(api_key or "", _ws.weebot_api_key or ""):
                     return JSONResponse(
                         status_code=401,
                         content={"detail": "Unauthorized — provide valid X-API-Key header"},
@@ -258,6 +260,15 @@ def create_app() -> FastAPI:
     async def websocket_global(websocket: WebSocket) -> None:
         """Global WebSocket connection (receives all events)."""
         client_host = websocket.client.host if websocket.client else "unknown"
+
+        # WebSocket authentication check
+        if _ws.weebot_api_key:
+            token = websocket.query_params.get("token")
+            import hmac as _hmac
+            if not _hmac.compare_digest(token or "", _ws.weebot_api_key):
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+
         logger.info(f"WebSocket /ws connection from {client_host}")
         
         await manager.connect(websocket)
@@ -276,6 +287,15 @@ def create_app() -> FastAPI:
     async def websocket_session(websocket: WebSocket, session_id: str) -> None:
         """Session-specific WebSocket connection."""
         client_host = websocket.client.host if websocket.client else "unknown"
+
+        # WebSocket authentication check
+        if _ws.weebot_api_key:
+            token = websocket.query_params.get("token")
+            import hmac as _hmac
+            if not _hmac.compare_digest(token or "", _ws.weebot_api_key):
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+
         logger.info(f"WebSocket /ws/sessions/{session_id} connection from {client_host}")
         
         await manager.connect(websocket, session_id)

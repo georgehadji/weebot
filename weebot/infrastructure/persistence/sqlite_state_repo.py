@@ -137,6 +137,8 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
             events_data = events_data[1:]
             events_json = json.dumps(events_data, default=str)
+            # Reset FTS5 index tracker — truncated events need re-indexing
+            self._fts5_indexed.pop(session.id, None)
 
         async with pool.acquire_write() as conn:
             await conn.execute(
@@ -166,8 +168,10 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
             logger.debug(f"Session saved: {session.id}")
             
-            # Index events for FTS5 search (M2)
-            for event in session.events:
+            # Index only NEW events for FTS5 search (avoid write amplification)
+            last_indexed = self._fts5_indexed.get(session.id, 0)
+            new_events = session.events[last_indexed:]
+            for event in new_events:
                 event_type = getattr(event, "type", "unknown")
                 summary = getattr(event, "message", "") or getattr(event, "summary", "") or event_type
                 content = ""
@@ -179,6 +183,7 @@ class SQLiteStateRepository(StateRepositoryPort):
                     )
                 except Exception:
                     logger.warning("Failed to index event for FTS5", exc_info=True)
+            self._fts5_indexed[session.id] = len(session.events)
     
     async def load_session(self, session_id: str) -> Optional[Session]:
         """Load a session by ID."""
@@ -192,8 +197,11 @@ class SQLiteStateRepository(StateRepositoryPort):
         
         if not row:
             return None
-        
-        return self._row_to_session(row)
+
+        session = self._row_to_session(row)
+        # Seed FTS5 index count to avoid re-indexing existing events
+        self._fts5_indexed[session_id] = len(session.events)
+        return session
     
     async def list_sessions(
         self,
@@ -239,7 +247,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         
         rows = await pool.execute_read(query, tuple(params))
         
-        return [self._row_to_session(row) for row in rows]
+        return [self._row_to_session(row, load_events=False) for row in rows]
     
     async def update_session_status(self, session_id: str, status: SessionStatus) -> bool:
         """
@@ -329,6 +337,8 @@ class SQLiteStateRepository(StateRepositoryPort):
     
     # Lazily-initialized TypeAdapter for AgentEvent union
     _event_adapter = None
+    # Tracks how many events have been FTS5-indexed per session (avoids re-index)
+    _fts5_indexed: dict[str, int] = {}
 
     @classmethod
     def _get_event_adapter(cls):
@@ -338,20 +348,26 @@ class SQLiteStateRepository(StateRepositoryPort):
             cls._event_adapter = TypeAdapter(AgentEvent)
         return cls._event_adapter
 
-    def _row_to_session(self, row) -> Session:
-        """Convert a database row to Session domain model."""
+    def _row_to_session(self, row, load_events: bool = True) -> Session:
+        """Convert a database row to Session domain model.
+
+        Args:
+            row: Database row dict.
+            load_events: When False, skip deserializing events (use for list views).
+        """
         from weebot.domain.models.event import MessageEvent, AgentEvent
         
-        # Parse events JSON
-        events_raw = json.loads(row["events_json"] or "[]")
         events = []
-        adapter = self._get_event_adapter()
-        for e in events_raw:
-            try:
-                events.append(adapter.validate_python(e))
-            except Exception:
-                # Fallback for malformed events
-                events.append(MessageEvent(message=f"[unparseable event: {type(e).__name__}]"))
+        if load_events:
+            # Parse events JSON
+            events_raw = json.loads(row["events_json"] or "[]")
+            adapter = self._get_event_adapter()
+            for e in events_raw:
+                try:
+                    events.append(adapter.validate_python(e))
+                except Exception:
+                    # Fallback for malformed events
+                    events.append(MessageEvent(message=f"[unparseable event: {type(e).__name__}]"))
         
         return Session(
             id=row["id"],

@@ -39,8 +39,6 @@ def _sanitize_error(exc: BaseException) -> None:
             exc.args = (msg,) + exc.args[1:]
         except (AttributeError, TypeError):
             pass
-    LLMCache = None
-    CacheKey = None
 
 logger = logging.getLogger(__name__)
 

@@ -91,15 +91,17 @@ class PythonExecuteTool(BaseTool):
         """
         super().__init__()
         if sandbox is None:
-            import logging
-            logging.getLogger(__name__).warning(
-                "PythonExecuteTool: no SandboxPort injected — creating "
-                "ad-hoc Container. Inject through DI to share connections."
-            )
-            from weebot.application.di import Container
-            container = Container()
-            container.configure_defaults()
-            sandbox = container.get(SandboxPort)
+            try:
+                from weebot.application.di import Container
+                container = Container()
+                container.configure_defaults()
+                sandbox = container.get(SandboxPort)
+            except Exception as _exc:
+                raise RuntimeError(
+                    f"PythonExecuteTool requires a SandboxPort. "
+                    f"Inject via __init__(sandbox=...) or configure DI container. "
+                    f"Fallback failed: {_exc}"
+                ) from _exc
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(

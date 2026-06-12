@@ -122,10 +122,17 @@ class BashTool(BaseTool):
         """
         super().__init__()
         if sandbox is None:
-            from weebot.application.di import Container
-            container = Container()
-            container.configure_defaults()
-            sandbox = container.get(SandboxPort)
+            try:
+                from weebot.application.di import Container
+                container = Container()
+                container.configure_defaults()
+                sandbox = container.get(SandboxPort)
+            except Exception as _exc:
+                raise RuntimeError(
+                    f"BashTool requires a SandboxPort. "
+                    f"Inject via __init__(sandbox=...) or configure DI container. "
+                    f"Fallback failed: {_exc}"
+                ) from _exc
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(
@@ -285,7 +292,7 @@ class BashTool(BaseTool):
         if not secret:
             return False
 
-        expected = hmac.new(
+        expected = hmac.HMAC(
             secret.encode("utf-8"),
             command.encode("utf-8"),
             hashlib.sha256,
