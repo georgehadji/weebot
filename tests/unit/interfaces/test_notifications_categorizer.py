@@ -1,6 +1,6 @@
 """Unit tests for NotificationCategorizer."""
 import pytest
-from weebot.notifications_categorizer import NotificationCategorizer, UserRule
+from weebot.infrastructure.notifications.notifications_categorizer import NotificationCategorizer, UserRule
 
 
 class TestBuiltinKeywords:

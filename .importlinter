@@ -99,10 +99,9 @@ ignore_imports =
     weebot.interfaces.web.routers.health -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.webhook -> weebot.application.di
-    # Health router checks browser pool and cache health directly.
+    # Health router checks browser pool health directly.
     weebot.interfaces.web.routers.health -> weebot.infrastructure.browser
     weebot.interfaces.web.routers.health -> weebot.infrastructure.browser.session_pool
-    weebot.interfaces.web.routers.health -> weebot.infrastructure.cache.llm_cache
     # Model selection routers query the model service.
     weebot.interfaces.web.routers.health -> weebot.application.services.model_selection
     weebot.interfaces.web.routers.models -> weebot.application.services.model_selection

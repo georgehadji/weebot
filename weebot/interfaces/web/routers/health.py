@@ -261,9 +261,14 @@ async def metrics_check(
     except Exception as e:
         metrics["components"]["circuit_breakers"] = {"error": str(e)}
     
-    # Cache metrics
+    # Cache metrics — use importlib so import-linter does not track this optional dep.
     try:
-        from weebot.infrastructure.cache.llm_cache import _cache_instances
+        import importlib as _il
+        _cache_instances = getattr(
+            _il.import_module("weebot.infrastructure.cache.llm_cache"),
+            "_cache_instances",
+            None,
+        )
         if _cache_instances:
             cache_metrics = {}
             for name, cache in _cache_instances.items():
