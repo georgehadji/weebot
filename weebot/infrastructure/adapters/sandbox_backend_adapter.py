@@ -50,10 +50,10 @@ class SandboxBackendAdapter(BackendPort):
         default_timeout: int = 60,
     ) -> None:
         if sandbox is None:
-            from weebot.application.di import Container
-            c = Container()
-            c.configure_defaults()
-            sandbox = c.get(SandboxPort)
+            raise ValueError(
+                "SandboxBackendAdapter requires a SandboxPort. "
+                "Inject via __init__(sandbox=...)."
+            )
         self._sandbox = sandbox
         self._default_timeout = default_timeout
 

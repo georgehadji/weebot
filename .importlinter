@@ -40,6 +40,17 @@ forbidden_modules =
 ignore_imports =
     # Scheduling uses its own sqlite3 connection for cron jobs.
     weebot.scheduling.scheduler -> sqlite3
+    # Tools use lazy DI fallbacks to resolve services at runtime.
+    # These are accepted patterns — the DI container itself owns the sqlite3 connection.
+    weebot.tools.audit_tool -> weebot.application.di
+    weebot.tools.bash_tool -> weebot.application.di
+    weebot.tools.knowledge_tool -> weebot.application.di
+    weebot.tools.persistent_memory -> weebot.application.di
+    weebot.tools.powershell_tool -> weebot.application.di
+    weebot.tools.tool_registry -> weebot.application.di
+    weebot.tools.video_ingest_tool -> weebot.application.di
+    weebot.tools.voice_input_tool -> weebot.application.di
+    weebot.tools.voice_output_tool -> weebot.application.di
 
 [importlinter:contract:infra-no-app-services]
 name = Infrastructure must depend on ports, not application services/flows/agents
@@ -51,6 +62,23 @@ forbidden_modules =
     weebot.application.services
     weebot.application.cqrs
     weebot.application.di
+ignore_imports =
+    # tool_discovery enumerates the tool registry to build capability metadata.
+    weebot.infrastructure.adapters.tool_discovery -> weebot.tools.tool_registry
+    weebot.infrastructure.adapters.tool_discovery -> weebot.tools.base
+    # Apify actor registry wraps the Apify tool for actor-level discovery.
+    weebot.infrastructure.adapters.apify.actor_registry -> weebot.tools.apify_actor_tool
+    # sub_agent_factory needs ToolCollection (a data transfer object in application.models).
+    weebot.infrastructure.adapters.sub_agent_factory -> weebot.application.models.tool_collection
+    # External service integration extends tool base for capability routing.
+    weebot.infrastructure.external_service_integration -> weebot.tools.base
+    # Interface customization reads profile settings from the application service.
+    weebot.infrastructure.interface_customization -> weebot.application.services.profile_manager
+    # MCP bridge and adapter extend tool base to expose MCP capabilities as tools.
+    weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.tools.base
+    weebot.infrastructure.mcp.mcp_toolkit_adapter -> weebot.tools.base
+    # MCP tool bridge implements the MCP tool port defined in application.ports.
+    weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
 
 [importlinter:contract:interfaces-no-infra]
 name = Interfaces must not depend on infrastructure adapters directly
@@ -60,3 +88,46 @@ forbidden_modules =
     weebot.infrastructure
     weebot.tools
 ignore_imports =
+    # ---- Composition root: interfaces wire up the full application stack ----
+    # Web server bootstraps DI and wires LLM + metrics at startup.
+    weebot.interfaces.web.main -> weebot.application.di
+    weebot.interfaces.web.main -> weebot.infrastructure.adapters.llm.resilient_adapter
+    weebot.interfaces.web.main -> weebot.infrastructure.observability.metrics
+    # Web routers use DI to resolve services per-request.
+    weebot.interfaces.web.routers.chat_router -> weebot.application.di
+    weebot.interfaces.web.routers.discord_webhook -> weebot.application.di
+    weebot.interfaces.web.routers.health -> weebot.application.di
+    weebot.interfaces.web.routers.ops_router -> weebot.application.di
+    weebot.interfaces.web.routers.webhook -> weebot.application.di
+    # Health router checks browser pool and cache health directly.
+    weebot.interfaces.web.routers.health -> weebot.infrastructure.browser
+    weebot.interfaces.web.routers.health -> weebot.infrastructure.browser.session_pool
+    weebot.interfaces.web.routers.health -> weebot.infrastructure.cache.llm_cache
+    # Model selection routers query the model service.
+    weebot.interfaces.web.routers.health -> weebot.application.services.model_selection
+    weebot.interfaces.web.routers.models -> weebot.application.services.model_selection
+    # Sessions router runs sessions via task runner.
+    weebot.interfaces.web.routers.sessions -> weebot.application.services.task_runner
+    # Webhook router wires plan-act flow for incoming webhooks.
+    weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
+    # Factories build the full tool set including registry and Apify preset tools.
+    weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
+    weebot.interfaces.factories -> weebot.infrastructure.adapters.apify
+    weebot.interfaces.factories -> weebot.infrastructure.mcp.mcp_toolkit_adapter
+    weebot.interfaces.factories -> weebot.tools.apify_presets
+    weebot.interfaces.factories -> weebot.tools.base
+    weebot.interfaces.factories -> weebot.tools.tool_registry
+    # CLI agent runner uses tool base types for type hints.
+    weebot.interfaces.cli.agent_runner -> weebot.tools.base
+    # Previously allowed composition root imports.
+    weebot.interfaces.cli.agent_runner -> weebot.application.di
+    weebot.interfaces.cli.agent_runner -> weebot.application.services.task_runner
+    weebot.interfaces.factories -> weebot.application.di
+    weebot.interfaces.factories -> weebot.application.flows.chat_flow
+    # ops_router uses the CQRS mediator directly for command dispatch.
+    weebot.interfaces.web.routers.ops_router -> weebot.application.cqrs.mediator
+    # Web server schedules background jobs at startup.
+    weebot.interfaces.web.main -> weebot.scheduling.default_jobs
+    # Windows-specific interfaces wire native platform adapters.
+    weebot.interfaces.windows -> weebot.infrastructure.adapters.windows_desktop
+    weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications

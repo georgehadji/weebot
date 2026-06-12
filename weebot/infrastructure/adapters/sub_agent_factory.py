@@ -163,24 +163,9 @@ class SubAgentFactory(SubAgentFactoryPort):
 
     def _build_flow(self, session: Session, spec: SubAgentSpec):
         """Build a PlanActFlow for a sub-agent session."""
-        if self._flow_factory is not None:
-            return self._flow_factory(session, spec, self._llm, self._tools)
-        # Fallback if no factory injected (backward compat)
-        from weebot.application.flows.plan_act_flow import PlanActFlow
-        from weebot.application.di import Container
-
-        container = Container()
-        container.configure_defaults()
-        mediator = container.build_mediator()
-
-        return PlanActFlow(
-            llm=self._llm,
-            tools=self._tools,
-            session=session,
-            event_bus=None,
-            model=spec.model or _TIER_MODEL[spec.tier],
-            mediator=mediator,
-            state_repo=container._maybe_get("state_repo_port"),
-            skill_prompt=None,
-            max_steps=spec.max_tool_calls,
-        )
+        if self._flow_factory is None:
+            raise RuntimeError(
+                "SubAgentFactory requires a flow_factory. "
+                "Inject via __init__(flow_factory=...)."
+            )
+        return self._flow_factory(session, spec, self._llm, self._tools)

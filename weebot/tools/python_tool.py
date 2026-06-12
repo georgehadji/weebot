@@ -89,27 +89,13 @@ class PythonExecuteTool(BaseTool):
             sandbox: SandboxPort implementation for code execution.
                 When None, resolves from the DI container.
         """
+        import logging as _logging
         super().__init__()
         if sandbox is None:
-            # Try resolving from DI container as fallback
-            try:
-                from weebot.application.di import Container
-                from weebot.application.ports.sandbox_port import SandboxPort as _SP
-                _c = Container()
-                sandbox = _c._maybe_get(_SP)
-            except Exception:
-                pass
-        if sandbox is None:
-            # Final fallback: use native sandbox
-            try:
-                from weebot.infrastructure.sandbox.factory import create_sandbox
-                sandbox = create_sandbox()
-            except Exception:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "PythonExecuteTool: no SandboxPort available — "
-                    "python_execute will be unavailable"
-                )
+            _logging.getLogger(__name__).warning(
+                "PythonExecuteTool: no SandboxPort injected — "
+                "python_execute calls will return an error until a sandbox is set"
+            )
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(
@@ -137,6 +123,12 @@ class PythonExecuteTool(BaseTool):
             ToolResult with combined stdout/stderr on success, or an error
             message describing why execution failed.
         """
+        if self._sandbox is None:
+            return ToolResult(
+                output="",
+                error="python_execute is unavailable: no SandboxPort was injected at construction.",
+            )
+
         effective_timeout = timeout if timeout is not None else self._default_timeout
 
         # --- Defense-in-depth: BashGuard catches shell injection ---
