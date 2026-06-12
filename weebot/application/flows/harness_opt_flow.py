@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, AsyncGenerator, Callable, Optional
+
+from weebot.domain.models.session import Session
 
 from weebot.application.cqrs.commands.harness_edit_commands import (
     ApplyHarnessEditsCommand,
@@ -83,8 +87,7 @@ class HarnessOptFlow(BaseFlow):
         held_in_tasks: Optional[list[str]] = None,
         held_out_tasks: Optional[list[str]] = None,
         max_proposals: int = 3,
-        min_traces: int = 10,
-        harness_path: str | None = None,
+        gate: Optional[RegressionGate] = None,
     ):
         self._llm = llm
         self._target = target
@@ -93,13 +96,10 @@ class HarnessOptFlow(BaseFlow):
         self._held_in_tasks = held_in_tasks or []
         self._held_out_tasks = held_out_tasks or []
         self._max_proposals = max_proposals
-        self._min_traces = min_traces
         self._done = False
 
-        # Stub regression gate — replaced in Phase 4
-        self._gate = RegressionGate(
-            flow_factory=flow_factory,
-        )
+        # Injected gate; defaults to stub (always-accept) for Phase 3
+        self._gate = gate or RegressionGate(flow_factory=flow_factory)
 
     def is_done(self) -> bool:
         return self._done
@@ -125,13 +125,10 @@ class HarnessOptFlow(BaseFlow):
             message=f"Loaded harness {harness.version}: {harness.description}",
         )
 
-        # 2. Evaluate: run current harness on held-in tasks
-        yield MessageEvent(message=f"Evaluating on {len(self._held_in_tasks)} held-in tasks...")
-        held_in_results = await self._evaluate_tasks(
-            self._held_in_tasks, version=harness.version,
-        )
-
-        # 3. Mine: query failure clusters from repository
+        # 2. Mine: query failure clusters from repository
+        # NOTE: held-in evaluation (running tasks against the current harness)
+        # is deferred to Phase 4 when RegressionGate consumes the results.
+        # Mining uses already-stored failure signatures from past runs.
         yield MessageEvent(message="Mining failure patterns...")
         bundle = await self._mine_failure_patterns()
 
@@ -210,9 +207,6 @@ class HarnessOptFlow(BaseFlow):
         """
         results = []
         for task_id in task_ids:
-            from weebot.domain.models.session import Session
-            import uuid
-
             session = Session(
                 id=f"harness-eval-{uuid.uuid4().hex[:8]}",
                 user_id="harness-opt",
@@ -305,7 +299,6 @@ class HarnessOptFlow(BaseFlow):
 
                 raw = response.content
                 # Strip markdown fences if present
-                import re
                 fence_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
                 if fence_match:
                     raw = fence_match.group(1)

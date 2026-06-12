@@ -57,6 +57,11 @@ class HarnessOptimizationTarget(OptimizationTarget):
     # ── OptimizationTarget properties ─────────────────────────────────
 
     @property
+    def is_loaded(self) -> bool:
+        """Whether the harness has been loaded from disk."""
+        return self._current is not None
+
+    @property
     def name(self) -> str:
         return self._current.version if self._current else "unloaded"
 

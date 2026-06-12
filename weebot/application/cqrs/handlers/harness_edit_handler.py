@@ -40,7 +40,7 @@ class ApplyHarnessEditsHandler(CommandHandler):
     async def handle(self, command: ApplyHarnessEditsCommand) -> CommandResult:
         try:
             # Ensure target has loaded the current harness
-            if self._target._current is None:
+            if not self._target.is_loaded:
                 await self._target.load()
 
             # Apply edits to produce a candidate

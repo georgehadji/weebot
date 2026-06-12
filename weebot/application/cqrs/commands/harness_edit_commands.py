@@ -23,8 +23,8 @@ class ApplyHarnessEditsCommand(Command):
         description="List of edit dicts with 'target', 'value', 'mechanism' keys",
     )
     harness_version: str = Field(
-        default="0.2.0",
-        description="Base harness version to apply edits to",
+        default="",
+        description="Base harness version to apply edits to (empty = use loaded)",
     )
     validation_tasks: list[str] = Field(
         default_factory=list,
