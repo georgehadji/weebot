@@ -40,6 +40,7 @@ class AgentToolsMixin:
         from weebot.tools.tool_registry import RoleBasedToolRegistry
         from weebot.config.constants import SUBAGENT_MAX_STEPS
         from weebot.application.ports.llm_port import LLMPort
+        from weebot.config.harness.schema import HarnessConfig
         registry = RoleBasedToolRegistry()
         tools = registry.create_tool_collection("admin", llm_port=self._maybe_get(LLMPort))
         cfg = PlanActFlowConfig(
@@ -51,5 +52,6 @@ class AgentToolsMixin:
             max_steps=SUBAGENT_MAX_STEPS,
             logger=self._maybe_get_str("structured_logger"),
             skill_retriever=self._maybe_get_str("skill_retriever"),
+            harness_config=self._maybe_get(HarnessConfig),
         )
         return PlanActFlow(cfg)

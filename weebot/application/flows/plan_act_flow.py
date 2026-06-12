@@ -23,6 +23,7 @@ from weebot.core.structured_logger import StructuredLogger
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
+from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
 
 
 class PlanStuckError(RuntimeError):
@@ -175,9 +176,6 @@ class PlanActFlow(BaseFlow):
         # ── Self-Harness: behavioural instruction block ──────────
         self._harness_instruction_block: str = ""
         if cfg.harness_config is not None:
-            from weebot.application.services.harness_prompt_assembler import (
-                HarnessPromptAssembler,
-            )
             try:
                 hc = cfg.harness_config
                 self._harness_instruction_block = HarnessPromptAssembler.assemble(
@@ -186,10 +184,11 @@ class PlanActFlow(BaseFlow):
                     subagents=hc.subagents,
                     skill_selection=hc.skill_selection,
                 )
-            except Exception as exc:
-                self._stdlib_logger.warning(
+            except (AttributeError, TypeError, ValueError) as exc:
+                self._stdlib_logger.error(
                     "Failed to assemble harness instructions: %s — running without harness block",
                     exc,
+                    exc_info=True,
                 )
         # ──────────────────────────────────────────────────────────
         # ── Timing bookkeeping ────────────────────────────────────

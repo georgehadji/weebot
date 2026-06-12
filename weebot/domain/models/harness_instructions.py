@@ -26,23 +26,19 @@ class InstructionConfig(BaseModel):
         description="Arbitrary text appended directly to the base system prompt",
     )
     bootstrap: str = Field(
-        default="Start by inspecting the workspace and identifying the "
-                 "smallest relevant edit surface.",
+        default="",
         description="Guidance for the very first action on a task",
     )
     execution: str = Field(
-        default="Prefer concrete repo changes over generic advice, and "
-                 "keep edits tightly scoped to the task.",
+        default="",
         description="Guidance for how to approach execution",
     )
     verification: str = Field(
-        default="Before concluding, verify the result with the most "
-                 "targeted command, file read, or test you can run.",
+        default="",
         description="Guidance for verifying outcomes",
     )
     failure_recovery: str = Field(
-        default="If a tool call fails, inspect the error and adapt; "
-                 "do not blindly retry the same action.",
+        default="",
         description="Guidance for recovering from tool-call failures",
     )
 

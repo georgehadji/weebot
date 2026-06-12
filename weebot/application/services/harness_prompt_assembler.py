@@ -62,33 +62,35 @@ class HarnessPromptAssembler:
         if instructions is None:
             return ""
 
-        parts = []
+        # Build each section independently to avoid positional misalignment
+        section_map = {
+            "bootstrap_section": (
+                f"- **Boot:** {instructions.bootstrap}\n"
+                if instructions.bootstrap else ""
+            ),
+            "execution_section": (
+                f"- **Execute:** {instructions.execution}\n"
+                if instructions.execution else ""
+            ),
+            "verification_section": (
+                f"- **Verify:** {instructions.verification}\n"
+                if instructions.verification else ""
+            ),
+            "failure_recovery_section": (
+                f"- **Recover:** {instructions.failure_recovery}\n"
+                if instructions.failure_recovery else ""
+            ),
+            "extension_section": (
+                f"{instructions.system_prompt_extension}\n"
+                if instructions.system_prompt_extension else ""
+            ),
+        }
 
-        if instructions.bootstrap:
-            parts.append(f"**Boot:** {instructions.bootstrap}")
-
-        if instructions.execution:
-            parts.append(f"**Execute:** {instructions.execution}")
-
-        if instructions.verification:
-            parts.append(f"**Verify:** {instructions.verification}")
-
-        if instructions.failure_recovery:
-            parts.append(f"**Recover:** {instructions.failure_recovery}")
-
-        if instructions.system_prompt_extension:
-            parts.append(instructions.system_prompt_extension)
-
-        if not parts:
+        # If all sections are empty, don't inject the header
+        if not any(section_map.values()):
             return ""
 
-        return cls.BLOCK_TEMPLATE.format(
-            bootstrap_section=f"- {parts[0]}\n" if len(parts) > 0 else "",
-            execution_section=f"- {parts[1]}\n" if len(parts) > 1 else "",
-            verification_section=f"- {parts[2]}\n" if len(parts) > 2 else "",
-            failure_recovery_section=f"- {parts[3]}\n" if len(parts) > 3 else "",
-            extension_section=f"{parts[4]}\n" if len(parts) > 4 else "",
-        )
+        return cls.BLOCK_TEMPLATE.format(**section_map)
 
     @classmethod
     def assemble_compact(

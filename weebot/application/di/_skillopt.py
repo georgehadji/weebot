@@ -107,6 +107,7 @@ class SkillOptMixin:
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.config.harness.schema import HarnessConfig
 
         class _LazyLLM:
             def __init__(self, container):
@@ -129,6 +130,7 @@ class SkillOptMixin:
                 logger=self._maybe_get_str("structured_logger"),
                 skill_retriever=self._maybe_get_str("skill_retriever"),
                 code_reviewer=self._maybe_get_str("code_reviewer"),
+                harness_config=self._maybe_get(HarnessConfig),
             )
             return PlanActFlow(cfg)
         return factory
