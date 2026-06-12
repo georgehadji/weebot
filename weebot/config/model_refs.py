@@ -24,11 +24,10 @@ from __future__ import annotations
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "x-ai/grok-build-0.1"
-"""Tier 1: Grok Build 0.1 — primary model.
-Direct API via XAI_API_KEY (preferred, lower latency).
-OpenRouter fallback if XAI_API_KEY not set.
-Native model ID: ``grok-build-0.1`` (OpenAI-compatible endpoint)."""
+MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.7-code"
+"""Tier 1: Kimi K2.7 Code — primary executor model.
+256K context, 32B/1T MoE, native thinking mode.
+Routed via OpenRouter (moonshotai provider)."""
 
 MODEL_BUDGET: str = "x-ai/grok-build-0.1"
 """Budget model for non-critical operations (compression, curation, defaults).
