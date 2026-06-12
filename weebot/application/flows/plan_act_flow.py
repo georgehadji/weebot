@@ -24,6 +24,9 @@ from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
 from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
+from weebot.application.services.model_aware_harness_resolver import (
+    ModelAwareHarnessResolver,
+)
 
 
 class PlanStuckError(RuntimeError):
@@ -173,11 +176,17 @@ class PlanActFlow(BaseFlow):
         self._skill_prompt = cfg.skill_prompt
         self._tracing_port = None
         self._persistence_adapter = None
-        # ── Self-Harness: behavioural instruction block ──────────
+        # ── Self-Harness: behavioural instruction block + resolver ──
         self._harness_instruction_block: str = ""
+        self._harness_config: Any = cfg.harness_config  # HarnessConfig
+        self._harness_resolver: ModelAwareHarnessResolver | None = None
+
         if cfg.harness_config is not None:
             try:
                 hc = cfg.harness_config
+                self._harness_resolver = ModelAwareHarnessResolver(
+                    base_config=hc,
+                )
                 self._harness_instruction_block = HarnessPromptAssembler.assemble(
                     instructions=hc.instructions,
                     runtime_control=hc.runtime_control,
@@ -429,6 +438,26 @@ class PlanActFlow(BaseFlow):
 
         while iteration_count <= max_iterations:
             iteration_count += 1
+
+            # ── Self-Harness: resolve harness instructions per-step ──
+            # Before executing a state, check if we have a resolver and
+            # the current state is one that uses the executor (ExecutingState).
+            # Resolve instructions for the configured model and push them
+            # to the executor so model-cascade switches get appropriate prompts.
+            if self._harness_resolver is not None:
+                try:
+                    model_id = self._model or self._executor._model or ""
+                    resolved_block = self._harness_resolver.resolve_instruction_block(
+                        model_id,
+                    )
+                    if resolved_block and resolved_block != self._harness_instruction_block:
+                        self._harness_instruction_block = resolved_block
+                        self._executor.set_harness_block(resolved_block)
+                except Exception as exc:
+                    self._stdlib_logger.debug(
+                        "Per-step harness resolution failed: %s — using previous block",
+                        exc,
+                    )
 
             # Execute current state.
             # Only pass the prompt if it's the first iteration or it's a re-planning loop

@@ -18,6 +18,13 @@ from weebot.domain.models.harness_instructions import (
 )
 
 
+# Avoid circular import at module level — HarnessConfig imports
+# InstructionConfig from domain, so we only import Schema at runtime.
+def _import_harness_config():
+    from weebot.config.harness.schema import HarnessConfig
+    return HarnessConfig
+
+
 class HarnessPromptAssembler:
     """Assembles the harness instruction block for executor system prompts.
 
@@ -91,6 +98,32 @@ class HarnessPromptAssembler:
             return ""
 
         return cls.BLOCK_TEMPLATE.format(**section_map)
+
+    @classmethod
+    def assemble_from_config(cls, config: Any) -> str:
+        """Convenience: assemble instruction block from a ``HarnessConfig``.
+
+        Extracts instructions, runtime_control, subagents, and
+        skill_selection from the config and delegates to ``assemble()``.
+
+        Args:
+            config: A ``HarnessConfig`` instance.
+
+        Returns:
+            Formatted instruction block, or empty string if config has
+            no non-empty instruction surfaces.
+        """
+        if config is None:
+            return ""
+        instructions = getattr(config, "instructions", None)
+        if instructions is None:
+            return ""
+        return cls.assemble(
+            instructions=instructions,
+            runtime_control=getattr(config, "runtime_control", None),
+            subagents=getattr(config, "subagents", None),
+            skill_selection=getattr(config, "skill_selection", None),
+        )
 
     @classmethod
     def assemble_compact(

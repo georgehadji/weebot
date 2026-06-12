@@ -209,15 +209,26 @@ class HarnessOptFlow(BaseFlow):
 
             (task_ids: list[str], config: HarnessConfig) -> list[dict]
 
-        Each task_id is used as a prompt for a PlanActFlow run.  The result
-        dict must contain ``{"passed": bool}``.
+        Each task_id is used as a prompt for a PlanActFlow run.
+        The candidate ``config`` is injected into the flow via
+        ``PlanActFlowConfig.harness_config`` so that the RegressionGate
+        can compare different harness versions.
 
-        **Limitation (Phase 4):** the ``config`` parameter is logged but not
-        injected into the flow — both baseline and candidate evaluations
-        use the current HarnessConfig from DI.  Phase 5 will add per-run
-        config injection so the gate can compare different harness versions.
+        To avoid circular imports, builds ``PlanActFlowConfig`` directly
+        instead of going through the DI container's flow_factory.
         """
+        from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
         from weebot.config.harness.schema import HarnessConfig
+
+        # Snapshot the llm and tools from the base flow_factory by
+        # creating a reference session and inspecting the produced flow.
+        _ref_session = Session(
+            id="_gate_ref", user_id="_", agent_id="_",
+        )
+        _ref_flow = self._flow_factory(_ref_session)
+        _model = getattr(_ref_flow, "_model", None)
+        _llm = getattr(_ref_flow, "_llm", None)
 
         async def _run(
             task_ids: list[str],
@@ -231,7 +242,14 @@ class HarnessOptFlow(BaseFlow):
                     agent_id="gate-eval",
                     context={"harness_version": config.version},
                 )
-                flow = self._flow_factory(session)
+                # Create a PlanActFlow with the given harness config
+                flow_cfg = PlanActFlowConfig(
+                    llm=_llm if _llm else self._llm,
+                    tools=None,  # gate eval doesn't need tools
+                    session=session,
+                    harness_config=config,
+                )
+                flow = PlanActFlow(flow_cfg)
                 try:
                     async for _ in flow.run(task_id):
                         pass

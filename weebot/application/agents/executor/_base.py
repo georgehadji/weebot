@@ -168,22 +168,15 @@ class ExecutorAgent:
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._harness_instruction_block = harness_instruction_block or None
-        # Phase 6: Cross-step trajectory monitor — created once, persists across steps
-        from weebot.application.services.trajectory_monitor import TrajectoryMonitor
-        self._trajectory_monitor = TrajectoryMonitor()
-        self._max_context_turns = max_context_turns
-        self._system_prompt: Optional[str] = None
-        self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
-        self._facts: Dict[str, Any] = {}
-        self._should_terminate = False
-        # Token tracking + auto-compress
-        self._auto_compress = auto_compress
-        self._context_window = context_window
-        self._total_prompt_tokens: int = 0
-        self._total_completion_tokens: int = 0
-        self._compressor: Optional[ConversationCompressor] = None
-        # Thread-safe step budget
-        self._step_budget = StepBudget(max_steps=max_steps)
+
+    def set_harness_block(self, block: str | None) -> None:
+        """Update the harness instruction block for the next step.
+
+        Called between steps when model-cascade switches the active model,
+        allowing model-specific instructions to be injected without
+        re-creating the executor.
+        """
+        self._harness_instruction_block = block or None
 
     @property
     def should_terminate(self) -> bool:
