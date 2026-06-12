@@ -98,8 +98,14 @@ class HarnessOptFlow(BaseFlow):
         self._max_proposals = max_proposals
         self._done = False
 
-        # Injected gate; defaults to stub (always-accept) for Phase 3
-        self._gate = gate or RegressionGate(flow_factory=flow_factory)
+        # Injected gate; defaults to stub (always-accept) when no gate
+        # or task_runner is provided.  The task_runner callable is what
+        # lets the gate evaluate tasks under a specific HarnessConfig.
+        # Phase 4+ wiring: pass a task_runner that creates PlanActFlows
+        # with the candidate harness config injected.
+        self._gate = gate or RegressionGate(
+            task_runner=self._make_task_runner(),
+        )
 
     def is_done(self) -> bool:
         return self._done
@@ -195,6 +201,45 @@ class HarnessOptFlow(BaseFlow):
         yield DoneEvent()
 
     # ── Internal stages ───────────────────────────────────────────────
+
+    def _make_task_runner(self) -> Callable:
+        """Return a callable for the RegressionGate's task_runner protocol.
+
+        The returned function has signature:
+            (tasks: list[WeebotTask], config: HarnessConfig) -> list[dict]
+
+        For now, it ignores the candidate config and uses the flow_factory
+        as-is (which reads the current HarnessConfig from DI).  In Phase 5+,
+        the flow_factory should accept a harness config override so the
+        candidate can be evaluated without disk writes.
+        """
+        from weebot.config.harness.schema import HarnessConfig
+        from weebot.domain.models.benchmark_task import WeebotTask
+
+        async def _run(
+            tasks: list[WeebotTask],
+            config: HarnessConfig,
+        ) -> list[dict]:
+            results = []
+            for task in tasks:
+                for sample in (task.samples or []):
+                    session = Session(
+                        id=f"gate-eval-{uuid.uuid4().hex[:8]}",
+                        user_id="regression-gate",
+                        agent_id="gate-eval",
+                        context={"harness_config": config.version},
+                    )
+                    flow = self._flow_factory(session)
+                    try:
+                        async for _ in flow.run(sample.prompt):
+                            pass
+                        results.append({"passed": True})
+                    except Exception as exc:
+                        logger.warning("Gate eval task %s failed: %s", task.task_id, exc)
+                        results.append({"passed": False, "error": str(exc)})
+            return results
+
+        return _run
 
     async def _evaluate_tasks(
         self,

@@ -324,4 +324,4 @@ class TestRegressionGate:
             candidate={"version": "0.2.1"},
         )
         assert decision.accepted
-        assert "Stub" in decision.reason
+        assert "No task_runner" in decision.reason
