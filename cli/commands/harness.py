@@ -185,3 +185,96 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
         console.print(f"  Output: {Path(output_dir).resolve() / '.claude'}")
 
 
+@harness.command("evolve")
+@click.option("--harness-path", default="weebot/config/harness/v0.2.0.yaml",
+              show_default=True, help="Base harness YAML path")
+@click.option("--output-dir", default=None,
+              help="Output directory for evolved harnesses (default: <harness_path>/evolved/)")
+@click.option("--held-in-tasks", "-i", multiple=True,
+              help="Task IDs for held-in evaluation (repeatable)")
+@click.option("--held-out-tasks", "-o", multiple=True,
+              help="Task IDs for held-out evaluation (repeatable)")
+@click.option("--max-proposals", default=3, type=int, show_default=True)
+@click.option("--iterations", default=1, type=int, show_default=True,
+              help="Number of Self-Harness optimization iterations")
+@click.option("--db", default="./weebot_sessions.db", show_default=True)
+def harness_evolve(
+    harness_path: str, output_dir: str | None,
+    held_in_tasks: tuple[str, ...], held_out_tasks: tuple[str, ...],
+    max_proposals: int, iterations: int, db: str,
+) -> None:
+    """Run the Self-Harness optimization loop to evolve an agent harness.
+
+    The harness is evaluated against held-in tasks, failure patterns
+    are mined from the trajectory repository, and the LLM proposes
+    targeted instruction edits.  Edits that pass regression testing
+    (Δ_in ≥ 0, Δ_ho ≥ 0) are promoted to new versioned YAML files.
+    """
+    import asyncio
+    from pathlib import Path
+
+    async def _run() -> None:
+        from weebot.application.di import Container
+        from weebot.application.flows.harness_opt_flow import HarnessOptFlow
+        from weebot.application.services.harness_optimization_target import (
+            HarnessOptimizationTarget,
+        )
+        from weebot.application.ports.llm_port import LLMPort
+        from weebot.infrastructure.persistence.trajectory_repo import (
+            TrajectoryRepository,
+        )
+        from weebot.config.model_refs import MODEL_BUDGET
+
+        console.print(f"[bold]Self-Harness Evolution[/bold]")
+        console.print(f"  Harness: {harness_path}")
+        console.print(f"  Held-in tasks: {list(held_in_tasks)}")
+        console.print(f"  Held-out tasks: {list(held_out_tasks)}")
+        console.print(f"  Max proposals per iteration: {max_proposals}")
+        console.print(f"  Iterations: {iterations}")
+
+        # Bootstrap DI container
+        container = Container()
+        container.configure_defaults(db_path=db)
+        llm = container.get(LLMPort)
+        trajectory_repo = TrajectoryRepository(db_path=db)
+
+        # Create optimization target
+        target = HarnessOptimizationTarget(
+            harness_path=harness_path,
+            output_dir=output_dir,
+        )
+        await target.load()
+
+        # Create flow factory for evaluation
+        flow_factory = container._create_target_flow_factory()
+
+        for iteration in range(iterations):
+            console.print(f"\n[bold]Iteration {iteration + 1}/{iterations}[/bold]")
+
+            flow = HarnessOptFlow(
+                llm=llm,
+                target=target,
+                trajectory_repo=trajectory_repo,
+                flow_factory=flow_factory,
+                held_in_tasks=list(held_in_tasks),
+                held_out_tasks=list(held_out_tasks),
+                max_proposals=max_proposals,
+            )
+
+            try:
+                async for event in flow.run():
+                    if hasattr(event, "message") and event.message:
+                        console.print(f"  {event.message}")
+            except Exception as exc:
+                console.print(f"[red]Iteration failed: {exc}[/red]")
+                break
+
+            if flow.is_done():
+                console.print(f"[green]✓ Iteration {iteration + 1} complete[/green]")
+
+        await trajectory_repo.close()
+        console.print("\n[bold green]Self-Harness evolution complete.[/bold green]")
+
+    asyncio.run(_run())
+
+

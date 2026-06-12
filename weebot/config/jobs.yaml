@@ -47,3 +47,18 @@ jobs:
       hours: 168  # weekly
     callable_name: "memory_cleanup"
     enabled: true
+
+  # ── Self-Harness (Phase 7) ─────────────────────────────────────────────
+  - job_id: self_harness_weekly
+    name: "Self-Harness Weekly Evolution"
+    description: "Run Self-Harness optimization loop — mine failure patterns, propose harness edits, promote accepted candidates"
+    trigger_type: "cron"
+    trigger_config:
+      cron_expression: "0 3 * * 0"  # Sunday 3 AM
+      timezone: "UTC"
+    callable_name: "self_harness_evolve"
+    enabled: true
+    args:
+      harness_path: "weebot/config/harness/v0.2.0.yaml"
+      max_proposals: 3
+      min_traces_required: 20
