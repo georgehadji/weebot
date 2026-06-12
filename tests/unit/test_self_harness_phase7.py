@@ -29,21 +29,25 @@ class TestHarnessEvolveCli:
         assert "--max-proposals" in result.output
         assert "--iterations" in result.output
 
-    def test_evolve_no_tasks_shows_warning(self):
-        """Without held-in tasks, the flow skips gracefully."""
+    def test_evolve_options_parsed(self):
+        """Verify all evolve options parse without errors."""
         from cli.main import cli
 
         runner = CliRunner()
-        # Use a small number of iterations and no tasks — flow should
-        # mine zero clusters and finish with a message.
+        # Pass valid options but let it fail on DI (no API keys in test env).
+        # We're testing option parsing, not the async flow.
         result = runner.invoke(cli, [
             "harness", "evolve",
             "--iterations", "1",
-            "--max-proposals", "1",
+            "--max-proposals", "2",
+            "--harness-path", "weebot/config/harness/v0.2.0.yaml",
+            "--db", ":memory:",
         ])
-        # The CLI invokes asyncio.run() internally, so this may return
-        # exit code 0 (no tasks = no clusters = clean finish).
-        assert result.exit_code in (0, 1)
+        # Exit code 0 = clean run, 1 = runtime error (no LLM configured).
+        # Exit code 2 = Click argument parse error — that's a real bug.
+        assert result.exit_code != 2, (
+            f"CLI argument parsing failed:\n{result.output}"
+        )
 
 
 class TestJobsYaml:

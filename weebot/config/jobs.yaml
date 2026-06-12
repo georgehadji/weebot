@@ -58,7 +58,3 @@ jobs:
       timezone: "UTC"
     callable_name: "self_harness_evolve"
     enabled: true
-    args:
-      harness_path: "weebot/config/harness/v0.2.0.yaml"
-      max_proposals: 3
-      min_traces_required: 20

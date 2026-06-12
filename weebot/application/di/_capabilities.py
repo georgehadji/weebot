@@ -84,5 +84,45 @@ class CapabilitiesMixin:
         async def memory_cleanup():
             logger.info("Memory cleanup: archival not yet implemented")
         mgr.register_callable("memory_cleanup", memory_cleanup)
+
+        # ── Self-Harness weekly evolution ────────────────────────────
+        async def self_harness_evolve():
+            try:
+                from weebot.application.flows.harness_opt_flow import HarnessOptFlow
+                from weebot.application.services.harness_optimization_target import (
+                    HarnessOptimizationTarget,
+                )
+                from weebot.infrastructure.persistence.trajectory_repo import (
+                    TrajectoryRepository,
+                )
+                from weebot.application.ports.llm_port import LLMPort
+
+                llm_port = self._maybe_get(LLMPort)
+                if llm_port is None:
+                    logger.warning("Self-Harness skipped: no LLM configured")
+                    return
+
+                target = HarnessOptimizationTarget()
+                await target.load()
+                trajectory_repo = TrajectoryRepository()
+
+                flow = HarnessOptFlow(
+                    llm=llm_port,
+                    target=target,
+                    trajectory_repo=trajectory_repo,
+                    flow_factory=lambda s: None,  # Stub — mining only
+                    max_proposals=3,
+                )
+                async for event in flow.run():
+                    if hasattr(event, "message") and event.message:
+                        logger.info("Self-Harness: %s", event.message)
+
+                await trajectory_repo.close()
+                logger.info("Self-Harness weekly evolution complete")
+            except Exception as exc:
+                logger.error("Self-Harness weekly failed: %s", exc, exc_info=True)
+
+        mgr.register_callable("self_harness_evolve", self_harness_evolve)
+
         await mgr.load_from_config()
         await mgr.start()

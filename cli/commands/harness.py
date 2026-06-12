@@ -223,7 +223,6 @@ def harness_evolve(
         from weebot.infrastructure.persistence.trajectory_repo import (
             TrajectoryRepository,
         )
-        from weebot.config.model_refs import MODEL_BUDGET
 
         console.print(f"[bold]Self-Harness Evolution[/bold]")
         console.print(f"  Harness: {harness_path}")
@@ -245,8 +244,13 @@ def harness_evolve(
         )
         await target.load()
 
+        if not held_in_tasks and not held_out_tasks:
+            console.print("[yellow]No held-in or held-out tasks provided — "
+                          "the optimizer can mine existing failure patterns "
+                          "but cannot validate proposals.[/yellow]")
+
         # Create flow factory for evaluation
-        flow_factory = container._create_target_flow_factory()
+        flow_factory = container._create_target_flow_factory(db_path=db)
 
         for iteration in range(iterations):
             console.print(f"\n[bold]Iteration {iteration + 1}/{iterations}[/bold]")
