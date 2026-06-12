@@ -44,6 +44,7 @@ class SkillOptMixin:
             mediator, self.get("skill_store"), scoring_port,
             trajectory_builder=trajectory_builder,
             evolution_tracker=self._maybe_get_str("evolution_tracker"),
+            llm_port=llm,
         )
         flow = SkillOptFlow(
             skill_name=skill_name, train_tasks=train_tasks,

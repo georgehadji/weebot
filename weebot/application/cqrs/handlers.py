@@ -527,12 +527,20 @@ from weebot.application.cqrs.commands.validation_commands import (
 from weebot.application.cqrs.commands.transfer_commands import (
     ValidateTransferCommand,
 )
+from weebot.application.cqrs.commands.failure_signature_commands import (
+    ClusterFailurePatternsQuery,
+    ExtractFailureSignatureCommand,
+)
 from weebot.application.cqrs.handlers.skill_edit_handler import (
     ApplySkillEditsHandler,
 )
 from weebot.application.cqrs.handlers.trajectory_handler import (
     BuildOptimizationBatchHandler,
     ScoreTrajectoryHandler,
+)
+from weebot.application.cqrs.handlers.failure_signature_handlers import (
+    ClusterFailurePatternsHandler,
+    ExtractFailureSignatureHandler,
 )
 from weebot.application.cqrs.handlers.validation_handler import (
     ValidateSkillHandler,
@@ -680,6 +688,7 @@ def register_skillopt_handlers(
     trajectory_repo,
     validation_runner,
     flow_factory,
+    llm_port=None,
 ) -> None:
     """Register SkillOpt-specific command handlers with a mediator.
 
@@ -704,10 +713,13 @@ def register_skillopt_handlers(
 
     # ScoreTrajectoryCommand — also callable from register_default_handlers()
     # when scoring deps are available; this ensures it's always registered
-    # when SkillOpt is configured.
+    # when SkillOpt is configured.  The mediator is passed so the handler
+    # can emit ExtractFailureSignatureCommand on failed trajectories.
     mediator.register_command_handler(
         ScoreTrajectoryCommand,
-        ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder),
+        ScoreTrajectoryHandler(
+            scoring_port, state_repo, trajectory_builder, mediator=mediator,
+        ),
     )
 
     # Skill edits (from optimizer reflection → merge → rank pipeline)
@@ -732,4 +744,20 @@ def register_skillopt_handlers(
     mediator.register_command_handler(
         ValidateTransferCommand,
         ValidateTransferHandler(state_repo, flow_factory),
+    )
+
+    # ── Self-Harness: failure signature extraction on failed trajectories ──
+    mediator.register_command_handler(
+        ExtractFailureSignatureCommand,
+        ExtractFailureSignatureHandler(
+            llm=llm_port,
+            trajectory_repo=trajectory_repo,
+            budget_model=None,  # Use default budget model
+        ),
+    )
+
+    # ── Self-Harness: cluster failure patterns for harness proposal ──────
+    mediator.register_query_handler(
+        ClusterFailurePatternsQuery,
+        ClusterFailurePatternsHandler(trajectory_repo),
     )

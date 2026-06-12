@@ -1,7 +1,10 @@
 """CQRS handlers for trajectory evidence pipeline."""
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult, QueryHandler, QueryResult
 from weebot.application.cqrs.commands.trajectory_commands import (
@@ -26,6 +29,10 @@ class ScoreTrajectoryHandler(CommandHandler):
 
     Delegates to ScoringPort for benchmark-specific scoring logic
     and to TrajectoryBuilder for compact trajectory text generation.
+
+    When the trajectory fails, automatically emits an
+    ``ExtractFailureSignatureCommand`` via the optional mediator to
+    kick off the Self-Harness Weakness Mining pipeline.
     """
 
     def __init__(
@@ -33,10 +40,12 @@ class ScoreTrajectoryHandler(CommandHandler):
         scoring_port: ScoringPort,
         state_repo: StateRepositoryPort,
         trajectory_builder: TrajectoryBuilder,
+        mediator: Any | None = None,
     ):
         self._scoring = scoring_port
         self._state_repo = state_repo
         self._builder = trajectory_builder
+        self._mediator = mediator
 
     async def handle(self, command: ScoreTrajectoryCommand) -> CommandResult:
         try:
@@ -59,6 +68,28 @@ class ScoreTrajectoryHandler(CommandHandler):
             event_store = getattr(self, "_event_store", None)
             if event_store is not None:
                 await event_store.save_trajectory(trajectory)
+
+            # ── Self-Harness: emit failure signature command on failure ──
+            if not trajectory.passed and self._mediator is not None:
+                try:
+                    from weebot.application.cqrs.commands.failure_signature_commands import (
+                        ExtractFailureSignatureCommand,
+                    )
+
+                    await self._mediator.send(
+                        ExtractFailureSignatureCommand(
+                            session_id=command.session_id,
+                            task_id=trajectory.task_id,
+                            trajectory_text=trajectory.trajectory_text,
+                            failure_modes=trajectory.failure_modes,
+                            harness_version=trajectory.harness,
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to emit failure signature extraction for session %s: %s",
+                        command.session_id, exc,
+                    )
 
             return CommandResult.ok(
                 data={
