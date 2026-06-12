@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weebot Documentation</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body { font-family: system-ui, sans-serif; }
+.glass { background: rgba(24,24,27,0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
+code { background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+pre { background: #0f0f11; padding: 1rem; border-radius: 12px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+.sidebar-link { display: block; padding: 6px 12px; border-radius: 8px; font-size: 0.875rem; color: #a1a1aa; transition: all 0.15s; }
+.sidebar-link:hover, .sidebar-link.active { background: rgba(255,255,255,0.05); color: #e4e4e7; }
+h2 { scroll-margin-top: 5rem; }
+</style>
+</head>
+<body class="bg-zinc-950 text-zinc-200 antialiased">
+<nav class="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-zinc-950/95 backdrop-blur-xl">
+<div class="max-w-7xl mx-auto px-6 flex items-center justify-between h-14">
+<a href="index.html" class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-white text-zinc-950 font-bold flex items-center justify-center text-sm">W</div>
+<span class="font-semibold text-lg tracking-tight">Weebot Docs</span>
+</a>
+<div class="flex items-center gap-4 text-sm">
+<a href="index.html" class="text-zinc-400 hover:text-white">Home</a>
+<a href="#tools" class="text-zinc-400 hover:text-white">Tools</a>
+<a href="#api" class="text-zinc-400 hover:text-white">API</a>
+<a href="https://github.com/georgehadji/weebot" class="text-zinc-400 hover:text-white">GitHub</a>
+</div>
+</div>
+</nav>
+
+<div class="pt-14 flex">
+<!-- Sidebar -->
+<aside class="hidden lg:block w-64 fixed top-14 bottom-0 left-0 border-r border-white/10 p-4 overflow-y-auto">
+<div class="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-3">Getting Started</div>
+<a href="#install" class="sidebar-link active">Installation</a>
+<a href="#config" class="sidebar-link">Configuration</a>
+<a href="#quickstart" class="sidebar-link">Quick Start</a>
+<div class="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-3 mt-6">Reference</div>
+<a href="#tools" class="sidebar-link">Tools (37)</a>
+<a href="#flows" class="sidebar-link">Flows (6)</a>
+<a href="#api" class="sidebar-link">REST API</a>
+<a href="#mcp" class="sidebar-link">MCP Server</a>
+<a href="#security" class="sidebar-link">Security Model</a>
+<a href="#models" class="sidebar-link">AI Models</a>
+</aside>
+
+<!-- Main content -->
+<main class="flex-1 lg:ml-64 max-w-4xl mx-auto px-6 py-12">
+
+<h1 class="text-4xl font-bold tracking-tight mb-2">Weebot Documentation</h1>
+<p class="text-zinc-400 text-lg mb-12">Production-grade AI agent framework for Windows 11. 37 tools, 6 flow types, 11 agent roles.</p>
+
+<!-- Installation -->
+<h2 id="install" class="text-2xl font-semibold tracking-tight mb-4 mt-12">Installation</h2>
+<pre><code class="text-emerald-300">git clone https://github.com/georgehadji/weebot.git
+cd weebot
+pip install -r requirements.txt
+cp .env.example .env  # Add your API keys
+python -m cli.main health</code></pre>
+
+<h2 id="config" class="text-2xl font-semibold tracking-tight mb-4 mt-12">Configuration</h2>
+<p class="text-zinc-400 mb-4">Set at least one AI provider key in <code>.env</code>:</p>
+<pre><code class="text-emerald-300"># Required (at least one)
+OPENROUTER_API_KEY=sk-or-...
+DEEPSEEK_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+
+# Optional
+WEEBOT_API_KEY=your-web-api-key      # Enables API auth
+WEEBOT_MCP_API_KEY=your-mcp-key      # Enables MCP auth
+SANDBOX_MODE=auto                     # auto|native|docker|wsl2
+BASH_TIMEOUT=30                       # seconds
+DAILY_AI_BUDGET=10.0                  # USD</code></pre>
+
+<h2 id="quickstart" class="text-2xl font-semibold tracking-tight mb-4 mt-12">Quick Start</h2>
+<pre><code class="text-emerald-300"># Run a task (Plan-Act autonomous agent)
+python -m cli.main flow run "Build a REST API with FastAPI"
+
+# Start the web UI backend
+python -m weebot.interfaces.web.main
+
+# Start the MCP server (for IDE integration)
+python run_mcp.py
+
+# Interactive REPL
+python run.py --interactive</code></pre>
+
+<!-- Tools Reference -->
+<h2 id="tools" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">Tools Reference (37 tools)</h2>
+<p class="text-zinc-400 mb-6">Every tool is access-controlled by role and gated by 5-layer security.</p>
+
+<h3 class="text-lg font-semibold text-emerald-400 mb-3">Execution Tools</h3>
+<div class="space-y-3 mb-8">
+<div class="glass rounded-xl p-4"><code class="text-emerald-300">bash</code> <span class="text-zinc-500">|</span> Execute shell via PowerShell (Windows) or WSL2. 5-layer security analysis, timeout enforcement, output truncation.<br><span class="text-zinc-500 text-xs">Params: command (string), timeout (number), working_dir (string), use_wsl (bool)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-emerald-300">python_execute</code> <span class="text-zinc-500">|</span> Run Python in isolated subprocess (256MB memory limit). Supports pandas, numpy, matplotlib.<br><span class="text-zinc-500 text-xs">Params: code (string), timeout (number, default 30)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-emerald-300">powershell</code> <span class="text-zinc-500">|</span> PowerShell-specific execution with diagnostic shortcuts (system_info, processes, services).<br><span class="text-zinc-500 text-xs">Params: command (string), diagnostic (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-emerald-300">computer_use</code> <span class="text-zinc-500">|</span> Desktop automation via pyautogui: mouse move/click/drag, keyboard type/press/key chords.<br><span class="text-zinc-500 text-xs">Params: action (string), coordinates (array), text (string)</span></div>
+</div>
+
+<h3 class="text-lg font-semibold text-sky-400 mb-3">Web &amp; Search Tools</h3>
+<div class="space-y-3 mb-8">
+<div class="glass rounded-xl p-4"><code class="text-sky-300">web_search</code> <span class="text-zinc-500">|</span> Multi-engine search (DuckDuckGo + Bing fallback) with optional cross-encoder reranking.<br><span class="text-zinc-500 text-xs">Params: query (string), num_results (int, default 5)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-sky-300">vane_search</code> <span class="text-zinc-500">|</span> AI-powered cited answers with focus modes: webSearch, academicSearch, redditSearch, youtubeSearch.<br><span class="text-zinc-500 text-xs">Params: query (string), focus (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-sky-300">advanced_browser</code> <span class="text-zinc-500">|</span> Full Playwright automation: 18 actions (launch, goto, click, fill, screenshot, JS eval, cookies, sessions).<br><span class="text-zinc-500 text-xs">Params: action (string), url (string), selector (string), value (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-sky-300">browser_navigator</code> <span class="text-zinc-500">|</span> AI-driven natural-language browser automation via browser-use + Playwright.<br><span class="text-zinc-500 text-xs">Params: task (string), url (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-sky-300">browser_inspector</code> <span class="text-zinc-500">|</span> Read-only page analysis: design tokens, computed CSS, asset inventory, element inspection.<br><span class="text-zinc-500 text-xs">Params: url (string), action (string)</span></div>
+</div>
+
+<h3 class="text-lg font-semibold text-amber-400 mb-3">File &amp; Data Tools</h3>
+<div class="space-y-3 mb-8">
+<div class="glass rounded-xl p-4"><code class="text-amber-300">file_editor</code> <span class="text-zinc-500">|</span> View, create, str_replace, insert, write_large. Path validation against null-bytes and workspace escape.<br><span class="text-zinc-500 text-xs">Params: command (enum), path (string), file_text (string), old_str (string), new_str (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-amber-300">knowledge</code> <span class="text-zinc-500">|</span> Persistent FTS5-indexed knowledge base: add_note, search, get_note, list_notes, delete_note.<br><span class="text-zinc-500 text-xs">Params: action (string), title (string), content (string), query (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-amber-300">video_ingest</code> <span class="text-zinc-500">|</span> YouTube transcript ingestion with token-accurate chunking via tiktoken.<br><span class="text-zinc-500 text-xs">Params: action (string), url (string)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-amber-300">ocr</code> <span class="text-zinc-500">|</span> Extract text from images via Tesseract OCR. Layout-aware mode available.<br><span class="text-zinc-500 text-xs">Params: image_base64 (string), language (string)</span></div>
+</div>
+
+<h3 class="text-lg font-semibold text-violet-400 mb-3">Orchestration Tools</h3>
+<div class="space-y-3 mb-8">
+<div class="glass rounded-xl p-4"><code class="text-violet-300">dispatch_parallel_tasks</code> <span class="text-zinc-500">|</span> Spawn N independent sub-agents concurrently (foreman pattern). Each runs a full PlanActFlow.<br><span class="text-zinc-500 text-xs">Params: tasks (array of {description, tier})</span></div>
+<div class="glass rounded-xl p-4"><code class="text-violet-300">workflow_orchestrator</code> <span class="text-zinc-500">|</span> DAG-based multi-agent workflow. Dependency-respecting parallelism.<br><span class="text-zinc-500 text-xs">Params: workflow (object with tasks and dependencies)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-violet-300">swarm</code> <span class="text-zinc-500">|</span> Goal-driven parallel agent orchestration: decompose, dispatch, synthesize.<br><span class="text-zinc-500 text-xs">Params: goal (string), max_agents (int)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-violet-300">debate</code> <span class="text-zinc-500">|</span> Multi-perspective analysis (optimist/pessimist/pragmatist) with reconciler synthesis.<br><span class="text-zinc-500 text-xs">Params: topic (string), perspectives (array)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-violet-300">mixture_of_agents</code> <span class="text-zinc-500">|</span> Parallel ensemble reasoning (4 frontier models) + aggregator synthesis (MoA pattern).<br><span class="text-zinc-500 text-xs">Params: prompt (string), models (array)</span></div>
+<div class="glass rounded-xl p-4"><code class="text-violet-300">schedule</code> <span class="text-zinc-500">|</span> APScheduler: create/list/get/delete/pause/resume. Triggers: cron, interval, date, once.<br><span class="text-zinc-500 text-xs">Params: action (string), job_id (string), trigger_type (string), trigger_config (object)</span></div>
+</div>
+
+<!-- Flows -->
+<h2 id="flows" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">Flows (6 types)</h2>
+<p class="text-zinc-400 mb-6">Flows are state machines that orchestrate multi-step agent behavior.</p>
+<div class="space-y-4 mb-8">
+<div class="glass rounded-xl p-5"><div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 bg-emerald-400 rounded-full"></span><span class="font-semibold">PlanActFlow</span> <span class="text-xs text-zinc-500">production</span></div><p class="text-zinc-400 text-sm">Core autonomous agent. 6 states: Planning -> Executing -> Reviewing -> Updating -> Summarizing -> Completed. Includes plan-stuck detection, continuation detection, truth binding, and code review.</p><pre class="mt-2"><code class="text-xs text-emerald-300">python -m cli.main flow run "your task description"</code></pre></div>
+<div class="glass rounded-xl p-5"><div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 bg-emerald-400 rounded-full"></span><span class="font-semibold">ChatFlow</span> <span class="text-xs text-zinc-500">production</span></div><p class="text-zinc-400 text-sm">Conversational chat with 500-exchange sliding window. For interactive sessions without autonomous planning.</p></div>
+<div class="glass rounded-xl p-5"><div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 bg-emerald-400 rounded-full"></span><span class="font-semibold">HyperAgentFlow</span> <span class="text-xs text-zinc-500">production</span></div><p class="text-zinc-400 text-sm">Multi-agent orchestrator. Decomposes complex tasks into parallel sub-agent executions with synthesis.</p></div>
+<div class="glass rounded-xl p-5"><div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 bg-amber-400 rounded-full"></span><span class="font-semibold">SkillOptFlow</span> <span class="text-xs text-zinc-500">experimental</span></div><p class="text-zinc-400 text-sm">Full optimization epoch: Rollout -> Reflect -> Merge -> Rank -> Apply -> Validate -> Accept/Reject -> Slow Update.</p></div>
+<div class="glass rounded-xl p-5"><div class="flex items-center gap-2 mb-2"><span class="w-2 h-2 bg-amber-400 rounded-full"></span><span class="font-semibold">HarnessGenerationFlow</span> <span class="text-xs text-zinc-500">experimental</span></div><p class="text-zinc-400 text-sm">Generate agent teams and skills from domain description. 6 team patterns: Pipeline, Fan-out/Fan-in, Expert Pool, Producer-Reviewer, Supervisor, Hierarchical Delegation.</p></div>
+</div>
+
+<!-- API -->
+<h2 id="api" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">REST API</h2>
+<p class="text-zinc-400 mb-6">FastAPI server at <code>http://localhost:8000</code>. Auth via <code>X-API-Key</code> header (when WEEBOT_API_KEY is set).</p>
+<div class="space-y-2 mb-8 text-sm">
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-400 text-xs font-mono">GET</span><code>/api/sessions</code><span class="text-zinc-500 ml-auto">List sessions (paginated)</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-sky-900/50 text-sky-400 text-xs font-mono">POST</span><code>/api/sessions</code><span class="text-zinc-500 ml-auto">Create + run session</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-400 text-xs font-mono">GET</span><code>/api/sessions/{id}</code><span class="text-zinc-500 ml-auto">Get session detail</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-sky-900/50 text-sky-400 text-xs font-mono">POST</span><code>/api/sessions/{id}/resume</code><span class="text-zinc-500 ml-auto">Resume waiting session</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-sky-900/50 text-sky-400 text-xs font-mono">POST</span><code>/api/webhook/run</code><span class="text-zinc-500 ml-auto">One-shot webhook execution</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-400 text-xs font-mono">GET</span><code>/api/health</code><span class="text-zinc-500 ml-auto">System health check</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-400 text-xs font-mono">GET</span><code>/api/dashboard/metrics</code><span class="text-zinc-500 ml-auto">Dashboard metrics</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-violet-900/50 text-violet-400 text-xs font-mono">WS</span><code>/ws</code><span class="text-zinc-500 ml-auto">Global event stream</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-violet-900/50 text-violet-400 text-xs font-mono">WS</span><code>/ws/sessions/{id}</code><span class="text-zinc-500 ml-auto">Session event stream</span></div>
+<div class="glass rounded-lg p-3 flex items-center gap-3"><span class="px-2 py-0.5 rounded bg-emerald-900/50 text-emerald-400 text-xs font-mono">GET</span><code>/metrics</code><span class="text-zinc-500 ml-auto">Prometheus scrape target</span></div>
+</div>
+
+<!-- MCP -->
+<h2 id="mcp" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">MCP Server</h2>
+<p class="text-zinc-400 mb-4">Model Context Protocol server for IDE integration (Claude Desktop, Cursor, Windsurf).</p>
+<pre class="mb-4"><code class="text-emerald-300"># Start MCP server
+python run_mcp.py          # stdio transport (Claude Desktop)
+python run_mcp.py --sse    # SSE transport (Cursor/web clients)</code></pre>
+<p class="text-zinc-400 mb-2"><strong>Exposed Tools:</strong> bash, python_execute, web_search, file_editor, ping</p>
+<p class="text-zinc-400 mb-2"><strong>Resources:</strong></p>
+<div class="space-y-1 text-sm mb-8">
+<div class="text-zinc-300"><code>weebot://activity</code> — Recent agent activity (newest-first, up to 50)</div>
+<div class="text-zinc-300"><code>weebot://state</code> — Current agent state snapshot</div>
+<div class="text-zinc-300"><code>weebot://schedule</code> — Scheduled jobs list</div>
+<div class="text-zinc-300"><code>weebot://costs</code> — Session cost and cascade statistics</div>
+<div class="text-zinc-300"><code>weebot://tools</code> — Available tools with role access info</div>
+<div class="text-zinc-300"><code>weebot://skills</code> — Installed skills with descriptions</div>
+</div>
+
+<!-- Security -->
+<h2 id="security" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">Security Model</h2>
+<p class="text-zinc-400 mb-4">5-layer defense-in-depth for all command execution:</p>
+<div class="space-y-3 mb-8">
+<div class="glass rounded-xl p-4 border-l-4 border-emerald-500"><strong class="text-emerald-400">Layer 1: CommandSecurityAnalyzer</strong><br><span class="text-zinc-400 text-sm">Multi-layer analysis: pattern matching, behavioral detection (download+execute), entropy analysis (encoded payloads), semantic validation.</span></div>
+<div class="glass rounded-xl p-4 border-l-4 border-sky-500"><strong class="text-sky-400">Layer 2: BashGuard</strong><br><span class="text-zinc-400 text-sm">Pattern-based safety: destructive ops (rm -rf /), system mutations (systemctl, mkfs), credential exposure, network risks, fork bombs. 4 risk levels: SAFE, SUSPICIOUS, DANGEROUS, BLOCKED.</span></div>
+<div class="glass rounded-xl p-4 border-l-4 border-amber-500"><strong class="text-amber-400">Layer 3: ExecApprovalPolicy</strong><br><span class="text-zinc-400 text-sm">Rule-based approval: AUTO_APPROVE (safe commands), ALWAYS_ASK (destructive), DENY (formatting, registry deletion). User confirmation required for risky ops.</span></div>
+<div class="glass rounded-xl p-4 border-l-4 border-violet-500"><strong class="text-violet-400">Layer 4: PathValidator</strong><br><span class="text-zinc-400 text-sm">Filesystem security: workspace boundary enforcement, null-byte injection detection, URL-encoded traversal, symlink resolution, allowed extension list.</span></div>
+<div class="glass rounded-xl p-4 border-l-4 border-rose-500"><strong class="text-rose-400">Layer 5: CapabilityGate</strong><br><span class="text-zinc-400 text-sm">Role-based access control: 11 roles with tiered tool access. Privileged tools (computer_use, terminate) require elevated permissions.</span></div>
+</div>
+
+<!-- Models -->
+<h2 id="models" class="text-2xl font-semibold tracking-tight mb-4 mt-16 pt-4 border-t border-white/10">Supported AI Models</h2>
+<p class="text-zinc-400 mb-4">Multi-provider cascading with circuit breaker, retry with exponential backoff, and cost optimization.</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+<div class="glass rounded-xl p-4"><strong class="text-emerald-400">OpenRouter</strong><br><span class="text-zinc-400 text-sm">200+ models. Primary provider. Budget/free tiers available.</span></div>
+<div class="glass rounded-xl p-4"><strong class="text-sky-400">Anthropic</strong><br><span class="text-zinc-400 text-sm">Claude 4 Sonnet/Opus. Premium tier for complex reasoning.</span></div>
+<div class="glass rounded-xl p-4"><strong class="text-violet-400">DeepSeek</strong><br><span class="text-zinc-400 text-sm">DeepSeek V4 Pro/Flash. Cost-effective coding and reasoning.</span></div>
+<div class="glass rounded-xl p-4"><strong class="text-amber-400">OpenAI</strong><br><span class="text-zinc-400 text-sm">GPT-4o, o3-mini. Standard tier.</span></div>
+<div class="glass rounded-xl p-4"><strong class="text-rose-400">X.ai (Grok)</strong><br><span class="text-zinc-400 text-sm">Grok Build. Default model for health checks.</span></div>
+<div class="glass rounded-xl p-4"><strong class="text-teal-400">Kimi (Moonshot)</strong><br><span class="text-zinc-400 text-sm">Moonshot AI. Long-context support.</span></div>
+</div>
+
+</main>
+</div>
+
+<footer class="border-t border-white/10 py-8 mt-16">
+<div class="max-w-7xl mx-auto px-6 text-center text-sm text-zinc-500">
+Built with Weebot. <a href="https://github.com/georgehadji/weebot" class="text-zinc-400 hover:text-white">GitHub</a> | <a href="index.html" class="text-zinc-400 hover:text-white">Home</a>
+</div>
+</footer>
+</body>
+</html>
