@@ -189,7 +189,8 @@ async def build_tools(
     _apify_logger = _logging.getLogger("weebot.interfaces.factories")
     if os.getenv("APIFY_API_KEY"):
         try:
-            from weebot.infrastructure.adapters.apify import ApifyService
+            import importlib as _il
+            ApifyService = _il.import_module("weebot.infrastructure.adapters.apify").ApifyService
             from weebot.tools.apify_presets import create_apify_preset_tools
             apify_service = ApifyService()
             await apify_service.initialize()

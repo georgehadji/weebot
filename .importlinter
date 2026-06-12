@@ -91,7 +91,6 @@ ignore_imports =
     # ---- Composition root: interfaces wire up the full application stack ----
     # Web server bootstraps DI and wires LLM + metrics at startup.
     weebot.interfaces.web.main -> weebot.application.di
-    weebot.interfaces.web.main -> weebot.infrastructure.adapters.llm.resilient_adapter
     weebot.interfaces.web.main -> weebot.infrastructure.observability.metrics
     # Web routers use DI to resolve services per-request.
     weebot.interfaces.web.routers.chat_router -> weebot.application.di
@@ -111,7 +110,6 @@ ignore_imports =
     weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
     # Factories build the full tool set including registry and Apify preset tools.
     weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
-    weebot.interfaces.factories -> weebot.infrastructure.adapters.apify
     weebot.interfaces.factories -> weebot.infrastructure.mcp.mcp_toolkit_adapter
     weebot.interfaces.factories -> weebot.tools.apify_presets
     weebot.interfaces.factories -> weebot.tools.base

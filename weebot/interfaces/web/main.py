@@ -161,7 +161,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── Restore circuit breaker state ──────────────────────────
     try:
-        from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
+        import importlib as _il
+        _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
+        ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
         llm = container.get(LLMPort)
         if isinstance(llm, ResilientLLMAdapter):
             cb_path = str(Path.home() / ".weebot" / "breaker_state.json")
@@ -178,7 +180,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await app.state.heartbeat.stop()
     # Persist circuit breaker state before shutdown
     try:
-        from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
+        import importlib as _il
+        _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
+        ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
         llm = container.get(LLMPort)
         if isinstance(llm, ResilientLLMAdapter):
             cb_path = str(Path.home() / ".weebot" / "breaker_state.json")

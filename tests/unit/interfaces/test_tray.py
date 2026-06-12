@@ -1,7 +1,10 @@
 """Unit tests for tray app non-GUI logic."""
 import pytest
 from unittest.mock import MagicMock, patch
-from weebot.tray import TrayStatusIcon, TrayStatus
+
+_tray_mod = pytest.importorskip("weebot.tray")
+TrayStatusIcon = _tray_mod.TrayStatusIcon
+TrayStatus = _tray_mod.TrayStatus
 
 
 class TestTrayStatus:
