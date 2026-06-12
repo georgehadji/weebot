@@ -110,12 +110,32 @@ class ModelAwareHarnessResolver:
         if not overlay_instructions:
             return self._base
 
-        current_instructions = self._base.instructions.model_dump()
-        merged_instructions = {**current_instructions, **overlay_instructions}
+        # Filter overlay keys to only valid InstructionConfig fields
+        valid_fields = set(InstructionConfig.model_fields.keys())
+        filtered = {
+            k: v for k, v in overlay_instructions.items()
+            if k in valid_fields
+        }
+        if not filtered:
+            logger.warning(
+                "Overlay for %s has no valid instruction fields (got: %s)",
+                model_id, list(overlay_instructions.keys()),
+            )
+            return self._base
 
-        return self._base.model_copy(update={
-            "instructions": InstructionConfig(**merged_instructions),
-        })
+        current_instructions = self._base.instructions.model_dump()
+        merged_instructions = {**current_instructions, **filtered}
+
+        try:
+            return self._base.model_copy(update={
+                "instructions": InstructionConfig(**merged_instructions),
+            })
+        except Exception as exc:
+            logger.warning(
+                "Failed to merge overlay for %s: %s — returning base config",
+                model_id, exc,
+            )
+            return self._base
 
     def resolve_instruction_block(self, model_id: str) -> str:
         """Resolve and assemble the instruction block for a model.

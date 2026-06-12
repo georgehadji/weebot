@@ -446,6 +446,11 @@ class PlanActFlow(BaseFlow):
             # to the executor so model-cascade switches get appropriate prompts.
             if self._harness_resolver is not None:
                 try:
+                    # NOTE: resolves against the *configured* model, not the
+                    # cascade-chosen model.  Cascade selection happens inside
+                    # ExecutorAgent._call_with_cascade() and does not propagate
+                    # back.  Phase 7+ may add a post-step callback to track
+                    # which model actually responded and re-resolve.
                     model_id = self._model or self._executor._model or ""
                     resolved_block = self._harness_resolver.resolve_instruction_block(
                         model_id,

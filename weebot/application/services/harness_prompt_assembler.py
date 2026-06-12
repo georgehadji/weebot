@@ -10,19 +10,14 @@ service ensures those mutations reach the executor.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from weebot.domain.models.harness_instructions import (
     InstructionConfig,
     RuntimeControlConfig,
     SubagentConfig,
     SkillSelectionConfig,
 )
-
-
-# Avoid circular import at module level — HarnessConfig imports
-# InstructionConfig from domain, so we only import Schema at runtime.
-def _import_harness_config():
-    from weebot.config.harness.schema import HarnessConfig
-    return HarnessConfig
 
 
 class HarnessPromptAssembler:
