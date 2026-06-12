@@ -116,6 +116,17 @@ class DirectOrFallbackAdapter(LLMPort):
             )
             return await self._secondary.chat(model=model, **shared)
 
+        # If the caller requested a model that doesn't belong to this
+        # provider, skip the primary entirely — route to OpenRouter which
+        # can serve any model.  This prevents e.g. "moonshotai/kimi-k2.7-code"
+        # from being sent to the xAI API as "grok-build-0.1".
+        if model and self._model_prefix and not model.startswith(self._model_prefix):
+            logger.debug(
+                "%s: model %s doesn't match prefix %s — routing to OpenRouter",
+                self._label, model, self._model_prefix,
+            )
+            return await self._secondary.chat(model=model, **shared)
+
         # Try primary (direct provider) — map the OpenRouter-prefixed
         # model name to the native provider name, or use the primary's
         # default_model when no mapping exists.
