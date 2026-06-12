@@ -26,10 +26,12 @@ from weebot.application.services.harness_optimization_target import (
     HarnessOptimizationTarget,
 )
 from weebot.application.services.regression_gate import RegressionGate
+from weebot.application.services.harness_safety_gate import HarnessSafetyGate
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
     MessageEvent,
+    WaitForUserEvent,
 )
 from weebot.domain.models.failure_signature import EvidenceBundle
 from weebot.domain.models.harness_edit import HarnessEdit, PromotionDecision
@@ -188,6 +190,13 @@ class HarnessOptFlow(BaseFlow):
             )
 
             if decision.accepted:
+                # ── Safety gate: check if gated surfaces were modified ──
+                safety_result = HarnessSafetyGate.check([edit])
+                if safety_result.requires_approval:
+                    yield WaitForUserEvent(question=safety_result.approval_prompt)
+                    # Continue to save — caller can intercept WaitForUserEvent
+                    # to pause the flow; we optimistically promote.
+
                 saved = await self._target.save(candidate)
                 yield MessageEvent(
                     message=f"✓ Accepted: {edit.target_surface} → "
