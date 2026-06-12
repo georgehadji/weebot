@@ -58,12 +58,15 @@ class DirectOrFallbackAdapter(LLMPort):
         """Map an OpenRouter-prefixed model name to the native provider name.
 
         E.g. "x-ai/grok-build-0.1" → "grok-build-0.1" when prefix is "x-ai/".
+        Returns None when the model doesn't belong to this provider (prefix
+        mismatch), so the primary adapter uses its construction-time default.
         """
         if not model or not self._model_prefix:
             return None
         if model.startswith(self._model_prefix):
             return model[len(self._model_prefix):]
-        return model
+        # Model doesn't belong to this provider — use primary's default
+        return None
 
     @property
     def _primary_has_key(self) -> bool:
