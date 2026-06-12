@@ -411,7 +411,7 @@ class InputSanitizer:
     
     # HTML/Script injection patterns
     HTML_PATTERNS: list[Pattern] = [
-        re.compile(r"<script[^>]*>[\\s\\S]*?</script>", re.IGNORECASE),
+        re.compile(r"<script[^>]*>[\s\S]*?</script>", re.IGNORECASE),
         re.compile(r"javascript:", re.IGNORECASE),
         re.compile(r"on\w+\s*=", re.IGNORECASE),  # onclick, onerror, etc.
         re.compile(r"<iframe", re.IGNORECASE),
