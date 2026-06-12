@@ -459,7 +459,15 @@ class RoleBasedToolRegistry:
                         _shared_browser_adapter = PlaywrightAdapter()
                     tool = tool_cls(browser=_shared_browser_adapter)
                 else:
-                    tool = tool_cls()
+                    try:
+                        tool = tool_cls()
+                    except (TypeError, RuntimeError) as exc:
+                        logger.warning(
+                            "Skipping tool %s: construction failed (%s). "
+                            "This tool requires DI injection.",
+                            name, exc,
+                        )
+                        continue
                 # Inject tool_config after construction if tool supports it
                 if tool_config is not None and hasattr(tool, "set_config"):
                     tool.set_config(tool_config)
