@@ -1,6 +1,8 @@
 """Phase 6 tests: HarnessSafetyGate — surface classification, approval prompts."""
 from __future__ import annotations
 
+import pytest
+
 from weebot.domain.models.harness_edit import HarnessEdit
 
 
@@ -114,3 +116,86 @@ class TestHarnessSafetyGate:
         edit = HarnessEdit(target_surface="runtime_control.enabled", new_value="true")
         result = HarnessSafetyGate.check([edit])
         assert "gated=1" in repr(result)
+
+    def test_structural_surfaces_are_autonomous(self):
+        """skill_retrieval.* and trajectory.* should be autonomous."""
+        from weebot.application.services.harness_safety_gate import HarnessSafetyGate
+
+        edits = [
+            HarnessEdit(target_surface="skill_retrieval.top_k", new_value="5"),
+            HarnessEdit(target_surface="trajectory.repetition_threshold", new_value="6"),
+        ]
+        result = HarnessSafetyGate.check(edits)
+        assert not result.requires_approval
+        assert len(result.autonomous_edits) == 2
+
+
+# ── Integration: HarnessOptFlow yields WaitForUserEvent for gated edits ──
+
+class TestHarnessOptFlowSafetyIntegration:
+    @pytest.mark.asyncio
+    async def test_gated_edit_yields_wait_for_user_event(self):
+        """When regression gate accepts a gated-surface edit, flow must
+        yield WaitForUserEvent before saving."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock
+
+        from weebot.application.flows.harness_opt_flow import HarnessOptFlow
+        from weebot.application.services.harness_optimization_target import (
+            HarnessOptimizationTarget,
+        )
+        from weebot.application.services.regression_gate import RegressionGate
+        from weebot.domain.models.event import WaitForUserEvent
+        from weebot.domain.models.failure_signature import (
+            FailureCluster, FailureSignature,
+        )
+        from weebot.domain.models.harness_edit import PromotionDecision
+
+        # Mock LLM to propose a GATED edit (runtime_control)
+        llm = AsyncMock()
+        llm.chat.return_value = MagicMock(
+            content=json.dumps({
+                "target": "runtime_control.max_recent_tool_errors",
+                "value": "5",
+                "mechanism": "unproductive_repetition",
+                "expected_effect": "Fewer retries",
+                "risks": [],
+            }),
+        )
+
+        # Mock trajectory repo with one failure cluster
+        repo = AsyncMock()
+        sig = FailureSignature(
+            session_id="s1", task_id="t1",
+            terminal_cause="timeout",
+            agent_behavior="retry_loop",
+            mechanism="unproductive_repetition",
+            actionability_score=0.8,
+        )
+        repo.get_clusters.return_value = [
+            FailureCluster.from_signatures([sig]),
+        ]
+        repo.count_trajectories.return_value = 10
+
+        # Mock regression gate to always accept
+        gate = RegressionGate()  # No task_runner → auto-accept
+
+        target = HarnessOptimizationTarget("weebot/config/harness/v0.2.0.yaml")
+
+        flow = HarnessOptFlow(
+            llm=llm,
+            target=target,
+            trajectory_repo=repo,
+            flow_factory=lambda s: AsyncMock(),
+            held_in_tasks=["t1"],
+            max_proposals=1,
+            gate=gate,
+        )
+
+        event_types = []
+        async for event in flow.run():
+            event_types.append(type(event).__name__)
+
+        assert "WaitForUserEvent" in event_types, (
+            f"Expected WaitForUserEvent for gated edit but got: {event_types}"
+        )

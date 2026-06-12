@@ -14,13 +14,10 @@ import logging
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
 from weebot.domain.models.session import Session
 
-from weebot.application.cqrs.commands.harness_edit_commands import (
-    ApplyHarnessEditsCommand,
-)
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.services.harness_optimization_target import (
     HarnessOptimizationTarget,
@@ -190,12 +187,14 @@ class HarnessOptFlow(BaseFlow):
             )
 
             if decision.accepted:
-                # ── Safety gate: check if gated surfaces were modified ──
+                # ── Safety gate: notify if gated surfaces were modified ──
+                # This is a NOTIFICATION, not a blocking gate.  The flow
+                # yields WaitForUserEvent to inform the caller, then
+                # optimistically saves.  Callers that want to block must
+                # stop iterating after receiving WaitForUserEvent.
                 safety_result = HarnessSafetyGate.check([edit])
                 if safety_result.requires_approval:
                     yield WaitForUserEvent(question=safety_result.approval_prompt)
-                    # Continue to save — caller can intercept WaitForUserEvent
-                    # to pause the flow; we optimistically promote.
 
                 saved = await self._target.save(candidate)
                 yield MessageEvent(

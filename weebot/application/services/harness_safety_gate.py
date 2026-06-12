@@ -10,6 +10,7 @@ so the user is shown edits that already pass regression testing.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Optional
 
 from weebot.domain.models.harness_edit import HarnessEdit
@@ -19,12 +20,21 @@ from weebot.domain.models.harness_edit import HarnessEdit
 # These are the paper's primary edit targets — instruction text changes
 # that do not affect the agent's capabilities or safety boundaries.
 AUTONOMOUS_SURFACES: frozenset[str] = frozenset({
-    "instructions.system_prompt_extension",
+    # Instruction surfaces — the paper's primary edit targets
+    "instructions.system_prompt_extension",  # Policy note: broad but safe (text only)
     "instructions.bootstrap",
     "instructions.execution",
     "instructions.verification",
     "instructions.failure_recovery",
+    # Skill and structural tuning knobs
     "skill_selection.active_skills",
+    "skill_retrieval.enabled",
+    "skill_retrieval.top_k",
+    "skill_retrieval.retriever",
+    "trajectory.repetition_threshold",
+    "trajectory.stagnation_window",
+    "trajectory.budget_hotspot_ratio",
+    "trajectory.exhaustion_ratio",
 })
 
 # Surfaces that require human approval before promotion.
@@ -90,20 +100,14 @@ class HarnessSafetyGate:
 
 # ── Result type ───────────────────────────────────────────────────────────
 
+@dataclass(frozen=True)
 class SafetyCheckResult:
     """Result of a safety check on harness edits."""
 
-    def __init__(
-        self,
-        requires_approval: bool,
-        autonomous_edits: list[HarnessEdit],
-        gated_edits: list[HarnessEdit],
-        approval_prompt: str,
-    ) -> None:
-        self.requires_approval = requires_approval
-        self.autonomous_edits = autonomous_edits
-        self.gated_edits = gated_edits
-        self.approval_prompt = approval_prompt
+    requires_approval: bool = False
+    autonomous_edits: list[HarnessEdit] = field(default_factory=list)
+    gated_edits: list[HarnessEdit] = field(default_factory=list)
+    approval_prompt: str = ""
 
     def __repr__(self) -> str:
         return (
