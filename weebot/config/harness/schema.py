@@ -5,9 +5,15 @@ Aggregates all harness layers into a single versioned artifact:
 - Procedural Skill Layer → BM25 index path, top_k
 - Action Realization Layer → canonicalizer settings
 - Trajectory Regulation Layer → detection thresholds
+- Behavioural Instruction Layer → model-specific prompts (Self-Harness)
+- Runtime Control Layer → safety-relevant policy knobs
+- Subagent Layer → parallel agent delegation
+- Skill Selection Layer → active skills
 
 The key property: *model-agnostic*.  A harness evolved on one model backbone
 can be reused on any other without retraining (LIFE-HARNESS paper finding).
+Behavioural instructions (the ``instructions`` field) are the Self-Harness
+optimiser's primary edit target.
 """
 from __future__ import annotations
 
@@ -16,6 +22,13 @@ from typing import Any, Optional
 
 import yaml
 from pydantic import BaseModel, Field
+
+from weebot.domain.models.harness_instructions import (
+    InstructionConfig,
+    RuntimeControlConfig,
+    SubagentConfig,
+    SkillSelectionConfig,
+)
 
 
 class CanonicalizerConfig(BaseModel):
@@ -46,17 +59,41 @@ class HarnessConfig(BaseModel):
 
     Loaded from a YAML file at startup.  The entire harness is swapped
     by changing the file path — no code changes needed.
+
+    .. versionchanged:: 0.2.0
+       Added ``instructions``, ``runtime_control``, ``subagents``,
+       and ``skill_selection`` behavioural surfaces for Self-Harness.
     """
 
     version: str = Field(default="0.0.0")
     description: str = Field(default="")
     evolved_from: Optional[str] = Field(
         default=None,
-        description="Model backbone this harness was evolved from, if any",
+        description="Prior harness version this was evolved from",
     )
+
+    # ── Structural layers (Tier 1.1–1.3) ──────────────────────────
     canonicalizer: CanonicalizerConfig = Field(default_factory=CanonicalizerConfig)
     skill_retrieval: SkillRetrievalConfig = Field(default_factory=SkillRetrievalConfig)
     trajectory: TrajectoryConfig = Field(default_factory=TrajectoryConfig)
+
+    # ── Behavioural / Self-Harness layers (v0.2.0+) ──────────────
+    instructions: InstructionConfig = Field(
+        default_factory=InstructionConfig,
+        description="Behavioural instruction surfaces — primary Self-Harness edit target",
+    )
+    runtime_control: RuntimeControlConfig = Field(
+        default_factory=RuntimeControlConfig,
+        description="Runtime policy knobs — safety-gated, not auto-evolvable",
+    )
+    subagents: SubagentConfig = Field(
+        default_factory=SubagentConfig,
+        description="Subagent declarations for parallel delegation",
+    )
+    skill_selection: SkillSelectionConfig = Field(
+        default_factory=SkillSelectionConfig,
+        description="Active skill names to load into executor context",
+    )
 
     @classmethod
     def load(cls, path: Path | str) -> "HarnessConfig":

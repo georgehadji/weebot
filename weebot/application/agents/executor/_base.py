@@ -152,6 +152,7 @@ class ExecutorAgent:
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
         agent_role: str | None = None,  # Agent role for per-role model selection
         hooks: "Optional[HookRegistryPort]" = None,  # HookRegistryPort for pre/post tool call events
+        harness_instruction_block: str | None = None,  # Self-Harness behavioural instructions
     ):
         self._llm = llm
         self._tools = tools
@@ -166,6 +167,7 @@ class ExecutorAgent:
         self._hooks = hooks
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
+        self._harness_instruction_block = harness_instruction_block or None
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         self._trajectory_monitor = TrajectoryMonitor()
@@ -597,6 +599,10 @@ class ExecutorAgent:
             "Always use absolute paths or chain the directory change inline: "
             "  Set-Location E:\\Output\\<project>; <command>\n"
         ) + system_prompt
+
+        # ── Self-Harness: inject behavioural instruction block ──────
+        if self._harness_instruction_block:
+            system_prompt = f"{system_prompt}\n{self._harness_instruction_block}"
 
         if self._skill_prompt:
             system_prompt = f"{system_prompt}\n\n{self._skill_prompt}"

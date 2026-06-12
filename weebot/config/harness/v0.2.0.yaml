@@ -1,0 +1,52 @@
+# Harness v0.2.0 — Default configuration with behavioural instruction surfaces.
+#
+# Extends v0.1.0 with the InstructionConfig / RuntimeControlConfig /
+# SubagentConfig / SkillSelectionConfig surfaces that Self-Harness can evolve.
+# Like v0.1.0, this harness is model-agnostic and contains sensible
+# defaults for all models.
+#
+# To evolve: run `python -m cli.main harness evolve --harness-version v0.2.0`.
+version: "0.2.0"
+description: "Default harness — contracts + BM25 skills + trajectory regulation + behavioural instructions"
+evolved_from: "0.1.0"
+
+canonicalizer:
+  strict_mode: false
+  coerce_types: true
+  contracts_dir: "config/contracts/"
+
+skill_retrieval:
+  enabled: true
+  retriever: "bm25"
+  top_k: 3
+  index_path: null
+
+trajectory:
+  repetition_threshold: 4
+  stagnation_window: 3
+  budget_hotspot_ratio: 0.4
+  exhaustion_ratio: 0.9
+
+# ── Behavioural instruction surfaces (Self-Harness editable) ──────────────
+instructions:
+  system_prompt_extension: ""
+  bootstrap: "Start by inspecting the workspace and identifying the smallest relevant edit surface."
+  execution: "Prefer concrete repo changes over generic advice, and keep edits tightly scoped to the task."
+  verification: "Before concluding, verify the result with the most targeted command, file read, or test you can run."
+  failure_recovery: "If a tool call fails, inspect the error and adapt; do not blindly retry the same action."
+
+# ── Runtime policy knobs (safety-gated — not auto-evolvable) ──────────────
+runtime_control:
+  enabled: false
+  max_recent_tool_errors: null
+  max_total_tool_messages: null
+  loop_detection_instruction: null
+
+# ── Subagent declarations ─────────────────────────────────────────────────
+subagents:
+  definitions: []
+  max_parallel: 0
+
+# ── Skill selection ───────────────────────────────────────────────────────
+skill_selection:
+  active_skills: []

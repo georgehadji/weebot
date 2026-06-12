@@ -172,6 +172,26 @@ class PlanActFlow(BaseFlow):
         self._skill_prompt = cfg.skill_prompt
         self._tracing_port = None
         self._persistence_adapter = None
+        # ── Self-Harness: behavioural instruction block ──────────
+        self._harness_instruction_block: str = ""
+        if cfg.harness_config is not None:
+            from weebot.application.services.harness_prompt_assembler import (
+                HarnessPromptAssembler,
+            )
+            try:
+                hc = cfg.harness_config
+                self._harness_instruction_block = HarnessPromptAssembler.assemble(
+                    instructions=hc.instructions,
+                    runtime_control=hc.runtime_control,
+                    subagents=hc.subagents,
+                    skill_selection=hc.skill_selection,
+                )
+            except Exception as exc:
+                self._stdlib_logger.warning(
+                    "Failed to assemble harness instructions: %s — running without harness block",
+                    exc,
+                )
+        # ──────────────────────────────────────────────────────────
         # ── Timing bookkeeping ────────────────────────────────────
         self._state_entered_at: float | None = None
         self._flow_started_at: float = 0.0
@@ -194,6 +214,9 @@ class PlanActFlow(BaseFlow):
             profile_name=cfg.profile_name,
             personality=cfg.personality,
             agent_role=cfg.agent_role,
+            harness_instruction_block=self._harness_instruction_block
+            if self._harness_instruction_block
+            else None,
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps

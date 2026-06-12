@@ -89,6 +89,13 @@ class PlanActFlowConfig:
     """Optional task preset controlling quality gates and model selection.
     If None, flow uses its hardcoded defaults (backward-compatible)."""
 
+    # ── Self-Harness: behavioural harness configuration ─────────────
+    harness_config: Optional[Any] = None  # HarnessConfig
+    """Optional behavioural harness config (``HarnessConfig`` from
+    ``weebot.config.harness.schema``).  When set, the executor's system
+    prompt is augmented with instruction blocks from this config.
+    When None, behaviour is unchanged (backward-compatible)."""
+
     # ── Cross-cutting ───────────────────────────────────────────────
     logger: Optional[StructuredLogger] = None
     hooks: Optional[Any] = None  # HookRegistryPort
