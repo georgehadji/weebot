@@ -91,17 +91,25 @@ class PythonExecuteTool(BaseTool):
         """
         super().__init__()
         if sandbox is None:
+            # Try resolving from DI container as fallback
             try:
                 from weebot.application.di import Container
-                container = Container()
-                container.configure_defaults()
-                sandbox = container.get(SandboxPort)
-            except Exception as _exc:
-                raise RuntimeError(
-                    f"PythonExecuteTool requires a SandboxPort. "
-                    f"Inject via __init__(sandbox=...) or configure DI container. "
-                    f"Fallback failed: {_exc}"
-                ) from _exc
+                from weebot.application.ports.sandbox_port import SandboxPort as _SP
+                _c = Container()
+                sandbox = _c._maybe_get(_SP)
+            except Exception:
+                pass
+        if sandbox is None:
+            # Final fallback: use native sandbox
+            try:
+                from weebot.infrastructure.sandbox.factory import create_sandbox
+                sandbox = create_sandbox()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "PythonExecuteTool: no SandboxPort available — "
+                    "python_execute will be unavailable"
+                )
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(
