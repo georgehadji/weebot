@@ -528,6 +528,7 @@ from weebot.application.cqrs.commands.transfer_commands import (
     ValidateTransferCommand,
 )
 from weebot.application.cqrs.commands.failure_signature_commands import (
+    BatchExtractSignaturesCommand,
     ClusterFailurePatternsQuery,
     ExtractFailureSignatureCommand,
 )
@@ -539,6 +540,7 @@ from weebot.application.cqrs.handlers.trajectory_handler import (
     ScoreTrajectoryHandler,
 )
 from weebot.application.cqrs.handlers.failure_signature_handlers import (
+    BatchExtractSignaturesHandler,
     ClusterFailurePatternsHandler,
     ExtractFailureSignatureHandler,
 )
@@ -747,12 +749,22 @@ def register_skillopt_handlers(
     )
 
     # ── Self-Harness: failure signature extraction on failed trajectories ──
+    _fs_handler = ExtractFailureSignatureHandler(
+        llm=llm_port,
+        trajectory_repo=trajectory_repo,
+        budget_model=None,  # Use default budget model
+    )
     mediator.register_command_handler(
         ExtractFailureSignatureCommand,
-        ExtractFailureSignatureHandler(
-            llm=llm_port,
+        _fs_handler,
+    )
+
+    # ── Self-Harness: batch re-extraction for bootstrapping ───────────────
+    mediator.register_command_handler(
+        BatchExtractSignaturesCommand,
+        BatchExtractSignaturesHandler(
+            handler=_fs_handler,
             trajectory_repo=trajectory_repo,
-            budget_model=None,  # Use default budget model
         ),
     )
 

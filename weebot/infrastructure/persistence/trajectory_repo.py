@@ -99,7 +99,7 @@ class TrajectoryRepository:
                 """
                 CREATE TABLE IF NOT EXISTS failure_signatures (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL UNIQUE,
                     task_id TEXT NOT NULL DEFAULT '',
                     terminal_cause TEXT NOT NULL DEFAULT '',
                     agent_behavior TEXT NOT NULL DEFAULT '',
@@ -226,12 +226,17 @@ class TrajectoryRepository:
     # ── Failure Signature CRUD ───────────────────────────────────────────
 
     async def save_failure_signature(self, signature: FailureSignature) -> None:
-        """Persist a failure signature for clustering."""
+        """Persist a failure signature for clustering.
+
+        Uses INSERT OR IGNORE to prevent duplicate signatures for the
+        same session.  The UNIQUE constraint on session_id ensures each
+        session produces at most one signature.
+        """
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
             await conn.execute(
                 """
-                INSERT INTO failure_signatures
+                INSERT OR IGNORE INTO failure_signatures
                     (session_id, task_id, terminal_cause, agent_behavior, mechanism,
                      trajectory_health, actionability_score, harness_version, model_id,
                      extracted_at)
@@ -338,6 +343,7 @@ class TrajectoryRepository:
         self,
         lookback_days: int = 7,
         max_sessions: int = 200,
+        force_reprocess: bool = False,
     ) -> list[tuple[str, str | None, str | None, str | None]]:
         """Return (session_id, task_id, trajectory_text, failure_modes_json)
         for trajectories that lack a failure_signature entry.
@@ -346,19 +352,32 @@ class TrajectoryRepository:
         """
         pool = await self._get_pool()
         cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
-        rows = await pool.execute_read(
-            """
-            SELECT t.session_id, t.task_id, t.trajectory_text, t.failure_modes
-            FROM trajectories t
-            LEFT JOIN failure_signatures fs ON t.session_id = fs.session_id
-            WHERE t.created_at >= :cutoff
-              AND t.passed = 0
-              AND fs.session_id IS NULL
-            ORDER BY t.created_at DESC
-            LIMIT :limit
-            """,
-            {"cutoff": cutoff, "limit": max_sessions},
-        )
+        if force_reprocess:
+            rows = await pool.execute_read(
+                """
+                SELECT t.session_id, t.task_id, t.trajectory_text, t.failure_modes
+                FROM trajectories t
+                WHERE t.created_at >= :cutoff
+                  AND t.passed = 0
+                ORDER BY t.created_at DESC
+                LIMIT :limit
+                """,
+                {"cutoff": cutoff, "limit": max_sessions},
+            )
+        else:
+            rows = await pool.execute_read(
+                """
+                SELECT t.session_id, t.task_id, t.trajectory_text, t.failure_modes
+                FROM trajectories t
+                LEFT JOIN failure_signatures fs ON t.session_id = fs.session_id
+                WHERE t.created_at >= :cutoff
+                  AND t.passed = 0
+                  AND fs.session_id IS NULL
+                ORDER BY t.created_at DESC
+                LIMIT :limit
+                """,
+                {"cutoff": cutoff, "limit": max_sessions},
+            )
         return [
             (r["session_id"], r["task_id"], r["trajectory_text"], r["failure_modes"])
             for r in rows

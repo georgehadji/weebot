@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -109,7 +110,13 @@ class ExtractFailureSignatureHandler(CommandHandler):
                     error_code="EMPTY_LLM",
                 )
 
-            parsed = json.loads(response.content)
+            # Strip markdown code fences if the model wrapped the JSON
+            raw = response.content
+            fence_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+            if fence_match:
+                raw = fence_match.group(1)
+
+            parsed = json.loads(raw)
             terminal_cause = parsed.get("terminal_cause", "unknown")
             agent_behavior = parsed.get("agent_behavior", "unknown")
             mechanism = parsed.get("mechanism", "unknown")
@@ -120,8 +127,14 @@ class ExtractFailureSignatureHandler(CommandHandler):
                 try:
                     health = TrajectoryHealth(command.trajectory_health)
                 except ValueError:
-                    pass
+                    logger.warning(
+                        "Unknown trajectory_health value %r for session %s — storing as None",
+                        command.trajectory_health, command.session_id,
+                    )
 
+            # NOTE: command.harness_version currently receives
+            # trajectory.harness ("direct_chat" etc.) not a version
+            # string like "0.2.0".  Full version wiring is Phase 5.
             signature = FailureSignature(
                 session_id=command.session_id,
                 task_id=command.task_id or "",
@@ -175,6 +188,7 @@ class BatchExtractSignaturesHandler(CommandHandler):
             existing = await self._repo.get_sessions_without_signature(
                 lookback_days=command.lookback_days,
                 max_sessions=command.max_sessions,
+                force_reprocess=command.force_reprocess,
             )
 
             if not existing:
@@ -279,17 +293,17 @@ def _estimate_actionability(
         "dependency_untested",
     }
 
+    # Known terminal causes — use exact match, not substring
+    LOW_ACTIONABILITY_CAUSES = {"timeout", "crash"}
+
     score = 0.5  # neutral baseline
 
     if mechanism in high_impact:
         score += 0.3
     if agent_behavior in high_impact_behaviors:
         score += 0.2
-    if "timeout" in terminal_cause.lower():
-        score -= 0.1  # timeouts can be model-inherent
-    if "crash" in terminal_cause.lower():
-        score -= 0.2  # crashes are often environmental
-    if mechanism == "tool_misuse":
-        score += 0.1  # highly addressable via instructions
+    if terminal_cause in LOW_ACTIONABILITY_CAUSES:
+        penalty = 0.1 if terminal_cause == "timeout" else 0.2
+        score -= penalty
 
     return max(0.1, min(1.0, score))
