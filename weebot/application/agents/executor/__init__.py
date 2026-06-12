@@ -1,12 +1,10 @@
-"""ExecutorAgent sub-package — extracted modules for ExecutorAgent decomposition.
+"""ExecutorAgent sub-package.
 
-Current status: extraction in progress.
-- _base.py: original ExecutorAgent (migrated from agents/executor.py)
-- cascade_manager.py: model cascade, circuit breaker, fallback
-- tool_executor.py: tool call execution, timeout, hooks
+- _base.py: ExecutorAgent implementation (migrated from agents/executor.py)
 
-As each module stabilises, methods will migrate out of _base.ExecutorAgent
-into the focused sub-modules above.
+Dead-code modules (cascade_manager.py, tool_executor.py) were removed after
+audit review confirmed zero importers.  Future decomposition should extract
+collaborators into weebot/application/flows/collaborators/ instead.
 """
 from ._base import ExecutorAgent, _classify_tool_error
 
