@@ -325,6 +325,79 @@ class CircuitBreaker:
                     )
 
     # ------------------------------------------------------------------
+    # Persistence — save/load breaker state to survive restarts
+    # ------------------------------------------------------------------
+
+    def persist_state(self, path: str | Path) -> None:
+        """Save all breaker states to a JSON file.
+
+        Args:
+            path: File path to write state to (e.g. ``~/.weebot/breaker_state.json``).
+        """
+        import json as _json
+        data = self.to_persistable()
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(_json.dumps(data, indent=2))
+
+    def restore_state(self, path: str | Path) -> bool:
+        """Load breaker states from a JSON file.
+
+        Args:
+            path: File path to read state from.
+
+        Returns:
+            True if state was restored, False if file doesn't exist.
+        """
+        import json as _json
+        p = Path(path)
+        if not p.exists():
+            return False
+        try:
+            data = _json.loads(p.read_text())
+            self.load_from_persistable(data)
+            return True
+        except Exception:
+            _log.warning("Failed to restore circuit breaker state from %s", path)
+            return False
+
+    def to_persistable(self) -> list[dict[str, Any]]:
+        """Serialize all breaker states for storage.
+
+        Returns list of dicts suitable for JSON serialization.
+        `last_state_change` is converted from monotonic time to
+        wall-clock offset so it survives restarts.
+        """
+        now = time.monotonic()
+        states: list[dict[str, Any]] = []
+        for entity_id, entry in self._breakers.items():
+            states.append({
+                "entity_id": entity_id,
+                "state": entry.state.value,
+                "failure_count": entry.failure_count,
+                "success_count": entry.success_count,
+                "last_failure_time": entry.last_failure_time,
+                "last_state_change_offset": now - entry.last_state_change,
+            })
+        return states
+
+    def load_from_persistable(self, states: list[dict[str, Any]]) -> None:
+        """Restore breaker states from previously saved data.
+
+        Args:
+            states: List of state dicts as returned by ``to_persistable()``.
+        """
+        now = time.monotonic()
+        for s in states:
+            entry = _BreakerEntry(
+                state=BreakerState(s["state"]),
+                failure_count=s["failure_count"],
+                success_count=s.get("success_count", 0),
+                last_failure_time=s.get("last_failure_time", 0.0),
+                last_state_change=now - s.get("last_state_change_offset", 0.0),
+            )
+            self._breakers[s["entity_id"]] = entry
+
+    # ------------------------------------------------------------------
     # HARDEN: Metrics
     # ------------------------------------------------------------------
 

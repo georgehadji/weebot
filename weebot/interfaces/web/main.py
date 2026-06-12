@@ -135,6 +135,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.configure_defaults()
     app.state.container = container
 
+    # ── Database migration (Alembic) ───────────────────────────
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config(str(Path(__file__).resolve().parent.parent.parent.parent / "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database migrations up to date")
+    except Exception as exc:
+        logger.warning("Database migration failed (non-fatal): %s", exc)
+
     # ── Scheduler startup ──────────────────────────────────────
     scheduler = container.build_scheduler()
     from weebot.scheduling.default_jobs import register_default_jobs
@@ -142,11 +152,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await scheduler.start()
     app.state.scheduler = scheduler
 
+    # ── Restore circuit breaker state ──────────────────────────
+    try:
+        from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
+        llm = container.get(LLMPort)
+        if isinstance(llm, ResilientLLMAdapter):
+            cb_path = str(Path.home() / ".weebot" / "breaker_state.json")
+            restored = llm._circuit.restore_state(cb_path) if llm._circuit else False
+            if restored:
+                logger.info("Restored circuit breaker state from %s", cb_path)
+    except Exception as exc:
+        logger.debug("Circuit breaker state restore skipped: %s", exc)
+
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────
     if hasattr(app.state, "heartbeat"):
         await app.state.heartbeat.stop()
+    # Persist circuit breaker state before shutdown
+    try:
+        from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
+        llm = container.get(LLMPort)
+        if isinstance(llm, ResilientLLMAdapter):
+            cb_path = str(Path.home() / ".weebot" / "breaker_state.json")
+            if llm._circuit:
+                llm._circuit.persist_state(cb_path)
+                logger.info("Circuit breaker state persisted to %s", cb_path)
+    except Exception as exc:
+        logger.debug("Circuit breaker state persist skipped: %s", exc)
     await scheduler.stop()
     logger.info("Shutting down Weebot Web Server...")
 

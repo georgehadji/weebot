@@ -1,25 +1,26 @@
-"""SQLite-based event store for session logging and audit trails.
+"""Async SQLite-based event store for session logging and audit trails.
 
-This module provides persistent storage for agent events, enabling:
+Uses the shared aiosqlite connection pool (SQLiteConnectionPool) instead of
+synchronous sqlite3 + asyncio.to_thread, eliminating thread pool contention.
+
+Provides persistent storage for agent events, enabling:
 - Complete session reconstruction for debugging
 - Cost tracking and analytics
 - Performance monitoring
 - Session export for sharing
-
-Based on patterns from The Dev Squad and Hyperagent analyses.
 """
 from __future__ import annotations
 
-import asyncio
 import json
-import sqlite3
-from contextlib import contextmanager
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+import logging
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from weebot.application.ports.event_store_port import EventStorePort
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,7 +37,6 @@ class Event:
     tokens_used: int
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "id": self.id,
             "timestamp": self.timestamp.isoformat(),
@@ -52,13 +52,11 @@ class Event:
 @dataclass
 class CostSummary:
     """Summary of costs for a session."""
-
     total_cost: float
     total_tokens: int
     model_breakdown: dict[str, dict[str, float]]
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "total_cost": self.total_cost,
             "total_tokens": self.total_tokens,
@@ -69,7 +67,6 @@ class CostSummary:
 @dataclass
 class SessionInfo:
     """Information about a session."""
-
     id: str
     started_at: datetime
     ended_at: Optional[datetime]
@@ -79,7 +76,6 @@ class SessionInfo:
     total_tokens: int
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
         return {
             "id": self.id,
             "started_at": self.started_at.isoformat() if self.started_at else None,
@@ -91,78 +87,39 @@ class SessionInfo:
         }
 
 
-class EventStore(EventStorePort):
-    """SQLite-based event store for audit logging.
+class AsyncEventStore(EventStorePort):
+    """Async SQLite-based event store for audit logging.
 
-    Implements EventStorePort using synchronous sqlite3, wrapped with
-    asyncio.to_thread for async compatibility.
+    Uses the existing SQLiteConnectionPool (aiosqlite) for all operations,
+    eliminating thread pool contention from the previous asyncio.to_thread approach.
 
     Example:
-        >>> store = EventStore()
-        >>> store.start_session("session-1", "user-1")
-        >>> store.log_event("session-1", "llm_call", {"model": "gpt-4"}, 0.02, "gpt-4", 150)
-        >>> events = store.get_session_events("session-1")
-        >>> summary = store.get_cost_summary("session-1")
+        store = AsyncEventStore()
+        await store.log_event("session-1", "llm_call", {...}, 0.02, "gpt-4", 150)
+        events = await store.get_session_events("session-1")
+        summary = await store.get_cost_summary("session-1")
     """
 
-    # ── EventStorePort async implementation ─────────────────────────
-    async def log_event(
-        self,
-        session_id: str,
-        event_type: str,
-        data: dict[str, Any],
-        cost: float = 0.0,
-        model: str = "",
-        tokens_used: int = 0,
-    ) -> int:
-        """Async wrapper for sync log_event. (EventStorePort implementation)"""
-        return await asyncio.to_thread(
-            self._sync_log_event, session_id, event_type, data, cost, model, tokens_used,
-        )
-
-    async def get_session_events(
-        self,
-        session_id: str,
-        event_type: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Async wrapper for sync get_session_events. (EventStorePort implementation)"""
-        events = await asyncio.to_thread(
-            self._sync_get_session_events, session_id, event_type,
-        )
-        return [e.to_dict() for e in events]
-
-    async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
-        """Async wrapper for sync get_cost_summary. (EventStorePort implementation)"""
-        summary = await asyncio.to_thread(self._sync_get_cost_summary, session_id)
-        return summary.to_dict()
-
-    async def query_recent_events(
-        self,
-        event_type: str | None = None,
-        limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        """Query recent events across all sessions, optionally filtered by type."""
-        events = await asyncio.to_thread(
-            self.query_events, event_type=event_type, limit=limit,
-        )
-        return [e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in events]
-
-    # ── Synchronous implementation ───────────────────────────────────
-
     def __init__(self, db_path: str = "~/.weebot/events.db"):
-        """Initialize the event store.
-
-        Args:
-            db_path: Path to SQLite database file
-        """
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        self._pool: Optional["SQLiteConnectionPool"] = None  # noqa: F821
 
-    def _init_db(self) -> None:
-        """Initialize the database schema."""
-        with self._get_connection() as conn:
-            conn.executescript(
+    async def _get_pool(self):
+        """Lazy-init connection pool."""
+        if self._pool is None:
+            from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
+            self._pool = await get_or_create_pool(
+                self.db_path, max_read_connections=3, enable_wal=True,
+            )
+            await self._ensure_schema()
+        return self._pool
+
+    async def _ensure_schema(self) -> None:
+        """Create tables if they don't exist."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
@@ -196,36 +153,12 @@ class EventStore(EventStorePort):
                     ON sessions(status);
                 CREATE INDEX IF NOT EXISTS idx_sessions_user
                     ON sessions(user_id);
-            """
+                """
             )
 
-    @contextmanager
-    def _get_connection(self):
-        """Get a database connection as a context manager."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        finally:
-            conn.close()
+    # ── EventStorePort async implementation ─────────────────────────
 
-    def start_session(self, session_id: str, user_id: Optional[str] = None) -> None:
-        """Record a new session.
-
-        Args:
-            session_id: Unique session identifier
-            user_id: Optional user identifier
-        """
-        with self._get_connection() as conn:
-            conn.execute(
-                """INSERT OR REPLACE INTO sessions
-                   (id, started_at, status, user_id)
-                   VALUES (?, datetime('now'), 'active', ?)""",
-                (session_id, user_id),
-            )
-
-    def _sync_log_event(
+    async def log_event(
         self,
         session_id: str,
         event_type: str,
@@ -234,213 +167,152 @@ class EventStore(EventStorePort):
         model: str = "",
         tokens_used: int = 0,
     ) -> int:
-        """Log an event.
+        """Log an event to the store.
 
-        Args:
-            session_id: Session this event belongs to
-            event_type: Type of event (e.g., 'llm_call', 'tool_call')
-            data: Event-specific data dictionary
-            cost: Cost of this event in USD
-            model: Model used (if applicable)
-            tokens_used: Tokens consumed (if applicable)
-
-        Returns:
-            Event ID
+        Returns the auto-generated event ID.
         """
-        with self._get_connection() as conn:
-            cursor = conn.execute(
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            cursor = await conn.execute(
                 """INSERT INTO events
                    (session_id, event_type, data_json, cost, model, tokens_used)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (session_id, event_type, json.dumps(data), cost, model, tokens_used),
             )
-
-            # Update session totals
-            conn.execute(
+            await conn.execute(
                 """UPDATE sessions
                    SET total_cost = total_cost + ?,
                        total_tokens = total_tokens + ?
                    WHERE id = ?""",
                 (cost, tokens_used, session_id),
             )
-
             return cursor.lastrowid
 
-    def _sync_get_session_events(
-        self, session_id: str, event_type: Optional[str] = None
-    ) -> list[Event]:
-        """Get all events for a session.
-
-        Args:
-            session_id: Session to query
-            event_type: Optional filter by event type
-
-        Returns:
-            List of events
-        """
-        with self._get_connection() as conn:
-            if event_type:
-                rows = conn.execute(
-                    """SELECT * FROM events
-                       WHERE session_id = ? AND event_type = ?
-                       ORDER BY timestamp""",
-                    (session_id, event_type),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """SELECT * FROM events
-                       WHERE session_id = ?
-                       ORDER BY timestamp""",
-                    (session_id,),
-                ).fetchall()
-
-            return [
-                Event(
-                    id=row["id"],
-                    timestamp=datetime.fromisoformat(row["timestamp"]),
-                    session_id=row["session_id"],
-                    event_type=row["event_type"],
-                    data=json.loads(row["data_json"]),
-                    cost=row["cost"],
-                    model=row["model"] or "",
-                    tokens_used=row["tokens_used"],
-                )
-                for row in rows
-            ]
-
-    def _sync_get_cost_summary(self, session_id: str) -> CostSummary:
-        """Get cost summary for a session.
-
-        Args:
-            session_id: Session to summarize
-
-        Returns:
-            CostSummary with totals and breakdown
-        """
-        with self._get_connection() as conn:
-            # Get per-model breakdown
-            rows = conn.execute(
-                """SELECT model,
-                          SUM(cost) as total_cost,
-                          SUM(tokens_used) as total_tokens,
-                          COUNT(*) as call_count
-                   FROM events
-                   WHERE session_id = ? AND model IS NOT NULL AND model != ''
-                   GROUP BY model""",
+    async def get_session_events(
+        self,
+        session_id: str,
+        event_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get all events for a session, optionally filtered by type."""
+        pool = await self._get_pool()
+        if event_type:
+            rows = await pool.execute_read(
+                """SELECT * FROM events
+                   WHERE session_id = ? AND event_type = ?
+                   ORDER BY timestamp""",
+                (session_id, event_type),
+            )
+        else:
+            rows = await pool.execute_read(
+                """SELECT * FROM events
+                   WHERE session_id = ?
+                   ORDER BY timestamp""",
                 (session_id,),
-            ).fetchall()
+            )
+        return [self._row_to_event(r).to_dict() for r in rows]
 
-            model_breakdown = {
-                row["model"]: {
-                    "cost": row["total_cost"],
-                    "tokens": row["total_tokens"],
-                    "calls": row["call_count"],
-                }
-                for row in rows
+    async def get_cost_summary(self, session_id: str) -> dict[str, Any]:
+        """Get cost summary for a session."""
+        pool = await self._get_pool()
+
+        rows = await pool.execute_read(
+            """SELECT model,
+                      SUM(cost) as total_cost,
+                      SUM(tokens_used) as total_tokens,
+                      COUNT(*) as call_count
+               FROM events
+               WHERE session_id = ? AND model IS NOT NULL AND model != ''
+               GROUP BY model""",
+            (session_id,),
+        )
+        model_breakdown = {
+            row["model"]: {
+                "cost": row["total_cost"],
+                "tokens": row["total_tokens"],
+                "calls": row["call_count"],
             }
+            for row in rows
+        }
 
-            # Get totals
-            total = conn.execute(
-                """SELECT total_cost, total_tokens FROM sessions WHERE id = ?""",
-                (session_id,),
-            ).fetchone()
+        total = await pool.execute_read(
+            """SELECT total_cost, total_tokens FROM sessions WHERE id = ?""",
+            (session_id,),
+            fetch_all=False,
+        )
 
-            return CostSummary(
-                total_cost=total["total_cost"] if total else 0.0,
-                total_tokens=total["total_tokens"] if total else 0,
-                model_breakdown=model_breakdown,
+        return CostSummary(
+            total_cost=total["total_cost"] if total else 0.0,
+            total_tokens=total["total_tokens"] if total else 0,
+            model_breakdown=model_breakdown,
+        ).to_dict()
+
+    async def query_recent_events(
+        self,
+        event_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Query recent events across all sessions."""
+        events = await self.query_events(event_type=event_type, limit=limit)
+        return [e.to_dict() for e in events]
+
+    # ── Additional public methods ───────────────────────────────────
+
+    async def start_session(self, session_id: str, user_id: Optional[str] = None) -> None:
+        """Record a new session."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """INSERT OR REPLACE INTO sessions
+                   (id, started_at, status, user_id)
+                   VALUES (?, datetime('now'), 'active', ?)""",
+                (session_id, user_id),
             )
 
-    def end_session(self, session_id: str, status: str = "completed") -> None:
-        """Mark a session as ended.
-
-        Args:
-            session_id: Session to end
-            status: Final status ('completed', 'failed', 'cancelled')
-        """
-        with self._get_connection() as conn:
-            conn.execute(
+    async def end_session(self, session_id: str, status: str = "completed") -> None:
+        """Mark a session as ended."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
                 """UPDATE sessions
                    SET ended_at = datetime('now'), status = ?
                    WHERE id = ?""",
                 (status, session_id),
             )
 
-    def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
-        """Get information about a session.
+    async def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
+        """Get information about a session."""
+        pool = await self._get_pool()
+        row = await pool.execute_read(
+            "SELECT * FROM sessions WHERE id = ?", (session_id,), fetch_all=False,
+        )
+        if not row:
+            return None
+        return self._row_to_session_info(row)
 
-        Args:
-            session_id: Session to query
-
-        Returns:
-            SessionInfo or None if not found
-        """
-        with self._get_connection() as conn:
-            row = conn.execute(
-                """SELECT * FROM sessions WHERE id = ?""", (session_id,)
-            ).fetchone()
-
-            if not row:
-                return None
-
-            return SessionInfo(
-                id=row["id"],
-                started_at=datetime.fromisoformat(row["started_at"]),
-                ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
-                status=row["status"],
-                user_id=row["user_id"],
-                total_cost=row["total_cost"],
-                total_tokens=row["total_tokens"],
-            )
-
-    def list_sessions(
+    async def list_sessions(
         self,
         user_id: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[SessionInfo]:
-        """List sessions with optional filtering.
+        """List sessions with optional filtering."""
+        pool = await self._get_pool()
+        query = "SELECT * FROM sessions WHERE 1=1"
+        params: list[Any] = []
+        if user_id:
+            query += " AND user_id = ?"
+            params.append(user_id)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY started_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
-        Args:
-            user_id: Filter by user
-            status: Filter by status ('active', 'completed', 'failed')
-            limit: Maximum results
-            offset: Pagination offset
+        rows = await pool.execute_read(query, tuple(params))
+        return [self._row_to_session_info(r) for r in rows]
 
-        Returns:
-            List of SessionInfo
-        """
-        with self._get_connection() as conn:
-            query = "SELECT * FROM sessions WHERE 1=1"
-            params: list[Any] = []
-
-            if user_id:
-                query += " AND user_id = ?"
-                params.append(user_id)
-            if status:
-                query += " AND status = ?"
-                params.append(status)
-
-            query += " ORDER BY started_at DESC LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
-
-            rows = conn.execute(query, params).fetchall()
-
-            return [
-                SessionInfo(
-                    id=row["id"],
-                    started_at=datetime.fromisoformat(row["started_at"]),
-                    ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
-                    status=row["status"],
-                    user_id=row["user_id"],
-                    total_cost=row["total_cost"],
-                    total_tokens=row["total_tokens"],
-                )
-                for row in rows
-            ]
-
-    def query_events(
+    async def query_events(
         self,
         event_type: Optional[str] = None,
         session_id: Optional[str] = None,
@@ -448,204 +320,162 @@ class EventStore(EventStorePort):
         end_time: Optional[datetime] = None,
         limit: int = 100,
     ) -> list[Event]:
-        """Query events with filters.
+        """Query events with filters."""
+        pool = await self._get_pool()
+        query = "SELECT * FROM events WHERE 1=1"
+        params: list[Any] = []
+        if event_type:
+            query += " AND event_type = ?"
+            params.append(event_type)
+        if session_id:
+            query += " AND session_id = ?"
+            params.append(session_id)
+        if start_time:
+            query += " AND timestamp >= ?"
+            params.append(start_time.isoformat())
+        if end_time:
+            query += " AND timestamp <= ?"
+            params.append(end_time.isoformat())
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
 
-        Args:
-            event_type: Filter by type
-            session_id: Filter by session
-            start_time: Filter events after this time
-            end_time: Filter events before this time
-            limit: Maximum results
+        rows = await pool.execute_read(query, tuple(params))
+        return [self._row_to_event(r) for r in rows]
 
-        Returns:
-            List of events
-        """
-        with self._get_connection() as conn:
-            query = "SELECT * FROM events WHERE 1=1"
-            params: list[Any] = []
+    async def get_recent_failed_sessions(self, limit: int = 10) -> list[SessionInfo]:
+        """Get recent failed sessions."""
+        return await self.list_sessions(status="failed", limit=limit)
 
-            if event_type:
-                query += " AND event_type = ?"
-                params.append(event_type)
-            if session_id:
-                query += " AND session_id = ?"
-                params.append(session_id)
-            if start_time:
-                query += " AND timestamp >= ?"
-                params.append(start_time.isoformat())
-            if end_time:
-                query += " AND timestamp <= ?"
-                params.append(end_time.isoformat())
-
-            query += " ORDER BY timestamp DESC LIMIT ?"
-            params.append(limit)
-
-            rows = conn.execute(query, params).fetchall()
-
-            return [
-                Event(
-                    id=row["id"],
-                    timestamp=datetime.fromisoformat(row["timestamp"]),
-                    session_id=row["session_id"],
-                    event_type=row["event_type"],
-                    data=json.loads(row["data_json"]),
-                    cost=row["cost"],
-                    model=row["model"] or "",
-                    tokens_used=row["tokens_used"],
-                )
-                for row in rows
-            ]
-
-    def get_recent_failed_sessions(self, limit: int = 10) -> list[SessionInfo]:
-        """Get recent failed sessions.
-
-        Args:
-            limit: Maximum results
-
-        Returns:
-            List of failed SessionInfo
-        """
-        return self.list_sessions(status="failed", limit=limit)
-
-    def export_session(self, session_id: str, format: str = "json") -> str:
-        """Export session data.
-
-        Args:
-            session_id: Session to export
-            format: 'json' or 'markdown'
-
-        Returns:
-            Exported data as string
-        """
-        events = self._sync_get_session_events(session_id)
-        summary = self._sync_get_cost_summary(session_id)
-        session_info = self.get_session_info(session_id)
+    async def export_session(self, session_id: str, format: str = "json") -> str:
+        """Export session data as JSON or Markdown."""
+        events = await self._get_session_events_raw(session_id)
+        summary = await self.get_cost_summary(session_id)
+        session_info = await self.get_session_info(session_id)
+        summary_obj = CostSummary(**summary) if isinstance(summary, dict) else summary
 
         if format == "json":
-            return json.dumps(
-                {
-                    "session": session_info.to_dict() if session_info else None,
-                    "cost_summary": summary.to_dict(),
-                    "events": [e.to_dict() for e in events],
-                },
-                indent=2,
-            )
+            return json.dumps({
+                "session": session_info.to_dict() if session_info else None,
+                "cost_summary": summary_obj.to_dict() if hasattr(summary_obj, "to_dict") else summary,
+                "events": [e.to_dict() for e in events],
+            }, indent=2)
 
         elif format == "markdown":
-            lines = [
-                f"# Session Log: {session_id}",
-                "",
-                "## Summary",
-            ]
-
+            lines = [f"# Session Log: {session_id}", "", "## Summary"]
             if session_info:
-                lines.extend([
-                    f"- Started: {session_info.started_at}",
-                    f"- Status: {session_info.status}",
-                    f"- User: {session_info.user_id or 'anonymous'}",
-                ])
-
-            lines.extend([
-                "",
-                "## Cost Summary",
-                f"- Total Cost: ${summary.total_cost:.4f}",
-                f"- Total Tokens: {summary.total_tokens:,}",
-                "",
-                "### Model Usage",
-            ])
-
-            for model, stats in summary.model_breakdown.items():
+                lines.append(f"- Started: {session_info.started_at}")
+                lines.append(f"- Status: {session_info.status}")
+                lines.append(f"- User: {session_info.user_id or 'anonymous'}")
+            lines.extend(["", "## Cost Summary"])
+            lines.append(f"- Total Cost: ${summary_obj.total_cost:.4f}")
+            lines.append(f"- Total Tokens: {summary_obj.total_tokens:,}")
+            lines.extend(["", "### Model Usage"])
+            for model, stats in summary_obj.model_breakdown.items():
                 lines.append(
                     f"- {model}: ${stats['cost']:.4f} ({stats['tokens']} tokens, {int(stats['calls'])} calls)"
                 )
-
             lines.extend(["", "## Events"])
             for e in events:
                 lines.append(f"\n### {e.event_type} ({e.timestamp.strftime('%H:%M:%S')})")
                 lines.append(f"Model: {e.model or 'N/A'} | Cost: ${e.cost:.4f}")
                 lines.append(f"```json\n{json.dumps(e.data, indent=2)}\n```")
-
             return "\n".join(lines)
 
-        else:
-            raise ValueError(f"Unknown format: {format}")
+        raise ValueError(f"Unknown format: {format}")
 
-    def delete_session(self, session_id: str) -> bool:
-        """Delete a session and all its events.
+    async def _get_session_events_raw(self, session_id: str) -> list[Event]:
+        """Get raw Event objects (internal helper for export)."""
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT * FROM events WHERE session_id = ? ORDER BY timestamp",
+            (session_id,),
+        )
+        return [self._row_to_event(r) for r in rows]
 
-        Args:
-            session_id: Session to delete
-
-        Returns:
-            True if deleted, False if not found
-        """
-        with self._get_connection() as conn:
-            # Delete events first (foreign key constraint)
-            conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
-
-            # Delete session
-            cursor = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete a session and all its events."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+            cursor = await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
             return cursor.rowcount > 0
 
-    def cleanup_old_sessions(self, days: int = 30) -> int:
-        """Delete sessions older than specified days.
-
-        Args:
-            days: Age threshold in days
-
-        Returns:
-            Number of sessions deleted
-        """
-        # Validate input to prevent negative days
+    async def cleanup_old_sessions(self, days: int = 30) -> int:
+        """Delete sessions older than specified days."""
         if not isinstance(days, int) or days < 0:
             raise ValueError(f"days must be a non-negative integer, got {days}")
 
-        with self._get_connection() as conn:
-            # Use parameterized query for days (SQLite datetime with variable)
-            # Note: SQLite datetime function doesn't support ? parameters directly for the modifier,
-            # so we construct the modifier string safely after validation
-            modifier = f"-{days} days"
-            rows = conn.execute(
-                """SELECT id FROM sessions
-                   WHERE started_at < datetime('now', ?)""",
-                (modifier,)
-            ).fetchall()
+        pool = await self._get_pool()
+        modifier = f"-{days} days"
+        rows = await pool.execute_read(
+            "SELECT id FROM sessions WHERE started_at < datetime('now', ?)",
+            (modifier,),
+        )
+        count = 0
+        for row in rows:
+            if await self.delete_session(row["id"]):
+                count += 1
+        return count
 
-            count = 0
-            for row in rows:
-                if self.delete_session(row["id"]):
-                    count += 1
+    async def get_stats(self) -> dict[str, Any]:
+        """Get database statistics."""
+        pool = await self._get_pool()
 
-            return count
+        session_count_row = await pool.execute_read(
+            "SELECT COUNT(*) as count FROM sessions", fetch_all=False,
+        )
+        event_count_row = await pool.execute_read(
+            "SELECT COUNT(*) as count FROM events", fetch_all=False,
+        )
+        total_row = await pool.execute_read(
+            "SELECT SUM(total_cost) as total, SUM(total_tokens) as tokens FROM sessions",
+            fetch_all=False,
+        )
 
-    def get_stats(self) -> dict[str, Any]:
-        """Get database statistics.
+        return {
+            "sessions": session_count_row["count"] if session_count_row else 0,
+            "events": event_count_row["count"] if event_count_row else 0,
+            "total_cost": total_row["total"] if total_row and total_row["total"] else 0.0,
+            "total_tokens": total_row["tokens"] if total_row and total_row["tokens"] else 0,
+            "db_path": str(self.db_path),
+            "db_size_bytes": self.db_path.stat().st_size if self.db_path.exists() else 0,
+        }
 
-        Returns:
-            Dictionary with statistics
-        """
-        with self._get_connection() as conn:
-            session_count = conn.execute(
-                "SELECT COUNT(*) as count FROM sessions"
-            ).fetchone()["count"]
+    async def close(self) -> None:
+        """Close the connection pool."""
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
 
-            event_count = conn.execute(
-                "SELECT COUNT(*) as count FROM events"
-            ).fetchone()["count"]
+    # ── Row mapping helpers ────────────────────────────────────────
 
-            total_cost = conn.execute(
-                "SELECT SUM(total_cost) as total FROM sessions"
-            ).fetchone()["total"] or 0.0
+    @staticmethod
+    def _row_to_event(row) -> Event:
+        """Convert a DB row to Event domain object."""
+        return Event(
+            id=row["id"],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+            session_id=row["session_id"],
+            event_type=row["event_type"],
+            data=json.loads(row["data_json"]),
+            cost=row["cost"],
+            model=row["model"] or "",
+            tokens_used=row["tokens_used"],
+        )
 
-            total_tokens = conn.execute(
-                "SELECT SUM(total_tokens) as total FROM sessions"
-            ).fetchone()["total"] or 0
+    @staticmethod
+    def _row_to_session_info(row) -> SessionInfo:
+        """Convert a DB row to SessionInfo."""
+        return SessionInfo(
+            id=row["id"],
+            started_at=datetime.fromisoformat(row["started_at"]),
+            ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
+            status=row["status"],
+            user_id=row["user_id"],
+            total_cost=row["total_cost"],
+            total_tokens=row["total_tokens"],
+        )
 
-            return {
-                "sessions": session_count,
-                "events": event_count,
-                "total_cost": total_cost,
-                "total_tokens": total_tokens,
-                "db_path": str(self.db_path),
-                "db_size_bytes": self.db_path.stat().st_size if self.db_path.exists() else 0,
-            }
+
+# Backward-compatible alias — existing importers use `EventStore`
+EventStore = AsyncEventStore
