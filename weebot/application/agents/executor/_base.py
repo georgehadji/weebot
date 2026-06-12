@@ -846,6 +846,7 @@ class ExecutorAgent:
                         step_result=step_result if step_result else None,
                         total_budget=self._max_steps,
                         used_budget=tool_calls_attempted,
+                        available_tools=list(self._tools._tools.keys()) if self._tools else None,
                     )
                     if diagnosis.recovery_message:
                         self._conversation_buffer.append({

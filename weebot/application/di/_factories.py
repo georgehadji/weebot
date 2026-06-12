@@ -260,7 +260,7 @@ class FactoriesMixin:
     @staticmethod
     def _create_harness_config():
         from pathlib import Path
-        version = _os.getenv("WEEBOT_HARNESS_VERSION", "v0.1.0")
+        version = _os.getenv("WEEBOT_HARNESS_VERSION", "v0.2.0")
         config_path = (
             Path(__file__).resolve().parent.parent.parent
             / "config" / "harness" / f"{version}.yaml"

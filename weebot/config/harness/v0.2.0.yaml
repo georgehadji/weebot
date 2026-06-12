@@ -30,10 +30,26 @@ trajectory:
 # ── Behavioural instruction surfaces (Self-Harness editable) ──────────────
 instructions:
   system_prompt_extension: ""
-  bootstrap: "Start by inspecting the workspace and identifying the smallest relevant edit surface."
-  execution: "Prefer concrete repo changes over generic advice, and keep edits tightly scoped to the task."
-  verification: "Before concluding, verify the result with the most targeted command, file read, or test you can run."
-  failure_recovery: "If a tool call fails, inspect the error and adapt; do not blindly retry the same action."
+  bootstrap: >
+    Start by inspecting the workspace and identifying the task scope.
+    For any web research, use the web_search TOOL directly — never use
+    bash with curl, wget, or Invoke-WebRequest.
+  execution: >
+    Use the right tool for each sub-task:
+    web_search for finding information online (NEVER bash curl/wget),
+    file_editor for creating and editing files (NEVER bash echo/cat),
+    python_execute for running Python scripts,
+    bash ONLY for system commands (ls, mkdir, pip install, git).
+    Keep edits tightly scoped. Aim for 5 tool calls or fewer per step.
+  verification: >
+    Before concluding a step, verify the result with the most targeted
+    check available: run tests, parse output, or read the file you created.
+    Do not skip verification.
+  failure_recovery: >
+    If a tool call fails or produces the same output twice, SWITCH to a
+    completely different tool. Do not retry bash with a variation of the
+    same command. If web_search is available, use it instead of bash for
+    any web access.
 
 # ── Runtime policy knobs (safety-gated — not auto-evolvable) ──────────────
 runtime_control:

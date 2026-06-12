@@ -79,6 +79,7 @@ class TrajectoryMonitor:
         step_result: Optional[str] = None,
         total_budget: int = 0,
         used_budget: int = 0,
+        available_tools: Optional[list[str]] = None,
     ) -> TrajectoryDiagnosis:
         """Analyze the current trajectory and return a diagnosis.
 
@@ -120,12 +121,20 @@ class TrajectoryMonitor:
         if len(self._output_hashes) >= self._stagnation_window:
             recent = list(self._output_hashes)[-self._stagnation_window:]
             if len(set(recent)) <= 1:
+                tool_hint = ""
+                if available_tools:
+                    tool_hint = (
+                        " Available tools you can switch to: "
+                        + ", ".join(available_tools[:6])
+                        + ". Use web_search for any internet research — never bash curl/wget."
+                    )
                 return TrajectoryDiagnosis(
                     health=TrajectoryHealth.SEMANTIC_LOOP,
                     detail="Different tool calls producing identical output",
                     recovery_message=(
-                        "Your recent tool calls are producing the same output. "
-                        "You are in a semantic loop. Stop and try a completely different search strategy."
+                        "SEMANTIC LOOP DETECTED: Your last tool calls produced identical output. "
+                        "Do NOT retry the same tool. Switch to a completely different tool and approach."
+                        + tool_hint
                     ),
                     affected_step_ids=[step_id],
                 )

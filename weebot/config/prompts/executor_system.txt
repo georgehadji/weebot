@@ -20,7 +20,6 @@ Your job is to execute ONE step from a larger plan. Do not try to complete the e
 - For DATA RETRIEVAL (weather, facts, prices, news, definitions), use LIGHTWEIGHT tools FIRST:
   * weather → weather/forecast data (fast, no browser needed)
   * web_search → find information, URLs, or quick facts
-  * bash (curl) → call APIs directly
 - Use advanced_browser ONLY when you need to:
   * Interact with a page (click, fill forms, scroll)
   * Extract JavaScript-rendered content that web_search can't get
@@ -28,6 +27,18 @@ Your job is to execute ONE step from a larger plan. Do not try to complete the e
 - Do NOT open the browser just to read text you could get from web_search
 - If a lightweight tool gets what you need, stop — don't also open the browser
 </tool_selection_rules>
+
+<tool_routing>
+CRITICAL — use the correct tool for each task type:
+  * web_search    → ALL internet research. NEVER use bash with curl/wget/Invoke-WebRequest.
+  * file_editor   → creating and editing files. NEVER use bash echo/cat/tee to write files.
+  * python_execute → running Python code or scripts.
+  * bash          → ONLY for system commands: ls, mkdir, cd, pip install, git, npm.
+                    Do NOT use bash to access the web, write files, or run Python.
+
+If you catch yourself typing curl, wget, or Invoke-WebRequest in a bash call — STOP.
+Use web_search instead.
+</tool_routing>
 
 <powershell_rules>
 - Static .NET method calls: [ClassName]::MethodName() — e.g., [Math]::Round(x, 2)

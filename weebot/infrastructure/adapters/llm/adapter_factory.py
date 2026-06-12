@@ -237,6 +237,7 @@ class AdapterFactory:
                     primary=direct,
                     secondary=fallback,
                     primary_label="deepseek-direct",
+                    model_prefix="deepseek/",
                 )
             # No direct key — OpenRouter only
             return OpenRouterAdapter(
@@ -263,6 +264,7 @@ class AdapterFactory:
                     primary=direct,
                     secondary=fallback,
                     primary_label="kimi-direct",
+                    model_prefix="moonshotai/",
                 )
             # No direct key — OpenRouter only
             return OpenRouterAdapter(
@@ -312,6 +314,7 @@ class AdapterFactory:
                     primary=direct,
                     secondary=fallback,
                     primary_label="xai-direct",
+                    model_prefix="x-ai/",
                 )
             # No direct key — OpenRouter only
             return OpenRouterAdapter(

@@ -46,11 +46,24 @@ class DirectOrFallbackAdapter(LLMPort):
         primary: LLMPort,
         secondary: LLMPort,
         primary_label: str = "direct",
+        model_prefix: str = "",
     ) -> None:
         self._primary = primary
         self._secondary = secondary
         self._label = primary_label
+        self._model_prefix = model_prefix  # e.g. "x-ai/" — stripped when forwarding to primary
         self._fallback_failure_count = 0
+
+    def _native_model(self, model: str | None) -> str | None:
+        """Map an OpenRouter-prefixed model name to the native provider name.
+
+        E.g. "x-ai/grok-build-0.1" → "grok-build-0.1" when prefix is "x-ai/".
+        """
+        if not model or not self._model_prefix:
+            return None
+        if model.startswith(self._model_prefix):
+            return model[len(self._model_prefix):]
+        return model
 
     @property
     def _primary_has_key(self) -> bool:
@@ -100,10 +113,15 @@ class DirectOrFallbackAdapter(LLMPort):
             )
             return await self._secondary.chat(model=model, **shared)
 
-        # Try primary (direct provider) — uses its own default_model,
-        # NOT the caller's OpenRouter-prefixed model name.
+        # Try primary (direct provider) — map the OpenRouter-prefixed
+        # model name to the native provider name, or use the primary's
+        # default_model when no mapping exists.
+        primary_kwargs = dict(shared)
+        native = self._native_model(model)
+        if native:
+            primary_kwargs["model"] = native
         try:
-            return await self._primary.chat(**shared)
+            return await self._primary.chat(**primary_kwargs)
         except Exception as exc:
             # Surface the actual API error for debugging.
             # Logged at INFO (not WARNING) so the executor's trajectory
