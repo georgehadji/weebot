@@ -19,7 +19,6 @@ from typing import Any, Callable, Optional
 
 from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.models.harness_edit import PromotionDecision
-from weebot.domain.models.benchmark_task import WeebotTask
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class RegressionGate:
 
     Usage::
 
-        async def run_tasks(tasks: list[WeebotTask], config: HarnessConfig
+        async def run_tasks(task_ids: list[str], config: HarnessConfig
                             ) -> list[dict]:
             # ... create PlanActFlow with config, run tasks, score ...
             return [{"passed": True}, ...]
@@ -78,10 +77,10 @@ class RegressionGate:
         """Initialize the gate.
 
         Args:
-            task_runner: Async callable ``(tasks: list[WeebotTask],
+            task_runner: Async callable ``(task_ids: list[str],
                 config: HarnessConfig) -> list[dict]``.  Each result dict
                 must have a ``"passed": bool`` key.  When None (test mode),
-                the gate uses a stub that always returns ``passed=True``.
+                the gate auto-accepts every candidate.
         """
         self._task_runner = task_runner
 
@@ -125,7 +124,7 @@ class RegressionGate:
         )
 
         baseline_in_report, candidate_in_report = await self._run_split(
-            tasks=held_in_tasks,
+            task_ids=held_in_tasks,
             baseline=baseline,
             candidate=candidate,
             repeats=repeats,
@@ -155,7 +154,7 @@ class RegressionGate:
         )
 
         baseline_ho_report, candidate_ho_report = await self._run_split(
-            tasks=held_out_tasks,
+            task_ids=held_out_tasks,
             baseline=baseline,
             candidate=candidate,
             repeats=repeats,
@@ -208,29 +207,29 @@ class RegressionGate:
 
     async def _run_split(
         self,
-        tasks: list[str],
+        task_ids: list[str],
         baseline: Any,
         candidate: Any,
         repeats: int,
     ) -> tuple[TaskRunReport, TaskRunReport]:
-        """Run both baseline and candidate on *tasks*, return (baseline, candidate) reports.
+        """Run both baseline and candidate on *task_ids*, return reports.
 
+        Passes task ID strings directly to the task_runner.
         Aggregates across ``repeats`` runs for stochastic stability.
         """
-        # Convert task IDs to WeebotTasks
-        weebot_tasks = [WeebotTask(task_id=tid, description="", samples=[])
-                        for tid in tasks]
+        if not task_ids:
+            return TaskRunReport(), TaskRunReport()
 
         # Baseline runs
-        all_baseline_results = []
+        all_baseline_results: list[dict] = []
         for _ in range(repeats):
-            results = await self._task_runner(weebot_tasks, baseline)
+            results = await self._task_runner(task_ids, baseline)
             all_baseline_results.extend(results)
 
         # Candidate runs
-        all_candidate_results = []
+        all_candidate_results: list[dict] = []
         for _ in range(repeats):
-            results = await self._task_runner(weebot_tasks, candidate)
+            results = await self._task_runner(task_ids, candidate)
             all_candidate_results.extend(results)
 
         baseline_report = TaskRunReport.from_results(all_baseline_results)

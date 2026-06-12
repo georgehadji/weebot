@@ -5,8 +5,6 @@ and error handling.  Uses mocked task_runners to avoid real LLM calls.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
 from weebot.domain.models.harness_edit import PromotionDecision
@@ -16,7 +14,7 @@ from weebot.config.harness.schema import HarnessConfig
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 def _make_config(**overrides) -> HarnessConfig:
-    """Create a HarnessConfig with optional instruction overrides."""
+    """Create a HarnessConfig with optional field overrides."""
     cfg = HarnessConfig.default()
     if overrides:
         data = cfg.model_dump()
@@ -25,137 +23,106 @@ def _make_config(**overrides) -> HarnessConfig:
     return cfg
 
 
-async def _task_runner_all_pass(tasks, config):
-    """Stub task runner: all tasks pass."""
-    return [{"passed": True} for _ in tasks]
+async def _task_runner_all_pass(task_ids, config):
+    """All tasks pass regardless of config."""
+    return [{"passed": True} for _ in task_ids]
 
 
-async def _task_runner_all_fail(tasks, config):
-    """Stub task runner: all tasks fail."""
-    return [{"passed": False} for _ in tasks]
-
-
-async def _task_runner_mixed(tasks, config):
-    """Stub task runner: first task fails, rest pass."""
-    return [{"passed": False} if i == 0 else {"passed": True}
-            for i in range(len(tasks))]
+async def _task_runner_all_fail(task_ids, config):
+    """All tasks fail regardless of config."""
+    return [{"passed": False} for _ in task_ids]
 
 
 # ── Acceptance Rule Tests ─────────────────────────────────────────────────
 
 class TestRegressionGateAcceptance:
-    """Tests for the paper's acceptance rule: Δ_in ≥ 0, Δ_ho ≥ 0, max > 0."""
+    """Tests for the paper's rule: Δ_in ≥ 0, Δ_ho ≥ 0, max(Δ_in, Δ_ho) > 0."""
 
     @pytest.mark.asyncio
     async def test_both_improve_accepts(self):
+        """Candidate better on both splits → ACCEPT."""
         from weebot.application.services.regression_gate import RegressionGate
 
         baseline = _make_config()
         candidate = _make_config(description="evolved")
 
-        async def _runner(tasks, config):
-            # Candidate always does better
+        async def _runner(task_ids, config):
             if config.description == "evolved":
-                return [{"passed": True}] * len(tasks)
-            return [{"passed": False}] * len(tasks)
+                return [{"passed": True}] * len(task_ids)
+            return [{"passed": False}] * len(task_ids)
 
         gate = RegressionGate(task_runner=_runner)
         decision = await gate.validate(
             baseline=baseline,
             candidate=candidate,
-            held_in_tasks=["task1", "task2"],
-            held_out_tasks=["task3", "task4"],
+            held_in_tasks=["t1", "t2"],
+            held_out_tasks=["t3", "t4"],
             repeats=1,
         )
-        assert decision.accepted, (
-            f"Both splits improved but gate rejected: {decision.reason}"
-        )
+        assert decision.accepted
         assert decision.delta_in > 0
         assert decision.delta_ho > 0
 
     @pytest.mark.asyncio
     async def test_held_in_regression_rejects_early(self):
-        """If Δ_in < 0, gate should reject WITHOUT running held-out."""
+        """If Δ_in < 0, gate rejects without evaluating held-out."""
         from weebot.application.services.regression_gate import RegressionGate
 
         baseline = _make_config()
         candidate = _make_config(description="worse")
+        call_count = {"n": 0}
 
-        call_log = {"held_out_ran": False}
-
-        async def _runner(tasks, config):
-            # Candidate does worse on all tasks
+        async def _runner(task_ids, config):
+            call_count["n"] += 1
+            # Candidate fails everything; baseline passes everything
             if config.description == "worse":
-                return [{"passed": False}] * len(tasks)
-            return [{"passed": True}] * len(tasks)
+                return [{"passed": False}] * len(task_ids)
+            return [{"passed": True}] * len(task_ids)
 
-        original_run_split = RegressionGate._run_split
-        try:
-            # Track whether held-out would have run
-            async def tracking_run_split(self, tasks, baseline, candidate, repeats):
-                held_in = ["held-in"]
-                held_out = ["held-out"]
-
-                # Determine which split we're running based on tasks
-                if tasks and tasks[0] == "held-out":
-                    call_log["held_out_ran"] = True
-
-                return await original_run_split(self, tasks, baseline, candidate, repeats)
-
-            RegressionGate._run_split = tracking_run_split
-            gate = RegressionGate(task_runner=_runner)
-            decision = await gate.validate(
-                baseline=baseline,
-                candidate=candidate,
-                held_in_tasks=["held-in"],
-                held_out_tasks=["held-out"],
-                repeats=1,
-            )
-            assert not decision.accepted
-            assert decision.delta_in < 0
-            assert decision.delta_ho == 0.0  # Held-out was never computed
-        finally:
-            RegressionGate._run_split = original_run_split
+        gate = RegressionGate(task_runner=_runner)
+        decision = await gate.validate(
+            baseline=baseline,
+            candidate=candidate,
+            held_in_tasks=["hi"],
+            held_out_tasks=["ho"],
+            repeats=1,
+        )
+        assert not decision.accepted
+        assert decision.delta_in < 0
+        assert decision.delta_ho == 0.0  # Never computed
+        # task_runner called 2 times (baseline held-in + candidate held-in)
+        # NOT 4 times (which would mean held-out also ran)
+        assert call_count["n"] == 2, (
+            f"Expected 2 calls (held-in only) but got {call_count['n']}"
+        )
 
     @pytest.mark.asyncio
     async def test_held_out_regression_rejects(self):
         """If Δ_in ≥ 0 but Δ_ho < 0, gate rejects."""
         from weebot.application.services.regression_gate import RegressionGate
 
-        baseline = _make_config()
+        baseline = _make_config(description="baseline")
         candidate = _make_config(description="overfit")
 
-        async def _runner(tasks, config):
-            # Candidate is same or better on held-in, worse on held-out
-            if config.description == "overfit":
-                # This runs BOTH held-in and held-out
-                return [{"passed": True}] * len(tasks)
-            return [{"passed": False}] * len(tasks)
+        async def _runner(task_ids, config):
+            is_candidate = config.description == "overfit"
+            # Distinguish held-in vs held-out by task ID prefix
+            is_held_out = any(tid.startswith("ho") for tid in task_ids)
 
-        # We need to simulate: baseline worse on held-in, better on held-out
-        # Actually, let me use a different approach: track which split we're on
+            if is_candidate and not is_held_out:
+                # Candidate improves on held-in
+                return [{"passed": True}] * len(task_ids)
+            elif is_candidate and is_held_out:
+                # Candidate regresses on held-out
+                return [{"passed": False}] * len(task_ids)
+            elif not is_candidate and not is_held_out:
+                # Baseline on held-in: worse
+                return [{"passed": False}] * len(task_ids)
+            else:
+                # Baseline on held-out: passes
+                return [{"passed": True}] * len(task_ids)
 
-        class _TrackingRunner:
-            def __init__(self):
-                self._called = 0
-            async def __call__(self, tasks, config):
-                self._called += 1
-                # 1st call (baseline held-in): worse
-                # 2nd call (candidate held-in): better → Δ_in > 0
-                # 3rd call (baseline held-out): better
-                # 4th call (candidate held-out): worse → Δ_ho < 0
-                if self._called % 2 == 0:  # Candidate (even call: 2, 4)
-                    if self._called == 2:  # candidate held-in → pass
-                        return [{"passed": True}] * len(tasks)
-                    else:  # self._called == 4: candidate held-out → fail
-                        return [{"passed": False}] * len(tasks)
-                else:  # Baseline (odd call: 1, 3)
-                    if self._called == 1:  # baseline held-in → fail
-                        return [{"passed": False}] * len(tasks)
-                    else:  # self._called == 3: baseline held-out → pass
-                        return [{"passed": True}] * len(tasks)
-
-        gate = RegressionGate(task_runner=_TrackingRunner())
+        gate = RegressionGate(task_runner=_runner)
         decision = await gate.validate(
             baseline=baseline,
             candidate=candidate,
@@ -163,14 +130,13 @@ class TestRegressionGateAcceptance:
             held_out_tasks=["ho1", "ho2"],
             repeats=1,
         )
-        assert not decision.accepted, (
-            f"Δ_ho should be negative but gate accepted: {decision.reason}"
-        )
-        assert decision.delta_ho < 0
+        assert not decision.accepted
+        assert decision.delta_in > 0   # Improved on held-in
+        assert decision.delta_ho < 0   # Regressed on held-out
 
     @pytest.mark.asyncio
     async def test_no_improvement_rejects(self):
-        """If Δ_in = 0 and Δ_ho = 0, gate rejects."""
+        """If Δ_in = 0 and Δ_ho = 0, gate rejects (no change)."""
         from weebot.application.services.regression_gate import RegressionGate
 
         gate = RegressionGate(task_runner=_task_runner_all_pass)
@@ -181,7 +147,6 @@ class TestRegressionGateAcceptance:
             held_out_tasks=["c"],
             repeats=1,
         )
-        # Both runner and candidate return same results, so Δ = 0
         assert not decision.accepted
         assert "No improvement" in decision.reason
 
@@ -197,6 +162,46 @@ class TestRegressionGateAcceptance:
         )
         assert decision.accepted
         assert "No task_runner" in decision.reason
+
+    @pytest.mark.asyncio
+    async def test_empty_tasks_no_crash(self):
+        """Empty task lists should not crash — short-circuit to (0, 0)."""
+        from weebot.application.services.regression_gate import RegressionGate
+
+        gate = RegressionGate(task_runner=_task_runner_all_pass)
+        decision = await gate.validate(
+            baseline=_make_config(),
+            candidate=_make_config(),
+            held_in_tasks=[],
+            held_out_tasks=[],
+            repeats=1,
+        )
+        assert not decision.accepted  # Δ_in=0, Δ_ho=0 → no improvement
+
+    @pytest.mark.asyncio
+    async def test_repeats_aggregate(self):
+        """Multiple repeats should aggregate pass rates."""
+        from weebot.application.services.regression_gate import RegressionGate
+
+        call_count = {"n": 0}
+
+        async def _runner(task_ids, config):
+            call_count["n"] += 1
+            if config.description == "better":
+                return [{"passed": True}] * len(task_ids)
+            return [{"passed": False}] * len(task_ids)
+
+        gate = RegressionGate(task_runner=_runner)
+        decision = await gate.validate(
+            baseline=_make_config(),
+            candidate=_make_config(description="better"),
+            held_in_tasks=["t1"],
+            held_out_tasks=["t2"],
+            repeats=3,
+        )
+        assert decision.accepted
+        # 2 splits × 2 configs × 3 repeats = 12 calls
+        assert call_count["n"] == 12
 
 
 # ── TaskRunReport Tests ──────────────────────────────────────────────────

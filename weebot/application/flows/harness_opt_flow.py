@@ -205,77 +205,50 @@ class HarnessOptFlow(BaseFlow):
     def _make_task_runner(self) -> Callable:
         """Return a callable for the RegressionGate's task_runner protocol.
 
-        The returned function has signature:
-            (tasks: list[WeebotTask], config: HarnessConfig) -> list[dict]
+        The returned function has signature::
 
-        For now, it ignores the candidate config and uses the flow_factory
-        as-is (which reads the current HarnessConfig from DI).  In Phase 5+,
-        the flow_factory should accept a harness config override so the
-        candidate can be evaluated without disk writes.
+            (task_ids: list[str], config: HarnessConfig) -> list[dict]
+
+        Each task_id is used as a prompt for a PlanActFlow run.  The result
+        dict must contain ``{"passed": bool}``.
+
+        **Limitation (Phase 4):** the ``config`` parameter is logged but not
+        injected into the flow — both baseline and candidate evaluations
+        use the current HarnessConfig from DI.  Phase 5 will add per-run
+        config injection so the gate can compare different harness versions.
         """
         from weebot.config.harness.schema import HarnessConfig
-        from weebot.domain.models.benchmark_task import WeebotTask
 
         async def _run(
-            tasks: list[WeebotTask],
+            task_ids: list[str],
             config: HarnessConfig,
         ) -> list[dict]:
             results = []
-            for task in tasks:
-                for sample in (task.samples or []):
-                    session = Session(
-                        id=f"gate-eval-{uuid.uuid4().hex[:8]}",
-                        user_id="regression-gate",
-                        agent_id="gate-eval",
-                        context={"harness_config": config.version},
+            for task_id in task_ids:
+                session = Session(
+                    id=f"gate-eval-{uuid.uuid4().hex[:8]}",
+                    user_id="regression-gate",
+                    agent_id="gate-eval",
+                    context={"harness_version": config.version},
+                )
+                flow = self._flow_factory(session)
+                try:
+                    async for _ in flow.run(task_id):
+                        pass
+                    results.append({"passed": True, "task_id": task_id})
+                except Exception as exc:
+                    logger.warning(
+                        "Gate eval %s (harness %s) failed: %s",
+                        task_id, config.version, exc,
                     )
-                    flow = self._flow_factory(session)
-                    try:
-                        async for _ in flow.run(sample.prompt):
-                            pass
-                        results.append({"passed": True})
-                    except Exception as exc:
-                        logger.warning("Gate eval task %s failed: %s", task.task_id, exc)
-                        results.append({"passed": False, "error": str(exc)})
+                    results.append({
+                        "passed": False,
+                        "task_id": task_id,
+                        "error": str(exc),
+                    })
             return results
 
         return _run
-
-    async def _evaluate_tasks(
-        self,
-        task_ids: list[str],
-        version: str,
-    ) -> list[dict]:
-        """Run a set of tasks and return scored results.
-
-        Uses the existing plan_act_flow via the flow_factory.
-        """
-        results = []
-        for task_id in task_ids:
-            session = Session(
-                id=f"harness-eval-{uuid.uuid4().hex[:8]}",
-                user_id="harness-opt",
-                agent_id="harness-eval",
-                context={"harness_version": version},
-            )
-            flow = self._flow_factory(session)
-            try:
-                async for _ in flow.run(task_id):
-                    pass
-                results.append({
-                    "task_id": task_id,
-                    "session_id": session.id,
-                    "status": "completed",
-                })
-            except Exception as exc:
-                logger.warning("Task %s failed: %s", task_id, exc)
-                results.append({
-                    "task_id": task_id,
-                    "session_id": session.id,
-                    "status": "error",
-                    "error": str(exc),
-                })
-        return results
 
     async def _mine_failure_patterns(
         self,
