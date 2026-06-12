@@ -101,8 +101,8 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "executor": [
         "moonshotai/kimi-k2.7-code",              # primary: Kimi K2.7 Code — agentic, tool-use, 256K
-        "x-ai/grok-build-0.1",                    # fallback 1: Grok Build — fast agentic
-        "deepseek/deepseek-v4-flash",             # fallback 2: DeepSeek V4 Flash — fast
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
     ],
     "reviewer": [
         "x-ai/grok-4.3",                          # primary: Grok 4.3 — factual accuracy
