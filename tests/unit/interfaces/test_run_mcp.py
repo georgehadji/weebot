@@ -31,9 +31,9 @@ class TestTryAttach:
     def test_returns_instance_on_success(self) -> None:
         """Existing class → instantiated object returned."""
         from run_mcp import _try_attach
-        from weebot.activity_stream import ActivityStream
+        from weebot.core.activity_stream import ActivityStream
 
-        result = _try_attach("weebot.activity_stream", "ActivityStream", "ActivityStream")
+        result = _try_attach("weebot.core.activity_stream", "ActivityStream", "ActivityStream")
         assert isinstance(result, ActivityStream)
 
 
