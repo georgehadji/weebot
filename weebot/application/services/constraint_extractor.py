@@ -94,6 +94,29 @@ class ConstraintExtractor:
         lines.append("[/CRITICAL CONSTRAINTS]")
         return "\n".join(lines)
     
+    def check_step(self, step_description: str, constraints: List[Constraint]) -> List[Constraint]:
+        """Return constraints that the step description appears to violate.
+
+        Only negative and safety constraints (priority <= 2) are checked;
+        positive requirements are not enforced here because partial progress
+        is acceptable. Uses key-token matching — no LLM calls.
+        """
+        violations: List[Constraint] = []
+        for c in constraints:
+            if c.priority > 2:
+                continue
+            action_match = re.search(
+                r"(?:do\s+not|don't|never|must\s+not|shall\s+not|cannot|can't|avoid)\s+(.+)",
+                c.text, re.IGNORECASE,
+            )
+            if action_match:
+                prohibited_phrase = action_match.group(1).strip().rstrip(".!;").lower()
+                key_tokens = prohibited_phrase.split()[:5]
+                step_lower = step_description.lower()
+                if sum(1 for tok in key_tokens if tok in step_lower) >= max(1, len(key_tokens) // 2):
+                    violations.append(c)
+        return violations
+
     def has_critical_constraints(self, text: str) -> bool:
         """Quick check if text contains any critical (safety) constraints.
         

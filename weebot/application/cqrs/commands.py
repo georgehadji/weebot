@@ -21,6 +21,10 @@ class CreatePlanCommand(Command):
     prompt: str = Field(min_length=1)
     model: str = MODEL_COMMAND_DEFAULT
     context: dict[str, Any] = Field(default_factory=dict)
+    meta_notes: list[str] = Field(
+        default_factory=list,
+        description="Cross-session avoidance hints from MisalignmentJournal",
+    )
 
 
 class ExecuteStepCommand(Command):

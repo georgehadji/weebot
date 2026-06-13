@@ -154,6 +154,7 @@ class PlanActFlow(BaseFlow):
         self._behavioral_learner = cfg.behavioral_learner
         self._checkpoint_port = cfg.checkpoint_port
         self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
+        self._misalignment_journal = cfg.misalignment_journal  # Optional[MisalignmentJournalPort]
         self._profile_name = cfg.profile_name
         self._agent_role = cfg.agent_role
         self._personality = cfg.personality
@@ -410,7 +411,50 @@ class PlanActFlow(BaseFlow):
         # Initial Resume/Start logic
         last_plan = self._session.get_last_plan()
 
-        if last_plan is not None and not last_plan.is_complete():
+        # ── Plan review resume (Enhancement 4) ──────────────────────────────
+        # Check for plan_pending_approval BEFORE the normal resume routing so
+        # we don't fall through to ExecutingState while the user's response
+        # is still being processed.
+        if self._session.context.get("plan_pending_approval"):
+            from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
+            # Clear the flag
+            _new_extra_pr = {**self._session.context.extra, "plan_pending_approval": False}
+            _new_ctx_pr = self._session.context.model_copy(update={"extra": _new_extra_pr})
+            self._session = self._session.model_copy(update={"context": _new_ctx_pr})
+            if last_plan is not None:
+                self._plan = last_plan
+            _response = prompt.strip().lower()
+            if _response in _APPROVE_TOKENS or not _response:
+                self._log.info("Plan approved by user — proceeding to execution")
+                self.set_state(ExecutingState())
+            else:
+                self._log.info("User requested plan modification: %r", prompt[:80])
+                # Record user correction in misalignment journal (best-effort)
+                if self._misalignment_journal is not None:
+                    import asyncio as _asyncio_pr
+                    try:
+                        from weebot.domain.models.misalignment_entry import MisalignmentEntry
+                        _asyncio_pr.ensure_future(self._misalignment_journal.record(
+                            MisalignmentEntry(
+                                session_id=self._session.id,
+                                project_path=self._session.context.get("working_dir", ""),
+                                symptom="user_correction",
+                                correction_text=prompt[:500],
+                            )
+                        ))
+                    except ImportError:
+                        pass
+                # Clear intent reviewed flag and nullify plan so PlanningState re-runs
+                _new_extra_pr2 = {
+                    **self._session.context.extra,
+                    "_intent_reviewed": False,
+                    "_plan_modification_request": prompt,
+                }
+                _new_ctx_pr2 = self._session.context.model_copy(update={"extra": _new_extra_pr2})
+                self._session = self._session.model_copy(update={"context": _new_ctx_pr2})
+                self._plan = None
+                self.set_state(PlanningState())
+        elif last_plan is not None and not last_plan.is_complete():
             self._plan = last_plan
             self.set_state(ExecutingState())
             self._log.info("Resuming session %s with existing plan", self._session.id)
@@ -421,6 +465,7 @@ class PlanActFlow(BaseFlow):
         else:
             # Fresh session, or WAITING with no plan (from a failed prior run)
             self.set_state(PlanningState())
+        # ────────────────────────────────────────────────────────────────────
 
         if self._hooks is not None:
             await self._hooks.execute_hooks("pre_execute", {

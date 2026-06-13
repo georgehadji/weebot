@@ -82,6 +82,9 @@ class PlanActFlowConfig:
 
     # ── Enhancement 5: Retention agent ─────────────────────────────
     retention_agent: Optional[Any] = None  # RetentionAgentPort
+
+    # ── Misalignment journal ─────────────────────────────────────────
+    misalignment_journal: Optional[Any] = None  # MisalignmentJournalPort
     """Service computing TrustReport from code review + CoVe evidence."""
 
     # ── Phase 5: Task preset (cost/quality tier) ────────────────────

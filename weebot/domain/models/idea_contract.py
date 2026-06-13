@@ -17,6 +17,7 @@ class IdeaSource(str, Enum):
     FAILED_STEP = "failed_step"
     AUDIT_VIOLATION = "audit_violation"
     KG_PATTERN = "kg_pattern"
+    USER_PROMPT = "user_prompt"
 
 
 class IdeaContract(BaseModel):

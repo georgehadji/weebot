@@ -306,10 +306,75 @@ class VerifyingState(FlowState):
             if write_count > 0 and verify_count == 0:
                 failures.append("unverified_writes")
 
+        # Gate 6+7: Artifact verification (Enhancement 3 — S7 fix)
+        artifact_failures = await self._gate_artifact_verification(flow)
+        failures.extend(artifact_failures)
+
         if failures:
             _log.info("Gate sweep failed: %s", failures)
         else:
-            _log.info("Gate sweep passed — all 5 gates clean")
+            _log.info("Gate sweep passed — all gates clean")
+
+        return failures
+
+    async def _gate_artifact_verification(self, flow) -> list[str]:
+        """Verify execution artifacts exist and tests passed.
+
+        Reads ToolEvent results directly — NOT the LLM summary.
+        Addresses S7 (Inaccurate Self-Reporting): agent claims completion
+        but execution artifacts contradict it.
+        """
+        from pathlib import Path
+        from weebot.domain.models.event import ToolEvent as _ToolEvent
+
+        failures: list[str] = []
+        session = flow._session
+
+        # Gate A: Files written by file_editor must still exist on disk.
+        written_paths: list[str] = []
+        for event in session.events:
+            if not isinstance(event, _ToolEvent):
+                continue
+            if event.tool_name not in ("file_editor", "edit_file", "write_file", "create_file"):
+                continue
+            args = event.function_args or {}
+            path = args.get("path") or args.get("file_path") or args.get("target_file", "")
+            if path:
+                written_paths.append(str(path))
+
+        missing = []
+        for p in written_paths:
+            try:
+                if not Path(p).exists():
+                    missing.append(p)
+            except (OSError, ValueError):
+                pass  # invalid path — skip without blocking
+
+        if missing:
+            _log.warning(
+                "Artifact gate A: %d written file(s) not found on disk: %s",
+                len(missing), missing[:3],
+            )
+            failures.append(f"written_files_missing:{','.join(missing[:2])}")
+
+        # Gate B: Test commands with failure markers in their output.
+        _test_keywords = (
+            "pytest", "npm test", "jest", "cargo test", "go test", "python -m pytest",
+        )
+        for event in session.events:
+            if not isinstance(event, _ToolEvent):
+                continue
+            if event.tool_name not in ("bash", "shell_exec", "powershell"):
+                continue
+            cmd = str((event.function_args or {}).get("command", "")).lower()
+            if not any(kw in cmd for kw in _test_keywords):
+                continue
+            result = (event.result or "").lower()
+            if any(m in result for m in ("failed", "error", "assertion error", "test failed")):
+                if "passed" not in result:
+                    _log.warning("Artifact gate B: test failure detected in bash output")
+                    failures.append("test_run_failed")
+                    break
 
         return failures
 

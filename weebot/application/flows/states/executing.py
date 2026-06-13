@@ -76,6 +76,49 @@ class ExecutingState(FlowState):
             context.set_state(UpdatingState())
             return
 
+        # ── Constraint enforcement (Enhancement 1 — S3 fix) ──────────────────
+        # Check the next step against constraints extracted from the original task
+        # before allowing execution. Uses ConstraintExtractor (regex-only, no LLM).
+        _initial_prompt = (
+            context._session.context.get("original_task", "")
+            or context._session.context.get("last_prompt", "")
+            or prompt
+        )
+        if _initial_prompt:
+            from weebot.application.services.constraint_extractor import ConstraintExtractor
+            _extractor = ConstraintExtractor()
+            _constraints = _extractor.extract(_initial_prompt)
+            _violations = _extractor.check_step(step.description, _constraints)
+            if _violations:
+                _violation_text = "; ".join(c.text for c in _violations[:2])
+                logger.warning(
+                    "Step '%s' may violate constraint: %s — pausing for user",
+                    step.id, _violation_text,
+                )
+                _journal = getattr(context, "_misalignment_journal", None)
+                if _journal is not None:
+                    import asyncio as _asyncio
+                    try:
+                        from weebot.domain.models.misalignment_entry import MisalignmentEntry
+                        _asyncio.ensure_future(_journal.record(MisalignmentEntry(
+                            session_id=context._session.id,
+                            project_path=context._session.context.get("working_dir", ""),
+                            symptom="constraint_violation",
+                            constraint_text=_violations[0].text,
+                            step_description=step.description,
+                        )))
+                    except ImportError:
+                        pass
+                yield WaitForUserEvent(
+                    question=(
+                        f"Step '{step.description}' may violate a stated constraint:\n"
+                        f"  {_violation_text}\n\n"
+                        f"Type 'proceed' to allow this step, or describe an alternative approach."
+                    )
+                )
+                return
+        # ──────────────────────────────────────────────────────────────────────
+
         # ── Capability 5: Behavioral Learning — extract rules from corrections ──
         # Dedup: only process one user message per session per 30-second window
         _dedup_key = f"blearn:{context._session.id}"

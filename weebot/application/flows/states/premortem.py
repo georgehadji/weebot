@@ -29,7 +29,7 @@ class PremortmState(FlowState):
     async def execute(
         self, context: "PlanActFlow", prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.executing import ExecutingState
+        from weebot.application.flows.states.plan_review import next_state_after_plan
         from weebot.application.services.premortem_analyzer import PremortmAnalyzer
 
         plan = context._plan
@@ -37,14 +37,14 @@ class PremortmState(FlowState):
         _enable = getattr(getattr(context, "_task_preset", None), "enable_premortem", None)
         if _enable is False:
             logger.debug("Pre-mortem skipped: disabled by task preset")
-            context.set_state(ExecutingState())
+            context.set_state(next_state_after_plan())
             return
         if _enable is None and (plan is None or len(plan.steps) < PREMORTEM_MIN_STEPS):
             logger.debug(
                 "Pre-mortem skipped: plan has %d steps (min %d)",
                 len(plan.steps) if plan else 0, PREMORTEM_MIN_STEPS,
             )
-            context.set_state(ExecutingState())
+            context.set_state(next_state_after_plan())
             return
 
         analyzer = PremortmAnalyzer(llm=context._llm)
@@ -73,4 +73,4 @@ class PremortmState(FlowState):
         else:
             logger.debug("Pre-mortem produced no risks")
 
-        context.set_state(ExecutingState())
+        context.set_state(next_state_after_plan())

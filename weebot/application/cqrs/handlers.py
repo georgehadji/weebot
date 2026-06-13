@@ -106,7 +106,7 @@ class CreatePlanHandler(CommandHandler):
 
             events: list[dict] = []
             final_plan = None
-            async for event in planner.create_plan(command.prompt):
+            async for event in planner.create_plan(command.prompt, meta_notes=command.meta_notes):
                 events.append(event.model_dump())
                 session = session.add_event(event)
                 if isinstance(event, PlanEvent) and event.plan is not None:

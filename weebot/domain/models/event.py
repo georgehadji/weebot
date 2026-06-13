@@ -72,6 +72,17 @@ class WaitForUserEvent(BaseEvent):
     question: str = Field(default="")
 
 
+class PlanReviewEvent(BaseEvent):
+    """Emitted when the flow pauses for the user to review a proposed plan.
+
+    The UI renders this as a structured step list with an approve/modify input.
+    plan_data mirrors PlanEvent.plan — a dict representation of the Plan model.
+    """
+    type: Literal["plan_review"] = "plan_review"
+    plan_data: Dict[str, Any] = Field(default_factory=dict)
+    step_count: int = Field(default=0)
+
+
 class NotificationEvent(BaseEvent):
     type: Literal["notification"] = "notification"
     text: str = Field(default="")
@@ -197,6 +208,7 @@ AgentEvent = Union[
     TrajectoryDiagnosisEvent,
     VerificationEvent,
     TodoEvent,
+    PlanReviewEvent,
 ]
 
 

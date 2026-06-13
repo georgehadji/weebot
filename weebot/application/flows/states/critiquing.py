@@ -45,14 +45,16 @@ class CritiquingState(FlowState):
         from weebot.application.flows.states.executing import ExecutingState
         from weebot.application.flows.states.planning import PlanningState
 
+        from weebot.application.flows.states.plan_review import next_state_after_plan
+
         if self._critic is None:
             logger.info("No plan critic available — proceeding to execution")
-            context.set_state(ExecutingState())
+            context.set_state(next_state_after_plan())
             return
 
         if context._plan is None:
             yield ErrorEvent(error="No plan available for critique")
-            context.set_state(ExecutingState())
+            context.set_state(next_state_after_plan())
             return
 
         logger.info(
