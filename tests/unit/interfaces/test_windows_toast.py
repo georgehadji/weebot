@@ -8,12 +8,11 @@ from weebot.infrastructure.notifications.notifications import WindowsToastChanne
 
 
 class Test:
-    def _make_notification(self, title="Test", message="body", category="info"):
+    def _make_notification(self, title="Test", message="body"):
         return Notification(
-            title=title, message=message,
+            title=title,
+            message=message,
             level=NotificationLevel.INFO,
-            timestamp=datetime.now(),
-            category=category,
         )
 
     @pytest.mark.asyncio
@@ -43,7 +42,7 @@ class Test:
         mock_winotify.audio = MagicMock()
         with patch.dict("sys.modules", {"winotify": mock_winotify}):
             ch = WindowsToastChannel(app_name="weebot-test")
-            await ch.send(self._make_notification(category="urgent"))
+            await ch.send(self._make_notification(title="urgent"))
         mock_toast.set_audio.assert_called_once_with(mock_winotify.audio.Default, loop=True)
 
     def test_category_to_icon_mapping(self):
