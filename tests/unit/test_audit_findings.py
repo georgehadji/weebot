@@ -19,6 +19,8 @@ class TestResilientAdapterSanitizeError:
     def test_llm_cache_and_cache_key_survive_sanitize_error(self):
         """_sanitize_error must not set LLMCache or CacheKey to None."""
         from weebot.infrastructure.adapters.llm import resilient_adapter
+        if not resilient_adapter.CACHE_AVAILABLE:
+            pytest.skip("LLMCache not available in this environment")
         original_cache = resilient_adapter.LLMCache
         original_key = resilient_adapter.CacheKey
         # Call sanitize with a credential-containing error
