@@ -273,7 +273,9 @@ class WindowsToastChannel:
                 msg=notification.message,
                 icon=self._icon_for_category(getattr(notification, "category", "info")),
             )
-            if getattr(notification, "category", "info") == "urgent":
+            _category = getattr(notification, "category", "info")
+            _level_val = getattr(getattr(notification, "level", None), "value", "")
+            if _category == "urgent" or _level_val in ("critical", "error"):
                 toast.set_audio(winotify.audio.Default, loop=True)
             
             await asyncio.to_thread(toast.show)
