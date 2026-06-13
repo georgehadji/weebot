@@ -257,9 +257,8 @@ class TestContainerFallback:
         import inspect
         from weebot.tools import bash_tool
         source = inspect.getsource(bash_tool)
-        # Should wrap Container creation in try/except with RuntimeError
-        assert "try" in source and "RuntimeError" in source, (
-            "BashTool must raise RuntimeError when sandbox can't be resolved"
+        assert "Container()" not in source, (
+            "BashTool must not silently instantiate Container when sandbox is None"
         )
 
     def test_python_tool_no_silent_container(self):
@@ -267,6 +266,6 @@ class TestContainerFallback:
         import inspect
         from weebot.tools import python_tool
         source = inspect.getsource(python_tool)
-        assert "try" in source and "RuntimeError" in source, (
-            "PythonExecuteTool must raise RuntimeError when sandbox can't be resolved"
+        assert "Container()" not in source, (
+            "PythonExecuteTool must not silently instantiate Container when sandbox is None"
         )
