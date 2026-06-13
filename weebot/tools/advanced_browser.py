@@ -11,6 +11,9 @@ from weebot.infrastructure.browser.session_manager import BrowserSessionManager
 
 logger = logging.getLogger(__name__)
 
+# Module-level Playwright instance — set when the browser is launched so
+# _close_browser() can call stop() to avoid zombie Chromium processes.
+_playwright_instance = None
 
 # ── wait_type → Playwright wait_until mapping ──
 _WAIT_TYPE_MAP: dict[str, str] = {
@@ -359,9 +362,14 @@ class AdvancedBrowserTool(BaseTool):
                     logger.info("Restored session '%s'", session_name)
 
     async def _close_browser(self) -> None:
-        """Close browser via the injected PlaywrightAdapter."""
+        """Close browser and stop the Playwright instance to avoid zombie processes."""
+        global _playwright_instance
         if self.browser is not None:
             await self.browser.close()
+        if _playwright_instance is not None:
+            pw = _playwright_instance
+            _playwright_instance = None
+            await pw.stop()
 
 
 class WebScraperTool(BaseTool):
