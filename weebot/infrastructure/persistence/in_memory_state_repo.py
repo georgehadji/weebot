@@ -33,3 +33,6 @@ class InMemoryStateRepository(StateRepositoryPort):
 
     async def delete_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+
+    async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
+        return []
