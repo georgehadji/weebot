@@ -132,8 +132,15 @@ class EventBroker:
                     await asyncio.wait_for(queue.put(event), timeout=5.0)
                     delivered = True
                     break
-                except (asyncio.TimeoutError, asyncio.QueueFull):
-                    # Exponential backoff with cap
+                except asyncio.TimeoutError:
+                    # Stalled subscriber — drop immediately, do not retry
+                    _log.warning(
+                        "EventBroker: queue %s stalled for %r, dropping event",
+                        id(queue), event_type,
+                    )
+                    break
+                except asyncio.QueueFull:
+                    # Transient full queue — retry with exponential backoff
                     delay = min(self._base_delay * (2 ** attempt), self._max_delay)
                     _log.warning(
                         "EventBroker: retry %d/%d for %r to queue %s after %.1fs",
