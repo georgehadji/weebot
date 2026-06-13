@@ -227,35 +227,19 @@ class TestSettingsTimeout:
     """BashTool and PythonExecuteTool respect WeebotSettings timeouts."""
 
     def test_bash_tool_stores_default_timeout_from_settings(self) -> None:
-        from unittest.mock import patch
         from weebot.tools.bash_tool import BashTool
+        from weebot.config.tool_config import ToolConfig
 
-        # WeebotSettings is imported locally inside model_post_init, so we patch
-        # the class in its home module (weebot.config.settings).
-        with patch(
-            "weebot.config.settings.WeebotSettings",
-            return_value=type(
-                "S",
-                (),
-                {"bash_timeout": 42, "sandbox_max_output_bytes": 65_536},
-            )(),
-        ):
-            tool = BashTool()
+        tool = BashTool()
+        tool.set_config(ToolConfig(bash_timeout=42))
         assert tool._default_timeout == 42.0
 
     def test_python_tool_stores_default_timeout_from_settings(self) -> None:
-        from unittest.mock import patch
         from weebot.tools.python_tool import PythonExecuteTool
+        from weebot.config.tool_config import ToolConfig
 
-        with patch(
-            "weebot.config.settings.WeebotSettings",
-            return_value=type(
-                "S",
-                (),
-                {"python_timeout": 55, "sandbox_max_output_bytes": 65_536},
-            )(),
-        ):
-            tool = PythonExecuteTool()
+        tool = PythonExecuteTool()
+        tool.set_config(ToolConfig(python_timeout=55))
         assert tool._default_timeout == 55.0
 
     @pytest.mark.asyncio
