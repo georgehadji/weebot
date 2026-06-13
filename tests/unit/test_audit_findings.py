@@ -227,8 +227,9 @@ class TestFts5IncrementalIndexing:
         from weebot.infrastructure.persistence.sqlite_state_repo import (
             SQLiteStateRepository,
         )
-        assert hasattr(SQLiteStateRepository, "_fts5_indexed")
-        assert isinstance(SQLiteStateRepository._fts5_indexed, dict)
+        repo = SQLiteStateRepository(":memory:")
+        assert hasattr(repo, "_fts5_indexed")
+        assert isinstance(repo._fts5_indexed, dict)
 
     def test_fts5_indexing_uses_event_slice(self):
         """save_session should only index new events via slice."""
