@@ -206,7 +206,7 @@ class TestApifyServiceExecute:
         await service.initialize()
         service._fast_session = mock_session
 
-        resp = await service.execute("get_dataset_items", dataset_id="ds_abc123", limit=50)
+        resp = await service.execute("get_dataset_items", dataset_id="abc123def456ghi", limit=50)
         assert resp.success
         assert resp.data == items
         await service.shutdown()
