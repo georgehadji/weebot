@@ -96,6 +96,12 @@ youtube-transcript-api>=0.6.0
 # Security
 cryptography>=41.0.0
 
+# Templating
+jinja2>=3.1.0
+
+# Caching / Message Queue
+redis>=4.6.0
+
 # Scheduling
 apscheduler>=3.10.0
 
