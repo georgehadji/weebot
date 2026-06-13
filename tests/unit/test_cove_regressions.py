@@ -314,6 +314,13 @@ class TestPlaywrightProcessLeak:
 # asyncio.wait_for() with a dynamic proportional timeout.
 # ===========================================================================
 
+try:
+    import pyautogui as _pyautogui  # noqa: F401
+    _PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    _PYAUTOGUI_AVAILABLE = False
+
+@pytest.mark.skipif(not _PYAUTOGUI_AVAILABLE, reason="pyautogui not installed")
 class TestPyautoguiEventLoopBlocking:
 
     @pytest.mark.asyncio
