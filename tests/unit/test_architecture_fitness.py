@@ -295,6 +295,7 @@ def test_ports_have_adapters():
         "RetentionAgentPort": ["RetentionAgent"],
         "IntentReviewPort": ["IntentReviewService"],
         "MainReviewPort": ["MainReviewService"],
+        "JudgePort": ["ModelJudge", "ScoreJudge"],
     }
 
     # Ports documented as [DEPRECATED] — no adapter expected.
