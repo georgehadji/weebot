@@ -11,9 +11,31 @@ from weebot.infrastructure.browser.session_manager import BrowserSessionManager
 
 logger = logging.getLogger(__name__)
 
-# Module-level Playwright instance — set when the browser is launched so
-# _close_browser() can call stop() to avoid zombie Chromium processes.
+import atexit
+import asyncio as _asyncio
+
+# Module-level Playwright globals — zeroed BEFORE their respective awaits
+# (τ-violation guard) so that a failed close/stop leaves them None and
+# prevents double-close by atexit or concurrent callers.
 _playwright_instance = None
+_browser = None
+_context = None
+_page = None
+
+
+def _atexit_cleanup_playwright() -> None:
+    """Synchronous atexit handler — stops any leaked Playwright instance."""
+    global _playwright_instance
+    pw = _playwright_instance
+    _playwright_instance = None
+    if pw is not None:
+        try:
+            pw.stop()
+        except Exception:
+            pass
+
+
+atexit.register(_atexit_cleanup_playwright)
 
 # ── wait_type → Playwright wait_until mapping ──
 _WAIT_TYPE_MAP: dict[str, str] = {
@@ -362,13 +384,28 @@ class AdvancedBrowserTool(BaseTool):
                     logger.info("Restored session '%s'", session_name)
 
     async def _close_browser(self) -> None:
-        """Close browser and stop the Playwright instance to avoid zombie processes."""
-        global _playwright_instance
+        """Close browser and stop Playwright, zeroing globals before each await."""
+        global _playwright_instance, _browser, _context, _page
+
+        # Zero each global BEFORE its await (τ-violation guard) so a failed
+        # close/stop still leaves the global as None, preventing double-close.
+        if _page is not None:
+            pg, _page = _page, None
+            await pg.close()
+
+        if _context is not None:
+            ctx, _context = _context, None
+            await ctx.close()
+
         if self.browser is not None:
             await self.browser.close()
+
+        if _browser is not None:
+            br, _browser = _browser, None
+            await br.close()
+
         if _playwright_instance is not None:
-            pw = _playwright_instance
-            _playwright_instance = None
+            pw, _playwright_instance = _playwright_instance, None
             await pw.stop()
 
 
