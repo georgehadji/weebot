@@ -251,7 +251,22 @@ class TestSettingsTimeout:
 
         captured: list[float] = []
 
+        from weebot.application.ports.sandbox_port import SandboxType, SandboxCapability
+
         class FakeSandbox(SandboxPort):
+            @property
+            def sandbox_type(self):
+                return SandboxType.NATIVE
+
+            async def is_available(self):
+                return True
+
+            def get_capabilities(self):
+                return set()
+
+            async def execute(self, command, timeout=None, cwd=None, env=None, memory_limit_mb=None):
+                return SandboxResult(stdout="", stderr="", returncode=0, elapsed_ms=1)
+
             async def execute_shell(self, script, shell="bash", timeout=30.0, cwd=None, **kw):
                 captured.append(timeout)
                 return SandboxResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
