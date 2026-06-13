@@ -84,8 +84,8 @@ uuid-utils>=0.0.0
 # Optional: For Zotero integration
 # pyzotero>=1.5.0
 
-# Optional: For Obsidian integration
-# watchdog>=3.0.0
+# Filesystem watching (behavior_tracker)
+watchdog>=3.0.0
 
 # MCP Server
 mcp>=1.5
