@@ -7,7 +7,10 @@ import logging
 import re
 from collections import deque
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from weebot.application.middleware.chain import MiddlewareChain
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
@@ -153,6 +156,7 @@ class ExecutorAgent:
         agent_role: str | None = None,  # Agent role for per-role model selection
         hooks: "Optional[HookRegistryPort]" = None,  # HookRegistryPort for pre/post tool call events
         harness_instruction_block: str | None = None,  # Self-Harness behavioural instructions
+        middleware_chain: Optional["MiddlewareChain"] = None,  # MiddlewareChain — interceptor pipeline
     ):
         self._llm = llm
         self._tools = tools
@@ -168,6 +172,7 @@ class ExecutorAgent:
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._harness_instruction_block = harness_instruction_block or None
+        self._middleware_chain: Optional["MiddlewareChain"] = middleware_chain
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         self._trajectory_monitor = TrajectoryMonitor()
@@ -718,7 +723,21 @@ class ExecutorAgent:
 
         self._step_budget.reset()
         while self._step_budget.consume():
+            # ── Pre-call compaction: ensure the LLM sees compacted context ──
+            await self._maybe_compress()
+
             messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
+
+            # ── Middleware: before_request ──────────────────────────────────
+            if self._middleware_chain is not None and not self._middleware_chain.is_empty():
+                _mw_tools = self._tools.to_params() if self._tools else []
+                messages, _mw_tools = await self._middleware_chain.apply_before_request(
+                    messages=messages,
+                    tools=_mw_tools,
+                    step_id=step.id,
+                    step_description=step.description,
+                )
+
             # Cost cascade: try budget model first, fall back to primary on failure.
             try:
                 response = await self._call_with_cascade(messages, description=step.description)
@@ -736,6 +755,18 @@ class ExecutorAgent:
                 break
 
             assistant_content = response.content or ""
+
+            # ── Middleware: after_response ─────────────────────────────────
+            if self._middleware_chain is not None and not self._middleware_chain.is_empty():
+                assistant_content, _modified_tc = await self._middleware_chain.apply_after_response(
+                    content=assistant_content,
+                    tool_calls=response.tool_calls or [],
+                    messages=messages,
+                    tools=self._tools.to_params() if self._tools else [],
+                )
+                if response.tool_calls:
+                    response.tool_calls = _modified_tc
+
             assistant_msg: dict = {"role": "assistant", "content": assistant_content}
             if response.tool_calls:
                 assistant_msg["tool_calls"] = response.tool_calls
@@ -934,6 +965,23 @@ class ExecutorAgent:
                 else:
                     last_error_class = None
                     consecutive_error_class_counts.clear()
+
+                # ── Middleware: after_tool_call ──────────────────────────────
+                if self._middleware_chain is not None and not self._middleware_chain.is_empty():
+                    _mw_result = await self._middleware_chain.apply_after_tool_call(
+                        tool_name=tool_name,
+                        arguments=event_args,
+                        output=result.output or "",
+                        error=result.error,
+                        is_error=result.is_error,
+                    )
+                    # If middleware modified the output, update the result
+                    if _mw_result.output != (result.output or ""):
+                        result = ToolResult(
+                            output=_mw_result.output,
+                            error=_mw_result.error or result.error,
+                            is_error=_mw_result.is_error or result.is_error,
+                        )
 
                 yield ToolEvent(
                     tool_call_id=tc["id"],

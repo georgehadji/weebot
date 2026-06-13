@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import EvolutionEntry, Skill
@@ -109,7 +110,16 @@ class SkillCurator:
             else:
                 age_days = 999  # No timestamp → treat as very old
         else:
-            age_days = 999
+            # Last resort: use the SKILL.md file's mtime so freshly
+            # installed skills are classified as active, not archive-candidate.
+            if skill.source_path:
+                try:
+                    mtime = Path(skill.source_path).stat().st_mtime
+                    age_days = (now - datetime.fromtimestamp(mtime, tz=timezone.utc)).days
+                except OSError:
+                    age_days = 999
+            else:
+                age_days = 999
 
         if age_days < ACTIVE_DAYS:
             return "active"

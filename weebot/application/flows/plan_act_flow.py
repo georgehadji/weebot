@@ -20,6 +20,7 @@ from weebot.application.flows.states.base import AgentStatus
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.structured_logger import StructuredLogger
+from weebot.application.termination.base import TerminationContext
 from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
@@ -147,6 +148,7 @@ class PlanActFlow(BaseFlow):
         self._plan_critic = cfg.plan_critic
         self._plan_critique = None  # Set by CritiquingState
         self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
+        self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress evaluation
         self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
@@ -171,6 +173,7 @@ class PlanActFlow(BaseFlow):
         self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
         self._context_aware_model_selection = cfg.context_aware_model_selection
         self._max_iterations = cfg.max_iterations
+        self._termination_conditions = cfg.termination_conditions or []
         self._step_execution_counts: dict[str, int] = {}
         self._emit_lock = asyncio.Lock()
 
@@ -226,6 +229,7 @@ class PlanActFlow(BaseFlow):
             harness_instruction_block=self._harness_instruction_block
             if self._harness_instruction_block
             else None,
+            middleware_chain=cfg.middleware_chain,
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
@@ -483,6 +487,22 @@ class PlanActFlow(BaseFlow):
 
         while iteration_count <= max_iterations:
             iteration_count += 1
+
+            # ── Composable termination check ──────────────────────────
+            if self._termination_conditions:
+                import time as _term_time
+                _term_ctx = TerminationContext(
+                    iteration=iteration_count,
+                    total_tokens=self._executor.token_usage.get("total_tokens", 0),
+                    elapsed_seconds=_term_time.monotonic() - self._flow_started_at,
+                )
+                for _tc in self._termination_conditions:
+                    _result = _tc.check(_term_ctx)
+                    if _result.should_terminate:
+                        self._log.info("Termination condition met: %s", _result.reason)
+                        from weebot.application.flows.states.completed import CompletedState
+                        self.set_state(CompletedState(termination_reason=_result.reason))
+                        return
 
             # ── Self-Harness: resolve harness instructions per-step ──
             # Before executing a state, check if we have a resolver and

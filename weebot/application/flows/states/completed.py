@@ -81,10 +81,19 @@ class CompletedState(FlowState):
     """Final state marking the end of the Plan-Act flow."""
     status = AgentStatus.COMPLETED
 
+    def __init__(self, termination_reason: str = "") -> None:
+        self._termination_reason = termination_reason
+
     async def execute(
         self, context: PlanActFlow, prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.plan_act_flow import AgentStatus
+
+        if self._termination_reason:
+            logger.info(
+                "Flow terminated: %s",
+                self._termination_reason,
+            )
 
         if context._plan:
             context._plan = context._plan.model_copy(update={"status": PlanStatus.COMPLETED})

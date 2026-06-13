@@ -84,6 +84,11 @@ class WeebotSettings(BaseSettings):
         "https://raw.githubusercontent.com/weebot-community/skillhub/main/index.json"
     )  # env: SKILLHUB_INDEX_URL — JSON index of community-contributed skills
 
+    # awesome-agent-skills — curated GitHub index (heilcheng/awesome-agent-skills)
+    awesome_agent_skills_index_url: str = (
+        "https://raw.githubusercontent.com/heilcheng/awesome-agent-skills/main/README.md"
+    )  # env: AWESOME_AGENT_SKILLS_INDEX_URL
+
     # Sandbox / code execution
     sandbox_mode: str = "auto"              # env: SANDBOX_MODE — "auto" | "native" | "docker" | "wsl2"
     bash_timeout: int = 30                  # env: BASH_TIMEOUT

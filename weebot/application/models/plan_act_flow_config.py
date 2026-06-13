@@ -57,11 +57,13 @@ class PlanActFlowConfig:
     max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS
     max_steps: Optional[int] = None
     auto_terminate_on_plan_complete: bool = True
+    termination_conditions: Optional[list] = None  # list[TerminationCondition]
 
     # ── Critique & validation ───────────────────────────────────────
     truth_binder: Optional[Any] = None  # TruthBinder
     plan_critic: Optional[Any] = None  # PlanCriticService
     code_reviewer: Optional[Any] = None  # CodeReviewerPort — per-step code review
+    step_evaluator: Optional[Any] = None  # StepEvaluatorPort — per-step progress evaluation
 
     # ── Learning & memory ───────────────────────────────────────────
     episodic_memory: Optional[Any] = None
@@ -106,5 +108,7 @@ class PlanActFlowConfig:
 
     Pass any object satisfying ``weebot.application.ports.hook_registry_port.HookRegistryPort``
     (e.g. ``weebot.templates.hooks.HookRegistry``).  Typed as ``Optional[Any]`` to avoid
-    importing the templates layer into the application models module.
-    """
+    importing the templates layer into the application models module."""
+
+    middleware_chain: Optional[Any] = None  # MiddlewareChain — interceptor pipeline for LLM calls
+    """Optional middleware chain wrapping every executor LLM request."""

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,31 @@ from rich.console import Console
 from rich.table import Table
 
 console = Console()
+logger = logging.getLogger(__name__)
+
+
+def _rebuild_bm25_index(rebuild_console: Console) -> None:
+    """Rebuild the BM25 skill index from the current registry.
+
+    Called after install/update so newly added skills are immediately
+    retrievable by the executor without a process restart.
+
+    Non-fatal: any error is logged and swallowed so the CLI command
+    still exits 0.
+    """
+    try:
+        from weebot.application.skills.skill_registry import SkillRegistry
+        from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
+
+        registry = SkillRegistry()
+        registry.load_all()
+        skills = registry.list_skills()
+        retriever = BM25SkillRetriever(registry)  # refresh() is called in __init__
+        has_bm25 = getattr(retriever, '_bm25', None) is not None
+        engine = "BM25" if has_bm25 else "word-overlap"
+        rebuild_console.print(f"  [dim]{engine} index rebuilt ({len(skills)} skills)[/dim]")
+    except Exception as exc:
+        logger.warning("BM25 rebuild skipped: %s", exc)
 
 
 @click.group()
@@ -111,7 +137,9 @@ def skill_install(source: str, name: str | None) -> None:
                 console.print(f"[red]✗[/red] Missing YAML frontmatter"); return
             target.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(skill_md), str(target / "SKILL.md"))
-            console.print(f"[green]✓[/green] Installed '[cyan]{skill_name}[/cyan]'"); return
+            console.print(f"[green]✓[/green] Installed '[cyan]{skill_name}[/cyan]'")
+            _rebuild_bm25_index(console)
+            return
         if detected.format in (SourceFormat.MYMANUS, SourceFormat.AGENTICSEEK):
             report = SkillConverter(skills_dir=target.parent).convert(src)
             if report.success:
@@ -127,20 +155,28 @@ def skill_install(source: str, name: str | None) -> None:
 @click.argument("skill_name", required=False)
 @click.option("--check", is_flag=True, help="Check for updates without installing")
 @click.option("--source", type=click.Choice(["skillhub", "agentskills"]), default="skillhub")
-def skill_update(skill_name: str | None, check: bool) -> None:
+def skill_update(skill_name: str | None, check: bool, source: str) -> None:
     """Update installed skills from the SkillHub remote index."""
     async def _run():
         from weebot.application.skills.skill_registry import SkillRegistry
-        from weebot.infrastructure.adapters.skill_index_github import GitHubSkillIndexAdapter
         registry = SkillRegistry(); registry.load_all()
         local = {s.name: s for s in registry.list_skills()}
         if not local:
             console.print("[dim]No local skills found.[/dim]"); return
-        index = GitHubSkillIndexAdapter()
+
+        if source == "agentskills":
+            from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
+                AwesomeAgentSkillsAdapter,
+            )
+            index = AwesomeAgentSkillsAdapter()
+        else:
+            from weebot.infrastructure.adapters.skill_index_github import GitHubSkillIndexAdapter
+            index = GitHubSkillIndexAdapter()
+
         remote = await index.fetch_index()
         remote_map = {s.name: s for s in remote}
         if not remote_map:
-            console.print("[yellow]Could not fetch SkillHub index.[/yellow]"); return
+            console.print("[yellow]Could not fetch remote skill index.[/yellow]"); return
         names = [skill_name] if skill_name else list(local.keys())
         updates = [(n, str(local[n].current_version), remote_map[n].version)
                    for n in names if n in local and n in remote_map
@@ -159,6 +195,7 @@ def skill_update(skill_name: str | None, check: bool) -> None:
             ok = await index.download(r, str(tgt))
             console.print(f"  {'[green]✓[/green]' if ok else '[red]✗[/red]'} Updated" if ok else f"  [red]✗[/red] Failed")
         await index.close()
+        _rebuild_bm25_index(console)
     asyncio.run(_run())
 
 

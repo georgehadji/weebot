@@ -7,7 +7,7 @@ from typing import Any, AsyncGenerator, TYPE_CHECKING
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
-from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolEvent, WaitForUserEvent
+from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolApprovalEvent, ToolEvent, WaitForUserEvent
 from weebot.domain.models.plan import StepStatus
 from weebot.domain.models.session import SessionStatus
 
@@ -239,6 +239,12 @@ class ExecutingState(FlowState):
             yield event
             if isinstance(event, WaitForUserEvent):
                 hitl_paused = True
+            elif isinstance(event, ToolApprovalEvent):
+                hitl_paused = True
+                logger.info(
+                    "Tool '%s' requires approval (risk=%s): %s",
+                    event.tool_name, event.risk_level, event.reason,
+                )
             elif isinstance(event, ErrorEvent):
                 execution_failed = True
             # Reconstruct shutdown signals from the serialised events
@@ -335,6 +341,27 @@ class ExecutingState(FlowState):
                 context._plan = context._plan.replace_step(step.id, updated_step)
                 # Stay in ExecutingState to retry the same step
                 context.set_state(ExecutingState())
+                return
+
+        # ── Improvement 6: Step progress evaluation ────────────────
+        _step_evaluator = getattr(context, "_step_evaluator", None)
+        if _step_evaluator is not None and step.result:
+            _prev_outputs = [
+                s.result for s in context._plan.steps
+                if s.is_done() and s.id != step.id and s.result
+            ]
+            _eval = await _step_evaluator.evaluate(
+                step=step,
+                output=str(step.result),
+                plan=context._plan,
+                previous_outputs=_prev_outputs,
+            )
+            if not _eval.passed:
+                logger.warning(
+                    "Step '%s' failed progress eval (score=%.2f, regression=%s): %s",
+                    step.id, _eval.score, _eval.regression_detected, _eval.reasoning,
+                )
+                context.set_state(UpdatingState())
                 return
 
         # Update step as completed, carrying the extracted result through

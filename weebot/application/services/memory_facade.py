@@ -8,7 +8,10 @@ gracefully when any component is None.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from weebot.application.ports.rag_port import RagPort
 
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.services.session_memory import SessionMemory
@@ -36,11 +39,13 @@ class MemoryFacade:
         working_memory: Optional[WorkingMemory] = None,
         episodic_memory: Optional[Any] = None,
         persistent_memory: Optional[Any] = None,
+        rag: "Optional[RagPort]" = None,
     ) -> None:
         self._session_memory = session_memory
         self._working_memory = working_memory
         self._episodic_memory = episodic_memory
         self._persistent_memory = persistent_memory
+        self._rag = rag
 
     async def recall(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Search all active memory systems for information relevant to *query*.
@@ -95,6 +100,19 @@ class MemoryFacade:
                                 })
             except Exception:
                 logger.debug("PersistentMemory recall failed", exc_info=True)
+
+        # 5. RAG memory — hybrid BM25 + vector search
+        if self._rag is not None:
+            try:
+                rag_results = await self._rag.search(query, top_k=top_k)
+                for r in rag_results:
+                    results.append({
+                        "source": "rag",
+                        "content": r,
+                        "confidence": 0.75,
+                    })
+            except Exception:
+                logger.debug("RAG memory search failed", exc_info=True)
 
         return results[:top_k]
 

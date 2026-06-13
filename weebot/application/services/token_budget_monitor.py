@@ -170,6 +170,20 @@ class TokenBudgetMonitor:
             return False
         return breakdown.total_used / breakdown.max_capacity >= self.warning_threshold
     
+    def should_terminate(self, breakdown: TokenBreakdown, threshold: float = 0.95) -> bool:
+        """Return True if token usage exceeds the termination threshold.
+
+        Args:
+            breakdown: The token breakdown to evaluate.
+            threshold: Usage ratio to trigger termination (default 0.95 = 95%).
+
+        Returns:
+            True if usage >= threshold, False otherwise.
+        """
+        if breakdown.max_capacity == 0:
+            return False
+        return breakdown.total_used / breakdown.max_capacity >= threshold
+    
     def get_recommendation(self, breakdown: TokenBreakdown) -> Optional[str]:
         """Get a recommendation based on usage.
         

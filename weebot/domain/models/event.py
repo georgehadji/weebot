@@ -83,6 +83,20 @@ class PlanReviewEvent(BaseEvent):
     step_count: int = Field(default=0)
 
 
+class ToolApprovalEvent(BaseEvent):
+    """Emitted when a tool call requires user approval before execution.
+
+    The UI renders this as an approval prompt. The flow pauses until the
+    user responds (similar to WaitForUserEvent).
+    """
+    type: Literal["tool_approval"] = "tool_approval"
+    tool_name: str = Field(default="")
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    risk_level: str = Field(default="")
+    reason: str = Field(default="")
+    prompt: str = Field(default="Allow this command? (yes/no)")
+
+
 class NotificationEvent(BaseEvent):
     type: Literal["notification"] = "notification"
     text: str = Field(default="")
@@ -209,6 +223,7 @@ AgentEvent = Union[
     VerificationEvent,
     TodoEvent,
     PlanReviewEvent,
+    ToolApprovalEvent,
 ]
 
 
