@@ -245,19 +245,22 @@ class TestSettingsTimeout:
     @pytest.mark.asyncio
     async def test_bash_execute_uses_explicit_timeout_over_default(self) -> None:
         """Explicit timeout= kwarg overrides the settings default."""
-        from unittest.mock import AsyncMock, patch
+        from unittest.mock import AsyncMock
         from weebot.tools.bash_tool import BashTool
-        from weebot.application.ports.sandbox_port import SandboxResult
+        from weebot.application.ports.sandbox_port import SandboxResult, SandboxPort
 
         captured: list[float] = []
 
-        async def fake_run(cmd, timeout=30.0, **kw):  # type: ignore[override]
-            captured.append(timeout)
-            return SandboxResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
+        class FakeSandbox(SandboxPort):
+            async def execute_shell(self, script, shell="bash", timeout=30.0, cwd=None, **kw):
+                captured.append(timeout)
+                return SandboxResult(stdout="ok", stderr="", returncode=0, elapsed_ms=1)
 
-        tool = BashTool()
-        with patch.object(tool._executor, "run", side_effect=fake_run):
-            await tool.execute(command="echo hi", timeout=99.0)
+            async def execute_python(self, code, timeout=30.0, **kw):
+                return SandboxResult(stdout="", stderr="", returncode=0, elapsed_ms=1)
+
+        tool = BashTool(sandbox=FakeSandbox())
+        await tool.execute(command="echo hi", timeout=99.0)
 
         assert captured == [99.0]
 
