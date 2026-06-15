@@ -126,3 +126,5 @@ ignore_imports =
     # Windows-specific interfaces wire native platform adapters.
     weebot.interfaces.windows -> weebot.infrastructure.adapters.windows_desktop
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications
+    # Shutdown handler closes all DB connection pools to prevent leaks.
+    weebot.interfaces.web.main -> weebot.infrastructure.persistence.connection_pool
