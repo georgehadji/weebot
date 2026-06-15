@@ -181,8 +181,8 @@ class TestRouterConfig:
     def test_missing_config_logs_warning(self, tmp_path: Path):
         missing = tmp_path / "nonexistent.yaml"
         router = KeywordTaskRouter(config_path=missing)
-        # Should not crash, categories should be empty
-        assert router._categories == {}
+        # Should not crash, categories should be empty (list-based after rewrite)
+        assert router._categories == []
 
     @pytest.mark.asyncio
     async def test_refresh_reloads_config(self, tmp_path: Path, minimal_config: Path):

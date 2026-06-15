@@ -50,14 +50,16 @@ class TestResultStructure:
         result = router.analyze_task("delete files from directory")
         assert 0.0 <= result["confidence"] <= 1.0
 
-    def test_suggested_sequence_has_two_items(self, router):
+    def test_suggested_sequence_has_three_items(self, router):
+        # Router now proposes a 3-tool fallback chain (primary + alternatives).
         result = router.analyze_task("delete files")
-        assert len(result["suggested_sequence"]) == 2
+        assert len(result["suggested_sequence"]) == 3
 
-    def test_suggested_sequence_contains_both_tools(self, router):
+    def test_suggested_sequence_leads_with_local_and_includes_web(self, router):
+        # A local-file task leads with powershell and offers web fallbacks.
         result = router.analyze_task("delete files")
         assert "powershell" in result["suggested_sequence"]
-        assert "browser" in result["suggested_sequence"]
+        assert "web_search" in result["suggested_sequence"]
 
     def test_primary_tool_is_first_in_sequence(self, router):
         result = router.analyze_task("delete files from directory")
@@ -65,9 +67,10 @@ class TestResultStructure:
 
 
 class TestEdgeCases:
-    def test_empty_task_returns_browser_default(self, router):
+    def test_empty_task_returns_safe_default(self, router):
+        # With no indicators the router defaults to a research/web tool.
         result = router.analyze_task("")
-        assert result["primary_tool"] in ("powershell", "browser")
+        assert result["primary_tool"] in ("powershell", "browser", "web_search", "vane_search")
 
     def test_mixed_task_returns_highest_scoring_tool(self, router):
         # Contains both ps and browser keywords — ps should win with more matches

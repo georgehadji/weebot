@@ -82,16 +82,22 @@ class KeywordTaskRouter(TaskRouterPort):
 
     async def route(self, query: str) -> TaskRoute:
         """Classify *query* and return a TaskRoute."""
-        if not query.strip():
-            return self._fallback_route()
+        stripped = query.strip()
+        # Short-circuit: empty or trivially short input is conversational, not a
+        # task.  Routing it to a heavyweight plan_act/COMPLEX flow is wrong.
+        if len(stripped) <= 2:
+            return self._casual_route()
 
         query_lower = query.lower()
 
         best_category = None
         best_hits = 0
+        matched_count = 0
 
         for cat_cfg in self._categories:
             hits = sum(1 for kw in cat_cfg["keywords"] if kw in query_lower)
+            if hits:
+                matched_count += 1
             if hits > best_hits:
                 best_hits = hits
                 best_category = cat_cfg
@@ -103,11 +109,41 @@ class KeywordTaskRouter(TaskRouterPort):
 
         return TaskRoute(
             category=best_category["category"],
-            complexity=best_category.get("complexity", TaskComplexity.HIGH),
+            complexity=self._estimate_complexity(query_lower, matched_count),
             flow_type=best_category["flow_type"],
             tool_restriction=best_category["tool_restriction"],
             mandatory_rules=best_category["mandatory_rules"],
             confidence=round(confidence, 3),
+        )
+
+    @staticmethod
+    def _estimate_complexity(query_lower: str, matched_count: int) -> TaskComplexity:
+        """Estimate task complexity from scope signals.
+
+        Multi-category queries or those naming build-scale work (build an app,
+        design a system, deploy a pipeline …) are HIGH; a single focused
+        request (write a function, fix a bug) is LOW.
+        """
+        if matched_count >= 2:
+            return TaskComplexity.HIGH
+        high_signals = (
+            "build", "create", "develop", "design", "architect", "end-to-end",
+            "full ", "system", "application", "app", "pipeline", "deploy",
+            "integrate", "website", "platform", "microservice",
+        )
+        if any(sig in query_lower for sig in high_signals):
+            return TaskComplexity.HIGH
+        return TaskComplexity.LOW
+
+    def _casual_route(self) -> TaskRoute:
+        """A conversational route for trivial/empty input."""
+        return TaskRoute(
+            category=TaskCategory.CASUAL,
+            complexity=TaskComplexity.LOW,
+            flow_type="chat",
+            tool_restriction="none",
+            mandatory_rules=[],
+            confidence=0.0,
         )
 
     async def refresh(self) -> None:

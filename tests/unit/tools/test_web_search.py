@@ -51,7 +51,8 @@ async def test_num_results_clamped_to_max():
 
     with patch.object(tool, "_search_duckduckgo", capture):
         await tool.execute(query="q", num_results=100)
-    assert captured["num_results"] == 10
+    # execute() clamps to 10, then over-fetches 2x candidates for reranking.
+    assert captured["num_results"] == 20
 
 
 @pytest.mark.asyncio
@@ -66,7 +67,8 @@ async def test_num_results_clamped_to_min():
 
     with patch.object(tool, "_search_duckduckgo", capture):
         await tool.execute(query="q", num_results=0)
-    assert captured["num_results"] == 1
+    # execute() clamps to 1, then over-fetches 2x candidates for reranking.
+    assert captured["num_results"] == 2
 
 
 def test_format_produces_numbered_output():
