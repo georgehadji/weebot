@@ -1,6 +1,7 @@
 """SQLite-backed misalignment journal."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 from pathlib import Path
@@ -63,7 +64,7 @@ class SQLiteMisalignmentJournal(MisalignmentJournalPort):
         return conn
 
     async def record(self, entry: MisalignmentEntry) -> None:
-        try:
+        def _sync_record():
             with self._connect() as conn:
                 conn.execute(_INSERT, (
                     entry.id,
@@ -76,15 +77,19 @@ class SQLiteMisalignmentJournal(MisalignmentJournalPort):
                     entry.created_at.isoformat(),
                 ))
                 conn.commit()
+        try:
+            await asyncio.to_thread(_sync_record)
         except Exception as exc:
             _log.warning("MisalignmentJournal.record failed: %s", exc)
 
     async def get_recent(
         self, project_path: str, limit: int = 5
     ) -> list[MisalignmentEntry]:
-        try:
+        def _sync_get_recent():
             with self._connect() as conn:
-                rows = conn.execute(_SELECT_RECENT, (project_path, limit)).fetchall()
+                return conn.execute(_SELECT_RECENT, (project_path, limit)).fetchall()
+        try:
+            rows = await asyncio.to_thread(_sync_get_recent)
             return [
                 MisalignmentEntry(
                     id=r[0],

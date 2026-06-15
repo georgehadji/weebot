@@ -46,11 +46,16 @@ class TelegramAdapter(GatewayAdapter):
 
     async def start(self) -> None:
         self._running = True
-        asyncio.create_task(self._poll_loop())
+        self._poll_task = asyncio.create_task(self._poll_loop())
         logger.info("TelegramAdapter started")
 
     async def stop(self) -> None:
         self._running = False
+        self._poll_task.cancel()
+        try:
+            await self._poll_task
+        except asyncio.CancelledError:
+            pass
         logger.info("TelegramAdapter stopped")
 
     async def _poll_loop(self) -> None:

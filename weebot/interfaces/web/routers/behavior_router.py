@@ -11,7 +11,15 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from weebot.core.behavior_reporting import BehaviorReporter
+from weebot.core.behavior_reporting import BehaviorReporter, SelfKnowledgeGenerator
+from weebot.core.behavior_tracker import (
+    TrustManager,
+    BehaviorTracker,
+    BehaviorEvent,
+    create_tracker,
+    get_tracker,
+    stop_tracker,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/behavior", tags=["behavior"])
@@ -191,41 +199,55 @@ async def regenerate_self_knowledge():
 
 
 # WebSocket for real-time behavior events
-# Store active WebSocket connections
+# Store active WebSocket connections (with lock for concurrent access)
 _ws_connections: List[WebSocket] = []
+_ws_lock = asyncio.Lock()
+_WS_MAX_MSG_SIZE = 1024 * 100  # 100 KB max incoming JSON
 
 
 async def broadcast_event(event: BehaviorEvent):
     """Broadcast event to all connected WebSockets."""
-    if not _ws_connections:
-        return
-    
-    message = {
-        "type": f"file.{event.event_type}",
-        "timestamp": event.timestamp,
-        "path": event.path,
-        "session_id": event.session_id,
-        "agent_version": event.agent_version,
-    }
-    
-    disconnected = []
-    for ws in _ws_connections:
-        try:
-            await ws.send_json(message)
-        except Exception:
-            disconnected.append(ws)
-    
-    # Clean up disconnected
-    for ws in disconnected:
-        if ws in _ws_connections:
-            _ws_connections.remove(ws)
+    async with _ws_lock:
+        if not _ws_connections:
+            return
+
+        message = {
+            "type": f"file.{event.event_type}",
+            "timestamp": event.timestamp,
+            "path": event.path,
+            "session_id": event.session_id,
+            "agent_version": event.agent_version,
+        }
+
+        disconnected = []
+        for ws in _ws_connections:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                disconnected.append(ws)
+
+        # Clean up disconnected
+        for ws in disconnected:
+            if ws in _ws_connections:
+                _ws_connections.remove(ws)
 
 
 @router.websocket("/ws")
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
+    # WebSocket authentication check
+    from weebot.config.settings import WeebotSettings
+    _ws_settings = WeebotSettings()
+    if _ws_settings.weebot_api_key:
+        token = websocket.query_params.get("token")
+        import hmac as _hmac
+        if not _hmac.compare_digest(token or "", _ws_settings.weebot_api_key):
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
+
     await websocket.accept()
-    _ws_connections.append(websocket)
+    async with _ws_lock:
+        _ws_connections.append(websocket)
     
     logger.info(f"Behavior WebSocket connected: {websocket.client}")
     
@@ -249,6 +271,9 @@ async def behavior_websocket(websocket: WebSocket):
         while True:
             try:
                 data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                if len(data) > _WS_MAX_MSG_SIZE:
+                    await websocket.send_json({"type": "error", "message": "Message too large"})
+                    continue
                 message = json.loads(data)
                 
                 # Handle client commands
@@ -290,13 +315,24 @@ async def behavior_websocket(websocket: WebSocket):
     except Exception as e:
         logger.warning(f"Behavior WebSocket error: {e}")
     finally:
-        if websocket in _ws_connections:
-            _ws_connections.remove(websocket)
+        async with _ws_lock:
+            if websocket in _ws_connections:
+                _ws_connections.remove(websocket)
 
 
 @router.websocket("/ws/session/{session_id}")
 async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
+    # WebSocket authentication check
+    from weebot.config.settings import WeebotSettings
+    _ws_settings = WeebotSettings()
+    if _ws_settings.weebot_api_key:
+        token = websocket.query_params.get("token")
+        import hmac as _hmac
+        if not _hmac.compare_digest(token or "", _ws_settings.weebot_api_key):
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
+
     await websocket.accept()
     
     logger.info(f"Session behavior WebSocket connected: {session_id}")
@@ -327,11 +363,13 @@ async def start_session_tracking(session_id: str, working_dir: str) -> BehaviorT
     from pathlib import Path
     
     # Set up event callback to broadcast to WebSockets
+    _tracker_tasks: list[asyncio.Task] = []
     def on_event(event: BehaviorEvent):
         # Schedule broadcast in event loop
         try:
             loop = asyncio.get_event_loop()
-            loop.create_task(broadcast_event(event))
+            task = loop.create_task(broadcast_event(event))
+            _tracker_tasks.append(task)
         except Exception as e:
             logger.debug(f"Failed to broadcast event: {e}")
     

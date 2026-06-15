@@ -230,6 +230,9 @@ class HarnessOptFlow(BaseFlow):
         """
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+        from weebot.application.services.harness_metric_scorer import (
+            HarnessMetricScorer,
+        )
         from weebot.config.harness.schema import HarnessConfig
 
         async def _run(
@@ -254,17 +257,29 @@ class HarnessOptFlow(BaseFlow):
                 try:
                     async for _ in flow.run(task_id):
                         pass
-                    results.append({"passed": True, "task_id": task_id})
+                    task_passed = True
+                    task_error = None
                 except Exception as exc:
                     logger.warning(
                         "Gate eval %s (harness %s) failed: %s",
                         task_id, config.version, exc,
                     )
-                    results.append({
-                        "passed": False,
-                        "task_id": task_id,
-                        "error": str(exc),
-                    })
+                    task_passed = False
+                    task_error = str(exc)
+
+                # Score with HarnessMetricScorer
+                metrics = HarnessMetricScorer.score(
+                    session=session,
+                    task_passed=task_passed,
+                )
+                result: dict = {
+                    "passed": task_passed,
+                    "task_id": task_id,
+                    "metrics": metrics.model_dump(),
+                }
+                if task_error:
+                    result["error"] = task_error
+                results.append(result)
             return results
 
         return _run

@@ -1,0 +1,3 @@
+{"id": "ho-task-list-dir", "prompt": "List the files in the current directory", "oracle": {"stdout_contains": {"substring": "README"}}, "expected_summary": "Directory listing returns files", "metadata": {"source_session": "sess-006"}}
+{"id": "ho-task-json-parse", "prompt": "Parse a JSON file and extract all keys from it", "oracle": {"stdout_contains": {"substring": "keys"}}, "expected_summary": "JSON parsed and keys shown", "metadata": {"source_session": "sess-007"}}
+{"id": "ho-task-mkdir", "prompt": "Create a directory named 'test_output' and write a log file inside it", "oracle": {"file_exists": {"path": "test_output/log.txt"}}, "expected_summary": "Directory with log file created", "metadata": {"source_session": "sess-008"}}

@@ -191,6 +191,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
+    # Close all connection pools to prevent leaks
+    try:
+        from weebot.infrastructure.persistence.connection_pool import close_all_pools
+        await close_all_pools()
+        logger.info("Connection pools closed")
+    except Exception as exc:
+        logger.debug("Connection pool close skipped: %s", exc)
+
     await scheduler.stop()
     logger.info("Shutting down Weebot Web Server...")
 

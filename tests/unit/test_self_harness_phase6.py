@@ -178,7 +178,7 @@ class TestHarnessOptFlowSafetyIntegration:
         repo.count_trajectories.return_value = 10
 
         # Mock regression gate to always accept
-        gate = RegressionGate()  # No task_runner → auto-accept
+        gate = RegressionGate(auto_accept=True)  # No task_runner → auto-accept
 
         target = HarnessOptimizationTarget("weebot/config/harness/v0.2.0.yaml")
 

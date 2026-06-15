@@ -1,13 +1,29 @@
+# Next.js standalone build
 FROM node:20-alpine AS build
 
 WORKDIR /app
 COPY weebot-ui/package*.json ./
 RUN npm ci
 COPY weebot-ui/ .
+
+# Standalone output: next build → .next/standalone/ with static assets copied
 RUN npm run build
 
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY weebot/config/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Copy standalone output (includes a minimal server + node_modules)
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

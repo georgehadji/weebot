@@ -316,12 +316,13 @@ class TestHarnessOptFlow:
 
 class TestRegressionGate:
     @pytest.mark.asyncio
-    async def test_stub_always_accepts(self):
+    async def test_stub_auto_accept_flag(self):
+        """auto_accept=True skips regression validation."""
         from weebot.application.services.regression_gate import RegressionGate
-        gate = RegressionGate()
+        gate = RegressionGate(auto_accept=True)
         decision = await gate.validate(
             baseline={"version": "0.2.0"},
             candidate={"version": "0.2.1"},
         )
         assert decision.accepted
-        assert "No task_runner" in decision.reason
+        assert "auto_accept" in decision.reason

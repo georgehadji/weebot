@@ -1,6 +1,7 @@
 """SQLite-based summary repository with lightweight in-memory vector search."""
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import sqlite3
@@ -35,22 +36,26 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
         summary: str,
         embedding: List[float],
     ) -> None:
-        with sqlite3.connect(self._db_path) as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO summaries (session_id, summary, embedding_json) VALUES (?, ?, ?)",
-                (session_id, summary, json.dumps(embedding)),
-            )
-            conn.commit()
+        def _save() -> None:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO summaries (session_id, summary, embedding_json) VALUES (?, ?, ?)",
+                    (session_id, summary, json.dumps(embedding)),
+                )
+                conn.commit()
+        await asyncio.to_thread(_save)
 
     async def find_similar(
         self,
         embedding: List[float],
         k: int = 3,
     ) -> List[Tuple[str, str, float]]:
-        with sqlite3.connect(self._db_path) as conn:
-            rows = conn.execute(
-                "SELECT session_id, summary, embedding_json FROM summaries"
-            ).fetchall()
+        def _query():
+            with sqlite3.connect(self._db_path) as conn:
+                return conn.execute(
+                    "SELECT session_id, summary, embedding_json FROM summaries"
+                ).fetchall()
+        rows = await asyncio.to_thread(_query)
 
         results: List[Tuple[str, str, float]] = []
         query_norm = _norm(embedding)

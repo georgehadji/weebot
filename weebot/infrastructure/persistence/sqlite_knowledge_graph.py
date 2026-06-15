@@ -10,6 +10,7 @@ Shares the same connection pool as the main state repository.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -57,6 +58,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
+
+    async def _run_db(self, func, *args, **kwargs):
+        """Run a synchronous DB operation in a thread pool to avoid blocking the event loop."""
+        return await asyncio.to_thread(lambda: func(*args, **kwargs))
 
     def _init_tables(self) -> None:
         """Create the knowledge graph tables if they don't exist."""

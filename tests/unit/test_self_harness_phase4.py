@@ -51,7 +51,7 @@ class TestRegressionGateAcceptance:
                 return [{"passed": True}] * len(task_ids)
             return [{"passed": False}] * len(task_ids)
 
-        gate = RegressionGate(task_runner=_runner)
+        gate = RegressionGate(task_runner=_runner, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=baseline,
             candidate=candidate,
@@ -79,7 +79,7 @@ class TestRegressionGateAcceptance:
                 return [{"passed": False}] * len(task_ids)
             return [{"passed": True}] * len(task_ids)
 
-        gate = RegressionGate(task_runner=_runner)
+        gate = RegressionGate(task_runner=_runner, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=baseline,
             candidate=candidate,
@@ -122,7 +122,7 @@ class TestRegressionGateAcceptance:
                 # Baseline on held-out: passes
                 return [{"passed": True}] * len(task_ids)
 
-        gate = RegressionGate(task_runner=_runner)
+        gate = RegressionGate(task_runner=_runner, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=baseline,
             candidate=candidate,
@@ -139,7 +139,7 @@ class TestRegressionGateAcceptance:
         """If Δ_in = 0 and Δ_ho = 0, gate rejects (no change)."""
         from weebot.application.services.regression_gate import RegressionGate
 
-        gate = RegressionGate(task_runner=_task_runner_all_pass)
+        gate = RegressionGate(task_runner=_task_runner_all_pass, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=_make_config(),
             candidate=_make_config(),
@@ -151,8 +151,8 @@ class TestRegressionGateAcceptance:
         assert "No improvement" in decision.reason
 
     @pytest.mark.asyncio
-    async def test_no_task_runner_auto_accepts(self):
-        """When no task_runner is set, gate auto-accepts (test mode)."""
+    async def test_no_task_runner_rejects_by_default(self):
+        """Without task_runner, gate rejects (fail-closed)."""
         from weebot.application.services.regression_gate import RegressionGate
 
         gate = RegressionGate()
@@ -160,15 +160,15 @@ class TestRegressionGateAcceptance:
             baseline=_make_config(),
             candidate=_make_config(),
         )
-        assert decision.accepted
-        assert "No task_runner" in decision.reason
+        assert not decision.accepted
+        assert "fail-closed" in decision.reason
 
     @pytest.mark.asyncio
     async def test_empty_tasks_no_crash(self):
         """Empty task lists should not crash — short-circuit to (0, 0)."""
         from weebot.application.services.regression_gate import RegressionGate
 
-        gate = RegressionGate(task_runner=_task_runner_all_pass)
+        gate = RegressionGate(task_runner=_task_runner_all_pass, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=_make_config(),
             candidate=_make_config(),
@@ -191,7 +191,7 @@ class TestRegressionGateAcceptance:
                 return [{"passed": True}] * len(task_ids)
             return [{"passed": False}] * len(task_ids)
 
-        gate = RegressionGate(task_runner=_runner)
+        gate = RegressionGate(task_runner=_runner, min_held_out_tasks=1)
         decision = await gate.validate(
             baseline=_make_config(),
             candidate=_make_config(description="better"),
