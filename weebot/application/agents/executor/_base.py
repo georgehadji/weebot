@@ -176,6 +176,8 @@ class ExecutorAgent:
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         self._trajectory_monitor = TrajectoryMonitor()
+        # Phase 2: skill-gap signals collected during retrieval; processed at session end
+        self._skill_gaps: list[dict] = []
         self._max_context_turns = max_context_turns
         self._system_prompt: Optional[str] = None
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
@@ -627,12 +629,16 @@ class ExecutorAgent:
                 matches = await self._skill_retriever.retrieve(
                     step.description, top_k=2
                 )
+                best_score = max((m.score for m in matches), default=0.0)
                 for m in matches:
-                    if m.score > 0.15:  # Only inject meaningfully relevant skills
+                    # Only inject trusted, meaningfully relevant skills
+                    if m.score > 0.15 and getattr(m, "is_injectable", True):
                         system_prompt += (
                             f"\n\n## Relevant Skill: {m.skill_name}\n"
                             f"{m.content_preview}"
                         )
+                # Phase 2: detect retrieval miss and record gap signal
+                _maybe_record_skill_gap(self, step.description, best_score)
             except Exception as exc:
                 logger.warning("Skill retrieval failed: %s", exc)
 
@@ -1185,3 +1191,29 @@ class ExecutorAgent:
             temperature=0.3,
         )
         yield MessageEvent(role="assistant", message=response.content or "Done.")
+
+
+# ── Phase 2 helpers ────────────────────────────────────────────────────────────
+
+
+def _maybe_record_skill_gap(executor: "ExecutorAgent", step_description: str, best_score: float) -> None:
+    """Record a skill-gap signal when retrieval misses the creation threshold.
+
+    Purely additive — appends to ``executor._skill_gaps``; never raises.
+    Actual IdeaContract creation and gate review happen later in CompletedState.
+    """
+    from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
+    from weebot.config.learning import TAU_CREATE
+
+    if not SKILL_GAP_TRIGGER_ENABLED:
+        return
+    if best_score >= TAU_CREATE:
+        return  # retrieval hit — no gap
+
+    executor._skill_gaps.append(
+        {"step": step_description[:200], "score": best_score}
+    )
+    logger.debug(
+        "Phase 2: skill gap recorded (score=%.3f < %.3f) for step: %s",
+        best_score, TAU_CREATE, step_description[:80],
+    )

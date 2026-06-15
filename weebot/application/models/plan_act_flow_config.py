@@ -71,6 +71,7 @@ class PlanActFlowConfig:
     knowledge_graph: Optional[Any] = None
     skill_prompt: Optional[str] = None
     skill_retriever: Optional[Any] = None  # SkillRetrieverPort — Tier 1.2
+    skill_distiller: Optional[Any] = None  # AutonomousSkillCreator — Phase 1 distillation
 
     # ── Identity ────────────────────────────────────────────────────
     model: Optional[str] = None

@@ -130,6 +130,7 @@ class SkillOptMixin:
                 max_steps=5,
                 logger=self._maybe_get_str("structured_logger"),
                 skill_retriever=self._maybe_get_str("skill_retriever"),
+                skill_distiller=self._maybe_get_str("skill_distiller"),
                 code_reviewer=self._maybe_get_str("code_reviewer"),
                 harness_config=self._maybe_get(HarnessConfig),
             )

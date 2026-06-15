@@ -27,6 +27,67 @@ async def _run_retention_review(
     )
 
 
+async def _run_skill_gap_processing(
+    gaps: list[dict],
+    session_id: str,
+) -> None:
+    """Submit skill-gap signals as IdeaContracts through the IdeaGate (Phase 2).
+
+    Background task — never blocks CompletedState.  Runs after the flow
+    yields DoneEvent so the user sees an immediate response.
+    """
+    from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
+
+    if not SKILL_GAP_TRIGGER_ENABLED or not gaps:
+        return
+    try:
+        from weebot.application.di import Container
+        from weebot.application.ports.llm_port import LLMPort
+        from weebot.application.services.idea_gate import IdeaGate
+        from weebot.application.services.intent_review_service import IntentReviewService
+        from weebot.application.services.main_review_service import MainReviewService
+        from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
+
+        c = Container()
+        c.configure_defaults()
+        llm = c.get(LLMPort)
+
+        contracts = [
+            IdeaContract(
+                title=f"Skill gap: {g['step'][:60]}",
+                prompt=(
+                    f"Create a reusable skill for tasks of type: {g['step']}\n"
+                    f"(No useful skill was found; best retrieval score: {g['score']:.3f})"
+                ),
+                source=IdeaSource.OPPORTUNITY_PROPOSAL,
+                source_ref=session_id,
+                evidence=[f"retrieval_miss score={g['score']:.3f}"],
+                heat_score=max(0.0, min(1.0, 1.0 - g["score"])),
+                estimated_effort="low",
+                dreamer_session_id=session_id,
+            )
+            for g in gaps
+        ]
+
+        gate = IdeaGate(
+            intent_reviewer=IntentReviewService(llm=llm),
+            main_reviewer=MainReviewService(llm=llm),
+        )
+        approved = await gate.process(contracts)
+        if approved:
+            logger.info(
+                "Phase 2: %d/%d skill-gap contracts approved for session %s",
+                len(approved), len(contracts), session_id[:8],
+            )
+        else:
+            logger.debug(
+                "Phase 2: %d skill-gap contracts processed, none approved (session %s)",
+                len(contracts), session_id[:8],
+            )
+    except Exception:
+        logger.debug("Phase 2 skill-gap background processing failed", exc_info=True)
+
+
 async def _run_dream_scan() -> None:
     """Run DreamerAgent + IdeaGate as background task after completion."""
     try:
@@ -243,6 +304,14 @@ class CompletedState(FlowState):
                 error_count=_error_count_ret,
                 tool_count=_tool_count_ret,
             ))
+
+        # ── Phase 2: skill-gap processing (background, flag-gated) ────
+        _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
+        if _gaps:
+            import asyncio as _aio
+            _aio.ensure_future(
+                _run_skill_gap_processing(list(_gaps), context._session.id)
+            )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
         import asyncio as _aio

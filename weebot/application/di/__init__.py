@@ -55,11 +55,12 @@ from weebot.application.di._agent_tools import AgentToolsMixin
 from weebot.application.di._capabilities import CapabilitiesMixin
 from weebot.application.di._skills import SkillsMixin
 from weebot.application.di._skillopt import SkillOptMixin
+from weebot.application.di._learning import LearningMixin
 
 
 @dataclass
 class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
-                SkillsMixin, SkillOptMixin):
+                SkillsMixin, SkillOptMixin, LearningMixin):
     """Simple service-locator / DI container.
 
     Bindings are Callable factories (lazy) to avoid instantiating
@@ -147,6 +148,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
         from weebot.scheduling.scheduler import SchedulingManager
         self.register("scheduler", lambda: SchedulingManager())
+        # Deployment-time learning (Memento-Skills; all flags default OFF)
+        self.configure_learning(db_path=db_path)
 
     # ── high-level builders ─────────────────────────────────────────
 

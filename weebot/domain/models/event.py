@@ -312,3 +312,47 @@ class EpochCompleted(DomainEvent):
     edits_accepted: int
     edits_rejected: int
     slow_update_applied: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Deployment-time learning (Memento-Skills plan, Phases 1+)
+# ---------------------------------------------------------------------------
+
+
+class SkillGapDetected(DomainEvent):
+    """Emitted when a retrieval step finds no skill above the creation threshold.
+
+    Signals that the agent encountered a task type for which no useful skill
+    exists yet.  These signals are batched at session completion and submitted
+    as IdeaContracts for gate-reviewed skill creation (Phase 2).
+    """
+    type: str = "skill_gap_detected"
+    session_id: str
+    step_description: str
+    best_score: float = 0.0          # highest match score returned by retriever
+
+
+class SkillDistilled(DomainEvent):
+    """Emitted when a new skill candidate is distilled from a completed task.
+
+    The skill is created at trust=quarantined and must pass validation
+    before being promoted.  Subscribers may index it for dedup checks.
+    """
+    type: str = "skill_distilled"
+    session_id: str
+    skill_name: str
+    origin: str = "distilled"          # "distilled" | "imported"
+    content_preview: str = ""          # first 200 chars of content, for logging
+
+
+class SkillPromoted(DomainEvent):
+    """Emitted when a skill transitions between trust tiers.
+
+    Covers both quarantined→candidate (after first validation) and
+    candidate→trusted (after CANDIDATE_PROMOTION_USES positive uses).
+    """
+    type: str = "skill_promoted"
+    skill_name: str
+    from_tier: str                     # "quarantined" | "candidate"
+    to_tier: str                       # "candidate" | "trusted"
+    positive_uses: int = 0             # uses accumulated at promotion time

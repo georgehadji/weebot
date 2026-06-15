@@ -34,6 +34,32 @@ METACOGNITIVE_IMPROVEMENT_ENABLED: bool = _env_bool(
 )
 
 
+# ── Deployment-time learning (Memento-Skills plan, Phases 1–5) ──────────────
+# Each phase ships behind a default-OFF flag. Phase 0 (foundations) is always
+# active but inert until a downstream phase is enabled.
+
+# Phase 1 — distil a new skill from a completed task (quarantined on creation).
+LIVE_SKILL_DISTILLATION_ENABLED: bool = _env_bool(
+    "WEEBOT_LIVE_SKILL_DISTILLATION", default=False
+)
+# Phase 2 — on a retrieval miss, enqueue a gated skill-creation request.
+SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool(
+    "WEEBOT_SKILL_GAP_TRIGGER", default=False
+)
+# Phase 3 — add a semantic (embedding) first stage to skill retrieval.
+SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool(
+    "WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=False
+)
+# Phase 4 — let the curator act (archive) and validate/dedup imports.
+CURATION_ACTIONS_ENABLED: bool = _env_bool(
+    "WEEBOT_CURATION_ACTIONS", default=False
+)
+# Phase 5 — attribute live failures to a skill and run online SkillOpt.
+ONLINE_SKILLOPT_ENABLED: bool = _env_bool(
+    "WEEBOT_ONLINE_SKILLOPT", default=False
+)
+
+
 def is_enabled(flag_name: str) -> bool:
     """Check if a feature flag is enabled by name."""
     return globals().get(flag_name, False)

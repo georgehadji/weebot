@@ -178,6 +178,7 @@ class PlanActFlow(BaseFlow):
         self._emit_lock = asyncio.Lock()
 
         self._skill_prompt = cfg.skill_prompt
+        self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
         self._tracing_port = None
         self._persistence_adapter = None
         # ── Self-Harness: behavioural instruction block + resolver ──

@@ -52,6 +52,7 @@ class AgentToolsMixin:
             max_steps=SUBAGENT_MAX_STEPS,
             logger=self._maybe_get_str("structured_logger"),
             skill_retriever=self._maybe_get_str("skill_retriever"),
+            skill_distiller=self._maybe_get_str("skill_distiller"),
             harness_config=self._maybe_get(HarnessConfig),
         )
         return PlanActFlow(cfg)

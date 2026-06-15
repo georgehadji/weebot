@@ -84,6 +84,66 @@ class MetaAnalysisState(FlowState):
         except Exception as exc:
             context._log.warning("Meta-analysis failed (non-blocking): %s", exc)
 
+        # ── Phase 1: live skill distillation (flag-guarded) ──────────
+        await _maybe_distil_skill(context, step_results, failures, tool_count)
+
         # ── Transition to VerifyingState (CoVe) → CompletedState ──
         from weebot.application.flows.states.verifying import VerifyingState
         context.set_state(VerifyingState())
+
+
+async def _maybe_distil_skill(
+    context: "PlanActFlow",
+    step_results: list[tuple[str, str]],
+    failures: list[str],
+    tool_count: int,
+) -> None:
+    """Run live skill distillation if the feature flag is enabled.
+
+    Best-effort — any exception is logged and swallowed so it never
+    blocks the flow.  The distiller is flag-gated; when the flag is off
+    DI returns a _NoOpDistiller and this function is a no-op.
+    """
+    from weebot.config.feature_flags import LIVE_SKILL_DISTILLATION_ENABLED
+
+    distiller = getattr(context, "_skill_distiller", None)
+    if distiller is None or not LIVE_SKILL_DISTILLATION_ENABLED:
+        return
+
+    session = context._session
+    try:
+        # Build a compact trajectory text for the distiller
+        trajectory_lines: list[str] = []
+        task = session.context.original_task or "(no task)"
+        trajectory_lines.append(f"Task: {task}")
+        trajectory_lines.append(f"Steps completed: {len(step_results)}, tool calls: {tool_count}")
+        if failures:
+            trajectory_lines.append(f"Failures: {'; '.join(failures[:3])}")
+        for step_id, desc in step_results:
+            trajectory_lines.append(f"  - [{step_id}] {desc}")
+        trajectory_text = "\n".join(trajectory_lines)
+
+        skill = await distiller.analyze_session(
+            session_id=session.id,
+            trajectory=trajectory_text,
+        )
+        if skill is not None:
+            # Publish lifecycle event for observability
+            try:
+                from weebot.domain.models.event import SkillDistilled
+                ev = SkillDistilled(
+                    session_id=session.id,
+                    skill_name=skill.name,
+                    content_preview=skill.content[:200],
+                    origin=skill.metadata.provenance.origin,
+                )
+                if context._event_bus is not None:
+                    await context._event_bus.publish(ev)
+            except Exception:
+                pass  # observability failure must never block flow
+            context._log.info(
+                "Phase 1: distilled quarantined skill '%s' from session %s",
+                skill.name, session.id[:8],
+            )
+    except Exception as exc:
+        context._log.warning("Phase 1 skill distillation failed (non-blocking): %s", exc)

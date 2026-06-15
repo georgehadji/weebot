@@ -80,7 +80,22 @@ class SkillRegistry:
         openclaw_meta = meta.get("openclaw", {}) if isinstance(meta, dict) else {}
         hermes_meta = meta.get("hermes", {}) if isinstance(meta, dict) else {}
 
-        from weebot.domain.models.skill import SkillMetadata
+        from weebot.domain.models.skill import SkillMetadata, SkillProvenance
+
+        # Phase 0: trust tier + provenance (defensive — bad values fall back safely)
+        trust_val = meta.get("trust", "trusted") if isinstance(meta, dict) else "trusted"
+        if trust_val not in ("quarantined", "candidate", "trusted"):
+            trust_val = "trusted"
+        prov_raw = meta.get("provenance", {}) if isinstance(meta, dict) else {}
+        try:
+            provenance = (
+                SkillProvenance(**prov_raw)
+                if isinstance(prov_raw, dict) and prov_raw
+                else SkillProvenance()
+            )
+        except Exception:
+            provenance = SkillProvenance()
+
         metadata = SkillMetadata(
             emoji=openclaw_meta.get("emoji") or meta.get("emoji") or frontmatter.get("emoji"),
             env=openclaw_meta.get("env", []) or meta.get("env", []),
@@ -91,6 +106,8 @@ class SkillRegistry:
             config=hermes_meta.get("config", []) or meta.get("config", []),
             fallback_for_toolsets=hermes_meta.get("fallback_for_toolsets", []) or meta.get("fallback_for_toolsets", []),
             requires_toolsets=hermes_meta.get("requires_toolsets", []) or meta.get("requires_toolsets", []),
+            trust=trust_val,
+            provenance=provenance,
         )
 
         skill = Skill(

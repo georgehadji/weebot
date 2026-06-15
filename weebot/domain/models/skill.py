@@ -8,11 +8,44 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, PrivateAttr
 
 from .skill_edit import SLOW_UPDATE_END, SLOW_UPDATE_START, SkillEdit
+
+TrustTier = Literal["quarantined", "candidate", "trusted"]
+"""Injection-trust tier for a skill (Phase 0 — deployment-time learning).
+
+- ``trusted``     — human-authored or fully promoted; injected live.
+- ``candidate``   — validated self-generated/imported skill accruing positive use.
+- ``quarantined`` — freshly distilled; retrievable for offline optimisation only,
+  never injected live until promoted.
+"""
+
+
+class SkillProvenance(BaseModel):
+    """Where a skill came from and how much it has proven itself.
+
+    Self-generated content is a steering-injection surface, so provenance is
+    tracked explicitly and gates live injection via the trust tier.
+    """
+    origin: Literal["human", "distilled", "imported"] = Field(
+        default="human",
+        description="How the skill was authored.",
+    )
+    session_id: Optional[str] = Field(
+        default=None, description="Session that produced a distilled skill."
+    )
+    trajectory_ref: Optional[str] = Field(
+        default=None, description="Reference to the originating trajectory."
+    )
+    created_at: Optional[datetime] = Field(default=None)
+    positive_uses: int = Field(
+        default=0,
+        ge=0,
+        description="Count of validated positive uses; drives candidate→trusted promotion.",
+    )
 
 
 class SkillMetadata(BaseModel):
@@ -57,6 +90,18 @@ class SkillMetadata(BaseModel):
             "Hide skill when required tools are missing."
         ),
     )
+
+    # --- Phase 0: deployment-time learning trust model ---
+    trust: TrustTier = Field(
+        default="trusted",
+        description=(
+            "Injection-trust tier. Human-authored skills default to 'trusted'. "
+            "Self-generated/imported skills start lower and are promoted only "
+            "after validated positive use. The live executor injects only "
+            "'trusted' skills."
+        ),
+    )
+    provenance: SkillProvenance = Field(default_factory=SkillProvenance)
 
 
 class SkillVersion(BaseModel):
@@ -197,6 +242,41 @@ class Skill(BaseModel):
         if not self.metadata.env:
             return True
         return all(self.check_env().values())
+
+    # --- Phase 0: trust gating + promotion ---
+
+    @property
+    def is_injectable(self) -> bool:
+        """Return True if this skill may be injected into the live prompt.
+
+        Only ``trusted`` skills are injected at inference time. Quarantined
+        and candidate skills remain retrievable for offline optimisation but
+        are withheld from the live executor.
+        """
+        return self.metadata.trust == "trusted"
+
+    def with_trust(self, tier: TrustTier) -> "Skill":
+        """Return a copy with the trust tier set to *tier* (immutable)."""
+        new_meta = self.metadata.model_copy(update={"trust": tier})
+        return self.model_copy(update={"metadata": new_meta})
+
+    def record_positive_use(self, *, promotion_threshold: int) -> "Skill":
+        """Record one validated positive use, promoting candidate→trusted.
+
+        Increments ``provenance.positive_uses``. A ``candidate`` skill is
+        promoted to ``trusted`` once its positive-use count reaches
+        *promotion_threshold*. ``quarantined`` skills are never auto-promoted
+        here — they must first pass validation (Phase 1) to become candidates.
+        Returns a new ``Skill``; the original is left unchanged.
+        """
+        prov = self.metadata.provenance.model_copy(
+            update={"positive_uses": self.metadata.provenance.positive_uses + 1}
+        )
+        new_trust: TrustTier = self.metadata.trust
+        if self.metadata.trust == "candidate" and prov.positive_uses >= promotion_threshold:
+            new_trust = "trusted"
+        new_meta = self.metadata.model_copy(update={"provenance": prov, "trust": new_trust})
+        return self.model_copy(update={"metadata": new_meta})
 
     # --- M3: Platform compatibility ---
 
