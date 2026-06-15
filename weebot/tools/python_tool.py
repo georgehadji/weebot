@@ -92,10 +92,18 @@ class PythonExecuteTool(BaseTool):
         import logging as _logging
         super().__init__()
         if sandbox is None:
-            _logging.getLogger(__name__).warning(
-                "PythonExecuteTool: no SandboxPort injected — "
-                "python_execute calls will return an error until a sandbox is set"
-            )
+            # No sandbox injected — fall back to the environment default so the
+            # tool is usable when constructed directly (registry, MCP, tests).
+            try:
+                from weebot.infrastructure.sandbox.factory import create_default_sandbox
+                sandbox = create_default_sandbox()
+            except Exception as exc:
+                _logging.getLogger(__name__).warning(
+                    "PythonExecuteTool: no SandboxPort injected and default "
+                    "sandbox creation failed (%s) — python_execute will error "
+                    "until a sandbox is set",
+                    exc,
+                )
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
         self._bash_guard = BashGuard(

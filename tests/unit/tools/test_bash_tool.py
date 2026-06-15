@@ -51,7 +51,8 @@ class TestBashTool:
             result = await tool.execute(command="format c:")
 
         assert result.is_error
-        assert "denied" in result.error.lower()
+        # Command is blocked before reaching the executor (BashGuard / policy).
+        assert "blocked" in result.error.lower() or "denied" in result.error.lower()
         run_mock.assert_not_called()
 
     @pytest.mark.asyncio
@@ -96,19 +97,20 @@ class TestBashTool:
 
     @pytest.mark.asyncio
     async def test_executor_called_with_powershell_prefix(self):
-        """By default (use_wsl=False) the subprocess uses PowerShell."""
+        """By default on Windows (use_wsl=False) the sandbox runs the PowerShell shell."""
         tool = BashTool()
-        captured: list[list[str]] = []
+        captured: list[dict] = []
 
-        async def capture_cmd(cmd, **kw):
-            captured.append(cmd)
+        async def capture_cmd(*args, **kwargs):
+            captured.append(kwargs)
             return _ok()
 
         with patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd):
             await tool.execute(command="Get-Date")
 
-        assert captured, "executor.run was not called"
-        assert captured[0][0].lower() == "powershell"
+        assert captured, "sandbox.execute_shell was not called"
+        # Current SandboxPort API passes the shell selection as a keyword arg.
+        assert captured[0].get("shell", "").lower() == "powershell"
 
     @pytest.mark.asyncio
     async def test_to_param_returns_function_spec(self):

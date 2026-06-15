@@ -101,23 +101,8 @@ class FactoriesMixin:
 
     @staticmethod
     def _create_sandbox() -> SandboxPort:
-        from weebot.config.settings import WeebotSettings
-        settings = WeebotSettings()
-        if settings.sandbox_mode != "auto":
-            from weebot.infrastructure.sandbox.factory import SandboxFactory, MODE_TO_TYPE
-            sandbox_type = MODE_TO_TYPE.get(settings.sandbox_mode.lower())
-            if sandbox_type is None:
-                raise ValueError(
-                    f"Unknown sandbox_mode '{settings.sandbox_mode}'. "
-                    f"Set SANDBOX_MODE to: auto, native, docker, wsl2."
-                )
-            return SandboxFactory().create(sandbox_type)
-        import sys as _sys
-        if _sys.platform == "win32":
-            from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
-            return NativeWindowsSandbox()
-        from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
-        return DockerLinuxSandbox()
+        from weebot.infrastructure.sandbox.factory import create_default_sandbox
+        return create_default_sandbox()
 
     @staticmethod
     def _create_llm(default_model: Optional[str]) -> LLMPort:

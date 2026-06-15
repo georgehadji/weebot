@@ -47,11 +47,19 @@ class WeebotSettings(BaseSettings):
         dotenv_settings,
         file_secret_settings,
     ):
-        """Put .env file FIRST so it overrides system environment variables."""
+        """Order sources so explicit constructor kwargs always win, then
+        .env overrides system environment (the documented intent).
+
+        Init kwargs must rank highest: silently overriding an explicitly
+        passed value with a stale .env/env var violates least astonishment
+        and breaks explicit construction (e.g. tests, programmatic config).
+        Among the ambient sources, .env still takes precedence over system
+        environment as originally intended.
+        """
         return (
-            dotenv_settings,      # .env file — highest priority
+            init_settings,        # constructor kwargs — highest priority
+            dotenv_settings,      # .env file — overrides system environment
             env_settings,         # system environment
-            init_settings,        # constructor kwargs
             file_secret_settings, # secrets dir
         )
 

@@ -375,13 +375,41 @@ def get_sandbox(
     config: Optional[SandboxConfig] = None,
 ) -> SandboxPort:
     """Get a specific sandbox type.
-    
+
     Args:
         sandbox_type: Type of sandbox to create.
         config: Optional configuration.
-    
+
     Returns:
         Configured sandbox instance.
     """
     factory = SandboxFactory()
     return factory.create(sandbox_type, config)
+
+
+def create_default_sandbox() -> SandboxPort:
+    """Create the default sandbox for the current environment (synchronous).
+
+    Honors ``WeebotSettings.sandbox_mode`` (auto | native | docker | wsl2).
+    In ``auto`` mode, selects NativeWindowsSandbox on Windows and
+    DockerLinuxSandbox elsewhere.  This is the single source of truth for the
+    "no sandbox injected" default, shared by the DI container and the
+    bash/python tools so their behaviour can never drift apart.
+    """
+    import sys
+
+    from weebot.config.settings import WeebotSettings
+
+    settings = WeebotSettings()
+    mode = (settings.sandbox_mode or "auto").lower()
+    if mode != "auto":
+        sandbox_type = MODE_TO_TYPE.get(mode)
+        if sandbox_type is None:
+            raise ValueError(
+                f"Unknown sandbox_mode '{settings.sandbox_mode}'. "
+                f"Set SANDBOX_MODE to: auto, native, docker, wsl2."
+            )
+        return SandboxFactory().create(sandbox_type)
+    if sys.platform == "win32":
+        return NativeWindowsSandbox()
+    return DockerLinuxSandbox()

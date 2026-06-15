@@ -13,7 +13,7 @@ class TestStructuredLogger:
     
     def test_logger_creation(self):
         """Test logger can be created."""
-        from weebot.structured_logger import StructuredLogger, get_logger
+        from weebot.core.structured_logger import StructuredLogger, get_logger
         
         logger = get_logger("test.logger")
         assert logger is not None
@@ -21,7 +21,7 @@ class TestStructuredLogger:
     
     def test_log_record_creation(self):
         """Test log record can be created and serialized."""
-        from weebot.structured_logger import StructuredLogRecord
+        from weebot.core.structured_logger import StructuredLogRecord
         
         record = StructuredLogRecord(
             level="INFO",
@@ -36,7 +36,7 @@ class TestStructuredLogger:
     
     def test_log_record_json_serialization(self):
         """Test log record serializes to valid JSON."""
-        from weebot.structured_logger import StructuredLogRecord
+        from weebot.core.structured_logger import StructuredLogRecord
         
         record = StructuredLogRecord(
             level="ERROR",
@@ -55,7 +55,7 @@ class TestStructuredLogger:
     
     def test_correlation_id_context(self):
         """Test correlation ID context manager."""
-        from weebot.structured_logger import StructuredLogger, get_correlation_id
+        from weebot.core.structured_logger import StructuredLogger, get_correlation_id
         
         logger = StructuredLogger("test")
         
@@ -71,7 +71,7 @@ class TestStructuredLogger:
     
     def test_timer_context(self):
         """Test timer context manager."""
-        from weebot.structured_logger import StructuredLogger
+        from weebot.core.structured_logger import StructuredLogger
         
         logger = StructuredLogger("test")
         
@@ -81,7 +81,7 @@ class TestStructuredLogger:
     
     def test_error_categorization(self):
         """Test error categorization in logs."""
-        from weebot.structured_logger import StructuredLogger, StructuredLogRecord
+        from weebot.core.structured_logger import StructuredLogger, StructuredLogRecord
         
         logger = StructuredLogger("test")
         
@@ -334,7 +334,7 @@ class TestPhase4Integration:
     
     def test_end_to_end_logging_and_tracing(self):
         """Test logging and tracing work together."""
-        from weebot.structured_logger import StructuredLogger
+        from weebot.core.structured_logger import StructuredLogger
         from weebot.core.workflow_tracer import WorkflowTracer
         
         logger = StructuredLogger("test.integration")
