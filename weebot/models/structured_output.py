@@ -10,6 +10,7 @@ Based on patterns from The Dev Squad analysis.
 from __future__ import annotations
 
 import json
+import random
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -320,6 +321,135 @@ RULES:
 STRUCTURED_OUTPUT_PROMPT = create_system_prompt()
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Verbalized Sampling — Phase 0 models
+# ═══════════════════════════════════════════════════════════════════════
+
+class SampledResponse(BaseModel):
+    """One candidate from a verbalized distribution (VS paper).
+
+    Attributes:
+        text: Candidate response text or JSON payload.
+        probability: Verbalized probability.  Steering signal only —
+            never surfaced as calibrated confidence.  Accepted formats:
+            0.12 (float), "0.12" (string), "12%" (string percent).
+    """
+    text: str = Field(..., description="Candidate response text or JSON payload")
+    probability: float = Field(
+        ..., ge=0.0, le=1.0,
+        description="Verbalized probability — steering signal only, not confidence",
+    )
+
+    @field_validator("probability", mode="before")
+    @classmethod
+    def _coerce_prob(cls, v: Any) -> float:
+        """Coerce string/percent formats to 0..1 float."""
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            v = v.strip()
+            if v.endswith("%"):
+                return float(v.rstrip("%")) / 100.0
+            return float(v)
+        raise ValueError(f"Cannot coerce {v!r} to probability")
+
+
+class SampledDistribution(BaseModel):
+    """A verbalized distribution over candidate responses."""
+
+    responses: list[SampledResponse] = Field(default_factory=list)
+
+    def mode(self) -> SampledResponse | None:
+        """Return the response with the highest probability (argmax)."""
+        if not self.responses:
+            return None
+        return max(self.responses, key=lambda r: r.probability)
+
+    def weighted_sample(self, rng: random.Random | None = None) -> SampledResponse | None:
+        """Sample a response proportional to its probability.
+
+        Args:
+            rng: Optional seeded RNG for deterministic tests.
+
+        Returns:
+            SampledResponse or None if empty.
+        """
+        if not self.responses:
+            return None
+        if rng is None:
+            rng = random.Random()
+        probs = [r.probability for r in self.responses]
+        total = sum(probs)
+        if total == 0:
+            return self.responses[0]  # uniform fallback
+        normalized = [p / total for p in probs]
+        return rng.choices(self.responses, weights=normalized, k=1)[0]
+
+    def tail(self, threshold: float = 0.1) -> list[SampledResponse]:
+        """Return responses with probability below *threshold* (low-typicality tail).
+
+        The tail represents the most novel / diverse candidates.
+        """
+        return [r for r in self.responses if r.probability < threshold]
+
+    def texts(self) -> list[str]:
+        """Return the text of all responses."""
+        return [r.text for r in self.responses]
+
+    def __bool__(self) -> bool:
+        return len(self.responses) > 0
+
+
+# Re-export prompt template path (loaded via load_prompt_with_fallback)
+VS_PROMPT_FILENAME: str = "verbalized_sampling.txt"
+VS_FALLBACK_PROMPT: str = \
+    "You are a helpful assistant. For the given task, generate a set of {k} DISTINCT " \
+    "candidate responses that together approximate the full distribution of good answers.\n\n" \
+    "Return ONLY valid JSON, no markdown:\n" \
+    '{{"responses": [{{"text": "<candidate>", "probability": <0..1>}}, ...]}}\n\n' \
+    "- Each candidate must be meaningfully different from the others.\n" \
+    '"probability" is your estimate of how typical/likely each candidate is.\n' \
+    "{threshold_clause}"
+
+
+def parse_sampled_distribution(raw_text: str) -> SampledDistribution:
+    """Parse an LLM response into a SampledDistribution.
+
+    Handles the same formats as ``parse_agent_output``: fenced JSON
+    (```json ... ```), bare JSON, or raw braces.  Never raises —
+    returns an empty distribution on any parse failure for fail-open.
+
+    Args:
+        raw_text: Raw LLM response text.
+
+    Returns:
+        SampledDistribution — empty on failure, never None/raises.
+    """
+    text = raw_text.strip() if raw_text else ""
+    if not text:
+        return SampledDistribution()
+
+    # Try markdown code block first
+    json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # Try bare JSON object
+        brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+        if brace_match:
+            json_str = brace_match.group(0)
+        else:
+            return SampledDistribution()
+
+    try:
+        data = json.loads(json_str)
+        if isinstance(data, dict) and "responses" in data:
+            return SampledDistribution(**data)
+        return SampledDistribution()
+    except (json.JSONDecodeError, ValueError):
+        return SampledDistribution()
+
+
 # Export all public symbols
 __all__ = [
     "TaskStatus",
@@ -331,4 +461,10 @@ __all__ = [
     "parse_agent_output",
     "create_system_prompt",
     "STRUCTURED_OUTPUT_PROMPT",
+    # Verbalized Sampling
+    "SampledResponse",
+    "SampledDistribution",
+    "parse_sampled_distribution",
+    "VS_PROMPT_FILENAME",
+    "VS_FALLBACK_PROMPT",
 ]

@@ -193,3 +193,29 @@ MAX_TOKENS_PLANNING: int = 4096
 """Structured plan generation — planner agent."""
 
 # MAX_TOKENS_DEFAULT (defined above) = 16384 — API default cap
+
+# ═══════════════════════════════════════════════════════════════════════
+# Verbalized Sampling — Phase 0 defaults
+# ═══════════════════════════════════════════════════════════════════════
+
+VS_DEFAULT_K: int = 5
+"""Default number of candidates for Verbalized Sampling."""
+
+VS_TAIL_THRESHOLD: float = 0.10
+"""Probability threshold for tail (low-typicality) filtering."""
+
+# Feature flags — default OFF, env-overridable
+VS_ENABLE_RECOVERY: bool = False
+"""Enable VS for ToT failure-recovery candidate generation (Phase 1)."""
+
+VS_ENABLE_PLANNING: bool = False
+"""Enable VS for multi-candidate plan generation (Phase 2)."""
+
+VS_ENABLE_DREAMER: bool = False
+"""Enable VS for diverent ideation (Phase 3)."""
+
+VS_ENABLE_OPTIMIZER: bool = False
+"""Enable VS for evolution-agent edit-pool diversification (Phase 4)."""
+
+VS_ENABLE_CONTENT: bool = False
+"""Enable VS for creative/content generation (Phase 6)."""

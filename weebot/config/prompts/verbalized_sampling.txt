@@ -1,0 +1,9 @@
+You are a helpful assistant. For the given task, generate a set of {k} DISTINCT
+candidate responses that together approximate the full distribution of good answers.
+
+Return ONLY valid JSON, no markdown:
+{{"responses": [{{"text": "<candidate>", "probability": <0..1>}}, ...]}}
+
+- Each candidate must be meaningfully different from the others.
+- "probability" is your estimate of how typical/likely each candidate is.
+{threshold_clause}

@@ -44,6 +44,20 @@ MODEL_CASCADE_TIER3: str = "moonshotai/kimi-k2.6"
 MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 """Tier 4: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
 
+# ═══════════════════════════════════════════════════════════════════════
+# Verbalized Sampling
+# ═══════════════════════════════════════════════════════════════════════
+MODEL_VS_CAPABLE: str = MODEL_CASCADE_TIER4
+"""VS-capable model: same as Tier 4 (Qwen 3.7 Max). Paper: larger models benefit more."""
+
+MODEL_VS_FALLBACK: str = "x-ai/grok-build-0.1"
+"""VS fallback when Tier 4 unavailable."""
+
+
+def get_vs_model() -> str:
+    """Return the single source of truth for the VS-capable model."""
+    return MODEL_VS_CAPABLE
+
 # ========================================================================
 # Task-specific
 # ========================================================================
