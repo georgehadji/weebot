@@ -187,7 +187,9 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             from weebot.tools.python_tool import PythonExecuteTool as PythonTool
             from weebot.tools.image_gen_tool import ImageGenTool
             try:
-                tools = ToolCollection(BashTool(), FileEditorTool(), PythonTool(), ImageGenTool())
+                sandbox = self._maybe_get(SandboxPort)
+                py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
+                tools = ToolCollection(BashTool(), FileEditorTool(), py_tool, ImageGenTool())
             except Exception:
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
@@ -255,10 +257,12 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.tools.python_tool import PythonExecuteTool as PythonTool
         from weebot.tools.image_gen_tool import ImageGenTool
 
+        sandbox = self._maybe_get(SandboxPort)
+        py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
         tools = ToolCollection(
             BashTool(),
             FileEditorTool(),
-            PythonTool(),
+            py_tool,
             ImageGenTool(),
         )
 

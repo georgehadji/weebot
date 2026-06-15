@@ -305,7 +305,16 @@ class CircuitBreaker:
     # ------------------------------------------------------------------
 
     def get_state(self, entity_id: str) -> BreakerState:
-        """Get the current state for *entity_id* (sync, for inspection)."""
+        """Get the current state for *entity_id* (sync, for inspection).
+
+        Note: This is intentionally **not** guarded by ``self._lock``
+        because it is called from sync contexts (monitoring dashboards,
+        Prometheus metrics) and from ``evaluate()``\'s Phase-1 dirty
+        pre-check.  The race window is microseconds — reading a single
+        enum field from a dict under CPython is effectively atomic.
+        The authoritative state transition always happens under the
+        lock in Phase 2 of ``evaluate()``.
+        """
         entry = self._breakers.get(entity_id)
         return entry.state if entry else BreakerState.CLOSED
 

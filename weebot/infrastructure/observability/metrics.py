@@ -101,6 +101,18 @@ scheduled_jobs_runs_total = Counter(
     ["job_id", "outcome"],  # outcome: "success" | "failure"
 )
 
+# ── Harness evolution (Code-as-Harness Phase 1) ──
+harness_promotion_total = Counter(
+    "weebot_harness_promotion_total",
+    "Harness edit promotion decisions",
+    ["decision"],  # "accepted" | "rejected"
+)
+harness_metric_delta = Gauge(
+    "weebot_harness_metric_delta",
+    "Harness composite metric delta per evaluation split",
+    ["split", "metric"],  # split: "held_in" | "held_out"; metric: "composite" | "pass_rate"
+)
+
 # ── Monitors / Heartbeat ──
 session_stale_count = Gauge(
     "weebot_sessions_stale_count",

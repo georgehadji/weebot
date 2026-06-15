@@ -269,6 +269,10 @@ class SchedulingManager:
                 return ScheduledJob.from_dict(dict(row))
         return None
 
+    def _run_db(self, func, *args, **kwargs):
+        """Run a synchronous DB operation in a thread pool."""
+        return asyncio.to_thread(lambda: func(*args, **kwargs))
+
     def list_jobs(
         self,
         status: Optional[str] = None,
@@ -435,28 +439,30 @@ class SchedulingManager:
 
         finally:
             self._running_jobs.discard(job_id)
-            self._save_job(job)
+            await self._save_job(job)
 
-    def _save_job(self, job: ScheduledJob) -> None:
-        """Save job to database.
+    async def _save_job(self, job: ScheduledJob) -> None:
+        """Save job to database (offloaded to thread pool).
 
         Args:
             job: ScheduledJob to save
         """
-        with sqlite3.connect(self.db_path) as conn:
-            job_dict = job.to_dict()
-            # JSON-serialize trigger_config for storage
-            if isinstance(job_dict.get('trigger_config'), dict):
-                job_dict['trigger_config'] = json.dumps(job_dict['trigger_config'])
+        def _save():
+            with sqlite3.connect(self.db_path) as conn:
+                job_dict = job.to_dict()
+                # JSON-serialize trigger_config for storage
+                if isinstance(job_dict.get('trigger_config'), dict):
+                    job_dict['trigger_config'] = json.dumps(job_dict['trigger_config'])
 
-            placeholders = ', '.join('?' * len(job_dict))
-            cols = ', '.join(job_dict.keys())
+                placeholders = ', '.join('?' * len(job_dict))
+                cols = ', '.join(job_dict.keys())
 
-            conn.execute(
-                f'INSERT OR REPLACE INTO jobs ({cols}) VALUES ({placeholders})',
-                tuple(job_dict.values())
-            )
-            conn.commit()
+                conn.execute(
+                    f'INSERT OR REPLACE INTO jobs ({cols}) VALUES ({placeholders})',
+                    tuple(job_dict.values())
+                )
+                conn.commit()
+        await asyncio.to_thread(_save)
 
     async def load_from_config(self, config_path: Optional[Path] = None) -> int:
         """Load job definitions from a YAML config file.
