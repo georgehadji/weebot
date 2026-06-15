@@ -165,23 +165,26 @@ class TestHarnessCLI:
 
     def test_harness_group_registered(self):
         """The harness command group exists.
-        
+
         Tests by checking the source file for the Click decorator
         rather than importing cli.main (which triggers a langchain
         import hang in this test environment).
         """
         import re
-        source = open("cli/main.py", encoding="utf-8").read()
-        assert re.search(r'@cli\.group\(\)\s*\n\s*def harness\(\)', source) is not None
+        # harness group is defined in cli/commands/harness.py and registered
+        # in cli/main.py via cli.add_command(harness)
+        harness_src = open("cli/commands/harness.py", encoding="utf-8").read()
+        assert re.search(r'@click\.group\(\)\s*\n\s*def harness\(\)', harness_src) is not None
+        main_src = open("cli/main.py", encoding="utf-8").read()
+        assert "cli.add_command(harness)" in main_src
 
     def test_harness_generate_command(self):
         """The generate subcommand exists."""
         import re
-        source = open("cli/main.py", encoding="utf-8").read()
+        source = open("cli/commands/harness.py", encoding="utf-8").read()
         assert re.search(r'@harness\.command\("generate"\)', source) is not None
 
     def test_dry_run_flag(self):
         """The --dry-run flag is accepted."""
-        import re
-        source = open("cli/main.py", encoding="utf-8").read()
+        source = open("cli/commands/harness.py", encoding="utf-8").read()
         assert '--dry-run' in source
