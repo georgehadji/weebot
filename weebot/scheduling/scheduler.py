@@ -242,10 +242,12 @@ class SchedulingManager:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-        # Remove from database
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('DELETE FROM jobs WHERE job_id = ?', (job_id,))
-            conn.commit()
+        # Remove from database (offload to thread pool)
+        def _delete():
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('DELETE FROM jobs WHERE job_id = ?', (job_id,))
+                conn.commit()
+        await asyncio.to_thread(_delete)
 
         logger.info(f"Deleted job: {job_id}")
         return True
