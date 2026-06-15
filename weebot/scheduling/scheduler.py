@@ -179,7 +179,7 @@ class SchedulingManager:
         )
 
         # Store in database
-        self._save_job(job)
+        await self._save_job(job)
 
         # Schedule if enabled
         if job.enabled:
@@ -220,7 +220,7 @@ class SchedulingManager:
             await self._schedule_job(job)
 
         # Save to database
-        self._save_job(job)
+        await self._save_job(job)
 
         logger.info(f"Updated job: {job_id}")
         return job
@@ -399,7 +399,7 @@ class SchedulingManager:
             # Update status
             job.status = JobStatus.RUNNING.value
             job.last_run = datetime.now()
-            self._save_job(job)
+            await self._save_job(job)
 
             # Execute payload
             if job.callable_name:
@@ -577,7 +577,7 @@ class SchedulingManager:
             return False
 
         job.status = JobStatus.PAUSED.value
-        self._save_job(job)
+        await self._save_job(job)
         logger.info(f"Paused job: {job_id}")
         return True
 
@@ -595,7 +595,7 @@ class SchedulingManager:
             return False
 
         job.status = JobStatus.PENDING.value
-        self._save_job(job)
+        await self._save_job(job)
 
         # Reschedule if needed
         if job.enabled and not self.scheduler.get_job(job_id):
