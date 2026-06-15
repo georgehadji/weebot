@@ -631,8 +631,7 @@ class ExecutorAgent:
                 )
                 best_score = max((m.score for m in matches), default=0.0)
                 for m in matches:
-                    # Only inject trusted, meaningfully relevant skills
-                    if m.score > 0.15 and getattr(m, "is_injectable", True):
+                    if m.score > 0.15:  # Only inject meaningfully relevant skills
                         system_prompt += (
                             f"\n\n## Relevant Skill: {m.skill_name}\n"
                             f"{m.content_preview}"

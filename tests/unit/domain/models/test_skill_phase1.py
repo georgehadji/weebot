@@ -92,13 +92,17 @@ class TestAutonomousSkillCreatorInit:
 
 class TestAnalyzeSession:
     def _make_creator(self, llm_response_json: str | None = None):
-        llm = AsyncMock()
+        # spec=LLMPort guards against mocking a non-existent method (e.g. the
+        # earlier `complete()` bug that a bare AsyncMock would have hidden).
+        from weebot.application.ports.llm_port import LLMPort
+
+        llm = AsyncMock(spec=LLMPort)
         if llm_response_json is not None:
             resp = MagicMock()
             resp.content = llm_response_json
-            llm.complete = AsyncMock(return_value=resp)
+            llm.chat = AsyncMock(return_value=resp)
         else:
-            llm.complete = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
+            llm.chat = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
         store = AsyncMock()
         store.save = AsyncMock()
         return AutonomousSkillCreator(llm=llm, skill_store=store), store

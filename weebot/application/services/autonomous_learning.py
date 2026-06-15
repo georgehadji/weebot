@@ -148,9 +148,12 @@ class AutonomousSkillCreator:
         truncated = trajectory[:_MAX_TRAJECTORY_CHARS]
         prompt = _DISTILL_PROMPT.format(trajectory=truncated)
         try:
-            response = await self._llm.complete(
-                messages=[{"role": "user", "content": prompt}],
-                system=_DISTILL_SYSTEM,
+            response = await self._llm.chat(
+                messages=[
+                    {"role": "system", "content": _DISTILL_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
                 max_tokens=900,
             )
             raw = response.content if hasattr(response, "content") else str(response)
