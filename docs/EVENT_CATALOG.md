@@ -26,6 +26,9 @@
 | `SkillEditProposed` | `"skill_edit_proposed"` | `skill_name`, `edits`, `score` | SkillOptFlow | — |
 | `MemoryCompacted` | `"memory_compacted"` | `session_id`, `events_before`, `events_after` | MemoryCompactor | EventStore |
 | `PlanStepCompleted` | `"plan_step_completed"` | `session_id`, `step_id` | ExecutorAgent | EventStore |
+| `SkillGapDetected` | `"skill_gap_detected"` | `session_id`, `step_description`, `best_score` | AutonomousLearning (MetaAnalysisState) | SkillRegistry gap log |
+| `SkillDistilled` | `"skill_distilled"` | `session_id`, `skill_name`, `origin`, `content_preview` | AutonomousLearning (CompletedState) | SkillRegistry |
+| `SkillPromoted` | `"skill_promoted"` | `skill_name`, `from_tier`, `to_tier` | SkillRegistry | EventStore |
 
 ### Event Flow Diagram
 
