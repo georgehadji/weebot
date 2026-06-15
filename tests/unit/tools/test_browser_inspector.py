@@ -31,6 +31,17 @@ def _make_mock_page(url: str = "https://example.com") -> MagicMock:
     return page
 
 
+def _make_mock_browser(page: MagicMock) -> MagicMock:
+    """Return a MagicMock standing in for the injected PlaywrightAdapter.
+
+    BrowserInspectorTool reads the active page via ``self.browser.page``;
+    tests inject this adapter so no real browser is launched.
+    """
+    browser = MagicMock()
+    browser.page = page
+    return browser
+
+
 # ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
@@ -90,7 +101,7 @@ class TestExtractDesignTokens:
             "custom_properties": {"--color-primary": "#3b82f6", "--spacing-md": "1rem"},
             "computed_root": {"font-family": "Inter", "font-size": "16px"},
         }
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="extract_design_tokens")
 
@@ -103,7 +114,7 @@ class TestExtractDesignTokens:
     async def test_empty_tokens_still_succeeds(self):
         page = _make_mock_page()
         page.evaluate.return_value = {"custom_properties": {}, "computed_root": {}}
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="extract_design_tokens")
 
@@ -119,7 +130,7 @@ class TestInspectElement:
     @pytest.mark.asyncio
     async def test_requires_selector(self):
         page = _make_mock_page()
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="inspect_element")
         assert result.is_error
@@ -129,7 +140,7 @@ class TestInspectElement:
     async def test_element_not_found_returns_error(self):
         page = _make_mock_page()
         page.evaluate.return_value = None
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="inspect_element", selector="#missing")
         assert result.is_error
@@ -150,7 +161,7 @@ class TestInspectElement:
                 "backgroundColor": "rgb(15,15,15)",
             },
         }
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="inspect_element", selector=".hero")
 
@@ -172,7 +183,7 @@ class TestEnumerateAssets:
             {"type": "img", "src": "https://example.com/hero.png", "alt": "Hero", "width": 800, "height": 400, "position": {"x": 0, "y": 0}},
             {"type": "inline-svg", "id": "logo", "viewBox": "0 0 24 24", "width": 24, "height": 24, "position": {"x": 10, "y": 10}},
         ]
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="enumerate_assets")
 
@@ -187,7 +198,7 @@ class TestEnumerateAssets:
         page.evaluate.return_value = [
             {"type": "img", "src": "/images/hero.png", "alt": "", "width": 100, "height": 100, "position": {"x": 0, "y": 0}},
         ]
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="enumerate_assets")
 
@@ -197,7 +208,7 @@ class TestEnumerateAssets:
     async def test_empty_assets_succeeds(self):
         page = _make_mock_page()
         page.evaluate.return_value = []
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="enumerate_assets")
 
@@ -224,7 +235,7 @@ class TestGetStructure:
                 {"tag": "main", "id": None, "classes": [], "text_preview": "", "bounding_box": {"x": 0, "y": 80, "width": 1440, "height": 3800}, "children": []},
             ],
         }
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="get_structure")
 
@@ -244,7 +255,7 @@ class TestScreenshot:
         page = _make_mock_page()
         raw = b"\x89PNG\r\n" + b"\xff" * 50
         page.screenshot = AsyncMock(return_value=raw)
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             result = await tool.execute(action="screenshot")
 
@@ -257,7 +268,7 @@ class TestScreenshot:
     @pytest.mark.asyncio
     async def test_screenshot_calls_full_page(self):
         page = _make_mock_page()
-        tool = BrowserInspectorTool()
+        tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
             await tool.execute(action="screenshot")
         page.screenshot.assert_called_once_with(full_page=True)
