@@ -1,5 +1,12 @@
-"""Unit tests for Self-Improving Learning Loop (Hermes M1)."""
+"""Unit tests for Self-Improving Learning Loop (Hermes M1 → Memento Phase 1).
+
+The original heuristic distiller (save_skill / _detect_repetitive_patterns)
+was replaced by an LLM-backed distiller in Phase 1.  Behavioural coverage of
+the new distiller lives in tests/unit/domain/models/test_skill_phase1.py; the
+tests here cover only the no-LLM and short-trajectory guard paths.
+"""
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 
 class TestAutonomousSkillCreator:
@@ -13,43 +20,15 @@ class TestAutonomousSkillCreator:
         assert skill is None
 
     @pytest.mark.asyncio
-    async def test_skill_for_long_trajectory(self):
+    async def test_no_skill_without_llm(self):
+        """A long trajectory still yields nothing when no LLM is configured."""
         from weebot.application.services.autonomous_learning import (
             AutonomousSkillCreator,
         )
-        creator = AutonomousSkillCreator()
-        trajectory = (
-            "Tool call: bash executed ls\n"
-            "Tool call: python executed analysis\n"
-            "Tool call: bash executed grep\n"
-            "Processing data with multiple steps\n"
-            "Validation completed successfully\n"
-            "Generation of report started\n"
-            "Extraction of key metrics\n"
-        )
+        creator = AutonomousSkillCreator(llm=None)
+        trajectory = "step detail line\n" * 60  # > _MIN_TRAJECTORY_CHARS
         skill = await creator.analyze_session("test-2", trajectory)
-        assert skill is not None
-        assert skill.name is not None
-        assert "Procedure" in skill.content
-
-    @pytest.mark.asyncio
-    async def test_save_skill_writes_file(self, tmp_path):
-        from weebot.application.services.autonomous_learning import (
-            AutonomousSkillCreator,
-        )
-        from weebot.domain.models.skill import Skill
-
-        creator = AutonomousSkillCreator(skills_dir=str(tmp_path / "skills"))
-        skill = Skill(name="test-skill", description="Test", content="# Test\n\nContent")
-        path = await creator.save_skill(skill)
-        assert path.exists()
-        assert path.read_text().startswith("---")
-
-    def test_detect_repetitive_patterns_empty(self):
-        from weebot.application.services.autonomous_learning import (
-            AutonomousSkillCreator,
-        )
-        assert AutonomousSkillCreator._detect_repetitive_patterns("") is False
+        assert skill is None
 
 
 class TestMemoryNudgeService:
