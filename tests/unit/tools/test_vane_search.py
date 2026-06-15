@@ -1,16 +1,36 @@
 import pytest
 import httpx
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from weebot.tools.vane_search import VaneSearchTool, ToolResult
-from weebot.config.settings import WeebotSettings
+
 
 @pytest.fixture
-def mock_vane_settings():
-    with patch('weebot.config.settings.WeebotSettings') as MockSettings:
-        mock_settings_instance = MockSettings.return_value
-        mock_settings_instance.vane_base_url = "http://mock-vane:3000"
-        mock_settings_instance.http_timeout_default = 5.0
-        yield
+def mock_vane_settings(monkeypatch):
+    # VaneSearchTool reads the base URL from the VANE_BASE_URL env var.
+    monkeypatch.setenv("VANE_BASE_URL", "http://mock-vane:3000")
+    yield
+
+
+def _mock_client(MockAsyncClient):
+    """Return the (awaited) client instance from a patched httpx.AsyncClient.
+
+    MagicMock auto-provides async-context-manager dunders, so ``async with
+    httpx.AsyncClient() as client`` yields ``__aenter__.return_value``.
+    """
+    return MockAsyncClient.return_value.__aenter__.return_value
+
+
+def _mock_response(*, status_code=200, json_data=None, raise_exc=None):
+    """Build a SYNC response mock (httpx Response.json/raise_for_status are sync)."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data or {}
+    if raise_exc is not None:
+        resp.raise_for_status.side_effect = raise_exc
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
 
 @pytest.mark.asyncio
 async def test_vane_search_success(mock_vane_settings):
@@ -28,14 +48,10 @@ async def test_vane_search_success(mock_vane_settings):
             },
         ],
     }
-    
+
     with patch('httpx.AsyncClient') as MockAsyncClient:
-        mock_client_instance = MockAsyncClient.return_value.__aenter__.return_value
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = mock_response_data
-        mock_response.raise_for_status.return_value = None
-        mock_client_instance.post.return_value = mock_response
+        client = _mock_client(MockAsyncClient)
+        client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
         result = await tool.execute(query="What is agentic coding?")
 
@@ -47,7 +63,7 @@ async def test_vane_search_success(mock_vane_settings):
         assert result.metadata["sources"][1]["url"] == "http://example.com/2"
         assert "vane_response_raw" in result.metadata
         assert result.metadata["vane_response_raw"] == mock_response_data
-        MockAsyncClient.return_value.__aenter__.return_value.post.assert_called_once_with(
+        client.post.assert_called_once_with(
             "http://mock-vane:3000/api/search",
             json={
                 "query": "What is agentic coding?",
@@ -57,18 +73,21 @@ async def test_vane_search_success(mock_vane_settings):
             },
         )
 
+
 @pytest.mark.asyncio
 async def test_vane_search_http_error(mock_vane_settings):
     tool = VaneSearchTool()
     with patch('httpx.AsyncClient') as MockAsyncClient:
-        mock_client_instance = MockAsyncClient.return_value.__aenter__.return_value
-        mock_response = AsyncMock()
-        mock_response.status_code = 500
-        mock_response.text = "Internal Server Error"
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "Internal Server Error", request=httpx.Request("POST", "http://mock-vane:3000/api/search"), response=mock_response
+        client = _mock_client(MockAsyncClient)
+        resp = _mock_response(
+            status_code=500,
+            raise_exc=httpx.HTTPStatusError(
+                "Internal Server Error",
+                request=httpx.Request("POST", "http://mock-vane:3000/api/search"),
+                response=MagicMock(status_code=500, text="Internal Server Error"),
+            ),
         )
-        mock_client_instance.post.return_value = mock_response
+        client.post = AsyncMock(return_value=resp)
 
         result = await tool.execute(query="Invalid query")
 
@@ -76,14 +95,15 @@ async def test_vane_search_http_error(mock_vane_settings):
         assert result.output == ""
         assert "Vane API returned an error 500" in result.error
 
+
 @pytest.mark.asyncio
 async def test_vane_search_request_error(mock_vane_settings):
     tool = VaneSearchTool()
     with patch('httpx.AsyncClient') as MockAsyncClient:
-        mock_client_instance = MockAsyncClient.return_value.__aenter__.return_value
-        mock_client_instance.post.side_effect = httpx.RequestError(
+        client = _mock_client(MockAsyncClient)
+        client.post = AsyncMock(side_effect=httpx.RequestError(
             "Network error", request=httpx.Request("POST", "http://mock-vane:3000/api/search")
-        )
+        ))
 
         result = await tool.execute(query="Network issue")
 
@@ -91,18 +111,15 @@ async def test_vane_search_request_error(mock_vane_settings):
         assert result.output == ""
         assert "Vane API request failed" in result.error
 
+
 @pytest.mark.asyncio
 async def test_vane_search_no_message_or_sources(mock_vane_settings):
     tool = VaneSearchTool()
     mock_response_data = {"some_other_field": "value"}
-    
+
     with patch('httpx.AsyncClient') as MockAsyncClient:
-        mock_client_instance = MockAsyncClient.return_value.__aenter__.return_value
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = mock_response_data
-        mock_response.raise_for_status.return_value = None
-        mock_client_instance.post.return_value = mock_response
+        client = _mock_client(MockAsyncClient)
+        client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
         result = await tool.execute(query="Empty response")
 
@@ -111,18 +128,15 @@ async def test_vane_search_no_message_or_sources(mock_vane_settings):
         assert "sources" in result.metadata
         assert len(result.metadata["sources"]) == 0
 
+
 @pytest.mark.asyncio
 async def test_vane_search_focus_mode_and_optimization(mock_vane_settings):
     tool = VaneSearchTool()
     mock_response_data = {"message": "Academic result", "sources": []}
-    
+
     with patch('httpx.AsyncClient') as MockAsyncClient:
-        mock_client_instance = MockAsyncClient.return_value.__aenter__.return_value
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = mock_response_data
-        mock_response.raise_for_status.return_value = None
-        mock_client_instance.post.return_value = mock_response
+        client = _mock_client(MockAsyncClient)
+        client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
         result = await tool.execute(
             query="Quantum physics breakthroughs",
@@ -131,7 +145,7 @@ async def test_vane_search_focus_mode_and_optimization(mock_vane_settings):
         )
 
         assert isinstance(result, ToolResult)
-        MockAsyncClient.return_value.__aenter__.return_value.post.assert_called_once_with(
+        client.post.assert_called_once_with(
             "http://mock-vane:3000/api/search",
             json={
                 "query": "Quantum physics breakthroughs",
