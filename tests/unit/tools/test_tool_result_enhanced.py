@@ -162,10 +162,15 @@ class TestToolCollectionMetadata:
 
     @pytest.mark.asyncio
     async def test_retry_on_failure(self):
-        """ToolCollection retries on failure."""
+        """ToolCollection retries on transient (retryable) failures.
+
+        Only RETRYABLE_EXCEPTIONS (OSError/TimeoutError/ConnectionError) are
+        retried; generic exceptions surface immediately to avoid masking logic
+        bugs. Use a retryable error here to exercise the retry path.
+        """
         failing_tool = AsyncMock(spec=BaseTool)
         failing_tool.name = "failing_tool"
-        failing_tool.execute = AsyncMock(side_effect=Exception("Always fails"))
+        failing_tool.execute = AsyncMock(side_effect=ConnectionError("Always fails"))
         
         collection = ToolCollection(failing_tool)
         

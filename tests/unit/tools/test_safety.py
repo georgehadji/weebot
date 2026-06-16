@@ -6,14 +6,21 @@ from weebot.core.safety import SafetyChecker
 
 @pytest.fixture
 def checker():
-    """SafetyChecker with mocked LLM to avoid real API calls."""
-    with patch("weebot.core.safety.ChatOpenAI") as mock_cls:
+    """SafetyChecker with mocked LLM to avoid real API calls.
+
+    SafetyChecker imports ChatOpenAI lazily inside __init__ and caches it on
+    the class (_llm_instance), so patch the source module and clear the cached
+    singleton to ensure the mock is used.
+    """
+    SafetyChecker._llm_instance = None
+    with patch("langchain_openai.ChatOpenAI") as mock_cls:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
             content='{"confirmation_required": "yes", "plan_b": "backup first"}'
         ))
         mock_cls.return_value = mock_llm
         yield SafetyChecker()
+    SafetyChecker._llm_instance = None
 
 
 class TestIsCriticalOperation:
