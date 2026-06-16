@@ -28,19 +28,41 @@ class MockLLM:
         return 128000
 
 
+async def _make_wired_flow(llm, session):
+    """Build a PlanActFlow with a CQRS mediator + state repo.
+
+    PlanningState now requires a Mediator (plan creation flows through the
+    CreatePlanCommand handler), so a bare PlanActFlow(llm, tools, session)
+    can no longer create a plan.  This wires the minimal CQRS stack used in
+    production, backed by an in-memory repo and the mock LLM.
+    """
+    from weebot.application.cqrs.mediator import Mediator
+    from weebot.application.cqrs.handlers import register_default_handlers
+    from weebot.infrastructure.persistence.in_memory_state_repo import (
+        InMemoryStateRepository,
+    )
+
+    repo = InMemoryStateRepository()
+    await repo.save_session(session)
+    mediator = Mediator()
+    register_default_handlers(mediator, repo, llm=llm)
+    return PlanActFlow(
+        llm=llm,
+        tools=ToolCollection(),
+        session=session,
+        mediator=mediator,
+        state_repo=repo,
+    )
+
+
 @pytest.mark.asyncio
 async def test_plan_act_flow_creates_plan():
     """PlanActFlow starts in PlanningState and creates a plan."""
     from weebot.domain.models.session import Session
-    from weebot.application.flows.plan_act_flow import PlanActFlow
 
     llm = MockLLM()
     session = Session(id="test-session")
-    flow = PlanActFlow(
-        llm=llm,
-        tools=ToolCollection(),
-        session=session,
-    )
+    flow = await _make_wired_flow(llm, session)
     events = []
     async for event in flow.run("test task"):
         events.append(event)
@@ -52,15 +74,10 @@ async def test_plan_act_flow_creates_plan():
 async def test_plan_act_flow_multiple_events():
     """PlanActFlow yields events including message, title, and plan events."""
     from weebot.domain.models.session import Session
-    from weebot.application.flows.plan_act_flow import PlanActFlow
 
     llm = MockLLM()
     session = Session(id="test-session-2")
-    flow = PlanActFlow(
-        llm=llm,
-        tools=ToolCollection(),
-        session=session,
-    )
+    flow = await _make_wired_flow(llm, session)
     event_types = set()
     async for event in flow.run("another task"):
         if hasattr(event, 'type'):

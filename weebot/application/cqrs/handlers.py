@@ -659,10 +659,14 @@ def register_default_handlers(
     mediator.register_query_handler(
         GetSimilarSessionsQuery, GetSimilarSessionsHandler(state_repo)
     )
+    if task_runner is None:
+        # Runtime import — TaskRunner is only imported under TYPE_CHECKING above,
+        # so referencing it here without this import raises NameError.
+        from weebot.application.services.task_runner import TaskRunner as _TaskRunner
+        task_runner = _TaskRunner(state_repo=state_repo)
     mediator.register_query_handler(
         GetActiveTasksQuery,
-        GetActiveTasksHandler(task_runner) if task_runner
-        else GetActiveTasksHandler(TaskRunner(state_repo=state_repo)),
+        GetActiveTasksHandler(task_runner),
     )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────

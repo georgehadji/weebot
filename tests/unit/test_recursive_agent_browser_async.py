@@ -7,7 +7,9 @@ from weebot.core.agent import RecursiveWeebotAgent
 
 @pytest.mark.asyncio
 async def test_browser_tool_uses_async_path():
-    with patch("weebot.core.agent.ChatOpenAI"), patch("weebot.core.safety.ChatOpenAI"):
+    # agent.py binds ChatOpenAI at module scope; safety.py imports it lazily
+    # inside SafetyChecker.__init__, so patch the source for the latter.
+    with patch("weebot.core.agent.ChatOpenAI"), patch("langchain_openai.ChatOpenAI"):
         agent = RecursiveWeebotAgent()
 
     routing = {

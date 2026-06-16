@@ -75,6 +75,7 @@ def _get_adapter_classes(port_cls: type) -> list[type]:
         "weebot.application.services",
         "weebot.application.agents",
         "weebot.application.cqrs",
+        "weebot.application.eval",  # JudgePort adapters: ModelJudge, ScoreJudge
     ]
 
     for pkg_name in packages_to_scan:

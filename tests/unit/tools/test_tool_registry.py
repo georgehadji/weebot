@@ -34,11 +34,11 @@ class TestRoleBasedToolRegistry:
         # Researcher should have web_search
         assert registry.validate_tool_for_role("researcher", "web_search") is True
 
-        # Analyst should have python_tool
-        assert registry.validate_tool_for_role("analyst", "python_tool") is True
+        # Analyst should have python_execute (registered tool name)
+        assert registry.validate_tool_for_role("analyst", "python_execute") is True
 
-        # Researcher should NOT have python_tool
-        assert registry.validate_tool_for_role("researcher", "python_tool") is False
+        # Researcher should NOT have python_execute
+        assert registry.validate_tool_for_role("researcher", "python_execute") is False
 
         # Invalid role should return False (not raise)
         assert registry.validate_tool_for_role("invalid_role", "web_search") is False

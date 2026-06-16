@@ -112,7 +112,7 @@ class TestSkillTestCLI:
 
     def test_verbose_flag_accepted(self):
         """The --verbose flag is accepted."""
-        from cli.main import skill_test
+        from cli.commands.skills import skill_test
 
         import click
         for param in skill_test.params:
