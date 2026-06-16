@@ -266,7 +266,7 @@ class TestSchedulingManager:
             )
             job1 = manager.get_job("job1")
             job1.status = JobStatus.COMPLETED.value
-            manager._save_job(job1)
+            await manager._save_job(job1)
 
             completed = manager.list_jobs(status=JobStatus.COMPLETED.value)
             assert len(completed) == 1

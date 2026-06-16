@@ -171,9 +171,10 @@ class TestProductionEngine:
     @pytest.mark.asyncio
     async def test_execute_rate_limited(self, prod_engine):
         """Execution is rate limited."""
-        # Use up rate limit
-        for i in range(20):
-            prod_engine.rate_limiter.is_allowed("test_user")
+        # execute() rate-limits on the "execute" resource bucket, so drain that
+        # bucket (not the default one) to trip the limit before template lookup.
+        for i in range(25):
+            prod_engine.rate_limiter.is_allowed("test_user", "execute")
         
         result = await prod_engine.execute(
             "Test Template",
@@ -294,7 +295,13 @@ class TestIntegration:
         
         # Create engine
         engine = ProductionTemplateEngine()
-        
+
+        # Register the template so the flow reaches execution (not a registry miss)
+        from weebot.templates.parser import WorkflowTemplate
+        engine.engine.registry.register(
+            WorkflowTemplate(name="Test Template", version="1.0", workflow={"task1": {}})
+        )
+
         # Register and authenticate user
         engine.authenticator.register_user(
             "user1",

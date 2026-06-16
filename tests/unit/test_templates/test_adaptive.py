@@ -139,17 +139,19 @@ class TestPrivacyCompliance:
         from datetime import datetime, timedelta
         
         mock_session = AsyncMock()
+        # purge_old_data uses `async with db_session_factory() as session`
+        mock_session.__aenter__.return_value = mock_session
         engine = AdaptiveSuggestionEngine(
             db_session_factory=lambda: mock_session,
         )
-        
-        # Mock the query results
+
+        # Mock the query result chain: (await execute()).scalars().all()
         mock_result = Mock()
-        mock_result.all.return_value = []
-        mock_session.execute.return_value = mock_result
-        
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
         await engine.purge_old_data(days=30)
-        
+
         # Should have executed delete queries
         assert mock_session.execute.called
         assert mock_session.commit.called

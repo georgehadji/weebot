@@ -26,8 +26,14 @@ from sqlalchemy import (
     select, func, and_
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import declarative_base
 
 from weebot.templates.parser import WorkflowTemplate, ParameterSchema
+
+# Declarative base for the adaptive-suggestion ORM records.  Without inheriting
+# a mapped Base, select()/delete() on these classes raises ArgumentError
+# ("Column expression … expected, got <class …>").
+Base = declarative_base()
 
 _log = logging.getLogger(__name__)
 
@@ -53,7 +59,7 @@ class SuggestionContext:
     domain_hint: Optional[str] = None  # e.g., "research", "coding"
 
 
-class ParameterEffectivenessRecord:
+class ParameterEffectivenessRecord(Base):
     """Database record for parameter effectiveness tracking."""
     __tablename__ = "parameter_effectiveness"
     
@@ -79,7 +85,7 @@ class ParameterEffectivenessRecord:
     can_be_used_for_suggestions = Column(Boolean, default=True)
 
 
-class UserPreferenceRecord:
+class UserPreferenceRecord(Base):
     """Anonymized user preferences."""
     __tablename__ = "user_preferences_anonymized"
     

@@ -57,19 +57,19 @@ class JinjaTemplateRenderer:
         self._register_functions()
     
     def _make_strict_undefined(self):
-        """Create strict undefined class that raises errors."""
-        from jinja2 import Undefined
-        
-        class StrictUndefined(Undefined):
-            def __getattr__(self, name):
-                raise TemplateRenderError(f"Undefined variable: {self._undefined_name}")
-            
-            def __getitem__(self, name):
-                raise TemplateRenderError(f"Undefined variable: {self._undefined_name}")
-            
-            def __call__(self, *args, **kwargs):
-                raise TemplateRenderError(f"Undefined variable: {self._undefined_name} is not callable")
-        
+        """Create a strict undefined class that raises on ANY use.
+
+        Subclasses jinja2's StrictUndefined (which already fails on string
+        rendering, iteration, truthiness, etc. via UndefinedError) rather than
+        the base Undefined — the previous version only overrode __getattr__/
+        __getitem__/__call__, so a bare ``{{undefined_var}}`` (which triggers
+        __str__) rendered as an empty string instead of erroring.
+
+        UndefinedError is a TemplateError subclass, so render() catches it and
+        wraps it as TemplateRenderError.
+        """
+        from jinja2 import StrictUndefined
+
         return StrictUndefined
     
     def _register_filters(self):
