@@ -199,6 +199,88 @@ def skill_update(skill_name: str | None, check: bool, source: str) -> None:
     asyncio.run(_run())
 
 
+@skill.command("scan")
+@click.argument("path", type=click.Path(exists=True), required=False)
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def skill_scan(path: str | None, json_output: bool) -> None:
+    """Security scan a skill for risky patterns.
+
+    PATH can be a SKILL.md file or a directory containing one.
+    If omitted, scans all installed skills.
+    """
+    from weebot.application.services.skill_security_scanner import SkillSecurityScanner
+    from weebot.domain.models.skill import Skill
+    from pathlib import Path
+
+    scanner = SkillSecurityScanner()
+
+    if path:
+        target = Path(path)
+        if target.is_dir():
+            skill_files = list(target.rglob("SKILL.md")) + list(target.rglob("skill.md"))
+        else:
+            skill_files = [target]
+
+        if not skill_files:
+            console.print("[yellow]No SKILL.md found at the specified path.[/yellow]")
+            return
+
+        for sf in skill_files:
+            content = sf.read_text(encoding="utf-8")
+            result = scanner.scan_content(content)
+            _display_scan_result(sf, result, json_output)
+    else:
+        # Scan all installed skills
+        from weebot.application.skills.skill_registry import SkillRegistry
+        registry = SkillRegistry()
+        registry.load_all()
+        skills = registry.list_skills()
+        if not skills:
+            console.print("[yellow]No installed skills to scan.[/yellow]")
+            return
+
+        for s in skills:
+            result = scanner.scan_skill(s)
+            _display_scan_result(Path(s.name), result, json_output)
+
+    console.print("[dim]Scan complete.[/dim]")
+
+
+def _display_scan_result(source: Path, result: dict, json_output: bool) -> None:
+    """Display a single scan result."""
+    from rich.table import Table
+
+    if json_output:
+        import json as _json
+        console.print(_json.dumps({"source": str(source), **result}, indent=2))
+        return
+
+    risk_tier = result["risk_tier"]
+    color = {"safe": "green", "low": "yellow", "medium": "yellow",
+             "high": "red", "critical": "red"}.get(risk_tier, "white")
+    passed = result["passed"]
+
+    console.print(f"\n[bold]Scan:[/bold] {source}")
+    console.print(f"  Risk Tier: [{color}]{risk_tier.upper()}[/{color}]")
+    console.print(f"  Passed: [{'green' if passed else 'red'}]{'YES' if passed else 'NO — BLOCKED'}[/{'green' if passed else 'red'}]")
+
+    if result["findings"]:
+        t = Table(title="Findings")
+        t.add_column("Pattern", style="cyan")
+        t.add_column("Severity", style="magenta")
+        t.add_column("Description", style="white")
+        t.add_column("Location", style="blue")
+        for f in result["findings"]:
+            sev_color = {"high": "red", "medium": "yellow", "low": "green"}.get(f.get("severity", "low"), "white")
+            t.add_row(
+                f.get("pattern_id", "?"),
+                f"[{sev_color}]{f.get('severity', '?')}[/{sev_color}]",
+                f.get("description", ""),
+                f.get("location", ""),
+            )
+        console.print(t)
+
+
 @skill.command("test")
 @click.argument("skill_name", required=False)
 @click.option("--should", "num_should", default=5)

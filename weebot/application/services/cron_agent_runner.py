@@ -34,6 +34,9 @@ class CronAgentRunner:
         self._tool_registry = tool_registry
 
     async def run(self, job: CronJobRecord) -> str:
+        import os
+        # Set recursion guard before spawning the flow
+        os.environ["WEEBOT_CRON_CONTEXT"] = "1"
         """Execute a cron job and return the result text.
 
         Args:

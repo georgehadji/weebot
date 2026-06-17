@@ -21,6 +21,7 @@ class ApprovalMode(Enum):
     AUTO_APPROVE = "auto_approve"
     ALWAYS_ASK   = "always_ask"
     DENY         = "deny"
+    FORCE_ALWAYS_ASK = "force_always_ask"  # Bypasses all normal rules; always asks.
 
 
 @dataclass
@@ -113,7 +114,7 @@ class ExecApprovalPolicy:
         if matches:
             # Most specific = longest pattern
             best = max(matches, key=lambda r: len(r.pattern))
-            if best.mode == ApprovalMode.DENY:
+            if best.mode in (ApprovalMode.DENY,):
                 return ApprovalResult(
                     command=command,
                     approved=False,
@@ -121,7 +122,7 @@ class ExecApprovalPolicy:
                     undo_hint=best.undo_hint,
                     reason=f"Command denied by policy: {best.pattern}",
                 )
-            if best.mode == ApprovalMode.ALWAYS_ASK:
+            if best.mode in (ApprovalMode.FORCE_ALWAYS_ASK, ApprovalMode.ALWAYS_ASK):
                 return ApprovalResult(
                     command=command,
                     approved=True,
@@ -144,3 +145,24 @@ class ExecApprovalPolicy:
             requires_confirmation=False,
             undo_hint="",
         )
+
+
+# ── Tool category tagging (Track 5 — Hermes Audit) ────────────────
+# Maps tool categories to their required approval mode.
+# Tools tagged ``finance`` or ``payment`` always require approval.
+TOOL_CATEGORIES: dict[str, ApprovalMode] = {
+    "finance": ApprovalMode.FORCE_ALWAYS_ASK,
+    "payment": ApprovalMode.FORCE_ALWAYS_ASK,
+}
+
+
+def get_category_approval_mode(category: str) -> ApprovalMode:
+    """Return the approval mode for a tool category.
+
+    Args:
+        category: Tool category string (e.g. "finance", "payment", "general").
+
+    Returns:
+        The ApprovalMode for that category. Unknown categories default to AUTO_APPROVE.
+    """
+    return TOOL_CATEGORIES.get(category.lower(), ApprovalMode.AUTO_APPROVE)

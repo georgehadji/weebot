@@ -567,6 +567,46 @@ class PlanActFlow(BaseFlow):
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
 
+            # ── Context compression at turn boundary (Track 3) ──────
+            # If the session has accumulated many events, compress older
+            # conversational turns to stay under the token budget.
+            if len(self._session.events) > 20:
+                try:
+                    from weebot.application.services.context_manager import ContextManager
+                    from weebot.application.services.lossy_context_compressor import (
+                        LossyContextCompressor,
+                    )
+
+                    compressor = LossyContextCompressor()
+                    mgr = ContextManager(engine=compressor)
+
+                    # Convert events to message dicts for the compressor
+                    msg_dicts = []
+                    for ev in self._session.events:
+                        if hasattr(ev, "role") and hasattr(ev, "message"):
+                            msg_dicts.append({"role": ev.role, "content": ev.message or ""})
+
+                    if msg_dicts:
+                        result = await mgr.prepare(msg_dicts)
+                        if result is not None:
+                            summary = result.get("summary", "")
+                            # Inject the summary as a system message
+                            from weebot.domain.models.event import MessageEvent
+                            summary_event = MessageEvent(
+                                role="system",
+                                message=f"[Compressed context — earlier messages summarized]\n{summary[:500]}",
+                            )
+                            self._session = self._session.add_event(summary_event)
+                            self._log.info(
+                                "Turn-boundary compression: %d→%d tokens (iteration %d)",
+                                result["original_token_count"],
+                                result["compressed_token_count"],
+                                iteration_count,
+                            )
+                except Exception as exc:
+                    self._stdlib_logger.debug("Turn-boundary compression skipped: %s", exc)
+            # ─────────────────────────────────────────────────────────
+
             # If we reached COMPLETED state logic or it paused for HITL, we break
             if self._session.status in (SessionStatus.COMPLETED, SessionStatus.WAITING):
                 break

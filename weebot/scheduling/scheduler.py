@@ -505,6 +505,144 @@ class SchedulingManager:
             logger.error("Failed to load jobs from config: %s", exc)
             return 0
 
+    async def load_cron_agent_jobs(self, jobs_path: Optional[Path] = None) -> int:
+        """Load cron agent job records and register CronAgentRunner.
+
+        Reads ``CronJobRecord`` JSON files and registers each as a
+        scheduled job with the ``cron_agent_runner`` callable.
+
+        Args:
+            jobs_path: Path to cron_jobs.json. Defaults to ~/.weebot/cron_jobs.json.
+
+        Returns:
+            Number of cron agent jobs loaded.
+        """
+        if jobs_path is None:
+            jobs_path = Path.home() / ".weebot" / "cron_jobs.json"
+        if not jobs_path.exists():
+            return 0
+
+        # Register the CronAgentRunner callable if not already registered
+        if "cron_agent_runner" not in self._callables:
+            try:
+                from weebot.application.services.cron_agent_runner import CronAgentRunner
+                from weebot.application.di import Container
+
+                container = Container()
+                container.configure_defaults()
+
+                async def _run_cron_job(job_id: str) -> None:
+                    """Wrapper that loads CronJobRecord and runs it."""
+                    import json
+                    try:
+                        raw = json.loads(jobs_path.read_text(encoding="utf-8"))
+                        data = raw.get(job_id)
+                        if data is None:
+                            logger.error("Cron job %s not found in %s", job_id, jobs_path)
+                            return
+                        from weebot.domain.models.cron_job import CronJobRecord
+                        job = CronJobRecord(**data)
+
+                        runner = CronAgentRunner(
+                            llm=container.get("llm_port"),
+                            state_repo=container.get("state_repo_port"),
+                        )
+                        result = await runner.run(job)
+
+                        # Deliver result
+                        from weebot.application.services.cron_delivery_service import (
+                            CronDeliveryService,
+                        )
+                        delivery = CronDeliveryService()
+                        await delivery.deliver(job, result)
+
+                        # Update job record
+                        from datetime import datetime, timezone
+                        raw[job_id]["last_run_at"] = datetime.now(timezone.utc).isoformat()
+                        raw[job_id]["last_result"] = result[:500]
+                        raw[job_id]["run_count"] = data.get("run_count", 0) + 1
+                        jobs_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+                    except Exception as exc:
+                        logger.error("Cron agent job %s failed: %s", job_id, exc)
+
+                self.register_callable("cron_agent_runner", _run_cron_job)
+            except Exception as exc:
+                logger.error("Failed to register CronAgentRunner: %s", exc)
+                return 0
+
+        # Load jobs from file
+        import json
+        try:
+            data = json.loads(jobs_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error("Failed to read cron jobs from %s: %s", jobs_path, exc)
+            return 0
+
+        loaded = 0
+        for job_id, job_data in data.items():
+            if not job_data.get("enabled", True):
+                continue
+            existing = self.get_job(job_id)
+            if existing is not None:
+                continue  # Already scheduled
+            schedule = job_data.get("schedule", "0 * * * *")
+            try:
+                trigger_config = _parse_cron_expression(schedule)
+                await self.create_job(
+                    job_id=job_id,
+                    name=job_data.get("name", job_id),
+                    description=job_data.get("prompt", "")[:100],
+                    trigger_type="cron",
+                    trigger_config=trigger_config,
+                    callable_name="cron_agent_runner",
+                )
+                loaded += 1
+            except Exception as exc:
+                logger.error("Failed to schedule cron agent job %s: %s", job_id, exc)
+
+        logger.info("Loaded %d cron agent jobs from %s", loaded, jobs_path)
+        return loaded
+
+
+def _parse_cron_expression(expr: str) -> dict:
+    """Parse a cron expression into a dict of keyword args for CronTrigger.
+
+    Supports standard 5-field cron expressions (min hour dom mon dow)
+    and simple interval expressions like "30min", "1h", "2hours".
+    """
+    expr = expr.strip().lower()
+
+    # Interval expressions
+    if expr.endswith("min") or expr.endswith("mins"):
+        minutes = int(expr.rstrip("mins"))
+        return {"minute": f"*/{minutes}"}
+    if expr.endswith("h") or expr.endswith("hour") or expr.endswith("hours"):
+        hours = int(expr.rstrip("hours"))
+        return {"hour": f"*/{hours}"}
+
+    # Standard 5-field cron
+    parts = expr.split()
+    if len(parts) == 5:
+        return {
+            "minute": parts[0],
+            "hour": parts[1],
+            "day": parts[2],
+            "month": parts[3],
+            "day_of_week": parts[4],
+        }
+    if len(parts) == 6:
+        return {
+            "second": parts[0],
+            "minute": parts[1],
+            "hour": parts[2],
+            "day": parts[3],
+            "month": parts[4],
+            "day_of_week": parts[5],
+        }
+
+    logger.warning("Unrecognized cron expression: %s — defaulting to hourly", expr)
+    return {"minute": "0"}
+
     async def run_catch_up(self) -> int:
         """Run catch-up for missed scheduled jobs.
 

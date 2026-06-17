@@ -113,6 +113,16 @@ class ScheduleTool(BaseTool):
         **_,
     ) -> ToolResult:
         """Execute scheduling action."""
+        # ── Recursion guard: prevent cron agent sessions from scheduling ──
+        # Check for a sentinel env-var or module-level flag set when a cron
+        # agent runner is active.  This prevents infinite scheduling loops.
+        import os as _cron_guard_os
+        if _cron_guard_os.environ.get("WEEBOT_CRON_CONTEXT", "").lower() in ("1", "true", "yes"):
+            return ToolResult(
+                output="",
+                error="Scheduling is disabled inside a cron agent session to prevent recursion.",
+            )
+
         try:
             scheduler = get_scheduler()
 
