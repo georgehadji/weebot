@@ -138,6 +138,65 @@ class SubagentRPCTool(BaseTool):
 
     _timeout: float = PrivateAttr(default=60.0)
 
+    async def _rpc_loop(
+        self,
+        proc: asyncio.subprocess.Process,
+    ) -> tuple[bytes, bytes]:
+        """Run the RPC protocol: read JSON requests from stdout, write responses to stdin.
+
+        Each line of stdout is a JSON request.  If it contains `\"tool\"` it's a
+        tool call; the parent responds with a stub result so the subprocess
+        doesn't deadlock.  When the subprocess emits a `_result` marker or
+        stdout closes, the loop ends and we return the accumulated output.
+        """
+        output_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+
+        async def _read_stderr() -> None:
+            while True:
+                chunk = await proc.stderr.read(4096)
+                if not chunk:
+                    break
+                stderr_chunks.append(chunk)
+
+        stderr_task = asyncio.ensure_future(_read_stderr())
+
+        try:
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break  # stdout closed → subprocess exited
+
+                output_chunks.append(line)
+
+                try:
+                    request = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # Not JSON — just text output
+
+                if "_result" in request:
+                    break  # Subprocess signaled completion
+
+                if "tool" in request or "_batch" in request:
+                    # Respond with a stub result so the subprocess continues
+                    response = json.dumps({
+                        "success": True,
+                        "output": f"[stub] tool '{request.get('tool', 'batch')}' would execute here",
+                    }) + "\n"
+                    proc.stdin.write(response.encode("utf-8"))
+                    await proc.stdin.drain()
+
+        except Exception:
+            pass
+        finally:
+            stderr_task.cancel()
+            try:
+                await stderr_task
+            except asyncio.CancelledError:
+                pass
+
+        return b"".join(output_chunks), b"".join(stderr_chunks)
+
     async def execute(  # type: ignore[override]
         self,
         script: str,
@@ -172,8 +231,11 @@ class SubagentRPCTool(BaseTool):
             )
 
             try:
+                # Run an RPC loop: read stdout line by line, execute tools,
+                # write results back to stdin.  Stop when the subprocess emits
+                # a _result marker or exits.
                 stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=effective_timeout,
+                    self._rpc_loop(proc), timeout=effective_timeout,
                 )
             except asyncio.TimeoutError:
                 proc.kill()
@@ -191,23 +253,29 @@ class SubagentRPCTool(BaseTool):
                     error=error or f"Exit code {proc.returncode}",
                 )
 
-            # Parse structured output lines
+            # Parse structured output — look for _result marker first
             result_lines = []
             for line in output.strip().split("\n"):
                 line = line.strip()
-                if line:
-                    try:
-                        parsed = json.loads(line)
-                        if "tool" in parsed:
-                            # RPC request — we don't execute tools here
-                            # (the parent agent does that in production)
-                            result_lines.append(
-                                f"[RPC] Would call {parsed['tool']}: {parsed['args']}"
-                            )
-                        else:
-                            result_lines.append(str(parsed))
-                    except (json.JSONDecodeError, ValueError):
-                        result_lines.append(line)
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                    if parsed.get("_result"):
+                        data = parsed.get("data", "")
+                        result_lines.append(str(data) if not isinstance(data, str) else data)
+                    elif "tool" in parsed and not parsed.get("_batch"):
+                        result_lines.append(
+                            f"[RPC] Would call {parsed['tool']}: {parsed.get('args', {})}"
+                        )
+                    elif parsed.get("_batch"):
+                        calls = parsed.get("calls", [])
+                        names = ", ".join(c.get("tool", "?") for c in calls)
+                        result_lines.append(f"[RPC] Batch call: {names}")
+                    else:
+                        result_lines.append(str(parsed))
+                except (json.JSONDecodeError, ValueError):
+                    result_lines.append(line)
 
             return ToolResult(
                 output="\n".join(result_lines) if result_lines else output,

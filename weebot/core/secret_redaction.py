@@ -87,7 +87,7 @@ class SecretRedactor:
         result = self._AWS_KEY_RE.sub("[AWS_KEY_REDACTED]", result)
         result = self._JWT_RE.sub("[JWT_REDACTED]", result)
         result = self._BEARER_RE.sub("[BEARER_TOKEN_REDACTED]", result)
-        result = self._PASSWORD_RE.sub(r"\1=[REDACTED]", result)
+        result = self._PASSWORD_RE.sub(r"password=[REDACTED]", result)
         result = self._API_KEY_GENERIC.sub(r"\1=[REDACTED]", result)
 
         # 2. PANs (credit card numbers) — validated with Luhn check

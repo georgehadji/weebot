@@ -146,10 +146,17 @@ class StripeWebhookHandler:
 
         amount = obj.get("amount")
         if amount:
-            # Amount is in cents
-            dollars = amount / 100.0
+            # Stripe amounts are in the currency's smallest unit.
+            # Zero-decimal currencies (JPY, KRW, VND, etc.) don't divide by 100.
             currency = obj.get("currency", "usd").upper()
-            parts.append(f"Amount: ${dollars:.2f} {currency}")
+            zero_decimal = {"BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW",
+                           "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF",
+                           "XOF", "XPF"}
+            if currency in zero_decimal:
+                parts.append(f"Amount: {currency} {amount}")
+            else:
+                dollars = amount / 100.0
+                parts.append(f"Amount: ${dollars:.2f} {currency}")
 
         status = obj.get("status")
         if status:

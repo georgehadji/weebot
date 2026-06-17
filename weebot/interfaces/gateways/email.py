@@ -73,11 +73,13 @@ class EmailAdapter(GatewayAdapter):
 
             # Use asyncio subprocess for SMTP (smtplib is blocking)
             import smtplib
+            import ssl
             loop = asyncio.get_event_loop()
 
             def _send():
+                tls_context = ssl.create_default_context()
                 with smtplib.SMTP(self._smtp_server, self._smtp_port) as server:
-                    server.starttls()
+                    server.starttls(context=tls_context)
                     if self._imap_user and self._imap_password:
                         server.login(self._imap_user, self._imap_password)
                     server.send_message(msg)

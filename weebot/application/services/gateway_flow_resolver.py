@@ -94,7 +94,7 @@ class GatewayFlowResolver:
             return
 
         sessions = await self._store.list(platform=platform, active_only=True)
-        if len(sessions) >= self._max_sessions_per_platform:
+        if len(sessions) > self._max_sessions_per_platform:
             # Sort by last_activity_at ascending and close the oldest
             sorted_sessions = sorted(sessions, key=lambda s: s.last_activity_at)
             to_close = sorted_sessions[:len(sorted_sessions) - self._max_sessions_per_platform + 1]

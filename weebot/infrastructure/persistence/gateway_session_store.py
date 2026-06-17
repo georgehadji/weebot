@@ -22,6 +22,7 @@ Schema:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -122,7 +123,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                     (composite,),
                 ).fetchone()
 
-        row = await _query()
+        row = await asyncio.to_thread(_query)
         if row is None:
             return None
         return self._row_to_session(row)
@@ -156,7 +157,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                 )
                 conn.commit()
 
-        await _write()
+        await asyncio.to_thread(_write)
 
     async def list(
         self,
@@ -190,7 +191,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                 ).fetchall()
                 return rows
 
-        rows = await _query()
+        rows = await asyncio.to_thread(_query)
         return [self._row_to_session(row) for row in rows]
 
     async def close_session(self, key: GatewaySessionKey) -> None:
@@ -205,7 +206,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                 )
                 conn.commit()
 
-        await _close()
+        await asyncio.to_thread(_close)
 
     async def delete(self, key: GatewaySessionKey) -> None:
         """Permanently remove a session."""
@@ -219,7 +220,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                 )
                 conn.commit()
 
-        await _delete()
+        await asyncio.to_thread(_delete)
 
     async def cleanup_expired(self, ttl_seconds: int) -> int:
         """Remove sessions that have exceeded the TTL."""
@@ -236,7 +237,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                 conn.commit()
                 return result.rowcount
 
-        count = await _cleanup()
+        count = await asyncio.to_thread(_cleanup)
         if count > 0:
             logger.info("Cleaned up %d expired gateway sessions", count)
         return count

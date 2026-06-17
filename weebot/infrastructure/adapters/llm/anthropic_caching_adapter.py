@@ -55,7 +55,9 @@ class AnthropicCachingAdapter:
         if not self._enabled:
             return messages
 
-        result = list(messages)
+        # Deep copy to avoid mutating the caller's message dicts
+        import copy
+        result = copy.deepcopy(messages)
         cache_markers_added = 0
 
         # 1. Cache the last system message
