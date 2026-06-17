@@ -8,6 +8,7 @@ from anthropic import AsyncAnthropic
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_FACTORY_ANTHROPIC
+from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 
 
 class AnthropicAdapter(LLMPort):
@@ -62,7 +63,7 @@ class AnthropicAdapter(LLMPort):
         kwargs: Dict[str, Any] = {
             "model": model or self._default_model,
             "max_tokens": max_tokens or 4096,
-            "messages": messages,
+            "messages": convert_messages(messages, "anthropic"),
         }
 
         anthropic_tools = self._convert_tools(tools)

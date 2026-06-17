@@ -60,6 +60,17 @@ ONLINE_SKILLOPT_ENABLED: bool = _env_bool(
 )
 
 
+# ── Vision-in-the-loop (PicoAgents audit) ───────────────────────────────────
+# When True, tool results carrying a screenshot (ToolResult.base64_image) are
+# injected back into the conversation as an image message, so a vision-capable
+# model can *see* the browser/desktop state instead of driving it blind off DOM
+# text + OCR. Only the most recent screenshot is kept live (token control).
+# Plan: tasks/specs/picoagents_vision_in_loop_spec.md
+VISION_IN_LOOP_ENABLED: bool = _env_bool(
+    "WEEBOT_VISION_IN_LOOP", default=False
+)
+
+
 def is_enabled(flag_name: str) -> bool:
     """Check if a feature flag is enabled by name."""
     return globals().get(flag_name, False)

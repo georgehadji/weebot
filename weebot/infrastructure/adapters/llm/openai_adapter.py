@@ -1,6 +1,7 @@
 """OpenAI-compatible LLM adapter implementing LLMPort."""
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -8,6 +9,9 @@ from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
+from weebot.infrastructure.adapters.llm._multimodal import convert_messages
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIAdapter(LLMPort):
@@ -60,7 +64,7 @@ class OpenAIAdapter(LLMPort):
     ) -> LLMResponse:
         kwargs: Dict[str, Any] = {
             "model": model or self._default_model,
-            "messages": messages,
+            "messages": convert_messages(messages, "openai"),
         }
         if tools:
             kwargs["tools"] = tools

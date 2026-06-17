@@ -334,6 +334,36 @@ class ExecutorAgent:
             self._total_prompt_tokens = int(self._total_prompt_tokens * 0.3)
             self._total_completion_tokens = 0
 
+    def _vision_enabled(self) -> bool:
+        """True when vision-in-the-loop is on and the active model accepts images."""
+        from weebot.config.feature_flags import is_enabled
+        if not is_enabled("VISION_IN_LOOP_ENABLED"):
+            return False
+        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
+        return model_supports_vision(self._model or "")
+
+    def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:
+        """Append the latest screenshot as an image message for the next LLM call.
+
+        Bounds token cost by keeping only the most recent screenshot live —
+        image blocks already in the buffer are downgraded to a text placeholder
+        before the new one is appended.
+        """
+        from weebot.infrastructure.adapters.llm._multimodal import build_image_message
+        for msg in self._conversation_buffer:
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            msg["content"] = [
+                {"type": "text", "text": "[earlier screenshot omitted]"}
+                if isinstance(b, dict) and b.get("type") == "image"
+                else b
+                for b in content
+            ]
+        self._conversation_buffer.append(
+            build_image_message(f"Current screen after {tool_name}:", image_b64)
+        )
+
     @property
     def token_usage(self) -> Dict[str, int]:
         """Cumulative real token usage for this executor instance."""
@@ -986,6 +1016,7 @@ class ExecutorAgent:
                             output=_mw_result.output,
                             error=_mw_result.error or result.error,
                             is_error=_mw_result.is_error or result.is_error,
+                            base64_image=result.base64_image,
                         )
 
                 yield ToolEvent(
@@ -1019,6 +1050,11 @@ class ExecutorAgent:
                     "content": str(result),
                     "tool_call_id": tc["id"],
                 })
+
+                # Vision-in-the-loop: let a vision-capable model SEE the screen
+                # state a tool produced, instead of driving blind off DOM/OCR text.
+                if getattr(result, "base64_image", None) and self._vision_enabled():
+                    self._inject_screenshot(tool_name, result.base64_image)
 
             if abort_step:
                 break
