@@ -70,6 +70,14 @@ VISION_IN_LOOP_ENABLED: bool = _env_bool(
     "WEEBOT_VISION_IN_LOOP", default=False
 )
 
+# Phase 2 reflection: after screenshot injection, make a structured LLM call to produce
+# PageObservation + NextActionPlan JSON. Adds one extra LLM round-trip per screenshot.
+# Requires VISION_IN_LOOP_ENABLED=True and a vision-capable model.
+# Plan: tasks/specs/picoagents_vision_in_loop_spec.md (Phase 2)
+VISION_REFLECTION_ENABLED: bool = _env_bool(
+    "WEEBOT_VISION_REFLECTION", default=False
+)
+
 
 def is_enabled(flag_name: str) -> bool:
     """Check if a feature flag is enabled by name."""

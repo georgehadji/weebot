@@ -14,7 +14,7 @@ import random
 import re
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -450,6 +450,66 @@ def parse_sampled_distribution(raw_text: str) -> SampledDistribution:
         return SampledDistribution()
 
 
+# ── Phase 2: Vision reflection models (PicoAgents audit) ────────────────────
+
+class PageObservation(BaseModel):
+    """Structured description of the current screen state, produced by a vision LLM.
+
+    Used in the vision-in-the-loop reflection step so the agent can articulate
+    what it sees before deciding on the next action.
+    """
+
+    summary: str = Field(..., description="One-sentence description of the current screen state")
+    key_elements: List[str] = Field(
+        default_factory=list,
+        description="Salient UI elements visible (buttons, text fields, dialogs, icons)",
+    )
+    is_task_complete: bool = Field(
+        False, description="Whether the overall task appears to be complete based on this screen"
+    )
+    confidence: float = Field(
+        0.5, ge=0.0, le=1.0, description="Model confidence in this observation (0-1)"
+    )
+
+
+class NextActionPlan(BaseModel):
+    """The model's plan for the next UI action, derived from PageObservation.
+
+    Captures the selector-with-coordinate fallback pattern: prefer a CSS/text
+    selector; fall back to pixel coordinates for unlabeled/visual elements
+    (the primary win over OCR-only navigation).
+    """
+
+    action_type: Literal["click", "type", "scroll", "navigate", "wait", "none"] = Field(
+        ..., description="Category of the next action"
+    )
+    selector: Optional[str] = Field(
+        None, description="CSS selector or visible text label for the target element"
+    )
+    value: Optional[str] = Field(
+        None, description="Text to type or URL to navigate to (if applicable)"
+    )
+    coordinates: Optional[Dict[str, int]] = Field(
+        None,
+        description="Pixel coordinates {x, y} — used when no selector is available (visual targets)",
+    )
+    reasoning: str = Field(..., description="Why this action is the correct next step")
+    expected_outcome: str = Field(
+        ...,
+        description="What the screen should look like after this action (used for self-correction)",
+    )
+    confidence: float = Field(
+        0.5, ge=0.0, le=1.0, description="Model confidence in this plan (0-1)"
+    )
+
+
+class VisionReflection(BaseModel):
+    """Combined observation + plan produced by the structured reflection step."""
+
+    observation: PageObservation
+    plan: NextActionPlan
+
+
 # Export all public symbols
 __all__ = [
     "TaskStatus",
@@ -467,4 +527,8 @@ __all__ = [
     "parse_sampled_distribution",
     "VS_PROMPT_FILENAME",
     "VS_FALLBACK_PROMPT",
+    # Vision reflection (Phase 2)
+    "PageObservation",
+    "NextActionPlan",
+    "VisionReflection",
 ]

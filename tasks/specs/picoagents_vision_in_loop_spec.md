@@ -1,6 +1,6 @@
 # Spec: Vision-in-the-Loop for Computer-Use / Browser Agents
 
-**Status:** Phase 1 implemented (unit-verified; smoke test PASSED) · Phase 2 proposed
+**Status:** Phase 1 + Phase 2 implemented (unit-verified; smoke test PASSED)
 **Date:** 2026-06-17
 
 **Phase 1 landed:** `infrastructure/adapters/llm/_multimodal.py` (`build_image_message`,

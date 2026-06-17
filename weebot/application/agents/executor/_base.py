@@ -364,6 +364,103 @@ class ExecutorAgent:
             build_image_message(f"Current screen after {tool_name}:", image_b64)
         )
 
+    def _reflection_enabled(self) -> bool:
+        """True when Phase 2 structured reflection is on (requires vision + reflection flags)."""
+        from weebot.config.feature_flags import is_enabled
+        if not is_enabled("VISION_IN_LOOP_ENABLED") or not is_enabled("VISION_REFLECTION_ENABLED"):
+            return False
+        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
+        return model_supports_vision(self._model or "")
+
+    async def _reflect_on_screenshot(
+        self, tool_name: str, image_b64: str
+    ) -> "Optional[VisionReflection]":
+        """Ask the LLM to produce a structured PageObservation + NextActionPlan.
+
+        Non-blocking: any parse/validation error returns None so execution continues.
+        Adds one extra LLM round-trip — only fires when WEEBOT_VISION_REFLECTION is set.
+        """
+        if not self._reflection_enabled():
+            return None
+
+        from weebot.models.structured_output import VisionReflection
+
+        prompt = (
+            "You are observing the current screen state after a tool action.\n"
+            "Examine the screenshot and respond with a JSON object matching this schema exactly:\n"
+            "{\n"
+            '  "observation": {\n'
+            '    "summary": "<one-sentence description>",\n'
+            '    "key_elements": ["<element1>", "..."],\n'
+            '    "is_task_complete": false,\n'
+            '    "confidence": 0.8\n'
+            "  },\n"
+            '  "plan": {\n'
+            '    "action_type": "click|type|scroll|navigate|wait|none",\n'
+            '    "selector": "<CSS selector or text label or null>",\n'
+            '    "value": "<text to type or URL or null>",\n'
+            '    "coordinates": {"x": 0, "y": 0},\n'
+            '    "reasoning": "<why this action>",\n'
+            '    "expected_outcome": "<what screen should show after>",\n'
+            '    "confidence": 0.7\n'
+            "  }\n"
+            "}\n"
+            "Use coordinates only when no text selector exists (visual/unlabeled elements).\n"
+            "Respond with raw JSON only — no markdown, no prose."
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image", "data": image_b64, "media_type": "image/png"},
+                ],
+            }
+        ]
+
+        try:
+            import json
+            response = await self._llm.chat(
+                messages=messages,
+                model=self._model,
+                max_tokens=512,
+                temperature=0.0,
+            )
+            raw = response.content or ""
+            # Strip possible markdown fence
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            data = json.loads(raw)
+            return VisionReflection.model_validate(data)
+        except Exception:
+            logger.debug("Vision reflection parse failed for %s (non-fatal)", tool_name)
+            return None
+
+    def _inject_reflection(self, reflection: "VisionReflection") -> None:
+        """Append a structured observation context message to the conversation buffer.
+
+        Stores expected_outcome for self-correction on the next screenshot.
+        """
+        obs = reflection.observation
+        plan = reflection.plan
+
+        completion_tag = " [TASK COMPLETE]" if obs.is_task_complete else ""
+        context = (
+            f"[Vision observation{completion_tag}] {obs.summary}"
+            + (f" | Elements: {', '.join(obs.key_elements)}" if obs.key_elements else "")
+            + f" | Confidence: {obs.confidence:.0%}"
+            + f"\n[Next action plan] {plan.action_type}"
+            + (f" selector={plan.selector!r}" if plan.selector else "")
+            + (f" coords={plan.coordinates}" if plan.coordinates else "")
+            + (f" value={plan.value!r}" if plan.value else "")
+            + f" | {plan.reasoning}"
+            + f"\n[Expected outcome] {plan.expected_outcome}"
+        )
+        self._conversation_buffer.append({"role": "system", "content": context})
+        # Store for self-correction comparison on next screenshot
+        self._last_expected_outcome: str = plan.expected_outcome
+
     @property
     def token_usage(self) -> Dict[str, int]:
         """Cumulative real token usage for this executor instance."""
@@ -1055,6 +1152,10 @@ class ExecutorAgent:
                 # state a tool produced, instead of driving blind off DOM/OCR text.
                 if getattr(result, "base64_image", None) and self._vision_enabled():
                     self._inject_screenshot(tool_name, result.base64_image)
+                    # Phase 2: structured observe→plan reflection (extra LLM call, opt-in)
+                    reflection = await self._reflect_on_screenshot(tool_name, result.base64_image)
+                    if reflection is not None:
+                        self._inject_reflection(reflection)
 
             if abort_step:
                 break
