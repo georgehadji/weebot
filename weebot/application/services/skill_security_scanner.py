@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 # Patterns that indicate high risk
 HIGH_RISK_PATTERNS: list[tuple[str, str, str]] = [
     # Data exfiltration
-    ("curl_to_unknown_host", r"curl\s+https?://(?!api\.)(?![a-z]+\.[a-z]{2,})[^\s]*\s", "Data exfiltration via curl to unknown host"),
-    ("wget_to_unknown_host", r"wget\s+https?://(?!api\.)(?!raw\.github)[^\s]*\s", "Data exfiltration via wget"),
+    ("curl_to_unknown_host", r"curl\s+https?://[^\s/]+\.[^\s]{2,}\b", "Data exfiltration via curl"),
+    ("wget_to_unknown_host", r"wget\s+https?://[^\s/]+\.[^\s]{2,}\b", "Data exfiltration via wget"),
     ("netcat_exfiltration", r"(?:nc|netcat)\s+-[ev]+", "Potential data exfiltration via netcat"),
     ("scp_external", r"scp\s+.*@", "Unknown SCP destination"),
     # Destructive commands
