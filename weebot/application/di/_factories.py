@@ -261,3 +261,63 @@ class FactoriesMixin:
             PrometheusMetricsAdapter,
         )
         return PrometheusMetricsAdapter()
+
+    # ── MCP Client factories (Track 1 — Hermes Audit) ─────────────
+
+    def _create_mcp_client(self):
+        """Create an MCPClientManager from config.
+
+        Reads server configurations from the configured config path.
+        Returns an empty (no-op) manager if no servers are configured.
+        """
+        from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
+
+        # Try to load server configs from WeebotSettings
+        try:
+            from weebot.config.settings import WeebotSettings
+            settings = WeebotSettings()
+            config_path = settings.mcp_servers_config_path
+            if config_path:
+                import json, yaml
+                from pathlib import Path
+                path = Path(config_path)
+                if path.exists():
+                    raw = path.read_text(encoding="utf-8")
+                    if config_path.endswith((".yaml", ".yml")):
+                        servers = yaml.safe_load(raw)
+                    else:
+                        servers = json.loads(raw)
+                    return MCPClientManager(config={"mcpServers": servers})
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to load MCP config from settings: %s", exc
+            )
+
+        return MCPClientManager(config={})
+
+    def _create_mcp_bridge(self):
+        """Create an MCPToolRegistryBridge with the MCP client injected."""
+        from weebot.application.services.mcp_tool_registry_bridge import (
+            MCPToolRegistryBridge,
+        )
+        from weebot.tools.tool_registry import RoleBasedToolRegistry
+
+        client = self._maybe_get_str("mcp_client")
+        registry = RoleBasedToolRegistry()
+        bridge = MCPToolRegistryBridge(
+            mcp_client=client,
+            registry=registry,
+        )
+        return bridge
+
+    def build_mcp_bridge(self) -> "MCPToolRegistryBridge":
+        """Build and initialize the MCP bridge singleton."""
+        from weebot.application.services.mcp_tool_registry_bridge import (
+            MCPToolRegistryBridge,
+        )
+        bridge = self._maybe_get_str("mcp_bridge")
+        if bridge is None:
+            bridge = self._create_mcp_bridge()
+            self.register_instance("mcp_bridge", bridge)
+        return bridge

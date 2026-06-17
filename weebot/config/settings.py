@@ -1,7 +1,7 @@
 """Configuration and constants for weebot Agent."""
 import os
 from pathlib import Path
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Constants - Use environment variable or current working directory
@@ -196,6 +196,118 @@ class WeebotSettings(BaseSettings):
     # Retry settings
     http_max_retries: int = 3
     http_retry_backoff: float = 1.0
+
+    # =======================================================================
+    # MCP CLIENT SETTINGS (Track 1 — Hermes Audit)
+    # =======================================================================
+
+    # MCP servers are configured via mcp_servers dict (loaded from YAML/JSON).
+    # Each key is a server name, value is MCPServerConfig-compatible dict.
+    mcp_servers_config_path: str | None = Field(
+        default=None,
+        description="Path to MCP servers config file (YAML/JSON). If None, no servers.",
+    )
+    mcp_token_dir: str = Field(
+        default=".weebot/mcp-tokens",
+        description="Directory for OAuth token cache (relative to workspace root or absolute).",
+    )
+    mcp_sampling_enabled: bool = Field(
+        default=True,
+        description="Allow MCP servers to request sampling/createMessage.",
+    )
+
+    # =======================================================================
+    # GATEWAY SESSION SETTINGS (Track 2 — Hermes Audit)
+    # =======================================================================
+
+    gateway_session_ttl_seconds: int = Field(
+        default=7 * 24 * 60 * 60,  # 7 days
+        description="TTL for gateway sessions before auto-close.",
+    )
+    gateway_max_sessions_per_platform: int = Field(
+        default=100,
+        description="Max active sessions per platform (0 = unlimited).",
+    )
+    gateway_allowed_platforms: list[str] = Field(
+        default_factory=lambda: ["telegram", "discord", "slack"],
+        description="List of enabled gateway platforms.",
+    )
+
+    # =======================================================================
+    # CONTEXT ENGINE SETTINGS (Track 3 — Hermes Audit)
+    # =======================================================================
+
+    context_engine: str = Field(
+        default="lossy",
+        description="Context engine type: 'lossy' (compression), 'none' (pass-through).",
+    )
+    context_compression_threshold: int = Field(
+        default=12000,
+        description="Token count threshold that triggers compression.",
+    )
+    context_compression_target_ratio: float = Field(
+        default=0.5,
+        description="Target compression ratio (e.g. 0.5 = compress to 50% of threshold).",
+    )
+    context_compression_protect_last_n: int = Field(
+        default=6,
+        description="Preserve the last N messages when compressing.",
+    )
+    prompt_caching_enabled: bool = Field(
+        default=False,
+        description="Enable Anthropic/OpenRouter prompt caching breakpoints.",
+    )
+    prompt_caching_ttl_seconds: int = Field(
+        default=300,
+        description="TTL for cached prompt breakpoints.",
+    )
+
+    # =======================================================================
+    # CRON AGENT TASK SETTINGS (Track 4 — Hermes Audit)
+    # =======================================================================
+
+    cron_agent_jobs_enabled: bool = Field(
+        default=False,
+        description="Enable cron agent task execution.",
+    )
+    cron_agent_max_runtime_seconds: int = Field(
+        default=300,
+        description="Max runtime for a single cron agent job.",
+    )
+    cron_agent_default_model: str | None = Field(
+        default=None,
+        description="Default model override for cron agent sessions.",
+    )
+
+    # =======================================================================
+    # SKILLS HUB SETTINGS (Track 6 — Hermes Audit)
+    # =======================================================================
+
+    skills_hub_catalog_url: str | None = Field(
+        default=None,
+        description="URL for remote skills hub catalog.",
+    )
+    skill_blueprints_enabled: bool = Field(
+        default=False,
+        description="Enable skill blueprint auto-suggestion.",
+    )
+
+    # =======================================================================
+    # SECURITY SETTINGS (Track 5 — Hermes Audit)
+    # =======================================================================
+
+    financial_tools_always_ask: bool = Field(
+        default=True,
+        description="Financial/payment tools always require user approval.",
+    )
+    secret_redaction_enabled: bool = Field(
+        default=True,
+        description="Redact secrets (PANs, API keys) in tool output and logs.",
+    )
+    secret_redaction_entropy_threshold: float = Field(
+        default=3.5,
+        description="Shannon entropy threshold for secret detection.",
+    )
 
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""

@@ -148,6 +148,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
         from weebot.scheduling.scheduler import SchedulingManager
         self.register("scheduler", lambda: SchedulingManager())
+
+        # MCP Client — connects to external MCP servers (Track 1)
+        self.register("mcp_client", self._create_mcp_client)
+        self.register("mcp_bridge", self._create_mcp_bridge)
         # Deployment-time learning (Memento-Skills; all flags default OFF)
         self.configure_learning(db_path=db_path)
 

@@ -170,6 +170,17 @@ class Skill(BaseModel):
     metadata: SkillMetadata = Field(default_factory=SkillMetadata)
     source_path: Optional[str] = Field(default=None)
 
+    # --- Blueprint (Track 6 — Hermes Audit) ---
+    blueprint: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Blueprint configuration for auto-scheduling. "
+            "Shape: {schedule, deliver_to, prompt, no_agent, default_enabled}. "
+            "When present, the suggestion engine offers to schedule this skill "
+            "as a cron agent task on install."
+        ),
+    )
+
     # --- Progressive Disclosure (H1) ---
     references: dict[str, str] = Field(
         default_factory=dict,

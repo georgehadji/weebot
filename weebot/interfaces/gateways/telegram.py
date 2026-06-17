@@ -3,6 +3,12 @@
 Uses long-polling (getUpdates) to receive messages. Normalizes incoming
 messages into GatewayMessage and routes responses back via sendMessage.
 
+Session continuity (Track 2 — Hermes Audit):
+    Each incoming message is resolved against a GatewaySessionKey derived
+    from the chat ID, so subsequent messages in the same chat resume the
+    same Weebot flow session. Slash commands (/new, /reset, /help, etc.)
+    are handled by the GatewayCommandDispatcher without invoking the LLM.
+
 Requires TELEGRAM_BOT_TOKEN in .env.
 """
 from __future__ import annotations
@@ -15,6 +21,12 @@ import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.services.gateway_command_dispatcher import (
+    GatewayCommandDispatcher,
+    build_default_dispatcher,
+)
+from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
+from weebot.domain.models.gateway_session import GatewaySessionKey
 from weebot.interfaces.factories import build_tools, create_flow
 from weebot.interfaces.gateways.base import (
     GatewayAdapter,
@@ -26,23 +38,29 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramAdapter(GatewayAdapter):
-    """Bot API adapter for Telegram messaging."""
+    """Bot API adapter for Telegram messaging with session continuity."""
 
     def __init__(
         self,
         token: str,
         state_repo: StateRepositoryPort,
         llm: LLMPort,
+        flow_resolver: GatewayFlowResolver,
         profile_name: str | None = None,
+        command_dispatcher: GatewayCommandDispatcher | None = None,
     ) -> None:
         super().__init__()
         self._token = token
         self._api = f"https://api.telegram.org/bot{token}"
         self._state_repo = state_repo
         self._llm = llm
+        self._flow_resolver = flow_resolver
+        self._command_dispatcher = command_dispatcher or build_default_dispatcher()
         self._profile_name = profile_name
         self._offset = 0
         self._running = False
+        # Track active sessions: chat_id -> (GatewaySession, flow_session_id)
+        self._active_sessions: dict[str, tuple] = {}
 
     async def start(self) -> None:
         self._running = True
@@ -109,24 +127,82 @@ class TelegramAdapter(GatewayAdapter):
                 "message_id": msg.get("message_id"),
                 "username": chat.get("username", ""),
                 "first_name": chat.get("first_name", ""),
+                "chat_type": chat.get("type", ""),
+                "chat_title": chat.get("title", ""),
+                "is_topic_message": msg.get("is_topic_message", False),
+                "message_thread_id": msg.get("message_thread_id"),
+                "chat": dict(chat),
             },
         )
 
+    def _build_session_key(self, message: GatewayMessage) -> GatewaySessionKey:
+        """Build a GatewaySessionKey from a gateway message.
+
+        Telegram private chats use chat_id as the key.
+        Group chats use group chat_id with optional thread_id.
+        """
+        chat_type = "private"
+        thread_id = None
+        meta = message.metadata or {}
+        chat = meta.get("chat", {})
+
+        # Detect chat type from Telegram metadata
+        chat_type_from_meta = meta.get("chat_type", "")
+        if chat_type_from_meta in ("group", "supergroup"):
+            chat_type = "group"
+        elif chat_type_from_meta == "channel":
+            chat_type = "channel"
+
+        # Thread support for groups
+        if meta.get("is_topic_message"):
+            thread_id = str(meta.get("message_thread_id", ""))
+
+        return GatewaySessionKey(
+            platform="telegram",
+            chat_type=chat_type,
+            chat_id=message.external_id,
+            thread_id=thread_id,
+        )
+
     async def _process_message(self, message: GatewayMessage) -> str:
+        """Process a gateway message with session continuity and slash command support."""
         text = await self.handle(message)
         if text is None:
             return "Message blocked by safety check."
 
-        import uuid
+        # Build session key from message metadata
+        key = self._build_session_key(message)
 
-        session_id = f"tg-{message.external_id}-{uuid.uuid4().hex[:6]}"
-        from weebot.domain.models.session import Session
+        # Check for slash commands first
+        if text.startswith("/"):
+            cmd_response = self._command_dispatcher.dispatch(text)
+            if cmd_response is not None:
+                return self._handle_command_response(cmd_response, key)
 
-        session = Session(
-            id=session_id,
-            user_id=f"telegram-{message.external_id}",
-            agent_id="telegram-agent",
+        # Resolve or create session
+        user_id = f"telegram-{message.external_id}"
+        meta = message.metadata or {}
+        gw_session, flow_session_id = await self._flow_resolver.resolve(
+            key=key,
+            user_id=user_id,
+            title=meta.get("chat_title") or meta.get("username"),
+            metadata=meta,
         )
+
+        # Build or reuse the Weebot session and flow
+        session = await self._get_or_create_flow_session(flow_session_id, user_id)
+
+        # Check for new/reset in text content
+        text_lower = text.strip().lower()
+        if text_lower in ("/new", "new session", "start over"):
+            # Close current session and create a new one
+            await self._flow_resolver.close(key)
+            gw_session, flow_session_id = await self._flow_resolver.resolve(
+                key=key, user_id=user_id, metadata=meta,
+            )
+            session = await self._get_or_create_flow_session(flow_session_id, user_id)
+            # Don't process the command text — just return confirmation
+            return "🔄 Session reset. Starting fresh."
 
         tools = await build_tools(role="admin")
         flow = create_flow(
@@ -144,6 +220,45 @@ class TelegramAdapter(GatewayAdapter):
                 response = getattr(event, "message", "") or response
 
         return response or "(no response)"
+
+    async def _get_or_create_flow_session(
+        self, flow_session_id: str, user_id: str,
+    ) -> "Session":
+        """Get or create a Weebot Session for the given flow session ID.
+
+        Tries to load an existing session from the state repo first.
+        If none exists, creates a fresh one.
+        """
+        from weebot.domain.models.session import Session as WeebotSession
+
+        try:
+            existing = await self._state_repo.load_session(flow_session_id)
+            if existing is not None:
+                return existing
+        except Exception:
+            pass
+
+        session = WeebotSession(
+            id=flow_session_id,
+            user_id=user_id,
+            agent_id="telegram-agent",
+        )
+        return session
+
+    def _handle_command_response(self, cmd_response: str, key: GatewaySessionKey) -> str:
+        """Handle special command responses that require action beyond text.
+
+        Commands like /new and /reset return special prefixes that instruct
+        the adapter to perform actions.
+        """
+        if cmd_response == "OK_NEW_SESSION" or cmd_response == "OK_RESET_SESSION":
+            return "🔄 Session will be reset on next message."
+        if cmd_response == "OK_STOP":
+            return "⏹ Task stopped."
+        if cmd_response.startswith("OK_SET_MODEL:"):
+            model = cmd_response.split(":", 1)[1]
+            return f"✅ Model set to: {model}"
+        return cmd_response
 
     async def send_response(self, response: GatewayResponse) -> bool:
         if not response.success:

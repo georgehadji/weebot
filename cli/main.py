@@ -642,6 +642,12 @@ cli.add_command(analytics_group)
 cli.add_command(soul_group)
 from cli.commands.dream import dream as dream_group
 cli.add_command(dream_group)
+from cli.commands.mcp import mcp as mcp_group
+cli.add_command(mcp_group)
+from cli.commands.gateway import gateway as gateway_group
+cli.add_command(gateway_group)
+from cli.commands.cron_agent import cron_agent as cron_agent_group
+cli.add_command(cron_agent_group)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────
