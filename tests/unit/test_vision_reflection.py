@@ -271,3 +271,105 @@ class TestInjectReflection:
         )
         ex._inject_reflection(reflection)
         assert ex._last_expected_outcome == "dialog should appear"
+
+    def test_last_expected_outcome_initialized_to_none(self):
+        """Reading _last_expected_outcome before any reflection must not raise."""
+        ex = _make_executor()
+        assert ex._last_expected_outcome is None
+
+
+def _good_reflection_json() -> str:
+    return json.dumps({
+        "observation": {
+            "summary": "Settings panel open",
+            "key_elements": ["gear icon"],
+            "is_task_complete": False,
+            "confidence": 0.9,
+        },
+        "plan": {
+            "action_type": "click",
+            "coordinates": {"x": 10, "y": 20},
+            "reasoning": "gear visible",
+            "expected_outcome": "settings menu expands",
+            "confidence": 0.8,
+        },
+    })
+
+
+class TestReflectionGrounding:
+    """The two HIGH fixes: task context in the prompt + token tracking."""
+
+    def _executor_with_capture(self):
+        from weebot.application.ports.llm_port import LLMResponse
+        captured: dict = {}
+
+        async def _chat(**kwargs):
+            captured["messages"] = kwargs["messages"]
+            captured["max_tokens"] = kwargs.get("max_tokens")
+            return LLMResponse(
+                content=_good_reflection_json(),
+                tool_calls=None,
+                model="claude-opus-4-8",
+                usage={"prompt_tokens": 1500, "completion_tokens": 80, "total_tokens": 1580},
+            )
+
+        mock_llm = MagicMock()
+        mock_llm.chat = AsyncMock(side_effect=_chat)
+
+        from weebot.application.agents.executor._base import ExecutorAgent
+        from weebot.application.models.tool_collection import ToolCollection
+        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model="claude-opus-4-8")
+        return ex, captured
+
+    @pytest.mark.asyncio
+    async def test_task_context_included_in_prompt(self, monkeypatch):
+        import weebot.config.feature_flags as ff
+        monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
+        monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
+
+        ex, captured = self._executor_with_capture()
+        await ex._reflect_on_screenshot(
+            "computer_use", _B64, task_context="Open the printer settings"
+        )
+
+        prompt_text = captured["messages"][0]["content"][0]["text"]
+        assert "Open the printer settings" in prompt_text
+
+    @pytest.mark.asyncio
+    async def test_prior_expected_outcome_fed_back(self, monkeypatch):
+        import weebot.config.feature_flags as ff
+        monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
+        monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
+
+        ex, captured = self._executor_with_capture()
+        ex._last_expected_outcome = "settings menu expands"
+        await ex._reflect_on_screenshot("computer_use", _B64, task_context="task")
+
+        prompt_text = captured["messages"][0]["content"][0]["text"]
+        assert "settings menu expands" in prompt_text
+        assert "previous action predicted" in prompt_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_no_prior_outcome_omits_feedback_line(self, monkeypatch):
+        import weebot.config.feature_flags as ff
+        monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
+        monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
+
+        ex, captured = self._executor_with_capture()
+        await ex._reflect_on_screenshot("computer_use", _B64, task_context="task")
+
+        prompt_text = captured["messages"][0]["content"][0]["text"]
+        assert "previous action predicted" not in prompt_text.lower()
+
+    @pytest.mark.asyncio
+    async def test_reflection_tokens_are_tracked(self, monkeypatch):
+        """The extra reflection call must be counted in token_usage."""
+        import weebot.config.feature_flags as ff
+        monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
+        monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
+
+        ex, _ = self._executor_with_capture()
+        assert ex.token_usage["total_tokens"] == 0
+        await ex._reflect_on_screenshot("computer_use", _B64, task_context="task")
+        assert ex.token_usage["prompt_tokens"] == 1500
+        assert ex.token_usage["completion_tokens"] == 80

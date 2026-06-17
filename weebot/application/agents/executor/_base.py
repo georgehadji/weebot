@@ -183,6 +183,9 @@ class ExecutorAgent:
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
         self._facts: Dict[str, Any] = {}
         self._should_terminate = False
+        # Phase 2 vision reflection: last predicted outcome, fed back into the
+        # next reflection so the model can self-correct (expected vs. actual).
+        self._last_expected_outcome: Optional[str] = None
         # Token tracking + auto-compress
         self._auto_compress = auto_compress
         self._context_window = context_window
@@ -367,27 +370,47 @@ class ExecutorAgent:
     def _reflection_enabled(self) -> bool:
         """True when Phase 2 structured reflection is on (requires vision + reflection flags)."""
         from weebot.config.feature_flags import is_enabled
-        if not is_enabled("VISION_IN_LOOP_ENABLED") or not is_enabled("VISION_REFLECTION_ENABLED"):
-            return False
-        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
-        return model_supports_vision(self._model or "")
+        return self._vision_enabled() and is_enabled("VISION_REFLECTION_ENABLED")
 
     async def _reflect_on_screenshot(
-        self, tool_name: str, image_b64: str
+        self, tool_name: str, image_b64: str, task_context: str = ""
     ) -> "Optional[VisionReflection]":
         """Ask the LLM to produce a structured PageObservation + NextActionPlan.
 
+        Grounds the reflection in the current task goal and, when available, the
+        previously predicted outcome — so the model can self-correct by comparing
+        what it expected against what it now sees.
+
         Non-blocking: any parse/validation error returns None so execution continues.
         Adds one extra LLM round-trip — only fires when WEEBOT_VISION_REFLECTION is set.
+
+        Note: this calls ``self._llm.chat`` directly rather than ``_call_with_cascade``
+        because the reflection requires a vision-capable model specifically (the
+        role-cascade may fall back to text-only models that reject images). The
+        response is still routed through ``_track_usage_and_maybe_compress`` so its
+        tokens are counted and can trigger compaction.
         """
         if not self._reflection_enabled():
             return None
 
         from weebot.models.structured_output import VisionReflection
 
+        goal_line = (
+            f"Current task goal: {task_context.strip()}\n"
+            if task_context and task_context.strip()
+            else ""
+        )
+        prior_line = (
+            f"Your previous action predicted this outcome: {self._last_expected_outcome!r}. "
+            "Compare it to what you now see and note in 'summary' whether it held.\n"
+            if self._last_expected_outcome
+            else ""
+        )
         prompt = (
             "You are observing the current screen state after a tool action.\n"
-            "Examine the screenshot and respond with a JSON object matching this schema exactly:\n"
+            + goal_line
+            + prior_line
+            + "Examine the screenshot and respond with a JSON object matching this schema exactly:\n"
             "{\n"
             '  "observation": {\n'
             '    "summary": "<one-sentence description>",\n'
@@ -405,6 +428,7 @@ class ExecutorAgent:
             '    "confidence": 0.7\n'
             "  }\n"
             "}\n"
+            "Judge 'is_task_complete' against the task goal above.\n"
             "Use coordinates only when no text selector exists (visual/unlabeled elements).\n"
             "Respond with raw JSON only — no markdown, no prose."
         )
@@ -426,6 +450,9 @@ class ExecutorAgent:
                 max_tokens=512,
                 temperature=0.0,
             )
+            # Count the reflection call's tokens so token_usage stays accurate
+            # and the buffer can compact if needed.
+            await self._track_usage_and_maybe_compress(response)
             raw = response.content or ""
             # Strip possible markdown fence
             raw = raw.strip()
@@ -458,8 +485,9 @@ class ExecutorAgent:
             + f"\n[Expected outcome] {plan.expected_outcome}"
         )
         self._conversation_buffer.append({"role": "system", "content": context})
-        # Store for self-correction comparison on next screenshot
-        self._last_expected_outcome: str = plan.expected_outcome
+        # Store for self-correction: fed into the next reflection prompt so the
+        # model can compare its prediction against the next observed screen.
+        self._last_expected_outcome = plan.expected_outcome
 
     @property
     def token_usage(self) -> Dict[str, int]:
@@ -1152,8 +1180,11 @@ class ExecutorAgent:
                 # state a tool produced, instead of driving blind off DOM/OCR text.
                 if getattr(result, "base64_image", None) and self._vision_enabled():
                     self._inject_screenshot(tool_name, result.base64_image)
-                    # Phase 2: structured observe→plan reflection (extra LLM call, opt-in)
-                    reflection = await self._reflect_on_screenshot(tool_name, result.base64_image)
+                    # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
+                    # Grounded in the step description so the model can judge progress.
+                    reflection = await self._reflect_on_screenshot(
+                        tool_name, result.base64_image, task_context=step.description
+                    )
                     if reflection is not None:
                         self._inject_reflection(reflection)
 

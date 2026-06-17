@@ -73,6 +73,9 @@ VISION_IN_LOOP_ENABLED: bool = _env_bool(
 # Phase 2 reflection: after screenshot injection, make a structured LLM call to produce
 # PageObservation + NextActionPlan JSON. Adds one extra LLM round-trip per screenshot.
 # Requires VISION_IN_LOOP_ENABLED=True and a vision-capable model.
+# COST: with both flags on, each screenshot is sent twice — once in the reflection
+# call here, and once in the buffer that the next main call reads — so expect ~2x
+# image tokens plus the extra round-trip. Keep off unless reflection earns its cost.
 # Plan: tasks/specs/picoagents_vision_in_loop_spec.md (Phase 2)
 VISION_REFLECTION_ENABLED: bool = _env_bool(
     "WEEBOT_VISION_REFLECTION", default=False
