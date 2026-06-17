@@ -590,17 +590,41 @@ class PlanActFlow(BaseFlow):
                         result = await mgr.prepare(msg_dicts)
                         if result is not None:
                             summary = result.get("summary", "")
-                            # Inject the summary as a system message
+                            kept = result.get("retained_count", len(self._session.events))
+
+                            # Build compressed session: keep system events,
+                            # the most recent N message events, and inject the summary.
                             from weebot.domain.models.event import MessageEvent
+
+                            # Keep non-message events (PlanEvent, StepEvent, etc.) +
+                            # system messages + the compressed summary.
+                            preserved: list = []
+                            msg_events: list = []
+
+                            for ev in self._session.events:
+                                if hasattr(ev, "role") and hasattr(ev, "message"):
+                                    msg_events.append(ev)
+                                else:
+                                    preserved.append(ev)
+
+                            # Keep only the last few message events
+                            keep_last = max(2, kept - 1)  # -1 for the summary
+                            recent = msg_events[-keep_last:] if keep_last < len(msg_events) else msg_events
+
                             summary_event = MessageEvent(
                                 role="system",
                                 message=f"[Compressed context — earlier messages summarized]\n{summary[:500]}",
                             )
-                            self._session = self._session.add_event(summary_event)
+
+                            # Reconstruct: preserved non-message events → summary → recent messages
+                            new_events = preserved + [summary_event] + recent
+                            self._session = self._session.model_copy(update={"events": new_events})
                             self._log.info(
-                                "Turn-boundary compression: %d→%d tokens (iteration %d)",
+                                "Turn-boundary compression: %d→%d tokens, %d→%d events (iteration %d)",
                                 result["original_token_count"],
                                 result["compressed_token_count"],
+                                len(self._session.events) if hasattr(self._session, "events") else 0,
+                                len(new_events),
                                 iteration_count,
                             )
                 except Exception as exc:

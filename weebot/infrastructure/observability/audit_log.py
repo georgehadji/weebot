@@ -101,7 +101,11 @@ class AuditLog:
         event_type: str,
         details: dict[str, Any] | None = None,
     ) -> int:
-        """Record a new audit log entry.
+        """Record a new audit log entry (atomic transaction).
+
+        Reads the last hash and computes the next sequence in a single
+        BEGIN IMMEDIATE transaction to prevent TOCTOU races between
+        concurrent callers.
 
         Args:
             event_type: Type of event (tool_call, approval, denial, etc.).
@@ -112,27 +116,39 @@ class AuditLog:
         """
         details_json = json.dumps(details or {}, default=str)
         timestamp = datetime.now(timezone.utc).isoformat()
-        previous_hash = self._get_last_hash()
 
         def _insert() -> int:
             with self._get_conn() as conn:
-                # Get next sequence
-                row = conn.execute("SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM audit_log").fetchone()
-                sequence = row["next_seq"]
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    # Atomically read last hash + next sequence
+                    last_row = conn.execute(
+                        "SELECT hash FROM audit_log ORDER BY sequence DESC LIMIT 1"
+                    ).fetchone()
+                    previous_hash = last_row["hash"] if last_row else ""
 
-                entry_hash = self._compute_hash(
-                    sequence, timestamp, event_type, details_json, previous_hash,
-                )
+                    seq_row = conn.execute(
+                        "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_seq FROM audit_log"
+                    ).fetchone()
+                    sequence = seq_row["next_seq"]
 
-                conn.execute(
-                    """INSERT INTO audit_log (sequence, timestamp, event_type, details, previous_hash, hash)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (sequence, timestamp, event_type, details_json, previous_hash, entry_hash),
-                )
-                conn.commit()
-                return sequence
+                    entry_hash = self._compute_hash(
+                        sequence, timestamp, event_type, details_json, previous_hash,
+                    )
 
-        return _insert()
+                    conn.execute(
+                        """INSERT INTO audit_log (sequence, timestamp, event_type, details, previous_hash, hash)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (sequence, timestamp, event_type, details_json, previous_hash, entry_hash),
+                    )
+                    conn.commit()
+                    return sequence
+                except Exception:
+                    conn.rollback()
+                    raise
+
+        import asyncio
+        return await asyncio.to_thread(_insert)
 
     async def query(
         self,
@@ -150,35 +166,41 @@ class AuditLog:
         Returns:
             List of dicts with sequence, timestamp, event_type, details, hash.
         """
-        def _query() -> list[dict[str, Any]]:
-            with self._get_conn() as conn:
-                if event_type:
-                    rows = conn.execute(
-                        """SELECT sequence, timestamp, event_type, details, previous_hash, hash
-                           FROM audit_log WHERE event_type = ?
-                           ORDER BY sequence DESC LIMIT ? OFFSET ?""",
-                        (event_type, limit, offset),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        """SELECT sequence, timestamp, event_type, details, previous_hash, hash
-                           FROM audit_log ORDER BY sequence DESC LIMIT ? OFFSET ?""",
-                        (limit, offset),
-                    ).fetchall()
+        import asyncio
+        return await asyncio.to_thread(self._query_sync, event_type, limit, offset)
 
-                results = []
-                for row in rows:
-                    results.append({
-                        "sequence": row["sequence"],
-                        "timestamp": row["timestamp"],
-                        "event_type": row["event_type"],
-                        "details": json.loads(row["details"]) if row["details"] else {},
-                        "previous_hash": row["previous_hash"],
-                        "hash": row["hash"],
-                    })
-                return results
+    def _query_sync(
+        self,
+        event_type: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self._get_conn() as conn:
+            if event_type:
+                rows = conn.execute(
+                    """SELECT sequence, timestamp, event_type, details, previous_hash, hash
+                       FROM audit_log WHERE event_type = ?
+                       ORDER BY sequence DESC LIMIT ? OFFSET ?""",
+                    (event_type, limit, offset),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT sequence, timestamp, event_type, details, previous_hash, hash
+                       FROM audit_log ORDER BY sequence DESC LIMIT ? OFFSET ?""",
+                    (limit, offset),
+                ).fetchall()
 
-        return _query()
+            results = []
+            for row in rows:
+                results.append({
+                    "sequence": row["sequence"],
+                    "timestamp": row["timestamp"],
+                    "event_type": row["event_type"],
+                    "details": json.loads(row["details"]) if row["details"] else {},
+                    "previous_hash": row["previous_hash"],
+                    "hash": row["hash"],
+                })
+            return results
 
     async def verify_integrity(self) -> list[int]:
         """Verify the hash chain integrity.
@@ -186,42 +208,44 @@ class AuditLog:
         Returns:
             List of sequence numbers of corrupted entries (empty if intact).
         """
-        def _verify() -> list[int]:
-            corrupted: list[int] = []
-            with self._get_conn() as conn:
-                rows = conn.execute(
-                    """SELECT sequence, timestamp, event_type, details, previous_hash, hash
-                       FROM audit_log ORDER BY sequence ASC""",
-                ).fetchall()
+        import asyncio
+        return await asyncio.to_thread(self._verify_integrity_sync)
 
-                expected_previous = ""
-                for row in rows:
-                    expected_hash = self._compute_hash(
-                        row["sequence"],
-                        row["timestamp"],
-                        row["event_type"],
-                        row["details"],
-                        expected_previous,
-                    )
-                    if expected_hash != row["hash"]:
-                        corrupted.append(row["sequence"])
-                    expected_previous = row["hash"]
+    def _verify_integrity_sync(self) -> list[int]:
+        corrupted: list[int] = []
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                """SELECT sequence, timestamp, event_type, details, previous_hash, hash
+                   FROM audit_log ORDER BY sequence ASC""",
+            ).fetchall()
 
-            return corrupted
+            expected_previous = ""
+            for row in rows:
+                expected_hash = self._compute_hash(
+                    row["sequence"],
+                    row["timestamp"],
+                    row["event_type"],
+                    row["details"],
+                    expected_previous,
+                )
+                if expected_hash != row["hash"]:
+                    corrupted.append(row["sequence"])
+                expected_previous = row["hash"]
 
-        return _verify()
+        return corrupted
 
     async def count(self, event_type: str | None = None) -> int:
         """Count entries, optionally filtered by type."""
-        def _count() -> int:
-            with self._get_conn() as conn:
-                if event_type:
-                    row = conn.execute(
-                        "SELECT COUNT(*) AS cnt FROM audit_log WHERE event_type = ?",
-                        (event_type,),
-                    ).fetchone()
-                else:
-                    row = conn.execute("SELECT COUNT(*) AS cnt FROM audit_log").fetchone()
-                return row["cnt"]
+        import asyncio
+        return await asyncio.to_thread(self._count_sync, event_type)
 
-        return _count()
+    def _count_sync(self, event_type: str | None = None) -> int:
+        with self._get_conn() as conn:
+            if event_type:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM audit_log WHERE event_type = ?",
+                    (event_type,),
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) AS cnt FROM audit_log").fetchone()
+            return row["cnt"]

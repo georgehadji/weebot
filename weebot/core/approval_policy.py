@@ -95,7 +95,19 @@ class ExecApprovalPolicy:
                         rule.pattern, i, exc,
                     )
 
-    def evaluate(self, command: str) -> ApprovalResult:
+    def evaluate(self, command: str, tool_category: str = "") -> ApprovalResult:
+        # ── Tool-category override: financial tools always ask ──────
+        if tool_category:
+            category_mode = get_category_approval_mode(tool_category)
+            if category_mode == ApprovalMode.FORCE_ALWAYS_ASK:
+                return ApprovalResult(
+                    command=command,
+                    approved=True,
+                    requires_confirmation=True,
+                    undo_hint="",
+                    reason=f"Financial tool '{command[:80]}' requires explicit approval.",
+                )
+
         cmd_lower = command.lower()
 
         # Find all matching rules, pick the most specific (longest pattern match)
