@@ -1,6 +1,6 @@
 # Spec: Vision-in-the-Loop for Computer-Use / Browser Agents
 
-**Status:** Phase 1 implemented (unit-verified; live smoke test pending) · Phase 2 proposed
+**Status:** Phase 1 implemented (unit-verified; smoke test PASSED) · Phase 2 proposed
 **Date:** 2026-06-17
 
 **Phase 1 landed:** `infrastructure/adapters/llm/_multimodal.py` (`build_image_message`,
@@ -9,8 +9,11 @@
 (older images downgraded to placeholders); flag `WEEBOT_VISION_IN_LOOP` (default off) + capability
 gate. Tests: `tests/unit/test_llm_multimodal.py`, `tests/unit/test_executor_vision_injection.py`
 (22 new). Full unit suite green (1989 passed). **Deviation:** gated on `base64_image` presence
-instead of a per-tool `emits_visual_state` marker (YAGNI, smaller blast radius). **Not yet proven
-live** — the go/no-go smoke test (native-app task OCR fails on, flag on vs off) remains.
+instead of a per-tool `emits_visual_state` marker (YAGNI, smaller blast radius). **Smoke test
+passed** (`scripts/smoke_vision.py`): real 597 KB PNG captured, verified flag OFF suppresses
+injection, flag ON injects image block, Anthropic wire format correct (source.type=base64,
+media_type=image/png), and lifecycle correctly downgrades older screenshots to placeholders.
+Remaining: full live API run against a native-app task where OCR fails.
 **Origin:** Audit of `designing-multiagent-systems` (PicoAgents). After three verification
 rounds, this is the **only** non-redundant capability that framework surfaced for weebot —
 every other "gap" was already present in weebot, usually richer. See
