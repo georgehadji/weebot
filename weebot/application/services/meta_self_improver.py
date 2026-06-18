@@ -14,7 +14,7 @@ and this wrapper, enabling true self-referential improvement.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config import feature_flags
@@ -60,7 +60,7 @@ class MetaSelfImprover:
     def __init__(
         self,
         llm: LLMPort,
-        audit_log: "MetaImprovementLog | None" = None,
+        audit_log: "MetaImprovementLog",
     ) -> None:
         self._llm = llm
         if audit_log is None:

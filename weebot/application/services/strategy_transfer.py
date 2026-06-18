@@ -34,7 +34,7 @@ class StrategyTransferService:
 
     def __init__(
         self,
-        store: "StrategyStore | None" = None,
+        store: "StrategyStore",
         min_score: float = 0.7,
         max_strategies: int = 3,
     ) -> None:
