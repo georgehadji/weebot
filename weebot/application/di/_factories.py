@@ -262,6 +262,12 @@ class FactoriesMixin:
         )
         return PrometheusMetricsAdapter()
 
+    @staticmethod
+    def _create_egress_guard():
+        """Create an EgressGuard singleton, managed by the DI container."""
+        from weebot.core.egress_guard import EgressGuard
+        return EgressGuard()
+
     # ── MCP Client factories (Track 1 — Hermes Audit) ─────────────
 
     def _create_mcp_client(self):

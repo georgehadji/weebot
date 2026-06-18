@@ -155,6 +155,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Populate the registry with known flow types
         self.build_flow_registry()
 
+        # Egress guard — migrated from global singleton to DI
+        from weebot.core.egress_guard import EgressGuard
+        self.register(EgressGuard, self._create_egress_guard)
+
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
         self.register("mcp_bridge", self._create_mcp_bridge)
