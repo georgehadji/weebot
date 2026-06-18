@@ -23,7 +23,7 @@ class AuditMiddleware(EventMiddleware):
     before it reaches persistent storage.
     """
 
-    def __init__(self, audit_log: Any = None) -> None:
+    def __init__(self, audit_log: "AuditLog | None" = None) -> None:
         self._audit_log = audit_log or AuditLog()
 
     async def process(self, event: AgentEvent, context: dict[str, Any]) -> AgentEvent:

@@ -1,4 +1,5 @@
 """Event middleware implementations."""
+from weebot.application.middleware.middlewares.audit import AuditMiddleware
 from weebot.application.middleware.middlewares.credential_sanitizer import (
     CredentialSanitizerMiddleware,
 )
@@ -14,6 +15,7 @@ from weebot.application.middleware.middlewares.truth_binding import (
 )
 
 __all__ = [
+    "AuditMiddleware",
     "CredentialSanitizerMiddleware",
     "EventBusPublishMiddleware",
     "PersistenceMiddleware",
