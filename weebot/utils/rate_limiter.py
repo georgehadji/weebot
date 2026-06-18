@@ -95,6 +95,14 @@ _rate_limit_buckets: Dict[str, TokenBucket] = {}
 _buckets_lock = Lock()
 
 
+def reset_all_buckets() -> None:
+    """Clear all rate limit buckets.
+
+    Used by test fixtures to avoid cross-test state leakage.
+    """
+    _rate_limit_buckets.clear()
+
+
 # Default rate limits per tool
 DEFAULT_RATE_LIMITS = {
     # Tool name: (rate per second, burst capacity)

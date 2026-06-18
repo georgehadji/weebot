@@ -68,15 +68,7 @@ def _get_cache():
 _metrics_module = None
 
 
-def _get_tool_metrics():
-    global _metrics_module
-    if _metrics_module is None:
-        try:
-            from weebot.infrastructure.observability import metrics as m
-            _metrics_module = m
-        except Exception:
-            _metrics_module = False  # sentinel — metrics unavailable
-    return _metrics_module if _metrics_module is not False else None
+from weebot.application.services.metrics_bridge import get_metrics as _get_tool_metrics
 
 
 class ToolCollection:

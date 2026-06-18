@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_BALANCED
 from weebot.domain.models.session import Session
 
 from weebot.application.flows.base_flow import BaseFlow
@@ -35,8 +36,8 @@ from weebot.domain.models.harness_edit import HarnessEdit, PromotionDecision
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.infrastructure.persistence.trajectory_repo import (
-        TrajectoryRepository,
+    from weebot.application.ports.trajectory_repository_port import (
+        TrajectoryRepositoryPort,
     )
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,7 @@ class HarnessOptFlow(BaseFlow):
         self,
         llm: "LLMPort",
         target: HarnessOptimizationTarget,
-        trajectory_repo: "TrajectoryRepository",
+        trajectory_repo: "TrajectoryRepositoryPort",
         flow_factory: Callable,
         held_in_tasks: Optional[list[str]] = None,
         held_out_tasks: Optional[list[str]] = None,
@@ -342,8 +343,8 @@ class HarnessOptFlow(BaseFlow):
                 response = await self._llm.chat(
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"},
-                    temperature=0.3 + (len(edits) * 0.1),  # increase temp for diversity
-                    max_tokens=500,
+                    temperature=TEMPERATURE_BALANCED + (len(edits) * 0.1),  # ramp for diversity
+                    max_tokens=MAX_TOKENS_SHORT,
                 )
 
                 if not response or not response.content:

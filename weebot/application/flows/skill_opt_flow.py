@@ -32,9 +32,9 @@ from weebot.domain.models.session import Session
 from weebot.domain.models.skill import Skill
 from weebot.domain.models.trajectory import OptimizationBatch
 if TYPE_CHECKING:
+    from weebot.application.ports.skill_store_port import SkillStorePort
+    from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
     from weebot.application.services.evolution_tracker import EvolutionTracker
-    from weebot.infrastructure.persistence.skill_store import SkillStore
-    from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,8 @@ class SkillOptFlow(BaseFlow):
         skill_name: str,
         target_flow_factory: Callable,
         optimizer: OptimizerPort,
-        skill_store: "SkillStore",
-        trajectory_repo: "TrajectoryRepository",
+        skill_store: "SkillStorePort",
+        trajectory_repo: "TrajectoryRepositoryPort",
         event_bus: EventBusPort | None,
         mediator,
         epochs: int = 4,

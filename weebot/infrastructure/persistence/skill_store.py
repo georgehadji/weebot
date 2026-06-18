@@ -12,14 +12,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from weebot.application.ports.skill_store_port import SkillStorePort
 from weebot.domain.models.skill import Skill
 from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
 
 logger = logging.getLogger(__name__)
 
 
-class SkillStore:
-    """Persistence for Skill models with full version history."""
+class SkillStore(SkillStorePort):
+    """SQLite adapter for SkillStorePort."""
 
     def __init__(self, db_path: str = "./weebot_sessions.db"):
         self._db_path = Path(db_path)
@@ -100,10 +101,9 @@ class SkillStore:
             cursor = await conn.execute(
                 "DELETE FROM skills WHERE name = ?", (name,)
             )
+            deleted = cursor.rowcount > 0 if cursor.rowcount >= 0 else True
             await cursor.close()
-            # Check if existed by trying to load
-            existing = await self.load(name)
-            return existing is None
+            return deleted
 
     async def export_best_md(self, name: str, output_path: str) -> None:
         """Write the best-validated skill content to a markdown file."""

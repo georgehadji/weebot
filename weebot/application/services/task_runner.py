@@ -14,14 +14,7 @@ from weebot.application.services.memory_archivist import MemoryArchivist
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 
-# Prometheus metrics — lazy import
-_metrics_mod = None
-def _get_tr_metrics():
-    global _metrics_mod
-    if _metrics_mod is None:
-        from weebot.infrastructure.observability import metrics as m
-        _metrics_mod = m
-    return _metrics_mod
+from weebot.application.services.metrics_bridge import get_metrics as _get_tr_metrics
 from weebot.application.models.tool_collection import ToolCollection
 
 logger = logging.getLogger(__name__)

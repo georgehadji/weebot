@@ -28,8 +28,6 @@ _NON_PORT_CLASSES = {
 
 # Ports known to have zero adapters (tracked for future implementation)
 _ZERO_ADAPTER_PORTS = {
-    "CapabilityGatePort": "No adapter found — tracked for future capability-gating",
-    "TruthBindingPort": "No adapter found — tracked for truth-binding integration",
     "SwarmEventBusPort": "SwarmEventBus exists but does not inherit the port interface",
     "SpeechPort": "WhisperSpeechAdapter exists but is not found by conservative scan (nested package)",
     "TaskQueuePort": "InMemoryTaskQueue exists but is not found by conservative scan (nested package)",

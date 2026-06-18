@@ -204,9 +204,9 @@ class MCPToolRegistryBridge:
                 # Role doesn't exist yet — create it
                 self._registry.add_role(role, [namespaced])
 
-        # Add to TOOL_TIERS (default to "controlled" for MCP tools)
-        if namespaced not in self._registry.TOOL_TIERS:
-            self._registry.TOOL_TIERS[namespaced] = "controlled"
+        # Add to tool tiers (default to "controlled" for MCP tools)
+        if self._registry.get_tool_tier(namespaced) == "public":
+            self._registry.set_tool_tier(namespaced, "controlled")
 
         logger.debug("Bridge: registered MCP tool %s (server: %s)", namespaced, server_name)
 

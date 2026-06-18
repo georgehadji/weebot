@@ -279,6 +279,20 @@ class WeebotSettings(BaseSettings):
         description="Default model override for cron agent sessions.",
     )
 
+    # Feature flags (migrated from os.getenv — see Phase 3c)
+    plan_review_enabled: bool = Field(
+        default=True,
+        description="Enable plan-review pause before execution (was WEEBOT_PLAN_REVIEW_ENABLED).",
+    )
+    cove_enabled: bool = Field(
+        default=True,
+        description="Enable Chain-of-Verification step (was WEEBOT_COVE_ENABLED).",
+    )
+    cove_max_questions: int = Field(
+        default=3,
+        description="Max verification questions in CoVE step (was WEEBOT_COVE_QUESTIONS).",
+    )
+
     # =======================================================================
     # SKILLS HUB SETTINGS (Track 6 — Hermes Audit)
     # =======================================================================

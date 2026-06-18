@@ -20,6 +20,12 @@ from openai import AuthenticationError
 
 from weebot.application.flows.states.base import FlowState, AgentStatus
 from weebot.config.constants import (
+    MAX_TOKENS_BRIEF,
+    MAX_TOKENS_COMPACT,
+    MAX_TOKENS_CRISP,
+    MAX_TOKENS_SHORT,
+    MAX_TOKENS_VERDICT,
+    TEMPERATURE_DETERMINISTIC,
     VERIFICATION_AXES,
     VERIFICATION_MAX_REVISION_PASSES,
     VERIFICATION_SCORE_MIN,
@@ -51,17 +57,17 @@ class VerifyingState(FlowState):
             flow: The PlanActFlow instance (provides llm, session, plan).
             prompt: Not used — verification runs on the flow's current plan/session.
         """
-        import os
+        from weebot.config.settings import WeebotSettings
+        _settings = WeebotSettings()
 
         # ── Feature toggle ──────────────────────────────────────────
-        enabled = os.getenv("WEEBOT_COVE_ENABLED", "true").lower() in ("true", "1", "yes")
-        if not enabled:
+        if not _settings.cove_enabled:
             _log.debug("CoVe disabled — skipping verification")
             from weebot.application.flows.states.completed import CompletedState
             flow.set_state(CompletedState())
             return
 
-        num_questions = int(os.getenv("WEEBOT_COVE_QUESTIONS", str(self._max_questions)))
+        num_questions = _settings.cove_max_questions
 
         # ── Get the summary to verify ───────────────────────────────
         plan = flow._plan
@@ -206,8 +212,8 @@ class VerifyingState(FlowState):
         try:
             response = await flow._llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=100,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_BRIEF,
             )
             scores = json.loads(response.content or "{}")
             return {
@@ -247,8 +253,8 @@ class VerifyingState(FlowState):
             try:
                 response = await flow._llm.chat(
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.0,
-                    max_tokens=500,
+                    temperature=TEMPERATURE_DETERMINISTIC,
+                    max_tokens=MAX_TOKENS_SHORT,
                 )
                 summary = (response.content or summary).strip()
             except Exception:
@@ -392,8 +398,8 @@ class VerifyingState(FlowState):
         try:
             response = await flow._llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,  # deterministic for verification
-                max_tokens=200,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_COMPACT,
             )
             content = response.content or ""
             questions = [
@@ -411,8 +417,8 @@ class VerifyingState(FlowState):
         try:
             response = await flow._llm.chat(
                 messages=[{"role": "user", "content": question}],
-                temperature=0.0,
-                max_tokens=150,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_CRISP,
             )
             return (response.content or "").strip()
         except Exception:
@@ -433,8 +439,8 @@ class VerifyingState(FlowState):
         try:
             response = await flow._llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=10,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_VERDICT,
             )
             return "yes" in (response.content or "").lower()
         except Exception:
@@ -456,8 +462,8 @@ class VerifyingState(FlowState):
         try:
             response = await flow._llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=500,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_SHORT,
             )
             return (response.content or "").strip()
         except Exception:

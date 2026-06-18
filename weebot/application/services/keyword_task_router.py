@@ -14,6 +14,7 @@ from typing import Optional
 
 import yaml
 
+from weebot.application.ports.file_storage_port import FileStoragePort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.task_route import TaskCategory, TaskComplexity, TaskRoute
 

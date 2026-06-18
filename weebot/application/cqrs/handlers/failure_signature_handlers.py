@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult, QueryHandler, QueryResult
+from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
 from weebot.application.cqrs.commands.failure_signature_commands import (
     BatchExtractSignaturesCommand,
     ClusterFailurePatternsQuery,
@@ -31,8 +32,8 @@ from weebot.domain.models.trajectory import TrajectoryHealth
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.infrastructure.persistence.trajectory_repo import (
-        TrajectoryRepository,
+    from weebot.application.ports.trajectory_repository_port import (
+        TrajectoryRepositoryPort,
     )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class ExtractFailureSignatureHandler(CommandHandler):
     def __init__(
         self,
         llm: "LLMPort",
-        trajectory_repo: "TrajectoryRepository",
+        trajectory_repo: "TrajectoryRepositoryPort",
         budget_model: str | None = None,
     ) -> None:
         self._llm = llm
@@ -100,8 +101,8 @@ class ExtractFailureSignatureHandler(CommandHandler):
                 messages=[{"role": "user", "content": prompt}],
                 model=self._budget_model,
                 response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=300,
+                temperature=TEMPERATURE_PRECISE,
+                max_tokens=MAX_TOKENS_CONCISE,
             )
 
             if not response or not response.content:
@@ -178,7 +179,7 @@ class BatchExtractSignaturesHandler(CommandHandler):
     def __init__(
         self,
         handler: ExtractFailureSignatureHandler,
-        trajectory_repo: "TrajectoryRepository",
+        trajectory_repo: "TrajectoryRepositoryPort",
     ) -> None:
         self._handler = handler
         self._repo = trajectory_repo
@@ -237,7 +238,7 @@ class ClusterFailurePatternsHandler(QueryHandler):
     an EvidenceBundle ordered by (support × mean_actionability).
     """
 
-    def __init__(self, trajectory_repo: "TrajectoryRepository") -> None:
+    def __init__(self, trajectory_repo: "TrajectoryRepositoryPort") -> None:
         self._repo = trajectory_repo
 
     async def handle(self, query: ClusterFailurePatternsQuery) -> QueryResult:

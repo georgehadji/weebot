@@ -130,7 +130,7 @@ class RoleBasedToolRegistry:
 
     # Capability tiers per tool (Capability 4).
     # Maps tool name -> tier string. Default is "public".
-    TOOL_TIERS: Dict[str, str] = {
+    _TOOL_TIERS: Dict[str, str] = {
         "bash": "restricted",
         "computer_use": "privileged",
         "powershell": "restricted",
@@ -261,7 +261,16 @@ class RoleBasedToolRegistry:
         Returns:
             Tier string: "public", "controlled", "restricted", or "privileged".
         """
-        return self.TOOL_TIERS.get(tool_name, "public")
+        return self._TOOL_TIERS.get(tool_name, "public")
+
+    def set_tool_tier(self, tool_name: str, tier: str) -> None:
+        """Set the access tier for a tool.
+
+        Args:
+            tool_name: The tool''s name.
+            tier: One of "public", "controlled", "restricted", "privileged".
+        """
+        self._TOOL_TIERS[tool_name] = tier
 
     def get_tools_for_role_with_gate(
         self,

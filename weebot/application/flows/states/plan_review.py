@@ -13,8 +13,9 @@ Control flow:
 from __future__ import annotations
 
 import logging
-import os
 from typing import AsyncGenerator, TYPE_CHECKING
+
+from weebot.config.settings import WeebotSettings
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -38,8 +39,8 @@ def next_state_after_plan(min_steps: int = 1):
     """
     from weebot.application.flows.states.executing import ExecutingState
 
-    enabled = os.getenv("WEEBOT_PLAN_REVIEW_ENABLED", "true").lower() in ("true", "1", "yes")
-    if not enabled:
+    settings = WeebotSettings()
+    if not settings.plan_review_enabled:
         return ExecutingState()
     return PlanReviewState(min_steps=min_steps)
 

@@ -15,10 +15,10 @@ from weebot.application.cqrs.base import CommandHandler, CommandResult
 from weebot.application.cqrs.commands.transfer_commands import ValidateTransferCommand
 
 if TYPE_CHECKING:
+    from weebot.application.ports.skill_store_port import SkillStorePort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
     from weebot.domain.models.session import Session
     from weebot.domain.models.skill import Skill
-    from weebot.infrastructure.persistence.skill_store import SkillStore
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,11 @@ class ValidateTransferHandler(CommandHandler):
     def __init__(
         self,
         state_repo: StateRepositoryPort,
+        skill_store: SkillStorePort,
         flow_factory: Callable,              # injected, not imported
     ):
         self._state_repo = state_repo
+        self._skill_store = skill_store
         self._create_flow = flow_factory
 
     async def handle(self, command: ValidateTransferCommand) -> CommandResult:
@@ -43,10 +45,7 @@ class ValidateTransferHandler(CommandHandler):
         from weebot.domain.models.trajectory import TrajectorySummary
 
         try:
-            # Load skill from the skill store (lazy import)
-            from weebot.infrastructure.persistence.skill_store import SkillStore
-            skill_store = SkillStore()
-            skill = await skill_store.load(command.skill_name)
+            skill = await self._skill_store.load(command.skill_name)
             if skill is None:
                 return CommandResult.fail(
                     error=f"Skill '{command.skill_name}' not found",
@@ -96,7 +95,7 @@ class ValidateTransferHandler(CommandHandler):
                     key: result.model_dump(),
                 }
             })
-            await skill_store.save(skill)
+            await self._skill_store.save(skill)
 
             return CommandResult.ok(data={
                 "skill_name": command.skill_name,

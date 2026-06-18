@@ -11,6 +11,10 @@ explicitly via constructor kwargs or ``monkeypatch.setenv``.
 """
 from __future__ import annotations
 
+# Shared model constant used across vision/multimodal unit tests.
+# Change here to update all callers at once.
+VISION_TEST_MODEL = "claude-opus-4-8"
+
 import pytest
 
 # Config/provider env vars that may leak from the developer's shell or .env
@@ -53,3 +57,21 @@ def _isolate_weebot_settings(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
     yield
+
+    # Reset mutable module-level state to prevent cross-test leakage
+    # (architecture remediation Phase 2.3)
+    try:
+        from weebot.utils.rate_limiter import reset_all_buckets
+        reset_all_buckets()
+    except Exception:
+        pass
+    try:
+        from weebot.infrastructure.event_bus import _reset_metrics_cache
+        _reset_metrics_cache()
+    except Exception:
+        pass
+    try:
+        from weebot.application.services.metrics_bridge import reset_metrics_cache
+        reset_metrics_cache()
+    except Exception:
+        pass

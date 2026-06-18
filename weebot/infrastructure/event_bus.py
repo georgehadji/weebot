@@ -13,13 +13,24 @@ from weebot.application.ports.event_bus_port import (
 from weebot.domain.models.event import AgentEvent, DomainEvent
 
 # Prometheus metrics — lazily imported to avoid circular import at module level
-_metrics = None
+_metrics_cache = None
 def _get_metrics():
-    global _metrics
-    if _metrics is None:
+    global _metrics_cache
+    if _metrics_cache is None:
         from weebot.infrastructure.observability import metrics as _m
-        _metrics = _m
-    return _metrics
+        _metrics_cache = _m
+    return _metrics_cache
+
+
+_metrics_reset_hook = None
+
+def _reset_metrics_cache() -> None:
+    """Reset the metrics cache.
+
+    Used by test fixtures for clean isolation.
+    """
+    global _metrics_cache
+    _metrics_cache = None
 
 logger = logging.getLogger(__name__)
 

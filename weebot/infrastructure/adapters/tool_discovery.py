@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from weebot.application.ports.tool_discovery_port import ToolDiscoveryPort
 from weebot.domain.models.tool_manifest import ToolManifest
 from weebot.tools.base import BaseTool
 from weebot.tools.tool_registry import RoleBasedToolRegistry
@@ -161,7 +160,7 @@ _MANUAL_MANIFESTS: dict[str, dict] = {
 }
 
 
-class ToolDiscoveryAdapter(ToolDiscoveryPort):
+class ToolDiscoveryAdapter:
     """Discovers tool manifests by introspecting BaseTool subclasses.
 
     Merges automatic discovery (class-level ``_manifest_*`` attributes) with

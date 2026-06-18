@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from weebot.application.ports.event_store_port import EventStorePort
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
-    from weebot.infrastructure.persistence.trajectory_repo import (
-        TrajectoryRepository,
+    from weebot.application.ports.trajectory_repository_port import (
+        TrajectoryRepositoryPort,
     )
 
 
@@ -112,7 +112,7 @@ class ScoreTrajectoryHandler(CommandHandler):
 class BuildOptimizationBatchHandler(CommandHandler):
     """Collect trajectories for a skill version into an OptimizationBatch."""
 
-    def __init__(self, trajectory_repo: TrajectoryRepository):
+    def __init__(self, trajectory_repo: TrajectoryRepositoryPort):
         self._repo = trajectory_repo
 
     async def handle(self, command: BuildOptimizationBatchCommand) -> CommandResult:

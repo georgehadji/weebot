@@ -68,6 +68,8 @@ if TYPE_CHECKING:
 # The module-level logger is a fallback for static/class methods only.
 logger = logging.getLogger(__name__)
 
+from weebot.application.services.metrics_bridge import get_metrics as _get_metrics_bridge
+
 
 class PlanActFlow(BaseFlow):
     """Plan-Act agent flow with explicit state machine."""
@@ -382,13 +384,14 @@ class PlanActFlow(BaseFlow):
 
         # Record transition duration for the previous state
         if hasattr(self, "_state") and self._state is not None:
-            try:
-                from weebot.infrastructure.observability import metrics as _m
-                _m.flow_step_duration_seconds.labels(
-                    state=type(self._state).__name__,
-                ).observe(prev_duration)
-            except Exception:
-                pass  # metrics must never break state transitions
+            _m = _get_metrics_bridge()
+            if _m:
+                try:
+                    _m.flow_step_duration_seconds.labels(
+                        state=type(self._state).__name__,
+                    ).observe(prev_duration)
+                except Exception:
+                    pass  # metrics must never break state transitions
 
         # Each FlowState subclass declares its own status class attribute
         # so adding a new state does not require modifying this method.

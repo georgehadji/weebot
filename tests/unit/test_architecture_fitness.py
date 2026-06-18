@@ -299,7 +299,7 @@ def test_ports_have_adapters():
     }
 
     # Ports documented as [DEPRECATED] — no adapter expected.
-    deprecated_ports = {"CapabilityGatePort", "TruthBindingPort", "SwarmEventBusPort",
+    deprecated_ports = {"SwarmEventBusPort",
                         "TaskQueuePort", "SpeechPort"}
 
     # Find all port classes (files with ABC/Protocol that define ports)
@@ -753,6 +753,7 @@ def test_application_services_no_infra_imports():
         "meta_self_improver.py",         # TYPE_CHECKING only — MetaImprovementLog annotation (lazy fallback removed)
         "multi_source_research.py",      # TYPE_CHECKING only — ServiceRegistry annotation
         "strategy_transfer.py",          # TYPE_CHECKING only — StrategyStore annotation (lazy fallback removed)
+        "metrics_bridge.py",            # designated bridge to infrastructure Prometheus adapter
     }
 
     services_dir = ROOT / "application" / "services"
@@ -882,8 +883,6 @@ def test_orphan_ports_flagged():
     # Known orphan ports (no implementation exists yet, or implementations live
     # outside infrastructure/ — e.g. in application/eval/ or application/agents/)
     known_orphans = {
-        "CapabilityGatePort",
-        "TruthBindingPort",
         # Hook context dataclasses (not injected via DI)
         "PostCompleteContext",
         "PostExecuteContext",
@@ -960,4 +959,152 @@ def test_orphan_ports_flagged():
     assert not orphans, (
         f"Ports with zero implementations (orphans): {orphans}\n"
         "Either implement them, remove them, or add to known_orphans if intentional."
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-1: Executor extraction verification
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_executor_cascade_methods_extracted():
+    """Verify cascade methods were extracted from _base.py to _cascade.py."""
+    base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
+    content = base_path.read_text(encoding="utf-8")
+    
+    # These method names should NOT appear in _base.py anymore
+    extracted = [
+        "_cascade_is_tripped",
+        "_cascade_record_failure",
+        "_cascade_reset",
+        "_cascade_try_chat",
+        "_call_with_cascade",
+        "_try_live_model_rescue",
+    ]
+    violations = [m for m in extracted if m in content]
+    assert not violations, (
+        f"Cascade methods still present in _base.py: {violations}"
+    )
+
+
+def test_executor_tool_methods_extracted():
+    """Verify tool execution methods were extracted from _base.py."""
+    base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
+    content = base_path.read_text(encoding="utf-8")
+    
+    # These method names should NOT appear in _base.py anymore
+    extracted = [
+        "_execute_tool_batch",
+        "_get_step_id",
+        "_normalize_text",
+        "_follow_up_like",
+        "_tool_signature",
+        "_parse_args_for_event",
+    ]
+    violations = [m for m in extracted if re.search(rf'def {m}|self\.{m}', content)]
+    assert not violations, (
+        f"Tool methods still present in _base.py: {violations}"
+    )
+
+
+def test_executor_context_methods_extracted():
+    """Verify context/compression methods were extracted from _base.py."""
+    base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
+    content = base_path.read_text(encoding="utf-8")
+    
+    extracted = [
+        "_track_usage_and_maybe_compress",
+        "_maybe_compress",
+        "_reflect_on_screenshot",
+    ]
+    violations = [m for m in extracted if re.search(rf'def {m}|self\.{m}', content)]
+    assert not violations, (
+        f"Context methods still present in _base.py: {violations}"
+    )
+
+
+def test_cascade_executor_file_exists():
+    """CascadeExecutor module must exist and be importable."""
+    import importlib
+    mod = importlib.import_module("weebot.application.agents.executor._cascade")
+    assert hasattr(mod, "CascadeExecutor"), "CascadeExecutor class not found"
+
+
+def test_tool_executor_file_exists():
+    """ToolExecutor module must exist and be importable."""
+    import importlib
+    mod = importlib.import_module("weebot.application.agents.executor._tool_executor")
+    assert hasattr(mod, "ToolExecutor"), "ToolExecutor class not found"
+
+
+def test_context_compressor_file_exists():
+    """ContextCompressor module must exist and be importable."""
+    import importlib
+    mod = importlib.import_module("weebot.application.agents.executor._context_compressor")
+    assert hasattr(mod, "ContextCompressor"), "ContextCompressor class not found"
+
+
+def test_error_handler_file_exists():
+    """ErrorHandler module must exist and be importable."""
+    import importlib
+    mod = importlib.import_module("weebot.application.agents.executor._error_handler")
+    assert hasattr(mod, "classify_tool_error"), "classify_tool_error not found"
+    assert hasattr(mod, "build_stuck_error"), "build_stuck_error not found"
+    assert hasattr(mod, "normalize_text"), "normalize_text not found"
+    assert hasattr(mod, "ExecutionLoopState"), "ExecutionLoopState not found"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-2: Container.get_static() must not be called outside di/
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_container_get_static_not_called_outside_di():
+    """Container.get_static() was removed from executor._base.py during extraction."""
+    base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
+    content = base_path.read_text(encoding="utf-8")
+    assert "get_static" not in content, (
+        "get_static should not be referenced in executor._base.py after extraction"
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-3: CQRS handlers split verification
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_cqrs_handlers_directory_split():
+    """Verify the CQRS handlers/ directory contains individual handler files."""
+    handlers_dir = ROOT / "application" / "cqrs" / "handlers"
+    expected_files = {
+        "create_plan_handler.py",
+        "execute_step_handler.py",
+        "update_plan_handler.py",
+        "cancel_session_handler.py",
+        "compact_memory_handler.py",
+        "process_message_handler.py",
+        "summarize_handler.py",
+        "archive_session_handler.py",
+    }
+    existing = {p.name for p in handlers_dir.glob("*.py")}
+    missing = expected_files - existing
+    assert not missing, f"Missing handler files: {missing}"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-4: SkillStore and TrajectoryRepository port compliance
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_skill_store_implements_port():
+    """SkillStore must implement SkillStorePort."""
+    from weebot.application.ports.skill_store_port import SkillStorePort
+    from weebot.infrastructure.persistence.skill_store import SkillStore
+    assert issubclass(SkillStore, SkillStorePort), (
+        "SkillStore must inherit from SkillStorePort"
+    )
+
+
+def test_trajectory_repository_implements_port():
+    """TrajectoryRepository must implement TrajectoryRepositoryPort."""
+    from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
+    from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
+    assert issubclass(TrajectoryRepository, TrajectoryRepositoryPort), (
+        "TrajectoryRepository must inherit from TrajectoryRepositoryPort"
     )

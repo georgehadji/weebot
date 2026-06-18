@@ -9,7 +9,7 @@ from weebot.domain.models.skill import Skill
 from weebot.domain.models.skill_edit import SkillEdit
 
 if TYPE_CHECKING:
-    from weebot.infrastructure.persistence.skill_store import SkillStore
+    from weebot.application.ports.skill_store_port import SkillStorePort
 
 
 class ApplySkillEditsHandler(CommandHandler):
@@ -19,7 +19,7 @@ class ApplySkillEditsHandler(CommandHandler):
     after the validation gate has accepted or rejected it.
     """
 
-    def __init__(self, skill_store: SkillStore):
+    def __init__(self, skill_store: SkillStorePort):
         self._skill_store = skill_store
 
     async def handle(self, command: ApplySkillEditsCommand) -> CommandResult:

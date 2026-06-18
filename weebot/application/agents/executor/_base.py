@@ -30,6 +30,7 @@ from weebot.config.model_refs import (
     MODEL_CODE_REVIEW,
 )
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
+from weebot.application.agents.executor._error_handler import normalize_text, tool_signature, follow_up_like, parse_args_for_event, classify_tool_error, build_stuck_error
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -121,24 +122,6 @@ def _load_executor_system_prompt() -> str:
 _MAX_SAME_ERROR_CLASS = 3
 
 
-def _classify_tool_error(error_output: str) -> Optional[str]:
-    """Classify a tool error into a stable error-class key, or None if no match."""
-    if not error_output:
-        return None
-    lo = error_output.lower()
-    if "requires user confirmation" in lo:
-        return "confirmation_required"
-    if "denied by policy" in lo or "command blocked" in lo:
-        return "policy_denied"
-    if "security error" in lo or ("layer" in lo and "triggered" in lo):
-        return "security_blocked"
-    if "timed out" in lo:
-        return "timeout"
-    if "access denied" in lo or "permission" in lo:
-        return "permission_denied"
-    return None
-
-
 class ExecutorAgent:
     """Agent responsible for executing individual plan steps."""
 
@@ -199,7 +182,34 @@ class ExecutorAgent:
         self._compressor: Optional[ConversationCompressor] = None
         # Thread-safe step budget
         self._step_budget = StepBudget(max_steps=max_steps)
-        self._circuit_breaker_failures: dict[str, int] = {}
+        # Context compressor -- conversation buffer, token tracking, vision reflection
+        from weebot.application.agents.executor._context_compressor import ContextCompressor
+        self._context_compressor: ContextCompressor = ContextCompressor(
+            conversation_buffer=self._conversation_buffer,
+            auto_compress=auto_compress,
+            context_window=context_window,
+            llm=llm,
+            model=model,
+        )
+        # Cascade executor -- manages per-role model cascade + circuit breakers
+        from weebot.application.agents.executor._cascade import CascadeExecutor
+        self._cascade: CascadeExecutor = CascadeExecutor(
+            llm=llm,
+            tools=tools,
+            agent_role=agent_role,
+            model_provider=self._model_for_step,
+            on_success=self._context_compressor.track_usage_and_maybe_compress,
+        )
+        # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
+        from weebot.application.agents.executor._tool_executor import ToolExecutor
+        self._tool_executor: ToolExecutor = ToolExecutor(
+            tools=tools,
+            hooks=hooks,
+            conversation_buffer=self._conversation_buffer,
+            system_prompt=self._system_prompt,
+            llm=llm,
+            model=model,
+        )
 
     def set_harness_block(self, block: str | None) -> None:
         """Update the harness instruction block for the next step.
@@ -240,60 +250,6 @@ class ExecutorAgent:
         self._facts.clear()
 
     @staticmethod
-    def _normalize_text(text: str) -> str:
-        return re.sub(r"\s+", " ", (text or "")).strip().lower()
-
-    @staticmethod
-    def _tool_signature(tool_name: str, raw_arguments: str) -> str:
-        try:
-            parsed = json.loads(raw_arguments)
-        except Exception:
-            parsed = raw_arguments
-        return f"{tool_name}:{json.dumps(parsed, sort_keys=True, ensure_ascii=False)}"
-
-    @staticmethod
-    def _follow_up_like(text: str) -> bool:
-        lower_result = (text or "").lower()
-        return any(phrase in lower_result for phrase in (
-            "follow-up question",
-            "follow up question",
-            "do you have any follow-up questions",
-            "do you have any follow up questions",
-            "would you like me to proceed",
-        ))
-
-    @staticmethod
-    def _parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
-        try:
-            parsed = json.loads(raw_arguments)
-            return parsed if isinstance(parsed, dict) else {"_value": parsed}
-        except Exception:
-            return {"_raw": raw_arguments}
-
-    @staticmethod
-    def _build_stuck_error(
-        step: Step,
-        reason: str,
-        recent_signatures: deque[str],
-        max_steps: int,
-    ) -> str:
-        recent = list(recent_signatures)[-3:]
-        recent_block = " | ".join(recent) if recent else "none"
-        return (
-            f"Step '{step.id}' ('{step.description}') got stuck: {reason}. "
-            f"Recent tool calls: {recent_block}. "
-            f"Guardrails triggered before/at max step budget ({max_steps}). "
-            "Recovery: flow should replan this step or request missing user input."
-        )
-
-    _TIER1_MODEL: str = MODEL_CASCADE_TIER1
-    _TIER2_MODEL: str = MODEL_CASCADE_TIER2
-    _TIER3_MODEL: str = MODEL_CASCADE_TIER3
-    _TIER4_MODEL: str = MODEL_CASCADE_TIER4
-    _REVIEW_MODEL: str = MODEL_CODE_REVIEW
-
-    # ── Task-model routing ─────────────────────────────────────────
-    @staticmethod
     def _model_for_step(description: str) -> str:
         """Return the best model for *description* using the task-model router.
 
@@ -305,467 +261,26 @@ class ExecutorAgent:
         except Exception:
             return MODEL_CASCADE_TIER1
 
-    _REVIEW_KEYWORDS = (
-        "review", "audit", "analyze code", "inspect", "critique",
-        "security audit", "code quality", "refactor analysis"
-    )
 
-    def _is_review_step(self, description: str) -> bool:
-        desc = description.lower()
-        return any(kw in desc for kw in self._REVIEW_KEYWORDS)
-
-    async def _track_usage_and_maybe_compress(self, resp: Any) -> None:
-        """Accumulate real token usage from *resp* and trigger compression if needed."""
-        if resp and resp.usage:
-            self._total_prompt_tokens += resp.usage.get("prompt_tokens", 0)
-            self._total_completion_tokens += resp.usage.get("completion_tokens", 0)
-        await self._maybe_compress()
-
-    async def _maybe_compress(self) -> None:
-        """Summarize the middle of the conversation buffer when approaching context limit."""
-        if not self._auto_compress:
-            return
-        total_tokens = self._total_prompt_tokens + self._total_completion_tokens
-        threshold = int(self._context_window * 0.75)
-        if total_tokens >= threshold and len(self._conversation_buffer) >= 10:
-            logger.info(
-                "Token usage %d >= threshold %d — compressing conversation buffer",
-                total_tokens,
-                threshold,
-            )
-            if self._compressor is None:
-                self._compressor = ConversationCompressor(llm=self._llm)
-            compressed = await self._compressor.compress(list(self._conversation_buffer))
-            self._conversation_buffer.clear()
-            for msg in compressed:
-                self._conversation_buffer.append(msg)
-            # Reset counters post-compaction to avoid immediate re-trigger
-            self._total_prompt_tokens = int(self._total_prompt_tokens * 0.3)
-            self._total_completion_tokens = 0
-
-    def _vision_enabled(self) -> bool:
-        """True when vision-in-the-loop is on and the active model accepts images."""
-        from weebot.config.feature_flags import is_enabled
-        if not is_enabled("VISION_IN_LOOP_ENABLED"):
-            return False
-        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
-        return model_supports_vision(self._model or "")
-
-    def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:
-        """Append the latest screenshot as an image message for the next LLM call.
-
-        Bounds token cost by keeping only the most recent screenshot live —
-        image blocks already in the buffer are downgraded to a text placeholder
-        before the new one is appended.
-        """
-        from weebot.infrastructure.adapters.llm._multimodal import build_image_message
-        updated = []
-        for msg in self._conversation_buffer:
-            content = msg.get("content")
-            if isinstance(content, list):
-                new_content = [
-                    {"type": "text", "text": "[earlier screenshot omitted]"}
-                    if isinstance(b, dict) and b.get("type") == "image"
-                    else b
-                    for b in content
-                ]
-                updated.append({**msg, "content": new_content})
-            else:
-                updated.append(msg)
-        self._conversation_buffer.clear()
-        for m in updated:
-            self._conversation_buffer.append(m)
-        self._conversation_buffer.append(
-            build_image_message(f"Current screen after {tool_name}:", image_b64)
-        )
-
-    def _reflection_enabled(self) -> bool:
-        """True when Phase 2 structured reflection is on (requires vision + reflection flags)."""
-        from weebot.config.feature_flags import is_enabled
-        return self._vision_enabled() and is_enabled("VISION_REFLECTION_ENABLED")
-
-    async def _reflect_on_screenshot(
-        self, tool_name: str, image_b64: str, task_context: str = ""
-    ) -> "Optional[VisionReflection]":
-        """Ask the LLM to produce a structured PageObservation + NextActionPlan.
-
-        Grounds the reflection in the current task goal and, when available, the
-        previously predicted outcome — so the model can self-correct by comparing
-        what it expected against what it now sees.
-
-        Non-blocking: any parse/validation error returns None so execution continues.
-        Adds one extra LLM round-trip — only fires when WEEBOT_VISION_REFLECTION is set.
-
-        Note: this calls ``self._llm.chat`` directly rather than ``_call_with_cascade``
-        because the reflection requires a vision-capable model specifically (the
-        role-cascade may fall back to text-only models that reject images). The
-        response is still routed through ``_track_usage_and_maybe_compress`` so its
-        tokens are counted and can trigger compaction.
-        """
-        if not self._reflection_enabled():
-            return None
-
-        from weebot.models.structured_output import VisionReflection
-
-        goal_line = (
-            f"Current task goal: {task_context.strip()}\n"
-            if task_context and task_context.strip()
-            else ""
-        )
-        prior_line = (
-            f"Your previous action predicted this outcome: {self._last_expected_outcome!r}. "
-            "Compare it to what you now see and note in 'summary' whether it held.\n"
-            if self._last_expected_outcome
-            else ""
-        )
-        prompt = (
-            "You are observing the current screen state after a tool action.\n"
-            + goal_line
-            + prior_line
-            + "Examine the screenshot and respond with a JSON object matching this schema exactly:\n"
-            "{\n"
-            '  "observation": {\n'
-            '    "summary": "<one-sentence description>",\n'
-            '    "key_elements": ["<element1>", "..."],\n'
-            '    "is_task_complete": false,\n'
-            '    "confidence": 0.8\n'
-            "  },\n"
-            '  "plan": {\n'
-            '    "action_type": "click|type|scroll|navigate|wait|none",\n'
-            '    "selector": "<CSS selector or text label or null>",\n'
-            '    "value": "<text to type or URL or null>",\n'
-            '    "coordinates": {"x": 0, "y": 0},\n'
-            '    "reasoning": "<why this action>",\n'
-            '    "expected_outcome": "<what screen should show after>",\n'
-            '    "confidence": 0.7\n'
-            "  }\n"
-            "}\n"
-            "Judge 'is_task_complete' against the task goal above.\n"
-            "Use coordinates only when no text selector exists (visual/unlabeled elements).\n"
-            "Respond with raw JSON only — no markdown, no prose."
-        )
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image", "data": image_b64, "media_type": "image/png"},
-                ],
-            }
-        ]
-
-        try:
-            response = await self._llm.chat(
-                messages=messages,
-                model=self._model,
-                max_tokens=MAX_TOKENS_SHORT,
-                temperature=TEMPERATURE_DETERMINISTIC,
-            )
-        except Exception:
-            logger.debug("Vision reflection LLM call failed for %s (non-fatal)", tool_name)
-            return None
-
-        # Track tokens outside the parse try-block so compaction failures
-        # are not misattributed as JSON parse errors.
-        await self._track_usage_and_maybe_compress(response)
-
-        try:
-            raw = (response.content or "").strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            data = json.loads(raw)
-            return VisionReflection.model_validate(data)
-        except Exception:
-            logger.debug("Vision reflection parse/validate failed for %s (non-fatal)", tool_name)
-            return None
-
-    def _inject_reflection(self, reflection: "VisionReflection") -> None:
-        """Append a structured observation context message to the conversation buffer.
-
-        Stores expected_outcome for self-correction on the next screenshot.
-        """
-        obs = reflection.observation
-        plan = reflection.plan
-
-        completion_tag = " [TASK COMPLETE]" if obs.is_task_complete else ""
-        context = (
-            f"[Vision observation{completion_tag}] {obs.summary}"
-            + (f" | Elements: {', '.join(obs.key_elements)}" if obs.key_elements else "")
-            + f" | Confidence: {obs.confidence:.0%}"
-            + f"\n[Next action plan] {plan.action_type}"
-            + (f" selector={plan.selector!r}" if plan.selector else "")
-            + (f" coords={plan.coordinates}" if plan.coordinates else "")
-            + (f" value={plan.value!r}" if plan.value else "")
-            + f" | {plan.reasoning}"
-            + f"\n[Expected outcome] {plan.expected_outcome}"
-        )
-        self._conversation_buffer.append({"role": "system", "content": context})
-        # Store for self-correction: fed into the next reflection prompt so the
-        # model can compare its prediction against the next observed screen.
-        self._last_expected_outcome = plan.expected_outcome
-
-    @property
     def token_usage(self) -> Dict[str, int]:
         """Cumulative real token usage for this executor instance."""
         return {
-            "prompt_tokens": self._total_prompt_tokens,
-            "completion_tokens": self._total_completion_tokens,
-            "total_tokens": self._total_prompt_tokens + self._total_completion_tokens,
+            "prompt_tokens": self._context_compressor.total_prompt_tokens,
+            "completion_tokens": self._context_compressor.total_completion_tokens,
+            "total_tokens": self._context_compressor.total_prompt_tokens + self._context_compressor.total_completion_tokens,
         }
 
-    @staticmethod
-    def _is_fast_fail_error(exc: Exception) -> bool:
-        """Return True if *exc* indicates an auth or not-found error."""
-        msg = str(exc).lower()
-        return any(kw in msg for kw in (
-            "404", "401", "403", "not found", "unauthorized",
-            "permission denied", "invalid api key", "resource_not_found",
-        ))
+    def _vision_enabled(self) -> bool:
+        """True when vision-in-the-loop is on and the active model accepts images."""
+        return self._context_compressor.vision_enabled
 
-    def _cascade_is_tripped(self, model_id: str) -> bool:
-        """Return True if *model_id* has tripped its per-session circuit breaker."""
-        return self._circuit_breaker_failures.get(model_id, 0) >= 5
+    def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:
+        """Forward to context compressor (kept for test compatibility)."""
+        self._context_compressor.inject_screenshot(tool_name, image_b64)
 
-    def _cascade_record_failure(self, model_id: str) -> None:
-        """Increment the per-session failure counter for *model_id*."""
-        c = self._circuit_breaker_failures[model_id] = self._circuit_breaker_failures.get(model_id, 0) + 1
-        if c >= 3:
-            logger.warning("Circuit breaker tripped for %s", model_id)
-
-    def _cascade_reset(self, model_id: str) -> None:
-        """Reset the per-session failure counter for *model_id* (call on success)."""
-        self._circuit_breaker_failures[model_id] = 0
-
-    async def _cascade_try_chat(
-        self,
-        messages: List[Dict[str, Any]],
-        model_id: str,
-        timeout: float = 15.0,
-        fast_fail: bool = False,
-        first_error: dict[str, str] | None = None,
-    ) -> LLMResponse | None:
-        """Try a single model call with tiered timeout.
-
-        Returns LLMResponse on success, None on transient failure,
-        raises on fatal errors (auth, context length).
-        """
-        import time as _cascade_time
-
-        if self._cascade_is_tripped(model_id):
-            return None
-        effective = min(timeout, 15.0) if fast_fail else timeout
-        start = _cascade_time.monotonic()
-
-        # Acquire global LLM concurrency slot (WP-8)
-        pool = None
-        try:
-            from weebot.application.di import Container
-            pool = Container.get_static("llm_pool")
-        except Exception:
-            pass
-
-        async def _chat_with_pool():
-            if pool is not None:
-                async with pool:
-                    return await asyncio.wait_for(
-                        self._llm.chat(
-                            messages=messages,
-                            tools=self._tools.to_params(),
-                            tool_choice="auto",
-                            model=model_id,
-                            temperature=TEMPERATURE_BALANCED,
-                        ),
-                        timeout=effective,
-                    )
-            return await asyncio.wait_for(
-                self._llm.chat(
-                    messages=messages,
-                    tools=self._tools.to_params(),
-                    tool_choice="auto",
-                    model=model_id,
-                    temperature=TEMPERATURE_BALANCED,
-                ),
-                timeout=effective,
-            )
-
-        try:
-            resp = await _chat_with_pool()
-            if resp and (resp.content or resp.tool_calls):
-                elapsed = (_cascade_time.monotonic() - start) * 1000
-                self._cascade_reset(model_id)
-                logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
-                return resp
-            elapsed = (_cascade_time.monotonic() - start) * 1000
-            logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
-            return None
-        except asyncio.TimeoutError:
-            elapsed = (_cascade_time.monotonic() - start) * 1000
-            logger.debug("Model %s timed out after %.0fms (limit %.1fs)", model_id, elapsed, effective)
-            return None
-        except Exception as exc:
-            if ErrorClassifier.should_fail_fast(exc):
-                raise
-            if first_error is not None and model_id not in first_error:
-                first_error[model_id] = str(exc)[:300] or type(exc).__name__
-                logger.warning("Model %s first error: %s", model_id, first_error[model_id])
-            else:
-                logger.debug("Model %s failed (%.1fs): %s", model_id, effective, exc)
-            self._cascade_record_failure(model_id)
-            return None
-
-    async def _call_with_cascade(
-        self, messages: List[Dict[str, Any]], description: str = ""
-    ) -> LLMResponse:
-        """Per-role cascade: role-primary → role-fallback1 → role-fallback2 → tier3 → tier4.
-
-        Priority:
-        1. Role cascade (per ``get_model_cascade_for_role()``) — 3 models tailored to agent role
-        2. Task-specific model (per ``_model_for_step()``) — parallel candidate
-        3. Remaining cascade tiers: tier3 → tier4
-        """
-        # ── Resolve models ──────────────────────────────────────────
-        from weebot.config.model_refs import get_model_cascade_for_role
-        role_cascade = get_model_cascade_for_role(self._agent_role)
-        role_primary = role_cascade[0]
-        role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
-        role_fallback2 = role_cascade[2] if len(role_cascade) > 2 else self._TIER3_MODEL
-        task_model = self._model_for_step(description)
-
-        fast_fail: bool = False
-        first_error: dict[str, str] = {}
-
-        async def _try(model: str, tmo: float) -> LLMResponse | None:
-            nonlocal fast_fail
-            resp = await self._cascade_try_chat(messages, model, tmo, fast_fail, first_error)
-            if resp is None and not fast_fail:
-                # Check if the last error triggered fast-fail
-                if any(self._is_fast_fail_error(ee) for ee in first_error.values() if ee):
-                    fast_fail = True
-                    logger.warning(
-                        "Fast-fail detected — reducing remaining cascade timeouts to 15s"
-                    )
-            return resp
-
-        # ── Phase 1: parallel probes (90s timeout) ──────────────────
-        parallel = list(dict.fromkeys(
-            m for m in (role_primary, task_model, role_fallback1) if m
-        ))
-        if parallel:
-            tasks = {asyncio.ensure_future(_try(m, 90.0)): m for m in parallel}
-            done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
-            for fut in done:
-                resp = fut.result()
-                if resp is not None:
-                    for pf in pending:
-                        pf.cancel()
-                    for pf in pending:
-                        if not pf.cancelled():
-                            try:
-                                pf.exception()  # suppress "never retrieved" warning
-                            except (asyncio.InvalidStateError, asyncio.CancelledError):
-                                pass
-                    await self._track_usage_and_maybe_compress(resp)
-                    return resp
-
-        # ── Phase 2: sequential fallback (60s) ──────────────────────
-        remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
-                     if m and not self._cascade_is_tripped(m) and m not in parallel]
-        for m in remaining:
-            resp = await _try(m, 60.0)
-            if resp is not None:
-                await self._track_usage_and_maybe_compress(resp)
-                return resp
-
-        # ── Live model rescue (all-404) ─────────────────────────────
-        if fast_fail and first_error and all(
-            any(kw in (e or "").lower() for kw in ("404", "not found"))
-            for e in first_error.values()
-        ):
-            rescue_model = await _try_live_model_rescue(messages)
-            if rescue_model is not None:
-                await self._track_usage_and_maybe_compress(rescue_model)
-                return rescue_model
-
-        # ── Terminal ────────────────────────────────────────────────
-        raise AllModelsTrippedError(
-            "All models in the cascade have tripped their circuit breakers. "
-            "Check OpenRouter credits at https://openrouter.ai/credits"
-        )
-
-    @staticmethod
-    async def _try_live_model_rescue(
-        messages: List[Dict[str, Any]],
-    ) -> LLMResponse | None:
-        """Last-resort: fetch current free models from OpenRouter and try the first.
-
-        Called when ALL configured models return 404 — the model IDs may be
-        globally stale.  Fetches from the OpenRouter API with a short timeout
-        to avoid blocking the cascade further.
-
-        Returns:
-            An ``LLMResponse`` if a live model responds, or ``None``.
-        """
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get("https://openrouter.ai/api/v1/models")
-                resp.raise_for_status()
-                data = resp.json()
-        except Exception as exc:
-            logger.warning("Live model rescue: failed to fetch model list: %s", exc)
-            return None
-
-        # Prefer free models with tool support, sorted by context length desc
-        free_models: list[dict] = []
-        for m in data.get("data", []):
-            mid = m.get("id", "")
-            if ":free" not in mid:
-                continue
-            params = m.get("supported_parameters", [])
-            if "tools" not in params:
-                continue
-            ctx = m.get("context_length", 0)
-            free_models.append({"id": mid, "ctx": ctx})
-
-        if not free_models:
-            # Fall back to any free model even without tool support
-            for m in data.get("data", []):
-                if ":free" in m.get("id", ""):
-                    free_models.append({"id": m["id"], "ctx": m.get("context_length", 0)})
-
-        if not free_models:
-            logger.warning("Live model rescue: no free models found in OpenRouter listing")
-            return None
-
-        # Sort by context length descending — bigger context = more capable
-        free_models.sort(key=lambda m: m["ctx"], reverse=True)
-        rescue_id = free_models[0]["id"]
-        logger.warning(
-            "Live model rescue: trying %s (from %d live free models)",
-            rescue_id, len(free_models),
-        )
-
-        try:
-            from weebot.application.di import Container
-            from weebot.application.ports.llm_port import LLMPort
-            c = Container()
-            c.configure_defaults()
-            llm = c.get(LLMPort)
-            resp = await asyncio.wait_for(
-                llm.chat(
-                    messages=messages,
-                    model=rescue_id,
-                    temperature=TEMPERATURE_BALANCED,
-                ),
-                timeout=30.0,
-            )
-            if resp and (resp.content or resp.tool_calls):
-                logger.info("Live model rescue SUCCESS with %s", rescue_id)
-                return resp
-        except Exception as exc:
-            logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)
-
-        return None
+    def _inject_reflection(self, reflection: "VisionReflection") -> None:
+        """Forward to context compressor."""
+        self._context_compressor.inject_reflection(reflection)
 
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None,
@@ -912,7 +427,7 @@ class ExecutorAgent:
         self._step_budget.reset()
         while self._step_budget.consume():
             # ── Pre-call compaction: ensure the LLM sees compacted context ──
-            await self._maybe_compress()
+            await self._context_compressor._maybe_compress()
 
             messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
 
@@ -928,7 +443,7 @@ class ExecutorAgent:
 
             # Cost cascade: try budget model first, fall back to primary on failure.
             try:
-                response = await self._call_with_cascade(messages, description=step.description)
+                response = await self._cascade.call_with_cascade(messages, description=step.description)
             except AllModelsTrippedError as exc:
                 yield ErrorEvent(error=str(exc))
                 yield MessageEvent(
@@ -971,7 +486,7 @@ class ExecutorAgent:
                 )
 
             if not response.tool_calls:
-                normalized = self._normalize_text(assistant_content)
+                normalized = normalize_text(assistant_content)
                 if normalized and normalized == last_assistant_text:
                     repeated_assistant_turns += 1
                 else:
@@ -979,11 +494,11 @@ class ExecutorAgent:
                 last_assistant_text = normalized
 
                 step_result = assistant_content or "No result"
-                if self._follow_up_like(step_result):
+                if follow_up_like(step_result):
                     step_result = "Step completed. Continuing to the next plan step."
 
                 if repeated_assistant_turns >= 2:
-                    loop_error = self._build_stuck_error(
+                    loop_error = build_stuck_error(
                         step=step,
                         reason="repeated assistant-only responses with no tool progress",
                         recent_signatures=recent_tool_signatures,
@@ -1004,7 +519,7 @@ class ExecutorAgent:
             for tc in response.tool_calls:
                 tool_name = tc["function"]["name"]
                 raw_arguments = tc["function"].get("arguments", "{}")
-                signature = self._tool_signature(tool_name, raw_arguments)
+                signature = tool_signature(tool_name, raw_arguments)
                 recent_tool_signatures.append(signature)
 
                 if signature == last_tool_signature:
@@ -1014,7 +529,7 @@ class ExecutorAgent:
                     last_tool_signature = signature
 
                 if repeated_tool_calls >= 4:
-                    loop_error = self._build_stuck_error(
+                    loop_error = build_stuck_error(
                         step=step,
                         reason=f"repeated identical tool call '{tool_name}'",
                         recent_signatures=recent_tool_signatures,
@@ -1024,7 +539,7 @@ class ExecutorAgent:
                     abort_step = True
                     break
 
-                event_args = self._parse_args_for_event(raw_arguments)
+                event_args = parse_args_for_event(raw_arguments)
                 yield ToolEvent(
                     tool_call_id=tc["id"],
                     tool_name=tool_name,
@@ -1038,7 +553,7 @@ class ExecutorAgent:
                 break
 
             # ── Phase 2: Execute all tool calls in parallel ─────
-            results = await self._execute_tool_batch(_batch_tool_calls)
+            results = await self._tool_executor.execute_tool_batch(_batch_tool_calls)
 
             # Guard: must have same length as input
             assert len(results) == len(_batch_tool_calls), (
@@ -1050,8 +565,8 @@ class ExecutorAgent:
             for tc, result in zip(_batch_tool_calls, results):
                 tool_name = tc["function"]["name"]
                 raw_arguments = tc["function"].get("arguments", "{}")
-                event_args = self._parse_args_for_event(raw_arguments)
-                signature = self._tool_signature(tool_name, raw_arguments)
+                event_args = parse_args_for_event(raw_arguments)
+                signature = tool_signature(tool_name, raw_arguments)
                 tool_calls_attempted += 1
                 if not result.is_error:
                     tool_calls_succeeded += 1
@@ -1121,7 +636,7 @@ class ExecutorAgent:
 
                 # ═══ Policy-error-loop detection (Fix 5) ═══
                 if result.is_error:
-                    err_class = _classify_tool_error(result.error or result.output or "")
+                    err_class = classify_tool_error(result.error or result.output or "")
                     if err_class:
                         if err_class == last_error_class:
                             consecutive_error_class_counts[err_class] = \
@@ -1207,20 +722,20 @@ class ExecutorAgent:
                 # Vision-in-the-loop: let a vision-capable model SEE the screen
                 # state a tool produced, instead of driving blind off DOM/OCR text.
                 if getattr(result, "base64_image", None) and self._vision_enabled():
-                    self._inject_screenshot(tool_name, result.base64_image)
+                    self._context_compressor.inject_screenshot(tool_name, result.base64_image)
                     # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
                     # Grounded in the step description so the model can judge progress.
-                    reflection = await self._reflect_on_screenshot(
+                    reflection = await self._context_compressor.reflect_on_screenshot(
                         tool_name, result.base64_image, task_context=step.description
                     )
                     if reflection is not None:
-                        self._inject_reflection(reflection)
+                        self._context_compressor.inject_reflection(reflection)
 
             if abort_step:
                 break
 
         if not abort_step and loop_error is None and self._step_budget.exhausted and not step_result:
-            loop_error = self._build_stuck_error(
+            loop_error = build_stuck_error(
                 step=step,
                 reason="max step budget reached",
                 recent_signatures=recent_tool_signatures,
@@ -1238,7 +753,7 @@ class ExecutorAgent:
             and tool_calls_succeeded == 0
             and not step_result.strip()
         ):
-            loop_error = self._build_stuck_error(
+            loop_error = build_stuck_error(
                 step=step,
                 reason="all tool calls failed and no output was produced",
                 recent_signatures=recent_tool_signatures,
@@ -1261,132 +776,6 @@ class ExecutorAgent:
     # ── Phase 2: Parallel tool execution ─────────────────────────
     # Per-tool semaphore gating is handled by ToolCollection.execute().
     # The executor simply fires all tool calls concurrently via gather.
-
-    async def _execute_tool_batch(
-        self,
-        tool_calls: list[dict],
-    ) -> list[ToolResult]:
-        """Execute tool calls concurrently; return results in declared order.
-
-        Per-tool concurrency capping (``max_concurrent``) is enforced by
-        ``ToolCollection.execute()`` via its per-tool semaphore registry.
-        One failure does not cancel the batch — error results are placed
-        in the correct slot.
-        """
-        tasks: list[asyncio.Task[ToolResult]] = []
-        for tc in tool_calls:
-            tasks.append(asyncio.ensure_future(self._execute_tool_call(tc)))
-
-        raw = await asyncio.gather(*tasks, return_exceptions=True)
-
-        results: list[ToolResult] = []
-        for i, r in enumerate(raw):
-            if isinstance(r, Exception):
-                tc = tool_calls[i]
-                t_name = tc["function"]["name"]
-                results.append(ToolResult.error_result(
-                    error=f"Tool '{t_name}' raised: {r}",
-                    tool_name=t_name,
-                ))
-            else:
-                results.append(r)
-        return results
-
-    def _get_step_id(self) -> str:
-        return getattr(self, '_current_step_id', 'unknown')
-
-    async def execute_tool(self, name: str, arguments: str | dict[str, Any] | None = None) -> ToolResult:
-        """Public helper to execute a single tool call."""
-        if isinstance(arguments, str):
-            try:
-                args = json.loads(arguments)
-                if not isinstance(args, dict):
-                    return ToolResult.error_result(
-                        error=f"Invalid tool arguments JSON for '{name}': expected object.",
-                        output=f"Invalid tool arguments JSON for '{name}'.",
-                        tool_name=name,
-                    )
-            except json.JSONDecodeError as exc:
-                return ToolResult.error_result(
-                    error=f"Invalid tool arguments JSON for '{name}': {exc.msg}.",
-                    output=f"Invalid tool arguments JSON for '{name}'.",
-                    tool_name=name,
-                )
-        else:
-            args = arguments or {}
-        # Determine effective timeout for the asyncio safety net.
-        # Tools like bash/powershell have their own internal timeouts, but
-        # this provides a hard ceiling for the awaitable itself.
-        # Phase 3: Use per-tool default if available, fall back to 60s.
-        tool_obj = self._tools.get_tool(name)
-        timeout = float(getattr(tool_obj, "default_timeout_seconds", 60) if tool_obj else 60)
-        if "timeout" in args:
-            try:
-                # Allow up to 300s (max) if explicitly requested
-                timeout = min(float(args["timeout"]) + 5.0, 305.0)
-            except (ValueError, TypeError):
-                pass
-        
-        # Pre-tool hook
-        if self._hooks is not None:
-            await self._hooks.execute_hooks("pre_tool_call", {
-                "session_id": getattr(self, '_current_session_id', 'unknown'),
-                "step_id": self._get_step_id(),
-                "tool_name": name,
-                "tool_args": args,
-            })
-        import time as _timer
-        _t0 = _timer.monotonic()
-        try:
-            result = await asyncio.wait_for(self._tools.execute(_name=name, **args), timeout=timeout)
-        except asyncio.TimeoutError:
-            logger.warning("Tool %s timed out after %.0fs", name, timeout)
-            return ToolResult.error_result(
-                error=f"Tool '{name}' timed out after {int(timeout)}s.",
-                output=f"Tool '{name}' timed out after {int(timeout)}s.",
-                timeout_seconds=timeout,
-                tool_name=name,
-            )
-        _elapsed = (_timer.monotonic() - _t0) * 1000
-        # Post-tool hook
-        if self._hooks is not None:
-            await self._hooks.execute_hooks("post_tool_call", {
-                "session_id": getattr(self, '_current_session_id', 'unknown'),
-                "step_id": self._get_step_id(),
-                "tool_name": name,
-                "tool_args": args,
-                "result": result,
-                "elapsed_ms": _elapsed,
-                "success": not isinstance(result, Exception),
-            })
-        return result
-
-    async def _execute_tool_call(self, tc: Dict[str, Any]) -> ToolResult:
-        return await self.execute_tool(tc["function"]["name"], tc["function"].get("arguments", "{}"))
-
-    async def summarize(self) -> AsyncGenerator[AgentEvent, None]:
-        has_error = any(
-            (msg.get("role") == "assistant" and "error" in str(msg.get("content", "")).lower())
-            for msg in self._conversation_buffer
-        )
-        summary_prompt = (
-            "Provide a concise summary of what was accomplished, what failed, and concrete next steps for the user."
-            if has_error
-            else "Provide a concise summary of what was accomplished."
-        )
-        self._conversation_buffer.append({
-            "role": "user",
-            "content": summary_prompt,
-        })
-        system_prompt = self._system_prompt or _load_executor_system_prompt()
-        messages = [{"role": "system", "content": system_prompt}] + list(self._conversation_buffer)
-        response = await self._llm.chat(
-            messages=messages,
-            model=self._model,
-            temperature=TEMPERATURE_BALANCED,
-        )
-        yield MessageEvent(role="assistant", message=response.content or "Done.")
-
 
 # ── Phase 2 helpers ────────────────────────────────────────────────────────────
 

@@ -42,6 +42,8 @@ from weebot.application.cqrs.handlers import (
     CancelSessionHandler,
     CompactMemoryHandler,
     CreatePlanHandler,
+    ProcessMessageHandler,
+    SummarizeHandler,
     ExecuteStepHandler,
     GetSessionHandler,
     GetSessionStatusHandler,

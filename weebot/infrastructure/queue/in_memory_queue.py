@@ -5,8 +5,10 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from weebot.application.ports.task_queue_port import TaskQueuePort, FlowFactory
 from weebot.domain.models.session import Session
+
+# Type alias (was re-exported from TaskQueuePort before port deletion)
+FlowFactory = Callable[["Session"], Any]
 
 
 @dataclass(order=True)
@@ -16,7 +18,7 @@ class _PrioritizedItem:
     factory: FlowFactory = field(compare=False)
 
 
-class InMemoryTaskQueue(TaskQueuePort):
+class InMemoryTaskQueue:
     """In-memory priority queue for session dispatch.
 
     Default adapter for development and single-process deployment.

@@ -45,7 +45,6 @@ from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTra
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.tracing_port import TracingPort
 from weebot.application.ports.rerank_port import RerankPort
-from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
 from weebot.application.services.task_runner import TaskRunner
 from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.ports import EventPublisher
@@ -53,6 +52,12 @@ from weebot.domain.ports import EventPublisher
 from weebot.application.di._factories import FactoriesMixin
 from weebot.application.di._agent_tools import AgentToolsMixin
 from weebot.application.di._capabilities import CapabilitiesMixin
+
+
+def _lazy_cost_tracker():
+    """Lazy-import SubAgentCostTracker to avoid top-level infra import."""
+    from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
+    return SubAgentCostTracker(budget_usd=0.50)
 from weebot.application.di._skills import SkillsMixin
 from weebot.application.di._skillopt import SkillOptMixin
 from weebot.application.di._learning import LearningMixin
@@ -101,20 +106,6 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self._singletons[port_type] = instance
         return instance
 
-    @classmethod
-    def get_static(cls, key: str) -> Any:
-        """Get a DI singleton by string key, creating the container if needed.
-
-        Used by deep call-sites (e.g. ExecutorAgent._cascade_try_chat)
-        that can't receive DI directly.  Creates a Container singleton on
-        first call and caches it at the class level.
-        """
-        if not hasattr(cls, "_static_container"):
-            c = Container()
-            c.configure_defaults()
-            cls._static_container = c
-        return cls._static_container.get(key)
-
     # ── convenience binders ─────────────────────────────────────────
 
     def configure_defaults(
@@ -145,7 +136,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
         self.register(SwarmEventBusPort, self._create_swarm_bus)
         self.register(SubAgentFactoryPort, self._create_sub_agent_factory)
-        self.register(SubAgentCostTrackerPort, lambda: SubAgentCostTracker(budget_usd=0.50))
+        self.register(SubAgentCostTrackerPort, lambda: _lazy_cost_tracker())
         self.register("cascade_tracker", lambda: self._create_cascade_tracker())
         self.register("soul_provider", lambda: self._create_soul_provider())
         self.register(RerankPort, lambda: self._create_rerank_adapter())

@@ -19,6 +19,7 @@ from weebot.domain.models.failure_signature import (
     FailureSignature,
 )
 from weebot.domain.models.trajectory import TrajectorySummary, TrajectoryHealth
+from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
 from weebot.infrastructure.persistence.connection_pool import (
     get_or_create_pool,
 )
@@ -26,12 +27,8 @@ from weebot.infrastructure.persistence.connection_pool import (
 logger = logging.getLogger(__name__)
 
 
-class TrajectoryRepository:
-    """Persistence for trajectory evidence.
-
-    Stores trajectories in a separate table alongside the existing
-    event store.  One trajectory per completed task execution.
-    """
+class TrajectoryRepository(TrajectoryRepositoryPort):
+    """SQLite adapter for TrajectoryRepositoryPort."""
 
     def __init__(self, db_path: str = "./weebot_sessions.db"):
         self._db_path = Path(db_path)
