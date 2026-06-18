@@ -173,24 +173,24 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         # PlanActFlow — the primary agent flow
         registry.register("plan_act", lambda **kw: PlanActFlow(
-            llm=self.get("llm_port"),
+            llm=self.get(LLMPort),
             tools=kw.get("tools"),
             session=kw.get("session"),
-            event_bus=self.get("event_bus_port") if kw.get("event_bus") is not False else None,
+            event_bus=self.get(EventBusPort) if kw.get("event_bus") is not False else None,
             model=kw.get("model") or self._maybe_get_model(),
-            mediator=self._maybe_get("mediator"),
-            state_repo=self.get("state_repo_port"),
+            mediator=self._maybe_get(Mediator),
+            state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
         ))
 
         # ChatFlow — lightweight conversational flow
         registry.register("chat", lambda **kw: ChatFlow(
-            llm=self.get("llm_port"),
+            llm=self.get(LLMPort),
             session=kw.get("session"),
-            event_bus=self.get("event_bus_port") if kw.get("event_bus") is not False else None,
+            event_bus=self.get(EventBusPort) if kw.get("event_bus") is not False else None,
             model=kw.get("model") or self._maybe_get_model(),
-            mediator=self._maybe_get("mediator"),
-            state_repo=self.get("state_repo_port"),
+            mediator=self._maybe_get(Mediator),
+            state_repo=self.get(StateRepositoryPort),
         ))
 
         return registry

@@ -949,7 +949,7 @@ def test_orphan_ports_flagged():
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("weebot.application.ports"):
-                        implemented.add(path.name)
+                        implemented.add(alias.name.split(".").pop())
             elif isinstance(node, ast.ImportFrom):
                 if node.module and node.module.startswith("weebot.application.ports"):
                     if node.names:
