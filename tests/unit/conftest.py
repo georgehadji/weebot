@@ -77,4 +77,8 @@ def _isolate_weebot_settings(monkeypatch):
         pass
     # Browser pool is async — sync fixture can't await. Pool cleanup is
     # best-effort from fixtures; actual cleanup happens in browser tests.
-    # The import serves as a smoke test that the function exists.
+    # The import serves as a smoke test that reset_global_pool exists.
+    try:
+        from weebot.infrastructure.browser.session_pool import reset_global_pool  # noqa: F401
+    except Exception:
+        pass
