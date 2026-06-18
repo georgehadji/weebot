@@ -30,6 +30,7 @@ class LLMPool:
     def __init__(self, max_concurrent: int = 12) -> None:
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._max = max_concurrent
+        self._available = max_concurrent  # Tracked counter (avoids private _value attr)
 
     @property
     def max_concurrent(self) -> int:
@@ -37,14 +38,13 @@ class LLMPool:
 
     @property
     def available(self) -> int:
-        """Approximate number of available slots (racy but useful for diagnostics)."""
-        return self._semaphore._value if hasattr(self._semaphore, "_value") else 0
+        """Number of available concurrency slots (exact, no race)."""
+        return self._available
 
     async def __aenter__(self) -> "LLMPool":
         """Acquire a concurrency slot, waiting if all slots are in use.
 
-        Raises asyncio.TimeoutError if not acquired within 120 seconds
-        (defensive — should never trigger if the pool is sized correctly).
+        Raises asyncio.TimeoutError if not acquired within 120 seconds.
         """
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=120.0)
@@ -54,8 +54,10 @@ class LLMPool:
                 self._max,
             )
             raise
+        self._available -= 1
         return self
 
     async def __aexit__(self, *args: object) -> None:
         """Release the concurrency slot."""
         self._semaphore.release()
+        self._available += 1

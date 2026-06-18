@@ -555,8 +555,29 @@ class ExecutorAgent:
             return None
         effective = min(timeout, 15.0) if fast_fail else timeout
         start = _cascade_time.monotonic()
+
+        # Acquire global LLM concurrency slot (WP-8)
+        pool = None
         try:
-            resp = await asyncio.wait_for(
+            from weebot.application.di import Container
+            pool = Container.get_static("llm_pool")
+        except Exception:
+            pass
+
+        async def _chat_with_pool():
+            if pool is not None:
+                async with pool:
+                    return await asyncio.wait_for(
+                        self._llm.chat(
+                            messages=messages,
+                            tools=self._tools.to_params(),
+                            tool_choice="auto",
+                            model=model_id,
+                            temperature=TEMPERATURE_BALANCED,
+                        ),
+                        timeout=effective,
+                    )
+            return await asyncio.wait_for(
                 self._llm.chat(
                     messages=messages,
                     tools=self._tools.to_params(),
@@ -566,6 +587,9 @@ class ExecutorAgent:
                 ),
                 timeout=effective,
             )
+
+        try:
+            resp = await _chat_with_pool()
             if resp and (resp.content or resp.tool_calls):
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)

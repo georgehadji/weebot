@@ -306,12 +306,6 @@ class WeebotSettings(BaseSettings):
         le=100,
         description="Max concurrent LLM API requests across all sessions.",
     )
-    session_max_tool_calls_per_minute: int = Field(
-        default=30,
-        ge=0,
-        description="Max tool calls per minute per session. 0 = unlimited.",
-    )
-
     financial_tools_always_ask: bool = Field(
         default=True,
         description="Financial/payment tools always require user approval.",

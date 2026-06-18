@@ -101,6 +101,20 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self._singletons[port_type] = instance
         return instance
 
+    @classmethod
+    def get_static(cls, key: str) -> Any:
+        """Get a DI singleton by string key, creating the container if needed.
+
+        Used by deep call-sites (e.g. ExecutorAgent._cascade_try_chat)
+        that can't receive DI directly.  Creates a Container singleton on
+        first call and caches it at the class level.
+        """
+        if not hasattr(cls, "_static_container"):
+            c = Container()
+            c.configure_defaults()
+            cls._static_container = c
+        return cls._static_container.get(key)
+
     # ── convenience binders ─────────────────────────────────────────
 
     def configure_defaults(
@@ -164,8 +178,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(EgressGuard, self._create_egress_guard)
 
         # Global LLM concurrency pool — bounds parallel API calls (WP-8)
-        from weebot.application.strategies.llm_pool import LLMPool
-        self.register_instance("llm_pool", LLMPool(max_concurrent=12))
+        def _create_llm_pool():
+            from weebot.application.strategies.llm_pool import LLMPool
+            from weebot.config.settings import WeebotSettings
+            return LLMPool(max_concurrent=WeebotSettings().llm_max_concurrent_requests)
+        self.register("llm_pool", _create_llm_pool)
 
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
