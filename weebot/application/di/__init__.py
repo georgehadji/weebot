@@ -155,6 +155,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Populate the registry with known flow types
         self.build_flow_registry()
 
+        # Event pipeline middleware — composable _emit() processing
+        pipeline = self.build_event_pipeline()
+        self.register_instance("event_pipeline", pipeline)
+
         # Egress guard — migrated from global singleton to DI
         from weebot.core.egress_guard import EgressGuard
         self.register(EgressGuard, self._create_egress_guard)

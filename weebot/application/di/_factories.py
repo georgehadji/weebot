@@ -327,3 +327,26 @@ class FactoriesMixin:
             bridge = self._create_mcp_bridge()
             self.register_instance("mcp_bridge", bridge)
         return bridge
+
+    def build_event_pipeline(self) -> "EventPipeline":
+        """Build the default event middleware pipeline.
+
+        Middlewares run in registration order — each feeds into the next.
+        """
+        from weebot.application.middleware.event_middleware import EventPipeline
+        from weebot.application.middleware.middlewares import (
+            CredentialSanitizerMiddleware,
+            EventBusPublishMiddleware,
+            PersistenceMiddleware,
+            SessionMutationMiddleware,
+            TruthBindingMiddleware,
+        )
+
+        pipeline = EventPipeline([
+            TruthBindingMiddleware(),
+            CredentialSanitizerMiddleware(),
+            SessionMutationMiddleware(),
+            EventBusPublishMiddleware(),
+            PersistenceMiddleware(),
+        ])
+        return pipeline

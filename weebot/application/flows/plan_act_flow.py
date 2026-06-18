@@ -181,6 +181,10 @@ class PlanActFlow(BaseFlow):
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
         self._tracing_port = None
         self._persistence_adapter = None
+        # ── Event pipeline middleware (WP-4) ──────────────────────
+        # Built in ``configure_defaults`` and injected via config.
+        self._event_pipeline = getattr(cfg, "_event_pipeline", None)
+
         # ── Self-Harness: behavioural instruction block + resolver ──
         self._harness_instruction_block: str = ""
         self._harness_config: Any = cfg.harness_config  # HarnessConfig
@@ -242,9 +246,32 @@ class PlanActFlow(BaseFlow):
         return self._logger if self._logger is not None else self._stdlib_logger
 
     async def _emit(self, event: AgentEvent) -> None:
-        # ── Capability 1: Truth-binding response layer ──────────────
-        # Before publishing, validate assistant responses against
-        # deterministic guards (no LLM in the policy path).
+        """Emit an event through the middleware pipeline.
+
+        The pipeline handles truth binding, credential sanitization,
+        session mutation, event bus publishing, and DB persistence.
+        If a pipeline has been configured (via ``_event_pipeline``), use it.
+        Otherwise fall back to the original inline implementation for
+        backward compatibility.
+        """
+        pipeline = getattr(self, "_event_pipeline", None)
+        if pipeline is not None:
+            context = {
+                "session": self._session,
+                "flow": self,
+                "event_bus": self._event_bus,
+                "state_repo": self._state_repo,
+                "emit_lock": self._emit_lock,
+            }
+            event = await pipeline.process(event, context)
+            # Session mutation happens inside a middleware, so re-sync
+            new_session = context.get("session")
+            if new_session is not None:
+                self._session = new_session
+            return
+
+        # ── Legacy inline implementation (no pipeline configured) ──
+        # Truth-binding response layer
         if (
             self._truth_binder is not None
             and isinstance(event, MessageEvent)
@@ -267,35 +294,26 @@ class PlanActFlow(BaseFlow):
                 for v in result.violations:
                     self._log.debug("  Violation [%s]: %s", v.check, v.message)
                 event = event.model_copy(update={"message": result.bound_text})
-        # ────────────────────────────────────────────────────────────
 
-        # ── Credential redaction for user-provided text ─────────────
-        # Mask passwords, tokens, and API keys BEFORE they hit
-        # session storage, the event bus, or the behavior ledger.
+        # Credential redaction for user-provided text
         if isinstance(event, MessageEvent) and event.role == "user":
             from weebot.core.credential_sanitizer import sanitize
             sanitized = sanitize(event.message or "")
             if sanitized != event.message:
                 event = event.model_copy(update={"message": sanitized})
                 self._log.info("Credential sanitizer redacted user input")
-        # ────────────────────────────────────────────────────────────
 
-        # 1. Mutate in-memory session (fast, no I/O, no lock needed)
+        # Mutate in-memory session
         self._session = self._session.add_event(event)
-
-        # 1a. Save checkpoint after step completions (best-effort, non-blocking)
         if event.type == "step":
             await self._maybe_save_checkpoint()
 
-        # 2. Publish to event bus (async I/O, no lock needed)
+        # Publish to event bus
         if self._event_bus:
             await self._event_bus.publish(event)
-            # Publish domain events for key agent event types
             await self._emit_domain_event(event)
 
-        # 3. Persist to DB — lock held only for serial write.
-        #    Uses SessionPersistenceAdapter when available (retry + dead-letter);
-        #    falls back to raw repo for backward compatibility.
+        # Persist to DB
         if self._state_repo:
             async with self._emit_lock:
                 adapter = self._get_persistence_adapter()
