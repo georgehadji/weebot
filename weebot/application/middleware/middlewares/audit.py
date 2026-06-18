@@ -6,11 +6,13 @@ persistence layer.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from weebot.application.middleware.event_middleware import EventMiddleware
 from weebot.domain.models.event import AgentEvent
-from weebot.infrastructure.observability.audit_log import AuditLog
+
+if TYPE_CHECKING:
+    from weebot.infrastructure.observability.audit_log import AuditLog
 
 
 class AuditMiddleware(EventMiddleware):
@@ -21,7 +23,7 @@ class AuditMiddleware(EventMiddleware):
     before it reaches persistent storage.
     """
 
-    def __init__(self, audit_log: AuditLog | None = None) -> None:
+    def __init__(self, audit_log: Any = None) -> None:
         self._audit_log = audit_log or AuditLog()
 
     async def process(self, event: AgentEvent, context: dict[str, Any]) -> AgentEvent:
