@@ -731,3 +731,192 @@ def test_all_event_types_documented():
         "Every AgentEvent subtype must be documented in docs/EVENT_CATALOG.md.\n"
         f"Missing: {', '.join(missing)}"
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-0: Architecture test gates for 9/10 plan
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_application_services_no_infra_imports():
+    """``application/services/`` must not import from ``infrastructure`` at ANY
+    scope (import-time or lazy inside functions) — they must use DI-injected ports.
+
+    This is stricter than ``test_application_no_module_level_infra_imports``,
+    which only checks module-level imports.
+    """
+    violations: list[str] = []
+    # Files that are tracked for migration (will be removed as WP-4 progresses)
+    tracked_exceptions = {
+        "task_runner.py",            # imports metrics (tracked)
+        "meta_self_improver.py",     # imports MetaImprovementLog (tracked)
+        "strategy_transfer.py",      # imports StrategyStore (tracked)
+        "multi_source_research.py",  # imports ServiceRegistry (tracked)
+        "autonomous_learning.py",    # imports SkillStore (tracked)
+        "model_selection.py",        # imports adapter_factory (tracked)
+    }
+
+    services_dir = ROOT / "application" / "services"
+    for path in _walk_py(services_dir):
+        if path.name in tracked_exceptions:
+            continue
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("weebot.infrastructure"):
+                        rel = path.relative_to(ROOT.parent)
+                        violations.append(f"{rel}: import {alias.name!r}")
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("weebot.infrastructure"):
+                    rel = path.relative_to(ROOT.parent)
+                    violations.append(f"{rel}: from-import {node.module!r}")
+
+    assert not violations, (
+        "application/services/ must not import infrastructure at any scope.\n"
+        + "\n".join(violations) +
+        "\nInject infrastructure dependencies through DI instead."
+    )
+
+
+def test_no_services_flows_cycle():
+    """``services/`` and ``flows/`` must not have module-level mutual imports.
+    Lazy imports (inside functions) are tolerated as they don't create
+    import-time cycles. Only module-level ``import``/``from`` statements count."""
+    services_dir = ROOT / "application" / "services"
+    flows_dir = ROOT / "application" / "flows"
+
+    def _module_level_imports(paths: list, target_prefix: str) -> list[str]:
+        """Find all module-level (top-level AST children) imports of *target_prefix*."""
+        results: list[str] = []
+        for path in paths:
+            tree = _parse(path)
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.startswith(target_prefix):
+                            results.append(f"{path.name} → {alias.name}")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module and node.module.startswith(target_prefix):
+                        results.append(f"{path.name} → {node.module}")
+        return results
+
+    flows_importing_services = _module_level_imports(_walk_py(flows_dir), "weebot.application.services")
+    services_importing_flows = _module_level_imports(_walk_py(services_dir), "weebot.application.flows")
+
+    if flows_importing_services and services_importing_flows:
+        msg = (
+            "Module-level circular dependency detected between services/ and flows/.\n"
+            "Flows → Services:\n  " + "\n  ".join(flows_importing_services) + "\n"
+            "Services → Flows:\n  " + "\n  ".join(services_importing_flows) + "\n"
+            "Break the cycle by extracting shared interfaces into application/abstractions/."
+        )
+        pytest.fail(msg)
+
+
+def test_core_no_global_singletons_outside_di():
+    """``core/`` modules should not use ``global`` keyword for singleton state
+    outside an explicit allowlist (files tracked for migration).
+    """
+    # Tracked — these will be migrated to DI as part of WP-3
+    allowlisted_global_files = {
+        "bash_guard.py",         # _bash_guard_hooks — lightweight hook list
+        "structured_logger.py",  # _correlation_id — contextvar, not plain global
+        "safety.py",             # _llm_instance — class-level singleton (legacy)
+    }
+
+    violations: list[str] = []
+    for path in _walk_py(ROOT / "core"):
+        if path.name in allowlisted_global_files:
+            continue
+        content = path.read_text(encoding="utf-8")
+        if "global " in content:
+            violations.append(path.name)
+
+    assert not violations, (
+        "core/ modules must not use 'global' for singleton state.\n"
+        f"Files with 'global': {violations}\n"
+        "Migrate singletons to the DI container."
+    )
+
+
+def test_god_modules_under_800_lines():
+    """No file in ``application/`` should exceed 800 lines.
+    Allowlisted files will be decomposed under WP-2.
+
+    Limits are set so we can incrementally reduce them as decomposition progresses.
+    """
+    # Tracked — will shrink via WP-2 decomposition
+    line_allowlist: dict[str, int] = {
+        "model_selection.py": 3300,  # target: <800 (split into registry modules)
+        "_base.py": 1450,            # target: <800 (extract strategies)
+        "plan_act_flow.py": 810,     # target: <800 (close to target, minor extraction)
+    }
+
+    violations: list[str] = []
+    for path in _walk_py(ROOT / "application"):
+        content = path.read_text(encoding="utf-8")
+        lines = content.count("\n") + 1
+        limit = line_allowlist.get(path.name, 800)
+        if lines > limit:
+            rel = path.relative_to(ROOT.parent)
+            violations.append(f"{rel}: {lines} lines (limit: {limit})")
+
+    assert not violations, (
+        "Files in application/ exceed their line-count limit.\n"
+        + "\n".join(violations) +
+        "\nDecompose large files into smaller modules (see WP-2)."
+    )
+
+
+def test_orphan_ports_flagged():
+    """Every port class/protocol in ``application/ports/`` must have at least one
+    concrete implementation registered in ``infrastructure/`` or ``di/``.
+
+    Ports with zero implementations are dead abstraction and should be removed.
+    """
+    # Known orphan ports (no implementation exists)
+    known_orphans = {
+        "CapabilityGatePort",
+        "TruthBindingPort",
+    }
+
+    # Get all port class names
+    ports_dir = ROOT / "application" / "ports"
+    port_classes: set[str] = set()
+    for path in _walk_py(ports_dir):
+        tree = _parse(path)
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.ClassDef):
+                port_classes.add(node.name)
+
+    # Get all concrete implementations registered in di/
+    di_dir = ROOT / "application" / "di"
+    infra_dir = ROOT / "infrastructure"
+    implemented: set[str] = set()
+
+    # Check di/ for registrations
+    for path in _walk_py(di_dir):
+        content = path.read_text(encoding="utf-8")
+        for cls_name in port_classes:
+            if cls_name in content:
+                implemented.add(cls_name)
+
+    # Check infrastructure/ for ports
+    for path in _walk_py(infra_dir):
+        tree = _parse(path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("weebot.application.ports"):
+                        implemented.add(path.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("weebot.application.ports"):
+                    if node.names:
+                        for alias in node.names:
+                            implemented.add(alias.name)
+
+    orphans = port_classes - implemented - known_orphans
+    assert not orphans, (
+        f"Ports with zero implementations (orphans): {orphans}\n"
+        "Either implement them, remove them, or add to known_orphans if intentional."
+    )

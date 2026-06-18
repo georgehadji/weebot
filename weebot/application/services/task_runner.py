@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
-from weebot.application.flows.base_flow import BaseFlow
+from weebot.application.abstractions import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort

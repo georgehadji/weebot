@@ -149,6 +149,12 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.scheduling.scheduler import SchedulingManager
         self.register("scheduler", lambda: SchedulingManager())
 
+        # Flow registry — breaks services/flows circular dependency
+        from weebot.application.abstractions import FlowRegistry
+        self.register("flow_registry", lambda: FlowRegistry())
+        # Populate the registry with known flow types
+        self.build_flow_registry()
+
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
         self.register("mcp_bridge", self._create_mcp_bridge)
@@ -156,6 +162,38 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.configure_learning(db_path=db_path)
 
     # ── high-level builders ─────────────────────────────────────────
+
+    def build_flow_registry(self) -> "FlowRegistry":
+        """Build and populate the flow registry, then return it."""
+        from weebot.application.abstractions import FlowRegistry
+        from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.application.flows.chat_flow import ChatFlow
+
+        registry = self.get("flow_registry")
+
+        # PlanActFlow — the primary agent flow
+        registry.register("plan_act", lambda **kw: PlanActFlow(
+            llm=self.get("llm_port"),
+            tools=kw.get("tools"),
+            session=kw.get("session"),
+            event_bus=self.get("event_bus_port") if kw.get("event_bus") is not False else None,
+            model=kw.get("model") or self._maybe_get_model(),
+            mediator=self._maybe_get("mediator"),
+            state_repo=self.get("state_repo_port"),
+            skill_prompt=kw.get("skill_prompt"),
+        ))
+
+        # ChatFlow — lightweight conversational flow
+        registry.register("chat", lambda **kw: ChatFlow(
+            llm=self.get("llm_port"),
+            session=kw.get("session"),
+            event_bus=self.get("event_bus_port") if kw.get("event_bus") is not False else None,
+            model=kw.get("model") or self._maybe_get_model(),
+            mediator=self._maybe_get("mediator"),
+            state_repo=self.get("state_repo_port"),
+        ))
+
+        return registry
 
     def build_scheduler(self) -> "SchedulingManager":
         """Return the DI-managed SchedulingManager singleton."""
