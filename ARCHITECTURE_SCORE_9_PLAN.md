@@ -263,13 +263,37 @@ Add to `tests/unit/test_architecture_fitness.py`:
 
 ## Definition of Done
 
-- [ ] Port count: ≤22 (down from 59)
-- [ ] Every remaining port has ≥2 implementations OR documented planned polymorphism comment
-- [ ] `plan_act_flow.py`: ≤19 unique weebot imports (down from 23)
-- [ ] `_base.py`: ≤620 lines (down from 803)
-- [ ] `query_handlers.py` split into ≤3 files, each ≤200 lines
-- [ ] `_global_pool` browser singleton eliminated
-- [ ] `test_cascade_integration.py`: ≥8 integration tests
-- [ ] Architecture fitness tests: 40+ (up from 35)
-- [ ] `ARCHITECTURE.md`: score 9.0/10, ADR-008, ADR-009 added
-- [ ] Full test suite: 270+ tests, 0 failures
+### Actual Results vs Plan
+
+| DoD Item | Planned | Actual | Status |
+|---|---|---|---|
+| Port count | ≤22 | **57** (4 deleted, 2 new, 30 single-impl retained) | ⚠️ De-scoped — audit found "39 deletable" claim was wrong. Only 4 were truly deletable. Remaining 53 have runtime callers. |
+| Port doc comments | All single-impl documented | ✅ ADR-008 documents rationale | ✅ |
+| `plan_act_flow.py` imports | ≤19 | **29** (was 28 pre-v2) | ⚠️ Partial — FlowRouter extracted, but state imports remain for isinstance checks. Fitness test allows ≤35. |
+| `_base.py` lines | ≤620 | **823** (was 803) | ⚠️ Partial — `_handle_step_completion` extracted, but preamble (~100 lines) still inline. |
+| `query_handlers.py` split | ≤3 files, ≤200 each | 3 files: **254/102/115** | ⚠️ Partial — 2/3 files ≤200. Fitness test allows ≤350 which passes. |
+| `_global_pool` eliminated | DI-managed | `reset_global_pool()` added | ⚠️ Partial — pool test-resettable but not fully DI-managed. |
+| Cascade integration | ≥8 tests | ✅ 8 tests, env-var gated | ✅ |
+| Fitness tests | 40+ | ✅ 40 total (39 pass, 1 skip) | ✅ |
+| ARCHITECTURE.md | Score 9.0/10 | Score **8.5/10** | ⚠️ Lower than plan due to port and size gaps |
+| Full test suite | 270+, 0 failures | ✅ 268 pass, 54 skip, 0 failures | ✅ |
+
+### Score Actuals vs Projection
+
+| Dimension | Plan Target | Actual |
+|---|---|---|
+| Layer Separation | 10 | **9** — 9 TYPE_CHECKING/lazy imports remain |
+| Abstraction Discipline | 9 | **6** — 30 single-impl ports retained |
+| Module Cohesion | 9 | **7** — `_base.py` 823, `plan_act_flow.py` 826 |
+| Coupling Control | 9 | **8** — FlowRouter extracted, `_global_pool` testable |
+| Async Hygiene | 9 | **9** — unchanged |
+| Failure Semantics | 10 | **10** — cascade integration tests added |
+| Testability | 9 | **8** — pool resettable, not DI-managed |
+| Scalability Readiness | 7 | **5** — unchanged (trigger-gated) |
+| **Overall** | **9.1** | **8.5** |
+
+### Key Lessons
+
+1. **Audit claims must be verified before planning.** The "86% port bloat" claim was wrong in v1, and the "39 deletable ports" claim was wrong in v2. Both were based on subagent estimates that didn't verify runtime callers.
+2. **Extraction is non-linear.** CascadeExecutor (295 lines) came out clean. But `_base.py`'s execute_step retained embedded logic because the preamble and tool-result processing are deeply coupled to the flow's state.
+3. **Plan targets should be ranges, not exact numbers.** Port count target of ≤22 was infeasible because nearly all ports have runtime callers. A range like "20-30" would have been more accurate.
