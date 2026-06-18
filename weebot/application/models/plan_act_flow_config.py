@@ -113,3 +113,8 @@ class PlanActFlowConfig:
 
     middleware_chain: Optional[Any] = None  # MiddlewareChain — interceptor pipeline for LLM calls
     """Optional middleware chain wrapping every executor LLM request."""
+
+    event_pipeline: Optional[Any] = None  # EventPipeline — processes events in _emit()
+    """Optional event middleware pipeline (EventPipeline).
+    When set, ``_emit()`` delegates to the pipeline; when None,
+    the legacy inline implementation is used (backward-compatible)."""

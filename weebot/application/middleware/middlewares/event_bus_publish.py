@@ -19,8 +19,12 @@ class EventBusPublishMiddleware(EventMiddleware):
 
         if event_bus is not None:
             await event_bus.publish(event)
-            # Publish domain events for key agent event types
+            # Publish domain events — use context session (updated by SessionMutationMiddleware)
             if flow is not None and hasattr(flow, "_emit_domain_event"):
+                # Temporarily sync flow._session so domain events see the right session id
+                orig_session = getattr(flow, "_session", None)
+                flow._session = context.get("session", orig_session)
                 await flow._emit_domain_event(event)
+                flow._session = orig_session
 
         return event

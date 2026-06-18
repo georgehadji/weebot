@@ -183,7 +183,7 @@ class PlanActFlow(BaseFlow):
         self._persistence_adapter = None
         # ── Event pipeline middleware (WP-4) ──────────────────────
         # Built in ``configure_defaults`` and injected via config.
-        self._event_pipeline = getattr(cfg, "_event_pipeline", None)
+        self._event_pipeline = getattr(cfg, "event_pipeline", None) or getattr(cfg, "_event_pipeline", None)
 
         # ── Self-Harness: behavioural instruction block + resolver ──
         self._harness_instruction_block: str = ""
