@@ -3,11 +3,14 @@
 Extracted from PlanActFlow.run() to reduce coupling and make state
 routing testable in isolation.  Determines whether a session should
 resume, re-plan, or enter plan-review approval.
+
+Returns both the resolved FlowState and a (possibly mutated) Session,
+so callers can apply context mutations alongside the transition.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.executing import ExecutingState
@@ -21,23 +24,60 @@ class FlowRouter:
     """Resolves the initial flow state based on session context and plan status."""
 
     @staticmethod
-    def check_plan_pending_approval(session: Session, prompt: str) -> Optional[FlowState]:
-        """Check for plan_pending_approval flag and route accordingly.
+    def resolve_initial_state(
+        session: Session,
+        prompt: str,
+        extra: dict | None = None,
+    ) -> Tuple[FlowState, Session]:
+        """Determine the initial flow state for a session.
 
-        Returns a FlowState if the flag was handled, None otherwise.
+        Priority:
+        1. If plan_pending_approval is set, route based on user response.
+        2. If an incomplete plan exists, resume execution.
+        3. If the session was WAITING with a plan, resume execution.
+        4. Otherwise, start fresh planning.
+
+        Returns:
+            (FlowState, Session) — the state to transition to, and the
+            (possibly mutated) session with context flags updated.
         """
-        if not session.context.get("plan_pending_approval"):
-            return None
+        plan_pending_approval = session.context.get("plan_pending_approval")
 
-        from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
+        if plan_pending_approval:
+            from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
 
-        response = prompt.strip().lower()
-        if response in _APPROVE_TOKENS or not response:
-            logger.info("Plan approved by user — proceeding to execution")
-            return ExecutingState()
+            response = prompt.strip().lower()
 
-        logger.info("User requested plan modification: %r", prompt[:80])
-        return PlanningState()
+            # Clear the approval flag regardless of outcome
+            extra_out = {**(extra or {}), "plan_pending_approval": False}
+            updated = session.model_copy(
+                update={"context": session.context.model_copy(update={"extra": extra_out})}
+            )
+
+            if response in _APPROVE_TOKENS or not response:
+                logger.info("Plan approved by user — proceeding to execution")
+                return ExecutingState(), updated
+
+            logger.info("User requested plan modification: %r", prompt[:80])
+            # Set modification context so PlanningState re-runs
+            extra_out["_intent_reviewed"] = False
+            extra_out["_plan_modification_request"] = prompt
+            updated = session.model_copy(
+                update={"context": session.context.model_copy(update={"extra": extra_out})}
+            )
+            return PlanningState(), updated
+
+        last_plan = session.get_last_plan()
+
+        if last_plan is not None and not last_plan.is_complete():
+            logger.info("Resuming session %s with existing plan", session.id)
+            return ExecutingState(), session
+
+        if session.status == SessionStatus.WAITING and last_plan is not None:
+            logger.info("Session %s was waiting, resuming execution", session.id)
+            return ExecutingState(), session
+
+        return PlanningState(), session
 
     @staticmethod
     async def record_misalignment(
@@ -61,34 +101,3 @@ class FlowRouter:
             ))
         except ImportError:
             pass
-
-    @staticmethod
-    def resolve_initial_state(
-        session: Session,
-        prompt: str,
-        plan_pending_approval: bool = False,
-    ) -> FlowState:
-        """Determine the initial flow state for a session.
-
-        Priority:
-        1. If plan_pending_approval is set, route based on user response.
-        2. If an incomplete plan exists, resume execution.
-        3. If the session was WAITING with a plan, resume execution.
-        4. Otherwise, start fresh planning.
-        """
-        last_plan = session.get_last_plan()
-
-        if plan_pending_approval:
-            state = FlowRouter.check_plan_pending_approval(session, prompt)
-            if state is not None:
-                return state
-
-        if last_plan is not None and not last_plan.is_complete():
-            logger.info("Resuming session %s with existing plan", session.id)
-            return ExecutingState()
-
-        if session.status == SessionStatus.WAITING and last_plan is not None:
-            logger.info("Session %s was waiting, resuming execution", session.id)
-            return ExecutingState()
-
-        return PlanningState()

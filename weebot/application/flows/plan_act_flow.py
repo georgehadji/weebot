@@ -437,17 +437,27 @@ class PlanActFlow(BaseFlow):
         )
 
         # ── Resolve initial state via FlowRouter ───────────────────────────
-        initial_state = FlowRouter.resolve_initial_state(
+        initial_state, self._session = FlowRouter.resolve_initial_state(
             session=self._session,
             prompt=prompt,
-            plan_pending_approval=self._session.context.get("plan_pending_approval", False),
+            extra=self._session.context.extra if self._session.context else {},
         )
-        if isinstance(initial_state, ExecutingState) or isinstance(initial_state, PlanningState):
+        if isinstance(initial_state, ExecutingState):
             last_plan = self._session.get_last_plan()
-            if last_plan is not None and not last_plan.is_complete():
-                self._plan = last_plan
-            elif self._session.status == SessionStatus.WAITING and last_plan is not None:
-                self._plan = last_plan
+            self._plan = last_plan
+            self.set_state(initial_state)
+        elif isinstance(initial_state, PlanningState):
+            # Record misalignment if user rejected the plan, then re-plan
+            was_rejected = self._session.context.extra.get("_plan_modification_request") if self._session.context and self._session.context.extra else None
+            if was_rejected and self._misalignment_journal is not None:
+                await FlowRouter.record_misalignment(
+                    session=self._session,
+                    prompt=was_rejected,
+                    journal=self._misalignment_journal,
+                )
+            self._plan = None
+            self.set_state(initial_state)
+        else:
             self.set_state(initial_state)
         # ────────────────────────────────────────────────────────────────────
 
