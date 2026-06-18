@@ -40,6 +40,8 @@ forbidden_modules =
 ignore_imports =
     # Scheduling uses its own sqlite3 connection for cron jobs.
     weebot.scheduling.scheduler -> sqlite3
+    # schedule_tool invokes the scheduler, which lazily wires DI at runtime.
+    weebot.tools.schedule_tool -> weebot.scheduling.scheduler
     # Tools use lazy DI fallbacks to resolve services at runtime.
     # These are accepted patterns — the DI container itself owns the sqlite3 connection.
     weebot.tools.audit_tool -> weebot.application.di
