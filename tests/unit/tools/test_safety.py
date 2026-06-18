@@ -8,11 +8,9 @@ from weebot.core.safety import SafetyChecker
 def checker():
     """SafetyChecker with mocked LLM to avoid real API calls.
 
-    SafetyChecker imports ChatOpenAI lazily inside __init__ and caches it on
-    the class (), so patch the source module and clear the cached
-    singleton to ensure the mock is used.
+    SafetyChecker imports ChatOpenAI lazily inside __init__; patch the source
+    module so the constructor receives a mock instead of making real API calls.
     """
-    SafetyChecker. = None
     with patch("langchain_openai.ChatOpenAI") as mock_cls:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
@@ -20,7 +18,6 @@ def checker():
         ))
         mock_cls.return_value = mock_llm
         yield SafetyChecker()
-    SafetyChecker. = None
 
 
 class TestIsCriticalOperation:
