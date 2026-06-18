@@ -2,7 +2,7 @@
 
 Modules in this package:
 - ``_models.py`` — ``ModelTier`` enum, ``ModelConfig`` dataclass
-- ``_catalog.py`` — ``MODELS`` dict (343 LLM configurations)
+- ``_catalog.py`` — ``MODELS`` dict (327 unique LLM configurations)
 - ``_strategies.py`` — ``ModelSelectionStrategy`` ABC + 3 implementations
 - ``_service.py`` — ``ModelSelectionService`` (strategy-based routing)
 """

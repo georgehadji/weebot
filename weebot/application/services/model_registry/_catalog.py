@@ -1,5 +1,8 @@
-"""Model catalog — authoritative registry of LLM configurations.
-Extracted from model_selection.py during WP-2.
+"""Model catalog — 327 unique LLM configurations (343 entries, 16 free/paid duplicates).
+
+Extracted from model_selection.py during WP-2 god module decomposition.
+Duplicate keys (free variant overwritten by paid) are a pre-existing issue
+tracked for the model_registry v2 cleanup.
 """
 from __future__ import annotations
 
