@@ -37,6 +37,17 @@ class CodeReviewResult(BaseModel):
         description="info → cosmetic; warning → quality; error → correctness/security",
     )
 
+    over_engineered: bool = Field(
+        default=False,
+        description=(
+            "True if the step output uses more code, files, or dependencies "
+            "than necessary. Applies ponytail YAGNI ladder to the output: "
+            "was an abstraction added with only one implementation (rung 1)? "
+            "Could stdlib replace custom code (rung 2)? Was a new dependency "
+            "installed for a one-liner (rung 4)?"
+        ),
+    )
+
     @property
     def is_actionable(self) -> bool:
         """True when the verdict requires the flow to change its path."""

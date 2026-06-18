@@ -1,0 +1,82 @@
+# Ponytail YAGNI harness — default pre-flight check for all executor steps.
+#
+# Injects the ponytail 6-rung YAGNI ladder before every step, forcing the
+# agent to question whether each step needs to be executed at all.
+# Based on github.com/DietrichGebert/ponytail (MIT, 36.2k stars).
+#
+# This config extends v0.2.0 with the yagni_preflight instruction surface.
+# The yagni_preflight block is assembled BEFORE the harness instructions,
+# so it gates whether execution happens at all.
+#
+# To enable: set as the default model harness resolver config, or pass
+# harness_version="ponytail" in ExecutorAgent config.
+
+version: "ponytail"
+description: "Ponytail YAGNI harness — default YAGNI pre-flight check"
+evolved_from: "0.2.0"
+
+canonicalizer:
+  strict_mode: false
+  coerce_types: true
+  contracts_dir: "config/contracts/"
+
+skill_retrieval:
+  enabled: true
+  retriever: "bm25"
+  top_k: 3
+  index_path: null
+
+trajectory:
+  repetition_threshold: 4
+  stagnation_window: 3
+  budget_hotspot_ratio: 0.4
+  exhaustion_ratio: 0.9
+
+# ── Behavioural instruction surfaces ──────────────────────────────────────
+
+instructions:
+  yagni_preflight: |
+    BEFORE executing any step, stop at the first rung that holds:
+
+    1. YAGNI — does this step need to exist at all?
+       Previous steps may have satisfied it. If so, say "skipped: covered by [previous step]"
+       and move on without a tool call.
+
+    2. STDLIB — does the Python standard library or a built-in shell command cover this?
+       Use `python_execute` with stdlib imports instead of installing a package.
+       Use shell built-ins (`grep`, `sed`, `awk`) instead of custom scripts.
+
+    3. NATIVE — does the platform already provide this?
+       Browser has <input type="date">, filesystem has os.path, SQLite has constraints.
+       Don't build what the runtime already gives you.
+
+    4. DEPENDENCY — does an already-installed package solve this?
+       `pip list` before `pip install`. Never add a new dependency for what a few lines can do.
+
+    5. ONE-LINE — can this be a single command or expression?
+       One `bash` call instead of a `file_editor` write + `python_execute` run.
+       One `file_editor` edit instead of three sequential edits.
+
+    6. MINIMUM — only then: execute the planned step.
+       Write the shortest code that works. No scaffolding, no "for later," no config for
+       values that never change. The best code is the code never written.
+
+    Never skip: validation, error handling, security checks, or accessibility.
+    After execution, if you skipped anything, append a one-line note:
+    "skipped: [what was skipped] = add when [condition that would justify it]"
+
+    Mark deliberate simplifications with a `ponytail:` comment:
+    ```python
+    # ponytail: global lock — per-account locks if throughput matters
+    ```
+    so future readers know it was intentional, not ignorant.
+
+  execution: |
+    After each tool call, if you skipped anything, append a one-line note:
+    "skipped: [what] — add when [condition]"
+    Mark deliberate shortcuts with a `ponytail:` comment.
+
+runtime_control:
+  enabled: true
+  max_recent_tool_errors: 3
+  max_total_tool_messages: 20

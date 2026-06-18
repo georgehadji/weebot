@@ -42,6 +42,32 @@ class InstructionConfig(BaseModel):
         description="Guidance for recovering from tool-call failures",
     )
 
+    yagni_preflight: str = Field(
+        default=(
+            "Before executing any step, stop at the first rung that holds:\n"
+            "1. Does this step still need to be executed?\n"
+            "   Previous steps may have covered it. If so, skip this step and note why.\n"
+            "2. Does an existing tool call in the conversation already cover this?\n"
+            "   Reuse its output instead of repeating the call.\n"
+            "3. Can a single bash/python command replace the planned sequence?\n"
+            "   One command is cheaper than three tool calls.\n"
+            "4. Will the tool call output be smaller than the code it would produce?\n"
+            "   If the output is a single line, just output it. Don't call a tool.\n"
+            "5. Is the tool call necessary at all?\n"
+            "   Only then: execute the planned step.\n"
+            "\n"
+            "After execution, append 'skipped: [X], add when [Y]' if you skipped anything.\n"
+            "Never skip: validation, error handling, security checks, or accessibility.\n"
+            "Active every response. No drift back to over-building.\n"
+            "Based on ponytail (github.com/DietrichGebert/ponytail)."
+        ),
+        description=(
+            "Ponytail YAGNI ladder — forces the agent to question whether each "
+            "step needs to be executed, from 'skip entirely' (rung 1) to 'execute "
+            "as planned' (rung 5). Based on the ponytail skill."
+        ),
+    )
+
 
 class RuntimeControlConfig(BaseModel):
     """Runtime policy knobs — guardrails the optimizer can tighten or loosen.

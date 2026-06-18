@@ -31,6 +31,8 @@ class HarnessPromptAssembler:
     """
 
     BLOCK_TEMPLATE = (
+        "\n\n## Pre-Flight Check (YAGNI)\n\n"
+        "{yagni_preflight_section}"
         "\n\n## Harness Instructions (model-specific)\n\n"
         "{bootstrap_section}"
         "{execution_section}"
@@ -66,6 +68,10 @@ class HarnessPromptAssembler:
 
         # Build each section independently to avoid positional misalignment
         section_map = {
+            "yagni_preflight_section": (
+                f"{instructions.yagni_preflight}\n"
+                if instructions.yagni_preflight else ""
+            ),
             "bootstrap_section": (
                 f"- **Boot:** {instructions.bootstrap}\n"
                 if instructions.bootstrap else ""
@@ -133,6 +139,8 @@ class HarnessPromptAssembler:
             return "harness: none"
 
         active = []
+        if instructions.yagni_preflight:
+            active.append("yagni")
         if instructions.bootstrap:
             active.append("bootstrap")
         if instructions.execution:

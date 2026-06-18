@@ -1168,3 +1168,49 @@ def test_cascade_executor_importable():
     from weebot.application.agents.executor._cascade import CascadeExecutor
     assert hasattr(CascadeExecutor, 'call_with_cascade')
     assert hasattr(CascadeExecutor, 'cascade_is_tripped')
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-7: Ponytail YAGNI harness integration
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_ponytail_harness_block_present():
+    """InstructionConfig must have yagni_preflight with default ladder."""
+    from weebot.domain.models.harness_instructions import InstructionConfig
+    c = InstructionConfig()
+    assert len(c.yagni_preflight) > 100, 'yagni_preflight too short'
+    assert 'rung' in c.yagni_preflight, 'Missing rung ladder'
+    assert 'ponytail' in c.yagni_preflight.lower(), 'Missing ponytail reference'
+
+
+def test_ponytail_harness_assembled():
+    """HarnessPromptAssembler must include yagni_preflight."""
+    from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
+    from weebot.domain.models.harness_instructions import InstructionConfig
+    block = HarnessPromptAssembler.assemble(instructions=InstructionConfig())
+    assert 'Pre-Flight' in block
+    assert 'rung' in block
+
+
+def test_code_review_result_has_over_engineered():
+    """CodeReviewResult must include over_engineered field."""
+    from weebot.domain.models.code_review import CodeReviewResult
+    r = CodeReviewResult()
+    assert hasattr(r, 'over_engineered')
+    assert r.over_engineered is False  # default
+
+
+def test_code_review_prompt_includes_conciseness():
+    """Code reviewer prompt must check for over-engineering."""
+    from weebot.application.services.code_reviewer_service import _REVIEWER_SYSTEM_PROMPT
+    assert 'over_engineered' in _REVIEWER_SYSTEM_PROMPT or 'Over-engineering' in _REVIEWER_SYSTEM_PROMPT
+
+
+def test_code_review_result_over_engineered_parseable():
+    """CodeReviewerService must parse over_engineered from LLM response."""
+    from weebot.domain.models.code_review import CodeReviewResult
+    # Simulate LLM returning over_engineered=true
+    r = CodeReviewResult(over_engineered=True)
+    assert r.over_engineered is True
+    r2 = CodeReviewResult(over_engineered=False)
+    assert r2.over_engineered is False

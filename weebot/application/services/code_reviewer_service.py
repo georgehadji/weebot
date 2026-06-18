@@ -26,6 +26,12 @@ Check for:
 3. Missing error handling: uncaught exceptions, unhandled failure modes
 4. Architectural violations: wrong layer imports, mutating shared state, circular deps
 5. Scope creep: the step did something outside its description
+6. Over-engineering (ponytail YAGNI ladder):
+   - Abstraction with only one implementation ("interface for later")
+   - Custom code when stdlib or installed dependency covers it
+   - New dependency installed for what a few lines could do
+   - Configuration for a value that never changes
+   - Files or classes created where a one-liner would suffice
 
 Do NOT flag:
 - Style preferences, minor naming choices, or improvements unrelated to correctness
@@ -34,11 +40,12 @@ Do NOT flag:
 
 Respond with a single JSON object (no markdown, no fences):
 {
-  "verdict":    "approved" | "revise" | "reject",
-  "issues":     ["specific finding 1", ...],
-  "hint":       "one actionable instruction for the agent if verdict is revise",
-  "confidence": 0.0-1.0,
-  "severity":   "info" | "warning" | "error"
+  "verdict":        "approved" | "revise" | "reject",
+  "issues":         ["specific finding 1", ...],
+  "hint":           "one actionable instruction for the agent if verdict is revise",
+  "confidence":     0.0-1.0,
+  "severity":       "info" | "warning" | "error",
+  "over_engineered": false
 }
 
 Use "reject" only for unrecoverable issues (security breach, data loss risk).
@@ -99,6 +106,7 @@ class CodeReviewerService(CodeReviewerPort):
                     hint=data.get("hint", ""),
                     confidence=conf,
                     severity=data.get("severity", "info"),
+                    over_engineered=data.get("over_engineered", False),
                 )
                 logger.info(
                     "Code review step=%s verdict=%s confidence=%.2f issues=%d",
