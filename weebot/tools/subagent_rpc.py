@@ -137,6 +137,38 @@ class SubagentRPCTool(BaseTool):
     }
 
     _timeout: float = PrivateAttr(default=60.0)
+    _tool_registry: Any = PrivateAttr(default=None)
+
+    def set_tool_registry(self, registry: Any) -> None:
+        """Inject the tool registry for real RPC dispatch.
+
+        Without this, RPC calls return stub results.
+        """
+        self._tool_registry = registry
+
+    async def _dispatch_single_tool(self, tool_name: str, args: dict) -> dict[str, Any]:
+        """Execute a single tool call through the registry."""
+        if self._tool_registry is None:
+            return {
+                "success": True,
+                "output": f"[stub] tool '{tool_name}' would execute here (no registry)",
+            }
+
+        try:
+            # Build a tool collection for the admin role and find the tool
+            from weebot.tools.base import ToolCollection
+            collection = self._tool_registry.create_tool_collection("admin")
+            result = await collection.execute_tool(tool_name, **args)
+            return {
+                "success": result.success,
+                "output": result.output[:4096] if result.output else "",
+                "error": result.error[:1000] if result.error else None,
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "error": f"Tool dispatch failed: {exc}",
+            }
 
     async def _rpc_loop(
         self,
@@ -177,12 +209,25 @@ class SubagentRPCTool(BaseTool):
                 if "_result" in request:
                     break  # Subprocess signaled completion
 
-                if "tool" in request or "_batch" in request:
-                    # Respond with a stub result so the subprocess continues
-                    response = json.dumps({
-                        "success": True,
-                        "output": f"[stub] tool '{request.get('tool', 'batch')}' would execute here",
-                    }) + "\n"
+                if "tool" in request and not request.get("_batch"):
+                    # Single tool call — dispatch through registry
+                    tool_name = request.get("tool", "")
+                    args = request.get("args", {})
+                    result = await self._dispatch_single_tool(tool_name, args)
+                    response = json.dumps(result) + "\n"
+                    proc.stdin.write(response.encode("utf-8"))
+                    await proc.stdin.drain()
+                elif request.get("_batch"):
+                    # Batch call — dispatch each tool sequentially
+                    calls = request.get("calls", [])
+                    results = []
+                    for call in calls:
+                        r = await self._dispatch_single_tool(
+                            call.get("tool", ""),
+                            call.get("args", {}),
+                        )
+                        results.append(r)
+                    response = json.dumps(results) + "\n"
                     proc.stdin.write(response.encode("utf-8"))
                     await proc.stdin.drain()
 

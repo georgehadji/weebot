@@ -613,12 +613,13 @@ def _parse_cron_expression(expr: str) -> dict:
     expr = expr.strip().lower()
 
     # Interval expressions
-    if expr.endswith("min") or expr.endswith("mins"):
-        minutes = int(expr.rstrip("mins"))
-        return {"minute": f"*/{minutes}"}
-    if expr.endswith("h") or expr.endswith("hour") or expr.endswith("hours"):
-        hours = int(expr.rstrip("hours"))
-        return {"hour": f"*/{hours}"}
+    import re as _cron_re
+    m = _cron_re.match(r'^(\d+)\s*(min|mins|m)$', expr)
+    if m:
+        return {"minute": f"*/{m.group(1)}"}
+    m = _cron_re.match(r'^(\d+)\s*(h|hour|hours)$', expr)
+    if m:
+        return {"hour": f"*/{m.group(1)}"}
 
     # Standard 5-field cron
     parts = expr.split()
