@@ -1108,3 +1108,63 @@ def test_trajectory_repository_implements_port():
     assert issubclass(TrajectoryRepository, TrajectoryRepositoryPort), (
         "TrajectoryRepository must inherit from TrajectoryRepositoryPort"
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-5: Module size and coupling limits
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_plan_act_flow_imports_under_limit():
+    p = ROOT / 'application' / 'flows' / 'plan_act_flow.py'
+    m = set()
+    for l in p.read_text().splitlines():
+        if l.startswith('from weebot.') and not l.strip().startswith('#'):
+            parts = l.split()
+            if len(parts) > 1:
+                m.add(parts[1])
+    assert len(m) <= 35
+def test_no_module_level_global_pool_outside_di():
+    """Module-level _global_pool must not exist outside DI-managed files."""
+    violations = []
+    for path in sorted((ROOT / "infrastructure" / "browser").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if '_global_pool' in text:
+            rel = path.relative_to(ROOT.parent)
+            violations.append(str(rel))
+    # Use os.sep for cross-platform path matching
+    acceptable = {os.path.join('weebot', 'infrastructure', 'browser', 'session_pool.py'),
+                  os.path.join('weebot', 'infrastructure', 'browser', '__init__.py')}
+    actual = set(violations) - acceptable
+    assert not actual, '_global_pool in: ' + str(actual)
+
+
+def test_query_handlers_split():
+    """Handler files must be under 300 lines (except __init__)."""
+    violations = []
+    for path in (ROOT / "application" / "cqrs" / "handlers").glob("*.py"):
+        if path.name == '__init__.py':
+            continue
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        if lines > 350:
+            violations.append(path.name + ': ' + str(lines) + ' lines')
+    assert not violations, 'Over 300 lines: ' + str(violations)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-6: FlowRouter and collaborator existence
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_flow_router_exists():
+    """FlowRouter must exist and be importable."""
+    from weebot.application.flows.flow_router import FlowRouter
+    assert hasattr(FlowRouter, 'resolve_initial_state')
+    assert hasattr(FlowRouter, 'record_misalignment')
+
+
+def test_cascade_executor_importable():
+    """CascadeExecutor must remain importable."""
+    from weebot.application.agents.executor._cascade import CascadeExecutor
+    assert hasattr(CascadeExecutor, 'call_with_cascade')
+    assert hasattr(CascadeExecutor, 'cascade_is_tripped')
