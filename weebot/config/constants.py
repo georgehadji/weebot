@@ -153,6 +153,9 @@ TEMPERATURE_PRECISE: float = 0.1
 TEMPERATURE_BALANCED: float = 0.3
 """Moderate creativity — summarization, synthesis, debate, memory operations."""
 
+TEMPERATURE_EXPLORATORY: float = 0.4
+"""Light divergence — premortem analysis, adversarial brainstorming."""
+
 TEMPERATURE_CREATIVE: float = 0.7
 """High diversity — chat agent, mixture-of-agents reference calls."""
 
@@ -162,8 +165,20 @@ TEMPERATURE_KIMI: float = 1.0
 # ========================================================================
 # max_tokens presets — semantic names for agent-specific output limits
 # ========================================================================
+MAX_TOKENS_PROBE: int = 5
+"""Liveness / health-probe calls — single-word or yes/no ping."""
+
+MAX_TOKENS_VERDICT: int = 10
+"""Hard yes/no or score-only gate responses — verification classifiers."""
+
 MAX_TOKENS_TINY: int = 128
 """Short diagnostic output — layer diagnostics, skill curation."""
+
+MAX_TOKENS_BRIEF: int = 100
+"""Very short output — query expansion hints, lightweight classifiers."""
+
+MAX_TOKENS_CRISP: int = 150
+"""Terse structured output — CoVe step labels, chain-of-thought bullets."""
 
 MAX_TOKENS_COMPACT: int = 256
 """Brief responses — meta self-improver."""
