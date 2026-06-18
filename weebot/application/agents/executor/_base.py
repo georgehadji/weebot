@@ -544,6 +544,7 @@ class ExecutorAgent:
         fast_fail: bool = False,
         first_error: dict[str, str] | None = None,
     ) -> LLMResponse | None:
+        import time as _cascade_time
         """Try a single model call with tiered timeout.
 
         Returns LLMResponse on success, None on transient failure,
@@ -552,6 +553,7 @@ class ExecutorAgent:
         if self._cascade_is_tripped(model_id):
             return None
         effective = min(timeout, 15.0) if fast_fail else timeout
+        start = _cascade_time.monotonic()
         try:
             resp = await asyncio.wait_for(
                 self._llm.chat(
@@ -563,9 +565,12 @@ class ExecutorAgent:
                 ),
                 timeout=effective,
             )
+            elapsed = (_cascade_time.monotonic() - start) * 1000
             if resp and (resp.content or resp.tool_calls):
                 self._cascade_reset(model_id)
+                logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
                 return resp
+            logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
             return None
         except asyncio.TimeoutError:
             logger.debug("Model %s timed out (%.1fs)", model_id, effective)

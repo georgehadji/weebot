@@ -341,10 +341,14 @@ class FactoriesMixin:
             SessionMutationMiddleware,
             TruthBindingMiddleware,
         )
+        from weebot.application.middleware.middlewares.audit import AuditMiddleware
+        from weebot.infrastructure.observability.audit_log import AuditLog
 
         pipeline = EventPipeline([
             TruthBindingMiddleware(),
             CredentialSanitizerMiddleware(),
+            # Audit trail — record sanitized event before session mutation
+            AuditMiddleware(audit_log=AuditLog()),
             SessionMutationMiddleware(),
             EventBusPublishMiddleware(),
             PersistenceMiddleware(),

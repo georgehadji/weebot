@@ -258,6 +258,7 @@ class PlanActFlow(BaseFlow):
         if pipeline is not None:
             context = {
                 "session": self._session,
+                "session_id": self._session.id if self._session else None,
                 "flow": self,
                 "event_bus": self._event_bus,
                 "state_repo": self._state_repo,
