@@ -16,6 +16,7 @@ from weebot.application.flows.states.updating import UpdatingState
 from weebot.application.flows.states.summarizing import SummarizingState
 from weebot.application.flows.states.completed import CompletedState
 from weebot.application.flows.states.base import AgentStatus
+from weebot.application.flows.flow_router import FlowRouter
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -435,63 +436,19 @@ class PlanActFlow(BaseFlow):
             event_count=len(self._session.events),
         )
 
-        # Initial Resume/Start logic
-        last_plan = self._session.get_last_plan()
-
-        # ── Plan review resume (Enhancement 4) ──────────────────────────────
-        # Check for plan_pending_approval BEFORE the normal resume routing so
-        # we don't fall through to ExecutingState while the user's response
-        # is still being processed.
-        if self._session.context.get("plan_pending_approval"):
-            from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
-            # Clear the flag
-            _new_extra_pr = {**self._session.context.extra, "plan_pending_approval": False}
-            _new_ctx_pr = self._session.context.model_copy(update={"extra": _new_extra_pr})
-            self._session = self._session.model_copy(update={"context": _new_ctx_pr})
-            if last_plan is not None:
+        # ── Resolve initial state via FlowRouter ───────────────────────────
+        initial_state = FlowRouter.resolve_initial_state(
+            session=self._session,
+            prompt=prompt,
+            plan_pending_approval=self._session.context.get("plan_pending_approval", False),
+        )
+        if isinstance(initial_state, ExecutingState) or isinstance(initial_state, PlanningState):
+            last_plan = self._session.get_last_plan()
+            if last_plan is not None and not last_plan.is_complete():
                 self._plan = last_plan
-            _response = prompt.strip().lower()
-            if _response in _APPROVE_TOKENS or not _response:
-                self._log.info("Plan approved by user — proceeding to execution")
-                self.set_state(ExecutingState())
-            else:
-                self._log.info("User requested plan modification: %r", prompt[:80])
-                # Record user correction in misalignment journal (best-effort)
-                if self._misalignment_journal is not None:
-                    import asyncio as _asyncio_pr
-                    try:
-                        from weebot.domain.models.misalignment_entry import MisalignmentEntry
-                        _asyncio_pr.ensure_future(self._misalignment_journal.record(
-                            MisalignmentEntry(
-                                session_id=self._session.id,
-                                project_path=self._session.context.get("working_dir", ""),
-                                symptom="user_correction",
-                                correction_text=prompt[:500],
-                            )
-                        ))
-                    except ImportError:
-                        pass
-                # Clear intent reviewed flag and nullify plan so PlanningState re-runs
-                _new_extra_pr2 = {
-                    **self._session.context.extra,
-                    "_intent_reviewed": False,
-                    "_plan_modification_request": prompt,
-                }
-                _new_ctx_pr2 = self._session.context.model_copy(update={"extra": _new_extra_pr2})
-                self._session = self._session.model_copy(update={"context": _new_ctx_pr2})
-                self._plan = None
-                self.set_state(PlanningState())
-        elif last_plan is not None and not last_plan.is_complete():
-            self._plan = last_plan
-            self.set_state(ExecutingState())
-            self._log.info("Resuming session %s with existing plan", self._session.id)
-        elif self._session.status == SessionStatus.WAITING and last_plan is not None:
-            self._plan = last_plan
-            self.set_state(ExecutingState())
-            self._log.info("Session %s was waiting, resuming execution", self._session.id)
-        else:
-            # Fresh session, or WAITING with no plan (from a failed prior run)
-            self.set_state(PlanningState())
+            elif self._session.status == SessionStatus.WAITING and last_plan is not None:
+                self._plan = last_plan
+            self.set_state(initial_state)
         # ────────────────────────────────────────────────────────────────────
 
         if self._hooks is not None:

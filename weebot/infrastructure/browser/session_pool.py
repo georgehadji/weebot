@@ -448,3 +448,11 @@ async def close_global_pool() -> None:
             await _global_pool.close()
             _global_pool = None
             logger.info("Global browser pool closed")
+
+
+async def reset_global_pool() -> None:
+    """Reset the global pool — close if running, clear reference.
+
+    Used by test fixtures for clean isolation.
+    """
+    await close_global_pool()

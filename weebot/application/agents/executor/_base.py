@@ -734,6 +734,35 @@ class ExecutorAgent:
             if abort_step:
                 break
 
+        # Delegate to extracted step-completion handler
+        async for event in self._handle_step_completion(
+            abort_step=abort_step,
+            loop_error=loop_error,
+            step_result=step_result,
+            recent_tool_signatures=list(recent_tool_signatures),
+            tool_calls_attempted=tool_calls_attempted,
+            tool_calls_succeeded=tool_calls_succeeded,
+            step=step,
+        ):
+            yield event
+            if isinstance(event, ErrorEvent):
+                loop_error = event.error
+
+    # ── Phase 2: Parallel tool execution ─────────────────────────
+    # Per-tool semaphore gating is handled by ToolCollection.execute().
+    # The executor simply fires all tool calls concurrently via gather.
+
+    async def _handle_step_completion(
+        self,
+        abort_step: bool,
+        loop_error: Optional[str],
+        step_result: str,
+        recent_tool_signatures: list,
+        tool_calls_attempted: int,
+        tool_calls_succeeded: int,
+        step: "Step",
+    ):
+        """Handle post-execution step completion: success, failure, stuck, or hollow."""
         if not abort_step and loop_error is None and self._step_budget.exhausted and not step_result:
             loop_error = build_stuck_error(
                 step=step,
@@ -743,9 +772,6 @@ class ExecutorAgent:
             )
             yield ErrorEvent(error=loop_error)
 
-        # Detect hollow completion: tools were attempted but none succeeded and
-        # the LLM produced no substantive output.  Surface this as a failure so
-        # the flow can replan rather than silently marking the step done.
         if (
             not abort_step
             and loop_error is None
@@ -762,8 +788,6 @@ class ExecutorAgent:
             yield ErrorEvent(error=loop_error)
 
         if loop_error:
-            # Yield a terminal step event so event-stream consumers see
-            # the step's final state before the generator exits.
             yield StepEvent(
                 step_id=step.id,
                 description=step.description,
@@ -772,10 +796,6 @@ class ExecutorAgent:
             return
 
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.COMPLETED)
-
-    # ── Phase 2: Parallel tool execution ─────────────────────────
-    # Per-tool semaphore gating is handled by ToolCollection.execute().
-    # The executor simply fires all tool calls concurrently via gather.
 
 # ── Phase 2 helpers ────────────────────────────────────────────────────────────
 

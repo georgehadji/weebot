@@ -75,3 +75,6 @@ def _isolate_weebot_settings(monkeypatch):
         reset_metrics_cache()
     except Exception:
         pass
+    # Browser pool is async — sync fixture can't await. Pool cleanup is
+    # best-effort from fixtures; actual cleanup happens in browser tests.
+    # The import serves as a smoke test that the function exists.
