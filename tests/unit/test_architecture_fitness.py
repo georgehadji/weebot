@@ -852,7 +852,7 @@ def test_god_modules_under_800_lines():
     line_allowlist: dict[str, int] = {
         "model_selection.py": 100,        # re-export shim (was 3265)
         "_catalog.py": 3200,              # data catalog (327 model configs — pure data)
-        "_base.py": 1450,                 # target: <800 (extract strategies)
+        "_base.py": 1400,  # was 1450 (WP-2b cascade extraction)                 # target: <800 (extract strategies)
         "plan_act_flow.py": 830,          # target: <800 (close to target, minor extraction)
         "information_synthesis.py": 900,  # WP-2: 850 lines, target: <800 (extract summarizer)
     }

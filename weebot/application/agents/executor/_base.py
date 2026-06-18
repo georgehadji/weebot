@@ -18,7 +18,12 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.services.conversation_compressor import ConversationCompressor
 from weebot.application.services.step_budget import StepBudget
 from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
-from weebot.config.constants import MAX_EXECUTOR_STEPS, TEMPERATURE_BALANCED
+from weebot.config.constants import (
+    MAX_EXECUTOR_STEPS,
+    MAX_TOKENS_SHORT,
+    TEMPERATURE_BALANCED,
+    TEMPERATURE_DETERMINISTIC,
+)
 from weebot.config.model_refs import (
     MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2,
     MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4,
@@ -353,16 +358,22 @@ class ExecutorAgent:
         before the new one is appended.
         """
         from weebot.infrastructure.adapters.llm._multimodal import build_image_message
+        updated = []
         for msg in self._conversation_buffer:
             content = msg.get("content")
-            if not isinstance(content, list):
-                continue
-            msg["content"] = [
-                {"type": "text", "text": "[earlier screenshot omitted]"}
-                if isinstance(b, dict) and b.get("type") == "image"
-                else b
-                for b in content
-            ]
+            if isinstance(content, list):
+                new_content = [
+                    {"type": "text", "text": "[earlier screenshot omitted]"}
+                    if isinstance(b, dict) and b.get("type") == "image"
+                    else b
+                    for b in content
+                ]
+                updated.append({**msg, "content": new_content})
+            else:
+                updated.append(msg)
+        self._conversation_buffer.clear()
+        for m in updated:
+            self._conversation_buffer.append(m)
         self._conversation_buffer.append(
             build_image_message(f"Current screen after {tool_name}:", image_b64)
         )
@@ -443,25 +454,28 @@ class ExecutorAgent:
         ]
 
         try:
-            import json
             response = await self._llm.chat(
                 messages=messages,
                 model=self._model,
-                max_tokens=512,
-                temperature=0.0,
+                max_tokens=MAX_TOKENS_SHORT,
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
-            # Count the reflection call's tokens so token_usage stays accurate
-            # and the buffer can compact if needed.
-            await self._track_usage_and_maybe_compress(response)
-            raw = response.content or ""
-            # Strip possible markdown fence
-            raw = raw.strip()
+        except Exception:
+            logger.debug("Vision reflection LLM call failed for %s (non-fatal)", tool_name)
+            return None
+
+        # Track tokens outside the parse try-block so compaction failures
+        # are not misattributed as JSON parse errors.
+        await self._track_usage_and_maybe_compress(response)
+
+        try:
+            raw = (response.content or "").strip()
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
             data = json.loads(raw)
             return VisionReflection.model_validate(data)
         except Exception:
-            logger.debug("Vision reflection parse failed for %s (non-fatal)", tool_name)
+            logger.debug("Vision reflection parse/validate failed for %s (non-fatal)", tool_name)
             return None
 
     def _inject_reflection(self, reflection: "VisionReflection") -> None:
@@ -498,6 +512,79 @@ class ExecutorAgent:
             "total_tokens": self._total_prompt_tokens + self._total_completion_tokens,
         }
 
+    @staticmethod
+    def _is_fast_fail_error(exc: Exception) -> bool:
+        """Return True if *exc* indicates an auth or not-found error."""
+        msg = str(exc).lower()
+        return any(kw in msg for kw in (
+            "404", "401", "403", "not found", "unauthorized",
+            "permission denied", "invalid api key", "resource_not_found",
+        ))
+
+    def _cascade_is_tripped(self, model_id: str) -> bool:
+        """Return True if *model_id* has tripped its per-session circuit breaker."""
+        if not hasattr(self, "_circuit_breaker_failures"):
+            self._circuit_breaker_failures: dict[str, int] = {}
+        return self._circuit_breaker_failures.get(model_id, 0) >= 5
+
+    def _cascade_record_failure(self, model_id: str) -> None:
+        """Increment the per-session failure counter for *model_id*."""
+        if not hasattr(self, "_circuit_breaker_failures"):
+            self._circuit_breaker_failures: dict[str, int] = {}
+        c = self._circuit_breaker_failures[model_id] = self._circuit_breaker_failures.get(model_id, 0) + 1
+        if c >= 3:
+            logger.warning("Circuit breaker tripped for %s", model_id)
+
+    def _cascade_reset(self, model_id: str) -> None:
+        """Reset the per-session failure counter for *model_id* (call on success)."""
+        if hasattr(self, "_circuit_breaker_failures"):
+            self._circuit_breaker_failures[model_id] = 0
+
+    async def _cascade_try_chat(
+        self,
+        messages: List[Dict[str, Any]],
+        model_id: str,
+        timeout: float = 15.0,
+        fast_fail: bool = False,
+        first_error: dict[str, str] | None = None,
+    ) -> LLMResponse | None:
+        """Try a single model call with tiered timeout.
+
+        Returns LLMResponse on success, None on transient failure,
+        raises on fatal errors (auth, context length).
+        """
+        if self._cascade_is_tripped(model_id):
+            return None
+        effective = min(timeout, 15.0) if fast_fail else timeout
+        try:
+            resp = await asyncio.wait_for(
+                self._llm.chat(
+                    messages=messages,
+                    tools=self._tools.to_params(),
+                    tool_choice="auto",
+                    model=model_id,
+                    temperature=TEMPERATURE_BALANCED,
+                ),
+                timeout=effective,
+            )
+            if resp and (resp.content or resp.tool_calls):
+                self._cascade_reset(model_id)
+                return resp
+            return None
+        except asyncio.TimeoutError:
+            logger.debug("Model %s timed out (%.1fs)", model_id, effective)
+            return None
+        except Exception as exc:
+            if ErrorClassifier.should_fail_fast(exc):
+                raise
+            if first_error is not None and model_id not in first_error:
+                first_error[model_id] = str(exc)[:300] or type(exc).__name__
+                logger.warning("Model %s first error: %s", model_id, first_error[model_id])
+            else:
+                logger.debug("Model %s failed (%.1fs): %s", model_id, effective, exc)
+            self._cascade_record_failure(model_id)
+            return None
+
     async def _call_with_cascade(
         self, messages: List[Dict[str, Any]], description: str = ""
     ) -> LLMResponse:
@@ -508,160 +595,72 @@ class ExecutorAgent:
         2. Task-specific model (per ``_model_for_step()``) — parallel candidate
         3. Remaining cascade tiers: tier3 → tier4
         """
-        is_review = self._is_review_step(description)
-        tier2_model = self._REVIEW_MODEL if is_review else self._TIER2_MODEL
-
-        # ── Per-role model cascade (primary + 2 fallbacks) ──────────
+        # ── Resolve models ──────────────────────────────────────────
         from weebot.config.model_refs import get_model_cascade_for_role
         role_cascade = get_model_cascade_for_role(self._agent_role)
         role_primary = role_cascade[0]
         role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
         role_fallback2 = role_cascade[2] if len(role_cascade) > 2 else self._TIER3_MODEL
-
         task_model = self._model_for_step(description)
 
-        # ── Circuit breaker: skip models that failed 3+ times this session ──
-        if not hasattr(self, "_circuit_breaker_failures"):
-            self._circuit_breaker_failures: dict[str, int] = {}
-        _cb = self._circuit_breaker_failures
+        fast_fail: bool = False
+        first_error: dict[str, str] = {}
 
-        def _is_tripped(model_id: str) -> bool:
-            return _cb.get(model_id, 0) >= 5
+        async def _try(model: str, tmo: float) -> LLMResponse | None:
+            nonlocal fast_fail
+            resp = await self._cascade_try_chat(messages, model, tmo, fast_fail, first_error)
+            if resp is None and not fast_fail:
+                # Check if the last error triggered fast-fail
+                fast_fail = any(
+                    self._is_fast_fail_error(ee) for ee in first_error.values()
+                    if ee
+                ) if first_error else False
+            return resp
 
-        def _record_failure(model_id: str) -> None:
-            _cb[model_id] = _cb.get(model_id, 0) + 1
-            if _cb[model_id] >= 3:
-                logger.warning("Circuit breaker tripped for %s", model_id)
-
-        # First-error tracking per model for diagnostics (Fix 8)
-        _first_error: dict[str, str] = {}
-
-        # ── Fast-fail detection ─────────────────────────────────────
-        # If any model returns 404/401/403, the API key or credits are
-        # likely the problem — reduce timeouts for remaining models to
-        # avoid wasting 60-90s per model.
-        _fast_fail_detected: bool = False
-
-        @staticmethod
-        def _is_fast_fail_error(exc: Exception) -> bool:
-            """Return True if *exc* indicates an auth or not-found error."""
-            msg = str(exc).lower()
-            return any(kw in msg for kw in (
-                "404", "401", "403", "not found", "unauthorized",
-                "permission denied", "invalid api key", "resource_not_found",
-            ))
-
-        # ── Single chat helper with tiered timeout ──────────────────
-        async def _try_chat(model_id: str, timeout: float = 15.0) -> LLMResponse | None:
-            nonlocal _fast_fail_detected
-            if _is_tripped(model_id):
-                return None
-            # If fast-fail was already detected, cap timeout at 15s
-            effective_timeout = min(timeout, 15.0) if _fast_fail_detected else timeout
-            try:
-                resp = await asyncio.wait_for(
-                    self._llm.chat(
-                        messages=messages,
-                        tools=self._tools.to_params(),
-                        tool_choice="auto",
-                        model=model_id,
-                        temperature=TEMPERATURE_BALANCED,
-                    ),
-                    timeout=effective_timeout,
-                )
-                if resp and (resp.content or resp.tool_calls):
-                    # Success — reset failure counter for this model
-                    _cb[model_id] = 0
-                    return resp
-                # Empty response but no exception — don't count as failure
-                return None
-            except asyncio.TimeoutError:
-                logger.debug("Model %s timed out (%.1fs) — retrying", model_id, effective_timeout)
-                return None
-            except Exception as exc:
-                if isinstance(exc, Exception) and ErrorClassifier.should_fail_fast(exc):
-                    raise
-                # Detect fast-fail on first such error
-                if not _fast_fail_detected and _is_fast_fail_error(exc):
-                    _fast_fail_detected = True
-                    logger.warning(
-                        "Fast-fail detected (%s on %s) — reducing remaining cascade timeouts to 15s",
-                        type(exc).__name__, model_id,
-                    )
-                if model_id not in _first_error:
-                    err_detail = str(exc)[:300] if str(exc) else type(exc).__name__
-                    _first_error[model_id] = err_detail
-                    logger.warning("Model %s first error: %s", model_id, err_detail)
-                else:
-                    logger.debug("Model %s failed (%.1fs timeout): %s", model_id, effective_timeout, exc)
-                _record_failure(model_id)
-                return None
-
-        # ── Phase 1: fire role-primary + role-fallback1 + task-model in parallel (90s) ──
-        # Thinking models (Kimi, DeepSeek, GLM) need 60-90s for tool-use turns.
-        # If fast-fail was already triggered, these are capped to 15s internally.
-        parallel_models: list[str] = []
-        for m in (role_primary, task_model, role_fallback1):
-            if m and m not in parallel_models:
-                parallel_models.append(m)
-
-        tasks = {asyncio.ensure_future(_try_chat(m, timeout=90.0)): m for m in parallel_models}
-        if tasks:
-            done, _pending = await asyncio.wait(
-                tasks.keys(), return_when=asyncio.FIRST_COMPLETED
-            )
+        # ── Phase 1: parallel probes (90s timeout) ──────────────────
+        parallel = list(dict.fromkeys(
+            m for m in (role_primary, task_model, role_fallback1) if m
+        ))
+        if parallel:
+            tasks = {asyncio.ensure_future(_try(m, 90.0)): m for m in parallel}
+            done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
             for fut in done:
                 resp = fut.result()
                 if resp is not None:
-                    for pending_fut in _pending:
-                        pending_fut.cancel()
-                    # ── Silently retrieve exceptions from cancelled tasks ──
-                    # If a pending task raised before being cancelled, its
-                    # exception is "never retrieved" and Python logs a noisy
-                    # warning.  Calling .exception() on each cancelled future
-                    # suppresses that warning without losing diagnostic info.
-                    for pfut in _pending:
-                        if pfut.cancelled():
-                            continue
-                        try:
-                            exc = pfut.exception()
-                        except asyncio.InvalidStateError:
-                            # Task hasn't completed yet — skip
-                            continue
-                        if exc is not None:
-                            logger.debug(
-                                "Suppressed exception from cancelled cascade task: %s",
-                                exc,
-                            )
+                    for pf in pending:
+                        pf.cancel()
+                    for pf in pending:
+                        if not pf.cancelled():
+                            try:
+                                pf.exception()  # suppress "never retrieved" warning
+                            except (asyncio.InvalidStateError, asyncio.CancelledError):
+                                pass
                     await self._track_usage_and_maybe_compress(resp)
                     return resp
 
-        # ── Phase 2: sequential — role-fallback2 → tier4 (60s timeout) ──
-        # If fast-fail was detected, these are capped to 15s internally.
+        # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
-                     if m and not _is_tripped(m) and m not in parallel_models]
-        for model_id in remaining:
-            resp = await _try_chat(model_id, timeout=60.0)
+                     if m and not self._cascade_is_tripped(m) and m not in parallel]
+        for m in remaining:
+            resp = await _try(m, 60.0)
             if resp is not None:
                 await self._track_usage_and_maybe_compress(resp)
                 return resp
 
-        # ── Live model refresh fallback (all-404 rescue) ──────────
-        # If every model returned 404/not-found, the model IDs may be stale.
-        # Try fetching current free models from OpenRouter as a last resort.
-        if _fast_fail_detected and _first_error and all(
-            any(kw in (err or "").lower() for kw in ("404", "not found"))
-            for err in _first_error.values()
+        # ── Live model rescue (all-404) ─────────────────────────────
+        if fast_fail and first_error and all(
+            any(kw in (e or "").lower() for kw in ("404", "not found"))
+            for e in first_error.values()
         ):
             rescue_model = await _try_live_model_rescue(messages)
             if rescue_model is not None:
                 await self._track_usage_and_maybe_compress(rescue_model)
                 return rescue_model
 
-        # ── All models tripped — raise terminal error ──
+        # ── Terminal ────────────────────────────────────────────────
         raise AllModelsTrippedError(
-            f"All models in the cascade have tripped their circuit breakers. "
-            f"Check OpenRouter credits at https://openrouter.ai/credits"
+            "All models in the cascade have tripped their circuit breakers. "
+            "Check OpenRouter credits at https://openrouter.ai/credits"
         )
 
     @staticmethod
@@ -1355,7 +1354,7 @@ class ExecutorAgent:
         response = await self._llm.chat(
             messages=messages,
             model=self._model,
-            temperature=0.3,
+            temperature=TEMPERATURE_BALANCED,
         )
         yield MessageEvent(role="assistant", message=response.content or "Done.")
 
