@@ -163,6 +163,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.core.egress_guard import EgressGuard
         self.register(EgressGuard, self._create_egress_guard)
 
+        # Global LLM concurrency pool — bounds parallel API calls (WP-8)
+        from weebot.application.strategies.llm_pool import LLMPool
+        self.register_instance("llm_pool", LLMPool(max_concurrent=12))
+
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
         self.register("mcp_bridge", self._create_mcp_bridge)
