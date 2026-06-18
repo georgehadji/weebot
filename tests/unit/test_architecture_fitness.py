@@ -821,8 +821,7 @@ def test_core_no_global_singletons_outside_di():
     allowlisted_global_files = {
         "bash_guard.py",              # _bash_guard_hooks — lightweight hook list
         "structured_logger.py",       # _correlation_id — contextvar, not plain global
-        "safety.py",                  # _llm_instance — class-level singleton (legacy)
-        "alerting.py",                # WP-3: alert registry singleton
+              "alerting.py",                # WP-3: alert registry singleton
         "behavior_integration.py",    # WP-3: integration state singleton
         "error_system_handler.py",    # WP-3: error handler singleton
         "memory_monitor.py",          # WP-3: memory monitor singleton

@@ -1,22 +1,25 @@
 """Counterfactual Simulation and Safety mechanisms."""
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 from langchain_core.prompts import PromptTemplate
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.core.approval_policy import ExecApprovalPolicy
 
 
 class SafetyChecker:
-    """Implements Counterfactual Simulation for critical operations."""
+    """Implements Counterfactual Simulation for critical operations.
+
+    The LLM instance is now per-instance (default) or injectable via
+    the ``llm`` parameter for testing.  Register via DI container.
+    """
 
     CRITICAL_KEYWORDS = ["delete", "remove", "format", "kill", "stop-process", "rm", "del"]
 
-    # Class-level singleton: all SafetyChecker instances share one ChatOpenAI
-    _llm_instance = None
-
-    def __init__(self):
-        if SafetyChecker._llm_instance is None:
+    def __init__(self, llm: Any = None):
+        if llm is not None:
+            self.llm = llm
+        else:
             from langchain_openai import ChatOpenAI
-            SafetyChecker._llm_instance = ChatOpenAI(temperature=0)
-        self.llm = SafetyChecker._llm_instance
+            self.llm = ChatOpenAI(temperature=TEMPERATURE_DETERMINISTIC)
         self.approval_policy = ExecApprovalPolicy()
     
     def is_critical_operation(self, action: str, tool: str) -> bool:
