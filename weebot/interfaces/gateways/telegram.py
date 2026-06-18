@@ -298,10 +298,6 @@ class TelegramAdapter(GatewayAdapter):
 
         async with aiohttp.ClientSession(headers=headers) as session:
             for path in response.media_paths:
-                if not _os.path.exists(path):
-                    logger.warning("Media file not found: %s", path)
-                    continue
-
                 ext = Path(path).suffix.lower()
                 caption = response.text[:1024] if response.text else ""
 

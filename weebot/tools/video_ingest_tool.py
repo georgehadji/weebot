@@ -332,12 +332,13 @@ class VideoIngestTool(BaseTool):
 
         # Count already-written lines so we can resume after a crash.
         skipped = 0
-        if os.path.exists(output_path):
-            try:
-                with open(output_path, "r", encoding="utf-8") as fh:
-                    skipped = sum(1 for line in fh if line.strip())
-            except OSError:
-                skipped = 0
+        try:
+            with open(output_path, "r", encoding="utf-8") as fh:
+                skipped = sum(1 for line in fh if line.strip())
+        except FileNotFoundError:
+            skipped = 0
+        except OSError:
+            skipped = 0
 
         # Fetch notes for this project
         rows = await self._repo.list_notes(project_id=project_id, limit=10_000)

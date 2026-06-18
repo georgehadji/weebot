@@ -109,9 +109,28 @@ class ParquetActivitySink(AnalyticsSinkPort):
 
     async def _periodic_flush(self) -> None:
         """Flush periodically at the configured interval."""
-        while True:
-            await asyncio.sleep(self._flush_interval)
-            await self.flush()
+        try:
+            while True:
+                await asyncio.sleep(self._flush_interval)
+                await self.flush()
+        except asyncio.CancelledError:
+            pass  # Normal shutdown — remaining events flushed in close()
+
+    async def close(self) -> None:
+        """Cancel background flush task and flush remaining buffered events."""
+        if self._flush_task and not self._flush_task.done():
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        await self.flush()
+
+    async def __aenter__(self) -> "ParquetActivitySink":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
 
     async def _write_batch(self, rows: list[dict[str, Any]]) -> None:
         """Write a batch of rows to partitioned Parquet files."""
