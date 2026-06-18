@@ -199,6 +199,7 @@ class ExecutorAgent:
         self._compressor: Optional[ConversationCompressor] = None
         # Thread-safe step budget
         self._step_budget = StepBudget(max_steps=max_steps)
+        self._circuit_breaker_failures: dict[str, int] = {}
 
     def set_harness_block(self, block: str | None) -> None:
         """Update the harness instruction block for the next step.
@@ -523,22 +524,17 @@ class ExecutorAgent:
 
     def _cascade_is_tripped(self, model_id: str) -> bool:
         """Return True if *model_id* has tripped its per-session circuit breaker."""
-        if not hasattr(self, "_circuit_breaker_failures"):
-            self._circuit_breaker_failures: dict[str, int] = {}
         return self._circuit_breaker_failures.get(model_id, 0) >= 5
 
     def _cascade_record_failure(self, model_id: str) -> None:
         """Increment the per-session failure counter for *model_id*."""
-        if not hasattr(self, "_circuit_breaker_failures"):
-            self._circuit_breaker_failures: dict[str, int] = {}
         c = self._circuit_breaker_failures[model_id] = self._circuit_breaker_failures.get(model_id, 0) + 1
         if c >= 3:
             logger.warning("Circuit breaker tripped for %s", model_id)
 
     def _cascade_reset(self, model_id: str) -> None:
         """Reset the per-session failure counter for *model_id* (call on success)."""
-        if hasattr(self, "_circuit_breaker_failures"):
-            self._circuit_breaker_failures[model_id] = 0
+        self._circuit_breaker_failures[model_id] = 0
 
     async def _cascade_try_chat(
         self,
@@ -611,10 +607,11 @@ class ExecutorAgent:
             resp = await self._cascade_try_chat(messages, model, tmo, fast_fail, first_error)
             if resp is None and not fast_fail:
                 # Check if the last error triggered fast-fail
-                fast_fail = any(
-                    self._is_fast_fail_error(ee) for ee in first_error.values()
-                    if ee
-                ) if first_error else False
+                if any(self._is_fast_fail_error(ee) for ee in first_error.values() if ee):
+                    fast_fail = True
+                    logger.warning(
+                        "Fast-fail detected — reducing remaining cascade timeouts to 15s"
+                    )
             return resp
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
