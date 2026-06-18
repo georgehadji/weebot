@@ -9,10 +9,10 @@ def checker():
     """SafetyChecker with mocked LLM to avoid real API calls.
 
     SafetyChecker imports ChatOpenAI lazily inside __init__ and caches it on
-    the class (_llm_instance), so patch the source module and clear the cached
+    the class (), so patch the source module and clear the cached
     singleton to ensure the mock is used.
     """
-    SafetyChecker._llm_instance = None
+    SafetyChecker. = None
     with patch("langchain_openai.ChatOpenAI") as mock_cls:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
@@ -20,7 +20,7 @@ def checker():
         ))
         mock_cls.return_value = mock_llm
         yield SafetyChecker()
-    SafetyChecker._llm_instance = None
+    SafetyChecker. = None
 
 
 class TestIsCriticalOperation:

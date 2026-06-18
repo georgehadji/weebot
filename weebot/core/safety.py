@@ -1,5 +1,5 @@
 """Counterfactual Simulation and Safety mechanisms."""
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from langchain_core.prompts import PromptTemplate
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.core.approval_policy import ExecApprovalPolicy
