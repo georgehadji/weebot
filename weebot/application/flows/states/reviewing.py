@@ -101,6 +101,7 @@ class ReviewingState(FlowState):
                 "confidence": result.confidence,
                 "severity": result.severity,
                 "issues": result.issues,
+                "over_engineered": result.over_engineered,
             },
         )
 
@@ -110,17 +111,25 @@ class ReviewingState(FlowState):
             context.set_state(ExecutingState())
 
         elif result.verdict == "revise":
+            # ── Augment hint when step was over-engineered ──────────
+            hint = result.hint
+            if result.over_engineered:
+                over_eng_hint = (
+                    " Simplify to the shortest correct version. "
+                    "One file if possible, one function if possible, one line if possible."
+                )
+                hint = (hint + over_eng_hint) if hint else over_eng_hint.strip()
             logger.info(
                 "Review REVISE step %s — hint: %s",
-                self._step.id, result.hint[:120],
+                self._step.id, hint[:120],
             )
             revised_step = self._step.model_copy(update={
                 "status": StepStatus.PENDING,
                 "retry_count": self._step.retry_count + 1,
                 "description": (
                     f"{self._step.description}\n"
-                    f"[Code review hint: {result.hint}]"
-                    if result.hint
+                    f"[Code review hint: {hint}]"
+                    if hint
                     else self._step.description
                 ),
             })
