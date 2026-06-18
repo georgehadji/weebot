@@ -38,11 +38,12 @@ class StrategyTransferService:
         min_score: float = 0.7,
         max_strategies: int = 3,
     ) -> None:
-        if store is not None:
-            self._store = store
-        else:
-            from weebot.infrastructure.persistence.strategy_store import StrategyStore as _SS
-            self._store = _SS()
+        if store is None:
+            raise TypeError(
+                "StrategyTransferService requires a store. "
+                "Inject StrategyStore via DI container."
+            )
+        self._store = store
         self._min_score = min_score
         self._max_strategies = max_strategies
 

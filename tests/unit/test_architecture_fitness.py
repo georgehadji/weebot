@@ -747,13 +747,12 @@ def test_application_services_no_infra_imports():
     violations: list[str] = []
     # Files that are tracked for migration (will be removed as WP-4 progresses)
     tracked_exceptions = {
-            "_service.py",           # imports adapter_factory (lazy, tracked)
-        "task_runner.py",            # imports metrics (tracked)
-        "meta_self_improver.py",     # imports MetaImprovementLog (tracked)
-        "strategy_transfer.py",      # imports StrategyStore (tracked)
-        "multi_source_research.py",  # imports ServiceRegistry (tracked)
-        "autonomous_learning.py",    # imports SkillStore (tracked)
-        "model_selection.py",        # imports adapter_factory (tracked)
+            "_service.py",              # imports adapter_factory — lazy method import
+        "task_runner.py",               # imports metrics — lazy function import
+        "autonomous_learning.py",        # TYPE_CHECKING only — SkillStore annotation
+        "meta_self_improver.py",         # TYPE_CHECKING only — MetaImprovementLog annotation (lazy fallback removed)
+        "multi_source_research.py",      # TYPE_CHECKING only — ServiceRegistry annotation
+        "strategy_transfer.py",          # TYPE_CHECKING only — StrategyStore annotation (lazy fallback removed)
     }
 
     services_dir = ROOT / "application" / "services"

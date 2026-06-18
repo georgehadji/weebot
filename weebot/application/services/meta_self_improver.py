@@ -63,11 +63,12 @@ class MetaSelfImprover:
         audit_log: "MetaImprovementLog | None" = None,
     ) -> None:
         self._llm = llm
-        if audit_log is not None:
-            self._audit_log = audit_log
-        else:
-            from weebot.infrastructure.persistence.meta_improvement_log import MetaImprovementLog as _MIL
-            self._audit_log = _MIL()
+        if audit_log is None:
+            raise TypeError(
+                "MetaSelfImprover requires an audit_log. "
+                "Inject MetaImprovementLog via DI container."
+            )
+        self._audit_log = audit_log
 
     @property
     def is_enabled(self) -> bool:
