@@ -5,19 +5,20 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Awaitable, Union
 
 from weebot.domain.models.event import AgentEvent, DomainEvent
+from weebot.application.ports.event_publisher_port import EventPublisherPort
 
 
 EventHandler = Callable[[AgentEvent], Awaitable[None]]
 DomainEventHandler = Callable[[DomainEvent], Awaitable[None]]
 
 
-class EventBusPort(ABC):
-    """Abstract interface for async event distribution."""
+class EventBusPort(EventPublisherPort):
+    """Full event bus interface: publishing + subscriber management.
 
-    @abstractmethod
-    async def publish(self, event: AgentEvent) -> None:
-        """Publish an agent event to all subscribers."""
-        ...
+    Extends ``EventPublisherPort`` with subscriber-management methods
+    needed by ``AsyncEventBus``.  Components that only need to publish
+    events should depend on ``EventPublisherPort`` instead.
+    """
 
     @abstractmethod
     async def publish_domain_event(self, event: DomainEvent) -> None:

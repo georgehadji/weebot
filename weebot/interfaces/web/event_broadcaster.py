@@ -5,14 +5,14 @@ import json
 import logging
 from typing import Any
 
-from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.event_publisher_port import EventPublisherPort
 from weebot.domain.models.event import AgentEvent
 from .websocket import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
 
-class WebSocketEventBroadcaster(EventBusPort):
+class WebSocketEventBroadcaster(EventPublisherPort):
     """Broadcasts events to WebSocket clients.
     
     This adapter implements EventBusPort to receive events from the internal
