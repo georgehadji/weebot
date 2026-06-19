@@ -274,20 +274,37 @@ class VerifyingState(FlowState):
         # Gate 1: Unverified facts — did VerifyingState find inconsistencies?
         # (Tracked via VerificationEvents in the session — check from execute())
         # Gate 2: Blocked commands — check session events for BLOCKED tool calls
+        # Only flag if the blocked command was the LAST attempt (not retried).
+        # A blocked command followed by a successful retry is normal recovery.
         session = flow._session
         from weebot.domain.models.event import ToolEvent
+        blocked_tool_names: set[str] = set()
+        successful_tool_names: set[str] = set()
         for event in session.events:
             if isinstance(event, ToolEvent):
-                result = getattr(event, "result", "")
-                if result and "blocked" in str(result).lower():
-                    failures.append("blocked_commands")
-                    break
+                tool_name = getattr(event, "tool_name", "")
+                result = str(getattr(event, "result", ""))
+                status = str(getattr(event, "status", ""))
+                if "blocked" in result.lower():
+                    blocked_tool_names.add(tool_name)
+                if "success" in result.lower() or status == "success":
+                    successful_tool_names.add(tool_name)
 
-        # Gate 3: Unresolved errors — check for ErrorEvents without recovery
-        from weebot.domain.models.event import ErrorEvent, WaitForUserEvent
+        # Only flag blocked commands that were never retried successfully
+        unresolved_blocks = blocked_tool_names - successful_tool_names
+        if unresolved_blocks:
+            failures.append(f"blocked_commands:{','.join(list(unresolved_blocks)[:2])}")
+
+        # Gate 3: Unresolved errors — check for ErrorEvents without recovery.
+        # An error followed by a successful step completion is normal recovery.
+        from weebot.domain.models.event import ErrorEvent, WaitForUserEvent, StepEvent, StepStatus
         has_error = any(isinstance(e, ErrorEvent) for e in session.events)
         has_recovery = any(isinstance(e, WaitForUserEvent) for e in session.events)
-        if has_error and not has_recovery:
+        has_completed_step = any(
+            isinstance(e, StepEvent) and getattr(e, "status", None) == StepStatus.COMPLETED
+            for e in session.events
+        )
+        if has_error and not has_recovery and not has_completed_step:
             failures.append("unresolved_errors")
 
         # Gate 4: Token budget — check executor token usage
@@ -316,12 +333,94 @@ class VerifyingState(FlowState):
         artifact_failures = await self._gate_artifact_verification(flow)
         failures.extend(artifact_failures)
 
+        # Gate 8: Outcome verification (product-mode Principle 5)
+        _product_ctx = (
+            flow._session.context.extra.get("product_context")
+            if hasattr(flow._session.context, "extra")
+            else None
+        )
+        if _product_ctx and _product_ctx.get("success_metric"):
+            outcome_failure = await self._gate_outcome_verification(
+                flow, _product_ctx,
+            )
+            if outcome_failure:
+                failures.append(outcome_failure)
+
         if failures:
             _log.info("Gate sweep failed: %s", failures)
         else:
             _log.info("Gate sweep passed — all gates clean")
 
         return failures
+
+    async def _gate_outcome_verification(
+        self, flow, product_context: dict,
+    ) -> str | None:
+        """Check whether the completed work achieves the stated success metric.
+
+        product-mode Principle 5: "Define Done by Outcome, Not Output."
+        This is an 8th gate in the gate sweep.  Non-blocking — even a
+        'missed' verdict does not prevent session completion (diagnostic only).
+
+        Returns a failure string if outcome was missed/partial, or None on pass.
+        """
+        success_metric = product_context.get("success_metric", "")
+        if not success_metric:
+            return None
+
+        plan = flow._plan
+        if plan is None:
+            return None
+
+        completed = [s for s in plan.steps if s.status.value == "completed"]
+        if not completed:
+            return None
+
+        output_summary = "\n".join(
+            f"Step {s.id}: {s.description}\nResult: {s.result or '(no result)'}"
+            for s in completed[-5:]
+        )
+
+        prompt = (
+            f"Success metric: {success_metric}\n\n"
+            f"Agent output:\n{output_summary[:800]}\n\n"
+            f"Did the agent achieve the success metric? "
+            f"Answer ONLY with one word: achieved, partial, missed, or unknown."
+        )
+        try:
+            from weebot.config.constants import (
+                MAX_TOKENS_VERDICT,
+                TEMPERATURE_DETERMINISTIC,
+            )
+
+            response = await flow._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_VERDICT,
+            )
+            verdict = (response.content or "").strip().lower()
+            _log.info(
+                "Outcome gate verdict: %s (metric: %s)",
+                verdict, success_metric[:80],
+            )
+
+            # Store verdict on session for analytics
+            extra = getattr(flow._session.context, "extra", {}) or {}
+            extra["outcome_verdict"] = verdict
+            flow._session = flow._session.model_copy(
+                update={
+                    "context": flow._session.context.model_copy(
+                        update={"extra": extra}
+                    )
+                }
+            )
+
+            if verdict in ("missed", "partial"):
+                return f"outcome_{verdict}:{success_metric[:40]}"
+            return None
+        except Exception:
+            _log.debug("Outcome gate failed — non-blocking", exc_info=True)
+            return None
 
     async def _gate_artifact_verification(self, flow) -> list[str]:
         """Verify execution artifacts exist and tests passed.
@@ -390,8 +489,10 @@ class VerifyingState(FlowState):
         """Generate verification questions from the summary."""
         prompt = (
             f"Given this task summary, list up to {n} specific fact-checking "
-            f"questions that could verify its accuracy.  Each question should "
-            f"target a concrete claim (dates, counts, names, file paths, results).\n\n"
+            f"questions that could verify its accuracy.  Each question must:\n"
+            f"- target a concrete claim mentioned in the summary\n"
+            f"- be answerable from the summary text alone (dates, counts, names, results)\n"
+            f"- NOT require filesystem access, tool execution, or external lookups\n\n"
             f"Summary:\n{summary}\n\n"
             f"Verification questions (one per line, no numbering):"
         )
@@ -413,10 +514,44 @@ class VerifyingState(FlowState):
             return []
 
     async def _answer_independently(self, flow, question: str) -> str:
-        """Answer a verification question WITHOUT seeing the original summary."""
+        """Answer a verification question WITHOUT seeing the original summary.
+
+        The CoVe paper requires independent verification (no summary access)
+        to prevent hallucination repetition.  However, the verifier DOES get
+        access to raw tool outputs — these are ground-truth evidence, not LLM
+        output.  Without them, every verification answers "I don't have that
+        information" because the LLM has zero factual context.
+        """
+        # Collect raw tool outputs as ground-truth evidence
+        from weebot.domain.models.event import ToolEvent
+        tool_outputs: list[str] = []
+        for event in flow._session.events:
+            if isinstance(event, ToolEvent):
+                tool_name = getattr(event, "tool_name", "unknown")
+                result = getattr(event, "result", "")
+                if result and isinstance(result, str):
+                    # Truncate long outputs but preserve the evidence
+                    truncated = result[:800] if len(result) > 800 else result
+                    tool_outputs.append(f"[{tool_name}] {truncated}")
+
+        evidence_block = ""
+        if tool_outputs:
+            # Show the last 5 tool outputs as factual evidence
+            evidence_block = (
+                "\n\n## Factual Evidence (tool outputs, ground truth)\n"
+                + "\n---\n".join(tool_outputs[-5:])
+            )
+
+        prompt = (
+            f"Answer this verification question using ONLY the factual evidence"
+            f" provided below.  If the evidence doesn't contain the answer,"
+            f" state exactly what is missing rather than guessing.\n\n"
+            f"Question: {question}"
+            f"{evidence_block}"
+        )
         try:
             response = await flow._llm.chat(
-                messages=[{"role": "user", "content": question}],
+                messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_CRISP,
             )
