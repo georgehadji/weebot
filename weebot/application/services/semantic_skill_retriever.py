@@ -9,6 +9,10 @@ Gated behind ``SEMANTIC_SKILL_RETRIEVAL_ENABLED`` — when the flag is off,
 
 Maps to SkillWeaver's bi-encoder + cosine similarity stage, substituting
 numpy brute-force search for FAISS (unnecessary below 1,000 skills).
+
+The underlying vector store is abstracted behind ``VectorStorePort``.
+Default is ``NumpyVectorStore`` (in-memory, numpy).  A future persistent
+backend (e.g. Zvec) can be swapped without changing this class.
 """
 from __future__ import annotations
 
@@ -18,10 +22,15 @@ from typing import Optional
 import numpy as np
 
 from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
+from weebot.application.ports.vector_store_port import VectorStorePort
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import SkillMatch
+from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
 
 logger = logging.getLogger(__name__)
+
+# Default embedding dimension for all-MiniLM-L6-v2
+_DEFAULT_DIM = 384
 
 
 class SemanticSkillRetriever(SkillRetrieverPort):
@@ -36,19 +45,25 @@ class SemanticSkillRetriever(SkillRetrieverPort):
         registry: Loaded ``SkillRegistry`` instance.
         top_k: Default number of results to return when ``top_k`` is not
             provided to ``retrieve()``.
+        store: Backing vector store.  Defaults to ``NumpyVectorStore(dim=384)``.
+            Swap to a persistent store (e.g. ZvecVectorStore) when needed.
     """
 
-    def __init__(self, registry: SkillRegistry, top_k: int = 3) -> None:
+    def __init__(
+        self,
+        registry: SkillRegistry,
+        top_k: int = 3,
+        store: Optional[VectorStorePort] = None,
+    ) -> None:
         self._registry = registry
         self._top_k = top_k
-        # Index state — built lazily on first retrieve() or explicitly via refresh()
-        self._skill_names: list[str] = []
-        self._skill_descriptions: list[str] = []
-        self._skill_previews: list[str] = []
-        self._embedding_matrix: Optional[np.ndarray] = None  # shape (N, 384)
+        self._store = store or NumpyVectorStore(dim=_DEFAULT_DIM)
         self._index_built = False
         self._embeddings = None  # LocalEmbeddings singleton, lazy
-        logger.debug("SemanticSkillRetriever created (index deferred)")
+        logger.debug(
+            "SemanticSkillRetriever created (store=%s)",
+            type(self._store).__name__,
+        )
 
     # ── Port implementation ─────────────────────────────────────────
 
@@ -64,8 +79,6 @@ class SemanticSkillRetriever(SkillRetrieverPort):
                 return []  # refresh failed or empty registry
 
         k = top_k if top_k > 0 else self._top_k
-        if self._embedding_matrix is None or not self._skill_names:
-            return []
 
         try:
             emb = self._get_embeddings()
@@ -80,33 +93,26 @@ class SemanticSkillRetriever(SkillRetrieverPort):
             logger.warning("SemanticSkillRetriever: query embedding failed — %s", exc)
             return []
 
-        # Cosine similarity = dot product of L2-normalized vectors
-        scores = np.dot(self._embedding_matrix, query_vec)
-        top_indices = np.argsort(scores)[::-1][:k]
+        store_results = await self._store.query(query_vec, top_k=k)
 
-        results: list[SkillMatch] = []
-        for idx in top_indices:
-            s = scores[idx]
-            if s <= 0.0:
-                continue
-            results.append(SkillMatch(
-                skill_name=self._skill_names[idx],
-                description=self._skill_descriptions[idx],
-                content_preview=self._skill_previews[idx],
-                score=round(float(s), 4),
-            ))
-        return results
+        return [
+            SkillMatch(
+                skill_name=doc_id,
+                description=meta.get("description", ""),
+                content_preview=meta.get("preview", ""),
+                score=round(score, 4),
+            )
+            for doc_id, score, meta in store_results
+        ]
 
     async def refresh(self) -> None:
         """Rebuild the embedding index from the current skill registry.
 
-        Safe to call while retrievals are in-flight — numpy array assignment
-        is atomic under the GIL.
+        Encodes all skills via ``LocalEmbeddings`` and pushes them into
+        the backing vector store via ``upsert``.
         """
         skills = self._registry.list_all()
         if not skills:
-            self._skill_names, self._skill_descriptions = [], []
-            self._skill_previews, self._embedding_matrix = [], None
             self._index_built = False
             logger.info("SemanticSkillRetriever: empty index (no skills loaded)")
             return
@@ -128,8 +134,6 @@ class SemanticSkillRetriever(SkillRetrieverPort):
                 texts.append(text)
 
         if not texts:
-            self._skill_names, self._skill_descriptions = [], []
-            self._skill_previews, self._embedding_matrix = [], None
             self._index_built = False
             logger.info("SemanticSkillRetriever: empty index (no texts)")
             return
@@ -145,19 +149,20 @@ class SemanticSkillRetriever(SkillRetrieverPort):
             matrix = matrix / norms
         except Exception as exc:
             logger.error("SemanticSkillRetriever: embedding failed — %s", exc)
-            self._embedding_matrix = None
             self._index_built = False
             return
 
-        self._skill_names = names
-        self._skill_descriptions = descriptions
-        self._skill_previews = previews
-        self._embedding_matrix = matrix
+        # Push to vector store
+        metadata = [
+            {"description": d, "preview": p}
+            for d, p in zip(descriptions, previews)
+        ]
+        await self._store.upsert(names, matrix, metadata)
         self._index_built = True
         logger.info(
-            "SemanticSkillRetriever: index built — %d skills, %d-dim",
+            "SemanticSkillRetriever: index built — %d skills (%s)",
             len(names),
-            matrix.shape[1],
+            type(self._store).__name__,
         )
 
     # ── Helpers ────────────────────────────────────────────────────
