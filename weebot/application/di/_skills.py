@@ -15,18 +15,40 @@ class SkillsMixin:
     def _create_skill_retriever(self):
         """Create a skill retriever with optional reranking.
 
-        Returns a ``BM25SkillRetriever`` wrapped with ``RerankingSkillRetriever``
-        if ``RerankPort`` is available, otherwise returns the raw BM25 retriever.
+        When ``SEMANTIC_SKILL_RETRIEVAL_ENABLED`` is True (Phase 3),
+        returns a ``SemanticSkillRetriever`` (all-MiniLM-L6-v2 embeddings)
+        wrapped with ``RerankingSkillRetriever`` if ``RerankPort`` is available.
+        When the flag is off, falls back to the original ``BM25SkillRetriever``
+        pipeline.
         """
         from weebot.application.skills.skill_registry import SkillRegistry
-        from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
         from weebot.application.ports.rerank_port import RerankPort
+        from weebot.config.learning import SEMANTIC_SKILL_RETRIEVAL_ENABLED
 
         registry = SkillRegistry()
         registry.load_all()
-        base = BM25SkillRetriever(registry)
 
-        # Wrap with reranking if available
+        # Phase 3: semantic (embedding-based) first stage
+        if SEMANTIC_SKILL_RETRIEVAL_ENABLED:
+            from weebot.application.services.semantic_skill_retriever import (
+                SemanticSkillRetriever,
+            )
+            base = SemanticSkillRetriever(registry)
+            rerank = self._maybe_get(RerankPort)
+            if rerank is not None:
+                from weebot.application.services.reranking_skill_retriever import (
+                    RerankingSkillRetriever,
+                )
+                logger.info(
+                    "Skill retriever: semantic (all-MiniLM-L6-v2) + Cohere rerank"
+                )
+                return RerankingSkillRetriever(base, rerank)
+            logger.info("Skill retriever: semantic (all-MiniLM-L6-v2)")
+            return base
+
+        # Default: BM25-based retrieval (unchanged)
+        from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
+        base = BM25SkillRetriever(registry)
         rerank = self._maybe_get(RerankPort)
         if rerank is not None:
             from weebot.application.services.reranking_skill_retriever import (
@@ -34,7 +56,6 @@ class SkillsMixin:
             )
             logger.info("Skill retriever: BM25 + Cohere rerank")
             return RerankingSkillRetriever(base, rerank)
-
         logger.info("Skill retriever: BM25 only (RerankPort not configured)")
         return base
 

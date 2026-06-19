@@ -84,6 +84,9 @@ class Plan(BaseModel):
     message: str = Field(default="", description="Initial message/plan summary")
     steps: List[Step] = Field(default_factory=list)
     status: PlanStatus = Field(default=PlanStatus.CREATED)
+    # Enhancement 4: tracks how many times the planner's step-splitting heuristics
+    # fired during plan parsing (proxy for decomposition granularity problems).
+    _heuristic_splits: int = 0
 
     def get_next_step(self) -> Optional[Step]:
         """Return the first step that is not done."""

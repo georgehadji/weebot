@@ -17,7 +17,7 @@ canonicalizer:
 
 skill_retrieval:
   enabled: true
-  retriever: "bm25"
+  retriever: "auto"
   top_k: 3
   index_path: null
 

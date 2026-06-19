@@ -303,7 +303,12 @@ class FactoriesMixin:
         return MCPClientManager(config={})
 
     def _create_mcp_bridge(self):
-        """Create an MCPToolRegistryBridge with the MCP client injected."""
+        """Create an MCPToolRegistryBridge with the MCP client injected.
+
+        Enhancement 3: wires the ``MCPToolSkillIndexer`` when
+        ``SEMANTIC_SKILL_RETRIEVAL_ENABLED`` is True, so discovered
+        MCP tools are automatically indexed as retrievable skills.
+        """
         from weebot.application.services.mcp_tool_registry_bridge import (
             MCPToolRegistryBridge,
         )
@@ -315,6 +320,23 @@ class FactoriesMixin:
             mcp_client=client,
             registry=registry,
         )
+
+        # Enhancement 3: wire skill indexer for MCP-to-skill bridging
+        try:
+            from weebot.config.learning import SEMANTIC_SKILL_RETRIEVAL_ENABLED
+            if SEMANTIC_SKILL_RETRIEVAL_ENABLED:
+                from weebot.application.skills.skill_registry import SkillRegistry
+                from weebot.application.services.mcp_tool_skill_indexer import (
+                    MCPToolSkillIndexer,
+                )
+                skill_reg = SkillRegistry()
+                skill_reg.load_all()
+                indexer = MCPToolSkillIndexer(skill_reg)
+                bridge.set_skill_indexer(indexer)
+                logger.info("MCP bridge: skill indexer wired (enhancement 3)")
+        except Exception as exc:
+            logger.debug("MCP bridge: skill indexer not wired — %s", exc)
+
         return bridge
 
     def build_mcp_bridge(self) -> "MCPToolRegistryBridge":

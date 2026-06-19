@@ -101,6 +101,7 @@ class MCPToolRegistryBridge:
         self._registry = registry or RoleBasedToolRegistry()
         self._server_configs: dict[str, MCPServerConfig] = {}
         self._registered_tools: dict[str, list[str]] = {}  # server_name -> [namespaced_names]
+        self._skill_indexer = None  # MCPToolSkillIndexer, wired by DI
 
     def set_mcp_client(self, client: Any) -> None:
         """Set or replace the MCP client (useful for DI)."""
@@ -109,6 +110,14 @@ class MCPToolRegistryBridge:
     def set_server_configs(self, configs: dict[str, MCPServerConfig]) -> None:
         """Set server configurations (useful for DI/testing)."""
         self._server_configs = configs
+
+    def set_skill_indexer(self, indexer) -> None:
+        """Wire the MCPToolSkillIndexer for semantic skill indexing (Enhancement 3).
+
+        Args:
+            indexer: An ``MCPToolSkillIndexer`` instance, or ``None`` to disable.
+        """
+        self._skill_indexer = indexer
 
     async def initialize(self) -> int:
         """Connect to all configured servers and register their tools.
@@ -189,6 +198,10 @@ class MCPToolRegistryBridge:
                 len(registered_names), server_name,
                 len(raw_for_server) - len(registered_names),
             )
+
+            # Enhancement 3: index MCP tools into the skill registry
+            if self._skill_indexer is not None:
+                await self._skill_indexer.index_tool_infos(filtered, server_name)
 
         return total
 

@@ -215,6 +215,8 @@ class PlanActFlow(BaseFlow):
         # ── Timing bookkeeping ────────────────────────────────────
         self._state_entered_at: float | None = None
         self._flow_started_at: float = 0.0
+        # ── Per-state prompt tracking: reset on state transition ─────
+        self._last_state_type: type | None = None
         # ──────────────────────────────────────────────────────────
         self._planner = PlannerAgent(
             llm=self._llm,
@@ -223,6 +225,7 @@ class PlanActFlow(BaseFlow):
             skill_prompt=cfg.skill_prompt,
             facts=cfg.session.get_facts(),
             episodic_memory=cfg.episodic_memory,
+            skill_catalog=self._build_skill_catalog(cfg.skill_retriever),
         )
         executor_kwargs = dict(
             llm=self._llm,
@@ -242,6 +245,148 @@ class PlanActFlow(BaseFlow):
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
         self._executor = ExecutorAgent(**executor_kwargs)
+
+        # Enhancement 5: subscribe to SkillGapDetected domain events
+        if self._event_bus is not None and self._misalignment_journal is not None:
+            try:
+                self._event_bus.subscribe_domain(self._on_skill_gap_detected)
+            except Exception:
+                pass  # subscription is best-effort
+
+    # ── Skill catalog for planner ───────────────────────────────────
+
+    @staticmethod
+    def _build_skill_catalog(skill_retriever) -> str:
+        """Build a compact skill summary for planner prompt injection.
+
+        Walks the skill retriever's underlying registry to produce a Markdown
+        list of available skills.  The planner uses this as step-boundary
+        guidance — each step should align with exactly one skill's capability.
+
+        Returns an empty string when no skills or no registry is available.
+        """
+        registry = None
+        retriever = skill_retriever
+        # Unwrap RerankingSkillRetriever decorator to reach the base retriever
+        if hasattr(retriever, "_base"):
+            retriever = retriever._base
+        if hasattr(retriever, "_registry"):
+            registry = retriever._registry
+
+        if registry is None:
+            return ""
+
+        skills = registry.list_all()
+        if not skills:
+            return ""
+
+        lines: list[str] = [
+            "## Available Skills",
+            "",
+            "When decomposing the user's task into steps, align each step with",
+            "exactly one skill capability from the list below.  Do NOT create steps",
+            "for capabilities not listed — if a needed capability is missing,",
+            "note it in the plan message and create a single informational step.",
+            "",
+        ]
+        for name, skill in sorted(skills.items()):
+            desc = getattr(skill, "description", "") or ""
+            if len(desc) > 120:
+                desc = desc[:117] + "..."
+            lines.append(f"- **{name}**: {desc}")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    async def _record_decomposition_signals(self) -> None:
+        """Record decomposition quality proxy signals in the misalignment journal.
+
+        Called after execution completes.  Uses heuristic metrics as proxies
+        for Decomposition Accuracy (DA) since weebot has no ground-truth
+        labels.  Signals are purely diagnostic — no behavioural changes.
+        """
+        if self._misalignment_journal is None or self._plan is None:
+            return
+
+        signals: list[str] = []
+        total_steps = max(len(self._plan.steps), 1)
+
+        # Signal 1: plan was updated mid-execution (failure replan)
+        # Each replan creates a snapshot in the plan history undo stack.
+        plan_snapshots = (
+            len(self._plan_history.get_all())
+            if hasattr(self._plan_history, "get_all")
+            else 0
+        )
+        plan_updates = max(plan_snapshots - 1, 0)  # first plan = 0 updates
+        if plan_updates > 0:
+            signals.append(f"replans={plan_updates}")
+
+        # Signal 2: step repetition rate (>30% of steps retried)
+        retried = sum(
+            1 for count in self._step_execution_counts.values() if count > 1
+        )
+        retry_rate = retried / total_steps
+        if retry_rate > 0.3:
+            signals.append(f"retry_rate={retried}/{total_steps}")
+
+        # Signal 3: plan critic was low confidence
+        if self._plan_critique is not None:
+            conf = getattr(self._plan_critique, "overall_confidence", None)
+            if conf is not None and conf < 0.6:
+                signals.append(f"critique_confidence={conf:.2f}")
+
+        # Signal 4: heuristic splits applied during plan parsing
+        heuristic_splits = getattr(self._plan, "_heuristic_splits", 0)
+        if heuristic_splits > 0:
+            signals.append(f"heuristic_splits={heuristic_splits}")
+
+        if not signals:
+            return
+
+        from weebot.domain.models.misalignment_entry import MisalignmentEntry
+
+        entry = MisalignmentEntry(
+            session_id=self._session.id,
+            project_path=(
+                str(self._session.context.working_dir)
+                if self._session.context
+                else ""
+            ),
+            symptom="decomposition_quality",
+            step_description=f"total_steps={total_steps}",
+            constraint_text="; ".join(signals),
+            correction_text="Proxy DA signals detected — review decomposition granularity",
+        )
+        await self._misalignment_journal.record(entry)
+        self._log.info(
+            "Decomposition quality signals recorded: %s",
+            "; ".join(signals),
+        )
+
+    async def _on_skill_gap_detected(self, event) -> None:
+        """Handle ``SkillGapDetected`` domain events (Enhancement 5).
+
+        Records the gap in the misalignment journal for cross-session
+        diagnostics.  The event bus delivers this; the callback must be
+        registered as a subscriber during flow construction.
+
+        Args:
+            event: A ``SkillGapDetected`` domain event.
+        """
+        if self._misalignment_journal is None:
+            return
+        from weebot.domain.models.misalignment_entry import MisalignmentEntry
+
+        entry = MisalignmentEntry(
+            session_id=getattr(event, "session_id", ""),
+            symptom="skill_gap",
+            step_description=getattr(event, "step_description", ""),
+            constraint_text=f"best_score={getattr(event, 'best_score', 0):.3f} < TAU_CREATE",
+            correction_text="Consider authoring a new skill for this capability",
+        )
+        await self._misalignment_journal.record(entry)
+        self._log.debug("Skill gap recorded for step: %s", getattr(event, "step_description", "")[:80])
 
     @property
     def _log(self):
@@ -399,6 +544,8 @@ class PlanActFlow(BaseFlow):
         self._state = state
         self._state_entered_at = now
         self.status = getattr(state, "status", AgentStatus.IDLE)
+        # Track state type for prompt_consumed reset in run()
+        self._last_state_type = type(state)
 
         if prev_duration > 0.001:
             self._log.info("Transition to state: %s (was in %s for %.1fs)",
@@ -456,7 +603,14 @@ class PlanActFlow(BaseFlow):
                     journal=self._misalignment_journal,
                 )
             self._plan = None
-            self.set_state(initial_state)
+
+            # ── Product-mode gate: inject ProductGateState before planning ──
+            from weebot.config.feature_flags import PRODUCT_MODE_ENABLED
+            if PRODUCT_MODE_ENABLED:
+                from weebot.application.flows.states.product_gate import ProductGateState
+                self.set_state(ProductGateState())
+            else:
+                self.set_state(initial_state)
         else:
             self.set_state(initial_state)
         # ────────────────────────────────────────────────────────────────────
@@ -473,10 +627,21 @@ class PlanActFlow(BaseFlow):
 
         # Track if the prompt has been "consumed" by a state that needs it.
         # This prevents an answer to step 1 from being injected as a prompt to step 2.
+        # Reset on state transition so each new state gets one chance at the prompt.
         prompt_consumed = False
 
         while iteration_count <= max_iterations:
             iteration_count += 1
+
+            # ── Reset prompt_consumed on state transition ────────────
+            # Each FlowState gets one chance at the prompt.  When the state
+            # type changes (e.g. ProductGateState → PlanningState), reset
+            # so the new state can receive the task prompt even if the
+            # previous state yielded events that consumed it.
+            current_state_type = type(self._state)
+            if current_state_type != self._last_state_type:
+                prompt_consumed = False
+                self._last_state_type = current_state_type
 
             # ── Composable termination check ──────────────────────────
             if self._termination_conditions:
@@ -639,6 +804,9 @@ class PlanActFlow(BaseFlow):
                 "elapsed_ms": _post_elapsed,
                 "total_tokens": _total_tokens,
             })
+
+        # Enhancement 4: record decomposition quality proxy signals
+        await self._record_decomposition_signals()
 
         if iteration_count > max_iterations:
             yield ErrorEvent(error=f"Max iterations ({max_iterations}) reached.")

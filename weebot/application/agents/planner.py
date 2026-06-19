@@ -73,6 +73,7 @@ class PlannerAgent:
         facts: Optional[Dict[str, Any]] = None,
         episodic_memory=None,
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
+        skill_catalog: str | None = None,  # Compact skill summary for step-boundary awareness
     ):
         self._llm = llm
         self._event_bus = event_bus
@@ -90,6 +91,9 @@ class PlannerAgent:
         if facts:
             facts_block = "### Known Facts\n" + "\n".join(f"- {k}: {v}" for k, v in facts.items())
             system_prompt = f"{system_prompt}\n\n{facts_block}"
+        # Inject skill catalog so the planner decomposes against real capabilities
+        if skill_catalog:
+            system_prompt = f"{system_prompt}\n\n{skill_catalog}"
         self._memory: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
@@ -323,6 +327,7 @@ class PlannerAgent:
         steps_data = data.get("steps", [])
         steps = []
         spec_count = 0
+        heuristic_splits = 0  # Enhancement 4: track how many heuristics fire
         for idx, s in enumerate(steps_data):
             step_id = s.get("id") or f"step-{idx + 1}"
             desc = s.get("description", "")
@@ -335,6 +340,7 @@ class PlannerAgent:
             if is_spec_step:
                 spec_count += 1
                 if spec_count > 1:
+                    heuristic_splits += 1  # dropped a spec step
                     continue  # drop excessive spec steps
 
             # Heuristic: count discrete items (files, images) in the step.
@@ -343,6 +349,7 @@ class PlannerAgent:
             items = _re.findall(_item_keywords, desc, _re.IGNORECASE)
             unique_items = list(dict.fromkeys(items))  # dedup preserving order
             if len(unique_items) > PlannerAgent._MAX_ITEMS_PER_STEP:
+                heuristic_splits += 1  # split an item batch
                 batch_size = PlannerAgent._MAX_ITEMS_PER_STEP
                 for batch_num, i in enumerate(range(0, len(unique_items), batch_size)):
                     batch_items = unique_items[i:i + batch_size]
@@ -355,8 +362,12 @@ class PlannerAgent:
                     description=desc,
                     status="pending",
                 ))
-        return Plan(
+        plan = Plan(
             title=data.get("title", "Untitled Plan"),
             message=data.get("message", ""),
             steps=steps,
         )
+        # Enhancement 4: Pydantic v2 silently ignores leading-underscore
+        # keys in constructors, so set via object.__setattr__ after creation.
+        object.__setattr__(plan, "_heuristic_splits", heuristic_splits)
+        return plan

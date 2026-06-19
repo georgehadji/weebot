@@ -1,0 +1,61 @@
+version: 0.2.1
+description: Default harness — contracts + BM25 skills + trajectory regulation + behavioural
+  instructions
+evolved_from: 0.2.0
+canonicalizer:
+  strict_mode: false
+  coerce_types: true
+  contracts_dir: config/contracts/
+skill_retrieval:
+  enabled: true
+  retriever: auto
+  top_k: 3
+trajectory:
+  repetition_threshold: 4
+  stagnation_window: 3
+  budget_hotspot_ratio: 0.4
+  exhaustion_ratio: 0.9
+instructions:
+  system_prompt_extension: ''
+  bootstrap: 'Start by inspecting the workspace and identifying the task scope. For
+    any web research, use the web_search TOOL directly — never use bash with curl,
+    wget, or Invoke-WebRequest.
+
+    '
+  execution: 'Use the right tool for each sub-task: web_search for finding information
+    online (NEVER bash curl/wget), file_editor for creating and editing files (NEVER
+    bash echo/cat), python_execute for running Python scripts, bash ONLY for system
+    commands (ls, mkdir, pip install, git). Keep edits tightly scoped. Aim for 5 tool
+    calls or fewer per step.
+
+    '
+  verification: 'Before concluding a step, verify the result with the most targeted
+    check available: run tests, parse output, or read the file you created. Do not
+    skip verification.
+
+    '
+  failure_recovery: 'If a tool call fails or produces the same output twice, SWITCH
+    to a completely different tool. Do not retry bash with a variation of the same
+    command. If web_search is available, use it instead of bash for any web access.
+
+    '
+  yagni_preflight: "Before executing any step, stop at the first rung that holds:\n\
+    1. Does this step still need to be executed?\n   Previous steps may have covered\
+    \ it. If so, skip this step and note why.\n2. Does an existing tool call in the\
+    \ conversation already cover this?\n   Reuse its output instead of repeating the\
+    \ call.\n3. Can a single bash/python command replace the planned sequence?\n \
+    \  One command is cheaper than three tool calls.\n4. Will the tool call output\
+    \ be smaller than the code it would produce?\n   If the output is a single line,\
+    \ just output it. Don't call a tool.\n5. Is the tool call necessary at all?\n\
+    \   Only then: execute the planned step.\n\nAfter execution, append 'skipped:\
+    \ [X], add when [Y]' if you skipped anything.\nNever skip: validation, error handling,\
+    \ security checks, or accessibility.\nActive every response. No drift back to\
+    \ over-building.\nBased on ponytail (github.com/DietrichGebert/ponytail)."
+runtime_control:
+  enabled: false
+  max_recent_tool_errors: 5
+subagents:
+  definitions: []
+  max_parallel: 0
+skill_selection:
+  active_skills: []
