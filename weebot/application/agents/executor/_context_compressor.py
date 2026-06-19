@@ -55,11 +55,17 @@ class ContextCompressor:
     async def track_usage_and_maybe_compress(self, resp: Any) -> None:
         """Accumulate real token usage from *resp* and trigger compression if needed.
 
-        Called as a post-success callback from CascadeExecutor.
+        Called as a post-success callback from CascadeExecutor and from
+        vision reflection calls. Handles both object-attribute and dict usage.
         """
         if hasattr(resp, "usage") and resp.usage:
-            self._total_prompt_tokens += getattr(resp.usage, "prompt_tokens", 0) or 0
-            self._total_completion_tokens += getattr(resp.usage, "completion_tokens", 0) or 0
+            usage = resp.usage
+            if isinstance(usage, dict):
+                self._total_prompt_tokens += usage.get("prompt_tokens", 0) or 0
+                self._total_completion_tokens += usage.get("completion_tokens", 0) or 0
+            else:
+                self._total_prompt_tokens += getattr(usage, "prompt_tokens", 0) or 0
+                self._total_completion_tokens += getattr(usage, "completion_tokens", 0) or 0
 
         if self._auto_compress:
             await self._maybe_compress()

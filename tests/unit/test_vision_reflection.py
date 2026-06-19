@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from weebot.models.structured_output import NextActionPlan, PageObservation, VisionReflection
+from tests.unit.conftest import VISION_TEST_MODEL
 
 _B64 = "aGVsbG8="  # base64("hello") — tiny valid-ish payload
 
@@ -102,7 +103,7 @@ class TestVisionReflection:
 
 # ── ExecutorAgent integration ─────────────────────────────────────────────────
 
-def _make_executor(model: str = "claude-opus-4-8"):
+def _make_executor(model: str = VISION_TEST_MODEL):
     from weebot.application.agents.executor._base import ExecutorAgent
     from weebot.application.models.tool_collection import ToolCollection
     return ExecutorAgent(llm=MagicMock(), tools=ToolCollection(), model=model)
@@ -127,7 +128,7 @@ class TestReflectionEnabled:
         import weebot.config.feature_flags as ff
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
-        ex = _make_executor("claude-opus-4-8")
+        ex = _make_executor(VISION_TEST_MODEL)
         assert ex._reflection_enabled() is True
 
     def test_reflection_off_for_non_vision_model(self, monkeypatch):
@@ -165,12 +166,12 @@ class TestReflectOnScreenshot:
         })
         mock_llm = MagicMock()
         mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content=good_json, tool_calls=None, model="claude-opus-4-8"
+            content=good_json, tool_calls=None, model=VISION_TEST_MODEL
         ))
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
-        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model="claude-opus-4-8")
+        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
 
         result = await ex._reflect_on_screenshot("computer_use", _B64)
         assert result is not None
@@ -188,12 +189,12 @@ class TestReflectOnScreenshot:
         from weebot.application.ports.llm_port import LLMResponse
         mock_llm = MagicMock()
         mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content="not json at all", tool_calls=None, model="claude-opus-4-8"
+            content="not json at all", tool_calls=None, model=VISION_TEST_MODEL
         ))
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
-        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model="claude-opus-4-8")
+        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
 
         result = await ex._reflect_on_screenshot("screen_tool", _B64)
         assert result is None  # graceful degradation
@@ -309,7 +310,7 @@ class TestReflectionGrounding:
             return LLMResponse(
                 content=_good_reflection_json(),
                 tool_calls=None,
-                model="claude-opus-4-8",
+                model=VISION_TEST_MODEL,
                 usage={"prompt_tokens": 1500, "completion_tokens": 80, "total_tokens": 1580},
             )
 
@@ -318,7 +319,7 @@ class TestReflectionGrounding:
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
-        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model="claude-opus-4-8")
+        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
         return ex, captured
 
     @pytest.mark.asyncio
@@ -373,3 +374,44 @@ class TestReflectionGrounding:
         await ex._reflect_on_screenshot("computer_use", _B64, task_context="task")
         assert ex.token_usage["prompt_tokens"] == 1500
         assert ex.token_usage["completion_tokens"] == 80
+
+
+# ── B1 regression: compaction failure must not be logged as a parse failure ───
+
+class TestReflectionErrorAttributionB1:
+    @pytest.mark.asyncio
+    async def test_compaction_failure_not_swallowed_as_parse_failure(self, monkeypatch, caplog):
+        """After the B1 fix, compaction errors propagate past the parse try-block
+        and must NOT produce the 'parse/validate failed' log line."""
+        import logging
+        import weebot.config.feature_flags as ff
+        monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
+        monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
+
+        good_json = json.dumps({
+            "observation": {"summary": "s", "key_elements": [], "is_task_complete": False, "confidence": 0.9},
+            "plan": {"action_type": "none", "reasoning": "r", "expected_outcome": "o", "confidence": 0.8},
+        })
+        from weebot.application.ports.llm_port import LLMResponse
+        mock_llm = MagicMock()
+        mock_llm.chat = AsyncMock(return_value=LLMResponse(
+            content=good_json, tool_calls=None, model=VISION_TEST_MODEL,
+            usage={"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+        ))
+
+        from weebot.application.agents.executor._base import ExecutorAgent
+        from weebot.application.models.tool_collection import ToolCollection
+        ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
+
+        # Simulate compaction failure inside track_usage_and_maybe_compress (on compressor)
+        async def _bad_compress(resp):
+            raise RuntimeError("compaction LLM timed out")
+
+        ex._context_compressor.track_usage_and_maybe_compress = _bad_compress
+
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(RuntimeError, match="compaction LLM timed out"):
+                await ex._reflect_on_screenshot("computer_use", _B64)
+
+        # The parse/validate log line must NOT have appeared
+        assert "parse/validate failed" not in caplog.text

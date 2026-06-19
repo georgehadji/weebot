@@ -25,7 +25,6 @@ from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
 from weebot.application.ports.vector_store_port import VectorStorePort
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import SkillMatch
-from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,10 @@ class SemanticSkillRetriever(SkillRetrieverPort):
     ) -> None:
         self._registry = registry
         self._top_k = top_k
-        self._store = store or NumpyVectorStore(dim=_DEFAULT_DIM)
+        if store is None:
+            from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
+            store = NumpyVectorStore(dim=_DEFAULT_DIM)
+        self._store = store
         self._index_built = False
         self._embeddings = None  # LocalEmbeddings singleton, lazy
         logger.debug(

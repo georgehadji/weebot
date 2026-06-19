@@ -172,17 +172,9 @@ class ExecutorAgent:
         self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
         self._facts: Dict[str, Any] = {}
         self._should_terminate = False
-        # Phase 2 vision reflection: last predicted outcome, fed back into the
-        # next reflection so the model can self-correct (expected vs. actual).
-        self._last_expected_outcome: Optional[str] = None
         # Token tracking + auto-compress
         self._auto_compress = auto_compress
         self._context_window = context_window
-        self._total_prompt_tokens: int = 0
-        self._total_completion_tokens: int = 0
-        self._reflection_prompt_tokens: int = 0
-        self._reflection_completion_tokens: int = 0
-        self._compressor: Optional[ConversationCompressor] = None
         # Thread-safe step budget
         self._step_budget = StepBudget(max_steps=max_steps)
         # Context compressor -- conversation buffer, token tracking, vision reflection
@@ -266,15 +258,33 @@ class ExecutorAgent:
 
 
     @property
+    def _last_expected_outcome(self) -> Optional[str]:
+        return self._context_compressor._last_expected_outcome
+
+    @_last_expected_outcome.setter
+    def _last_expected_outcome(self, value: Optional[str]) -> None:
+        self._context_compressor._last_expected_outcome = value
+
+    @property
     def token_usage(self) -> Dict[str, int]:
         """Cumulative real token usage for this executor instance."""
-        prompt = self._context_compressor.total_prompt_tokens + self._reflection_prompt_tokens
-        completion = self._context_compressor.total_completion_tokens + self._reflection_completion_tokens
+        prompt = self._context_compressor.total_prompt_tokens
+        completion = self._context_compressor.total_completion_tokens
         return {
             "prompt_tokens": prompt,
             "completion_tokens": completion,
             "total_tokens": prompt + completion,
         }
+
+    def __getattr__(self, name: str):
+        """Delegate vision reflection helpers to the context compressor."""
+        _ctx_map = {
+            '_reflect_on_screenshot': 'reflect_on_screenshot',
+            '_track_usage_and_maybe_compress': 'track_usage_and_maybe_compress',
+        }
+        if name in _ctx_map and '_context_compressor' in self.__dict__:
+            return getattr(self._context_compressor, _ctx_map[name])
+        raise AttributeError(f"'{type(self).__name__}' has no attribute {name!r}")
 
     def _vision_enabled(self) -> bool:
         """True when vision-in-the-loop is on and the active model accepts images."""
@@ -285,10 +295,8 @@ class ExecutorAgent:
         self._context_compressor.inject_screenshot(tool_name, image_b64)
 
     def _inject_reflection(self, reflection: "VisionReflection") -> None:
-        """Forward to context compressor and update last expected outcome."""
+        """Forward to context compressor (inject_reflection stores expected_outcome)."""
         self._context_compressor.inject_reflection(reflection)
-        if reflection.plan and reflection.plan.expected_outcome:
-            self._last_expected_outcome = reflection.plan.expected_outcome
 
     def _reflection_enabled(self) -> bool:
         """True when BOTH vision-in-loop AND reflection flags are on AND model supports vision."""
@@ -299,57 +307,6 @@ class ExecutorAgent:
             and VISION_REFLECTION_ENABLED
             and model_supports_vision(self._model or "")
         )
-
-    async def _track_usage_and_maybe_compress(self, response: Any) -> None:
-        """Update reflection token counters from an LLM response."""
-        usage = getattr(response, "usage", None) or {}
-        self._reflection_prompt_tokens += usage.get("prompt_tokens", 0)
-        self._reflection_completion_tokens += usage.get("completion_tokens", 0)
-
-    async def _reflect_on_screenshot(
-        self, tool_name: str, image_b64: str, task_context: str | None = None
-    ) -> "Optional[VisionReflection]":
-        """Call LLM with a screenshot and return a structured VisionReflection.
-
-        LLM errors → return None (graceful degradation).
-        Compaction/tracking errors propagate (B1 fix: don't mask as parse failures).
-        """
-        from weebot.models.structured_output import VisionReflection
-        _logger = logging.getLogger(__name__)
-        context_line = f"\nTask context: {task_context}" if task_context else ""
-        outcome_line = (
-            f"\nPrevious action predicted: {self._last_expected_outcome}"
-            if self._last_expected_outcome else ""
-        )
-        prompt = (
-            f"Tool '{tool_name}' produced this screenshot.{context_line}{outcome_line}\n"
-            "Describe what you observe and your planned next action. "
-            "Respond with valid JSON matching the VisionReflection schema."
-        )
-        messages: list[dict] = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image", "data": image_b64, "media_type": "image/png"},
-                ],
-            },
-        ]
-        try:
-            response = await self._llm.chat(
-                messages=messages, max_tokens=500, temperature=0.0
-            )
-        except Exception as exc:
-            _logger.debug("Vision reflection LLM call failed for tool=%s: %s", tool_name, exc)
-            return None
-        # Track usage OUTSIDE the parse try-block so compaction errors propagate (B1 fix).
-        await self._track_usage_and_maybe_compress(response)
-        try:
-            data = json.loads(response.content or "{}")
-            return VisionReflection.model_validate(data)
-        except Exception as exc:
-            _logger.debug("Vision reflection parse/validate failed for tool=%s: %s", tool_name, exc)
-            return None
 
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None,

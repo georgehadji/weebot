@@ -23,15 +23,30 @@ def normalize_text(text: str) -> str:
     return " ".join(text.lower().split())
 
 
+_FILE_TOOLS: frozenset = frozenset({
+    "file_editor", "write_file", "create_file", "edit_file",
+})
+
+
 def tool_signature(tool_name: str, raw_arguments: str) -> str:
-    """Normalize tool call to a stable signature for loop detection."""
+    """Normalize tool call to a stable signature for loop detection.
+
+    Transient keys (vary per invocation without changing tool behaviour)
+    are stripped.  However, for file tools, ``path`` is *structural* —
+    two file_editor calls on different files are NOT the same operation,
+    so ``path`` is preserved for those tools.
+    """
     import json
     try:
         args = json.loads(raw_arguments) if raw_arguments else {}
     except (json.JSONDecodeError, TypeError):
         args = {}
-    # Keep only the keys that affect tool behaviour, not transient values
-    stable = {k: args[k] for k in sorted(args) if k not in ("query", "content", "path", "url", "timeout")}
+    # Keys that are always transient
+    _transient = {"query", "content", "text", "file_text", "path", "url", "timeout"}
+    # For file tools, 'path' is structural — don't strip it
+    if tool_name in _FILE_TOOLS:
+        _transient.discard("path")
+    stable = {k: args[k] for k in sorted(args) if k not in _transient}
     return f"{tool_name}({stable})"
 
 
@@ -59,6 +74,38 @@ def parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
         return {"arg_keys": [], "arg_count": 0}
     except (json.JSONDecodeError, TypeError):
         return {"arg_keys": [], "arg_count": 0}
+
+
+# TDD/RED phase markers that indicate tool failure is expected
+_TDD_EXPECTED_FAILURE_MARKERS: frozenset = frozenset({
+    "RED-VERIFY",
+    "red-verify",
+    "[RED]",
+    "[RED-VERIFY]",
+    "tests fail",
+    "confirm all tests FAIL",
+    "tests should fail",
+    "expected failure",
+    "ImportError expected",
+    "NameError expected",
+})
+
+
+def is_expected_failure(step_description: str) -> bool:
+    """Return True if tool failure is expected for this TDD/RED phase step.
+
+    The planner signals TDD phases with ``[RED-VERIFY]`` or ``[RED]``
+    prefixes and instructions like "confirm all tests FAIL".  When
+    the executor runs ``pytest`` during these phases, a non-zero exit
+    code is the DESIRED outcome — not an error.
+    """
+    if not step_description:
+        return False
+    desc_lower = step_description.lower()
+    for marker in _TDD_EXPECTED_FAILURE_MARKERS:
+        if marker.lower() in desc_lower:
+            return True
+    return False
 
 
 def classify_tool_error(error_output: str) -> Optional[str]:

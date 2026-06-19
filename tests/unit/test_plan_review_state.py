@@ -105,12 +105,12 @@ class TestPlanReviewState:
 class TestNextStateAfterPlan:
     def test_returns_executing_when_disabled(self):
         from weebot.application.flows.states.executing import ExecutingState
-        with patch.dict(os.environ, {"WEEBOT_PLAN_REVIEW_ENABLED": "false"}):
+        with patch.dict(os.environ, {"PLAN_REVIEW_ENABLED": "false"}):
             state = next_state_after_plan()
         assert isinstance(state, ExecutingState)
 
     def test_returns_plan_review_when_enabled(self):
-        with patch.dict(os.environ, {"WEEBOT_PLAN_REVIEW_ENABLED": "true"}):
+        with patch.dict(os.environ, {"PLAN_REVIEW_ENABLED": "true"}):
             state = next_state_after_plan()
         assert isinstance(state, PlanReviewState)
 
