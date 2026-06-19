@@ -57,7 +57,7 @@ class NumpyVectorStore(VectorStorePort):
 
         self._ids = list(ids)
         self._vectors = vectors.copy()
-        self._metadata = list(metadata) if metadata else [{}] * len(ids)
+        self._metadata = list(metadata) if metadata else [{} for _ in range(len(ids))]
 
     async def query(
         self,
