@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 class WebSocketEventBroadcaster(EventPublisherPort):
     """Broadcasts events to WebSocket clients.
     
-    This adapter implements EventBusPort to receive events from the internal
-    event system and forward them to connected WebSocket clients.
+    This adapter implements ``EventPublisherPort`` — the minimal publishing
+    interface — to receive events from the internal event system and forward
+    them to connected WebSocket clients.
     """
 
     def __init__(self, connection_manager: ConnectionManager) -> None:

@@ -405,7 +405,7 @@ class VerifyingState(FlowState):
             )
 
             # Store verdict on session for analytics
-            extra = getattr(flow._session.context, "extra", {}) or {}
+            extra = dict(getattr(flow._session.context, "extra", {}) or {})
             extra["outcome_verdict"] = verdict
             flow._session = flow._session.model_copy(
                 update={

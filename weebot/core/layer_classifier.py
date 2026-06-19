@@ -54,8 +54,10 @@ def layer_for_module(module_path: str) -> str:
         One of ``"domain"``, ``"application"``, ``"infrastructure"``,
         ``"interfaces"``, ``"core"``, ``"tests"``, or ``"unknown"``.
     """
-    # Normalize: strip leading ./, convert backslashes, lowercase
-    normalized = module_path.replace("\\", "/").lstrip("./")
+    # Normalize: convert backslashes, strip leading ./
+    normalized = module_path.replace("\\", "/")
+    while normalized.startswith("./") or normalized.startswith("../"):
+        normalized = normalized[normalized.index("/") + 1:]
     for prefix, layer in _LAYER_RULES:
         if normalized.startswith(prefix):
             return layer
