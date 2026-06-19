@@ -201,5 +201,9 @@ class CodeReviewerService(CodeReviewerPort):
         for e in merged:
             tool_name = e.get("tool_name", "?")
             tool_input = str(e.get("tool_input", ""))[:200]
-            lines.append(f"- {tool_name}({tool_input})")
+            tool_result = str(e.get("result", e.get("tool_output", "")))[:150]
+            if tool_result:
+                lines.append(f"- {tool_name}({tool_input}) → {tool_result}")
+            else:
+                lines.append(f"- {tool_name}({tool_input})")
         return "\n".join(lines)

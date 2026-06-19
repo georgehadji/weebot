@@ -471,7 +471,7 @@ class RoleBasedToolRegistry:
                     try:
                         tool = tool_cls()
                     except (TypeError, RuntimeError) as exc:
-                        logger.warning(
+                        logger.debug(
                             "Skipping tool %s: construction failed (%s). "
                             "This tool requires DI injection.",
                             name, exc,

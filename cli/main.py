@@ -21,6 +21,18 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+# ── Load .env into os.environ before any weebot module reads API keys ──
+# pydantic-settings loads .env into its own store but does NOT populate
+# os.environ.  Several modules (openai_adapter.py, model_registry/_service.py,
+# browser_tool.py, image_gen_tool.py, openrouter_enhanced_cascade.py) read
+# keys via bare os.getenv().  Without this call, those paths get None when
+# keys live solely in .env, resulting in "no-key" → 401 from providers.
+#
+# override=True: .env values take priority over stale system environment
+# variables (e.g. an old OPENROUTER_API_KEY from a previous session).
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
@@ -52,8 +64,21 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress
 
-from weebot.agent_core_v2 import WeebotAgent, AgentConfig
 from weebot.state_manager import StateManager, ProjectStatus
+
+
+def _deprecated_agent(project_id: str, description: str = "", budget: float | None = None) -> tuple:
+    """Lazy-import the deprecated agent_core_v2 module.
+
+    Importing at the top level triggers a DeprecationWarning on every CLI
+    invocation (even for non-deprecated commands).  Lazy import confines
+    the warning to the 5 deprecated commands that actually use the module.
+    """
+    from weebot.agent_core_v2 import WeebotAgent, AgentConfig
+    cfg = AgentConfig(project_id=project_id, description=description)
+    if budget is not None:
+        cfg.daily_budget = budget
+    return WeebotAgent(cfg), cfg
 from weebot.interfaces.cli.support import (
     init_project,
     init_hooks,
@@ -95,12 +120,7 @@ def cli() -> None:
 @click.option("--budget", default=10.0, help="Daily AI budget")
 def create(project_id: str, description: str, budget: float) -> None:
     """[DEPRECATED] Use 'flow' commands instead. Create new project."""
-    config = AgentConfig(
-        project_id=project_id,
-        description=description,
-        daily_budget=budget
-    )
-    agent = WeebotAgent(config)
+    agent, _ = _deprecated_agent(project_id, description, budget)
     console.print(Panel(f"Created project: {project_id}", style="green"))
 
 
@@ -130,8 +150,7 @@ def list_projects() -> None:
 @click.argument("project_id")
 def status(project_id: str) -> None:
     """[DEPRECATED] Use 'flow' commands instead. Check project status."""
-    config = AgentConfig(project_id=project_id, description="")
-    agent = WeebotAgent(config)
+    agent, _ = _deprecated_agent(project_id, "")
     stats = agent.get_status()
     
     console.print(Panel.fit(
@@ -153,11 +172,10 @@ def run(project_id: str, plan_file: str) -> None:
     
     plan = json.loads(Path(plan_file).read_text())
     
-    config = AgentConfig(
-        project_id=project_id,
-        description=f"Running plan from {plan_file}"
+    agent, _ = _deprecated_agent(
+        project_id,
+        description=f"Running plan from {plan_file}",
     )
-    agent = WeebotAgent(config)
     
     with Progress() as progress:
         task = progress.add_task("[cyan]Executing tasks...", total=len(plan))
@@ -176,8 +194,7 @@ def run(project_id: str, plan_file: str) -> None:
 @click.argument("project_id")
 def resume(project_id: str) -> None:
     """[DEPRECATED] Use 'flow' commands instead. Resume paused project."""
-    config = AgentConfig(project_id=project_id, description="")
-    agent = WeebotAgent(config)
+    agent, _ = _deprecated_agent(project_id, "")
 
     # Resume from current state
     console.print(f"[yellow]Resuming project: {project_id}[/yellow]")
@@ -530,8 +547,10 @@ def implement(spec_file: str, output: str, project_id: str | None, execute: bool
     if execute:
         if not project_id:
             project_id = spec_path.stem
-        config = AgentConfig(project_id=project_id, description=f"Implementing {spec_path.name}")
-        agent = WeebotAgent(config)
+        agent, _ = _deprecated_agent(
+            project_id,
+            description=f"Implementing {spec_path.name}",
+        )
 
         async def run_plan():
             for item in plan:
