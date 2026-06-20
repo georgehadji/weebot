@@ -50,6 +50,10 @@ SKILL_GAP_TRIGGER_ENABLED: bool = _env_bool(
 SEMANTIC_SKILL_RETRIEVAL_ENABLED: bool = _env_bool(
     "WEEBOT_SEMANTIC_SKILL_RETRIEVAL", default=False
 )
+# Phase 3b — replace keyword task router with embedding-based classification.
+WEEBOT_SEMANTIC_TASK_ROUTER: bool = _env_bool(
+    "WEEBOT_SEMANTIC_TASK_ROUTER", default=False
+)
 # Phase 4 — let the curator act (archive) and validate/dedup imports.
 CURATION_ACTIONS_ENABLED: bool = _env_bool(
     "WEEBOT_CURATION_ACTIONS", default=False

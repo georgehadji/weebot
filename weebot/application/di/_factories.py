@@ -131,7 +131,18 @@ class FactoriesMixin:
 
     @staticmethod
     def _create_task_router():
+        """Create a task router — semantic when flag is enabled, keyword otherwise."""
+        from weebot.config.feature_flags import WEEBOT_SEMANTIC_TASK_ROUTER
+
+        if WEEBOT_SEMANTIC_TASK_ROUTER:
+            from weebot.application.services.semantic_task_router import SemanticTaskRouter
+
+            logger.info("Task router: semantic (all-MiniLM-L6-v2 centroids)")
+            return SemanticTaskRouter()
+
         from weebot.application.services.keyword_task_router import KeywordTaskRouter
+
+        logger.info("Task router: keyword (YAML patterns)")
         return KeywordTaskRouter()
 
     @staticmethod
