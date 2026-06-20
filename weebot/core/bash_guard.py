@@ -82,6 +82,12 @@ class BashGuard:
             "This would break your system. Use package manager to remove software.",
         ),
         (
+            r"rm\s+-rf?\s+/[a-zA-Z]",
+            RiskLevel.DANGEROUS,
+            "Recursive force-delete on an absolute path",
+            "Verify the target path before recursive deletion.",
+        ),
+        (
             r"rm\s+-rf?\s+~/?\*$",
             RiskLevel.DANGEROUS,
             "Deleting all files in home directory",
@@ -277,6 +283,36 @@ class BashGuard:
             "Obfuscated Python dynamic call",
             "Indirect system calls via getattr/__import__ are prohibited.",
         ),
+        (
+            r"\b(base64|base32|base16)\s+.*\|\s*(bash|sh|zsh|fish|python|perl|ruby)",
+            RiskLevel.BLOCKED,
+            "Base64-encoded payload piped to interpreter",
+            "Encoded payloads can hide malicious commands. Decode and review before executing.",
+        ),
+        (
+            r"\b(base64|base32|base16)\s+-d\s+.*\|\s*(bash|sh|python|cmd|powershell)",
+            RiskLevel.BLOCKED,
+            "Decoded payload piped to interpreter",
+            "Decode and inspect the payload before executing.",
+        ),
+        (
+            r"\bos\.system\s*\(\s*['\"].*rm\s+-rf",
+            RiskLevel.BLOCKED,
+            "Python os.system with destructive command",
+            "Python exec of destructive shell commands is highly dangerous.",
+        ),
+        (
+            r"\bsubprocess\.(call|run|Popen)\s*\(\s*\[.*rm\s+-rf",
+            RiskLevel.BLOCKED,
+            "Python subprocess with destructive command",
+            "Use Python APIs directly instead of shelling out for destructive operations.",
+        ),
+        (
+            r"\beval\s*\(\s*['\"].*__import__",
+            RiskLevel.BLOCKED,
+            "eval with dynamic import",
+            "Dynamic import via eval can load arbitrary code.",
+        ),
     ]
 
     # Windows-specific risks
@@ -298,6 +334,48 @@ class BashGuard:
             RiskLevel.SUSPICIOUS,
             "Changing to root directory (Windows)",
             "Ensure subsequent operations don't affect system files.",
+        ),
+        (
+            r"\bRemove-Item\s+-Recurse\s+-Force",
+            RiskLevel.DANGEROUS,
+            "PowerShell recursive force-delete",
+            "This deletes directories and all contents without confirmation. Use -WhatIf first.",
+        ),
+        (
+            r"\bshutdown\b",
+            RiskLevel.DANGEROUS,
+            "System shutdown command",
+            "Shutting down the system affects all users and services.",
+        ),
+        (
+            r"\bInvoke-Expression\b",
+            RiskLevel.BLOCKED,
+            "PowerShell Invoke-Expression (arbitrary code execution)",
+            "iex/Invoke-Expression executes arbitrary code. Use script blocks or direct commands instead.",
+        ),
+        (
+            r"\biex\s+",
+            RiskLevel.BLOCKED,
+            "PowerShell iex alias (arbitrary code execution)",
+            "iex executes arbitrary code. Use script blocks or direct commands instead.",
+        ),
+        (
+            r"\bformat\s+[A-Za-z]:",
+            RiskLevel.BLOCKED,
+            "Disk format command",
+            "Formatting a disk destroys all data. Use with extreme caution.",
+        ),
+        (
+            r"-EncodedCommand\s+",
+            RiskLevel.BLOCKED,
+            "PowerShell encoded command (obfuscated payload)",
+            "Encoded commands can hide malicious code. Decode and review before executing.",
+        ),
+        (
+            r"\bStart-Process\s+.*\b(Invoke-Expression|iex|cmd\.exe)",
+            RiskLevel.BLOCKED,
+            "Start-Process with dangerous target",
+            "Chaining Start-Process with executors enables privilege escalation.",
         ),
     ]
 
