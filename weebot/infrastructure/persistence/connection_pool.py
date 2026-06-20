@@ -275,9 +275,16 @@ class SQLiteConnectionPool:
             # Close write connection
             if self._write_conn:
                 try:
-                    # Checkpoint WAL before closing
+                    # Checkpoint WAL before closing. This can fail on a corrupt
+                    # database — guard it separately so a checkpoint failure never
+                    # prevents the connection (and its aiosqlite worker thread)
+                    # from being closed below. Leaving the thread alive hangs the
+                    # interpreter at shutdown (it is a non-daemon thread).
                     if self.enable_wal:
-                        await self._write_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        try:
+                            await self._write_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        except Exception as e:
+                            logger.warning(f"WAL checkpoint failed during close: {e}")
                     await self._write_conn.close()
                     logger.debug("Write connection closed")
                 except Exception as e:
@@ -329,7 +336,15 @@ class SQLiteConnectionPool:
 
 # Singleton pool registry for reuse across repositories
 _pool_registry: dict[str, SQLiteConnectionPool] = {}
-_pool_lock = asyncio.Lock()
+_pool_lock: Optional[asyncio.Lock] = None
+
+
+def _get_pool_lock() -> asyncio.Lock:
+    """Return the module-level pool lock, creating it lazily within the running loop."""
+    global _pool_lock
+    if _pool_lock is None:
+        _pool_lock = asyncio.Lock()
+    return _pool_lock
 
 
 async def get_or_create_pool(
@@ -339,21 +354,21 @@ async def get_or_create_pool(
 ) -> SQLiteConnectionPool:
     """
     Get existing pool or create new one for the given database path.
-    
+
     This allows multiple repositories to share the same connection pool
     for the same database file.
-    
+
     Args:
         db_path: Path to SQLite database
         max_read_connections: Maximum read connections
         **kwargs: Additional arguments for pool creation
-    
+
     Returns:
         SQLiteConnectionPool instance
     """
     path_key = str(Path(db_path).resolve())
-    
-    async with _pool_lock:
+
+    async with _get_pool_lock():
         if path_key not in _pool_registry:
             pool = SQLiteConnectionPool(
                 db_path=db_path,
@@ -363,21 +378,21 @@ async def get_or_create_pool(
             await pool.initialize()
             _pool_registry[path_key] = pool
             logger.info(f"Created new pool for {db_path}")
-        
+
         return _pool_registry[path_key]
 
 
 async def close_all_pools() -> None:
     """Close all registered connection pools."""
     global _pool_registry
-    
-    async with _pool_lock:
+
+    async with _get_pool_lock():
         for path, pool in list(_pool_registry.items()):
             try:
                 await pool.close()
                 logger.debug(f"Closed pool for {path}")
             except Exception as e:
                 logger.warning(f"Error closing pool for {path}: {e}")
-        
+
         _pool_registry.clear()
         logger.info("All connection pools closed")

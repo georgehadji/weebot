@@ -36,6 +36,26 @@ def clean_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def reset_connection_pool():
+    """Reset module-level asyncio.Lock and pool registry before each test.
+
+    The module-level _pool_lock must be re-created per test so it is bound
+    to the current event loop. Without this, a lock created in one
+    per-function event loop is reused in the next (closed) loop and deadlocks.
+    """
+    import sys
+    mod = sys.modules.get("weebot.infrastructure.persistence.connection_pool")
+    if mod is not None:
+        mod._pool_lock = None
+        mod._pool_registry.clear()
+    yield
+    mod = sys.modules.get("weebot.infrastructure.persistence.connection_pool")
+    if mod is not None:
+        mod._pool_lock = None
+        mod._pool_registry.clear()
+
+
+@pytest.fixture(autouse=True)
 def reset_settings_singletons():
     """Reset module-level _SETTINGS caches before each test.
 
