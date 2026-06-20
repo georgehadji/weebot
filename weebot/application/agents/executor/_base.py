@@ -497,7 +497,10 @@ class ExecutorAgent:
                 })
                 # One more LLM call to produce the summary, then break
                 messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
-                response = await self._cascade.call_with_cascade(messages=messages, step=step)
+                response = await self._cascade.call_with_cascade(
+                    messages=messages,
+                    description=step.description,
+                )
                 step_result = response.content or "Step completed (budget cap)."
                 yield MessageEvent(role="assistant", message=step_result)
                 abort_step = True
