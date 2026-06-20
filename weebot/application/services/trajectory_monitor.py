@@ -205,15 +205,18 @@ class TrajectoryMonitor:
 
         # 6. Phase 6: Cross-step failure accumulation — 3+ consecutive
         #    error-producing steps indicate a systemic failure.
-        #    Skip TDD RED-phase steps where test failure is expected.
+        #    Skip TDD RED-phase steps where test failure is expected,
+        #    and exploratory path errors (normal probing).
         if tool_output and "ERROR" in tool_output.upper():
             from weebot.application.agents.executor._error_handler import (
                 is_expected_failure,
             )
-            # Exclude exploratory path errors — "Cannot find path" is normal
-            #   exploration, not a systemic failure
             from weebot.core.error_classifier import ErrorClassifier
-            if not ErrorClassifier.is_path_error(tool_output):
+
+            if (
+                not is_expected_failure(self._step_description)
+                and not ErrorClassifier.is_path_error(tool_output)
+            ):
                 self._cross_step_error_outputs.append(tool_output[:100])
                 self._consecutive_failed_steps += 1
         else:
