@@ -88,9 +88,16 @@ class OpenAIAdapter(LLMPort):
             # Raise if your OpenRouter account has more credits, lower for tighter budget.
             kwargs["max_tokens"] = 16384
 
+        # GLM-5.2 / Z.ai thinking mode: disable for short queries to avoid
+        # truncation (thinking consumes max_tokens before visible output).
+        effective_model = model or self._default_model
+        if effective_model and "glm" in effective_model.lower() and max_tokens and max_tokens < 500:
+            kwargs["extra_body"] = kwargs.get("extra_body", {})
+            kwargs["extra_body"]["chat_template_kwargs"] = {"enable_thinking": False}
+
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
-            kwargs["extra_body"] = extra_body
+            kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
         if reasoning_effort is not None:
             kwargs["reasoning_effort"] = reasoning_effort
 
