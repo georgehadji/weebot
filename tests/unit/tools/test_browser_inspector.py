@@ -289,10 +289,14 @@ class TestNavigateAction:
     @pytest.mark.asyncio
     async def test_navigate_delegates_to_advanced_browser(self):
         tool = BrowserInspectorTool()
-        mock_result = ToolResult(output="Navigated to https://example.com", success=True)
+        mock_page = AsyncMock()
+        mock_page.goto = AsyncMock()
+        mock_browser = MagicMock()
+        mock_browser.page = mock_page
+        mock_browser.start = AsyncMock()
         with patch(
-            "weebot.tools.advanced_browser.AdvancedBrowserTool.execute",
-            new=AsyncMock(return_value=mock_result),
+            "weebot.infrastructure.browser.playwright_adapter.PlaywrightAdapter",
+            return_value=mock_browser,
         ):
             result = await tool.execute(action="navigate", url="https://example.com")
         assert result.success
