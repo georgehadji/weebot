@@ -276,6 +276,7 @@ def test_ports_have_adapters():
     # Adapters may live in infrastructure/ OR application/services/.
     port_adapter_map: dict[str, list[str]] = {
         "EventBusPort": ["AsyncEventBus"],
+        "EventPublisherPort": ["WebSocketEventBroadcaster"],  # in interfaces/ not infra/
         "LLMPort": ["OpenRouterAdapter", "AnthropicAdapter", "DeepSeekAdapter",
                      "OpenAIAdapter", "ResilientAdapter"],
         "StateRepositoryPort": ["SQLiteStateRepository", "InMemoryStateRepository"],
@@ -919,6 +920,7 @@ def test_orphan_ports_flagged():
         "SelfImprovementPort",
         "IGatewaySessionStorePort",
         "IContextEnginePort",
+        "EventPublisherPort",   # → WebSocketEventBroadcaster in interfaces/ (not infra/)
     }
 
     # Get all port class names
