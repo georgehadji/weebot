@@ -25,10 +25,10 @@ Rules:
   "New-Item -ItemType Directory -Force path/" not "mkdir -p path/"
   "Get-Content file.py" not "cat file.py"
   "Copy-Item src dst" not "cp src dst"
-- PROJECT STRUCTURE: The weebot source uses double nesting (weebot/weebot/).
-  Source paths are: weebot/weebot/config/, weebot/weebot/domain/models/,
-  weebot/weebot/application/, weebot/weebot/interfaces/, etc.
-  Use the "weebot/weebot/" prefix for all source file operations.
+- PROJECT STRUCTURE: Source files are at the workspace root under weebot/config/,
+  weebot/domain/models/, weebot/application/, weebot/interfaces/, etc.
+  There is NO double nesting — use the single "weebot/" prefix.
+  Example: weebot/application/agents/planner.py
   Output paths use "Output/" (no nesting).
 - BATCH READS: When reading multiple files, use a SINGLE shell command instead of
   reading each file individually. Example:
