@@ -147,7 +147,8 @@ class TestMCPToolRegistryBridge:
         assert registry.validate_tool_for_role("admin", "mcp__weather__get_weather")
         assert registry.validate_tool_for_role("automation", "mcp__weather__get_weather")
 
-    def test_register_followed_by_unregister(self):
+    @pytest.mark.asyncio
+    async def test_register_followed_by_unregister(self):
         """Registering then unregistering a server removes all its tools."""
         registry = RoleBasedToolRegistry()
         bridge = MCPToolRegistryBridge(mcp_client=None, registry=registry)
@@ -163,16 +164,13 @@ class TestMCPToolRegistryBridge:
         assert registry.validate_tool_for_role("admin", "mcp__weather__get_weather")
 
         # Now unregister
-        count = asyncio.get_event_loop().run_until_complete(
-            bridge.unregister_server_tools("weather")
-        )
+        count = await bridge.unregister_server_tools("weather")
         assert count == 1
         assert not registry.validate_tool_for_role("admin", "mcp__weather__get_weather")
 
-    def test_unregister_unknown_server(self):
+    @pytest.mark.asyncio
+    async def test_unregister_unknown_server(self):
         """Unregistering a non-existent server returns 0."""
         bridge = MCPToolRegistryBridge()
-        count = asyncio.get_event_loop().run_until_complete(
-            bridge.unregister_server_tools("nonexistent")
-        )
+        count = await bridge.unregister_server_tools("nonexistent")
         assert count == 0

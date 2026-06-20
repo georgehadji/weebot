@@ -123,10 +123,10 @@ async def test_concurrent_execution_is_faster():
         {"function": {"name": "b", "arguments": "{}"}, "id": "c2"},
         {"function": {"name": "c", "arguments": "{}"}, "id": "c3"},
     ]
-    start = asyncio.get_event_loop().time()
+    start = asyncio.get_running_loop().time()
     tasks = [tools.execute(_name=tc["function"]["name"]) for tc in tool_calls]
     await asyncio.gather(*tasks)
-    elapsed = asyncio.get_event_loop().time() - start
+    elapsed = asyncio.get_running_loop().time() - start
 
     # Sequential would take ~300ms; parallel should take ~100ms
     assert elapsed < 0.25, f"Parallel execution took {elapsed:.3f}s (expected < 0.25s)"

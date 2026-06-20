@@ -390,13 +390,13 @@ async def test_circuit_breaker_performance():
     """Circuit breaker handles high throughput."""
     cb = CircuitBreaker(failure_threshold=1000)
 
-    start = asyncio.get_event_loop().time()
+    start = asyncio.get_running_loop().time()
 
     # 1000 evaluations
     for i in range(1000):
         await cb.evaluate(f"entity_{i}")
 
-    elapsed = asyncio.get_event_loop().time() - start
+    elapsed = asyncio.get_running_loop().time() - start
 
     # Should complete in reasonable time (< 1s for 1000 ops)
     assert elapsed < 1.0

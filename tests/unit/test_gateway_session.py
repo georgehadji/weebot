@@ -74,11 +74,11 @@ class TestGatewaySession:
         assert session.user_id is None
 
     def test_touch_updates_timestamp(self):
+        import time
         key = GatewaySessionKey(platform="telegram", chat_type="private", chat_id="123")
         session = GatewaySession(key=key, flow_session_id="flow-abc")
         old = session.last_activity_at
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(asyncio.sleep(0.01))
+        time.sleep(0.01)
         updated = session.touch()
         assert updated.last_activity_at > old
 
