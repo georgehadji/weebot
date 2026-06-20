@@ -37,7 +37,13 @@ _LAYER_RULES: list[tuple[str, str]] = [
     ("weebot/config/", "core"),                         # configuration
     # Agents — legacy agent orchestration (maps to application)
     ("weebot/agents/", "application"),
+    # Root-level modules (weebot/*.py — no subdirectory)
     ("weebot/agent_core_v2", "application"),
+    ("weebot/ai_router", "application"),                # LLM routing
+    ("weebot/nlp_understanding", "application"),         # NLP processing
+    ("weebot/state_manager", "infrastructure"),          # deprecated state mgmt
+    ("weebot/notifications", "interfaces"),              # OS notifications
+    ("weebot/__init__", "interfaces"),                   # package facade
     # Tests — separate layer
     ("tests/", "tests"),
 ]
