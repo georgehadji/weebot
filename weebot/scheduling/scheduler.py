@@ -84,6 +84,45 @@ class ScheduledJob:
         return cls(**data)
 
 
+def _parse_cron_expression(expr: str) -> dict:
+    """Parse a cron expression into a dict of keyword args for CronTrigger.
+
+    Supports standard 5-field cron expressions (min hour dom mon dow)
+    and simple interval expressions like "30min", "1h", "2hours".
+    """
+    import re as _cron_re
+    expr = expr.strip().lower()
+
+    m = _cron_re.match(r'^(\d+)\s*(min|mins|m)$', expr)
+    if m:
+        return {"minute": f"*/{m.group(1)}"}
+    m = _cron_re.match(r'^(\d+)\s*(h|hour|hours)$', expr)
+    if m:
+        return {"hour": f"*/{m.group(1)}"}
+
+    parts = expr.split()
+    if len(parts) == 5:
+        return {
+            "minute": parts[0],
+            "hour": parts[1],
+            "day": parts[2],
+            "month": parts[3],
+            "day_of_week": parts[4],
+        }
+    if len(parts) == 6:
+        return {
+            "second": parts[0],
+            "minute": parts[1],
+            "hour": parts[2],
+            "day": parts[3],
+            "month": parts[4],
+            "day_of_week": parts[5],
+        }
+
+    logger.warning("Unrecognized cron expression: %s — defaulting to hourly", expr)
+    return {"minute": "0"}
+
+
 class SchedulingManager:
     """Manages scheduled jobs with APScheduler and SQLite persistence."""
 
@@ -602,47 +641,6 @@ class SchedulingManager:
 
         logger.info("Loaded %d cron agent jobs from %s", loaded, jobs_path)
         return loaded
-
-
-def _parse_cron_expression(expr: str) -> dict:
-    """Parse a cron expression into a dict of keyword args for CronTrigger.
-
-    Supports standard 5-field cron expressions (min hour dom mon dow)
-    and simple interval expressions like "30min", "1h", "2hours".
-    """
-    expr = expr.strip().lower()
-
-    # Interval expressions
-    import re as _cron_re
-    m = _cron_re.match(r'^(\d+)\s*(min|mins|m)$', expr)
-    if m:
-        return {"minute": f"*/{m.group(1)}"}
-    m = _cron_re.match(r'^(\d+)\s*(h|hour|hours)$', expr)
-    if m:
-        return {"hour": f"*/{m.group(1)}"}
-
-    # Standard 5-field cron
-    parts = expr.split()
-    if len(parts) == 5:
-        return {
-            "minute": parts[0],
-            "hour": parts[1],
-            "day": parts[2],
-            "month": parts[3],
-            "day_of_week": parts[4],
-        }
-    if len(parts) == 6:
-        return {
-            "second": parts[0],
-            "minute": parts[1],
-            "hour": parts[2],
-            "day": parts[3],
-            "month": parts[4],
-            "day_of_week": parts[5],
-        }
-
-    logger.warning("Unrecognized cron expression: %s — defaulting to hourly", expr)
-    return {"minute": "0"}
 
     async def run_catch_up(self) -> int:
         """Run catch-up for missed scheduled jobs.
