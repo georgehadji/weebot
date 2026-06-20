@@ -402,6 +402,13 @@ class ExecutorAgent:
             )
 
         self._system_prompt = system_prompt
+        # Inject OUTPUT_ROOT so tools resolve paths consistently
+        from weebot.core.output_path import output_path as _op
+        self._system_prompt = self._system_prompt + (
+            f"\n\nOUTPUT_ROOT = {_op('Output')}"
+            "\nALL file writes MUST use this absolute path prefix. "
+            "Example: Set-Content -Path \"{OUTPUT_ROOT}/refactor/file.md\" -Value '...'"
+        )
         # Inject persistent memory snapshot (frozen at session start, preserves prefix cache)
         try:
             from weebot.tools.persistent_memory import PersistentMemoryTool
@@ -477,7 +484,7 @@ class ExecutorAgent:
         # Enhancement D: per-step tool-call cap (default 8).
         # Prevents the executor from burning 30+ LLM calls on simple steps.
         _tool_call_count = 0
-        _MAX_TOOL_CALLS_PER_STEP = 8
+        _MAX_TOOL_CALLS_PER_STEP = 12
         while self._step_budget.consume():
             _tool_call_count += 1
             if _tool_call_count > _MAX_TOOL_CALLS_PER_STEP:
