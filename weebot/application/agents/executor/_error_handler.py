@@ -76,18 +76,17 @@ def parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
         return {"arg_keys": [], "arg_count": 0}
 
 
-# TDD/RED phase markers that indicate tool failure is expected
+# TDD/RED/GREEN phase markers that indicate tool failure is expected.
+# GREEN phases are included because the planner may create deliberate
+# test bugs (the test should fail on first run, then be fixed).
 _TDD_EXPECTED_FAILURE_MARKERS: frozenset = frozenset({
-    "RED-VERIFY",
-    "red-verify",
-    "[RED]",
-    "[RED-VERIFY]",
-    "tests fail",
-    "confirm all tests FAIL",
-    "tests should fail",
-    "expected failure",
-    "ImportError expected",
-    "NameError expected",
+    "RED-VERIFY", "red-verify",
+    "[RED]", "[RED-VERIFY]",
+    "[GREEN]", "[GREEN-VERIFY]",
+    "tests fail", "confirm all tests FAIL",
+    "tests should fail", "expected failure",
+    "ImportError expected", "NameError expected",
+    "deliberate", "DELIBERATELY",
 })
 
 
