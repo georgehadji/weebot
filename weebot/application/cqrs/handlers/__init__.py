@@ -143,7 +143,7 @@ def register_default_handlers(
         )
         mediator.register_command_handler(
             ExecuteStepCommand,
-            ExecuteStepHandler(state_repo, llm, tools or _empty_tools(), event_bus),
+            ExecuteStepHandler(state_repo, llm, tools or ToolCollection(), event_bus),
         )
         mediator.register_command_handler(
             UpdatePlanCommand,
