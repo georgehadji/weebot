@@ -97,11 +97,13 @@ class TestModelAwareHarnessResolver:
             ModelAwareHarnessResolver,
         )
         from weebot.config.harness.schema import HarnessConfig
+        from weebot.domain.models.harness_instructions import InstructionConfig
 
+        # Use a config with all instruction surfaces cleared to verify empty output
         base = HarnessConfig.default()
+        base = base.model_copy(update={"instructions": InstructionConfig(yagni_preflight="")})
         resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))
         block = resolver.resolve_instruction_block("gpt-4o")
-        # Base has empty defaults, so block should be empty
         assert block == ""
 
     def test_set_base(self):
@@ -149,8 +151,11 @@ class TestAssembleFromConfig:
             HarnessPromptAssembler,
         )
         from weebot.config.harness.schema import HarnessConfig
+        from weebot.domain.models.harness_instructions import InstructionConfig
 
-        cfg = HarnessConfig.default()  # Empty instructions
+        cfg = HarnessConfig.default()
+        # Clear yagni_preflight so all instruction surfaces are truly empty
+        cfg = cfg.model_copy(update={"instructions": InstructionConfig(yagni_preflight="")})
         block = HarnessPromptAssembler.assemble_from_config(cfg)
         assert block == ""
 
