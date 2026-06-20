@@ -41,8 +41,8 @@ class ErrorClassifier:
         (r"prompt.{0,20}too.{0,10}long", ErrorCategory.CONTEXT_LENGTH),
         # Rate limit
         (r"rate.?limit|too.many.request|429|quota.exceed", ErrorCategory.RATE_LIMIT),
-        # Auth — fail fast, no point retrying
-        (r"api.?key|unauthorized|authentication|403|invalid.?key", ErrorCategory.AUTH),
+        # Auth / billing — fail fast, no point retrying
+        (r"api.?key|unauthorized|authentication|40[123]|invalid.?key|payment.?required", ErrorCategory.AUTH),
         # Model unavailable
         (r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|503", ErrorCategory.MODEL_UNAVAILABLE),
         # Network / transient
