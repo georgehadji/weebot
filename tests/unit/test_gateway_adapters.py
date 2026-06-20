@@ -98,11 +98,11 @@ class TestSignalAdapter:
         result = await self.adapter.send_response(resp)
         assert result is False
 
-    def test_adapter_start_stop(self):
+    @pytest.mark.asyncio
+    async def test_adapter_start_stop(self):
         """Start and stop should not raise."""
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(self.adapter.start())
-        asyncio.get_event_loop().run_until_complete(self.adapter.stop())
+        await self.adapter.start()
+        await self.adapter.stop()
 
 
 class TestEmailAdapter:
