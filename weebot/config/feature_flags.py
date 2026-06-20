@@ -60,6 +60,20 @@ ONLINE_SKILLOPT_ENABLED: bool = _env_bool(
 )
 
 
+# ── Product-Mode (product-led thinking pipeline) ──────────────────────────
+# Master switch for the product thinking enhancements:
+# Planner prompt augmentation, ProductGateState, outcome verification.
+# Default OFF — enable via WEEBOT_PRODUCT_MODE=true
+PRODUCT_MODE_ENABLED: bool = _env_bool(
+    "WEEBOT_PRODUCT_MODE", default=False
+)
+# When True, emit ProductDecisionEvent on session completion for non-trivial
+# tasks with ProductContext available.
+PRODUCT_DECISION_LOG_ENABLED: bool = _env_bool(
+    "WEEBOT_PRODUCT_DECISION_LOG", default=False
+)
+
+
 # ── Vision-in-the-loop (PicoAgents audit) ───────────────────────────────────
 # When True, tool results carrying a screenshot (ToolResult.base64_image) are
 # injected back into the conversation as an image message, so a vision-capable
