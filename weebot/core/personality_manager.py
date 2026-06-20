@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Optional
 from weebot.domain.models.personality import RoleSectionMapping
 
 if TYPE_CHECKING:
-    from weebot.application.ports.soul_provider_port import SoulProviderPort
+    from weebot.core.soul_provider_port import SoulProviderPort
 
 logger = logging.getLogger(__name__)
 

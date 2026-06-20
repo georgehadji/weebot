@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from weebot.agent_core_v2 import AgentConfig, WeebotAgent
 from weebot.core.agent_context import AgentContext
-from weebot.tools.tool_registry import RoleBasedToolRegistry
 
 if TYPE_CHECKING:
     from weebot.tools.base import ToolCollection
+    from weebot.tools.tool_registry import RoleBasedToolRegistry
+    from weebot.agent_core_v2 import AgentConfig, WeebotAgent
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +26,18 @@ class AgentFactory:
 
     MAX_NESTING_LEVEL = 3
 
-    def __init__(self, tool_registry: Optional[RoleBasedToolRegistry] = None) -> None:
+    def __init__(self, tool_registry=None) -> None:
         """Initialize the agent factory.
 
         Args:
             tool_registry: RoleBasedToolRegistry instance for tool access control.
                           If None, creates a default registry.
         """
-        self.tool_registry = tool_registry or RoleBasedToolRegistry()
+        if tool_registry is not None:
+            self.tool_registry = tool_registry
+        else:
+            from weebot.tools.tool_registry import RoleBasedToolRegistry as _RTR
+            self.tool_registry = _RTR()
         self._agent_counter = 0
 
     async def spawn_agent(
@@ -110,7 +114,8 @@ class AgentFactory:
         # Create child config (inherited + overridden)
         # Note: In current codebase, we don't have parent agent reference,
         # so we create an independent config for the child
-        child_config = AgentConfig(
+        from weebot.agent_core_v2 import AgentConfig as _AC, WeebotAgent as _WA
+        child_config = _AC(
             project_id=f"{parent_context.orchestrator_id}_{child_context.agent_id}",
             description=description or f"Child agent: {role}",
             auto_resume=True,
@@ -120,7 +125,7 @@ class AgentFactory:
         )
 
         # Create agent instance
-        agent = WeebotAgent(child_config)
+        agent = _WA(child_config)
 
         # Attach context to agent (custom attribute for multi-agent coordination)
         agent._context = child_context

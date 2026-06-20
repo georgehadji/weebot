@@ -7,7 +7,6 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from weebot.tools.base import ToolCollection, ToolResult
 from weebot.domain.models import (
     AgentState, Memory, Message, Role, ToolCallSpec,
 )

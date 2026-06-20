@@ -6,9 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from weebot.tools.powershell_tool import PowerShellTool
-from weebot.tools.browser_tool import BrowserTool
-from weebot.tools.heuristic_router import HeuristicRouter
+from weebot.config.constants import TEMPERATURE
 from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 from weebot.core.safety import SafetyChecker
 
@@ -32,14 +30,17 @@ class RecursiveWeebotAgent:
     """
     
     def __init__(self):
-        self.llm = ChatOpenAI(model=MODEL_COMMAND_DEFAULT, temperature=0.2)
-        self.heuristic_router = HeuristicRouter()
+        self.llm = ChatOpenAI(model=MODEL_COMMAND_DEFAULT, temperature=TEMPERATURE)
+        from weebot.tools.heuristic_router import HeuristicRouter as _HR
+        self.heuristic_router = _HR()
         self.safety_checker = SafetyChecker()
         self.history: List[ExecutionStep] = []
         
-        # Tools
-        self.ps_tool = PowerShellTool()
-        self.browser_tool = BrowserTool()
+        # Tools (lazy-imported to keep core independent of infrastructure at module level)
+        from weebot.tools.powershell_tool import PowerShellTool as _PST
+        from weebot.tools.browser_tool import BrowserTool as _BT
+        self.ps_tool = _PST()
+        self.browser_tool = _BT()
         self.tools = [self.ps_tool, self.browser_tool]
         
         # Create agent with tools
