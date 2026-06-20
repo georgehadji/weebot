@@ -34,7 +34,9 @@ _LAYER_RULES: list[tuple[str, str]] = [
     ("weebot/templates/", "interfaces"),                # UI templates
     # Core — cross-cutting concerns
     ("weebot/core/", "core"),
-    ("weebot/config/", "core"),                         # configuration
+    ("weebot/config", "core"),                          # configuration (handles weebot/config and weebot/config/)
+    ("weebot/models/", "domain"),                       # shared models (structured_output, etc.)
+    ("weebot/utils/", "core"),                          # cross-cutting utilities
     # Agents — legacy agent orchestration (maps to application)
     ("weebot/agents/", "application"),
     # Root-level modules (weebot/*.py — no subdirectory)
