@@ -43,18 +43,29 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
     TaskCategory.CODING: [
         re.compile(r"\b(code|coding|refactor|implement|debug|fix|patch|rewrite|overhaul|convert)\b", re.I),
         re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)?\s*(html|css|js|javascript|python|typescript|react|vue|svelte|node|django|flask|fastapi|sql|database|schema|migration|docker|kubernetes|terraform|app|api|endpoint|route|component|page|site|script|function|class|module)\b", re.I),
+        re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)\s", re.I),
     ],
     TaskCategory.FILE_OPS: [
         re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
         re.compile(r"\b(create|write|make)\s+(a|the|new)?\s*(file|directory|folder|dir)\b", re.I),
+        re.compile(r"\b(list|count|scan|enumerate)\s+(all|every)\s+(python\s+)?files?\b", re.I),
         re.compile(r"\b(str_replace|insert|edit|rename|copy|move|delete|remove)\b", re.I),
         re.compile(r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b", re.I),
         re.compile(r"\b(get-childitem|get-content|ls\s+-la|dir\s+/|find\s+\.)\b", re.I),
     ],
     TaskCategory.RESEARCH: [
-        re.compile(r"\b(research|search|find|look\s+(up|into)|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I),
+        re.compile(r"\b(research|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I),
+        re.compile(r"\b(search|find|look\s+(up|into))\s+(for|the|a|an|relevant|information|papers?|articles?)\b", re.I),
         re.compile(r"\b(web\s*search|browser_inspector|advanced_browser|curl|fetch|http)\b", re.I),
-        re.compile(r"\b(compare|analyze|synthesize|summarize|report|benchmark|competitor|market|trend)\b", re.I),
+        re.compile(r"\b(compare|analyze|synthesize|benchmark|competitor|market|trend)\b", re.I),
+    ],
+    TaskCategory.PLANNING: [
+        re.compile(r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b", re.I),
+        re.compile(r"\b(create\s+(plan|roadmap|strategy)|task\s*(breakdown|decomposition))\b", re.I),
+    ],
+    TaskCategory.SECURITY: [
+        re.compile(r"\b(vulnerability|exploit|injection|xss|csrf)\b", re.I),
+        re.compile(r"\b(security|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential|sanitize|escape)\b", re.I),
     ],
     TaskCategory.REVIEW: [
         re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\s+(the|this|code|for|security|quality)\b", re.I),
@@ -72,8 +83,8 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
         re.compile(r"\b(sandbox|isolate|quarantine|block|deny|allow|policy|guard|validate|sanitize|escape)\b", re.I),
     ],
     TaskCategory.SUMMARIZATION: [
-        re.compile(r"\b(summarize|summary|recap|wrap\s*up|conclusion|outcome|result|complete|finish|done)\b", re.I),
-        re.compile(r"\b(provide\s+a?\s*(summary|recap|overview)|what\s+(was|happened|did|we))\b", re.I),
+        re.compile(r"\b(summarize|summary|recap|wrap\s*up|conclusion|report)\b", re.I),
+        re.compile(r"\b(provide\s+a?\s*(summary|recap|overview|report)|what\s+(was|happened|did|we))\b", re.I),
     ],
 }
 
@@ -98,13 +109,13 @@ def classify_step(description: str) -> TaskCategory:
         return TaskCategory.GENERAL
 
     priority = [
-        TaskCategory.SECURITY,
-        TaskCategory.REVIEW,
         TaskCategory.CODING,
+        TaskCategory.SECURITY,
+        TaskCategory.SUMMARIZATION,
+        TaskCategory.REVIEW,
         TaskCategory.PLANNING,
         TaskCategory.RESEARCH,
         TaskCategory.FILE_OPS,
-        TaskCategory.SUMMARIZATION,
     ]
     best, best_score = TaskCategory.GENERAL, -1
     for cat in priority:
