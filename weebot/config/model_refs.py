@@ -24,10 +24,10 @@ from __future__ import annotations
 # ========================================================================
 # Executor Cascade (4-tier)
 # ========================================================================
-MODEL_CASCADE_TIER1: str = "moonshotai/kimi-k2.7-code"
-"""Tier 1: Kimi K2.7 Code — primary executor model.
-256K context, 32B/1T MoE, native thinking mode.
-Routed via OpenRouter (moonshotai provider)."""
+MODEL_CASCADE_TIER1: str = "z-ai/glm-5.2"
+"""Tier 1: GLM 5.2 — primary executor model.
+1M context, long-horizon agent workflows, project-level SWE, strong coding.
+Routed via OpenRouter (z-ai provider).  $1.20/$4.10 per 1M tokens."""
 
 MODEL_BUDGET: str = "x-ai/grok-build-0.1"
 """Budget model for non-critical operations (compression, curation, defaults).
@@ -113,7 +113,7 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "x-ai/grok-build-0.1",                    # fallback 2: Grok Build — fast agentic SWE
     ],
     "executor": [
-        "moonshotai/kimi-k2.7-code",              # primary: Kimi K2.7 Code — agentic, tool-use, 256K
+        "z-ai/glm-5.2",                           # primary: GLM 5.2 — 1M ctx, long-horizon, strong coding
         "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast
         "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
     ],
@@ -198,6 +198,7 @@ MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 # Fallback chain
 # ========================================================================
 MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
+    "z-ai/glm-5.2",
     "moonshotai/kimi-k2.6",
     "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",

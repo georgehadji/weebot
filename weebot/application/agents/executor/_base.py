@@ -474,7 +474,34 @@ class ExecutorAgent:
             self._trajectory_monitor.set_step_context(step.description or "")
 
         self._step_budget.reset()
+        # Enhancement D: per-step tool-call cap (default 8).
+        # Prevents the executor from burning 30+ LLM calls on simple steps.
+        _tool_call_count = 0
+        _MAX_TOOL_CALLS_PER_STEP = 8
         while self._step_budget.consume():
+            _tool_call_count += 1
+            if _tool_call_count > _MAX_TOOL_CALLS_PER_STEP:
+                logger.warning(
+                    "Step %s: tool-call budget exhausted (%d calls). "
+                    "Completing step with current findings.",
+                    step.id, _MAX_TOOL_CALLS_PER_STEP,
+                )
+                # Force the LLM to produce a summary instead of more tool calls
+                self._conversation_buffer.append({
+                    "role": "user",
+                    "content": (
+                        "You have reached the maximum number of tool calls for this step. "
+                        "Summarize what you found and complete the step. Do NOT call "
+                        "any more tools."
+                    ),
+                })
+                # One more LLM call to produce the summary, then break
+                messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
+                response = await self._cascade.call_with_cascade(messages=messages, step=step)
+                step_result = response.content or "Step completed (budget cap)."
+                yield MessageEvent(role="assistant", message=step_result)
+                abort_step = True
+                break
             # ── Pre-call compaction: ensure the LLM sees compacted context ──
             await self._context_compressor._maybe_compress()
 

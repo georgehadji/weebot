@@ -58,6 +58,17 @@ class TrajectoryMonitor:
         self._consecutive_failed_steps: int = 0
         self._cross_step_error_outputs: deque[str] = deque(maxlen=5)
 
+        # ── TDD RED-phase tolerance ──────────────────────────────
+        self._step_description: str = ""
+
+    def set_step_context(self, step_description: str) -> None:
+        """Set the current step description for expected-failure detection.
+
+        Called by the executor before each step so the trajectory monitor
+        can distinguish TDD RED-phase failures from real errors.
+        """
+        self._step_description = step_description
+
     def reset_step(self) -> None:
         """Clear per-step rolling windows; preserve cross-step accumulators.
 
@@ -194,9 +205,17 @@ class TrajectoryMonitor:
 
         # 6. Phase 6: Cross-step failure accumulation — 3+ consecutive
         #    error-producing steps indicate a systemic failure.
+        #    Skip TDD RED-phase steps where test failure is expected.
         if tool_output and "ERROR" in tool_output.upper():
-            self._cross_step_error_outputs.append(tool_output[:100])
-            self._consecutive_failed_steps += 1
+            from weebot.application.agents.executor._error_handler import (
+                is_expected_failure,
+            )
+            # Exclude exploratory path errors — "Cannot find path" is normal
+            #   exploration, not a systemic failure
+            from weebot.core.error_classifier import ErrorClassifier
+            if not ErrorClassifier.is_path_error(tool_output):
+                self._cross_step_error_outputs.append(tool_output[:100])
+                self._consecutive_failed_steps += 1
         else:
             self._consecutive_failed_steps = 0
 

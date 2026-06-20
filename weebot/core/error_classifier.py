@@ -69,6 +69,28 @@ class ErrorClassifier:
         return cls.classify(exc) == ErrorCategory.AUTH
 
     @classmethod
+    def is_path_error(cls, error_text: str) -> bool:
+        """Return True if *error_text* is a filesystem path/exploration error.
+
+        These are normal during exploratory steps — the executor is probing
+        for file locations and some paths won't exist.  They should NOT count
+        toward the cross-step failure threshold.
+        """
+        combined = error_text.lower()
+        path_patterns = [
+            r"cannot find path",
+            r"does not exist",
+            r"access to the path.*is denied",
+            r"cannot find.*because it does",
+            r"get-childitem.*cannot find",
+            r"no such file or directory",
+        ]
+        for pattern in path_patterns:
+            if re.search(pattern, combined):
+                return True
+        return False
+
+    @classmethod
     def should_fallback_model(cls, exc: BaseException) -> bool:
         """True when a different model should be tried."""
         return cls.classify(exc) in (ErrorCategory.RATE_LIMIT, ErrorCategory.MODEL_UNAVAILABLE)
