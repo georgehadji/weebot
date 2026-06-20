@@ -105,7 +105,10 @@ class TestBashTool:
             captured.append(kwargs)
             return _ok()
 
-        with patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd):
+        # Simulate Windows platform regardless of actual CI OS
+        import os as _os
+        with patch.object(_os, "name", "nt"), \
+             patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd):
             await tool.execute(command="Get-Date")
 
         assert captured, "sandbox.execute_shell was not called"
