@@ -1,9 +1,15 @@
 """Unit tests for computer use tools."""
+import importlib.util
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import base64
 from PIL import Image
 from io import BytesIO
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("pyautogui") is None,
+    reason="pyautogui not installed",
+)
 
 from weebot.tools.computer_use import (
     ComputerUseTool,
