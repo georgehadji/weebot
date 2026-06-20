@@ -56,8 +56,22 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
     TaskCategory.RESEARCH: [
         re.compile(r"\b(research|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I),
         re.compile(r"\b(search|find|look\s+(up|into))\s+(for|the|a|an|relevant|information|papers?|articles?)\b", re.I),
-        re.compile(r"\b(web\s*search|browser_inspector|advanced_browser|curl|fetch|http)\b", re.I),
+        re.compile(r"\b(web[\s_]search|web_search|browser_inspector|advanced_browser|curl|fetch|http)\b", re.I),
         re.compile(r"\b(compare|analyze|synthesize|benchmark|competitor|market|trend)\b", re.I),
+    ],
+    TaskCategory.FILE_OPS: [
+        re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
+        re.compile(r"\b(create|write|make)\s+(a|the|new)?\s*(file|directory|folder|dir)\b", re.I),
+        re.compile(r"\b(create|make)\s+.*(directory|folder|dir)\b", re.I),
+        re.compile(r"\b(list|count|scan|enumerate)\s+(all|every)\s+(python\s+)?files?\b", re.I),
+        re.compile(r"\b(str_replace|insert|edit|rename|copy|move|delete|remove)\b", re.I),
+        re.compile(r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b", re.I),
+        re.compile(r"\b(get-childitem|get-content|ls\s+-la|dir\s+/|find\s+\.)\b", re.I),
+    ],
+    TaskCategory.REVIEW: [
+        re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\b", re.I),
+        re.compile(r"\b(code\s*review|security\s*(audit|review)|quality\s*(check|review)|best\s*practice|convention|standard)\b", re.I),
+        re.compile(r"\b(find\s+(bugs|issues|vulnerabilities|problems)|identify\s+(issues|problems|bugs))\b", re.I),
     ],
     TaskCategory.PLANNING: [
         re.compile(r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b", re.I),
@@ -109,13 +123,13 @@ def classify_step(description: str) -> TaskCategory:
         return TaskCategory.GENERAL
 
     priority = [
-        TaskCategory.CODING,
         TaskCategory.SECURITY,
-        TaskCategory.SUMMARIZATION,
         TaskCategory.REVIEW,
+        TaskCategory.CODING,
         TaskCategory.PLANNING,
         TaskCategory.RESEARCH,
         TaskCategory.FILE_OPS,
+        TaskCategory.SUMMARIZATION,
     ]
     best, best_score = TaskCategory.GENERAL, -1
     for cat in priority:

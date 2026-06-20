@@ -225,8 +225,20 @@ async def test_skillstore():
     persistence_ok = len(names_after_restart) == len(names_after) and all(n in names_after_restart for n in names_after)
     store_results.append({"op": "persistence_restart", "survived": persistence_ok, "count": len(names_after_restart)})
 
-    all_ok = all(r.get("ok", r.get("status") == "success") or r.get("survived") or r.get("removed") or r.get("version_grew") or r.get("buffer_grew") or r.get("slow_update_stripped") for r in store_results)
-    print(f"[SKILLSTORE] {'✓' if all_ok else '✗'} {sum(1 for r in store_results if r.get('ok', r.get('status')=='success'))}/{len(store_results)} ops passed")
+        all_ok = all(
+        r.get("ok") or r.get("status") == "success"
+        or r.get("all_loaded") or r.get("version_grew") or r.get("buffer_grew")
+        or r.get("survived") or r.get("removed") or r.get("slow_update_stripped")
+        or r.get("names_match") or r.get("descs_match")
+        for r in store_results
+    )
+    passed = sum(1 for r in store_results if (
+        r.get("ok") or r.get("status") == "success"
+        or r.get("all_loaded") or r.get("version_grew") or r.get("buffer_grew")
+        or r.get("survived") or r.get("removed") or r.get("slow_update_stripped")
+        or r.get("names_match") or r.get("descs_match")
+    ))
+    print(f"[SKILLSTORE] {'✓' if all_ok else '✗'} {passed}/{len(store_results)} ops passed")
 
     (OUT3 / "skillstore-cycle.json").write_text(json.dumps({"all_ok": all_ok, "results": store_results}, indent=2))
 
