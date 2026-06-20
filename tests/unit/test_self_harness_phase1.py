@@ -138,7 +138,7 @@ class TestHarnessPromptAssembler:
     def test_assemble_compact_all_empty(self):
         from weebot.domain.models.harness_instructions import InstructionConfig
         from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
-        ic = InstructionConfig()
+        ic = InstructionConfig(yagni_preflight="")  # explicitly clear all sections
         result = HarnessPromptAssembler.assemble_compact(instructions=ic)
         assert result == "harness: none"
 
