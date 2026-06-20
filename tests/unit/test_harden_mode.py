@@ -92,11 +92,10 @@ class TestRateLimiterBounds:
         assert metrics["active_buckets"] <= 100
         assert metrics["eviction_count"] > 0
     
-    @pytest.mark.xfail(reason="Metrics tracking not yet implemented")
     def test_metrics_tracking(self):
         """RateLimiter: Tracks utilization metrics."""
         from weebot.templates.production import RateLimiter
-        
+
         limiter = RateLimiter(backend="memory")
         
         # Make some requests
