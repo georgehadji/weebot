@@ -165,6 +165,9 @@ class ExecApprovalPolicy:
 TOOL_CATEGORIES: dict[str, ApprovalMode] = {
     "finance": ApprovalMode.FORCE_ALWAYS_ASK,
     "payment": ApprovalMode.FORCE_ALWAYS_ASK,
+    # Inbound email is untrusted input (ADR 006). Any action that follows
+    # an atomic_mail jmap_request must be confirmed before execution.
+    "inbound_mail": ApprovalMode.FORCE_ALWAYS_ASK,
 }
 
 

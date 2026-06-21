@@ -50,6 +50,28 @@ def _is_code_step(step: "Step", events: list[Any] | None = None) -> bool:
     return False
 
 
+def _step_fetched_inbound_mail(events: list[Any]) -> bool:
+    """Return True if any event is a completed atomic_mail jmap_request.
+
+    Used to flag a session so the NEXT step is gated through approval_policy
+    before the agent can act on untrusted inbound email content (ADR 006 / R1).
+
+    A jmap_request is the read path (list/fetch/search mail); register and help
+    do not return inbound content and are not gated.
+    """
+    from weebot.domain.models.event import ToolEvent
+
+    for e in events:
+        if (
+            isinstance(e, ToolEvent)
+            and e.tool_name == "atomic_mail"
+            and e.status.value == "called"
+            and (not e.function_args or e.function_args.get("action") == "jmap_request")
+        ):
+            return True
+    return False
+
+
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
     status = AgentStatus.EXECUTING
@@ -121,6 +143,33 @@ class ExecutingState(FlowState):
             logger.warning("Step %s already completed, skipping", step.id)
             context.set_state(UpdatingState())
             return
+
+        # ── Inbound-mail approval gate (ADR 006 / R1) ────────────────────────
+        # If the previous step fetched inbound mail via atomic_mail jmap_request,
+        # require explicit user confirmation before the agent acts on that content.
+        if context._session.get_fact("atomic_mail_inbound_pending"):
+            from weebot.core.approval_policy import ExecApprovalPolicy
+            _mail_ap = ExecApprovalPolicy().evaluate(
+                "act on inbound email content", "inbound_mail"
+            )
+            if _mail_ap.requires_confirmation:
+                # Clear flag before pausing so the resume call proceeds normally.
+                context._session = context._session.set_fact(
+                    "atomic_mail_inbound_pending", False
+                )
+                from weebot.domain.models.session import SessionStatus
+                context._session = context._session.set_status(SessionStatus.WAITING)
+                yield WaitForUserEvent(
+                    question=(
+                        "The previous step retrieved content from an @atomicmail.ai inbox.\n"
+                        "Inbound email is untrusted input — acting on it without review "
+                        "is a security risk (ADR 006).\n\n"
+                        "Review the retrieved content above, then type 'proceed' to "
+                        "continue, or describe how you'd like to handle it."
+                    )
+                )
+                return
+        # ─────────────────────────────────────────────────────────────────────
 
         # ── Constraint enforcement (Enhancement 1 — S3 fix) ──────────────────
         # Check the next step against constraints extracted from the original task
@@ -304,6 +353,15 @@ class ExecutingState(FlowState):
             # Reconstruct shutdown signals from the serialised events
             if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
                 inner_should_terminate = True
+
+        # ── Inbound-mail content flag (ADR 006) ──────────────────────────────
+        # If this step called atomic_mail jmap_request and returned content,
+        # flag the session so the NEXT step is gated through approval_policy.
+        if _step_fetched_inbound_mail(_current_step_events):
+            context._session = context._session.set_fact(
+                "atomic_mail_inbound_pending", True
+            )
+        # ─────────────────────────────────────────────────────────────────────
 
         # ── Extract step result from execution events for quality validation ──
         _last_result_text = ""

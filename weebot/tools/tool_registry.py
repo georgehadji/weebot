@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ class RoleBasedToolRegistry:
             "schedule",
             "file_editor",
             "python_execute",
+            "atomic_mail",
         ],
         "documentation": [
             "file_editor",
@@ -98,6 +100,7 @@ class RoleBasedToolRegistry:
             "design_system",
             "persistent_memory",
             "mixture_of_agents",
+            "atomic_mail",
         ],
         "coder": [
             "bash",
@@ -401,6 +404,11 @@ class RoleBasedToolRegistry:
             "vane_search": VaneSearchTool,
             "image_gen": ImageGenTool,
         }
+
+        if os.getenv("WEEBOT_ENABLE_ATOMIC_MAIL", "0").strip("\"'") not in ("", "0", "false", "False"):
+            from weebot.tools.atomic_mail_tool import AtomicMailTool
+            cls._TOOL_CLASS_MAP["atomic_mail"] = AtomicMailTool
+
         return cls._TOOL_CLASS_MAP
 
     def create_tool_collection(
