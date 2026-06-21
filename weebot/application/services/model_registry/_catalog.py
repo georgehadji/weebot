@@ -432,6 +432,7 @@ MODELS: dict[str, ModelConfig] = {
             strengths=[TaskType.ARCHITECTURE, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
             api_key_env="DEEPSEEK_API_KEY",
+            tool_use_score=7,
         ),
         "essentialai/rnj-1-instruct": ModelConfig(
             name="Rnj 1 Instruct",
@@ -2007,6 +2008,7 @@ MODELS: dict[str, ModelConfig] = {
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.CHAT, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.STANDARD,
             api_key_env="OPENROUTER_API_KEY",
+            tool_use_score=8,
         ),
         "x-ai/grok-4.20": ModelConfig(
             name="Grok 4.20",
@@ -2088,6 +2090,7 @@ MODELS: dict[str, ModelConfig] = {
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.STANDARD,
             api_key_env="KIMI_API_KEY",
+            tool_use_score=6,
         ),
         "switchpoint/router": ModelConfig(
             name="Switchpoint Router",

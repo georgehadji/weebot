@@ -27,6 +27,7 @@ class ModelConfig:
     strengths: List[TaskType]
     tier: ModelTier
     api_key_env: str
+    tool_use_score: int = 5
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         return (input_tokens + output_tokens) * self.cost_per_1k_tokens / 1000

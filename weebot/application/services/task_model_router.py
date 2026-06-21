@@ -18,6 +18,7 @@ class TaskCategory(Enum):
     FILE_OPS = "file_ops"
     RESEARCH = "research"
     REVIEW = "review"
+    BROWSER = "browser"
     PLANNING = "planning"
     SECURITY = "security"
     SUMMARIZATION = "summarization"
@@ -30,6 +31,7 @@ CATEGORY_MODEL: dict[TaskCategory, str] = {
     TaskCategory.CODING: "x-ai/grok-build-0.1",
     TaskCategory.FILE_OPS: "minimax/minimax-m3",
     TaskCategory.RESEARCH: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    TaskCategory.BROWSER: "deepseek/deepseek-v4-flash",  # strong tool-use for browser automation
     TaskCategory.REVIEW: "x-ai/grok-4.3",
     TaskCategory.PLANNING: "nvidia/nemotron-3-ultra-550b-a55b:free",
     TaskCategory.SECURITY: "x-ai/grok-4.3",
@@ -56,8 +58,18 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
     TaskCategory.RESEARCH: [
         re.compile(r"\b(research|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I),
         re.compile(r"\b(search|find|look\s+(up|into))\s+(for|the|a|an|relevant|information|papers?|articles?)\b", re.I),
-        re.compile(r"\b(web[\s_]search|web_search|browser_inspector|advanced_browser|curl|fetch|http)\b", re.I),
+        re.compile(r"\b(web[\s_]search|web_search|curl|fetch|http)\b", re.I),
         re.compile(r"\b(compare|analyze|synthesize|benchmark|competitor|market|trend)\b", re.I),
+    ],
+    TaskCategory.BROWSER: [
+        re.compile(r"\b(browser_navigator|advanced_browser|web_scraper|browser_inspector)\b", re.I),
+        re.compile(r"\b(navigate|goto|go\s+to|open|launch)\s+(to\s+)?(https?://|www\.)\b", re.I),
+        re.compile(r"\b(click|tap|press)\s+(on|the|a)\s+(button|link|element|selector|box|input|field)\b", re.I),
+        re.compile(r"\b(fill|type|enter)\s+(in|the|a)\s+(form|field|input|box|textbox|textarea)\b", re.I),
+        re.compile(r"\b(screenshot|capture|save\s+screenshot|take\s+(a\s+)?screenshot)\b", re.I),
+        re.compile(r"\b(login|log\s*in|sign\s*in|authenticate|post|publish|compose)\b", re.I),
+        re.compile(r"\b(scrape|extract|parse|crawl)\s+", re.I),
+        re.compile(r"\b(linkedin|facebook|twitter|github)\s+(post|article|page|profile|feed)\b", re.I),
     ],
     TaskCategory.FILE_OPS: [
         re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
@@ -125,6 +137,7 @@ def classify_step(description: str) -> TaskCategory:
     priority = [
         TaskCategory.SECURITY,
         TaskCategory.REVIEW,
+        TaskCategory.BROWSER,
         TaskCategory.CODING,
         TaskCategory.PLANNING,
         TaskCategory.RESEARCH,
