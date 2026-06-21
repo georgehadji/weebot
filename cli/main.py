@@ -300,11 +300,8 @@ def init(platform: str | None, tier: str | None, force: bool, no_env: bool, with
 def _validate_model_catalog(json_output: bool) -> None:
     """Cross-validate cascade models against the model catalog."""
     from weebot.config._catalog_validator import CatalogValidator
-    import weebot.config.model_refs as _mr
-    from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
 
-    _validator = CatalogValidator()
-    _report = _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
+    _report = CatalogValidator.run_default_validation()
     if json_output:
         import json as _json
         console.print_json(_json.dumps({

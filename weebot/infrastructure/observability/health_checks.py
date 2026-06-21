@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+try:
+    import httpx
+except ImportError:
+    httpx = None  # xAI health check gracefully degrades
 
 
 class HealthStatus(Enum):
@@ -230,8 +236,16 @@ class HealthCheckService:
                 latency_ms=latency,
             )
 
+        if httpx is None:
+            latency = (time.monotonic() - start_time) * 1000
+            return ComponentHealth(
+                name="xai",
+                status=HealthStatus.UNHEALTHY,
+                message="httpx not installed — cannot ping xAI API",
+                latency_ms=latency,
+            )
+
         try:
-            import httpx
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     "https://api.x.ai/v1/models",

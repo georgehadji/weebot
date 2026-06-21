@@ -34,7 +34,17 @@ class CascadeExecutor:
 
     # OpenRouter credit threshold — below this (in tokens), skip
     # OpenRouter models to avoid 402 errors that waste cascade timeouts.
+    # Override via OPENROUTER_MIN_CREDITS env var (default: 10000).
     _OPENROUTER_MIN_CREDITS: int = 10000
+
+    @classmethod
+    def _get_credit_threshold(cls) -> int:
+        """Return the credit threshold, respecting env-var override."""
+        import os as _os
+        try:
+            return int(_os.environ.get("OPENROUTER_MIN_CREDITS", cls._OPENROUTER_MIN_CREDITS))
+        except (TypeError, ValueError):
+            return cls._OPENROUTER_MIN_CREDITS
 
     def __init__(
         self,
@@ -108,9 +118,9 @@ class CascadeExecutor:
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
-    @classmethod
+    @staticmethod
     async def get_credits_and_filter_direct(
-        cls, model_ids: list[str]
+        model_ids: list[str],
     ) -> list[str]:
         """Filter ``model_ids`` to only include non-OpenRouter models if
         credits are below threshold.  Returns all models on success.
@@ -118,19 +128,20 @@ class CascadeExecutor:
         Used by the cascade to skip OpenRouter-dependent models when
         credits are too low to pay for a generation request.
         """
-        credits = await cls._check_openrouter_credits()
-        if credits >= cls._OPENROUTER_MIN_CREDITS:
+        threshold = CascadeExecutor._get_credit_threshold()
+        credits = await CascadeExecutor._check_openrouter_credits()
+        if credits >= threshold:
             return model_ids  # enough credits — use all models
 
         # Credits below threshold — filter out OpenRouter-only models
-        filtered = [m for m in model_ids if not cls._is_openrouter_model(m)]
+        filtered = [m for m in model_ids if not CascadeExecutor._is_openrouter_model(m)]
         if filtered != model_ids:
             skipped = len(model_ids) - len(filtered)
             logger.info(
                 "OpenRouter credits low (%d — need %d), skipping %d "
                 "OpenRouter-only model(s)",
                 credits,
-                cls._OPENROUTER_MIN_CREDITS,
+                threshold,
                 skipped,
             )
         return filtered

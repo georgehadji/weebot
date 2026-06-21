@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from weebot.application.services.model_registry._models import ModelConfig
 
 _log = logging.getLogger(__name__)
 
@@ -85,12 +88,33 @@ class CatalogValidator:
         validator = CatalogValidator()
         report = validator.validate(role_cascades=<dict>, catalog=<dict>)
         report.log_summary()
+
+    For the standard validation against the built-in catalog and cascade
+    definitions, use the convenience method::
+
+        report = CatalogValidator.run_default_validation()
     """
+
+    @staticmethod
+    def run_default_validation() -> ValidationReport:
+        """Run validation against the built-in catalog and role cascades.
+
+        This is the single entry point used by both the DI container
+        startup and the ``doctor --validate-catalog`` CLI flag.
+        """
+        import weebot.config.model_refs as _mr
+        from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
+
+        _validator = CatalogValidator()
+        return _validator.validate(
+            role_cascades=_mr._ROLE_MODEL_CASCADE,
+            catalog=_CATALOG,
+        )
 
     def validate(
         self,
         role_cascades: Dict[str, List[str]],
-        catalog: Dict[str, object],
+        catalog: Dict[str, "ModelConfig"],
     ) -> ValidationReport:
         """Run validation across all roles and their cascade tiers.
 
@@ -128,7 +152,7 @@ class CatalogValidator:
         report: ValidationReport,
         model_id: str,
         role: str,
-        catalog: Dict[str, object],
+        catalog: Dict[str, "ModelConfig"],
     ) -> None:
         """Validate a single model entry."""
         # Extract the expected provider from the model prefix
@@ -148,7 +172,10 @@ class CatalogValidator:
             return
 
         config = catalog[model_id]
-        actual_provider = getattr(config, "provider", None)
+        try:
+            actual_provider = config.provider
+        except AttributeError:
+            actual_provider = None
 
         if expected_provider and actual_provider and expected_provider != actual_provider:
             report.warnings.append(
@@ -175,6 +202,8 @@ class CatalogValidator:
         prefix_map = {
             "x-ai": "xai",
             "z-ai": "openrouter",  # z-ai models go through OpenRouter
+            "qwen": "openrouter",   # Qwen models go through OpenRouter
+            "kimi": "openrouter",   # Kimi models go through OpenRouter
             "nex-agi": "openrouter",
             "sourceful": "openrouter",
             "black-forest-labs": "openrouter",
