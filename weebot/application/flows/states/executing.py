@@ -54,6 +54,52 @@ class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
     status = AgentStatus.EXECUTING
 
+    # ── Browser invocation audit ───────────────────────────────────
+
+    @staticmethod
+    def _audit_browser_invocation(context: "PlanActFlow") -> None:
+        """Post-execution check: if plan mentions browser tools but none were invoked, warn.
+
+        Scans plan step descriptions for browser-related keywords. If any match,
+        checks session events for actual browser_navigator or advanced_browser calls.
+        Emits WARNING if the plan expected browser interaction but none occurred.
+        """
+        _browser_kw = {
+            "browser_navigator", "advanced_browser", "web_scraper", "browser_inspector",
+            "navigate", "click", "fill", "screenshot", "compose", "login",
+        }
+        _plan = getattr(context, "_plan", None)
+        if _plan is None or not hasattr(_plan, "steps"):
+            return
+
+        _plan_has_browser = any(
+            any(kw in (s.description or "").lower() for kw in _browser_kw)
+            for s in _plan.steps
+        )
+        if not _plan_has_browser:
+            return
+
+        # Check session events for browser tool calls
+        _session = getattr(context, "_session", None)
+        if _session is None:
+            return
+
+        _browser_called = any(
+            getattr(e, "type", "") == "tool"
+            and getattr(e, "tool_name", "") in ("browser_navigator", "advanced_browser")
+            for e in _session.events
+        )
+
+        if not _browser_called:
+            import logging as _log
+            _log.getLogger("weebot.application.flows.states.executing").warning(
+                "Plan contains browser-related steps (%d browser keywords found), "
+                "but no browser tool was invoked during execution. "
+                "The model may not support browser tool calls. "
+                "Consider using a model with higher tool-use capability.",
+                sum(1 for s in _plan.steps for kw in _browser_kw if kw in (s.description or "").lower()),
+            )
+
     async def execute(
         self, context: PlanActFlow, prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -411,6 +457,7 @@ class ExecutingState(FlowState):
 
         # Check if all steps are now complete
         if context._auto_terminate_on_plan_complete and context._plan.is_complete():
+            _audit_browser_invocation(context)
             logger.info("All plan steps completed. Auto-terminating.")
             context.set_state(VerifyingState())
             return

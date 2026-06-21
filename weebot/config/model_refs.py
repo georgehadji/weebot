@@ -470,6 +470,44 @@ def get_rerank_model_for(use_case: str) -> str:
     return _rerank_map.get(use_case, RERANK_MODEL_FREE)
 
 
+def get_models_for_role_and_task(
+    role: str,
+    task_type: str = "",
+    cascade: list[str] | None = None,
+) -> list[str]:
+    """Return the combined model list for a role + optional task type.
+
+    Merges ``_ROLE_MODEL_CASCADE`` (role-based) and ``MODEL_CASCADE``
+    (task-based) into a single deduplicated list. Role models come first
+    (they're specific to the agent), then task models (general-purpose).
+
+    Args:
+        role: Agent role name (e.g. ``"coder"``, ``"admin"``).
+        task_type: Task category (``"coding"``, ``"research"``, etc.).
+            Empty string skips task-based models.
+        cascade: Optional override list. If provided, returns it directly.
+
+    Returns:
+        Deduplicated list of model IDs, preserving order of first appearance.
+    """
+    if cascade is not None:
+        return list(dict.fromkeys(cascade))
+
+    combined: list[str] = list(_ROLE_MODEL_CASCADE.get(role, []))
+
+    if task_type:
+        try:
+            from weebot.core.model_cascade_config import get_cascade_for_task
+            task_models = get_cascade_for_task(task_type)
+            for tm in task_models:
+                if tm.id not in combined:
+                    combined.append(tm.id)
+        except Exception:
+            pass  # graceful fallback — role-only is sufficient
+
+    return combined
+
+
 # ========================================================================
 # ROLE_MODEL_CONFIG — consolidated from weebot.core.model_cascade_config
 # ========================================================================
