@@ -63,7 +63,11 @@ class AgentRunner:
 
     async def _ensure_tools(self) -> ToolCollection:
         if self._tools is None:
-            self._tools = await build_tools(role=self._role, mcp_config=self._mcp_config)
+            self._tools = await build_tools(
+                role=self._role,
+                mcp_config=self._mcp_config,
+                llm_port=self._llm,
+            )
         return self._tools
 
     async def _run_retention(

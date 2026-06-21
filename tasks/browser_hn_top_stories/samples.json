@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to Hacker News (https://news.ycombinator.com) and extract the top 5 story titles with their links. Return them as a numbered list.",
+    "expected_answer": null
+  }
+]

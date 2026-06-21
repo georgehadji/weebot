@@ -108,9 +108,9 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "x-ai/grok-4.3",                          # fallback 2: Grok 4.3 — factual accuracy
     ],
     "coder": [
-        "moonshotai/kimi-k2.7-code",              # primary: Kimi K2.7 Code — 256K, MoE, thinking mode
+        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
         "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast coding
-        "x-ai/grok-build-0.1",                    # fallback 2: Grok Build — fast agentic SWE
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
     ],
     "executor": [
         "z-ai/glm-5.2",                           # primary: GLM 5.2 — 1M ctx, long-horizon, strong coding
@@ -123,14 +123,14 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
     ],
     "admin": [
-        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — orchestration
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash
-        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max — broad capability
+        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
+        "x-ai/grok-4.3",                          # fallback 1: Grok 4.3 — factual accuracy
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
     ],
     "automation": [
-        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — instruction following
-        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
-        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max
+        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
+        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — instruction following
+        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
     ],
     "documentation": [
         "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast, cheap
@@ -172,10 +172,11 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
     """
     if role and role in _ROLE_MODEL_CASCADE:
         return list(_ROLE_MODEL_CASCADE[role])
+    # Default cascade — prefer xAI (native API key) over OpenRouter models
     return [
+        "x-ai/grok-build-0.1",
+        "x-ai/grok-4.3",
         MODEL_CASCADE_TIER1,
-        MODEL_CASCADE_TIER2,
-        MODEL_CASCADE_TIER3,
     ]
 
 # ========================================================================

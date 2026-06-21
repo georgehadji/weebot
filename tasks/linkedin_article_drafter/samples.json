@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to LinkedIn's article editor (https://www.linkedin.com/article/new), and draft a long-form article titled 'From IC to Tech Lead: 5 Lessons I Learned the Hard Way'. Structure it with an opening hook and 5 lessons (Calendar Is Your IDE, Best Code You Don't Write, 1:1s Are Most Important, Communication Scales Faster, Not Supposed to Have All Answers) plus a closing section and hashtags. Each section 150-200 words. Format with headings. Save as draft or publish. If not logged in, stop and report.",
+    "expected_answer": null
+  }
+]

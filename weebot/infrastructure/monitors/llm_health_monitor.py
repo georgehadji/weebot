@@ -32,7 +32,9 @@ class LLMHealthMonitor(Monitor):
 
         llm_components = [
             c for c in report.components
-            if "llm" in c.name.lower() or "openrouter" in c.name.lower()
+            if "llm" in c.name.lower()
+            or "openrouter" in c.name.lower()
+            or "xai" in c.name.lower()
         ]
 
         if not llm_components:

@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Create a LinkedIn carousel/document post on the topic: 'The Developer's Guide to Saying No (Without Burning Bridges)'. First create the carousel content locally as a markdown file (5 slides: Title, The Problem, Trade-Off Triangle, Data Over Emotion, Yes-If Pattern) saved to Output/linkedin_carousel/. Then navigate to LinkedIn, compose a new post, attach the document, write the accompanying caption about learning to say no professionally with 5 hashtags. Post or prepare for review. If not logged in, stop and report.",
+    "expected_answer": null
+  }
+]

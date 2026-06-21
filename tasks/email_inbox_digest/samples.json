@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to my webmail inbox (Gmail: https://mail.google.com/mail/u/0/#inbox), extract the 10 most recent email subject lines, senders, dates, and read/unread status. Format as a markdown table digest. Do NOT read email bodies — subjects only. Save to Output/email_digest/.",
+    "expected_answer": null
+  }
+]

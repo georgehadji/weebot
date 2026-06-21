@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to Wikipedia (https://en.wikipedia.org), search for 'Artificial intelligence', open the article, and extract the first 2-3 summary paragraphs and any infobox key facts. Return formatted as markdown.",
+    "expected_answer": null
+  }
+]

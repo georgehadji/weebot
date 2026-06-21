@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to https://github.com/signup, fill the registration form with demo data (email: testuser@example.com, password: TestPassword123!, username: testuser-demo-2024), but DO NOT submit. Take a screenshot of the filled form and report which fields were filled.",
+    "expected_answer": null
+  }
+]

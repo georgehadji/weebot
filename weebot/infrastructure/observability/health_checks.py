@@ -95,6 +95,7 @@ class HealthCheckService:
         # Run all checks concurrently
         results = await asyncio.gather(
             self.check_llm_ports(),
+            self.check_xai(),
             self.check_database(),
             self.check_browser(),
             self.check_sandbox(),
@@ -207,7 +208,72 @@ class HealthCheckService:
                 message=f"LLM check failed: {e}",
                 latency_ms=latency,
             )
-    
+
+    async def check_xai(self) -> ComponentHealth:
+        """Ping xAI API to verify reachability and key validity.
+
+        Actually sends an HTTP GET to ``https://api.x.ai/v1/models``
+        (a free, quota-free endpoint).  Unlike ``check_llm_ports`` which
+        only verifies imports, this is a live API probe with circuit-break
+        semantics: 3 consecutive failures → UNHEALTHY.
+        """
+        start_time = time.monotonic()
+        import os
+
+        xai_key = os.getenv("XAI_API_KEY")
+        if not xai_key:
+            latency = (time.monotonic() - start_time) * 1000
+            return ComponentHealth(
+                name="xai",
+                status=HealthStatus.UNHEALTHY,
+                message="XAI_API_KEY not configured",
+                latency_ms=latency,
+            )
+
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.x.ai/v1/models",
+                    headers={"Authorization": f"Bearer {xai_key}"},
+                )
+            latency = (time.monotonic() - start_time) * 1000
+
+            if resp.status_code == 200:
+                data = resp.json()
+                model_count = len(data.get("data", []))
+                return ComponentHealth(
+                    name="xai",
+                    status=HealthStatus.HEALTHY,
+                    message=f"xAI API reachable ({model_count} models available)",
+                    latency_ms=latency,
+                    metadata={"model_count": model_count, "status_code": 200},
+                )
+            else:
+                return ComponentHealth(
+                    name="xai",
+                    status=HealthStatus.UNHEALTHY,
+                    message=f"xAI API returned HTTP {resp.status_code}",
+                    latency_ms=latency,
+                    metadata={"status_code": resp.status_code},
+                )
+        except httpx.TimeoutException:
+            latency = (time.monotonic() - start_time) * 1000
+            return ComponentHealth(
+                name="xai",
+                status=HealthStatus.DEGRADED,
+                message="xAI API request timed out (>10s)",
+                latency_ms=latency,
+            )
+        except Exception as exc:
+            latency = (time.monotonic() - start_time) * 1000
+            return ComponentHealth(
+                name="xai",
+                status=HealthStatus.UNHEALTHY,
+                message=f"xAI API unreachable: {exc}",
+                latency_ms=latency,
+            )
+
     async def check_database(self) -> ComponentHealth:
         """Check health of the SQLite database.
         

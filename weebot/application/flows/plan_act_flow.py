@@ -823,6 +823,10 @@ class PlanActFlow(BaseFlow):
         Returns:
             New model ID if switch recommended, None otherwise.
         """
+        # Allow disabling context-aware model selection via env var (batch mode)
+        import os as _os_cam
+        if _os_cam.environ.get("CONTEXT_AWARE_MODEL_SELECTION", "").lower() == "false":
+            return None
         return self._context_switcher.maybe_switch_model_for_context(
             session=self._session,
             current_model=self._model,

@@ -164,6 +164,25 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         pipeline = self.build_event_pipeline()
         self.register_instance("event_pipeline", pipeline)
 
+        # ── Startup catalog validation (warnings only, never blocks) ──
+        try:
+            from weebot.config._catalog_validator import CatalogValidator
+            import weebot.config.model_refs as _mr
+            from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
+
+            _validator = CatalogValidator()
+            _report = _validator.validate(
+                role_cascades=_mr._ROLE_MODEL_CASCADE,
+                catalog=_CATALOG,
+            )
+            _report.log_summary()
+        except Exception as _exc:
+            import logging as _logging
+            _logging.getLogger("weebot.application.di").warning(
+                "Catalog validation skipped: %s", _exc
+            )
+        # ─────────────────────────────────────────────────────────────
+
         # Egress guard — migrated from global singleton to DI
         from weebot.core.egress_guard import EgressGuard
         self.register(EgressGuard, self._create_egress_guard)

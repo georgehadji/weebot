@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to LinkedIn (https://www.linkedin.com), open the post composer, and write an engaging short-form post on: 'The most underrated skill in software engineering is clear written communication — here's why.' Format with hook, insight paragraphs, evidence, CTA, and 3-5 hashtags. Keep paragraphs 1-2 sentences. Post it or capture a screenshot if posting requires confirmation. If not logged in, stop and report.",
+    "expected_answer": null
+  }
+]

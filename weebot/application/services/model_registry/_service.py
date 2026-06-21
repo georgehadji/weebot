@@ -46,7 +46,12 @@ class ModelSelectionService:
         return strategy.select(candidates, task_type, budget)
 
     def create_llm_adapter(self, model_id: str) -> LLMPort:
-        """Instantiate the correct LLMPort adapter for a model ID."""
+        """Instantiate the correct LLMPort adapter for a model ID.
+
+        Uses the model catalog's provider field to route through the native
+        API when a direct key is available (e.g. XAI_API_KEY for xAI models),
+        falling back to OpenRouter otherwise.
+        """
         import os
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
 
@@ -54,6 +59,6 @@ class ModelSelectionService:
         if not config:
             raise ValueError(f"Unknown model: {model_id}")
 
-        provider = "openrouter"
+        provider = getattr(config, "provider", "openrouter") or "openrouter"
         api_key = os.getenv("OPENROUTER_API_KEY")
         return create_adapter(provider, model=model_id, api_key=api_key)

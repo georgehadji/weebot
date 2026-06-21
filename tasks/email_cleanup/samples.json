@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to my webmail inbox and scan for cleanup candidates: emails older than 90 days, promotional/bulk senders, no-reply addresses, and large attachments. Extract samples of each category (up to 5 per category, metadata only — no bodies). Produce a read-only cleanup report with safe-action recommendations. Save to Output/email_cleanup/. Do NOT delete, archive, or modify any emails.",
+    "expected_answer": null
+  }
+]

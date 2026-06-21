@@ -32,6 +32,10 @@ class CascadeExecutor:
     _TIER3_MODEL: str = MODEL_CASCADE_TIER3
     _TIER4_MODEL: str = MODEL_CASCADE_TIER4
 
+    # OpenRouter credit threshold — below this (in tokens), skip
+    # OpenRouter models to avoid 402 errors that waste cascade timeouts.
+    _OPENROUTER_MIN_CREDITS: int = 10000
+
     def __init__(
         self,
         llm: LLMPort,
@@ -65,6 +69,71 @@ class CascadeExecutor:
 
     def _cascade_reset(self, model_id: str) -> None:
         self._circuit_breaker_failures[model_id] = 0
+
+    # ── OpenRouter credit pre-check ────────────────────────────────
+
+    @staticmethod
+    async def _check_openrouter_credits() -> int:
+        """Query OpenRouter's auth key endpoint for remaining credits.
+
+        Returns:
+            Remaining credits in tokens, or 0 if the check fails.
+        """
+        import os
+        key = os.getenv("OPENROUTER_API_KEY")
+        if not key:
+            return 0
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    "https://openrouter.ai/api/v1/auth/key",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return int(data.get("data", {}).get("credits", 0))
+                return 0
+        except Exception:
+            return 0  # fail open: assume OK on API error
+
+    @staticmethod
+    def _is_openrouter_model(model_id: str) -> bool:
+        """Return True if the model routes exclusively through OpenRouter.
+
+        Models with a native provider (x-ai, deepseek, moonshotai, minimax)
+        do NOT exclusively use OpenRouter, so they should NOT be filtered.
+        """
+        known_direct = {"x-ai", "deepseek", "moonshotai", "minimax", "recraft"}
+        prefix = model_id.split("/")[0] if "/" in model_id else ""
+        return prefix not in known_direct
+
+    @classmethod
+    async def get_credits_and_filter_direct(
+        cls, model_ids: list[str]
+    ) -> list[str]:
+        """Filter ``model_ids`` to only include non-OpenRouter models if
+        credits are below threshold.  Returns all models on success.
+
+        Used by the cascade to skip OpenRouter-dependent models when
+        credits are too low to pay for a generation request.
+        """
+        credits = await cls._check_openrouter_credits()
+        if credits >= cls._OPENROUTER_MIN_CREDITS:
+            return model_ids  # enough credits — use all models
+
+        # Credits below threshold — filter out OpenRouter-only models
+        filtered = [m for m in model_ids if not cls._is_openrouter_model(m)]
+        if filtered != model_ids:
+            skipped = len(model_ids) - len(filtered)
+            logger.info(
+                "OpenRouter credits low (%d — need %d), skipping %d "
+                "OpenRouter-only model(s)",
+                credits,
+                cls._OPENROUTER_MIN_CREDITS,
+                skipped,
+            )
+        return filtered
 
     # ── Single model call (with retry + pool) ───────────────────────
 
@@ -180,10 +249,14 @@ class CascadeExecutor:
                     )
             return resp
 
-        # ── Phase 1: parallel probes (90s timeout) ──────────────────
-        parallel = list(dict.fromkeys(
+        # ── Credit pre-check: filter OpenRouter models if low credits ──
+        all_models = list(dict.fromkeys(
             m for m in (role_primary, task_model, role_fallback1) if m
         ))
+        filtered_models = await self.get_credits_and_filter_direct(all_models)
+
+        # ── Phase 1: parallel probes (90s timeout) ──────────────────
+        parallel = list(dict.fromkeys(filtered_models))
         if parallel:
             tasks = {asyncio.ensure_future(_try(m, 90.0)): m for m in parallel}
             done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)

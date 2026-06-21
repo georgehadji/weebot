@@ -41,6 +41,12 @@ class DirectOrFallbackAdapter(LLMPort):
     # further traffic to a dead endpoint. Prevents the silent 401 cascade.
     _MAX_FALLBACK_FAILURES: int = 3
 
+    # Maximum consecutive primary (direct provider) failures before we
+    # skip the primary and route directly to OpenRouter.  At 3, a provider
+    # that's been down for ~3 cascade cycles (45s+ at 15s timeout) will be
+    # bypassed, preventing cascading latency.
+    _MAX_PRIMARY_FAILURES: int = 3
+
     def __init__(
         self,
         primary: LLMPort,
@@ -53,6 +59,7 @@ class DirectOrFallbackAdapter(LLMPort):
         self._label = primary_label
         self._model_prefix = model_prefix  # e.g. "x-ai/" — stripped when forwarding to primary
         self._fallback_failure_count = 0
+        self._primary_failure_count = 0  # circuit-breaker for primary (direct provider)
 
     def _native_model(self, model: str | None) -> str | None:
         """Map an OpenRouter-prefixed model name to the native provider name.
@@ -127,6 +134,18 @@ class DirectOrFallbackAdapter(LLMPort):
             )
             return await self._secondary.chat(model=model, **shared)
 
+        # Primary circuit breaker: if the direct provider has failed
+        # N times consecutively, skip it and go straight to OpenRouter.
+        # Prevents cascading latency when a provider is persistently down.
+        if self._primary_failure_count >= self._MAX_PRIMARY_FAILURES:
+            logger.warning(
+                "%s: primary circuit open (%d consecutive failures) — "
+                "routing directly to OpenRouter. Check provider health.",
+                self._label,
+                self._primary_failure_count,
+            )
+            return await self._secondary.chat(model=model, **shared)
+
         # Try primary (direct provider) — map the OpenRouter-prefixed
         # model name to the native provider name, or use the primary's
         # default_model when no mapping exists.
@@ -135,12 +154,18 @@ class DirectOrFallbackAdapter(LLMPort):
         if native:
             primary_kwargs["model"] = native
         try:
-            return await self._primary.chat(**primary_kwargs)
+            result = await self._primary.chat(**primary_kwargs)
+            # Success → reset primary circuit breaker
+            self._primary_failure_count = 0
+            return result
         except Exception as exc:
             # Surface the actual API error for debugging.
             # Logged at INFO (not WARNING) so the executor's trajectory
             # detector doesn't count adapter fallback as a step error.
             err_msg = str(exc)[:300] if str(exc) else "no detail"
+
+            # Increment primary circuit breaker
+            self._primary_failure_count += 1
 
             # Pre-flight: check if the fallback adapter has a valid key
             # before attempting the call. Avoids masking the primary error

@@ -2073,7 +2073,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "x-ai/grok-build-0.1": ModelConfig(
             name="Grok Build 0.1",
-            provider="openrouter",
+            provider="xai",
             cost_per_1k_tokens=0.0015,
             context_window=256000,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
@@ -2145,7 +2145,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "x-ai/grok-4.3": ModelConfig(
             name="Grok 4.3",
-            provider="openrouter",
+            provider="xai",
             cost_per_1k_tokens=0.001875,
             context_window=1000000,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.CHAT, TaskType.DOCUMENTATION, TaskType.REASONING],
@@ -2154,7 +2154,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "x-ai/grok-4.20": ModelConfig(
             name="Grok 4.20",
-            provider="openrouter",
+            provider="xai",
             cost_per_1k_tokens=0.001875,
             context_window=2000000,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.DOCUMENTATION, TaskType.REASONING],
@@ -2397,7 +2397,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "x-ai/grok-4.20-multi-agent": ModelConfig(
             name="Grok 4.20 Multi-Agent",
-            provider="openrouter",
+            provider="xai",
             cost_per_1k_tokens=0.004,
             context_window=2000000,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.DOCUMENTATION],

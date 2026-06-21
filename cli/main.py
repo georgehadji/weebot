@@ -297,6 +297,41 @@ def init(platform: str | None, tier: str | None, force: bool, no_env: bool, with
             console.print("[yellow]Hooks already initialized[/yellow]")
 
 
+def _validate_model_catalog(json_output: bool) -> None:
+    """Cross-validate cascade models against the model catalog."""
+    from weebot.config._catalog_validator import CatalogValidator
+    import weebot.config.model_refs as _mr
+    from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
+
+    _validator = CatalogValidator()
+    _report = _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
+    if json_output:
+        import json as _json
+        console.print_json(_json.dumps({
+            "ok": _report.warning_count == 0,
+            "total_models_checked": _report.total_models_checked,
+            "elapsed_ms": round(_report.elapsed_ms, 1),
+            "warnings": [
+                {"model_id": w.model_id, "cascade_role": w.cascade_role, "field": w.field, "detail": str(w)}
+                for w in _report.warnings
+            ],
+        }))
+        return
+    if _report.warning_count == 0:
+        console.print(
+            f"[green]Catalog validation passed:[/green] "
+            f"{_report.total_models_checked} models checked, 0 warnings "
+            f"({_report.elapsed_ms:.0f}ms)"
+        )
+    else:
+        console.print(
+            f"[yellow]Catalog validation: {_report.warning_count} warning(s)[/yellow] "
+            f"({_report.total_models_checked} models, {_report.elapsed_ms:.0f}ms)"
+        )
+        for w in _report.warnings:
+            console.print(f"  [yellow]![/yellow] {w}")
+
+
 def _print_doctor_table(report: Any) -> None:
     """Render a DoctorReport as a rich Table."""
     table = Table(title="weebot Doctor")
@@ -312,8 +347,15 @@ def _print_doctor_table(report: Any) -> None:
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.option("--fix", is_flag=True, help="Auto-repair warnings (create dirs, init DBs)")
 @click.option("--dry-run", is_flag=True, help="Show what --fix would do without changing anything")
-def doctor(json_output: bool, fix: bool, dry_run: bool) -> None:
+@click.option("--validate-catalog", is_flag=True, help="Cross-validate cascade models against the model catalog")
+def doctor(json_output: bool, fix: bool, dry_run: bool, validate_catalog: bool) -> None:
     """Run diagnostics and environment checks."""
+
+    # -- standalone: --validate-catalog ----------------------------------------
+    if validate_catalog:
+        _validate_model_catalog(json_output)
+        return
+
     if dry_run:
         # Show what would be fixed without applying changes
         report_preview = run_doctor(Path.cwd(), fix=False)

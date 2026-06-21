@@ -1,0 +1,6 @@
+[
+  {
+    "prompt": "Navigate to my webmail inbox, filter to show only unread emails. Extract up to 20 unread emails with sender, subject, time, attachment status, and reply indicators. Categorize each into High/Medium/Low priority based on sender and subject patterns. Produce a triage report saved to Output/email_triage/. Do NOT read email bodies.",
+    "expected_answer": null
+  }
+]

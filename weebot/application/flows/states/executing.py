@@ -79,11 +79,16 @@ class ExecutingState(FlowState):
         # ── Constraint enforcement (Enhancement 1 — S3 fix) ──────────────────
         # Check the next step against constraints extracted from the original task
         # before allowing execution. Uses ConstraintExtractor (regex-only, no LLM).
-        _initial_prompt = (
-            context._session.context.get("original_task", "")
-            or context._session.context.get("last_prompt", "")
-            or prompt
-        )
+        # Skip when CONSTRAINT_CHECK_ENABLED=false (batch/automated runs).
+        import os as _os_exec
+        if _os_exec.environ.get("CONSTRAINT_CHECK_ENABLED", "").lower() == "false":
+            _initial_prompt = ""
+        else:
+            _initial_prompt = (
+                context._session.context.get("original_task", "")
+                or context._session.context.get("last_prompt", "")
+                or prompt
+            )
         if _initial_prompt:
             from weebot.application.services.constraint_extractor import ConstraintExtractor
             _extractor = ConstraintExtractor()
@@ -109,6 +114,9 @@ class ExecutingState(FlowState):
                         )))
                     except ImportError:
                         pass
+                # Mark session as WAITING before yielding so resume works
+                from weebot.domain.models.session import SessionStatus
+                context._session = context._session.set_status(SessionStatus.WAITING)
                 yield WaitForUserEvent(
                     question=(
                         f"Step '{step.description}' may violate a stated constraint:\n"
