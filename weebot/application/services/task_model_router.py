@@ -46,6 +46,7 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
         re.compile(r"\b(code|coding|refactor|implement|debug|fix|patch|rewrite|overhaul|convert)\b", re.I),
         re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)?\s*(html|css|js|javascript|python|typescript|react|vue|svelte|node|django|flask|fastapi|sql|database|schema|migration|docker|kubernetes|terraform|app|api|endpoint|route|component|page|site|script|function|class|module)\b", re.I),
         re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)\s", re.I),
+        re.compile(r"\b(create|build|implement|develop|write)\s+.{0,25}(endpoint|route|api|function|class|module|component|service|script)\b", re.I),
     ],
     TaskCategory.FILE_OPS: [
         re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
@@ -137,10 +138,10 @@ def classify_step(description: str) -> TaskCategory:
     priority = [
         TaskCategory.SECURITY,
         TaskCategory.REVIEW,
-        TaskCategory.BROWSER,
         TaskCategory.CODING,
-        TaskCategory.PLANNING,
+        TaskCategory.BROWSER,
         TaskCategory.RESEARCH,
+        TaskCategory.PLANNING,
         TaskCategory.FILE_OPS,
         TaskCategory.SUMMARIZATION,
     ]
