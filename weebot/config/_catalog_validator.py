@@ -220,7 +220,6 @@ class CatalogValidator:
         # Models whose prefix matches the provider name directly (deepseek, moonshotai, minimax, recraft)
         direct_providers = {
             "deepseek",
-            "moonshotai",
             "minimax",
             "recraft",
         }

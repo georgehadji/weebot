@@ -53,7 +53,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=1048576,
             strengths=[TaskType.ARCHITECTURE, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "openrouter/pareto-code": ModelConfig(
             name="Pareto Code Router",
@@ -71,7 +71,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "moonshotai/kimi-k2.6:free": ModelConfig(  # alias for :free variant
             name="Kimi K2.6 (free)",
@@ -80,7 +80,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "google/gemma-4-26b-a4b-it": ModelConfig(
             name="Gemma 4 26B A4B  (free)",
@@ -575,7 +575,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=1048576,
             strengths=[TaskType.ARCHITECTURE, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "essentialai/rnj-1-instruct": ModelConfig(
             name="Rnj 1 Instruct",
@@ -971,7 +971,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=128000,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "thedrummer/rocinante-12b": ModelConfig(
             name="Rocinante 12B",
@@ -998,7 +998,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=131072,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "nex-agi/deepseek-v3.1-nex-n1": ModelConfig(
             name="DeepSeek V3.1 Nex N1",
@@ -1034,7 +1034,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.ARCHITECTURE, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "inclusionai/ring-2.6-1t": ModelConfig(
             name="Ring-2.6-1T",
@@ -1079,7 +1079,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "mistralai/mistral-small-2603": ModelConfig(
             name="Mistral Small 4",
@@ -1232,7 +1232,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "inception/mercury-2": ModelConfig(
             name="Mercury 2",
@@ -1250,7 +1250,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.ANALYSIS, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "qwen/qwen2.5-vl-72b-instruct": ModelConfig(
             name="Qwen2.5 VL 72B Instruct",
@@ -1340,7 +1340,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=131072,
             strengths=[TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "qwen/qwen3-coder-flash": ModelConfig(
             name="Qwen3 Coder Flash",
@@ -1385,7 +1385,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.AGENTIC, TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "minimax/minimax-m2.1": ModelConfig(
             name="MiniMax M2.1",
@@ -1475,7 +1475,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=1048576,
             strengths=[TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "xiaomi/mimo-v2.5-pro": ModelConfig(
             name="MiMo-V2.5-Pro",
@@ -1583,7 +1583,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=131072,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.FAST,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "anthropic/claude-3-haiku": ModelConfig(
             name="Claude 3 Haiku",
@@ -1880,7 +1880,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "qwen/qwen3.5-122b-a10b": ModelConfig(
             name="Qwen3.5-122B-A10B",
@@ -1997,7 +1997,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.ANALYSIS, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "qwen/qwen3.5-397b-a17b": ModelConfig(
             name="Qwen3.5 397B A17B",
@@ -2069,7 +2069,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=131072,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "x-ai/grok-build-0.1": ModelConfig(
             name="Grok Build 0.1",
@@ -2096,7 +2096,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "moonshotai/kimi-k2-0905": ModelConfig(
             name="Kimi K2 0905",
@@ -2105,7 +2105,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "deepseek/deepseek-r1": ModelConfig(
             name="R1",
@@ -2114,7 +2114,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=163840,
             strengths=[TaskType.ANALYSIS, TaskType.DOCUMENTATION, TaskType.REASONING],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="DEEPSEEK_API_KEY",
         ),
         "qwen/qwen3.6-27b": ModelConfig(
             name="Qwen3.6 27B",
@@ -2231,7 +2231,7 @@ MODELS: dict[str, ModelConfig] = {
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
             tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
+            api_key_env="KIMI_API_KEY",
         ),
         "switchpoint/router": ModelConfig(
             name="Switchpoint Router",
