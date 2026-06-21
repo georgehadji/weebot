@@ -25,7 +25,7 @@ def resolve_profile(role: str) -> RoleProfile:
     First checks _EXTENDED_PROFILES, then ROLE_MODEL_CONFIG (simple list).
     Returns an empty profile if neither has the role.
     """
-    from weebot.core.model_cascade_config import ROLE_MODEL_CONFIG
+    from weebot.config.model_refs import ROLE_MODEL_CONFIG
 
     # Check extended profiles first
     profile = _EXTENDED_PROFILES.get(role)

@@ -189,7 +189,7 @@ class FactoriesMixin:
 
         Falls back to the default model if the role is not configured.
         """
-        from weebot.core.model_cascade_config import ROLE_MODEL_CONFIG
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG
         models = ROLE_MODEL_CONFIG.get(role, [])
         model = models[0] if models else None
         return FactoriesMixin._create_llm(model)

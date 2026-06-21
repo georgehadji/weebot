@@ -468,3 +468,65 @@ def get_rerank_model_for(use_case: str) -> str:
         "knowledge": RERANK_MODEL_FREE,    # knowledge graph FTS5 — high-throughput
     }
     return _rerank_map.get(use_case, RERANK_MODEL_FREE)
+
+
+# ========================================================================
+# ROLE_MODEL_CONFIG — consolidated from weebot.core.model_cascade_config
+# ========================================================================
+# This is the authoritative source for role→model mapping used by
+# context switcher, role model selector, and harness profile resolver.
+# Consumers should import from here, not from model_cascade_config.
+# ========================================================================
+
+ROLE_MODEL_CONFIG: dict[str, list[str]] = {
+    # Moonshot (primary) → NVIDIA frontier (deep plan) → DeepSeek (budget)
+    "planner": [
+        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+    # Cross-lab diversity: OpenAI OSS → NousResearch → xAI (paid fallback)
+    "critic": [
+        "openai/gpt-oss-120b:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-build-0.1",
+    ],
+    # Qwen Coder (coding-specialist MoE) → Poolside (coding agent) → Kimi → DeepSeek
+    "executor": [
+        "qwen/qwen3-coder:free",
+        "poolside/laguna-m.1:free",
+        "moonshotai/kimi-k2.6:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+    # NVIDIA reasoning models purpose-built for sub-agent/verification roles
+    "verifier": [
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nex-agi/nex-n2-pro:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+    # Meta Llama (battle-tested) → Google Gemma → Kimi
+    "summarizer": [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "moonshotai/kimi-k2.6:free",
+    ],
+    # Fast, disposable: OpenAI OSS 20B → Poolside XS → GPT-4.1 Nano (budget)
+    "subagent": [
+        "openai/gpt-oss-20b:free",
+        "poolside/laguna-xs.2:free",
+        "openai/gpt-4.1-nano",
+    ],
+    # Independent code review: cross-lab from executor's Qwen Coder
+    "reviewer": [
+        "openai/gpt-oss-120b:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-build-0.1",
+    ],
+    # Idea synthesis: Kimi for multi-signal reasoning
+    "dreamer": [
+        "moonshotai/kimi-k2.6:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "deepseek/deepseek-v4-flash",
+    ],
+}

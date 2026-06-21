@@ -29,7 +29,7 @@ class RoleModelSelector:
 
         Falls back to *default_model* if the role is not in ROLE_MODEL_CONFIG.
         """
-        from weebot.core.model_cascade_config import ROLE_MODEL_CONFIG
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG
         models = ROLE_MODEL_CONFIG.get(role, [])
         if models:
             return models[0]
@@ -41,7 +41,7 @@ class RoleModelSelector:
 
     def fallback_chain(self, role: str) -> list[str]:
         """Return the full ordered fallback list for *role*."""
-        from weebot.core.model_cascade_config import ROLE_MODEL_CONFIG
+        from weebot.config.model_refs import ROLE_MODEL_CONFIG
         return list(
             ROLE_MODEL_CONFIG.get(
                 role,
