@@ -66,7 +66,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2.6": ModelConfig(
             name="Kimi K2.6 (free)",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0,
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
@@ -75,7 +75,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2.6:free": ModelConfig(  # alias for :free variant
             name="Kimi K2.6 (free)",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0,
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
@@ -1875,7 +1875,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2.5": ModelConfig(
             name="Kimi K2.5",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0.00115,
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
@@ -2064,7 +2064,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2": ModelConfig(
             name="Kimi K2 0711",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0.001435,
             context_window=131072,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
@@ -2091,7 +2091,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2-thinking": ModelConfig(
             name="Kimi K2 Thinking",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0.00155,
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.ARCHITECTURE, TaskType.DOCUMENTATION, TaskType.REASONING],
@@ -2100,7 +2100,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2-0905": ModelConfig(
             name="Kimi K2 0905",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0.00155,
             context_window=262144,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
@@ -2226,7 +2226,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "moonshotai/kimi-k2.6": ModelConfig(
             name="Kimi K2.6",
-            provider="openrouter",
+            provider="moonshot",
             cost_per_1k_tokens=0.00211,
             context_window=262144,
             strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],

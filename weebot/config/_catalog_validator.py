@@ -201,7 +201,8 @@ class CatalogValidator:
         # Map known OpenRouter prefixes to the provider names used in the catalog
         prefix_map = {
             "x-ai": "xai",
-            "z-ai": "openrouter",  # z-ai models go through OpenRouter
+            "z-ai": "openrouter",   # z-ai models go through OpenRouter
+            "moonshotai": "moonshot",  # moonshotai prefix → "moonshot" provider
             "qwen": "openrouter",   # Qwen models go through OpenRouter
             "kimi": "openrouter",   # Kimi models go through OpenRouter
             "nex-agi": "openrouter",
