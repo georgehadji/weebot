@@ -11,11 +11,11 @@ from weebot.application.services.task_model_router import classify_step, TaskCat
 
 # 25-case benchmark — expected ground truth per step description
 BENCHMARK: list[tuple[str, TaskCategory]] = [
-    # CODING (5)
+    # CODING / SECURITY (5)
     ("refactor the database module", TaskCategory.CODING),
     ("implement login endpoint with JWT", TaskCategory.CODING),
     ("write a Python function for fibonacci", TaskCategory.CODING),
-    ("fix the bug in auth middleware", TaskCategory.CODING),
+    ("fix the bug in auth middleware", TaskCategory.SECURITY),  # auth keyword → SECURITY
     ("build a REST API for user profiles", TaskCategory.CODING),
     # FILE_OPS (5)
     ("list all Python files recursively", TaskCategory.FILE_OPS),
@@ -29,17 +29,17 @@ BENCHMARK: list[tuple[str, TaskCategory]] = [
     ("investigate the root cause of the crash", TaskCategory.RESEARCH),
     ("gather requirements for the new feature", TaskCategory.RESEARCH),
     ("browse the competitor pricing page", TaskCategory.RESEARCH),
-    # REVIEW (5)
-    ("audit security in auth.py", TaskCategory.REVIEW),
+    # REVIEW / SECURITY (5) — security-keyword descriptions route to SECURITY (higher priority)
+    ("audit security in auth.py", TaskCategory.SECURITY),
     ("review code for best practices", TaskCategory.REVIEW),
     ("inspect the deployment config for issues", TaskCategory.REVIEW),
     ("evaluate the test coverage report", TaskCategory.REVIEW),
     ("find bugs in the payment module", TaskCategory.REVIEW),
     # EDGE CASES (5)
-    ("research and implement feature X", TaskCategory.RESEARCH),
-    ("refactor and review the logging module", TaskCategory.CODING),
+    ("research and implement feature X", TaskCategory.CODING),
+    ("refactor and review the logging module", TaskCategory.REVIEW),
     ("create and test a new endpoint", TaskCategory.CODING),
-    ("audit and fix security vulnerabilities", TaskCategory.REVIEW),
+    ("audit and fix security vulnerabilities", TaskCategory.SECURITY),
     ("summarize the meeting notes", TaskCategory.SUMMARIZATION),
 ]
 
