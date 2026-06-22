@@ -10,6 +10,7 @@ from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus
 from weebot.domain.models.session import SessionStatus
+from weebot.domain.models.event import ProductDecisionEvent
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,29 @@ class CompletedState(FlowState):
             await context._emit(completed)
             yield completed
 
+            # ── Save completed plan as template for reuse ────
+            if context._plan and getattr(context, "_state_repo", None) is not None:
+                try:
+                    from weebot.application.services.plan_template_cache import (
+                        compute_task_hash,
+                    )
+                    from weebot.domain.models.plan_template import PlanTemplate
+                    import json, uuid
+                    template = PlanTemplate(
+                        template_id=str(uuid.uuid4()),
+                        task_hash=compute_task_hash(prompt),
+                        task_description=prompt[:500],
+                        plan_json=json.dumps(context._plan.model_dump(), default=str),
+                        success_score=1.0,
+                    )
+                    await context._state_repo.save_plan_template(template)
+                    logger.info(
+                        "Saved plan template (hash=%s) for session %s",
+                        template.task_hash, context._session.id[:8],
+                    )
+                except Exception as exc:
+                    logger.debug("Plan template save skipped: %s", exc)
+
         context._session = context._session.set_status(SessionStatus.COMPLETED)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
@@ -247,7 +271,7 @@ class CompletedState(FlowState):
         logger.info("PlanActFlow completed for session %s in %.1fs",
                     context._session.id, _total_elapsed)
 
-        # ── Collect extra dict for TrustReport + RetentionReview ────
+        # ── Collect extra dict for TrustReport + RetentionReview + ProductContext ──
         _extra: dict = {}
         if hasattr(context._session.context, "extra"):
             _extra = context._session.context.extra.copy() or {}
@@ -276,6 +300,30 @@ class CompletedState(FlowState):
                 )
             except Exception:
                 logger.debug("TrustReport failed — non-blocking", exc_info=True)
+
+        # ── ProductDecisionEvent (product-mode Principle 7) ─────────────
+        from weebot.config.feature_flags import PRODUCT_DECISION_LOG_ENABLED
+        if PRODUCT_DECISION_LOG_ENABLED:
+            _pc = _extra.get("product_context")
+            if _pc:
+                try:
+                    _decision = ProductDecisionEvent(
+                        title=f"Session {context._session.id[:8]}: {str(_pc.get('problem', 'unknown'))[:80]}",
+                        problem=str(_pc.get("problem", "")),
+                        why_now=str(_pc.get("why_now", "")),
+                        choice=context._plan.title if context._plan else "unknown",
+                        rationale=context._plan.message[:300] if context._plan and context._plan.message else "",
+                        reversibility=str(_pc.get("reversibility", "two-way")),
+                        success_metric=str(_pc.get("success_metric", "")),
+                        session_id=context._session.id,
+                    )
+                    await context._emit(_decision)
+                    logger.info(
+                        "ProductDecisionEvent emitted for session %s (reversibility: %s)",
+                        context._session.id[:8], _decision.reversibility,
+                    )
+                except Exception:
+                    logger.debug("ProductDecisionEvent emission failed — non-blocking", exc_info=True)
 
         # ── RetentionReview (Enhancement 5 — background, non-blocking) ──
         if getattr(context, "_retention_agent", None) is not None:

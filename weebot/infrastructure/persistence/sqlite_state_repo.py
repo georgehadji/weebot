@@ -151,6 +151,28 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
 
+            # ── Plan templates table (reuse cache) ─────────
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS plan_templates (
+                    template_id TEXT PRIMARY KEY,
+                    task_hash TEXT NOT NULL,
+                    task_description TEXT NOT NULL,
+                    plan_json TEXT NOT NULL,
+                    success_score REAL NOT NULL DEFAULT 1.0,
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    last_used_at TEXT
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_plan_templates_hash
+                ON plan_templates(task_hash)
+                """
+            )
+
             # ── Commitments table ──────────────────────────
             await conn.execute(
                 """
@@ -644,6 +666,80 @@ class SQLiteStateRepository(StateRepositoryPort):
                 entry_hashes,
             )
             return cursor.rowcount
+
+    # ── Plan template persistence (reuse cache) ────────────────────
+
+    async def save_plan_template(self, template: "PlanTemplate") -> None:
+        """Save or update a plan template."""
+        from weebot.domain.models.plan_template import PlanTemplate
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                INSERT OR REPLACE INTO plan_templates
+                    (template_id, task_hash, task_description, plan_json,
+                     success_score, use_count, created_at, last_used_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    template.template_id,
+                    template.task_hash,
+                    template.task_description[:500],
+                    template.plan_json,
+                    template.success_score,
+                    template.use_count,
+                    template.created_at.isoformat(),
+                    template.last_used_at.isoformat() if template.last_used_at else None,
+                ),
+            )
+
+    async def find_plan_templates_by_hash(
+        self, task_hash: str, limit: int = 5
+    ) -> list["PlanTemplate"]:
+        """Find templates by task hash (ordered by success_score desc)."""
+        from weebot.domain.models.plan_template import PlanTemplate
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT * FROM plan_templates WHERE task_hash = ? "
+            "ORDER BY success_score DESC, use_count DESC LIMIT ?",
+            (task_hash, limit),
+        )
+        return [self._row_to_plan_template(r) for r in rows]
+
+    async def list_all_plan_templates(self, limit: int = 50) -> list["PlanTemplate"]:
+        """List all plan templates (newest first)."""
+        from weebot.domain.models.plan_template import PlanTemplate
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT * FROM plan_templates ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [self._row_to_plan_template(r) for r in rows]
+
+    async def increment_template_use(self, template_id: str) -> None:
+        """Increment the use_count and update last_used_at for a template."""
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc).isoformat()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                "UPDATE plan_templates SET use_count = use_count + 1, last_used_at = ? WHERE template_id = ?",
+                (now, template_id),
+            )
+
+    @staticmethod
+    def _row_to_plan_template(row) -> "PlanTemplate":
+        """Convert a DB row to PlanTemplate."""
+        from weebot.domain.models.plan_template import PlanTemplate
+        return PlanTemplate(
+            template_id=row["template_id"],
+            task_hash=row["task_hash"],
+            task_description=row["task_description"],
+            plan_json=row["plan_json"],
+            success_score=row["success_score"],
+            use_count=row["use_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            last_used_at=datetime.fromisoformat(row["last_used_at"]) if row.get("last_used_at") else None,
+        )
 
     # ── Commitment persistence ─────────────────────────────────────
 

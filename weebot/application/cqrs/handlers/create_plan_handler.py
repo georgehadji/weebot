@@ -57,6 +57,24 @@ class CreatePlanHandler(CommandHandler):
             if skill_content:
                 planner_cfg["skill_prompt"] = skill_content
 
+            # ── Seed planner from template cache ─────────────────
+            try:
+                from weebot.application.services.plan_template_cache import (
+                    build_meta_notes,
+                    find_matching_templates,
+                )
+                templates = await find_matching_templates(self._state_repo, command.prompt)
+                template_notes = build_meta_notes(templates)
+                if template_notes:
+                    combined = (command.meta_notes or "") + "\n\n" + template_notes
+                    planner_cfg["meta_notes"] = combined.strip()
+                    logger.info(
+                        "Seeding planner with %d template(s) for %s",
+                        len(templates), command.session_id[:8],
+                    )
+            except Exception:
+                pass
+
             planner = PlannerAgent(
                 llm=self._llm,
                 event_bus=self._event_bus,
