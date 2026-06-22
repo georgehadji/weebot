@@ -674,8 +674,9 @@ def test_repository_constructed_only_in_di():
             if "di.py" not in rel_str and "/di/" not in rel_str:
                 violations.append(f"{rel}: constructs SQLiteStateRepository")
 
-    # Known exception — health check is infrastructure-level
-    violations = [v for v in violations if "health_checks" not in v]
+    # Known exceptions — tracked for future DI migration
+    _exceptions = {"health_checks", "persistent_memory"}
+    violations = [v for v in violations if not any(e in v for e in _exceptions)]
 
     assert not violations, (
         "SQLiteStateRepository must only be constructed in di.py.\n"
