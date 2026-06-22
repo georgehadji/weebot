@@ -669,7 +669,9 @@ def test_repository_constructed_only_in_di():
         content = path.read_text(encoding="utf-8")
         if "SQLiteStateRepository(" in content and "SQLiteStateRepository()" in content:
             rel = path.relative_to(ROOT.parent)
-            if "di.py" not in str(rel):
+            rel_str = str(rel).replace("\\", "/")
+            # Allow the entire di/ package (composition root) and health checks
+            if "di.py" not in rel_str and "/di/" not in rel_str:
                 violations.append(f"{rel}: constructs SQLiteStateRepository")
 
     # Known exception — health check is infrastructure-level
