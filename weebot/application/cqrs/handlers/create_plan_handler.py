@@ -15,7 +15,11 @@ if TYPE_CHECKING:
 
 from weebot.application.cqrs.commands import CreatePlanCommand
 
+import logging
+
 from weebot.domain.models.plan import Plan, Step, PlanStatus
+
+logger = logging.getLogger(__name__)
 
 class CreatePlanHandler(CommandHandler):
     """Executes plan creation through PlannerAgent and returns events.
