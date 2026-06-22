@@ -79,19 +79,21 @@ class MemoryLifecycleService:
         """Determine the appropriate tier for a memory entry.
 
         Rules:
-        1. Entries younger than HOT_TTL with >= min_access → HOT
+        1. Entries younger than HOT_TTL → HOT (recency alone is sufficient)
         2. Entries younger than WARM_TTL → WARM
-        3. Entries older than COLD_TTL but younger than COLD_TTL + grace → COLD
-        4. Everything else → COLD (eligible for deletion)
+        3. Everything else → COLD (eligible for deletion)
+
+        hot_min_access controls demotion of stale HOT entries (see sweep()),
+        not initial classification — a brand-new entry is always HOT.
         """
         now = time.time()
         age = now - entry.created_at
 
-        # HOT: recent AND frequently accessed (both conditions required)
-        if age < self._hot_ttl and entry.access_count >= self._hot_min_access:
+        # HOT: within the hot TTL window
+        if age < self._hot_ttl:
             return MemoryTier.HOT
 
-        # WARM: within hot_ttl but low access, OR within warm_ttl
+        # WARM: within warm TTL
         if age < self._warm_ttl:
             return MemoryTier.WARM
 
