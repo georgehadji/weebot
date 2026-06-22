@@ -21,6 +21,15 @@ jobs:
     callable_name: "opportunity_scan"
     enabled: true
 
+  - job_id: memory_salience_sweep
+    name: "Memory Salience Sweep"
+    description: "Evict low-salience memory entries past their TTL"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 1
+    callable_name: "memory_salience_sweep"
+    enabled: true
+
   - job_id: commitment_heartbeat
     name: "Commitment Heartbeat"
     description: "Scan for overdue commitments, update statuses, prepare follow-up suggestions"

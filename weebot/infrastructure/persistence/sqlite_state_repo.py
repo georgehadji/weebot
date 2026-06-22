@@ -130,6 +130,27 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
 
+            # ── Memory metadata table (salience scoring) ────
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_metadata (
+                    entry_hash TEXT PRIMARY KEY,
+                    entry_text TEXT NOT NULL,
+                    source TEXT NOT NULL DEFAULT 'agent',
+                    salience REAL NOT NULL DEFAULT 0.5,
+                    access_count INTEGER NOT NULL DEFAULT 0,
+                    last_accessed TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_memory_salience
+                ON memory_metadata(salience)
+                """
+            )
+
             # ── Commitments table ──────────────────────────
             await conn.execute(
                 """
@@ -565,6 +586,64 @@ class SQLiteStateRepository(StateRepositoryPort):
             presented=bool(row["presented"]),
             accepted=bool(row["accepted"]),
         )
+
+    # ── Memory metadata persistence (salience scoring) ─────────────
+
+    async def upsert_memory_metadata(
+        self,
+        entry_hash: str,
+        entry_text: str,
+        source: str = "agent",
+        salience: float = 0.5,
+    ) -> None:
+        """Insert or update a memory metadata entry."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            row = await conn.execute(
+                "SELECT access_count FROM memory_metadata WHERE entry_hash = ?",
+                (entry_hash,),
+            )
+            existing = await row.fetchone()
+            now = datetime.now(timezone.utc).isoformat()
+            if existing:
+                await conn.execute(
+                    "UPDATE memory_metadata SET salience = ?, access_count = access_count + 1, "
+                    "last_accessed = ?, entry_text = ? WHERE entry_hash = ?",
+                    (salience, now, entry_text, entry_hash),
+                )
+            else:
+                await conn.execute(
+                    "INSERT INTO memory_metadata "
+                    "(entry_hash, entry_text, source, salience, access_count, last_accessed, created_at) "
+                    "VALUES (?, ?, ?, ?, 1, ?, ?)",
+                    (entry_hash, entry_text, source, salience, now, now),
+                )
+
+    async def get_low_salience_entries(
+        self, threshold: float = 0.3, limit: int = 50
+    ) -> list[dict]:
+        """Get entries below the salience threshold (eviction candidates)."""
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT entry_hash, entry_text, source, salience, access_count, "
+            "last_accessed, created_at FROM memory_metadata "
+            "WHERE salience < ? ORDER BY salience ASC LIMIT ?",
+            (threshold, limit),
+        )
+        return [dict(r) for r in rows]
+
+    async def delete_memory_entries(self, entry_hashes: list[str]) -> int:
+        """Delete memory metadata entries by hash. Returns count deleted."""
+        if not entry_hashes:
+            return 0
+        pool = await self._get_pool()
+        placeholders = ",".join("?" for _ in entry_hashes)
+        async with pool.acquire_write() as conn:
+            cursor = await conn.execute(
+                f"DELETE FROM memory_metadata WHERE entry_hash IN ({placeholders})",
+                entry_hashes,
+            )
+            return cursor.rowcount
 
     # ── Commitment persistence ─────────────────────────────────────
 

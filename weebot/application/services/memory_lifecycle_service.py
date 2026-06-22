@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -130,6 +131,52 @@ class MemoryLifecycleService:
                     size_bytes=entry.size_bytes,
                 ))
         return candidates
+
+    async def sweep(self, repo=None) -> dict:
+        """Query low-salience entries, classify tiers, evict COLD past TTL.
+
+        Args:
+            repo: An object with ``get_low_salience_entries()`` and
+                  ``delete_memory_entries()`` methods (e.g. SQLiteStateRepository).
+
+        Returns:
+            Dict with ``checked``, ``evicted`` counts.
+        """
+        stats: dict = {"checked": 0, "evicted": 0}
+        if repo is None:
+            return stats
+        try:
+            low_entries = await repo.get_low_salience_entries(threshold=0.3, limit=100)
+        except Exception as exc:
+            logger.warning("MemoryLifecycleService sweep: failed to query: %s", exc)
+            return stats
+
+        now = datetime.now(timezone.utc)
+        evict_hashes: list[str] = []
+        for row in low_entries:
+            stats["checked"] += 1
+            try:
+                created = datetime.fromisoformat(row["created_at"]) if row.get("created_at") else now
+                last_acc = datetime.fromisoformat(row["last_accessed"]) if row.get("last_accessed") else None
+            except (ValueError, TypeError):
+                continue
+            age = (now - created).total_seconds()
+            # Evict COLD entries past the cold TTL
+            if age > self._cold_ttl:
+                evict_hashes.append(row["entry_hash"])
+
+        if evict_hashes:
+            try:
+                deleted = await repo.delete_memory_entries(evict_hashes)
+                stats["evicted"] = deleted
+                logger.info(
+                    "MemoryLifecycleService sweep: evicted %d/%d low-salience entries",
+                    deleted, len(evict_hashes),
+                )
+            except Exception as exc:
+                logger.warning("MemoryLifecycleService sweep: eviction failed: %s", exc)
+
+        return stats
 
     def enforce_hot_capacity(self, entries: list[MemoryEntry]) -> list[MemoryEntry]:
         """If HOT entries exceed max, demote oldest to WARM."""

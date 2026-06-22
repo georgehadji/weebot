@@ -58,6 +58,22 @@ class CapabilitiesMixin:
                 proposals = await opp.scan()
                 logger.info("Opportunity scan: %d proposals", len(proposals))
             mgr.register_callable("opportunity_scan", opportunity_scan)
+        # ── Memory salience sweep (hourly) ────────────────────────
+        async def memory_salience_sweep():
+            try:
+                from weebot.application.services.memory_lifecycle_service import MemoryLifecycleService
+                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                repo = SQLiteStateRepository()
+                svc = MemoryLifecycleService()
+                stats = await svc.sweep(repo=repo)
+                logger.info(
+                    "Memory salience sweep: checked=%d, evicted=%d",
+                    stats["checked"], stats["evicted"],
+                )
+            except Exception as exc:
+                logger.warning("Memory salience sweep failed: %s", exc, exc_info=True)
+        mgr.register_callable("memory_salience_sweep", memory_salience_sweep)
+
         # ── Commitment heartbeat ──────────────────────────────────
         from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
         _cmt_repo = SQLiteStateRepository(db_path=str(Path("./weebot_sessions.db")))

@@ -123,8 +123,27 @@ class PersistentMemoryTool(BaseTool):
 
     # ── actions ───────────────────────────────────────────────────────────
 
+    async def _track_salience(self, entry_text: str, source: str) -> None:
+        """Record salience metadata for a memory entry (best-effort, non-fatal)."""
+        try:
+            import hashlib
+            from weebot.application.services.salience_scorer import compute_salience
+            from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+            if not hasattr(self, '_salience_repo'):
+                self._salience_repo = SQLiteStateRepository()
+            entry_hash = hashlib.sha256(entry_text.encode()).hexdigest()[:16]
+            salience = compute_salience(access_count=2)
+            await self._salience_repo.upsert_memory_metadata(
+                entry_hash, entry_text[:500], source, salience,
+            )
+        except Exception:
+            pass
+
     async def _read(self, file: str) -> ToolResult:
         entries = await self._memory.read_entries(file)
+        for entry_text in entries:
+            if entry_text.strip():
+                await self._track_salience(entry_text, file)
         if not entries:
             return ToolResult.success_result(
                 output="(no entries)", data={"entries": [], "count": 0}
@@ -140,6 +159,7 @@ class PersistentMemoryTool(BaseTool):
             return ToolResult.error_result(
                 "Entry rejected: contains a potential prompt injection pattern."
             )
+        await self._track_salience(entry, file)
         entries = await self._memory.read_entries(file)
         entries.append(entry)
         await self._memory.write_entries(file, entries)
