@@ -79,6 +79,9 @@ ignore_imports =
     weebot.infrastructure.mcp.mcp_toolkit_adapter -> weebot.tools.base
     # MCP tool bridge implements the MCP tool port defined in application.ports.
     weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
+    # sqlite_state_repo lazily extracts commitments from saved assistant messages.
+    # Tracked for migration: commit extraction should move to the application layer.
+    weebot.infrastructure.persistence.sqlite_state_repo -> weebot.application.services.commitment_extractor
 
 [importlinter:contract:interfaces-no-infra]
 name = Interfaces must not depend on infrastructure adapters directly

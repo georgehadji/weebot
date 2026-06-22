@@ -86,3 +86,10 @@ class ChatMessageState(FlowState):
             ]
             async for event in agent.respond(prompt, history):
                 yield event
+
+        # Persist the updated session now that all events have been yielded.
+        if context._state_repo:
+            try:
+                await context._state_repo.save_session(context._session)
+            except Exception as exc:
+                logger.debug("save_session failed in ChatMessageState (non-fatal): %s", exc)
