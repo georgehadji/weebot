@@ -87,15 +87,11 @@ class MemoryLifecycleService:
         now = time.time()
         age = now - entry.created_at
 
-        # HOT: recent + frequently accessed
+        # HOT: recent AND frequently accessed (both conditions required)
         if age < self._hot_ttl and entry.access_count >= self._hot_min_access:
             return MemoryTier.HOT
 
-        # HOT: still within TTL if we have capacity
-        if age < self._hot_ttl:
-            return MemoryTier.HOT
-
-        # WARM: within warm TTL
+        # WARM: within hot_ttl but low access, OR within warm_ttl
         if age < self._warm_ttl:
             return MemoryTier.WARM
 
@@ -157,12 +153,20 @@ class MemoryLifecycleService:
             stats["checked"] += 1
             try:
                 created = datetime.fromisoformat(row["created_at"]) if row.get("created_at") else now
-                last_acc = datetime.fromisoformat(row["last_accessed"]) if row.get("last_accessed") else None
+                # Normalise naive datetimes to aware for comparison
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
             except (ValueError, TypeError):
+                logger.debug("MemoryLifecycleService sweep: skipping unparseable entry %s", row.get("entry_hash", "?"))
                 continue
-            age = (now - created).total_seconds()
-            # Evict COLD entries past the cold TTL
-            if age > self._cold_ttl:
+            # Use classify() to determine tier, should_retain() for eviction decision
+            entry = MemoryEntry(
+                key=row["entry_hash"],
+                tier=MemoryTier.COLD,
+                access_count=row.get("access_count", 0),
+                created_at=created.timestamp(),
+            )
+            if not self.should_retain(entry):
                 evict_hashes.append(row["entry_hash"])
 
         if evict_hashes:

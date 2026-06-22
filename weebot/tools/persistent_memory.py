@@ -126,18 +126,18 @@ class PersistentMemoryTool(BaseTool):
     async def _track_salience(self, entry_text: str, source: str) -> None:
         """Record salience metadata for a memory entry (best-effort, non-fatal).
 
-        Requires _salience_repo to be injected at construction time via DI.
-        When not set, salience tracking is silently skipped.
+        Uses a lazily-initialised SQLiteStateRepository — the first call
+        triggers connection pool creation, subsequent calls reuse it.
         """
-        repo = getattr(self, '_salience_repo', None)
-        if repo is None:
-            return
         try:
             import hashlib
             from weebot.application.services.salience_scorer import compute_salience
+            if not hasattr(self, '_salience_repo'):
+                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                self._salience_repo = SQLiteStateRepository()
             entry_hash = hashlib.sha256(entry_text.encode()).hexdigest()[:16]
             salience = compute_salience(access_count=2)
-            await repo.upsert_memory_metadata(
+            await self._salience_repo.upsert_memory_metadata(
                 entry_hash, entry_text[:500], source, salience,
             )
         except Exception:
