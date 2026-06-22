@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import types
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
@@ -24,7 +25,7 @@ class ApprovalMode(Enum):
     FORCE_ALWAYS_ASK = "force_always_ask"  # Bypasses all normal rules; always asks.
 
 
-@dataclass
+@dataclass(frozen=True)
 class CommandRule:
     pattern: str
     mode: ApprovalMode
@@ -42,7 +43,7 @@ class ApprovalResult:
 
 
 # Built-in defaults: destructive → ask, format → deny, rest → auto
-_DEFAULT_RULES: List[CommandRule] = [
+_DEFAULT_RULES: tuple[CommandRule, ...] = (
     # Allow Remove-Item / python writes inside the Output\ working directory
     # (checked before the blanket remove-item rule because longest-match wins)
     CommandRule(
@@ -67,7 +68,15 @@ _DEFAULT_RULES: List[CommandRule] = [
                 undo_hint="Note the PID before stopping in case restart is needed."),
     CommandRule("kill", ApprovalMode.ALWAYS_ASK,
                 undo_hint="Save PID/name before killing."),
-]
+)
+
+
+# ── Frozen sentinel ──────────────────────────────────────────────────────────
+# Once this module is loaded, its permission data structures are immutable.
+# Any code attempting to mutate _DEFAULT_RULES or TOOL_CATEGORIES at runtime
+# will get a TypeError (tuple/MappingProxyType). This prevents accidental or
+# malicious permission widening after import.
+_FROZEN: bool = True
 
 
 class ExecApprovalPolicy:
@@ -77,8 +86,8 @@ class ExecApprovalPolicy:
     """
 
     def __init__(self, rules: Optional[List[CommandRule]] = None) -> None:
-        # User rules first, then built-in defaults
-        self._rules = (rules or []) + _DEFAULT_RULES
+        # User rules first, then built-in defaults (frozen tuple — cast to list)
+        self._rules = list(rules or []) + list(_DEFAULT_RULES)
 
         # Pre-compile regex patterns at init time so evaluate() never raises
         # re.error at runtime.  Invalid patterns are logged and silently skipped
@@ -162,13 +171,15 @@ class ExecApprovalPolicy:
 # ── Tool category tagging (Track 5 — Hermes Audit) ────────────────
 # Maps tool categories to their required approval mode.
 # Tools tagged ``finance`` or ``payment`` always require approval.
-TOOL_CATEGORIES: dict[str, ApprovalMode] = {
+# Wrapped in MappingProxyType to prevent runtime mutation — any
+# TOOL_CATEGORIES["key"] = val will raise TypeError.
+TOOL_CATEGORIES: types.MappingProxyType = types.MappingProxyType({
     "finance": ApprovalMode.FORCE_ALWAYS_ASK,
     "payment": ApprovalMode.FORCE_ALWAYS_ASK,
     # Inbound email is untrusted input (ADR 006). Any action that follows
     # an atomic_mail jmap_request must be confirmed before execution.
     "inbound_mail": ApprovalMode.FORCE_ALWAYS_ASK,
-}
+})
 
 
 def get_category_approval_mode(category: str) -> ApprovalMode:

@@ -14,6 +14,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from weebot.application.services.tool_call_repair import fuzzy_match_tool_name
 from weebot.config.constants import MAX_TOOL_OUTPUT_CHARS
 
 
@@ -149,11 +150,16 @@ class ToolCollection:
 
     async def execute(self, _name: str, **kwargs: Any) -> ToolResult:
         if _name not in self._tools:
-            return ToolResult.error_result(
-                error=f"Unknown tool: {_name!r}",
-                execution_time_ms=0.0,
-                retry_count=0,
-            )
+            # Try fuzzy name match before giving up (handles typos, casing)
+            fuzzy_name = fuzzy_match_tool_name(_name, list(self._tools.keys()))
+            if fuzzy_name is not None:
+                _name = fuzzy_name
+            else:
+                return ToolResult.error_result(
+                    error=f"Unknown tool: {_name!r}",
+                    execution_time_ms=0.0,
+                    retry_count=0,
+                )
 
         # Phase 3: Block execution of unhealthy tools (if health check has run)
         if self._healthy is not None and not self._healthy.get(_name, True):

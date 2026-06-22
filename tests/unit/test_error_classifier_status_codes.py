@@ -35,19 +35,20 @@ class TestErrorClassifierAuth:
         assert ErrorClassifier.should_fail_fast(Exception("invalid api key")) is True
 
     def test_500_is_not_auth(self):
-        """Server errors must NOT be classified as AUTH — they are retryable."""
-        assert ErrorClassifier.classify(Exception("500 Internal Server Error")) == ErrorCategory.UNKNOWN
+        """Server errors must NOT be classified as AUTH — they are retryable (SERVER_ERROR)."""
+        assert ErrorClassifier.classify(Exception("500 Internal Server Error")) == ErrorCategory.SERVER_ERROR
         assert ErrorClassifier.should_fail_fast(Exception("500 Internal Server Error")) is False
 
-    def test_503_is_network(self):
-        """Service unavailable is a network error, not AUTH."""
+    def test_503_is_model_unavailable(self):
+        """Service unavailable is MODEL_UNAVAILABLE, not AUTH."""
         assert ErrorClassifier.classify(Exception("503 Service Unavailable")) == ErrorCategory.MODEL_UNAVAILABLE
         assert ErrorClassifier.should_fail_fast(Exception("503 Service Unavailable")) is False
 
-    def test_rate_limit_is_not_auth(self):
-        """Rate limits are retryable (with backoff)."""
+    def test_rate_limit_is_backoff(self):
+        """Rate limits produce BACKOFF action (retryable with backoff)."""
         assert ErrorClassifier.classify(Exception("429 Too Many Requests")) == ErrorCategory.RATE_LIMIT
         assert ErrorClassifier.should_fail_fast(Exception("429 Too Many Requests")) is False
+        assert ErrorClassifier.is_retryable(Exception("429 Too Many Requests")) is True
 
 
 class TestErrorClassifierPathErrors:

@@ -9,17 +9,92 @@ OpenRouter with Anthropic models).
 """
 from __future__ import annotations
 
+import ast
+import copy
+import json
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
+# ── Tool-call argument normalizer ────────────────────────────────────────────
+
+
+def normalize_tool_call_arguments(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize tool_call argument JSON for bit-stable message prefixes.
+
+    Walks the message list and re-serializes every ``function.arguments``
+    JSON string inside ``tool_calls`` blocks with ``sort_keys=True`` and
+    compact separators (``,`` / ``:``, no spaces).
+
+    This ensures deterministic argument strings regardless of provider-specific
+    key ordering or formatting (OpenAI returns valid JSON; Anthropic SDK
+    returns Python ``str()`` repr with single quotes). Deterministic arguments
+    maximize prompt cache hit rates by producing bit-identical message prefixes
+    across turns.
+
+    Non-decodable argument strings are silently skipped (left unchanged).
+    The original message list is not mutated — a deep copy is returned.
+    """
+    result = copy.deepcopy(messages)
+
+    for msg in result:
+        tool_calls = msg.get("tool_calls")
+        if not tool_calls:
+            continue
+
+        for tc in tool_calls:
+            func = tc.get("function")
+            if not func:
+                continue
+
+            raw = func.get("arguments", "")
+            if not raw or not raw.strip():
+                continue
+
+            normalized = _normalize_json_string(raw)
+            if normalized is not None and normalized != raw:
+                func["arguments"] = normalized
+
+    return result
+
+
+def _normalize_json_string(raw: str) -> str | None:
+    """Parse *raw* as JSON (or Python repr) and re-serialize with sort_keys.
+
+    Returns ``None`` if the string can't be parsed, or if ``ast.literal_eval``
+    produced a non-dict value (scalar/list). Silently skipped in both cases.
+    """
+    # Try standard JSON first (OpenAI, OpenRouter, etc.)
+    try:
+        parsed = json.loads(raw)
+        return json.dumps(parsed, sort_keys=True, separators=(",", ":"))
+    except json.JSONDecodeError:
+        pass
+
+    # Try Python ast.literal_eval (Anthropic SDK returns str(block.input))
+    # This handles single-quoted keys, True/False/None, etc.
+    # Guard: only re-serialize dicts (not scalars/lists), and protect
+    # against NaN/Infinity that json.dumps would serialise as invalid JSON.
+    try:
+        parsed = ast.literal_eval(raw)
+        if isinstance(parsed, dict):
+            normalized = json.dumps(
+                parsed, sort_keys=True, separators=(",", ":"), allow_nan=False,
+            )
+            return normalized
+    except (ValueError, SyntaxError, MemoryError, TypeError):
+        pass
+
+    return None
+
+
 class AnthropicCachingAdapter:
     """Wraps LLM provider calls to inject cache_control breakpoints.
 
     Usage:
-        caching_adapter = AnthropicCachingAdapter(prompt_caching_enabled=True)
+        caching_adapter = AnthropicCachingAdapter(enabled=True)
         messages = caching_adapter.prepare_messages(raw_messages)
 
     The adapter injects ``cache_control: {"type": "ephemeral"}`` on specific
@@ -48,16 +123,17 @@ class AnthropicCachingAdapter:
         """Prepare messages with cache_control breakpoints.
 
         If caching is disabled, returns messages unchanged.
-        If enabled, adds ``cache_control: {"type": "ephemeral"}`` to
-        the last system message and the last user message before any
-        assistant response.
+        If enabled:
+        1. Normalizes tool_call argument JSON for bit-stable prefixes
+        2. Adds ``cache_control: {"type": "ephemeral"}`` to the last system
+           message and the last user message before any assistant response
         """
         if not self._enabled:
             return messages
 
-        # Deep copy to avoid mutating the caller's message dicts
-        import copy
-        result = copy.deepcopy(messages)
+        # Step 1: Normalize tool_call arguments for bit-stable prefixes
+        # (runs before deepcopy so the normalizer does its own copy)
+        result = normalize_tool_call_arguments(messages)
         cache_markers_added = 0
 
         # 1. Cache the last system message

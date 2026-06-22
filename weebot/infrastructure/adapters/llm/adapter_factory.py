@@ -5,6 +5,10 @@ import os
 from typing import Optional, Dict, Any
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.infrastructure.adapters.llm.caching_llm_adapter import (
+    CachingLLMAdapter,
+    supports_prompt_caching,
+)
 from weebot.infrastructure.adapters.llm.resilient_adapter import ResilientLLMAdapter
 
 # Import concrete adapters
@@ -152,8 +156,15 @@ class AdapterFactory:
         """
         provider = provider.lower()
         
-        # Check cache
-        cache_key = f"{provider}:{model}:{api_key}"
+        # Check cache — includes caching flag so enable_caching=True/False
+        # calls don't silently return the wrong adapter variant.
+        _cache_flag = (
+            "caching" if (enable_caching
+                          if enable_caching is not None
+                          else self._enable_caching)
+            else "nocache"
+        )
+        cache_key = f"{provider}:{model}:{api_key}:{_cache_flag}"
         if cache_key in self._adapters:
             return self._adapters[cache_key]
         
@@ -169,7 +180,24 @@ class AdapterFactory:
             api_key=api_key,
             **kwargs
         )
-        
+
+        # Conditionally wrap with prompt-caching adapter (Anthropic-only).
+        # Injects cache_control breakpoints for Anthropic prompt caching
+        # when enabled + model supports it.
+        #
+        # NOTE: LLM_ENABLE_CACHING / enable_caching gates TWO caches:
+        #   1. Prompt caching (here) — Anthropic cache_control breakpoints
+        #   2. Response caching (ResilientLLMAdapter below) — LLMCache dedup
+        # These share a single knob by design. If separated in the future,
+        # use distinct flags (e.g. LLM_ENABLE_PROMPT_CACHING / LLM_ENABLE_RESPONSE_CACHING).
+        _do_cache = enable_caching if enable_caching is not None else self._enable_caching
+        if _do_cache and supports_prompt_caching(model):
+            inner_adapter = CachingLLMAdapter(
+                inner_adapter=inner_adapter,
+                model=model,
+                enabled=True,
+            )
+
         # Strip provider prefix for the model name used inside the adapter
         # so the inner adapter doesn't see prefixed names like "deepseek/deepseek-chat"
         stripped_model = model.split("/", 1)[-1] if "/" in model else model
@@ -287,15 +315,16 @@ class AdapterFactory:
         elif provider == "xai":
             # Strip prefix: "x-ai/grok-build-0.1" → "grok-build-0.1"
             clean_model = model.split("/", 1)[-1] if "/" in model else model
-            # Prefer explicit api_key param, then .env-backed settings (which
-            # overrides stale system env vars), then raw env as last resort.
-            _xai_key = api_key
-            if not _xai_key:
-                try:
-                    from weebot.config.settings import WeebotSettings
-                    _xai_key = WeebotSettings().xai_api_key
-                except Exception:
-                    _xai_key = os.getenv("XAI_API_KEY")
+            # IMPORTANT: do NOT use the api_key parameter here — it carries
+            # the OpenRouter key from create_llm_adapter.  xAI models must
+            # authenticate with XAI_API_KEY against https://api.x.ai/v1.
+            # Using an OpenRouter key on xAI's endpoint produces a 401.
+            _xai_key = None
+            try:
+                from weebot.config.settings import WeebotSettings
+                _xai_key = WeebotSettings().xai_api_key
+            except Exception:
+                _xai_key = os.getenv("XAI_API_KEY")
             if not _xai_key:
                 _xai_key = os.getenv("XAI_API_KEY")
             xai_key = _xai_key

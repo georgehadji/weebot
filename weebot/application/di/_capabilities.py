@@ -58,6 +58,22 @@ class CapabilitiesMixin:
                 proposals = await opp.scan()
                 logger.info("Opportunity scan: %d proposals", len(proposals))
             mgr.register_callable("opportunity_scan", opportunity_scan)
+        # ── Commitment heartbeat ──────────────────────────────────
+        from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+        _cmt_repo = SQLiteStateRepository(db_path=str(Path("./weebot_sessions.db")))
+        async def commitment_heartbeat():
+            try:
+                from weebot.application.services.commitment_engine import CommitmentEngine
+                engine = CommitmentEngine(state_repo=_cmt_repo)
+                stats = await engine.heartbeat()
+                logger.info(
+                    "Commitment heartbeat: checked=%d, overdue=%d, pending=%d",
+                    stats["checked"], stats["marked_overdue"], stats["active_pending"],
+                )
+            except Exception as exc:
+                logger.warning("Commitment heartbeat failed: %s", exc, exc_info=True)
+        mgr.register_callable("commitment_heartbeat", commitment_heartbeat)
+
         learner = self._maybe_get_str("behavioral_learner")
         if learner is not None:
             async def behavioral_consolidation():

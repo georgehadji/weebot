@@ -381,8 +381,9 @@ class TestReflectionGrounding:
 class TestReflectionErrorAttributionB1:
     @pytest.mark.asyncio
     async def test_compaction_failure_not_swallowed_as_parse_failure(self, monkeypatch, caplog):
-        """After the B1 fix, compaction errors propagate past the parse try-block
-        and must NOT produce the 'parse/validate failed' log line."""
+        """After the P0 quarantine fix, compaction errors are caught and logged as WARN
+        inside the compressor, and must NOT produce the 'parse/validate failed' log line
+        or propagate as an unhandled RuntimeError."""
         import logging
         import weebot.config.feature_flags as ff
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
@@ -409,9 +410,17 @@ class TestReflectionErrorAttributionB1:
 
         ex._context_compressor.track_usage_and_maybe_compress = _bad_compress
 
-        with caplog.at_level(logging.DEBUG):
-            with pytest.raises(RuntimeError, match="compaction LLM timed out"):
-                await ex._reflect_on_screenshot("computer_use", _B64)
+        with caplog.at_level(logging.WARNING):
+            result = await ex._reflect_on_screenshot("computer_use", _B64)
 
-        # The parse/validate log line must NOT have appeared
+        # After quarantine, compaction error is caught and logged, not propagated.
+        # Parse continues normally with the valid JSON response (returns VisionReflection).
+        assert result is not None, (
+            "Compaction failure should quarantine (not propagate), "
+            "and valid JSON should still parse successfully"
+        )
+        assert "Compressor quarantine" in caplog.text, (
+            "Compaction failure must be logged as a WARN quarantine message"
+        )
+        # The parse/validate log line must NOT have appeared (that's a different error path)
         assert "parse/validate failed" not in caplog.text

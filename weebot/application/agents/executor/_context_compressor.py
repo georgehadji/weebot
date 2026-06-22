@@ -10,7 +10,6 @@ import logging
 from typing import Any, Dict, Optional
 from collections import deque
 
-from weebot.config.constants import TEMPERATURE_BALANCED
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,13 @@ class ContextCompressor:
                 self._total_completion_tokens += getattr(usage, "completion_tokens", 0) or 0
 
         if self._auto_compress:
-            await self._maybe_compress()
+            try:
+                await self._maybe_compress()
+            except Exception as exc:
+                logger.warning(
+                    "Compressor quarantine: _maybe_compress failed — %s: %s",
+                    type(exc).__name__, exc,
+                )
 
     async def _maybe_compress(self) -> None:
         """Summarize the middle of the conversation buffer when approaching limit."""
@@ -82,34 +87,39 @@ class ContextCompressor:
         if estimated_tokens < self._context_window * 0.75:
             return
 
-        if self._compressor is None:
-            from weebot.application.services.conversation_compressor import (
-                ConversationCompressor,
-            )
-            self._compressor = ConversationCompressor(
-                llm=self._llm,
-                model=self._model,
-                temperature=TEMPERATURE_BALANCED,
-            )
+        try:
+            if self._compressor is None:
+                from weebot.application.services.conversation_compressor import (
+                    ConversationCompressor,
+                )
+                self._compressor = ConversationCompressor(
+                    llm=self._llm,
+                    cheap_model=self._model,
+                )
 
-        keep_first = max(1, len(conversation) // 4)
-        keep_last = max(1, len(conversation) // 4)
-        middle = conversation[keep_first:-keep_last] if keep_last > 0 else conversation[keep_first:]
-        if not middle:
-            return
+            keep_first = max(1, len(conversation) // 4)
+            keep_last = max(1, len(conversation) // 4)
+            middle = conversation[keep_first:-keep_last] if keep_last > 0 else conversation[keep_first:]
+            if not middle:
+                return
 
-        summary = await self._compressor.compress(middle)
-        if summary:
-            self._conversation_buffer.clear()
-            for msg in conversation[:keep_first]:
-                self._conversation_buffer.append(msg)
-            self._conversation_buffer.append({"role": "system", "content": summary})
-            for msg in conversation[-keep_last:]:
-                self._conversation_buffer.append(msg)
-            logger.info(
-                "Compressed conversation: %d -> %d messages, %d tokens cleared",
-                len(conversation), len(self._conversation_buffer),
-                estimated_tokens,
+            summary = await self._compressor.compress(middle)
+            if summary:
+                self._conversation_buffer.clear()
+                for msg in conversation[:keep_first]:
+                    self._conversation_buffer.append(msg)
+                self._conversation_buffer.append({"role": "system", "content": summary})
+                for msg in conversation[-keep_last:]:
+                    self._conversation_buffer.append(msg)
+                logger.info(
+                    "Compressed conversation: %d -> %d messages, %d tokens cleared",
+                    len(conversation), len(self._conversation_buffer),
+                    estimated_tokens,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Compressor quarantine: compression failed — %s: %s",
+                type(exc).__name__, exc,
             )
 
     # ── Vision helpers ─────────────────────────────────────────────
@@ -232,7 +242,13 @@ class ContextCompressor:
             logger.debug("Vision reflection LLM call failed for %s (non-fatal)", tool_name)
             return None
 
-        await self.track_usage_and_maybe_compress(response)
+        try:
+            await self.track_usage_and_maybe_compress(response)
+        except Exception as exc:
+            logger.warning(
+                "Compressor quarantine: track_usage_and_maybe_compress in reflection failed "
+                "for %s — %s: %s", tool_name, type(exc).__name__, exc,
+            )
 
         try:
             import json

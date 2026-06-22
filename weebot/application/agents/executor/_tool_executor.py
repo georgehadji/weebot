@@ -13,6 +13,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.session import Session
@@ -94,12 +95,30 @@ class ToolExecutor:
                         output=f"Invalid tool arguments JSON for '{name}'.",
                         tool_name=name,
                     )
-            except json.JSONDecodeError as exc:
-                return ToolResult.error_result(
-                    error=f"Invalid tool arguments JSON for '{name}': {exc.msg}.",
-                    output=f"Invalid tool arguments JSON for '{name}'.",
-                    tool_name=name,
-                )
+            except json.JSONDecodeError:
+                # Attempt repair before giving up
+                repaired = repair_json_string(arguments)
+                if repaired is not None:
+                    try:
+                        args = json.loads(repaired)
+                        if not isinstance(args, dict):
+                            return ToolResult.error_result(
+                                error=f"Invalid tool arguments JSON for '{name}': expected object.",
+                                output=f"Invalid tool arguments JSON for '{name}'.",
+                                tool_name=name,
+                            )
+                    except json.JSONDecodeError:
+                        return ToolResult.error_result(
+                            error=f"Invalid tool arguments JSON for '{name}': unrepairable.",
+                            output=f"Invalid tool arguments JSON for '{name}'.",
+                            tool_name=name,
+                        )
+                else:
+                    return ToolResult.error_result(
+                        error=f"Invalid tool arguments JSON for '{name}': unrepairable.",
+                        output=f"Invalid tool arguments JSON for '{name}'.",
+                        tool_name=name,
+                    )
         else:
             args = arguments or {}
 

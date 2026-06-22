@@ -130,6 +130,36 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
 
+            # ── Commitments table ──────────────────────────
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS commitments (
+                    id TEXT PRIMARY KEY,
+                    promise_text TEXT NOT NULL,
+                    context TEXT NOT NULL DEFAULT '',
+                    source_session_id TEXT NOT NULL,
+                    source_event_id TEXT,
+                    due_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    failure_reason TEXT
+                )
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_commitments_status
+                ON commitments(status)
+                """
+            )
+            await conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_commitments_due_at
+                ON commitments(due_at)
+                """
+            )
+
             logger.debug("Database schema ensured")
     
     async def save_session(self, session: Session) -> None:
@@ -142,6 +172,25 @@ class SQLiteStateRepository(StateRepositoryPort):
         
         # Serialize session data
         events_data = [e.model_dump() for e in session.events]
+
+        # ── Extract commitments from assistant messages ───────────
+        try:
+            from weebot.application.services.commitment_extractor import extract_commitments
+            from weebot.domain.models.event import MessageEvent
+            for event in session.events:
+                if isinstance(event, MessageEvent) and getattr(event, 'role', '') == 'assistant':
+                    text = getattr(event, 'message', '') or ''
+                    if text:
+                        commitments = extract_commitments(
+                            text,
+                            context="Session: " + (session.title or "")[:200],
+                            source_session_id=session.id,
+                            source_event_id=getattr(event, 'event_id', None),
+                        )
+                        for cmt in commitments:
+                            await self.save_commitment(cmt)
+        except Exception as exc:
+            logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
 
         # Guard against event bloat: if JSON exceeds limit, keep only recent events
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
@@ -515,6 +564,105 @@ class SQLiteStateRepository(StateRepositoryPort):
             created_at=datetime.fromisoformat(row["created_at"]),
             presented=bool(row["presented"]),
             accepted=bool(row["accepted"]),
+        )
+
+    # ── Commitment persistence ─────────────────────────────────────
+
+    async def save_commitment(self, commitment: "Commitment") -> None:
+        """Save or update a commitment."""
+        from weebot.domain.models.commitment import Commitment
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            await conn.execute(
+                """
+                INSERT OR REPLACE INTO commitments
+                    (id, promise_text, context, source_session_id, source_event_id,
+                     due_at, status, created_at, updated_at, failure_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    commitment.id,
+                    commitment.promise_text,
+                    commitment.context,
+                    commitment.source_session_id,
+                    commitment.source_event_id,
+                    commitment.due_at.isoformat() if commitment.due_at else None,
+                    commitment.status.value,
+                    commitment.created_at.isoformat(),
+                    commitment.updated_at.isoformat(),
+                    commitment.failure_reason,
+                ),
+            )
+
+    async def list_commitments(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list["Commitment"]:
+        """List commitments, optionally filtered by status."""
+        from weebot.domain.models.commitment import Commitment
+        pool = await self._get_pool()
+
+        if status:
+            rows = await pool.execute_read(
+                "SELECT * FROM commitments WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            )
+        else:
+            rows = await pool.execute_read(
+                "SELECT * FROM commitments ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+
+        return [self._row_to_commitment(r) for r in rows]
+
+    async def get_pending_commitments(self, limit: int = 20) -> list["Commitment"]:
+        """Get commitments that are pending or overdue."""
+        from weebot.domain.models.commitment import Commitment
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT * FROM commitments WHERE status IN ('pending', 'overdue') "
+            "ORDER BY due_at ASC NULLS LAST, created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [self._row_to_commitment(r) for r in rows]
+
+    async def update_commitment_status(
+        self,
+        commitment_id: str,
+        status: str,
+        failure_reason: Optional[str] = None,
+    ) -> bool:
+        """Update a commitment's status (and optional failure_reason)."""
+        pool = await self._get_pool()
+        async with pool.acquire_write() as conn:
+            if failure_reason:
+                cursor = await conn.execute(
+                    "UPDATE commitments SET status = ?, updated_at = ?, failure_reason = ? WHERE id = ?",
+                    (status, datetime.now(timezone.utc).isoformat(), failure_reason, commitment_id),
+                )
+            else:
+                cursor = await conn.execute(
+                    "UPDATE commitments SET status = ?, updated_at = ? WHERE id = ?",
+                    (status, datetime.now(timezone.utc).isoformat(), commitment_id),
+                )
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _row_to_commitment(row) -> "Commitment":
+        """Convert a DB row to Commitment."""
+        from weebot.domain.models.commitment import Commitment, CommitmentStatus
+        return Commitment(
+            id=row["id"],
+            promise_text=row["promise_text"],
+            context=row["context"],
+            source_session_id=row["source_session_id"],
+            source_event_id=row.get("source_event_id"),
+            due_at=datetime.fromisoformat(row["due_at"]) if row.get("due_at") else None,
+            status=CommitmentStatus(row["status"]),
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+            failure_reason=row.get("failure_reason"),
         )
 
     # ────────────────────────────────────────────────────────────────
