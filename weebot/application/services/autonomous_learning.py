@@ -19,6 +19,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 
+from weebot.config.constants import MAX_TOKENS_MODERATE, TEMPERATURE_BALANCED
 from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance
 
 if TYPE_CHECKING:
@@ -70,6 +71,17 @@ _MIN_TRAJECTORY_CHARS = 500
 _MAX_NAME_LEN = 50
 # Regex for valid kebab-case skill name characters.
 _NAME_RE = re.compile(r"[^a-z0-9-]")
+
+# Singleton proposal tracker for anti-pattern detection across sessions
+_proposal_tracker: Optional["ProposalTracker"] = None
+
+
+def _get_proposal_tracker() -> "ProposalTracker":
+    global _proposal_tracker
+    if _proposal_tracker is None:
+        from weebot.application.services.proposal_tracker import ProposalTracker
+        _proposal_tracker = ProposalTracker(suppression_threshold=3)
+    return _proposal_tracker
 
 
 class AutonomousSkillCreator:
@@ -126,6 +138,14 @@ class AutonomousSkillCreator:
         meta = SkillMetadata(trust="quarantined", provenance=prov)
         skill = Skill(name=name, description=description, content=content, metadata=meta)
 
+        # ── Anti-pattern guard: suppress identical proposals ──
+        fp = _get_proposal_tracker().fingerprint(content)
+        if not _get_proposal_tracker().record_and_check(fp):
+            logger.info(
+                "Anti-pattern guard suppressed skill '%s' (repeated proposal)", name
+            )
+            return None
+
         if self._skill_store is not None:
             try:
                 await self._skill_store.save(skill)
@@ -153,8 +173,8 @@ class AutonomousSkillCreator:
                     {"role": "system", "content": _DISTILL_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.3,
-                max_tokens=900,
+                temperature=TEMPERATURE_BALANCED,
+                max_tokens=MAX_TOKENS_MODERATE,
             )
             raw = response.content if hasattr(response, "content") else str(response)
             return _parse_distiller_response(raw)

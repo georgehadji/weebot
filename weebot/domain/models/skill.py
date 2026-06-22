@@ -581,6 +581,33 @@ class Skill(BaseModel):
         return self.model_copy(update={"evolution_log": updated[-max_entries:]})
 
 
+class SkillPromotionResult(BaseModel):
+    """Result of a verification-gated promotion evaluation.
+
+    Produced by ``SkillPromotionGate.evaluate()``.
+    """
+    skill_name: str
+    passed: bool = False
+    verify_score: float = 0.0
+    harness_score: float = 0.0
+    detail: str = ""
+
+
+class SkillReview(BaseModel):
+    """Result of an LLM review gate evaluation for a quarantined skill.
+
+    Produced by ``SkillReviewGate.review()``.
+    """
+    skill_name: str
+    coherence: float = 0.0
+    value: float = 0.0
+    similarity: float = 0.0
+    safety: float = 0.0
+    summary: str = ""
+    recommendation: str = "reject"
+    promoted: bool = False
+
+
 class SkillMatch(BaseModel):
     """A skill retrieved by the Procedural Skill Layer (Tier 1.2).
 

@@ -173,3 +173,73 @@ class SkillCurator:
             logger.warning(
                 "Failed to update evolution_log for skill %r: %s", skill.name, exc
             )
+
+    # ── Overlap detection for consolidation ────────────────────────
+
+    async def detect_overlaps(self) -> list[dict[str, str | float]]:
+        """Detect overlapping skills and return merge recommendations.
+
+        For each pair of skills, computes keyword Jaccard similarity.
+        Pairs with overlap >= 0.5 are flagged as potential merges.
+
+        Returns:
+            List of dicts with keys: skill_a, skill_b, overlap, recommendation.
+        """
+        from weebot.application.services.skill_curator import _extract_keywords, _keyword_overlap
+
+        skills: list = []
+        try:
+            skills = self._registry.load_all()
+        except Exception:
+            logger.warning("SkillCurator overlap: registry load failed")
+            return []
+
+        keywords_map: dict[str, set[str]] = {}
+        for s in skills:
+            text = f"{s.name} {s.description} {s.body}"
+            keywords_map[s.name] = _extract_keywords(text)
+
+        recommendations: list[dict[str, str | float]] = []
+        names = list(keywords_map.keys())
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                overlap = _keyword_overlap(keywords_map[names[i]], keywords_map[names[j]])
+                if overlap >= 0.5:
+                    recommendations.append({
+                        "skill_a": names[i],
+                        "skill_b": names[j],
+                        "overlap": round(overlap, 2),
+                        "recommendation": "Consider merging these skills",
+                    })
+
+        return recommendations
+
+
+# ── Helper functions for overlap detection ──────────────────────────
+
+_STOPWORDS: frozenset = frozenset({
+    "the", "a", "an", "in", "on", "at", "to", "for", "of", "with",
+    "and", "or", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would",
+    "can", "could", "shall", "should", "may", "might", "must",
+    "this", "that", "these", "those", "it", "its", "you", "your",
+    "i", "we", "they", "he", "she", "not", "no", "nor", "but",
+    "if", "then", "else", "when", "where", "why", "how", "all",
+    "each", "every", "both", "few", "more", "most", "some", "any",
+    "use", "using", "used", "set", "get", "make", "need", "take",
+})
+
+
+def _extract_keywords(text: str, max_keywords: int = 10) -> set[str]:
+    """Extract significant keywords from *text* for overlap detection."""
+    import re
+    tokens = re.findall(r"[a-zA-Z]\w{3,}", text.lower())
+    filtered = [t for t in tokens if t not in _STOPWORDS and not t.isdigit()]
+    return set(filtered[:max_keywords])
+
+
+def _keyword_overlap(keywords_a: set[str], keywords_b: set[str]) -> float:
+    """Jaccard similarity between two keyword sets."""
+    if not keywords_a or not keywords_b:
+        return 0.0
+    return len(keywords_a & keywords_b) / len(keywords_a | keywords_b)
