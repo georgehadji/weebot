@@ -172,6 +172,74 @@ class TrajectoryDiagnosisEvent(BaseEvent):
     recovery_message: str | None = Field(default=None)
 
 
+# ── Product-mode events ──────────────────────────────────────────────
+
+class ProductGateReviewEvent(BaseEvent):
+    """Emitted when ProductGateState needs user clarification on problem framing.
+
+    The user sees the low-confidence fields and clarification questions,
+    then responds with clarifications. The flow resumes and re-runs the
+    product gate with the enriched context.
+    """
+    type: Literal["product_gate_review"] = "product_gate_review"
+    product_context: dict = Field(
+        default_factory=dict,
+        description="Partial ProductContext dict with fields filled so far.",
+    )
+    low_confidence_fields: list[str] = Field(
+        default_factory=list,
+        description="Field names that scored below the confidence threshold.",
+    )
+    clarification_questions: list[str] = Field(
+        default_factory=list,
+        description="Up to 3 questions to help the user clarify the problem.",
+    )
+
+
+class ProductDecisionEvent(BaseEvent):
+    """Emitted on session completion — captures the product decision made.
+
+    Follows the product-mode ADR-lite format (Principle 7):
+        - Context: Problem, constraints, why now
+        - Options considered (if enriched by background LLM)
+        - Choice and rationale
+        - Reversibility: one-way or two-way door
+        - Revisit trigger: metric/date/condition that reopens the decision
+    """
+    type: Literal["product_decision"] = "product_decision"
+    title: str = Field(
+        default="",
+        description="Short decision title (e.g. 'Session abc123: user login flow').",
+    )
+    problem: str = Field(default="")
+    why_now: str = Field(default="")
+    options_considered: list[str] = Field(
+        default_factory=list,
+        description="[A, B, C] — filled by background LLM if non-trivial.",
+    )
+    choice: str = Field(
+        default="",
+        description="What was done (plan title + summary).",
+    )
+    rationale: str = Field(
+        default="",
+        description="Why this choice was made.",
+    )
+    reversibility: Literal["one-way", "two-way"] = Field(
+        default="two-way",
+        description="'one-way' (costly to undo) or 'two-way' (easily reversible).",
+    )
+    revisit_trigger: str = Field(
+        default="",
+        description="Metric threshold / date / condition that reopens this decision.",
+    )
+    success_metric: str = Field(
+        default="",
+        description="The one number or observable we expect to move.",
+    )
+    session_id: str = Field(default="")
+
+
 # ── Phase 2+6: Cron & Heartbeat domain events ────────────────────
 
 class SessionStalenessEvent(BaseEvent):
@@ -224,6 +292,8 @@ AgentEvent = Union[
     TodoEvent,
     PlanReviewEvent,
     ToolApprovalEvent,
+    ProductGateReviewEvent,
+    ProductDecisionEvent,
 ]
 
 
