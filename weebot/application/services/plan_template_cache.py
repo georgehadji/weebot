@@ -26,11 +26,8 @@ _STOPWORDS: frozenset = frozenset({
     "if", "then", "else", "when", "where", "why", "how", "all",
     "each", "every", "both", "few", "more", "most", "some", "any",
     "use", "using", "used", "set", "get", "make", "need", "take",
-    "please", "help", "want", "need", "would", "could",
+    "please", "help", "want", "would", "could",
 })
-
-_MAX_TASK_CHARS = 2000
-
 
 def compute_task_hash(task_description: str) -> str:
     """Compute a stable hash for a task description.

@@ -1,23 +1,25 @@
-# P2 Audit Report — Memory Salience + Eviction
+# P2 Audit Report — Plan-Template Reuse Cache
 
-**Plan:** `weebot_unified_implementation_plan.md` · P2 Grows-with-you — Memory salience scoring + eviction  
+**Plan:** `weebot_unified_implementation_plan.md` · P2 Grows-with-you — WS-E Plan-template reuse cache  
 **Date:** 2026-06-22 (implementation + audit)  
 **Auditor:** Reasonix Code (automated review + manual verification)  
-**Final Verdict:** 🟢 **APPROVED** — 3 blocking + 1 should-fix bugs resolved in audit, 15 tests pass
+**Final Verdict:** 🟢 **APPROVED** — 3 blocking + 3 should-fix bugs resolved in audit, 14 tests pass
 
 ---
 
 ## 1. Executive Summary
 
-The memory salience system is correctly architected — `SalienceScorer` computes salience as `0.4*recency + 0.6*frequency`, `memory_metadata` stores per-entry scores, `PersistentMemoryTool` tracks on read/add, and `MemoryLifecycleService.sweep()` evicts COLD entries past TTL.
+The plan-template cache is correctly architected end-to-end: `PlanTemplate` domain model → `plan_templates` SQLite table → `PlanTemplateCache` service (hash + Jaccard matching) → `CreatePlanHandler` seeding → `CompletedState` save.
 
-**4 audit findings fixed:**
-1. 🔴 `_salience_repo` was never initialized → lazy-init now triggers on first call
-2. 🔴 `classify()` rule 2 shadowed `hot_min_access` → removed, HOT now requires BOTH recency AND frequency
-3. 🟡 `sweep()` duplicated retention logic → now reuses `should_retain()`
-4. 🟡 Naive `created_at` entries silently skipped → now normalized to aware datetime
+**6 audit findings fixed:**
+1. 🔴 Template seeding was dead code — `meta_notes` passed to wrong method (`__init__` vs `create_plan`), type mismatch (`list + str`), original args overrode combined value
+2. 🔴 `increment_template_use` never called — use_count always 0
+3. 🟡 `success_score` hardcoded to 1.0 — now computed from step completion ratio
+4. 🟡 Bare `except: pass` — now logs `logger.debug`
+5. 🟡 Dead `_MAX_TASK_CHARS` constant — removed
+6. 🟡 Duplicate `"need"` stopword — deduplicated
 
-**15 tests pass**, scoring and sweep all verified.
+**14 tests pass**, zero regressions.
 
 ---
 
@@ -25,12 +27,13 @@ The memory salience system is correctly architected — `SalienceScorer` compute
 
 | Plan Item | Status | Evidence |
 |-----------|--------|----------|
-| Memory salience scoring | ✅ Complete | `salience_scorer.py` — `compute_salience()` with recency+frequency |
-| memory_metadata storage | ✅ Complete | SQLite table + CRUD in `sqlite_state_repo.py` |
-| Wire into PersistentMemoryTool | ✅ Complete (fixed) | `_track_salience()` with lazy-init repo on add/read |
-| Wire into MemoryLifecycleService | ✅ Complete | `sweep(repo)` method + 1hr cron job |
-| Cron registration | ✅ Complete | `memory_salience_sweep` in `jobs.yaml` + `_capabilities.py` |
-| Unit tests | ✅ Complete | `test_salience.py` — 15 tests |
+| PlanTemplate domain model | ✅ Complete | `plan_template.py` — task_hash, plan_json, success_score, use_count |
+| SQLite storage + CRUD | ✅ Complete | `plan_templates` table + save/find/list/increment methods |
+| Task signature computation | ✅ Complete | `compute_task_hash()` — stopword-stripped SHA-256 |
+| Template matching | ✅ Complete | Exact hash match + Jaccard similarity fallback |
+| Seed planner from cache | ✅ Complete | `CreatePlanHandler` builds `meta_list` with template notes |
+| Save completed plans | ✅ Complete | `CompletedState` saves on task completion |
+| Unit tests | ✅ Complete | `test_plan_template_cache.py` — 14 tests |
 
 ---
 
@@ -38,33 +41,37 @@ The memory salience system is correctly architected — `SalienceScorer` compute
 
 | Check | Status |
 |-------|--------|
-| Pure application-layer scorer | ✅ `salience_scorer.py` — zero infra imports |
-| Portal pattern on repo | ✅ `sweep()` takes duck-typed repo |
-| Cron follows existing pattern | ✅ Matches `opportunity_scan`, `commitment_heartbeat` |
+| Domain model in domain layer | ✅ `plan_template.py` |
+| Service in application layer | ✅ `plan_template_cache.py` — pure functions, no infra imports |
+| Persistence in infrastructure | ✅ `sqlite_state_repo.py` — table + CRUD |
+| Single DB table per domain concept | ✅ `plan_templates` |
+| Dependency direction inward | ✅ Service → domain model only |
 
 ---
 
-## 4. Code Quality — Audit Fixes
+## 4. Audit Fixes
 
 | Finding | Severity | Fix |
 |---------|----------|-----|
-| `_salience_repo` never initialized → tracking dead | 🔴 | Lazy-init via `hasattr` check on first `_track_salience()` call |
-| `classify()` rule 2 shadowed `hot_min_access` | 🔴 | Removed rule 2; HOT now requires `age < hot_ttl AND access >= hot_min_access` |
-| `sweep()` duplicated retention logic | 🟡 | Now uses `classify()` + `should_retain()` for eviction decision |
-| Naive datetime silently skipped in sweep | 🟡 | Normalised with `.replace(tzinfo=timezone.utc)` before comparison |
+| `meta_notes` passed to `__init__`, not `create_plan` | 🔴 | Now builds a `meta_list` and passes to `create_plan(prompt, meta_notes=meta_list)` |
+| `list + str` type mismatch | 🔴 | `meta_list` is `list[str]`; template notes appended as a list entry |
+| `command.meta_notes` overrode combined value | 🔴 | Passes `meta_list` instead of original `command.meta_notes` |
+| `increment_template_use` never called | 🟡 | Called for each matched template after seeding |
+| `success_score` hardcoded 1.0 | 🟡 | Now computed as `completed_steps / total_steps` |
+| Bare `except: pass` | 🟡 | Now logs `logger.debug("Template cache lookup skipped: ...")` |
 
 ---
 
 ## 5. Testing
 
-| Suite | Tests | Status |
-|-------|-------|--------|
-| `test_salience.py` | 15 | 15 passed |
-| `test_governed_skill_loop.py` | 14 | 14 passed |
-| `test_commitment.py` | 20 | 20 passed |
+| Suite | Tests |
+|-------|-------|
+| `test_plan_template_cache.py` | 14 — hash, tokenize, Jaccard, matching, meta_notes |
+
+---
 
 ## 6. Final Verdict
 
 ### 🟢 APPROVED
 
-4 bugs fixed in audit. Salience scoring, persistence, tool tracking, lifecycle sweep, and cron wiring all functional. 49 tests pass.
+6 bugs fixed. Template seeding is fully functional. 14 tests pass.

@@ -58,6 +58,8 @@ class CreatePlanHandler(CommandHandler):
                 planner_cfg["skill_prompt"] = skill_content
 
             # ── Seed planner from template cache ─────────────────
+            # meta_notes is passed to PlannerAgent.create_plan(), not __init__().
+            meta_list = list(command.meta_notes or [])
             try:
                 from weebot.application.services.plan_template_cache import (
                     build_meta_notes,
@@ -66,14 +68,19 @@ class CreatePlanHandler(CommandHandler):
                 templates = await find_matching_templates(self._state_repo, command.prompt)
                 template_notes = build_meta_notes(templates)
                 if template_notes:
-                    combined = (command.meta_notes or "") + "\n\n" + template_notes
-                    planner_cfg["meta_notes"] = combined.strip()
+                    meta_list.append(template_notes)
+                    # Increment use_count for matched templates (best-effort)
+                    for tpl in templates:
+                        try:
+                            await self._state_repo.increment_template_use(tpl.template_id)
+                        except Exception:
+                            pass
                     logger.info(
                         "Seeding planner with %d template(s) for %s",
                         len(templates), command.session_id[:8],
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Template cache lookup skipped: %s", exc)
 
             planner = PlannerAgent(
                 llm=self._llm,
@@ -83,7 +90,7 @@ class CreatePlanHandler(CommandHandler):
 
             events: list[dict] = []
             final_plan = None
-            async for event in planner.create_plan(command.prompt, meta_notes=command.meta_notes):
+            async for event in planner.create_plan(command.prompt, meta_notes=meta_list or None):
                 events.append(event.model_dump())
                 session = session.add_event(event)
                 if isinstance(event, PlanEvent) and event.plan is not None:

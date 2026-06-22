@@ -173,18 +173,24 @@ class CompletedState(FlowState):
                         compute_task_hash,
                     )
                     from weebot.domain.models.plan_template import PlanTemplate
-                    import json, uuid
+                    import json as _json, uuid as _uuid
+                    # Compute success score from step completion ratio
+                    total_steps = len(context._plan.steps)
+                    completed_steps = sum(
+                        1 for s in context._plan.steps if s.is_done()
+                    )
+                    score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
                     template = PlanTemplate(
-                        template_id=str(uuid.uuid4()),
+                        template_id=str(_uuid.uuid4()),
                         task_hash=compute_task_hash(prompt),
                         task_description=prompt[:500],
-                        plan_json=json.dumps(context._plan.model_dump(), default=str),
-                        success_score=1.0,
+                        plan_json=_json.dumps(context._plan.model_dump(), default=str),
+                        success_score=score,
                     )
                     await context._state_repo.save_plan_template(template)
                     logger.info(
-                        "Saved plan template (hash=%s) for session %s",
-                        template.task_hash, context._session.id[:8],
+                        "Saved plan template (hash=%s, score=%.2f) for session %s",
+                        template.task_hash, score, context._session.id[:8],
                     )
                 except Exception as exc:
                     logger.debug("Plan template save skipped: %s", exc)
