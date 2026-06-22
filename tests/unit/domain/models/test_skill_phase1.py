@@ -95,6 +95,7 @@ class TestAnalyzeSession:
         # spec=LLMPort guards against mocking a non-existent method (e.g. the
         # earlier `complete()` bug that a bare AsyncMock would have hidden).
         from weebot.application.ports.llm_port import LLMPort
+        from weebot.application.services.proposal_tracker import ProposalTracker
 
         llm = AsyncMock(spec=LLMPort)
         if llm_response_json is not None:
@@ -105,7 +106,10 @@ class TestAnalyzeSession:
             llm.chat = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
         store = AsyncMock()
         store.save = AsyncMock()
-        return AutonomousSkillCreator(llm=llm, skill_store=store), store
+        # Fresh tracker per test so the module-level singleton doesn't
+        # accumulate counts across test runs and trigger suppression.
+        tracker = ProposalTracker(suppression_threshold=100)
+        return AutonomousSkillCreator(llm=llm, skill_store=store, proposal_tracker=tracker), store
 
     GOOD_TRAJECTORY = "\n".join([
         "Task: Deploy microservice to production Kubernetes cluster",

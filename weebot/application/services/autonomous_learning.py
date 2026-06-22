@@ -98,9 +98,12 @@ class AutonomousSkillCreator:
         llm: Optional["LLMPort"] = None,
         skill_store: Optional["SkillStore"] = None,
         skills_dir: Optional[str] = None,  # legacy param, ignored when skill_store provided
+        proposal_tracker: Optional["ProposalTracker"] = None,
     ) -> None:
         self._llm = llm
         self._skill_store = skill_store
+        # Allow injection for test isolation; None falls back to the process singleton.
+        self._proposal_tracker = proposal_tracker
 
     async def analyze_session(
         self,
@@ -139,8 +142,9 @@ class AutonomousSkillCreator:
         skill = Skill(name=name, description=description, content=content, metadata=meta)
 
         # ── Anti-pattern guard: suppress identical proposals ──
-        fp = _get_proposal_tracker().fingerprint(content)
-        if not _get_proposal_tracker().record_and_check(fp):
+        tracker = self._proposal_tracker if self._proposal_tracker is not None else _get_proposal_tracker()
+        fp = tracker.fingerprint(content)
+        if not tracker.record_and_check(fp):
             logger.info(
                 "Anti-pattern guard suppressed skill '%s' (repeated proposal)", name
             )
