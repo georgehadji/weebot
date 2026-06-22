@@ -82,6 +82,22 @@ async def create_session(
     return _session_to_response(session)
 
 
+@router.get("/search")
+async def search_sessions(
+    q: str = Query(..., min_length=1, max_length=500, description="Search query"),
+    limit: int = Query(10, ge=1, le=100),
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> dict:
+    """Search sessions with goal→match→resolution bookends."""
+    from weebot.application.services.session_search_service import SessionSearchService
+    svc = SessionSearchService(state_repo=state_repo)
+    results = await svc.search(q, limit=limit)
+    return {
+        "query": q,
+        "count": len(results),
+        "results": [r.__dict__ for r in results],
+    }
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
@@ -96,9 +112,7 @@ async def get_session(
     return _session_to_response(session)
 
 
-@router.get("/search")
-async def search_sessions(
-    q: str = Query(..., min_length=1, max_length=500, description="Search query"),
+@router.post("/{session_id}/cancel")
     limit: int = Query(10, ge=1, le=100),
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> dict:

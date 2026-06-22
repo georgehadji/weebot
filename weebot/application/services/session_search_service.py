@@ -8,9 +8,8 @@ Wraps the raw FTS5 search and loads each matching session to extract:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
