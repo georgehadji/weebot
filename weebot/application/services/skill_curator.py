@@ -87,6 +87,13 @@ class SkillCurator:
             if classification in ("stale", "archive-candidate"):
                 await self._review_and_log(skill, classification, now)
 
+        # ── Overlap detection ──────────────────────────────────────
+        overlaps = await self.detect_overlaps()
+        if overlaps:
+            for rec in overlaps:
+                results[rec["skill_a"]] = f"overlap with {rec['skill_b']} ({rec['overlap']:.0%})"
+            logger.info("SkillCurator: %d overlap(s) detected", len(overlaps))
+
         return results
 
     @staticmethod
@@ -185,7 +192,7 @@ class SkillCurator:
         Returns:
             List of dicts with keys: skill_a, skill_b, overlap, recommendation.
         """
-        from weebot.application.services.skill_curator import _extract_keywords, _keyword_overlap
+        # _extract_keywords and _keyword_overlap are defined in this module — use them directly
 
         skills: list = []
         try:

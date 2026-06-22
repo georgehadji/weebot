@@ -62,7 +62,7 @@ class SkillPromotionGate:
         try:
             verify_result = await self._cov.verify(
                 query=f"Evaluate skill: {skill.name}",
-                response=skill.body[:2000],
+                response=skill.content[:2000],
             )
             verify_score = getattr(verify_result, "score", 0) or 0.0
             verify_detail = getattr(verify_result, "corrected_response", "") or ""

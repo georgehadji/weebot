@@ -64,7 +64,7 @@ class SkillReviewGate:
         prompt = (
             f"Skill name: {skill.name}\n"
             f"Description: {skill.description}\n"
-            f"Body:\n{skill.body}\n\n"
+            f"Body:\n{skill.content}\n\n"
             f"Existing skills: {existing_text}\n\n"
             "Evaluate and respond with JSON."
         )
