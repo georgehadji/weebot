@@ -12,6 +12,7 @@ from weebot.application.di import Container
 from weebot.application.cqrs.mediator import Mediator
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.model_selection import ModelSelectionService
+from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 from weebot.domain.models.event import WaitForUserEvent
 from weebot.interfaces.cli.agent_runner import AgentRunner
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
@@ -20,6 +21,27 @@ console = Console()
 
 # Shared container — initialized lazily
 _container: Container | None = None
+
+
+def _run_async(coro_factory) -> None:
+    """Run an async CLI command body, guaranteeing DB pool teardown.
+
+    aiosqlite worker threads are non-daemon, so a connection pool left open
+    keeps the interpreter alive at shutdown — Python joins those threads and
+    hangs forever. Closing pools inside the same event loop (on both success
+    and failure paths) ensures the process always exits cleanly, even when a
+    query raises (e.g. a corrupt database).
+    """
+    async def _wrapper() -> None:
+        try:
+            await coro_factory()
+        finally:
+            from weebot.infrastructure.persistence.connection_pool import (
+                close_all_pools,
+            )
+            await close_all_pools()
+
+    asyncio.run(_wrapper())
 
 
 def _get_state_repo() -> StateRepositoryPort:
@@ -67,7 +89,7 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
                     await subscriber.on_event(resume_event)
                 break
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("resume")
@@ -86,7 +108,7 @@ def flow_resume(session_id: str, answer: str) -> None:
         async for event in runner.resume_session(session_id, answer):
             await subscriber.on_event(event)
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("list")
@@ -109,7 +131,7 @@ def flow_list(user_id: str | None) -> None:
             table.add_row(s.id, s.status.value, s.title or "—")
         console.print(table)
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("cancel")
@@ -128,7 +150,7 @@ def flow_cancel(session_id: str) -> None:
         else:
             console.print(f"[yellow]Session {session_id} was not active[/yellow]")
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("undo")
@@ -137,7 +159,7 @@ def flow_undo(session_id: str) -> None:
     """Undo the last plan mutation for a session."""
     async def _run() -> None:
         model_service = ModelSelectionService()
-        llm = model_service.create_llm_adapter("gpt-4o-mini")
+        llm = model_service.create_llm_adapter(MODEL_COMMAND_DEFAULT)
         state_repo = _get_state_repo()
         runner = AgentRunner(llm=llm, state_repo=state_repo)
         ok = await runner.flow_undo(session_id)
@@ -146,7 +168,7 @@ def flow_undo(session_id: str) -> None:
         else:
             console.print(f"[yellow]Nothing to undo for session {session_id}[/yellow]")
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("skillopt")
@@ -205,7 +227,7 @@ def flow_skillopt(skill_name: str, epochs: int, steps: int, batch: int, output: 
             else:
                 console.print(f"  [{event_type}]")
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("export")
@@ -224,37 +246,83 @@ def flow_export(session_id: str, output: str | None, compress: int | None) -> No
         count = await exporter.export_session(session_id, str(dest), compress=compress)
         console.print(f"[green]✓[/green] Exported {count} events to {dest}")
 
-    asyncio.run(_run())
+    _run_async(_run)
 
 
 @flow.command("search")
 @click.argument("query")
 @click.option("--limit", default=10, type=int, help="Max results")
 def cmd_flow_search(query: str, limit: int) -> None:
-    """Full-text search across all session events."""
+    """Full-text search with goal→match→resolution bookends."""
     async def _run() -> None:
         state_repo = _get_state_repo()
-        results = await state_repo.search_sessions(query, limit=limit)
+        from weebot.application.services.session_search_service import SessionSearchService
+        svc = SessionSearchService(state_repo=state_repo)
+        results = await svc.search(query, limit=limit)
 
         if not results:
             console.print("[dim]No results found.[/dim]")
             return
 
         table = Table(title=f"Session Search: {query}")
-        table.add_column("Session ID", style="cyan")
-        table.add_column("Type", style="yellow")
-        table.add_column("Summary")
-        table.add_column("Score", style="green")
+        table.add_column("Session ID", style="cyan", no_wrap=True)
+        table.add_column("Goal", style="yellow")
+        table.add_column("Resolution", style="green")
+        table.add_column("Match", style="white")
+        table.add_column("Score", justify="right")
 
         for r in results:
-            score = r.get("score", 0)
-            score_str = f"{score:.3f}" if score else "—"
             table.add_row(
-                r.get("session_id", "?")[:20],
-                r.get("event_type", "?")[:15],
-                r.get("summary", "")[:60],
-                score_str,
+                r.session_id[:12] + "...",
+                r.goal[:60],
+                r.resolution[:60],
+                r.match_summary[:60],
+                f"{r.score:.3f}",
             )
         console.print(table)
 
-    asyncio.run(_run())
+    _run_async(_run)
+
+
+@flow.command("decisions")
+@click.argument("session_id")
+def cmd_flow_decisions(session_id: str) -> None:
+    """List product decisions logged for a session."""
+    async def _run() -> None:
+        from rich.panel import Panel
+
+        state_repo = _get_state_repo()
+        session = await state_repo.load_session(session_id)
+
+        if session is None:
+            console.print(f"[red]✗[/red] Session not found: {session_id}")
+            return
+
+        decisions = [
+            e for e in session.events
+            if getattr(e, "type", "") == "product_decision"
+        ]
+
+        if not decisions:
+            console.print("[dim]No product decisions logged for this session.[/dim]")
+            return
+
+        for d in decisions:
+            console.print(Panel.fit(
+                f"[bold]Decision:[/bold] {d.title}\n"
+                f"[bold]Date:[/bold] {d.timestamp.isoformat()[:10] if hasattr(d, 'timestamp') else 'N/A'}\n"
+                f"[bold]Problem:[/bold] {d.problem[:200]}\n"
+                f"[bold]Why now:[/bold] {d.why_now[:200]}\n"
+                f"[bold]Choice:[/bold] {d.choice[:200]}\n"
+                f"[bold]Reversibility:[/bold] {'🔴 One-way door' if d.reversibility == 'one-way' else '🟢 Two-way door'}\n"
+                f"[bold]Success metric:[/bold] {d.success_metric[:200]}\n"
+                + (f"[bold]Revisit trigger:[/bold] {d.revisit_trigger[:200]}\n" if d.revisit_trigger else "")
+                + (f"[bold]Options considered:[/bold] {', '.join(d.options_considered[:5])}\n" if d.options_considered else "")
+                + f"[bold]Session:[/bold] {d.session_id[:20]}",
+                title="📋 Product Decision",
+                border_style="blue",
+            ))
+
+        console.print(f"\n[dim]{len(decisions)} decision(s) found[/dim]")
+
+    _run_async(_run)
