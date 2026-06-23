@@ -90,12 +90,21 @@ class CapabilitiesMixin:
                 logger.warning("Commitment heartbeat failed: %s", exc, exc_info=True)
         mgr.register_callable("commitment_heartbeat", commitment_heartbeat)
 
-        learner = self._maybe_get_str("behavioral_learner")
-        if learner is not None:
-            async def behavioral_consolidation():
-                rules = await learner.get_active_rules()
-                logger.info("Behavioral consolidation: %d active rules", len(rules))
-            mgr.register_callable("behavioral_consolidation", behavioral_consolidation)
+        # ── User-model consolidation (replaces stub) ──────────────
+        async def behavioral_consolidation():
+            try:
+                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                repo = SQLiteStateRepository()
+                from weebot.application.services.user_model_consolidator import UserModelConsolidator
+                consolidator = UserModelConsolidator(state_repo=repo)
+                profile = await consolidator.consolidate()
+                logger.info(
+                    "User-model consolidation: profile (%d chars, %d words)",
+                    len(profile), len(profile.split()),
+                )
+            except Exception as exc:
+                logger.warning("User-model consolidation failed: %s", exc, exc_info=True)
+        mgr.register_callable("behavioral_consolidation", behavioral_consolidation)
         async def integrity_check():
             issues = []
             try:

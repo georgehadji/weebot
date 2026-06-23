@@ -31,6 +31,7 @@ from weebot.config.model_refs import (
     MODEL_CODE_REVIEW,
 )
 from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
+from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
 from weebot.application.agents.executor._error_handler import normalize_text, tool_signature, follow_up_like, parse_args_for_event, classify_tool_error, build_stuck_error, is_expected_failure
 from weebot.domain.models.event import (
     AgentEvent,
@@ -394,6 +395,21 @@ class ExecutorAgent:
                     system_prompt += f"\n\n{rules_prompt}"
             except Exception as exc:
                 logger.warning("Behavioral rules injection failed: %s", exc)
+
+        # ── User profile from dialectic consolidation ─────────
+        try:
+            import hashlib
+            from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+            _repo = SQLiteStateRepository()
+            _key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
+            for row in await _repo.get_low_salience_entries(threshold=1.0, limit=5):
+                if row.get("entry_hash") == _key:
+                    txt = row.get("entry_text", "")
+                    if txt and txt != "No user data collected yet.":
+                        system_prompt += f"\n\n## User Profile\n{txt[:500]}"
+                    break
+        except Exception:
+            pass
 
         # ── Phase 1.1: Core Personality — inject WEEBOT_CORE.md + SOUL.md ──
         if self._personality is not None and self._personality.loaded:
@@ -810,9 +826,12 @@ class ExecutorAgent:
                     abort_step = True
                     break
 
+                _tool_content = str(result)
+                if not result.is_error and is_untrusted_tool(tool_name):
+                    _tool_content = wrap_untrusted(source=tool_name, content=_tool_content)
                 self._conversation_buffer.append({
                     "role": "tool",
-                    "content": str(result),
+                    "content": _tool_content,
                     "tool_call_id": tc["id"],
                 })
 
