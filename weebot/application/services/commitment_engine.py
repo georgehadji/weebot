@@ -31,8 +31,9 @@ class CommitmentEngine:
             Typically ``SQLiteStateRepository`` or a test mock.
     """
 
-    def __init__(self, state_repo) -> None:
+    def __init__(self, state_repo, knowledge_graph=None) -> None:
         self._repo = state_repo
+        self._kg = knowledge_graph
 
     # ── Heartbeat ───────────────────────────────────────────────────
 
@@ -43,6 +44,36 @@ class CommitmentEngine:
             Dict with stats: ``checked``, ``marked_overdue``, ``active_pending``.
         """
         stats: dict = {"checked": 0, "marked_overdue": 0, "active_pending": 0}
+
+        # ── KG provenance: ensure all pending commitments have KG nodes ──
+        if self._kg is not None:
+            try:
+                pending_all = await self._repo.list_commitments(status="pending", limit=200)
+                for cmt in pending_all:
+                    node_id = f"commitment:{cmt.id[:16]}".lower()
+                    existing = await self._kg.query(label="commitment", name=node_id)
+                    if not existing:
+                        await self._kg.discover_node(
+                            label="commitment",
+                            name=node_id,
+                            properties={
+                                "promise_text": cmt.promise_text[:200],
+                                "status": cmt.status.value,
+                                "due_at": cmt.due_at.isoformat() if cmt.due_at else "",
+                                "session_id": cmt.source_session_id[:16],
+                            },
+                            session_id=cmt.source_session_id[:16],
+                            confidence=0.8,
+                        )
+                        if cmt.source_session_id:
+                            await self._kg.relate_nodes(
+                                node_id, f"session:{cmt.source_session_id[:16]}",
+                                "originates_from",
+                                confidence=0.8,
+                                evidence=f"Commitment extracted from session {cmt.source_session_id[:16]}",
+                            )
+            except Exception as exc:
+                logger.debug("KG provenance for commitments skipped: %s", exc)
 
         try:
             pending = await self._repo.list_commitments(status="pending", limit=200)

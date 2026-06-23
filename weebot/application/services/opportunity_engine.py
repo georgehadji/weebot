@@ -112,6 +112,28 @@ class OpportunityEngine:
                     await self._state_repo.save_opportunity(proposal)
                 except Exception as save_exc:
                     logger.warning("Failed to persist opportunity: %s", save_exc)
+
+            # ── KG provenance ─────────────────────────────────
+            if self._kg is not None:
+                for proposal in top:
+                    try:
+                        node_id = f"opportunity:{proposal.id[:16]}".lower()
+                        existing = await self._kg.query(label="opportunity", name=node_id)
+                        if not existing:
+                            await self._kg.discover_node(
+                                label="opportunity",
+                                name=node_id,
+                                properties={
+                                    "prompt": proposal.prompt[:200],
+                                    "source": proposal.source,
+                                    "confidence": proposal.confidence,
+                                    "status": "pending",
+                                },
+                                session_id="",
+                                confidence=proposal.confidence,
+                            )
+                    except Exception as kg_exc:
+                        logger.debug("KG provenance for opportunity skipped: %s", kg_exc)
         return top
 
     async def get_pending(self) -> list[OpportunityProposal]:
