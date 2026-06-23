@@ -10,6 +10,7 @@ as an optional backend when REPLICATE_API_TOKEN is configured.
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import re
 import uuid
@@ -20,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.config.api_endpoints import IDEOGRAM_GENERATION_URL, XAI_IMAGE_GENERATION_URL
+
+logger = logging.getLogger(__name__)
 
 _SVG_SANITIZE_RE = re.compile(r'[<>"\']')
 
@@ -543,8 +546,7 @@ class ImageGenTool(BaseTool):
                 ) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        import logging
-                        logging.getLogger(__name__).info(
+                        logger.info(
                             "xAI direct image gen failed: HTTP %s — %s",
                             resp.status, error_text[:150],
                         )
