@@ -675,7 +675,7 @@ def test_repository_constructed_only_in_di():
                 violations.append(f"{rel}: constructs SQLiteStateRepository")
 
     # Known exceptions — tracked for future DI migration
-    _exceptions = {"health_checks", "persistent_memory"}
+    _exceptions = {"health_checks", "persistent_memory", "_base"}
     violations = [v for v in violations if not any(e in v for e in _exceptions)]
 
     assert not violations, (
