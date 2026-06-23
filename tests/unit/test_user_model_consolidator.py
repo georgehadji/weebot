@@ -46,3 +46,7 @@ class TestUserModelConsolidator:
         profile = await consolidator.consolidate()
         assert mock_llm.chat.called
         assert profile == "User prefers safe commands."
+        # Verify profile was stored with correct entry_text
+        repo.upsert_memory_metadata.assert_awaited_once()
+        _, kwargs = repo.upsert_memory_metadata.call_args
+        assert kwargs.get("entry_text") == "User prefers safe commands."

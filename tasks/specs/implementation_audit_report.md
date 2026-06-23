@@ -1,17 +1,22 @@
-# P2 Audit Report — Session-Search UX
+# P2 Audit Report — Dialectic User-Model Consolidation
 
-**Plan:** `weebot_unified_implementation_plan.md` · P2 Grows-with-you — Session-search UX  
+**Plan:** `weebot_unified_implementation_plan.md` · P2 Grows-with-you — Dialectic user-model deepening  
 **Date:** 2026-06-22 (implementation + audit)  
-**Auditor:** Reasonix Code (automated review + manual verification)  
-**Final Verdict:** 🟢 **APPROVED** — 1 blocking route bug fixed, 2 tests pass
+**Final Verdict:** 🟢 **APPROVED** — 2 blocking + 4 issues fixed, 3 tests pass
 
 ---
 
 ## 1. Executive Summary
 
-The session-search UX correctly enriches FTS5 search results with goal→match→resolution bookends. Web API and CLI are both updated.
+The user-model consolidator correctly loads behavioral rules and user memory, distills a profile (with or without LLM), stores it as a pinned memory entry, and injects it into the executor system prompt alongside the raw behavioral rules.
 
-**1 blocking bug fixed:** `/search` route was shadowed by `/{session_id}` in FastAPI route ordering — moved above parameterized route.
+**6 fixes applied:**
+1. 🔴 `threshold=1.0` vs `salience < ?` — profile at salience 1.0 never matched → fixed to `threshold=1.01`
+2. 🔴 DB query on every step — now cached in `_user_profile_cache` (lazy-init once per executor)
+3. 🟡 Unused `import json` — removed
+4. 🟡 Wrong docstring ref — `behavioral_rule_consolidation` → `behavioral_consolidation`
+5. 🟡 Test didn't verify storage — now asserts `upsert_memory_metadata` called correctly
+6. 🟡 Misleading variable name — `low` → `entries`
 
 ---
 
@@ -19,31 +24,24 @@ The session-search UX correctly enriches FTS5 search results with goal→match�
 
 | Plan Item | Status | Evidence |
 |-----------|--------|----------|
-| SessionSearchService | ✅ | `session_search_service.py` — wraps FTS5 + loads sessions for goal/resolution |
-| Web API search endpoint | ✅ (fixed) | `GET /sessions/search` — now correctly routed before `/{session_id}` |
-| CLI search enhancement | ✅ | `flow search` shows Goal, Resolution, Match columns |
+| Periodic user-model pass | ✅ | `UserModelConsolidator.consolidate()` called hourly via `behavioral_consolidation` cron |
+| Inject into executor prompt | ✅ | `_base.py` injects `## User Profile` block into system_prompt |
+| Uses existing infrastructure | ✅ | `list_behavioral_rules()` + `get_low_salience_entries()` + `upsert_memory_metadata()` |
 
 ---
 
-## 3. Audit Fixes
+## 3. Scoring
 
-| Finding | Severity | Fix |
-|---------|----------|-----|
-| `/search` shadowed by `/{session_id}` | 🔴 | Moved `@router.get("/search")` before `@router.get("/{session_id}")` |
-| Unused imports (`field`, `datetime`) | 🟡 | Removed |
+| Concern | Rating |
+|---------|--------|
+| Error handling | 🟢 All try/except with logging |
+| Performance | 🟢 Cached per executor (lazy-init) |
+| Test coverage | 🟢 3 tests: without LLM, no data, with LLM + storage verify |
 
----
 
-## 4. Testing
 
-| Suite | Tests |
-|-------|-------|
-| `test_session_search.py` | 2 — enriched results, empty results |
-
----
-
-## 5. Final Verdict
+## 4. Final Verdict
 
 ### 🟢 APPROVED
 
-Route bug fixed. 2 tests pass. Web API and CLI functional.
+6 fixes applied. 3 tests pass. P2 complete.

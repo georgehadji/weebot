@@ -397,19 +397,27 @@ class ExecutorAgent:
                 logger.warning("Behavioral rules injection failed: %s", exc)
 
         # ── User profile from dialectic consolidation ─────────
-        try:
-            import hashlib
-            from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
-            _repo = SQLiteStateRepository()
-            _key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-            for row in await _repo.get_low_salience_entries(threshold=1.0, limit=5):
-                if row.get("entry_hash") == _key:
-                    txt = row.get("entry_text", "")
-                    if txt and txt != "No user data collected yet.":
-                        system_prompt += f"\n\n## User Profile\n{txt[:500]}"
-                    break
-        except Exception:
-            pass
+        # Lazy-init: load once per executor lifetime (cron refreshes it)
+        if not hasattr(self, '_user_profile_cache'):
+            try:
+                import hashlib
+                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                repo = SQLiteStateRepository()
+                key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
+                for row in await repo.get_low_salience_entries(threshold=1.01, limit=5):
+                    if row.get("entry_hash") == key:
+                        txt = row.get("entry_text", "")
+                        if txt and txt != "No user data collected yet.":
+                            self._user_profile_cache = txt[:500]
+                        else:
+                            self._user_profile_cache = ""
+                        break
+                else:
+                    self._user_profile_cache = ""
+            except Exception:
+                self._user_profile_cache = ""
+        if getattr(self, '_user_profile_cache', ''):
+            system_prompt += f"\n\n## User Profile\n{self._user_profile_cache}"
 
         # ── Phase 1.1: Core Personality — inject WEEBOT_CORE.md + SOUL.md ──
         if self._personality is not None and self._personality.loaded:

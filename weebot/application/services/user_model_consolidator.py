@@ -4,12 +4,11 @@ Loads behavioral rules and user memory entries, calls an LLM to distill
 a concise user profile, and stores it for injection into the executor
 system prompt alongside the raw behavioral rules.
 
-Replaces the stub ``behavioral_rule_consolidation`` cron callback with
+Replaces the stub ``behavioral_consolidation`` cron callback with
 real logic.
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Optional
 
@@ -44,11 +43,11 @@ class UserModelConsolidator:
         except Exception as exc:
             logger.debug("UserModelConsolidator: failed to load rules: %s", exc)
 
-        # 2. Load user memory entries
+        # 2. Load user memory entries (non-pinned, for distillation)
         memories: list[str] = []
         try:
-            low = await self._repo.get_low_salience_entries(threshold=1.0, limit=50)
-            for row in low:
+            entries = await self._repo.get_low_salience_entries(threshold=1.0, limit=50)
+            for row in entries:
                 if row.get("source") == "user":
                     txt = row.get("entry_text", "")
                     if txt:
