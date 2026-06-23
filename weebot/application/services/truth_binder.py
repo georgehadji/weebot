@@ -33,10 +33,19 @@ _KNOWN_PROMPT_FRAGMENTS: list[re.Pattern] = [
     re.compile(r"<identity>.*?</identity>", re.DOTALL),
     re.compile(r"You are Reasonix Code", re.IGNORECASE),
     re.compile(r"system prompt", re.IGNORECASE),
+    re.compile(r"system instructions", re.IGNORECASE),
     re.compile(r"# System Prompt", re.IGNORECASE),
     re.compile(r"## Constraints", re.IGNORECASE),
+    re.compile(r"internal prompt", re.IGNORECASE),
+    re.compile(r"\binternal\s+prompt\b", re.IGNORECASE),   
+    re.compile(r"\bAs an? AI\b", re.IGNORECASE),
+    re.compile(r"\bmy\s+training\s+data\b", re.IGNORECASE),
+    re.compile(r"\bmy\s+instructions?\s+(?:are|say|state|tell)\b", re.IGNORECASE),
+    re.compile(r"\b(?:configured|programmed|prompted)\s+(?:with|as|to)\b", re.IGNORECASE),
+    re.compile(r"\bmy\s+system\s+instructions?\b", re.IGNORECASE),
     re.compile(r"You are an AI assistant", re.IGNORECASE),
 ]
+
 
 # ── Phrases indicating concrete output ──
 _CONCRETE_OUTPUT_PATTERNS = [
@@ -184,6 +193,13 @@ class TruthBinder:
                 url = args.get("url") or args.get("query") or ""
                 if url:
                     visited_urls.add(url)
+
+        # Fallback: also consume navigation_trace strings from context
+        trace_urls = context.get("navigation_trace", [])
+        if isinstance(trace_urls, list):
+            for u in trace_urls:
+                if isinstance(u, str) and u.startswith("http"):
+                    visited_urls.add(u)
 
         unvisited = [u for u in urls_in_response if not any(
             v in u for v in visited_urls

@@ -100,6 +100,13 @@ class BashGuard:
             "Verify the current directory is correct. Consider using absolute paths.",
         ),
         (
+            r"\b(curl|wget)\s+.*\|\s*(bash|sh)\b",
+            RiskLevel.BLOCKED,
+            "Remote code execution via pipe",
+            "This downloads and executes arbitrary code from the internet. "
+            "Use package manager or verified checksums instead.",
+        ),
+        (
             r">\s*/(etc|bin|sbin|boot|dev|lib|proc|root|sys|usr|var|opt|srv)/",
             RiskLevel.SUSPICIOUS,
             "Redirect overwriting a system directory file",
@@ -150,6 +157,13 @@ class BashGuard:
             RiskLevel.DANGEROUS,
             "Direct disk writing",
             "This can overwrite partition tables or filesystems. Double-check target device.",
+        ),
+        (
+            r"\b(python|ruby|node|perl)\s+-[ce]\s+",
+            RiskLevel.DANGEROUS,
+            "Inline script execution",
+            "Script execution may have side effects (file writes, network calls, spawning processes). "
+            "Review the code carefully before proceeding.",
         ),
         (
             r"\breg\s+add\b",
@@ -411,6 +425,11 @@ class BashGuard:
                 # Skip invalid patterns
                 continue
 
+    @staticmethod
+    def _normalize(command: str) -> str:
+        """Normalize shell command — strip backslash-escaped spaces."""
+        return re.sub(r"\\\s+", " ", command)
+
     def evaluate(self, command: str) -> tuple[RiskLevel, list[SafetyCheck]]:
         """Evaluate a command for safety.
 
@@ -421,6 +440,7 @@ class BashGuard:
             Tuple of (highest_risk_level, list_of_all_checks)
             The highest_risk_level is the most severe risk found.
         """
+        command = self._normalize(command)
         if not command or not command.strip():
             return RiskLevel.SAFE, []
 
