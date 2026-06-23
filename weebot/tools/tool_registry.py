@@ -53,6 +53,7 @@ class RoleBasedToolRegistry:
             "schedule",
             "file_editor",
             "python_execute",
+            "video_gen",
             "atomic_mail",
         ],
         "documentation": [
@@ -71,6 +72,7 @@ class RoleBasedToolRegistry:
             "web_search",
             "vane_search",
             "image_gen",
+            "video_gen",
             "advanced_browser",
             "browser_navigator",
             "browser_inspector",
@@ -108,9 +110,11 @@ class RoleBasedToolRegistry:
             "file_editor",
             "web_search",
             "image_gen",
+            "video_gen",
         ],
         "designer": [
             "image_gen",
+            "video_gen",
             "file_editor",
             "browser_inspector",
             "web_search",
@@ -369,6 +373,7 @@ class RoleBasedToolRegistry:
         from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
         from weebot.tools.vane_search import VaneSearchTool
         from weebot.tools.image_gen_tool import ImageGenTool
+        from weebot.tools.video_gen_tool import VideoGenTool
 
         cls._TOOL_CLASS_MAP = {
             "bash": BashTool,
@@ -403,6 +408,7 @@ class RoleBasedToolRegistry:
             "workflow_orchestrator": WorkflowOrchestratorTool,
             "vane_search": VaneSearchTool,
             "image_gen": ImageGenTool,
+            "video_gen": VideoGenTool,
         }
 
         if os.getenv("WEEBOT_ENABLE_ATOMIC_MAIL", "0").strip("\"'") not in ("", "0", "false", "False"):

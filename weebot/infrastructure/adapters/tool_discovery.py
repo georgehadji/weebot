@@ -49,6 +49,7 @@ def _import_tool_modules() -> None:
         "weebot.tools.search_history",
         "weebot.tools.weather_tool",
         "weebot.tools.image_gen_tool",
+        "weebot.tools.video_gen_tool",
         "weebot.tools.voice_input_tool",
         "weebot.tools.voice_output_tool",
         "weebot.tools.video_ingest_tool",

@@ -264,10 +264,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
             from weebot.tools.python_tool import PythonExecuteTool as PythonTool
             from weebot.tools.image_gen_tool import ImageGenTool
+            from weebot.tools.video_gen_tool import VideoGenTool
             try:
                 sandbox = self._maybe_get(SandboxPort)
                 py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
-                tools = ToolCollection(BashTool(), FileEditorTool(), py_tool, ImageGenTool())
+                tools = ToolCollection(BashTool(), FileEditorTool(), py_tool, ImageGenTool(), VideoGenTool())
             except Exception:
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
@@ -334,6 +335,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
         from weebot.tools.python_tool import PythonExecuteTool as PythonTool
         from weebot.tools.image_gen_tool import ImageGenTool
+        from weebot.tools.video_gen_tool import VideoGenTool
 
         sandbox = self._maybe_get(SandboxPort)
         py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
@@ -342,6 +344,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             FileEditorTool(),
             py_tool,
             ImageGenTool(),
+            VideoGenTool(),
         )
 
         from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER
