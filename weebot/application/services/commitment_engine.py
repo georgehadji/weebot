@@ -45,11 +45,16 @@ class CommitmentEngine:
         """
         stats: dict = {"checked": 0, "marked_overdue": 0, "active_pending": 0}
 
-        # ── KG provenance: ensure all pending commitments have KG nodes ──
+        try:
+            pending = await self._repo.list_commitments(status="pending", limit=200)
+        except Exception as exc:
+            logger.warning("CommitmentEngine heartbeat: failed to list commitments: %s", exc)
+            return stats
+
+        # ── KG provenance: ensure KG nodes exist for commitments ──
         if self._kg is not None:
             try:
-                pending_all = await self._repo.list_commitments(status="pending", limit=200)
-                for cmt in pending_all:
+                for cmt in pending:
                     node_id = f"commitment:{cmt.id[:16]}".lower()
                     existing = await self._kg.query(label="commitment", name=node_id)
                     if not existing:
@@ -74,12 +79,6 @@ class CommitmentEngine:
                             )
             except Exception as exc:
                 logger.debug("KG provenance for commitments skipped: %s", exc)
-
-        try:
-            pending = await self._repo.list_commitments(status="pending", limit=200)
-        except Exception as exc:
-            logger.warning("CommitmentEngine heartbeat: failed to list commitments: %s", exc)
-            return stats
 
         now = datetime.now(timezone.utc)
         for cmt in pending:

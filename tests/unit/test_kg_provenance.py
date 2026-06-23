@@ -34,10 +34,19 @@ class TestCommitmentKGProvenance:
 
     async def test_no_kg_skips_provenance(self):
         repo = MagicMock()
-        repo.list_commitments = AsyncMock(return_value=[])
+        repo.list_commitments = AsyncMock(return_value=[
+            Commitment(
+                id="cmt-1", promise_text="test",
+                context="", source_session_id="sess-1",
+                status=CommitmentStatus.PENDING,
+            ),
+        ])
+        repo.update_commitment_status = AsyncMock(return_value=True)
         engine = CommitmentEngine(state_repo=repo, knowledge_graph=None)
         stats = await engine.heartbeat()
-        assert stats["checked"] == 0
+        # When KG is None, no discover_node should be attempted
+        assert stats["checked"] == 1
+        assert engine._kg is None
 
 
 class TestOpportunityKGProvenance:
@@ -68,7 +77,7 @@ class TestOpportunityKGProvenance:
         ]
 
     @pytest.mark.asyncio
-    async def test_scan_creates_kg_nodes(self, engine, monkeypatch, mock_scan_result):
+    async def test_scan_creates_kg_nodes(self, engine, mock_scan_result):
         # Patch internal scan methods to return the mock proposal
         engine._scan_knowledge_gaps = AsyncMock(return_value=mock_scan_result)
         engine._scan_recurring_patterns = AsyncMock(return_value=[])
