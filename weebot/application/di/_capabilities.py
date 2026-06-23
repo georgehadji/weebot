@@ -126,6 +126,40 @@ class CapabilitiesMixin:
             logger.info("Memory cleanup: archival not yet implemented")
         mgr.register_callable("memory_cleanup", memory_cleanup)
 
+        # ── Skill promotion check (daily) ───────────────────────────
+        async def skill_promotion_check():
+            try:
+                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                repo = SQLiteStateRepository()
+                # Load all candidate skills (trust=candidate) from skill store
+                from weebot.infrastructure.persistence.skill_store import SkillStore
+                store = SkillStore()
+                candidates = [s for s in await store.list_all() if s.metadata.trust == "candidate"]
+                if not candidates:
+                    logger.debug("Skill promotion: no candidate skills found")
+                    return
+                promoted = 0
+                for skill in candidates:
+                    try:
+                        from weebot.application.services.skill_promotion_gate import SkillPromotionGate
+                        gate = SkillPromotionGate(
+                            chain_of_verification=None,  # will be lazy-initialized
+                            harness_scorer=None,
+                        )
+                        result = await gate.evaluate(skill)
+                        if result.passed:
+                            updated = skill.with_trust("trusted")
+                            await store.save(updated)
+                            promoted += 1
+                            logger.info("Promoted skill %s to trusted (verify=%.2f, harness=%.2f)",
+                                        skill.name, result.verify_score, result.harness_score)
+                    except Exception as exc:
+                        logger.debug("Skill promotion check skipped for %s: %s", skill.name, exc)
+                logger.info("Skill promotion: %d/%d candidates promoted", promoted, len(candidates))
+            except Exception as exc:
+                logger.warning("Skill promotion check failed: %s", exc, exc_info=True)
+        mgr.register_callable("skill_promotion_check", skill_promotion_check)
+
         # ── Self-Harness weekly evolution ────────────────────────────
         async def self_harness_evolve():
             try:

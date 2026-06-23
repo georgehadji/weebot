@@ -21,6 +21,15 @@ jobs:
     callable_name: "opportunity_scan"
     enabled: true
 
+  - job_id: skill_promotion_check
+    name: "Skill Promotion Check"
+    description: "Evaluate candidate skills against CoVe + harness thresholds, promote passing ones to trusted"
+    trigger_type: "interval"
+    trigger_config:
+      hours: 24
+    callable_name: "skill_promotion_check"
+    enabled: false  # Enable after CoVe and harness scorer are initialized in container
+
   - job_id: memory_salience_sweep
     name: "Memory Salience Sweep"
     description: "Evict low-salience memory entries past their TTL"

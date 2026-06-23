@@ -63,6 +63,8 @@ class CascadeExecutor:
         self._on_success = on_success
         # Per-session circuit breaker state
         self._circuit_breaker_failures: dict[str, int] = {}
+        # Per-run: models that returned 5xx are skipped in current cascade
+        self._server_error_models: set[str] = set()
 
     # ── Circuit breaker helpers ─────────────────────────────────────
 
@@ -221,6 +223,11 @@ class CascadeExecutor:
             if first_error is not None and model_id not in first_error:
                 first_error[model_id] = str(exc)[:300] or type(exc).__name__
             self._cascade_record_failure(model_id)
+            # Track server errors so we skip this model in the current cascade run
+            from weebot.core.error_classifier import ErrorCategory
+            if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
+                self._server_error_models.add(model_id)
+                logger.debug("Server error from %s — skipping for rest of cascade", model_id)
             return None
 
     # ── Full cascade orchestration ──────────────────────────────────
@@ -248,6 +255,7 @@ class CascadeExecutor:
 
         fast_fail: bool = False
         first_error: dict[str, str] = {}
+        self._server_error_models.clear()  # fresh per-run set
 
         async def _try(model: str, tmo: float) -> LLMResponse | None:
             nonlocal fast_fail
@@ -267,7 +275,9 @@ class CascadeExecutor:
         filtered_models = await self.get_credits_and_filter_direct(all_models)
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
-        parallel = list(dict.fromkeys(filtered_models))
+        parallel = list(dict.fromkeys(
+            m for m in filtered_models if m not in self._server_error_models
+        ))
         if parallel:
             tasks = {asyncio.ensure_future(_try(m, 90.0)): m for m in parallel}
             done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
@@ -288,7 +298,9 @@ class CascadeExecutor:
 
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
-                     if m and not self.cascade_is_tripped(m) and m not in parallel]
+                     if m and not self.cascade_is_tripped(m)
+                     and m not in parallel
+                     and m not in self._server_error_models]
         for m in remaining:
             resp = await _try(m, 60.0)
             if resp is not None:
