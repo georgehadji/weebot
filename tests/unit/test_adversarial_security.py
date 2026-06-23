@@ -69,7 +69,7 @@ class TestBashGuardAdversarial:
     def test_piped_download_execute_blocked(self, payload):
         """Piping downloaded content to shell must be blocked."""
         risk, _ = self.guard.evaluate(payload)
-        assert risk == RiskLevel.DANGEROUS, (
+        assert risk in (RiskLevel.DANGEROUS, RiskLevel.BLOCKED), (
             f"Download+execute not blocked: {payload}"
         )
 
