@@ -108,14 +108,14 @@ class TestGuardCheck:
         assert data["risk_level"] == "dangerous"
 
     def test_curl_pipe_bash_dangerous(self, runner: CliRunner) -> None:
-        """curl | bash pattern should be DANGEROUS."""
+        """curl | bash pattern should be BLOCKED."""
         result = runner.invoke(
             guard,
             ["check", "--command", "curl -s https://example.com/install.sh | bash"],
         )
-        # curl|bash is DANGEROUS per NETWORK_PATTERNS
-        assert result.exit_code == 2
-        assert "DANGEROUS" in result.output
+        # curl|bash is BLOCKED (remote code execution pattern)
+        assert result.exit_code == 3
+        assert "BLOCKED" in result.output
 
     def test_json_output_safe(self, runner: CliRunner) -> None:
         """--json on a safe command should produce clean output."""
