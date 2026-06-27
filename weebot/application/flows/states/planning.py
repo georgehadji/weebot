@@ -65,6 +65,17 @@ class PlanningState(FlowState):
             )
             return
 
+        # ── Prompt fallback: when a pre-planning gate (ProductGateState)
+        # yields events before transitioning here, the run-loop's
+        # prompt_consumed flag starves us of the task prompt.  Fall back
+        # to original_task or last_prompt stored in the session context.
+        if not prompt.strip():
+            prompt = (
+                context._session.context.get("_original_task", "")
+                or context._session.context.get("last_prompt", "")
+            )
+            logger.debug("PlanningState prompt was empty — using fallback: %.80s", prompt)
+
         # ── Intent disambiguation gate (Enhancement 2 — S2 fix) ──────────────
         # Skip if this is a short continuation like "yes" / "proceed".
         # IntentReviewService.review() has a 5s timeout and fails open.
@@ -193,6 +204,49 @@ class PlanningState(FlowState):
             context.set_state(SummarizingState())
         else:
             context._snapshot_plan()
+            # --- DPPM: parallel planning for complex tasks ---
+            _use_dppm = (
+                context._planning_mode == "dppm"
+                or (context._planning_mode == "auto"
+                    and ParallelPlanner.is_complex_task(prompt))
+            )
+            if _use_dppm and context._llm is not None:
+                try:
+                    from weebot.application.agents.parallel_planner import ParallelPlanner
+                    from weebot.application.services.plan_merger import PlanMerger
+
+                    dppm = ParallelPlanner(llm=context._llm)
+                    merger = PlanMerger(llm=context._llm)
+                    candidates = await dppm.generate(prompt, num_alternatives=2)
+                    if candidates:
+                        plan = await merger.merge(candidates, prompt)
+                        if plan is not None:
+                            context._plan = plan
+                            logger.info(
+                                "DPPM: generated plan with %d steps from %d candidates",
+                                len(plan.steps), len(candidates),
+                            )
+                except Exception as exc:
+                    logger.warning("DPPM planning failed, falling back to sequential: %s", exc)
+
+            # --- AWM: retrieve workflow hints from similar past sessions ---
+            awm_hints = None
+            if context._llm is not None:
+                try:
+                    awm = context._get_awm()
+                    if awm is not None:
+                        templates = await awm.query(prompt, max_results=2)
+                        if templates:
+                            # Pick the template with the highest success rate
+                            best = max(templates, key=lambda t: t.success_rate)
+                            if best.generalized_steps:
+                                awm_hints = best.generalized_steps
+                                logger.info(
+                                    "AWM: injected %d workflow hints from '%s' (%.0f%% success rate)",
+                                    len(awm_hints), best.task_summary, best.success_rate * 100,
+                                )
+                except Exception as exc:
+                    logger.debug("AWM: workflow query skipped: %s", exc)
             # Rehydrate planner with latest facts before executing
             context._planner = PlannerAgent(
                 llm=context._llm,
@@ -201,6 +255,7 @@ class PlanningState(FlowState):
                 skill_prompt=context._skill_prompt,
                 facts=context._session.get_facts(),
                 episodic_memory=context._episodic_memory,
+                awm_hints=awm_hints,
             )
             # Transition to CritiquingState if a critic is available
             if context._plan_critic is not None:

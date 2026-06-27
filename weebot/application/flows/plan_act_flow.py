@@ -38,7 +38,7 @@ class PlanStuckError(RuntimeError):
     operator rather than silently retrying with identical plans.
     """
     pass
-from weebot.application.services.continuation_detector import (
+from weebot.domain.services.continuation_detector import (
     ContinuationDetector,
 )
 from weebot.application.services.plan_critic import PlanCriticService
@@ -171,14 +171,17 @@ class PlanActFlow(BaseFlow):
         self._compactor = MemoryCompactor()
         self._plan_history = PlanHistory()
         self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
+        self._awm = None  # AgentWorkflowMemory — lazy-init via _get_awm()
         self._episodic_memory = cfg.episodic_memory
         self._max_step_repetitions = cfg.max_step_repetitions
+        self._planning_mode = getattr(cfg, "planning_mode", "auto")
         self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
         self._context_aware_model_selection = cfg.context_aware_model_selection
         self._max_iterations = cfg.max_iterations
         self._termination_conditions = cfg.termination_conditions or []
         self._step_execution_counts: dict[str, int] = {}
         self._emit_lock = asyncio.Lock()
+        self._event_publisher = None  # Lazy-init via _get_event_publisher()
 
         self._skill_prompt = cfg.skill_prompt
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
@@ -393,14 +396,29 @@ class PlanActFlow(BaseFlow):
         """Return the best available logger (StructuredLogger preferred)."""
         return self._logger if self._logger is not None else self._stdlib_logger
 
+    def _get_event_publisher(self):
+        """Return the shared EventPublisher instance (lazy-init)."""
+        if self._event_publisher is None:
+            from weebot.application.flows.event_publisher import EventPublisher
+            self._event_publisher = EventPublisher(
+                session=self._session,
+                event_bus=self._event_bus,
+                state_repo=self._state_repo,
+                truth_binder=self._truth_binder,
+                plan=self._plan,
+                persistence_adapter=self._get_persistence_adapter(),
+                hooks=self._hooks,
+                emit_lock=self._emit_lock,
+            )
+        return self._event_publisher
+
     async def _emit(self, event: AgentEvent) -> None:
         """Emit an event through the middleware pipeline.
 
-        The pipeline handles truth binding, credential sanitization,
-        session mutation, event bus publishing, and DB persistence.
+        Delegates to EventPublisher for the full pipeline:
+        truth binding, credential sanitization, session mutation,
+        event bus publishing, and DB persistence.
         If a pipeline has been configured (via ``_event_pipeline``), use it.
-        Otherwise fall back to the original inline implementation for
-        backward compatibility.
         """
         pipeline = getattr(self, "_event_pipeline", None)
         if pipeline is not None:
@@ -413,73 +431,13 @@ class PlanActFlow(BaseFlow):
                 "emit_lock": self._emit_lock,
             }
             event = await pipeline.process(event, context)
-            # Session mutation happens inside a middleware, so re-sync
             new_session = context.get("session")
             if new_session is not None:
                 self._session = new_session
             return
 
-        # ── Legacy inline implementation (no pipeline configured) ──
-        # Truth-binding response layer
-        if (
-            self._truth_binder is not None
-            and isinstance(event, MessageEvent)
-            and event.role == "assistant"
-        ):
-            result = await self._truth_binder.bind(
-                event.message,
-                {
-                    "session_events": self._session.events,
-                    "step": self._plan.current_step if self._plan else None,
-                    "facts": self._session.get_facts(),
-                },
-            )
-            if not result.passed or result.has_rewrites():
-                self._log.info(
-                    "Truth binding %s for response (%d violations)",
-                    "blocked" if result.has_blockers() else "rewrote",
-                    len(result.violations),
-                )
-                for v in result.violations:
-                    self._log.debug("  Violation [%s]: %s", v.check, v.message)
-                event = event.model_copy(update={"message": result.bound_text})
-
-        # Credential redaction for user-provided text
-        if isinstance(event, MessageEvent) and event.role == "user":
-            from weebot.core.credential_sanitizer import sanitize
-            sanitized = sanitize(event.message or "")
-            if sanitized != event.message:
-                event = event.model_copy(update={"message": sanitized})
-                self._log.info("Credential sanitizer redacted user input")
-
-        # Mutate in-memory session
-        self._session = self._session.add_event(event)
-        if event.type == "step":
-            await self._maybe_save_checkpoint()
-
-        # Publish to event bus
-        if self._event_bus:
-            await self._event_bus.publish(event)
-            await self._emit_domain_event(event)
-
-        # Persist to DB
-        if self._state_repo:
-            async with self._emit_lock:
-                adapter = self._get_persistence_adapter()
-                if adapter is not None:
-                    ok = await adapter.save_session(self._session)
-                    if not ok:
-                        self._log.error(
-                            "Session %s dead-lettered — persistence exhausted retries",
-                            self._session.id,
-                        )
-                else:
-                    try:
-                        await self._state_repo.save_session(self._session)
-                    except Exception as exc:
-                        self._log.warning(
-                            "Session persistence failed (retryable): %s", exc
-                        )
+        publisher = self._get_event_publisher()
+        self._session = await publisher.emit(event)
 
     async def _emit_domain_event(self, event: AgentEvent) -> None:
         """Publish domain events derived from agent events."""
@@ -916,6 +874,18 @@ class PlanActFlow(BaseFlow):
         guards with ``if adapter is not None``).
         """
         return self._persistence_adapter
+
+    def _get_awm(self):
+        """Return the shared AgentWorkflowMemory instance (lazy-init).
+
+        The AWM is shared across all flow states so that workflow templates
+        induced during session completion are visible to subsequent planning
+        queries.
+        """
+        if self._awm is None and self._llm is not None:
+            from weebot.application.services.workflow_memory import AgentWorkflowMemory
+            self._awm = AgentWorkflowMemory(llm=self._llm)
+        return self._awm
 
     async def _maybe_save_checkpoint(self) -> None:
         """Save a flow checkpoint if a CheckpointPort is wired.

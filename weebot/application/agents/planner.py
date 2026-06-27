@@ -74,6 +74,7 @@ class PlannerAgent:
         episodic_memory=None,
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         skill_catalog: str | None = None,  # Compact skill summary for step-boundary awareness
+        awm_hints: Optional[list[str]] = None,  # Agent Workflow Memory hints
     ):
         self._llm = llm
         self._event_bus = event_bus
@@ -94,6 +95,15 @@ class PlannerAgent:
         # Inject skill catalog so the planner decomposes against real capabilities
         if skill_catalog:
             system_prompt = f"{system_prompt}\n\n{skill_catalog}"
+        # Inject Agent Workflow Memory hints — proven step patterns from past sessions
+        if awm_hints:
+            hints_block = "\n".join(f"{i+1}. {step}" for i, step in enumerate(awm_hints))
+            system_prompt = (
+                f"{system_prompt}\n\n"
+                f"### Workflow Hints (from similar past sessions)\n"
+                f"Consider this proven step pattern for similar tasks:\n{hints_block}\n"
+                f"(These are hints, not requirements — adapt to the specific task.)"
+            )
         self._memory: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]

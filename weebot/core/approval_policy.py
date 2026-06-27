@@ -168,6 +168,36 @@ class ExecApprovalPolicy:
         )
 
 
+# ── Tool annotation tiers (MCP destructiveHint/readOnlyHint → approval) ─
+# Maps annotation strings to ApprovalMode for the 3-tier HITL gate.
+#   Tier 1 (auto_approve):   readOnlyHint=true  — safe, no side effects
+#   Tier 2 (always_ask):     destructiveHint=false — notify user
+#   Tier 3 (deny):           destructiveHint=true  — block, require explicit consent
+TOOL_ANNOTATION_TIERS: dict[str, ApprovalMode] = {
+    "read_only": ApprovalMode.AUTO_APPROVE,
+    "destructive": ApprovalMode.DENY,
+    "default": ApprovalMode.ALWAYS_ASK,
+}
+
+
+def get_approval_mode_from_annotation(read_only: bool = False,
+                                       destructive: bool = False) -> ApprovalMode:
+    """Map MCP-style annotations to an approval tier.
+
+    Args:
+        read_only: ``readOnlyHint`` from the tool schema.
+        destructive: ``destructiveHint`` from the tool schema.
+
+    Returns:
+        One of ``AUTO_APPROVE``, ``ALWAYS_ASK``, or ``DENY``.
+    """
+    if destructive:
+        return ApprovalMode.DENY
+    if read_only:
+        return ApprovalMode.AUTO_APPROVE
+    return ApprovalMode.ALWAYS_ASK
+
+
 # ── Tool category tagging (Track 5 — Hermes Audit) ────────────────
 # Maps tool categories to their required approval mode.
 # Tools tagged ``finance`` or ``payment`` always require approval.

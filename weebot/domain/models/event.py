@@ -8,6 +8,18 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+
+class FailureSeverity(str, Enum):
+    """3-tier failure severity for step execution outcomes.
+
+    Based on the paper "Fundamentals of Building Autonomous LLM Agents"
+    (arXiv:2510.09244v1), §4.4: feedback is classified into three tiers.
+    """
+    SUCCESS = "success"            # Action produced expected result → continue
+    MINOR_FIX = "minor_fix"         # Close but not exact → adjust and re-attempt
+    SUBPLAN_FAIL = "subplan_fail"   # Step cannot proceed → regenerate subplan
+    FULL_REPLAN = "full_replan"     # Plan is invalid → restart from planning
+
 from .plan import PlanStatus, StepStatus
 
 
@@ -25,6 +37,7 @@ class BaseEvent(BaseModel):
 class ErrorEvent(BaseEvent):
     type: Literal["error"] = "error"
     error: str = Field(default="")
+    failure_severity: FailureSeverity = Field(default=FailureSeverity.SUBPLAN_FAIL)
 
 
 class PlanEvent(BaseEvent):

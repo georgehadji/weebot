@@ -159,6 +159,22 @@ class CompletedState(FlowState):
 
         if context._plan:
             context._plan = context._plan.model_copy(update={"status": PlanStatus.COMPLETED})
+
+            # ── AWM: induce workflow template from completed session ────
+            if context._llm is not None and context._session is not None:
+                try:
+                    awm = context._get_awm()
+                    if awm is not None:
+                        template = await awm.induce(context._session)
+                        if template is not None:
+                            await awm.store(template)
+                            logger.info(
+                                "AWM: induced and stored workflow '%s' (%d steps) from session %s",
+                                template.task_summary, len(template.generalized_steps),
+                                context._session.id[:8],
+                            )
+                except Exception as exc:
+                    logger.debug("AWM: workflow induction skipped: %s", exc)
             plan_dump = context._plan.model_dump()
             # Emit and yield the SAME event object so event bus consumers
             # and flow callers see identical event IDs / timestamps.
@@ -169,7 +185,7 @@ class CompletedState(FlowState):
             # ── Save completed plan as template for reuse ────
             if context._plan and getattr(context, "_state_repo", None) is not None:
                 try:
-                    from weebot.application.services.plan_template_cache import (
+                    from weebot.domain.services.plan_template_cache import (
                         compute_task_hash,
                     )
                     from weebot.domain.models.plan_template import PlanTemplate

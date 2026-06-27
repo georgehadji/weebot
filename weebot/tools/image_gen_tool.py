@@ -24,7 +24,12 @@ from weebot.config.api_endpoints import IDEOGRAM_GENERATION_URL, XAI_IMAGE_GENER
 
 logger = logging.getLogger(__name__)
 
-_SVG_SANITIZE_RE = re.compile(r'[<>"\']')
+_SVG_SANITIZE_RE = re.compile(r'[<>"\'&]')
+
+# ── Download safety limits ────────────────────────────────────────────
+_MAX_IMAGE_BYTES: int = 100 * 1024 * 1024   # 100 MiB — generous for AI-generated images
+_DOWNLOAD_CHUNK_SIZE: int = 64 * 1024       # 64 KiB per chunk
+_SAFE_BASE: Path = Path.cwd().resolve()
 
 # Replicate is optional — only needed for raster image generation
 try:
@@ -212,7 +217,7 @@ def _render_themed_svg(
             theme = "icon"
     elif "logo" in prompt or "brand" in prompt:
             theme = "logo"
-    elif "og" in prompt or "open graph" in prompt or "social" in prompt or "card" in prompt:
+    elif "og" in prompt or "open graph" in prompt or "social" in prompt:
             theme = "og"
     elif "project" in prompt or "thumbnail" in prompt or "card" in prompt:
             theme = "card"
@@ -472,26 +477,7 @@ class ImageGenTool(BaseTool):
                     path = Path(output_path)
                     path.parent.mkdir(parents=True, exist_ok=True)
 
-                    async with session.get(image_url) as img_resp:
-                        if img_resp.status == 200:
-                            path.write_bytes(await img_resp.read())
-                        else:
-                            return None
-
-                    size = path.stat().st_size
-                    return ToolResult(
-                        output=(
-                            f"Generated image via Ideogram: {output_path} ({size} bytes)"
-                        ),
-                        data={
-                            "path": str(path.resolve()),
-                            "model": "ideogram/ideogram-v3-turbo",
-                            "kind": "ideogram-direct",
-                            "size_bytes": size,
-                            "format": path.suffix.lstrip("."),
-                            "prompt": prompt,
-                        },
-                    )
+                    return await self._download_image(image_url, output_path, "ideogram/ideogram-v3-turbo", prompt, kind="ideogram-direct")
 
         except Exception as exc:
             logger.info("Ideogram direct image gen failed: %s", exc)
@@ -568,11 +554,7 @@ class ImageGenTool(BaseTool):
                         import base64 as _b64
                         path.write_bytes(_b64.b64decode(b64))
                     elif url.startswith("http"):
-                        async with session.get(url) as img_resp:
-                            if img_resp.status == 200:
-                                path.write_bytes(await img_resp.read())
-                            else:
-                                return None
+                        return await self._download_image(url, output_path, f"x-ai/{xai_model}", prompt, kind="xai-direct")
                     else:
                         return None
 
@@ -592,6 +574,7 @@ class ImageGenTool(BaseTool):
         except _asyncio.TimeoutError:
             return None
         except Exception:
+            logger.info("xAI direct image gen failed", exc_info=True)
             return None
 
     async def _execute_openrouter(self, params: ImageGenParams) -> ToolResult:
@@ -711,12 +694,11 @@ class ImageGenTool(BaseTool):
                             _, b64_data = url.split(",", 1)
                             path.write_bytes(_b64.b64decode(b64_data))
                         elif url.startswith("http"):
-                            async with session.get(url) as img_resp:
-                                if img_resp.status == 200:
-                                    path.write_bytes(await img_resp.read())
-                                else:
-                                    last_error = f"{model}: download failed HTTP {img_resp.status}"
-                                    continue
+                            download_result = await self._download_image(url, output_path, model, prompt)
+                            if download_result is not None:
+                                return download_result
+                            last_error = f"{model}: download failed"
+                            continue
                         else:
                             last_error = f"{model}: unsupported format {url[:80]}"
                             continue
@@ -772,6 +754,82 @@ class ImageGenTool(BaseTool):
             return content
 
         return ""
+
+    @staticmethod
+    def _sanitize_output_path(output_path: str) -> Path:
+        """Resolve and validate *output_path* — reject paths escaping the workspace.
+
+        Returns:
+            Resolved Path guaranteed to be under ``_SAFE_BASE``.
+
+        Raises:
+            ValueError: If the path contains ``..`` components or resolves outside
+                        the safe base directory.
+        """
+        if ".." in output_path.split("/"):
+            raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
+        resolved = Path(output_path).resolve()
+        if not str(resolved).startswith(str(_SAFE_BASE)):
+            raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
+        return resolved
+
+    async def _download_image(
+        self,
+        image_url: str,
+        output_path: str,
+        model: str,
+        prompt: str,
+        *,
+        kind: str = "image",
+    ) -> ToolResult | None:
+        """Download an image from a URL and save it to disk.
+
+        Guards:
+        - Rejects non-``https://`` URLs.
+        - Streams in 64 KiB chunks with a 100 MiB cap to avoid OOM.
+        - Validates output path is within workspace.
+        """
+        import aiohttp
+
+        if not image_url.startswith("https://"):
+            return None
+
+        path = self._sanitize_output_path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                    if resp.status != 200:
+                        return None
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(_DOWNLOAD_CHUNK_SIZE):
+                        total += len(chunk)
+                        if total > _MAX_IMAGE_BYTES:
+                            logger.warning(
+                                "Image download exceeded %d bytes from %s — aborting",
+                                _MAX_IMAGE_BYTES, image_url[:80],
+                            )
+                            return None
+                        chunks.append(chunk)
+                    path.write_bytes(b"".join(chunks))
+        except Exception:
+            logger.warning("Image download failed from %s", image_url[:80])
+            return None
+
+        size = path.stat().st_size
+        return ToolResult(
+            output=f"Generated image via {model}: {path} ({size} bytes)",
+            data={
+                "path": str(path.resolve()),
+                "model": model,
+                "kind": kind,
+                "size_bytes": size,
+                "format": path.suffix.lstrip("."),
+                "prompt": prompt,
+            },
+        )
 
     async def _fallback_svg(self, params: ImageGenParams, output_path: str, reason: str) -> ToolResult:
         """Generate a prompt-driven themed SVG placeholder as ultimate fallback."""
@@ -847,11 +905,12 @@ class ImageGenTool(BaseTool):
             try:
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(svg) as resp:
-                        if resp.status == 200:
-                            path.write_bytes(await resp.read())
-                        else:
-                            return ToolResult.error_result(f"Failed to download image: HTTP {resp.status}")
+                    result = await self._download_image(svg, output_path, "raster", params.prompt, kind="raster")
+                    if result is not None:
+                        return result
+                    return ToolResult.error_result(
+                        f"Failed to download raster image (check URL, size, or network): {svg[:80]}"
+                    )
             except ImportError:
                 return ToolResult(
                     output=f"Image URL (install aiohttp to auto-download): {svg}",

@@ -259,16 +259,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         event_bus = self._maybe_get(EventBusPort)
         tools = None
         if llm is not None:
-            from weebot.application.models.tool_collection import ToolCollection
-            from weebot.tools.bash_tool import BashTool
-            from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
-            from weebot.tools.python_tool import PythonExecuteTool as PythonTool
-            from weebot.tools.image_gen_tool import ImageGenTool
-            from weebot.tools.video_gen_tool import VideoGenTool
+            from weebot.tools.tool_registry import RoleBasedToolRegistry
             try:
                 sandbox = self._maybe_get(SandboxPort)
-                py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
-                tools = ToolCollection(BashTool(), FileEditorTool(), py_tool, ImageGenTool(), VideoGenTool())
+                registry = RoleBasedToolRegistry()
+                tools = registry.create_tool_collection(
+                    role="admin", sandbox_port=sandbox, llm_port=llm,
+                )
             except Exception:
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
@@ -330,21 +327,12 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         """Create a SubAgentFactory."""
         from weebot.infrastructure.adapters.sub_agent_factory import SubAgentFactory
         from weebot.application.flows.plan_act_flow import PlanActFlow
-        from weebot.application.models.tool_collection import ToolCollection
-        from weebot.tools.bash_tool import BashTool
-        from weebot.tools.file_editor import StrReplaceEditorTool as FileEditorTool
-        from weebot.tools.python_tool import PythonExecuteTool as PythonTool
-        from weebot.tools.image_gen_tool import ImageGenTool
-        from weebot.tools.video_gen_tool import VideoGenTool
+        from weebot.tools.tool_registry import RoleBasedToolRegistry
 
         sandbox = self._maybe_get(SandboxPort)
-        py_tool = PythonTool(sandbox=sandbox) if sandbox else PythonTool()
-        tools = ToolCollection(
-            BashTool(),
-            FileEditorTool(),
-            py_tool,
-            ImageGenTool(),
-            VideoGenTool(),
+        registry = RoleBasedToolRegistry()
+        tools = registry.create_tool_collection(
+            role="admin", sandbox_port=sandbox,
         )
 
         from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER

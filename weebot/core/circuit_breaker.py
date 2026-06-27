@@ -26,6 +26,63 @@ _log = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------
+# Action hash queue — sliding window for repetition detection
+# ------------------------------------------------------------------
+
+
+@dataclass
+class ActionHashEntry:
+    """A single action record in the sliding window."""
+    tool_name: str
+    arg_hash: str
+    timestamp: float
+
+
+class ActionHashQueue:
+    """Sliding-window queue detecting semantic tool call repetition.
+
+    Tracks the last *W* tool calls.  If the same ``(tool, arg_hash)``
+    pair appears more than *K* times inside the window, it flags a
+    repetition (``is_repeating = True``).
+
+    This is Enhancement 5 (Upgraded CircuitBreaker) — a hash-based
+    sliding window replacing the naive loop detection.
+    """
+
+    def __init__(self, window_size: int = 20, threshold: int = 5) -> None:
+        self._window: list[ActionHashEntry] = []
+        self._window_size = window_size
+        self._threshold = threshold
+
+    def record(self, tool_name: str, arg_hash: str) -> None:
+        """Record a tool call and prune the window if necessary."""
+        self._window.append(ActionHashEntry(
+            tool_name=tool_name,
+            arg_hash=arg_hash,
+            timestamp=time.time(),
+        ))
+        if len(self._window) > self._window_size:
+            self._window.pop(0)
+
+    @property
+    def is_repeating(self) -> bool:
+        """``True`` if any (tool, arg) pair exceeds the repetition threshold."""
+        counts: dict[tuple[str, str], int] = {}
+        for entry in self._window:
+            key = (entry.tool_name, entry.arg_hash)
+            counts[key] = counts.get(key, 0) + 1
+            if counts[key] >= self._threshold:
+                return True
+        return False
+
+    def clear(self) -> None:
+        self._window.clear()
+
+    def __len__(self) -> int:
+        return len(self._window)
+
+
+# ------------------------------------------------------------------
 # Public types
 # ------------------------------------------------------------------
 

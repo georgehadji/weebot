@@ -218,7 +218,7 @@ class SQLiteStateRepository(StateRepositoryPort):
 
         # ── Extract commitments from assistant messages ───────────
         try:
-            from weebot.application.services.commitment_extractor import extract_commitments
+            from weebot.domain.services.commitment_extractor import extract_commitments
             from weebot.domain.models.event import MessageEvent
             for event in session.events:
                 if isinstance(event, MessageEvent) and getattr(event, 'role', '') == 'assistant':

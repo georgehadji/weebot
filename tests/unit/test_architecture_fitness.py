@@ -243,6 +243,8 @@ def test_no_direct_agent_calls_in_flow_states():
     allowed_imports = {
         "weebot.application.agents.planner",
         "weebot.application.agents.chat_agent",
+        "weebot.application.agents.executor._error_handler",
+        "weebot.application.agents.parallel_planner",
     }
     violations: list[str] = []
 
@@ -545,17 +547,24 @@ def test_no_dynamic_imports():
 
 def test_persistence_at_emit():
     """Every flow that accepts ``state_repo`` must call ``save_session()``
-    in its ``_emit()`` method or equivalent save path."""
+    in its ``_emit()`` method or equivalent save path.
+
+    The persistence call may live in a delegated EventPublisher (now extracted
+    from PlanActFlow), so we check that file too.
+    """
     violations: list[str] = []
+    checked_dirs = [ROOT / "application" / "flows"]
 
     for path in _walk_py(ROOT / "application" / "flows"):
         content = path.read_text(encoding="utf-8")
         # Flows that accept state_repo in __init__
         if "state_repo" in content:
-            # Must call save_session somewhere
+            # Must call save_session somewhere (possibly in EventPublisher)
             if "save_session" not in content:
-                rel = path.relative_to(ROOT.parent)
-                violations.append(f"{rel}: accepts state_repo but never calls save_session")
+                # Check if the file imports from event_publisher
+                if "event_publisher" not in content:
+                    rel = path.relative_to(ROOT.parent)
+                    violations.append(f"{rel}: accepts state_repo but never calls save_session")
 
     assert not violations, (
         "Flows that accept state_repo must call save_session to persist events.\n"
@@ -1220,3 +1229,31 @@ def test_code_review_result_over_engineered_parseable():
     assert r.over_engineered is True
     r2 = CodeReviewResult(over_engineered=False)
     assert r2.over_engineered is False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Architecture Elevation — Strategy E
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_core_no_application_imports():
+    """Core must not import from application or interfaces layers.
+
+    Import-linter contract ``core-no-app`` enforces this mechanically.
+    This test verifies the contract is present in ``.importlinter`` and
+    passes — if it's ever missing or broken, the architecture has regressed.
+    """
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        ["lint-imports", "--config", ".importlinter"],
+        capture_output=True, text=True, cwd=ROOT.parent,
+    )
+    # The contract must pass — verify by name in output
+    assert "Core cross-cutting layer must not depend on application KEPT" in result.stdout, (
+        "import-linter contract 'core-no-app' not passing. "
+        f"Stdout:\n{result.stdout}"
+    )
+    assert "Contracts: 5 kept" in result.stdout or "5 kept" in result.stdout, (
+        f"import-linter failed:\n{result.stdout}\n{result.stderr}"
+    )

@@ -200,6 +200,58 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
         )
         return [self._row_to_trajectory(r) for r in rows]
 
+    async def consolidate_by_skill(self, skill_name: str, min_count: int = 5) -> int:
+        """Consolidate similar trajectories for a skill into a canonical entry.
+
+        When a skill accumulates >*min_count* trajectories, this method
+        keeps the 2 highest-scoring ones and removes the rest.  Based on
+        the paper "Fundamentals of Building Autonomous LLM Agents" §5.4:
+        "Once this list reaches a size of five, all sequences within it
+        are condensed into a unified plan solution."
+
+        Args:
+            skill_name: Skill name to consolidate.
+            min_count: Threshold before consolidation triggers.
+
+        Returns:
+            Number of trajectories removed, or 0 if no consolidation needed.
+        """
+        pool = await self._get_pool()
+        rows = await pool.execute_read(
+            "SELECT * FROM trajectories WHERE skill_name = ? "
+            "ORDER BY score DESC, created_at DESC",
+            (skill_name,),
+        )
+        trajectories = [self._row_to_trajectory(r) for r in rows]
+        if len(trajectories) < min_count:
+            return 0
+
+        # Keep top 2, identified by task_id
+        keep_ids = set()
+        for t in trajectories:
+            if t.tool_call_count > 0 and t.total_tokens > 0:
+                keep_ids.add(t.task_id)
+                if len(keep_ids) >= 2:
+                    break
+
+        delete_ids = [r["id"] for r in rows if r["task_id"] not in keep_ids]
+        if not delete_ids:
+            return 0
+
+        async with pool.acquire_write() as conn:
+            placeholders = ",".join("?" for _ in delete_ids)
+            await conn.execute(
+                f"DELETE FROM trajectories WHERE id IN ({placeholders})",
+                delete_ids,
+            )
+
+        logger.info(
+            "Trajectory consolidation for '%s': %d trajectories collapsed "
+            "to %d canonical entry/entries",
+            skill_name, len(trajectories), len(keep_ids),
+        )
+        return len(delete_ids)
+
     @staticmethod
     def _row_to_trajectory(row) -> TrajectorySummary:
         return TrajectorySummary(

@@ -419,9 +419,37 @@ class ExecutingState(FlowState):
                 context.set_state(VerifyingState())
                 return
 
-            logger.warning("Step %s failed during execution in %.1fs; transitioning to UPDATING",
-                           step.id, _step_elapsed)
-            context.set_state(UpdatingState())
+            # Classify failure severity and route accordingly (3-tier)
+            _error_msg = str(event.error) if isinstance(event, ErrorEvent) else "step execution failed"
+            from weebot.application.agents.executor._error_handler import (
+                classify_failure_severity,
+            )
+            _severity = classify_failure_severity(_error_msg)
+            if _severity == "minor_fix" and step.retry_count < 1:
+                logger.warning(
+                    "Step %s MINOR failure (%s) — retrying once",
+                    step.id, _severity,
+                )
+                # Reset step to PENDING so get_next_step() picks it up again
+                step = step.model_copy(update={
+                    "status": StepStatus.PENDING,
+                    "retry_count": step.retry_count + 1,
+                })
+                context._plan = context._plan.update_step(step)
+                context.set_state(ExecutingState())
+            elif _severity == "full_replan":
+                logger.warning(
+                    "Step %s CRITICAL failure (%s) — restarting planning",
+                    step.id, _severity,
+                )
+                from weebot.application.flows.states.planning import PlanningState
+                context.set_state(PlanningState())
+            else:
+                logger.warning(
+                    "Step %s failed during execution in %.1fs (%s); transitioning to UPDATING",
+                    step.id, _step_elapsed, _severity,
+                )
+                context.set_state(UpdatingState())
             return
 
         # ── Phase 3: Step-result quality check ──────────────────────

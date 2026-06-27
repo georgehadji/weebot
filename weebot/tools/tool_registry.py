@@ -161,10 +161,27 @@ class RoleBasedToolRegistry:
 
         Args:
             role_mappings: Optional custom role-to-tools mappings.
-                          If None, uses DEFAULT_ROLE_MAPPINGS.
+                          If None, uses DEFAULT_ROLE_MAPPINGS merged with
+                          autodiscovered tool declarations.
         """
-        self.role_mappings = role_mappings or dict(self.DEFAULT_ROLE_MAPPINGS)
+        if role_mappings:
+            self.role_mappings = role_mappings
+        else:
+            # Prefer autodiscovered role mappings from tool classes
+            auto = self._build_role_mappings_from_class_map()
+            if auto:
+                self.role_mappings = auto
+            else:
+                self.role_mappings = dict(self.DEFAULT_ROLE_MAPPINGS)
         logger.info(f"Initialized RoleBasedToolRegistry with {len(self.role_mappings)} roles")
+
+    def get_profile_for_role(self, role: str) -> Any:
+        """Return the ExpertProfile for a role, or None if unregistered."""
+        try:
+            from weebot.domain.models.expert_profile import get_expert_profile
+            return get_expert_profile(role)
+        except ImportError:
+            return None
 
     def get_tools_for_role(self, role: str) -> List[str]:
         """Get the list of authorized tools for a given role.
@@ -336,86 +353,89 @@ class RoleBasedToolRegistry:
     def _build_tool_class_map(cls) -> Dict[str, type]:
         """Lazy-build a mapping from ``BaseTool.name`` -> tool class.
 
-        Imports are deferred to avoid circular imports at module load time.
+        Uses ``pkgutil.iter_modules`` to auto-discover tool modules in
+        ``weebot/tools/``, then checks each for ``BaseTool`` subclasses.
         The map is cached as a class-level singleton.
+
+        Import errors for individual tools are logged and skipped — one
+        broken tool does not block the entire registry.
         """
         if cls._TOOL_CLASS_MAP is not None:
             return cls._TOOL_CLASS_MAP
 
-        from weebot.tools.bash_tool import BashTool
-        from weebot.tools.python_tool import PythonExecuteTool
-        from weebot.tools.web_search import WebSearchTool
-        from weebot.tools.file_editor import StrReplaceEditorTool
-        from weebot.tools.advanced_browser import AdvancedBrowserTool
-        from weebot.tools.computer_use import ComputerUseTool
-        from weebot.tools.screen_tool import ScreenCaptureBaseTool
-        from weebot.tools.schedule_tool import ScheduleTool
-        from weebot.tools.knowledge_tool import KnowledgeTool
-        from weebot.tools.product_tool import ProductTool
-        from weebot.tools.video_ingest_tool import VideoIngestTool
-        from weebot.tools.powershell_tool import PowerShellTool
-        from weebot.tools.ocr import OCRTool
-        from weebot.tools.weather_tool import WeatherTool
-        from weebot.tools.design_system_tool import DesignSystemTool
-        from weebot.tools.control import TerminateTool, AskHumanTool
-        from weebot.tools.browser_inspector import BrowserInspectorTool
-        from weebot.tools.dispatch_agents import DispatchAgentsTool
-        from weebot.tools.persistent_memory import PersistentMemoryTool
-        from weebot.tools.mixture_of_agents import MixtureOfAgentsTool
-        from weebot.tools.swarm import SwarmTool
-        from weebot.tools.debate import DebateTool
-        from weebot.tools.search_history import SearchHistoryTool
-        from weebot.tools.todo_tool import TodoWriteTool
-        from weebot.tools.audit_tool import AuditTool
-        from weebot.tools.voice_input_tool import VoiceInputTool
-        from weebot.tools.voice_output_tool import VoiceOutputTool
-        from weebot.tools.browser_tool import BrowserTool
-        from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
-        from weebot.tools.vane_search import VaneSearchTool
-        from weebot.tools.image_gen_tool import ImageGenTool
-        from weebot.tools.video_gen_tool import VideoGenTool
+        import importlib
+        import pkgutil
+        from weebot.tools.base import BaseTool
 
-        cls._TOOL_CLASS_MAP = {
-            "bash": BashTool,
-            "python_execute": PythonExecuteTool,
-            "web_search": WebSearchTool,
-            "file_editor": StrReplaceEditorTool,
-            "advanced_browser": AdvancedBrowserTool,
-            "computer_use": ComputerUseTool,
-            "screen_capture": ScreenCaptureBaseTool,
-            "schedule": ScheduleTool,
-            "knowledge": KnowledgeTool,
-            "product": ProductTool,
-            "video_ingest": VideoIngestTool,
-            "powershell": PowerShellTool,
-            "ocr": OCRTool,
-            "weather": WeatherTool,
-            "design_system": DesignSystemTool,
-            "terminate": TerminateTool,
-            "ask_human": AskHumanTool,
-            "browser_inspector": BrowserInspectorTool,
-            "dispatch_parallel_tasks": DispatchAgentsTool,
-            "persistent_memory": PersistentMemoryTool,
-            "mixture_of_agents": MixtureOfAgentsTool,
-            "swarm": SwarmTool,
-            "debate": DebateTool,
-            "search_history": SearchHistoryTool,
-            "todo_write": TodoWriteTool,
-            "audit_session": AuditTool,
-            "voice_input": VoiceInputTool,
-            "voice_output": VoiceOutputTool,
-            "browser_navigator": BrowserTool,
-            "workflow_orchestrator": WorkflowOrchestratorTool,
-            "vane_search": VaneSearchTool,
-            "image_gen": ImageGenTool,
-            "video_gen": VideoGenTool,
-        }
+        cls._TOOL_CLASS_MAP = {}
 
-        if os.getenv("WEEBOT_ENABLE_ATOMIC_MAIL", "0").strip("\"'") not in ("", "0", "false", "False"):
-            from weebot.tools.atomic_mail_tool import AtomicMailTool
-            cls._TOOL_CLASS_MAP["atomic_mail"] = AtomicMailTool
+        import weebot.tools as _tools_pkg
+        for importer, modname, is_pkg in pkgutil.walk_packages(
+            path=_tools_pkg.__path__,
+            prefix="weebot.tools.",
+            onerror=lambda _: None,
+        ):
+            if is_pkg or modname.endswith("__init__") or modname.endswith("base"):
+                continue
+            try:
+                mod = importlib.import_module(modname)
+                for attr_name in dir(mod):
+                    attr = getattr(mod, attr_name)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, BaseTool)
+                        and attr is not BaseTool
+                    ):
+                        try:
+                            # Instantiate to read Pydantic field `name`
+                            instance = attr()
+                            tool_name = instance.name
+                            if tool_name and tool_name not in cls._TOOL_CLASS_MAP:
+                                cls._TOOL_CLASS_MAP[tool_name] = attr
+                        except Exception:
+                            continue
+            except Exception as exc:
+                logger.debug("Tool auto-discovery skipped %s: %s", modname, exc)
+
+        if not cls._TOOL_CLASS_MAP:
+            logger.warning("Tool auto-discovery returned no tools — registry will be empty!")
 
         return cls._TOOL_CLASS_MAP
+
+    @classmethod
+    def _build_role_mappings_from_class_map(cls) -> dict[str, list[str]]:
+        """Build role→tool mappings from ``BaseTool.allowed_roles`` attributes.
+
+        Iterates over the class map and groups tools by the roles listed
+        in their ``allowed_roles`` field.  Tools with ``allowed_roles=["*"]``
+        are assigned to a ``"*"`` key (all roles).  The primary use case
+        is to replace the hardcoded ``DEFAULT_ROLE_MAPPINGS``.
+
+        Returns:
+            Dict mapping role name to list of tool name strings, or empty
+            dict if the class map is not yet built or all tools are universal.
+        """
+        class_map = cls._build_tool_class_map()
+        mappings: dict[str, list[str]] = {}
+        universal: list[str] = []
+
+        for tool_name, tool_class in class_map.items():
+            allowed = getattr(tool_class, "allowed_roles", ["*"])
+            if not allowed or "*" in allowed:
+                universal.append(tool_name)
+                continue
+            for role in allowed:
+                mappings.setdefault(role, []).append(tool_name)
+
+        # If all tools are universal, return empty (caller falls back to DEFAULT_ROLE_MAPPINGS)
+        if not mappings:
+            return {}
+
+        # Merge universal tools into every role
+        for role in mappings:
+            mappings[role].extend(universal)
+
+        return mappings
 
     def create_tool_collection(
         self,

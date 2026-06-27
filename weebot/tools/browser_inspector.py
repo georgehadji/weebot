@@ -206,6 +206,7 @@ class BrowserInspectorTool(BaseTool):
                     "enumerate_assets",
                     "get_structure",
                     "screenshot",
+                    "som",
                     "navigate",
                 ],
                 "description": (
@@ -214,6 +215,7 @@ class BrowserInspectorTool(BaseTool):
                     "enumerate_assets: all img/svg/bg-image/video URLs and dimensions. "
                     "get_structure: semantic HTML hierarchy with bounding boxes. "
                     "screenshot: full-page base64 PNG. "
+                    "som: Set-of-Mark annotated screenshot with numbered bounding boxes. "
                     "navigate: go to url and wait for network idle."
                 ),
             },
@@ -262,6 +264,8 @@ class BrowserInspectorTool(BaseTool):
                 return await self._get_structure(page)
             elif action == "screenshot":
                 return await self._screenshot(page)
+            elif action == "som":
+                return await self._som(page)
             else:
                 return ToolResult.error_result(f"Unknown action: {action!r}")
         except Exception as exc:
@@ -358,3 +362,62 @@ class BrowserInspectorTool(BaseTool):
             base64_image=img_b64,
             data={"format": "png", "size_bytes": len(screenshot_bytes)},
         )
+
+    async def _som(self, page) -> ToolResult:
+        """Set-of-Mark annotated screenshot with numbered bounding boxes."""
+        # Get all interactive elements via Playwright's built-in selectors
+        elements = []
+        try:
+            from weebot.infrastructure.browser.som_renderer import SomRenderer
+
+            # Collect all clickable/interactive elements
+            raw_elements = await page.query_selector_all(
+                "button, a, input, select, textarea, [role=button], [role=link], "
+                "[role=checkbox], [role=radio], [tabindex]:not([tabindex=-1])"
+            )
+            for el in raw_elements:
+                try:
+                    bbox = await el.bounding_box()
+                    if bbox and bbox["width"] > 5 and bbox["height"] > 5:
+                        tag = await el.evaluate("el => el.tagName.toLowerCase()")
+                        text = (await el.inner_text() or "").strip()[:60]
+                        elements.append({
+                            "bounding_box": {
+                                "x": round(bbox["x"]),
+                                "y": round(bbox["y"]),
+                                "width": round(bbox["width"]),
+                                "height": round(bbox["height"]),
+                            },
+                            "tag": tag,
+                            "text": text,
+                        })
+                except Exception:
+                    continue
+
+            # Take screenshot and render overlays
+            screenshot_bytes = await page.screenshot(full_page=True)
+            renderer = SomRenderer()
+            viewport = page.viewport_size or {"width": 1920, "height": 1080}
+            result = await renderer.render(
+                screenshot_bytes, elements,
+                page_width=viewport.get("width", 1920),
+                page_height=viewport.get("height", 1080),
+            )
+
+            return ToolResult(
+                output=(
+                    f"Set-of-Mark screenshot: {result['mark_count']} elements marked. "
+                    f"Pillow rendering: {result.get('overlay_rendered', False)}."
+                ),
+                success=True,
+                base64_image=result.get("image", ""),
+                data={
+                    "marks": result["marks"],
+                    "mark_count": result["mark_count"],
+                    "pillow_available": result["pillow_available"],
+                    "overlay_rendered": result.get("overlay_rendered", False),
+                },
+            )
+        except Exception as exc:
+            logger.warning("SoM rendering failed: %s", exc)
+            return ToolResult.error_result(f"Set-of-Mark failed: {exc}")

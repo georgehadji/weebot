@@ -9,16 +9,21 @@ as an MP4 file.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.config.api_endpoints import XAI_API_BASE
+
+
+logger = logging.getLogger(__name__)
 
 
 class VideoGenParams(BaseModel):
@@ -39,15 +44,12 @@ class VideoGenParams(BaseModel):
         default="",
         description="File path to write the MP4 to (e.g. 'Output/videos/demo.mp4')"
     )
-    duration_seconds: int = Field(
-        default=5,
-        description="Target video duration in seconds (model-dependent, not all models support exact duration)"
-    )
 
 
-# ── Custom video model mappings ─────────────────────────────────────
-# Models that need special handling (e.g. direct API path vs OpenRouter)
-_XAI_VIDEO_PATTERN = re.compile(r"^x-ai/")
+# ── Download safety limits ────────────────────────────────────────────
+_MAX_VIDEO_BYTES: int = 512 * 1024 * 1024  # 512 MiB — generous for AI clips
+_DOWNLOAD_CHUNK_SIZE: int = 64 * 1024  # 64 KiB per chunk
+_SAFE_BASE: Path = Path.cwd().resolve()
 
 
 class VideoGenTool(BaseTool):
@@ -96,10 +98,6 @@ class VideoGenTool(BaseTool):
                 "type": "string",
                 "description": "File path for the output MP4 file (required). E.g. 'Output/videos/demo.mp4'"
             },
-            "duration_seconds": {
-                "type": "integer",
-                "description": "Target video duration in seconds (model-dependent, default 5)"
-            },
         },
         "required": ["prompt", "output_path"],
     }
@@ -108,14 +106,17 @@ class VideoGenTool(BaseTool):
 
     async def _execute_xai_direct(
         self,
+        model: str,
         prompt: str,
         output_path: str,
         xai_key: str,
     ) -> ToolResult | None:
         """Call xAI's video generation endpoint directly.
 
-        Uses the xAI chat completions API with x-ai/grok-imagine-video
-        as the model parameter, requesting video output.
+        Uses the xAI chat completions API with the given *model* ID
+        (the *model* parameter is the full OpenRouter ID like
+        ``x-ai/grok-imagine-video`` — the ``x-ai/`` prefix is stripped
+        before sending).
 
         Returns:
             ToolResult on success, None on failure (caller should fall back).
@@ -123,12 +124,14 @@ class VideoGenTool(BaseTool):
         import asyncio as _asyncio
         import aiohttp
 
+        xai_model = model.split("/", 1)[-1]  # "x-ai/grok-imagine-video" → "grok-imagine-video"
+
         headers = {
             "Authorization": f"Bearer {xai_key}",
             "Content-Type": "application/json",
         }
         payload: dict = {
-            "model": "grok-imagine-video",
+            "model": xai_model,
             "messages": [{"role": "user", "content": prompt}],
         }
 
@@ -142,8 +145,7 @@ class VideoGenTool(BaseTool):
                 ) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        _log = __import__("logging").getLogger(__name__)
-                        _log.debug("xAI video gen failed: HTTP %s — %s", resp.status, error_text[:150])
+                        logger.debug("xAI video gen failed: HTTP %s — %s", resp.status, error_text[:150])
                         return None
 
                     result = await resp.json()
@@ -151,11 +153,12 @@ class VideoGenTool(BaseTool):
                     if not video_url:
                         return None
 
-                    return await self._download_video(video_url, output_path, "x-ai/grok-imagine-video", prompt)
+                    return await self._download_video(video_url, output_path, model, prompt)
 
         except _asyncio.TimeoutError:
             return None
         except Exception:
+            logger.info("xAI direct video gen failed", exc_info=True)
             return None
 
     # ── OpenRouter video generation ──────────────────────────────────
@@ -199,9 +202,28 @@ class VideoGenTool(BaseTool):
         if isinstance(content, str):
             url_match = re.search(r"https?://[^\s\"']+\.(mp4|webm|mov|avi)", content)
             if url_match:
+                logger.warning("Video URL extracted via regex fallback: %s", url_match.group(0))
                 return url_match.group(0)
 
         return ""
+
+    @staticmethod
+    def _sanitize_output_path(output_path: str) -> Path:
+        """Resolve and validate *output_path* — reject paths escaping the workspace.
+
+        Returns:
+            Resolved Path guaranteed to be under ``_SAFE_BASE``.
+
+        Raises:
+            ValueError: If the path contains ``..`` components or resolves outside
+                        the safe base directory.
+        """
+        if ".." in output_path.split("/"):
+            raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
+        resolved = Path(output_path).resolve()
+        if not str(resolved).startswith(str(_SAFE_BASE)):
+            raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
+        return resolved
 
     async def _download_video(
         self,
@@ -210,10 +232,18 @@ class VideoGenTool(BaseTool):
         model: str,
         prompt: str,
     ) -> ToolResult | None:
-        """Download a video from a URL and save it to disk."""
+        """Download a video from a URL and save it to disk.
+
+        Guards:
+        - Rejects non-``https://`` URLs.
+        - Streams in 64 KiB chunks with a 512 MiB cap to avoid OOM.
+        """
         import aiohttp
 
-        path = Path(output_path)
+        if not video_url.startswith("https://"):
+            return None
+
+        path = self._sanitize_output_path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -221,13 +251,25 @@ class VideoGenTool(BaseTool):
                 async with session.get(video_url, timeout=aiohttp.ClientTimeout(total=180)) as resp:
                     if resp.status != 200:
                         return None
-                    path.write_bytes(await resp.read())
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(_DOWNLOAD_CHUNK_SIZE):
+                        total += len(chunk)
+                        if total > _MAX_VIDEO_BYTES:
+                            logger.warning(
+                                "Video download exceeded %d bytes from %s — aborting",
+                                _MAX_VIDEO_BYTES, video_url[:80],
+                            )
+                            return None
+                        chunks.append(chunk)
+                    path.write_bytes(b"".join(chunks))
         except Exception:
+            logger.warning("Video download failed from %s", video_url[:80])
             return None
 
         size = path.stat().st_size
         return ToolResult(
-            output=f"Generated video via {model}: {output_path} ({size} bytes)",
+            output=f"Generated video via {model}: {path} ({size} bytes)",
             data={
                 "path": str(path.resolve()),
                 "model": model,
@@ -285,8 +327,9 @@ class VideoGenTool(BaseTool):
 
         for model in models_to_try:
             # ── Try xAI direct for x-ai/* models ───────────────────
-            if _XAI_VIDEO_PATTERN.match(model) and xai_key:
+            if model.startswith("x-ai/") and xai_key:
                 xai_result = await self._execute_xai_direct(
+                    model=model,
                     prompt=prompt,
                     output_path=output_path,
                     xai_key=xai_key,
@@ -356,5 +399,10 @@ class VideoGenTool(BaseTool):
             return ToolResult.error_result("prompt is required for video generation")
         if not params.output_path:
             return ToolResult.error_result("output_path is required")
+
+        try:
+            self._sanitize_output_path(params.output_path)
+        except ValueError as exc:
+            return ToolResult.error_result(str(exc))
 
         return await self._execute_openrouter(params)

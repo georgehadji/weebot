@@ -13,23 +13,7 @@ forbidden_modules =
     weebot.core
     weebot.tools
     weebot.nlp_understanding
-    weebot.multi_source_research
-    weebot.information_synthesis
-    weebot.strategy_adaptation
-    weebot.source_credibility_assessment
-    weebot.external_service_integration
-    weebot.activity_stream
-    weebot.cli_support
-    weebot.complex_task_executor
-    weebot.error_system_base
-    weebot.error_system_handler
-    weebot.error_system_user_messages
     weebot.notifications
-    weebot.notifications_categorizer
-    weebot.rtk_integration
-    weebot.security_validators
-    weebot.structured_logger
-    weebot.workflow_planner
 
 [importlinter:contract:tools-no-db]
 name = Tools must not access databases directly
@@ -79,9 +63,8 @@ ignore_imports =
     weebot.infrastructure.mcp.mcp_toolkit_adapter -> weebot.tools.base
     # MCP tool bridge implements the MCP tool port defined in application.ports.
     weebot.infrastructure.mcp.mcp_tool_bridge -> weebot.application.ports.mcp_tool_port
-    # sqlite_state_repo lazily extracts commitments from saved assistant messages.
-    # Tracked for migration: commit extraction should move to the application layer.
-    weebot.infrastructure.persistence.sqlite_state_repo -> weebot.application.services.commitment_extractor
+    # (moved — sqlite_state_repo -> domain.services.commitment_extractor is
+    #  architecturally correct and requires no ignore_imports entry.)
 
 [importlinter:contract:interfaces-no-infra]
 name = Interfaces must not depend on infrastructure adapters directly
@@ -133,3 +116,24 @@ ignore_imports =
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications
     # Shutdown handler closes all DB connection pools to prevent leaks.
     weebot.interfaces.web.main -> weebot.infrastructure.persistence.connection_pool
+
+
+[importlinter:contract:core-no-app]
+name = Core cross-cutting layer must not depend on application
+type = forbidden
+source_modules = weebot.core
+forbidden_modules =
+    weebot.application
+    weebot.interfaces
+ignore_imports =
+    # Core agent factory imports tool types and the tool registry to build
+    # agent configurations. Tools legitimately depend on application ports
+    # (e.g. sandbox_port, llm_port, memory_port) — these are NOT core
+    # reaching into application, they are core using the tool abstraction layer.
+    weebot.core.agent -> weebot.tools.browser_tool
+    weebot.core.agent -> weebot.tools.powershell_tool
+    weebot.core.agent_factory -> weebot.tools.base
+    weebot.core.agent_factory -> weebot.tools.tool_registry
+    # agent_factory imports agent_core_v2 which bridges into application.
+    # This is a legacy dependency tracked for migration.
+    weebot.core.agent_factory -> weebot.agent_core_v2

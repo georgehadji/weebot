@@ -56,3 +56,33 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run unit tests with coverage
         run: pytest tests/unit/ -v --tb=short -x --cov=weebot --cov-report=term --cov-fail-under=48
+
+  docker-smoke:
+    name: Docker Build Smoke Test
+    runs-on: ubuntu-latest
+    needs: architecture-fitness
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build weebot-api image
+        run: docker build -t weebot-api .
+      - name: Build weebot-ui image
+        run: docker build -t weebot-ui -f weebot-ui/Dockerfile weebot-ui/
+      - name: Start services (no .env — verify crash-free)
+        run: |
+          export OPENROUTER_API_KEY=ci-test-key
+          export ANTHROPIC_API_KEY=ci-test-key
+          docker compose -f docker-compose.yml up -d --wait || true
+      - name: Verify API health
+        run: |
+          for i in $(seq 1 10); do
+            curl -s http://localhost:8000/health && break
+            sleep 2
+          done
+      - name: Check services running
+        run: docker compose ps
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

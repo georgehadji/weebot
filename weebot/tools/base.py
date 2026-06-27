@@ -126,6 +126,7 @@ class BaseTool(ABC, BaseModel):
     name: str
     description: str
     parameters: dict  # JSON Schema object
+    allowed_roles: list[str] = ["*"]  # Roles authorized to use this tool. ["*"] = all roles.
 
     # Phase 2: Concurrency cap (0 = unlimited). Set to 1 for tools that
     # share a resource (browser, screen, voice, computer_use).
