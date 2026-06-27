@@ -124,9 +124,25 @@ class YouTubeDownloadTool(BaseTool):
         # 3. Check video metadata before downloading
         metadata = await self._get_metadata(params.url)
         if metadata is None:
+            # Try to get at least the transcript as partial data
+            transcript_hint = ""
+            try:
+                from weebot.tools.video_ingest_tool import VideoIngestTool
+                vt = VideoIngestTool()
+                if await vt.health_check():
+                    transcript_hint = (
+                        " Try video_ingest to fetch the transcript/subtitles instead."
+                    )
+            except Exception:
+                pass
             return ToolResult.error_result(
-                f"Could not fetch metadata for {params.url[:60]}. "
-                "The video may be private, age-restricted, or the URL may be invalid."
+                "Could not download video from " + params.url[:60] + ". "
+                "The video may be private, age-restricted, geo-blocked, or the "
+                "URL may be invalid.\n\nSuggested alternatives:\n"
+                "1. Use web_search to find the same video on another platform\n"
+                "2. Search for a transcript or summary of the video content\n"
+                "3. Use video_ingest to fetch the subtitles/transcript" + transcript_hint + "\n"
+                "4. Try a different YouTube URL for the same content"
             )
 
         duration = metadata.get("duration", 0)
