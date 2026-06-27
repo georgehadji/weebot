@@ -129,6 +129,55 @@ def classify_tool_error(error_output: str) -> Optional[str]:
     return None
 
 
+def classify_failure_severity(error_output: str, tool_name: str = "") -> str:
+    """Classify a tool error into a 3-tier failure severity.
+
+    Returns one of ``"minor_fix"``, ``"subplan_fail"``, or ``"full_replan"``.
+
+    Based on the paper "Fundamentals of Building Autonomous LLM Agents" §4.4:
+
+    - **MINOR_FIX**: Close but not exact (e.g., coordinates slightly off,
+      timeout on first attempt).  Re-attempt with adjusted params.
+    - **SUBPLAN_FAIL**: Step cannot proceed as-is (e.g., file not found,
+      permission denied).  Modify the remaining plan.
+    - **FULL_REPLAN**: The plan itself is invalid (e.g., the step references
+      a non-existent tool, the goal is unreachable).  Restart planning.
+
+    Args:
+        error_output: The error message from the tool.
+        tool_name: The name of the tool that produced the error.
+
+    Returns:
+        One of ``"minor_fix"``, ``"subplan_fail"``, ``"full_replan"``.
+    """
+    if not error_output:
+        return "minor_fix"
+
+    lo = error_output.lower()
+    # Security enforcement and tool-policy denial are always full replan.
+    # Use compound-keyword matching to avoid false positives on common
+    # words like "security.txt" or "privacy policy document".
+    if any(kw in lo for kw in (
+        "denied by policy", "command blocked", "security violation", "security error")):
+        return "full_replan"
+    # Timeouts are MINOR_FIX — the step may work with a retry
+    if "timed out" in lo:
+        return "minor_fix"
+    # File/directory not found: the step's preconditions may be wrong, so
+    # the subplan needs adjusting rather than a full restart
+    if any(kw in lo for kw in ("not found", "no such file", "does not exist")):
+        return "subplan_fail"
+
+    # Tool-specific heuristics
+    if tool_name == "web_search" and ("rate limit" in lo or "too many requests" in lo):
+        return "minor_fix"
+    if tool_name == "web_search" and ("no results" in lo or "failed" in lo):
+        return "minor_fix"
+
+    # Default: assume subplan needs adjusting
+    return "subplan_fail"
+
+
 # ── Instance-based error state for stuck-loop detection ─────────────────
 
 @dataclass
