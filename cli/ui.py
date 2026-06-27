@@ -78,9 +78,9 @@ class AgenticUI:
             )
             self._tool_panels.append(panel)
             if len(self._tool_panels) <= 3:
-                node = self._tree.add(panel)
+                self._tree.add(panel)
             else:
-                node = self._tree.add(Text(f"... +{len(self._tool_panels) - 3} more tool calls"))
+                self._refresh_with_summary()
             self._refresh()
         else:
             logger.info("[tool] %s(%s)", tool_name, arguments[:100])
@@ -153,3 +153,17 @@ class AgenticUI:
                 self._live.refresh()
             except Exception:
                 pass
+
+    def _refresh_with_summary(self) -> None:
+        """Replace excess tool panels with a summary node."""
+        if _RICH_AVAILABLE and self._tree is not None:
+            # Remove last child if it was a summary node from a previous call
+            children = self._tree.children
+            if children and isinstance(children[-1], Text):
+                last_text = str(children[-1])
+                if last_text.startswith("... +"):
+                    children.pop()
+            extra = len(self._tool_panels) - 3
+            if extra > 0:
+                self._tree.add(Text(f"... +{extra} more tool calls"))
+            self._refresh()

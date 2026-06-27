@@ -128,7 +128,7 @@ class EventPublisher:
                     ),
                 })
             except Exception:
-                pass
+                logger.debug("Checkpoint hook failed", exc_info=True)
 
     # ── Step 4: Domain events ─────────────────────────────────────────────
 

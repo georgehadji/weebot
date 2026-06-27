@@ -61,7 +61,7 @@ class AgentSessionManager:
                         state=prev_name,
                     ).observe(prev_duration)
             except Exception:
-                pass
+                logger.debug("Metrics recording failed", exc_info=True)
 
         if self._tracing_port is not None:
             span = self._tracing_port.start_span(f"state.{type(state).__name__}")
@@ -93,4 +93,4 @@ class AgentSessionManager:
                     "session_id": self._session.id,
                 })
             except Exception:
-                pass
+                logger.debug("Checkpoint hook failed", exc_info=True)

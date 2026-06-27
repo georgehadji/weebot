@@ -13,17 +13,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-
-class AgentStatus(str, Enum):
-    """Status of the Plan-Act flow state machine."""
-    IDLE = "idle"
-    PLANNING = "planning"
-    EXECUTING = "executing"
-    REVIEWING = "reviewing"
-    UPDATING = "updating"
-    VERIFYING = "verifying"
-    SUMMARIZING = "summarizing"
-    COMPLETED = "completed"
+from weebot.application.flows.states.base import AgentStatus
 
 
 # State transition rules: (current_agent_status, event_type) → next_agent_status

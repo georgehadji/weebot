@@ -401,11 +401,12 @@ class ExecutingState(FlowState):
                     "error_type": "step_failure",
                     "plan": context._plan,
                 })
+            eval_events = cmd_result.data.get("events", [])
             # If ALL models are circuit-broken, replanning will also fail.
             # Skip the replan cycle and go straight to terminal state.
             _all_tripped = any(
                 "All models in the cascade have tripped" in getattr(e, "error", "")
-                for e in cmd_result.data.get("events", [])
+                for e in eval_events
                 if isinstance(e, dict) and e.get("type") == "error"
             )
             if _all_tripped:
@@ -419,8 +420,13 @@ class ExecutingState(FlowState):
                 context.set_state(VerifyingState())
                 return
 
+            # Collect the actual error message from any ErrorEvent in the batch
+            _error_msg = "step execution failed"
+            for _ev in eval_events:
+                if isinstance(_ev, ErrorEvent):
+                    _error_msg = str(_ev.error or _error_msg)
+
             # Classify failure severity and route accordingly (3-tier)
-            _error_msg = str(event.error) if isinstance(event, ErrorEvent) else "step execution failed"
             from weebot.application.agents.executor._error_handler import (
                 classify_failure_severity,
             )
