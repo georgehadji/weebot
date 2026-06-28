@@ -126,12 +126,13 @@ class ContextCompressor:
 
     @property
     def vision_enabled(self) -> bool:
-        """True when vision-in-the-loop is on and the active model accepts images."""
+        """True when vision-in-the-loop feature flag is on.
+
+        Does NOT check the current model — model switching to a VLM is handled
+        by the executor when screenshots are injected into the buffer.
+        """
         from weebot.config.feature_flags import is_enabled
-        if not is_enabled("VISION_IN_LOOP_ENABLED"):
-            return False
-        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
-        return model_supports_vision(self._model or "")
+        return is_enabled("VISION_IN_LOOP_ENABLED")
 
     @property
     def reflection_enabled(self) -> bool:

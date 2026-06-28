@@ -89,7 +89,16 @@ class PlanReviewState(FlowState):
         _new_ctx = context._session.context.model_copy(update={"extra": _new_extra})
         context._session = context._session.model_copy(update={"context": _new_ctx})
 
-        yield WaitForUserEvent(
+        # Mark session as WAITING and persist DIRECTLY before yielding.
+        # The caller (CLI flow_run) breaks the async-for loop on WaitForUserEvent
+        # and calls resume_session() which loads from DB — the status MUST be
+        # WAITING in the DB at that point.  Using _emit() goes through the
+        # event publisher pipeline which caches a stale session reference,
+        # so we bypass it and save to the state repo directly.
+        from weebot.domain.models.session import SessionStatus
+        context._session = context._session.set_status(SessionStatus.WAITING)
+
+        wait_event = WaitForUserEvent(
             question=(
                 f"Plan ready ({len(plan.steps)} step{'s' if len(plan.steps) != 1 else ''}):\n"
                 + "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(plan.steps[:8]))
@@ -97,3 +106,16 @@ class PlanReviewState(FlowState):
                 + "\n\nType 'approve' to start execution, or describe changes / constraints to add."
             )
         )
+
+        # Persist WAITING status AND the event directly to DB
+        context._session = context._session.add_event(wait_event)
+        if context._state_repo:
+            await context._state_repo.save_session(context._session)
+
+        # Also emit through pipeline for event bus subscribers
+        try:
+            await context._emit(wait_event)
+        except Exception:
+            pass
+
+        yield wait_event

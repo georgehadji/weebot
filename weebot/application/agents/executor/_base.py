@@ -193,9 +193,10 @@ class ExecutorAgent:
             llm=llm,
             tools=tools,
             agent_role=agent_role,
-            model_provider=self._model_for_step,
+            model_provider=self._resolve_model_for_step,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
         )
+        self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
         from weebot.application.agents.executor._tool_executor import ToolExecutor
         self._tool_executor: ToolExecutor = ToolExecutor(
@@ -244,6 +245,19 @@ class ExecutorAgent:
 
     def clear_facts(self) -> None:
         self._facts.clear()
+
+    def _resolve_model_for_step(self, description: str) -> str:
+        """Return the best model for *description*, preferring vision when needed.
+
+        Uses the task-model router for normal steps.  When ``_needs_vision`` is
+        set (a screenshot was injected into the conversation buffer), returns a
+        vision-capable VLM instead so the model can actually see the image.
+        """
+        if self._needs_vision:
+            self._needs_vision = False  # Consume the flag for this call
+            from weebot.config.model_refs import MODEL_VISION_PRIMARY
+            return MODEL_VISION_PRIMARY
+        return self._model_for_step(description)
 
     @staticmethod
     def _model_for_step(description: str) -> str:
@@ -300,14 +314,13 @@ class ExecutorAgent:
         self._context_compressor.inject_reflection(reflection)
 
     def _reflection_enabled(self) -> bool:
-        """True when BOTH vision-in-loop AND reflection flags are on AND model supports vision."""
+        """True when BOTH vision-in-loop AND reflection flags are on.
+
+        Does NOT check the current model — model switching to a VLM is handled
+        separately via _needs_vision + _resolve_model_for_step.
+        """
         from weebot.config.feature_flags import VISION_IN_LOOP_ENABLED, VISION_REFLECTION_ENABLED
-        from weebot.infrastructure.adapters.llm._multimodal import model_supports_vision
-        return (
-            VISION_IN_LOOP_ENABLED
-            and VISION_REFLECTION_ENABLED
-            and model_supports_vision(self._model or "")
-        )
+        return VISION_IN_LOOP_ENABLED and VISION_REFLECTION_ENABLED
 
     async def execute_step(
         self, plan: Plan, step: Step, user_input: str | None = None,
@@ -846,6 +859,7 @@ class ExecutorAgent:
                 # Vision-in-the-loop: let a vision-capable model SEE the screen
                 # state a tool produced, instead of driving blind off DOM/OCR text.
                 if getattr(result, "base64_image", None) and self._vision_enabled():
+                    self._needs_vision = True  # Next LLM call must use a VLM
                     self._context_compressor.inject_screenshot(tool_name, result.base64_image)
                     # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
                     # Grounded in the step description so the model can judge progress.

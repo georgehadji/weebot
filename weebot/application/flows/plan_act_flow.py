@@ -437,6 +437,10 @@ class PlanActFlow(BaseFlow):
             return
 
         publisher = self._get_event_publisher()
+        # Sync publisher's session ref — the flow may have mutated
+        # self._session (e.g. PlanReviewState setting WAITING status)
+        # since the publisher was first constructed.
+        publisher._session = self._session
         self._session = await publisher.emit(event)
 
     async def _emit_domain_event(self, event: AgentEvent) -> None:

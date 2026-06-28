@@ -205,6 +205,8 @@ class PlanningState(FlowState):
         else:
             context._snapshot_plan()
             # --- DPPM: parallel planning for complex tasks ---
+            from weebot.application.agents.parallel_planner import ParallelPlanner
+
             _use_dppm = (
                 context._planning_mode == "dppm"
                 or (context._planning_mode == "auto"
@@ -212,7 +214,6 @@ class PlanningState(FlowState):
             )
             if _use_dppm and context._llm is not None:
                 try:
-                    from weebot.application.agents.parallel_planner import ParallelPlanner
                     from weebot.application.services.plan_merger import PlanMerger
 
                     dppm = ParallelPlanner(llm=context._llm)

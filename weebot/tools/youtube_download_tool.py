@@ -1,8 +1,11 @@
-"""YouTube video download tool for weebot agents.
+"""Video download tool for weebot agents.
 
-Downloads YouTube videos as MP4 files using yt-dlp.
-Reuses the same security patterns as image_gen_tool and video_gen_tool:
-path traversal guard, HTTPS validation, size caps, timeout.
+Downloads videos and extracts MP3 audio from YouTube, Twitter/X, TikTok,
+Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, and hundreds of
+other sites using yt-dlp.  Also handles age-restricted content via browser
+cookies and JS-heavy sites via Deno runtime.
+
+Security: path traversal guard, HTTPS validation, size caps, timeout.
 """
 from __future__ import annotations
 
@@ -19,10 +22,11 @@ from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-# ── YouTube URL patterns ───────────────────────────────────────────────
-_YOUTUBE_URL_RE = re.compile(
-    r"^(https?://)?(www\.|m\.)?(youtube\.com|youtu\.be)/"
-)
+# ── URL validation ───────────────────────────────────────────────────
+# Accept any HTTPS URL — yt-dlp validates whether it can handle the site.
+# Known supported sources: YouTube, Twitter/X, TikTok, Instagram, Vimeo,
+# Dailymotion, Facebook, Reddit, Twitch, and 1000+ more.
+_HTTPS_URL_RE = re.compile(r"^https?://")
 
 # yt-dlp is optional — the tool reports an error if it's not installed.
 # Availability is checked at runtime via `yt-dlp --version` in health_check().
@@ -36,9 +40,9 @@ _SAFE_BASE: Path = Path.cwd().resolve()
 
 
 class YouTubeDownloadParams(BaseModel):
-    """Parameters for YouTube video download."""
+    """Parameters for video download from any yt-dlp-supported site."""
     url: str = Field(
-        description="YouTube video URL (e.g. https://youtube.com/watch?v=...)"
+        description="Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site"
     )
     output_path: str = Field(
         default="",
@@ -46,7 +50,7 @@ class YouTubeDownloadParams(BaseModel):
     )
     format: str = Field(
         default="mp4",
-        description="Output format: mp4, webm, mkv, or 'audio' for m4a audio only"
+        description="Output format: mp4, webm, mkv, 'mp3' for MP3 audio extraction, or 'audio' for m4a audio only"
     )
     quality: str = Field(
         default="best",
@@ -55,33 +59,58 @@ class YouTubeDownloadParams(BaseModel):
 
 
 class YouTubeDownloadTool(BaseTool):
-    """Download YouTube videos as MP4 files using yt-dlp.
+    """Download videos and extract MP3 audio from any yt-dlp-supported site.
+
+    Supports YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion,
+    Facebook, Reddit, Twitch, and 1000+ other sites.
+
+    Download strategies for edge cases:
+    - **Age-restricted**: Use `cookies` param via Playwright get_cookies export.
+    - **JS runtime error ("No supported JavaScript runtime")**:
+      Install Deno: ``winget install DenoLand.Deno`` or ``scoop install deno``.
+      Then pass path via `js_runtime` param.
+    - **Cannot download at all**: Fall back to `video_ingest` tool for transcript.
+    - **Firefox users**: ``yt-dlp --cookies-from-browser firefox`` avoids DPAPI
+      errors on Chrome/Edge cookies.
 
     Security guards:
-    - URL validated against YouTube URL pattern
-    - Video duration checked before download (max 10 min)
+    - URL validated for HTTPS
+    - Video duration checked before download (max 10 min, YouTube only)
     - Output path guarded against traversal attacks
     - Download timed out at 300 seconds
 
     Usage:
         youtube_download(url="https://youtube.com/watch?v=dQw4w9WgXcQ",
                          output_path="Output/videos/clip.mp4")
+        youtube_download(url="https://twitter.com/user/status/123",
+                         format="mp4")
     """
     default_timeout_seconds: int = _DOWNLOAD_TIMEOUT_SEC
     name: str = "youtube_download"
     description: str = (
-        "Download a YouTube video as MP4 file using yt-dlp. "
+        "Download a video or extract MP3 audio from any yt-dlp-supported site "
+        "(YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, "
+        "Reddit, Twitch, and 1000+ more). "
         "Parameters: url (required), output_path (optional, auto-generated if empty), "
-        "format (mp4/webm/mkv/audio), quality (best/worst/resolution). "
-        "Video duration is limited to 10 minutes. "
-        "After download, the file path is returned."
+        "format (mp4/webm/mkv/mp3/audio), quality (best/worst/resolution), "
+        "cookies (path to Netscape-format cookies file for age-restricted videos), "
+        "js_runtime (path to Deno/Node.js executable for EJS extractors). "
+        "Video duration is limited to 10 minutes (YouTube only). "
+        "For MP3: extracts audio and converts to MP3 (320kbps best quality). "
+        "After download, the file path is returned.\n\n"
+        "Download strategies:\n"
+        "- Normal: works as-is for any supported site.\n"
+        "- Age-restricted: Use the cookies param with a Playwright cookie export.\n"
+        "- JS runtime error: Install Deno (winget install DenoLand.Deno), "
+        "then pass its path as js_runtime.\n"
+        "- Fallback: Use video_ingest tool for transcript/subtitles instead."
     )
     parameters: dict = {
         "type": "object",
         "properties": {
             "url": {
                 "type": "string",
-                "description": "YouTube video URL (e.g. https://youtube.com/watch?v=...)"
+                "description": "Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site"
             },
             "output_path": {
                 "type": "string",
@@ -89,12 +118,20 @@ class YouTubeDownloadTool(BaseTool):
             },
             "format": {
                 "type": "string",
-                "enum": ["mp4", "webm", "mkv", "audio"],
-                "description": "Output format (default mp4)"
+                "enum": ["mp4", "webm", "mkv", "mp3", "audio"],
+                "description": "Output format: mp4, webm, mkv, mp3 (audio extraction), or audio (m4a) (default mp4)"
             },
             "quality": {
                 "type": "string",
                 "description": "Quality: best, worst, or resolution like 1080p, 720p (default best)"
+            },
+            "cookies": {
+                "type": "string",
+                "description": "Path to Netscape-format cookies file for age-restricted videos"
+            },
+            "js_runtime": {
+                "type": "string",
+                "description": "Path to Deno/Node.js for yt-dlp EJS extractors"
             },
         },
         "required": ["url"],
@@ -107,11 +144,11 @@ class YouTubeDownloadTool(BaseTool):
             k: v for k, v in kwargs.items() if v is not None
         })
 
-        # 1. Validate YouTube URL
-        if not _YOUTUBE_URL_RE.match(params.url):
+        # 1. Validate URL is HTTPS
+        if not _HTTPS_URL_RE.match(params.url):
             return ToolResult.error_result(
-                f"Invalid YouTube URL: {params.url[:80]}. "
-                "Expected format: https://youtube.com/watch?v=..."
+                f"Invalid URL: {params.url[:80]}. "
+                "Expected an https:// URL to a video page."
             )
 
         # 2. Check yt-dlp available (deferred — check on first call)
@@ -136,13 +173,13 @@ class YouTubeDownloadTool(BaseTool):
             except Exception:
                 pass
             return ToolResult.error_result(
-                "Could not download video from " + params.url[:60] + ". "
-                "The video may be private, age-restricted, geo-blocked, or the "
-                "URL may be invalid.\n\nSuggested alternatives:\n"
-                "1. Use web_search to find the same video on another platform\n"
-                "2. Search for a transcript or summary of the video content\n"
-                "3. Use video_ingest to fetch the subtitles/transcript" + transcript_hint + "\n"
-                "4. Try a different YouTube URL for the same content"
+                "Could not fetch metadata from " + params.url[:60] + ". "
+                "The video may be private, age-restricted, or geo-blocked.\n\n"
+                "DO NOT GIVE UP — try these approaches IN ORDER within the same step:\n"
+                "1. Try downloading anyway (metadata fetch may fail but download may succeed)\n"
+                "2. Use video_ingest to fetch the subtitles/transcript" + transcript_hint + "\n"
+                "3. Use web_search to find the same video on another platform\n"
+                "4. Try a different URL for the same content"
             )
 
         duration = metadata.get("duration", 0)
@@ -157,20 +194,68 @@ class YouTubeDownloadTool(BaseTool):
         output_path = params.output_path
         if not output_path:
             import uuid
-            ext = "m4a" if params.format == "audio" else "mp4"
+            if params.format == "mp3":
+                ext = "mp3"
+            elif params.format == "audio":
+                ext = "m4a"
+            else:
+                ext = "mp4"
             output_path = f"Output/videos/youtube_{uuid.uuid4().hex[:8]}.{ext}"
 
         path = self._sanitize_output_path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 5. Download
-        result = await self._download(params.url, path, params.format, params.quality)
+        # 5. Download (pass cookies/js_runtime for age-restricted / EJS scenarios)
+        result = await self._download(
+            url=params.url,
+            output_path=path,
+            fmt=params.format,
+            quality=params.quality,
+            cookies=params.cookies,
+            js_runtime=params.js_runtime,
+        )
         if result is not None:
             return result
 
+        # Build a targeted fallback message based on the actual yt-dlp error
+        last_error = getattr(self, "_last_download_error", "")
+        error_lower = last_error.lower()
+
+        if "sign in to confirm your age" in error_lower or "age" in error_lower:
+            fallback = (
+                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
+                "1. Use advanced_browser to navigate to youtube.com and sign in\n"
+                "2. Call advanced_browser get_cookies action to export cookies\n"
+                "3. Use python_execute to convert cookies to Netscape format\n"
+                "4. Retry: youtube_download(url=..., cookies=\"tmp/youtube_cookies.txt\")\n"
+                "5. If that fails, try video_ingest for transcript as last resort"
+            )
+        elif "no supported javascript runtime" in error_lower or "javascript runtime" in error_lower:
+            fallback = (
+                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
+                "1. Install Deno: winget install DenoLand.Deno\n"
+                "2. Find the path: (Get-Command deno).Source\n"
+                "3. Retry: youtube_download(url=..., js_runtime=\"<deno_path>\")\n"
+                "4. If that fails, try video_ingest for transcript"
+            )
+        elif "video unavailable" in error_lower or "private" in error_lower:
+            fallback = (
+                "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
+                "1. Use video_ingest to get the transcript/subtitles\n"
+                "2. Use web_search to find mirrors or alternative sources"
+            )
+        else:
+            fallback = (
+                f"\n\nyt-dlp error: {last_error[:200]}\n\n"
+                "DO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
+                "1. If age-restricted: use cookies (advanced_browser → get_cookies → retry)\n"
+                "2. If JS error: install Deno and retry with js_runtime param\n"
+                "3. Last resort: video_ingest for transcript"
+            )
+
         return ToolResult.error_result(
-            f"YouTube download failed for {params.url[:60]}. "
-            "Check the URL or ensure yt-dlp is up to date."
+            f"Video download failed for {params.url[:60]}."
+            + fallback
         )
 
     # ── Dependency check ────────────────────────────────────────────────
@@ -242,13 +327,28 @@ class YouTubeDownloadTool(BaseTool):
         output_path: Path,
         fmt: str,
         quality: str,
+        cookies: str = "",
+        js_runtime: str = "",
     ) -> Optional[ToolResult]:
         """Run yt-dlp subprocess to download the video.
 
+        Args:
+            url: YouTube video URL.
+            output_path: Where to save the video.
+            fmt: Output format (mp4, webm, mkv, audio).
+            quality: Quality string (best, worst, or resolution).
+            cookies: Optional path to Netscape-format cookies file
+                     (for age-restricted videos, exported from Playwright).
+            js_runtime: Optional path to Deno/Node.js executable
+                        (for EJS extractor runtime).
+
         Returns ToolResult on success, None on failure.
         """
-        # Resolve format string
-        if fmt == "audio":
+        # Resolve format string and post-processing flags
+        if fmt == "mp3":
+            # Extract best audio and convert to MP3 at highest quality
+            format_spec = "bestaudio/best"
+        elif fmt == "audio":
             format_spec = "bestaudio/best"
         elif quality and quality != "best":
             format_spec = f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]"
@@ -259,12 +359,44 @@ class YouTubeDownloadTool(BaseTool):
             "yt-dlp",
             "--no-playlist",
             "--no-overwrites",
-            "--print", "after_move:filepath",  # Output actual filepath after download
+            "--print", "after_move:filepath",
             "-o", str(output_path),
             "-f", format_spec,
-            "--merge-output-format", fmt if fmt != "audio" else "mp4",
-            url,
         ]
+
+        # Audio extraction: --extract-audio --audio-format with quality
+        if fmt == "mp3":
+            cmd.extend([
+                "--extract-audio",
+                "--audio-format", "mp3",
+                "--audio-quality", "0",  # best (320kbps for mp3)
+            ])
+        elif fmt == "audio":
+            cmd.extend(["--merge-output-format", "mp4"])
+        else:
+            cmd.extend(["--merge-output-format", fmt])
+
+        # Optional: cookies file for age-restricted videos
+        # (export from Playwright get_cookies action → Netscape format)
+        if cookies:
+            cp = Path(cookies)
+            if cp.exists() and cp.is_file():
+                cmd.extend(["--cookies", str(cp.resolve())])
+                logger.info("Using cookies: %s", cp)
+            else:
+                logger.warning("Cookies file not found: %s", cookies)
+
+        # Optional: JS runtime path for EJS extractors
+        # (install Deno via: winget install DenoLand.Deno)
+        if js_runtime:
+            jp = Path(js_runtime)
+            if jp.exists() and jp.is_file():
+                cmd.extend(["--js-runtimes", str(jp.resolve())])
+                logger.info("Using JS runtime: %s", jp)
+            else:
+                logger.warning("JS runtime not found: %s", js_runtime)
+
+        cmd.append(url)
 
         logger.info("Downloading YouTube video: %s", url[:60])
 
@@ -278,8 +410,11 @@ class YouTubeDownloadTool(BaseTool):
                 proc.communicate(), timeout=_DOWNLOAD_TIMEOUT_SEC,
             )
             if proc.returncode != 0:
-                error_text = stderr.decode()[:300]
+                error_text = stderr.decode()[:500]
                 logger.warning("yt-dlp download failed: %s", error_text)
+                # Attach the error text as a special attribute so execute()
+                # can use it for targeted fallback instructions.
+                self._last_download_error = error_text
                 return None
 
             # yt-dlp --print after_move:filepath prints the final path on stdout

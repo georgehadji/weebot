@@ -26,25 +26,40 @@ class RoleSectionMapping:
             "invariant_rules",
             "operating_principles",
             "response_style",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ],
         "researcher": [
             "identity",
             "invariant_rules",
             "operating_principles",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ],
         "analyst": [
             "identity",
             "invariant_rules",
             "operating_principles",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ],
         "automation": [
             "identity",
             "invariant_rules",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ],
         "documentation": [
             "identity",
             "operating_principles",
             "response_style",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ],
         "custom": [],  # Custom roles have no defaults
     }
@@ -57,12 +72,15 @@ class RoleSectionMapping:
         """
         if role in cls.DEFAULT:
             return cls.DEFAULT[role]
-        # Unknown role gets everything
+        # Unknown role gets everything + new sections
         return [
             "identity",
             "invariant_rules",
             "operating_principles",
             "response_style",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
         ]
 
     @classmethod

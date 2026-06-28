@@ -67,7 +67,6 @@ MODEL_CASCADE = {
             max_retries=2,
             use_for=["coding", "refactoring", "debugging", "analysis"],
             description="Qwen3-Coder-480B MoE — purpose-built coding specialist, 1M context.",
-            recommended=True,
         ),
         ModelConfig(
             id="poolside/laguna-m.1:free",
@@ -107,8 +106,8 @@ MODEL_CASCADE = {
         ),
         # --- BUDGET tier ---
         ModelConfig(
-            id="deepseek/deepseek-v4-flash",
-            name="DeepSeek V4 Flash",
+            id="deepseek/deepseek-v4-flash:thinking",
+            name="DeepSeek V4 Flash :thinking",
             tier="budget",
             prompt_price=0.0983,
             completion_price=0.1966,
@@ -116,7 +115,8 @@ MODEL_CASCADE = {
             timeout_seconds=30,
             max_retries=2,
             use_for=["coding", "refactoring", "debugging", "analysis"],
-            description="DeepSeek V4 Flash — $0.10/1M, 1M context, reliable coding fallback.",
+            description="DeepSeek V4 Flash :thinking — $0.10/1M, 1M context, CoT reasoning for coding.",
+            recommended=True,
         ),
         ModelConfig(
             id="qwen/qwen3-coder-30b-a3b-instruct",
@@ -156,8 +156,7 @@ MODEL_CASCADE = {
             timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "analysis", "chat", "planning"],
-            description="Kimi K2.6 free tier — recommended default for analysis.",
-            recommended=True,
+            description="Kimi K2.6 free tier — long-horizon analysis fallback.",
         ),
         ModelConfig(
             id="nex-agi/nex-n2-pro:free",
@@ -185,8 +184,8 @@ MODEL_CASCADE = {
         ),
         # --- BUDGET tier ---
         ModelConfig(
-            id="deepseek/deepseek-v4-flash",
-            name="DeepSeek V4 Flash",
+            id="deepseek/deepseek-v4-flash:thinking",
+            name="DeepSeek V4 Flash :thinking",
             tier="budget",
             prompt_price=0.0983,
             completion_price=0.1966,
@@ -194,7 +193,8 @@ MODEL_CASCADE = {
             timeout_seconds=30,
             max_retries=2,
             use_for=["analysis", "chat", "summarization"],
-            description="DeepSeek V4 Flash — $0.10/1M, 1M context, fast analysis fallback.",
+            description="DeepSeek V4 Flash :thinking — $0.10/1M, 1M context, CoT reasoning for analysis.",
+            recommended=True,
         ),
     ],
 
@@ -210,8 +210,7 @@ MODEL_CASCADE = {
             timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "analysis", "chat"],
-            description="Kimi K2.6 free tier — best overall model for chat.",
-            recommended=True,
+            description="Kimi K2.6 free tier — chat fallback.",
         ),
         ModelConfig(
             id="nex-agi/nex-n2-pro:free",
@@ -237,6 +236,20 @@ MODEL_CASCADE = {
             use_for=["chat", "summarization"],
             description="Meta Llama 3.3 70B — battle-tested, reliable, multilingual.",
         ),
+        # --- BUDGET tier ---
+        ModelConfig(
+            id="deepseek/deepseek-v4-flash",
+            name="DeepSeek V4 Flash",
+            tier="budget",
+            prompt_price=0.0983,
+            completion_price=0.1966,
+            context_length=1049000,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["chat", "analysis"],
+            description="DeepSeek V4 Flash — $0.10/1M, 1M context, recommended for chat.",
+            recommended=True,
+        ),
     ],
 
     "planning": [
@@ -251,8 +264,7 @@ MODEL_CASCADE = {
             timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "analysis", "planning"],
-            description="Kimi K2.6 free tier — long-horizon planning and coding.",
-            recommended=True,
+            description="Kimi K2.6 free tier — planning fallback.",
         ),
         ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",
@@ -278,6 +290,20 @@ MODEL_CASCADE = {
             use_for=["planning", "analysis"],
             description="Hermes 3 405B — advanced agentic capabilities, tool use, planning.",
         ),
+        # --- STANDARD tier ---
+        ModelConfig(
+            id="z-ai/glm-5.2:thinking",
+            name="GLM 5.2 :thinking",
+            tier="standard",
+            prompt_price=0.95,
+            completion_price=3.0,
+            context_length=1049000,
+            timeout_seconds=60,
+            max_retries=2,
+            use_for=["planning", "analysis", "coding"],
+            description="Z.ai GLM 5.2 :thinking — reasoning model (effort=xhigh), 1M context, Design Arena #1 coding.",
+            recommended=True,
+        ),
         # --- BUDGET tier ---
         ModelConfig(
             id="deepseek/deepseek-v4-flash",
@@ -289,7 +315,7 @@ MODEL_CASCADE = {
             timeout_seconds=45,
             max_retries=2,
             use_for=["planning", "analysis"],
-            description="DeepSeek V4 Flash — fast, 1M context planning fallback.",
+            description="DeepSeek V4 Flash — fast, 1M context, budget planning fallback.",
         ),
     ],
 
@@ -305,8 +331,7 @@ MODEL_CASCADE = {
             timeout_seconds=20,
             max_retries=3,
             use_for=["subagent", "chat", "analysis"],
-            description="OpenAI 21B MoE — fast, Apache 2.0, ideal for subagent dispatch.",
-            recommended=True,
+            description="OpenAI 21B MoE — fast, Apache 2.0, subagent dispatch fallback.",
         ),
         ModelConfig(
             id="poolside/laguna-xs.2:free",
@@ -343,7 +368,8 @@ MODEL_CASCADE = {
             timeout_seconds=20,
             max_retries=3,
             use_for=["subagent", "chat"],
-            description="OpenAI GPT-4.1 Nano — $0.10/1M, 1M context, reliable quality.",
+            description="OpenAI GPT-4.1 Nano — $0.10/1M, 1M context, recommended for subagent.",
+            recommended=True,
         ),
     ],
 
@@ -359,8 +385,7 @@ MODEL_CASCADE = {
             timeout_seconds=120,
             max_retries=2,
             use_for=["long_context", "analysis", "planning"],
-            description="NVIDIA 550B frontier model — 1M context, best for giant inputs.",
-            recommended=True,
+            description="NVIDIA 550B frontier model — 1M context, giant-input fallback.",
         ),
         ModelConfig(
             id="qwen/qwen3-coder:free",
@@ -397,7 +422,8 @@ MODEL_CASCADE = {
             timeout_seconds=120,
             max_retries=2,
             use_for=["long_context", "analysis"],
-            description="Meta Llama 4 Scout — $0.10/1M, 10M context, extreme long-context tasks.",
+            description="Meta Llama 4 Scout — $0.10/1M, 10M context, recommended for long context.",
+            recommended=True,
         ),
     ],
 }
@@ -419,12 +445,16 @@ TOKEN_THRESHOLDS = {
 def select_model_by_tokens(task_type: str, estimated_tokens: int) -> ModelConfig:
     """Select optimal model based on estimated token count."""
     if estimated_tokens >= TOKEN_THRESHOLDS["long_context"]:
-        models = MODEL_CASCADE.get("long_context", [])
-        if models:
-            return models[0]
+        recommended = get_recommended_model("long_context")
+        if recommended:
+            return recommended
 
     if estimated_tokens >= TOKEN_THRESHOLDS["medium_context"]:
+        # Prefer recommended (paid) model; fall back to first model with sufficient context
         models = MODEL_CASCADE.get(task_type, [])
+        recommended = get_recommended_model(task_type)
+        if recommended:
+            return recommended
         for model in models:
             if model.context_length >= 128000:
                 return model

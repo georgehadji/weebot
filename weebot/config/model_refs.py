@@ -29,6 +29,16 @@ MODEL_CASCADE_TIER1: str = "z-ai/glm-5.2"
 1M context, long-horizon agent workflows, project-level SWE, strong coding.
 Routed via OpenRouter (z-ai provider).  $1.20/$4.10 per 1M tokens."""
 
+# ── Vision-capable models (VLM) ───────────────────────────────────
+MODEL_VISION_PRIMARY: str = "openai/gpt-4o"
+"""Primary VLM: GPT-4o — best multimodal, tool use, 128K context. $2.50/$10.00 per 1M."""
+
+MODEL_VISION_FAST: str = "google/gemini-2.5-flash"
+"""Fast VLM: Gemini 2.5 Flash — cheap, strong vision, 1M context. $0.15/$0.60 per 1M."""
+
+MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct:free"
+"""Free VLM: Qwen2.5-VL 72B — open vision model, free tier via OpenRouter."""
+
 MODEL_BUDGET: str = "x-ai/grok-build-0.1"
 """Budget model for non-critical operations (compression, curation, defaults).
 Same as Tier 1 — fast coding model via direct XAI_API_KEY."""
@@ -61,8 +71,8 @@ def get_vs_model() -> str:
 # ========================================================================
 # Task-specific
 # ========================================================================
-MODEL_PLANNER: str = "x-ai/grok-build-0.1"
-"""Planning: Grok Build 0.1 — fast coding model for agentic planning via direct XAI_API_KEY."""
+MODEL_PLANNER: str = "z-ai/glm-5.2:thinking"
+"""Planning: GLM 5.2 :thinking — reasoning model (effort=xhigh), 1M context, Design Arena #1 coding. $0.95/$3.00 per 1M."""
 
 MODEL_CODE_REVIEW: str = "x-ai/grok-4.3"
 """Code review: Grok 4.3 — reasoning model, high factual accuracy, 1M context."""
@@ -98,14 +108,14 @@ MODEL_ROLE_DOCUMENTATION: str = "deepseek/deepseek-v4-flash"
 
 _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
-        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — direct API, structured output
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast
+        "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
         "qwen/qwen3.7-max",                       # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
-        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast math/reasoning
-        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
-        "x-ai/grok-4.3",                          # fallback 2: Grok 4.3 — factual accuracy
+        "deepseek/deepseek-v4-flash:thinking",    # primary: DeepSeek V4 Flash :thinking — math/reasoning
+        "moonshotai/kimi-k2.6:thinking",          # fallback 1: Kimi K2.6 :thinking
+        "x-ai/grok-4.3:thinking",                 # fallback 2: Grok 4.3 :thinking — factual accuracy
     ],
     "coder": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
@@ -113,14 +123,14 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
     ],
     "executor": [
-        "z-ai/glm-5.2",                           # primary: GLM 5.2 — 1M ctx, long-horizon, strong coding
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast
-        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
+        "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking — 1M ctx, reasoning xhigh
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
+        "moonshotai/kimi-k2.6:thinking",          # fallback 2: Kimi K2.6 :thinking — structured + CoT
     ],
     "reviewer": [
-        "x-ai/grok-4.3",                          # primary: Grok 4.3 — factual accuracy
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — reasoning
-        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
+        "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking — factual accuracy + CoT
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — reasoning
+        "moonshotai/kimi-k2.6:thinking",          # fallback 2: Kimi K2.6 :thinking
     ],
     "admin": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
@@ -143,19 +153,24 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "minimax/minimax-m3",
     ],
     "planner": [
-        "moonshotai/kimi-k2.6",                   # primary: Kimi K2.6 — structured planning
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash
+        "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — structured planning + CoT
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking
         "x-ai/grok-build-0.1",                    # fallback 2: Grok Build — agentic
     ],
     "planner_sub": [
-        "moonshotai/kimi-k2.6",
-        "deepseek/deepseek-v4-flash",
+        "moonshotai/kimi-k2.6:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
         "deepseek/deepseek-v4-flash",             # primary: fast, cheap
         "moonshotai/kimi-k2.6",
-        "sourceful/riverflow-v2.5-pro:free",
+        "minimax/minimax-m3",                     # fallback 2: MiniMax M3 — paid, $0.30/$1.20
+    ],
+    "vision": [
+        "openai/gpt-4o",                          # primary: best vision + tool use
+        "google/gemini-2.5-flash",                # fallback 1: cheap, strong vision
+        "qwen/qwen2.5-vl-72b-instruct:free",      # fallback 2: free tier
     ],
 }
 
@@ -222,11 +237,11 @@ MODEL_RTK_STANDARD: str = "qwen/qwen3.7-max"
 # ========================================================================
 # Image Generation Models (text → image via OpenRouter)
 # ========================================================================
-MODEL_IMAGE_FREE: str = "sourceful/riverflow-v2.5-pro:free"
-"""Default free image generation: Sourceful Riverflow V2.5 Pro — FREE, high quality."""
+MODEL_IMAGE_FREE: str = "black-forest-labs/flux.2-klein-4b"
+"""Budget image generation: Flux.2 Klein 4B — cheapest paid, fast, decent quality."""
 
-MODEL_IMAGE_FAST: str = "sourceful/riverflow-v2.5-fast:free"
-"""Fast free image generation: Sourceful Riverflow V2.5 Fast — FREE, 2-3x faster."""
+MODEL_IMAGE_FAST: str = "black-forest-labs/flux.2-flex"
+"""Fast image generation: Flux.2 Flex — batch-optimized, fast throughput."""
 
 MODEL_IMAGE_VECTOR: str = "recraft/recraft-v4.1-pro-vector"
 """Professional vector/SVG generation: Recraft V4.1 Pro Vector — logos, icons, brand assets."""
@@ -244,8 +259,6 @@ MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
 def get_image_models() -> list[str]:
     """Return the canonical list of image generation model IDs."""
     return [
-        "sourceful/riverflow-v2.5-pro:free",
-        "sourceful/riverflow-v2.5-fast:free",
         "black-forest-labs/flux.2-pro",
         "black-forest-labs/flux.2-flex",
         "black-forest-labs/flux.2-klein-4b",
@@ -268,9 +281,9 @@ def get_image_models() -> list[str]:
 IMAGE_CASCADE: dict[str, list[str]] = {
     # ── Website hero banners — photorealistic, high impact ──────────
     "hero": [
-        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE — good general quality
-        "x-ai/grok-imagine-image-quality",       # 2nd: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",           # 3rd: paid — photorealistic
+        "x-ai/grok-imagine-image-quality",       # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",           # 2nd: paid — photorealistic
+        "black-forest-labs/flux.2-max",           # 3rd: paid — max quality
     ],
 
     # ── Logos, brand assets, icons — vector output preferred ────────
@@ -282,17 +295,17 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Small icons, favicons, UI elements ──────────────────────────
     "icon": [
-        "sourceful/riverflow-v2.5-fast:free",    # 1st: FREE — fast
-        "black-forest-labs/flux.2-klein-4b",     # 2nd: cheap — fastest paid
-        "recraft/recraft-v4.1-pro-vector",       # 3rd: paid — clean vector
+        "black-forest-labs/flux.2-klein-4b",     # 1st: cheapest paid — fast
+        "recraft/recraft-v4.1-pro-vector",       # 2nd: paid — clean vector
+        "black-forest-labs/flux.2-flex",          # 3rd: paid — batch-optimized
     ],
 
     # ── Photorealistic — products, people, places ───────────────────
     "photo": [
-        "sourceful/riverflow-v2.5-pro:free",     # 1st: FREE
-        "x-ai/grok-imagine-image-quality",       # 2nd: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",           # 3rd: paid — excellent quality
-        "black-forest-labs/flux.2-max",           # 4th: paid — max quality
+        "x-ai/grok-imagine-image-quality",       # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",           # 2nd: paid — excellent quality
+        "black-forest-labs/flux.2-max",           # 3rd: paid — max quality
+        "recraft/recraft-v4.1-pro",               # 4th: paid — consistent output
     ],
 
     # ── Diagrams, charts, UI mockups, technical illustrations ───────
@@ -304,9 +317,9 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Social media, thumbnails — fast, cheap, decent ──────────────
     "social": [
-        "sourceful/riverflow-v2.5-fast:free",     # 1st: FREE + fast
-        "black-forest-labs/flux.2-klein-4b",      # 2nd: cheapest paid
-        "black-forest-labs/flux.2-flex",           # 3rd: batch-optimized
+        "black-forest-labs/flux.2-klein-4b",      # 1st: cheapest paid — fast
+        "black-forest-labs/flux.2-flex",           # 2nd: batch-optimized
+        "x-ai/grok-imagine-image-quality",        # 3rd: cheap (~$0.05/img) — direct xAI
     ],
 
     # ── Text-heavy images — signs, banners with text ────────────────
@@ -325,9 +338,9 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── General / catch-all ────────────────────────────────────────
     "general": [
-        "sourceful/riverflow-v2.5-pro:free",      # 1st: FREE — high quality
-        "x-ai/grok-imagine-image-quality",        # 2nd: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",            # 3rd: paid — photorealistic
+        "x-ai/grok-imagine-image-quality",        # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",            # 2nd: paid — photorealistic
+        "black-forest-labs/flux.2-flex",           # 3rd: paid — batch-optimized
     ],
 }
 
@@ -339,7 +352,7 @@ def get_image_model_for(use_case: str, tier: int = 0, free_only: bool = False) -
         use_case: One of 'hero', 'logo', 'icon', 'photo', 'diagram',
                   'social', 'text', 'brand', 'general'.
         tier: 0 = primary, 1 = first fallback, 2 = second fallback, etc.
-        free_only: If True, skip paid models and return the first free one.
+        free_only: Deprecated — all models are now paid. Returns tier 0.
 
     Returns:
         Model ID string, or the SVG template fallback marker 'svg:hero',
@@ -350,10 +363,8 @@ def get_image_model_for(use_case: str, tier: int = 0, free_only: bool = False) -
     """
     cascade = IMAGE_CASCADE.get(use_case, IMAGE_CASCADE["general"])
     if free_only:
-        for m in cascade:
-            if ":free" in m:
-                return m
-        return "svg:" + use_case  # ultimate fallback: template SVG
+        # No free models remain; return the cheapest paid option (tier 0)
+        return cascade[0] if cascade else "svg:" + use_case
     if tier < len(cascade):
         return cascade[tier]
     return cascade[-1]  # clamp to last available
@@ -521,20 +532,18 @@ MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 # ========================================================================
 
 def get_free_models() -> list[str]:
-    """Return the canonical list of free-tier model IDs.
+    """Return the canonical list of budget (paid) model IDs.
 
-    Verified against OpenRouter API 2026-06-07.
-    ``nvidia/nemotron-3-ultra-550b-a55b:free`` is the recommended default.
-    ``nvidia/nemotron-3.5-content-safety:free`` excluded — too slow at inference.
+    Previously returned free-tier models; now returns cheapest paid alternatives.
+    Verified against OpenRouter API 2026-06.
     """
     return [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "qwen/qwen3-coder:free",
-        "qwen/qwen3.6-plus:free",
-        "google/gemini-2.0-flash-exp:free",
+        "deepseek/deepseek-v4-flash",
+        "qwen/qwen3-coder-30b-a3b-instruct",
+        "openai/gpt-4.1-nano",
         "minimax/minimax-m3",
+        "meta-llama/llama-4-scout",
+        "nex-agi/nex-n2-pro",
     ]
 
 
@@ -556,8 +565,8 @@ RERANK_MODEL_FAST: str = "cohere/rerank-4-fast"
 Use for latency-sensitive paths: web search result reordering,
 conversation compressor turn selection."""
 
-RERANK_MODEL_FREE: str = "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
-"""NVIDIA Nemotron Rerank VL 1B — free tier via OpenRouter.
+RERANK_MODEL_FREE: str = "cohere/rerank-4-fast"
+"""Cohere Rerank 4 Fast — cheapest paid rerank, 32K context, 100+ languages.
 Use for high-throughput, low-criticality paths (search, memory, knowledge graph).
 NOTE: Not confirmed against the Cohere-compatible rerank endpoint.  The
 adapter falls back to RERANK_MODEL_VERIFIED if this model returns a non-200
@@ -644,54 +653,52 @@ def get_models_for_role_and_task(
 # ========================================================================
 
 ROLE_MODEL_CONFIG: dict[str, list[str]] = {
-    # Moonshot (primary) → NVIDIA frontier (deep plan) → DeepSeek (budget)
+    # Z.ai GLM 5.2 :thinking (reasoning xhigh, 1M ctx) → DeepSeek Flash :thinking → Kimi K2.6 :thinking
     "planner": [
-        "moonshotai/kimi-k2.6:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "deepseek/deepseek-v4-flash",
+        "z-ai/glm-5.2:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
+        "moonshotai/kimi-k2.6:thinking",
     ],
-    # Cross-lab diversity: OpenAI OSS → NousResearch → xAI (paid fallback)
+    # Cross-lab diversity: xAI Grok 4.3 :thinking (xAI lab ≠ Z.ai planner) → DeepSeek :thinking → Grok Build
     "critic": [
-        "openai/gpt-oss-120b:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-4.3:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
-    # Qwen Coder (coding-specialist MoE) → Poolside (coding agent) → Kimi → DeepSeek
+    # GLM 5.2 :thinking (primary, reasoning xhigh) → DeepSeek Flash :thinking → Kimi K2.6 :thinking
     "executor": [
-        "qwen/qwen3-coder:free",
-        "poolside/laguna-m.1:free",
-        "moonshotai/kimi-k2.6:free",
-        "deepseek/deepseek-v4-flash",
+        "z-ai/glm-5.2:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
+        "moonshotai/kimi-k2.6:thinking",
     ],
-    # NVIDIA reasoning models purpose-built for sub-agent/verification roles
+    # DeepSeek Flash :thinking (fast CoVe) → Grok 4.3 :thinking (factual) → Qwen Max
     "verifier": [
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nex-agi/nex-n2-pro:free",
-        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-flash:thinking",
+        "x-ai/grok-4.3:thinking",
+        "qwen/qwen3.7-max",
     ],
-    # Meta Llama (battle-tested) → Google Gemma → Kimi
+    # DeepSeek Flash (fast, cheap — no thinking needed for summarization)
     "summarizer": [
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-4-31b-it:free",
-        "moonshotai/kimi-k2.6:free",
+        "deepseek/deepseek-v4-flash",
+        "minimax/minimax-m3",
+        "moonshotai/kimi-k2.6",
     ],
-    # Fast, disposable: OpenAI OSS 20B → Poolside XS → GPT-4.1 Nano (budget)
+    # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
-        "openai/gpt-oss-20b:free",
-        "poolside/laguna-xs.2:free",
         "openai/gpt-4.1-nano",
+        "deepseek/deepseek-v4-flash:thinking",
+        "qwen/qwen3-coder-30b-a3b-instruct",
     ],
-    # Independent code review: cross-lab from executor's Qwen Coder
+    # Independent code review: xAI Grok 4.3 :thinking (xAI ≠ Z.ai executor) → DeepSeek :thinking → Grok Build
     "reviewer": [
-        "openai/gpt-oss-120b:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "x-ai/grok-4.3:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
-    # Idea synthesis: Kimi for multi-signal reasoning
+    # Kimi K2.6 :thinking (broad knowledge, CoT) → GLM 5.2 :thinking → DeepSeek Flash :thinking
     "dreamer": [
-        "moonshotai/kimi-k2.6:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "deepseek/deepseek-v4-flash",
+        "moonshotai/kimi-k2.6:thinking",
+        "z-ai/glm-5.2:thinking",
+        "deepseek/deepseek-v4-flash:thinking",
     ],
 }

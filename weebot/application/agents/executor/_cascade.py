@@ -332,7 +332,11 @@ class CascadeExecutor:
         self,
         messages: List[Dict[str, Any]],
     ) -> LLMResponse | None:
-        """Last-resort: fetch current free models from OpenRouter and try the first."""
+        """Last-resort: fetch available models from OpenRouter and try the best.
+
+        Prefers paid models with tools support; falls back to free models only
+        if no paid models are available.
+        """
         try:
             import httpx
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -343,31 +347,33 @@ class CascadeExecutor:
             logger.warning("Live model rescue: failed to fetch model list: %s", exc)
             return None
 
+        paid_models: list[dict] = []
         free_models: list[dict] = []
         for m in data.get("data", []):
             mid = m.get("id", "")
-            if ":free" not in mid:
-                continue
             params = m.get("supported_parameters", [])
             if "tools" not in params:
                 continue
             ctx = m.get("context_length", 0)
-            free_models.append({"id": mid, "ctx": ctx})
+            entry = {"id": mid, "ctx": ctx}
+            if ":free" in mid:
+                free_models.append(entry)
+            else:
+                paid_models.append(entry)
 
-        if not free_models:
-            for m in data.get("data", []):
-                if ":free" in m.get("id", ""):
-                    free_models.append({"id": m["id"], "ctx": m.get("context_length", 0)})
+        # Prefer paid models; fall back to free only as absolute last resort
+        candidates = paid_models if paid_models else free_models
 
-        if not free_models:
-            logger.warning("Live model rescue: no free models found")
+        if not candidates:
+            logger.warning("Live model rescue: no models with tools support found")
             return None
 
-        free_models.sort(key=lambda m: m["ctx"], reverse=True)
-        rescue_id = free_models[0]["id"]
+        candidates.sort(key=lambda m: m["ctx"], reverse=True)
+        rescue_id = candidates[0]["id"]
+        is_free = ":free" in rescue_id
         logger.warning(
-            "Live model rescue: trying %s (from %d live free models)",
-            rescue_id, len(free_models),
+            "Live model rescue: trying %s (from %d paid + %d free candidates)",
+            rescue_id, len(paid_models), len(free_models),
         )
 
         try:

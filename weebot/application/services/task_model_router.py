@@ -30,13 +30,13 @@ class TaskCategory(Enum):
 CATEGORY_MODEL: dict[TaskCategory, str] = {
     TaskCategory.CODING: "x-ai/grok-build-0.1",
     TaskCategory.FILE_OPS: "minimax/minimax-m3",
-    TaskCategory.RESEARCH: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    TaskCategory.RESEARCH: "deepseek/deepseek-v4-flash:thinking",
     TaskCategory.BROWSER: "deepseek/deepseek-v4-flash",  # strong tool-use for browser automation
-    TaskCategory.REVIEW: "x-ai/grok-4.3",
-    TaskCategory.PLANNING: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    TaskCategory.SECURITY: "x-ai/grok-4.3",
+    TaskCategory.REVIEW: "x-ai/grok-4.3:thinking",
+    TaskCategory.PLANNING: "z-ai/glm-5.2:thinking",
+    TaskCategory.SECURITY: "x-ai/grok-4.3:thinking",
     TaskCategory.SUMMARIZATION: "minimax/minimax-m3",
-    TaskCategory.GENERAL: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    TaskCategory.GENERAL: "deepseek/deepseek-v4-flash",
 }
 
 # ── Keyword patterns ───────────────────────────────────────────────

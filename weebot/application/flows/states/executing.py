@@ -541,15 +541,29 @@ class ExecutingState(FlowState):
                 logger.warning("Knowledge graph extraction failed: %s", kg_exc)
         # ────────────────────────────────────────────────────────────
 
-        # Check if terminate was called
+        # Check if terminate was called — this means the executor finished
+        # the CURRENT step, not the entire plan.  Only transition to
+        # VerifyingState if there are no more pending steps.
         if inner_should_terminate:
-            logger.info("Terminate detected, completing task")
-            context.set_state(VerifyingState())
+            logger.info("Terminate detected for step %s", step.id)
+            # Check if there are more steps to execute
+            next_step = context._plan.get_next_step()
+            if next_step is not None:
+                logger.info(
+                    "Continuing to next step: %s (%d pending remaining)",
+                    next_step.id,
+                    len(context._plan.get_pending_steps()),
+                )
+                # Don't transition — the while loop in run() will re-enter
+                # ExecutingState which calls get_next_step()
+            else:
+                logger.info("All steps complete after terminate — verifying")
+                context.set_state(VerifyingState())
             return
 
         # Check if all steps are now complete
         if context._auto_terminate_on_plan_complete and context._plan.is_complete():
-            _audit_browser_invocation(context)
+            self._audit_browser_invocation(context)
             logger.info("All plan steps completed. Auto-terminating.")
             context.set_state(VerifyingState())
             return

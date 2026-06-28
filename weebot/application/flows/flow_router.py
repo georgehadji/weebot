@@ -2,7 +2,8 @@
 
 Extracted from PlanActFlow.run() to reduce coupling and make state
 routing testable in isolation.  Determines whether a session should
-resume, re-plan, or enter plan-review approval.
+resume, re-plan, enter product-gate clarification, or plan-review
+approval.
 
 Returns both the resolved FlowState and a (possibly mutated) Session,
 so callers can apply context mutations alongside the transition.
@@ -32,6 +33,8 @@ class FlowRouter:
         """Determine the initial flow state for a session.
 
         Priority:
+        0. If product_gate_pending is set, route back to ProductGateState
+           with the user's clarification.
         1. If plan_pending_approval is set, route based on user response.
         2. If an incomplete plan exists, resume execution.
         3. If the session was WAITING with a plan, resume execution.
@@ -41,6 +44,19 @@ class FlowRouter:
             (FlowState, Session) — the state to transition to, and the
             (possibly mutated) session with context flags updated.
         """
+        # Priority 0: Product gate clarification pending
+        product_gate_pending = session.context.get("_product_gate_pending")
+        if product_gate_pending:
+            from weebot.application.flows.states.product_gate import ProductGateState
+
+            # Clear the pending flag
+            extra_out = {**(extra or {}), "_product_gate_pending": False}
+            updated = session.model_copy(
+                update={"context": session.context.model_copy(update={"extra": extra_out})}
+            )
+            logger.info("Resuming product gate with user clarification")
+            return ProductGateState(resume_with=prompt), updated
+
         plan_pending_approval = session.context.get("plan_pending_approval")
 
         if plan_pending_approval:
@@ -56,6 +72,9 @@ class FlowRouter:
 
             if response in _APPROVE_TOKENS or not response:
                 logger.info("Plan approved by user — proceeding to execution")
+                # Transition from WAITING → RUNNING so the main loop
+                # doesn't break prematurely (it breaks on WAITING).
+                updated = updated.set_status(SessionStatus.RUNNING)
                 return ExecutingState(), updated
 
             logger.info("User requested plan modification: %r", prompt[:80])
@@ -71,10 +90,13 @@ class FlowRouter:
 
         if last_plan is not None and not last_plan.is_complete():
             logger.info("Resuming session %s with existing plan", session.id)
+            if session.status == SessionStatus.WAITING:
+                session = session.set_status(SessionStatus.RUNNING)
             return ExecutingState(), session
 
         if session.status == SessionStatus.WAITING and last_plan is not None:
             logger.info("Session %s was waiting, resuming execution", session.id)
+            session = session.set_status(SessionStatus.RUNNING)
             return ExecutingState(), session
 
         return PlanningState(), session

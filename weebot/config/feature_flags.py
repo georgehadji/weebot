@@ -85,7 +85,7 @@ PRODUCT_DECISION_LOG_ENABLED: bool = _env_bool(
 # text + OCR. Only the most recent screenshot is kept live (token control).
 # Plan: tasks/specs/picoagents_vision_in_loop_spec.md
 VISION_IN_LOOP_ENABLED: bool = _env_bool(
-    "WEEBOT_VISION_IN_LOOP", default=False
+    "WEEBOT_VISION_IN_LOOP", default=True
 )
 
 # Phase 2 reflection: after screenshot injection, make a structured LLM call to produce
@@ -96,7 +96,7 @@ VISION_IN_LOOP_ENABLED: bool = _env_bool(
 # image tokens plus the extra round-trip. Keep off unless reflection earns its cost.
 # Plan: tasks/specs/picoagents_vision_in_loop_spec.md (Phase 2)
 VISION_REFLECTION_ENABLED: bool = _env_bool(
-    "WEEBOT_VISION_REFLECTION", default=False
+    "WEEBOT_VISION_REFLECTION", default=True
 )
 
 

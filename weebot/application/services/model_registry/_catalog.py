@@ -1829,15 +1829,6 @@ MODELS: dict[str, ModelConfig] = {
             tier=ModelTier.STANDARD,
             api_key_env="OPENROUTER_API_KEY",
         ),
-        "z-ai/glm-5": ModelConfig(
-            name="GLM 5",
-            provider="openrouter",
-            cost_per_1k_tokens=0.00126,
-            context_window=202752,
-            strengths=[TaskType.AGENTIC, TaskType.ARCHITECTURE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
-            tier=ModelTier.STANDARD,
-            api_key_env="OPENROUTER_API_KEY",
-        ),
         "minimax/minimax-m1": ModelConfig(
             name="MiniMax M1",
             provider="openrouter",
@@ -2064,12 +2055,12 @@ MODELS: dict[str, ModelConfig] = {
             tier=ModelTier.STANDARD,
             api_key_env="OPENROUTER_API_KEY",
         ),
-        "z-ai/glm-5.1": ModelConfig(
-            name="GLM 5.1",
+        "z-ai/glm-5.2": ModelConfig(
+            name="GLM 5.2",
             provider="openrouter",
-            cost_per_1k_tokens=0.00203,
-            context_window=202752,
-            strengths=[TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION],
+            cost_per_1k_tokens=0.00198,
+            context_window=1048576,
+            strengths=[TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.REASONING, TaskType.AGENTIC, TaskType.ARCHITECTURE],
             tier=ModelTier.STANDARD,
             api_key_env="OPENROUTER_API_KEY",
         ),

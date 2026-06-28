@@ -147,6 +147,21 @@ class CatalogValidator:
         report.elapsed_ms = (_t.monotonic() - t0) * 1000
         return report
 
+    # Suffixes that are routing variants, not separate model IDs
+    _ROUTING_SUFFIXES = (":thinking", ":free", ":nitro")
+
+    @staticmethod
+    def _strip_routing_suffix(model_id: str) -> str:
+        """Strip routing variant suffixes to get the base model ID.
+
+        ``z-ai/glm-5.2:thinking`` → ``z-ai/glm-5.2``
+        ``qwen/qwen3-coder:free`` → ``qwen/qwen3-coder``
+        """
+        for suffix in CatalogValidator._ROUTING_SUFFIXES:
+            if model_id.endswith(suffix):
+                return model_id[: -len(suffix)]
+        return model_id
+
     def _check_model(
         self,
         report: ValidationReport,
@@ -159,7 +174,11 @@ class CatalogValidator:
         # e.g. "x-ai/grok-build-0.1" -> prefix "x-ai" -> provider "xai"
         expected_provider = self._model_prefix_to_provider(model_id)
 
-        if model_id not in catalog:
+        # Strip routing suffixes (:thinking, :free, :nitro) for catalog lookup —
+        # these are runtime variants, not separate model IDs in the catalog.
+        base_id = self._strip_routing_suffix(model_id)
+
+        if base_id not in catalog and model_id not in catalog:
             report.warnings.append(
                 ValidationWarning(
                     model_id=model_id,
@@ -171,7 +190,9 @@ class CatalogValidator:
             )
             return
 
-        config = catalog[model_id]
+        # Look up using the base ID (stripped of routing suffix) first,
+        # fall back to the original model_id for backward compatibility.
+        config = catalog.get(base_id) or catalog[model_id]
         try:
             actual_provider = config.provider
         except AttributeError:
@@ -203,6 +224,7 @@ class CatalogValidator:
             "x-ai": "xai",
             "z-ai": "openrouter",   # z-ai models go through OpenRouter
             "moonshotai": "moonshot",  # moonshotai prefix → "moonshot" provider
+            "minimax": "openrouter",  # MiniMax models route through OpenRouter
             "qwen": "openrouter",   # Qwen models go through OpenRouter
             "kimi": "openrouter",   # Kimi models go through OpenRouter
             "nex-agi": "openrouter",
@@ -217,10 +239,9 @@ class CatalogValidator:
             "cohere": "openrouter",
         }
 
-        # Models whose prefix matches the provider name directly (deepseek, moonshotai, minimax, recraft)
+        # Models whose prefix matches the provider name directly
         direct_providers = {
             "deepseek",
-            "minimax",
             "recraft",
         }
 

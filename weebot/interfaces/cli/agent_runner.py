@@ -164,6 +164,7 @@ class AgentRunner:
                 skill_prompt=self._skill_prompt,
                 mediator=self._mediator,
                 steering=self._steering,
+                state_repo=self._state_repo,
             )
             # Store the route in session context for audit and traceability
             session = session.model_copy(update={
@@ -186,6 +187,7 @@ class AgentRunner:
                 skill_prompt=self._skill_prompt,
                 mediator=self._mediator,
                 steering=self._steering,
+                state_repo=self._state_repo,
             )
 
         async for event in flow.run(prompt):
@@ -266,6 +268,7 @@ class AgentRunner:
             skill_prompt=self._skill_prompt,
             mediator=self._mediator,
             steering=self._steering,
+            state_repo=self._state_repo,
         )
 
         async for event in flow.run(answer):
