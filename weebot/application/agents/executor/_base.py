@@ -302,7 +302,11 @@ class ExecutorAgent:
         raise AttributeError(f"'{type(self).__name__}' has no attribute {name!r}")
 
     def _vision_enabled(self) -> bool:
-        """True when vision-in-the-loop is on and the active model accepts images."""
+        """True when vision-in-the-loop feature flag is on.
+
+        Does NOT check the current model — model switching to a VLM
+        is handled by _resolve_model_for_step when screenshots are present.
+        """
         return self._context_compressor.vision_enabled
 
     def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:

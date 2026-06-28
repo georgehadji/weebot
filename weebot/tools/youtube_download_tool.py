@@ -143,6 +143,8 @@ class YouTubeDownloadTool(BaseTool):
         params = YouTubeDownloadParams(url=url, **{
             k: v for k, v in kwargs.items() if v is not None
         })
+        # Reset per-call state
+        self._last_download_error = ""
 
         # 1. Validate URL is HTTPS
         if not _HTTPS_URL_RE.match(params.url):

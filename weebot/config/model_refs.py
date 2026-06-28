@@ -36,8 +36,8 @@ MODEL_VISION_PRIMARY: str = "openai/gpt-4o"
 MODEL_VISION_FAST: str = "google/gemini-2.5-flash"
 """Fast VLM: Gemini 2.5 Flash — cheap, strong vision, 1M context. $0.15/$0.60 per 1M."""
 
-MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct:free"
-"""Free VLM: Qwen2.5-VL 72B — open vision model, free tier via OpenRouter."""
+MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct"
+"""Budget VLM: Qwen2.5-VL 72B — open vision model, paid tier via OpenRouter. Use :free suffix only if credit-constrained."""
 
 MODEL_BUDGET: str = "x-ai/grok-build-0.1"
 """Budget model for non-critical operations (compression, curation, defaults).
@@ -170,7 +170,7 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
         "google/gemini-2.5-flash",                # fallback 1: cheap, strong vision
-        "qwen/qwen2.5-vl-72b-instruct:free",      # fallback 2: free tier
+        "qwen/qwen2.5-vl-72b-instruct",            # fallback 2: budget VLM
     ],
 }
 

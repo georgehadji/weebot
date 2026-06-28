@@ -116,6 +116,6 @@ class PlanReviewState(FlowState):
         try:
             await context._emit(wait_event)
         except Exception:
-            pass
+            _log.debug("Emit through pipeline failed (non-critical)", exc_info=True)
 
         yield wait_event

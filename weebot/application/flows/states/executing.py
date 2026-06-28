@@ -157,7 +157,6 @@ class ExecutingState(FlowState):
                 context._session = context._session.set_fact(
                     "atomic_mail_inbound_pending", False
                 )
-                from weebot.domain.models.session import SessionStatus
                 context._session = context._session.set_status(SessionStatus.WAITING)
                 yield WaitForUserEvent(
                     question=(
@@ -210,7 +209,6 @@ class ExecutingState(FlowState):
                     except ImportError:
                         pass
                 # Mark session as WAITING before yielding so resume works
-                from weebot.domain.models.session import SessionStatus
                 context._session = context._session.set_status(SessionStatus.WAITING)
                 yield WaitForUserEvent(
                     question=(
