@@ -31,9 +31,12 @@ class ComputerUseTool(BaseTool):
     default_timeout_seconds: int = 30
     name: str = "computer_use"
     description: str = (
-        "Control the computer: move mouse, click, type, press keys. "
+        "Control the computer: move mouse, click, type, press keys, "
+        "focus windows, check active window. "
         "Useful for desktop automation, form filling, web interactions. "
-        "Supports dpi_scale param for high-DPI coordinate translation."
+        "Supports dpi_scale param for high-DPI coordinate translation. "
+        "Use require_window to verify correct window is focused before typing. "
+        "Use get_active_window to check which window is in the foreground."
     )
     parameters: dict = {
         "type": "object",
@@ -50,6 +53,9 @@ class ComputerUseTool(BaseTool):
                     "key_down",
                     "key_up",
                     "get_mouse_position",
+                    "get_active_window",
+                    "focus_window",
+                    "hover_and_verify",
                 ],
                 "description": "Action to perform",
             },
@@ -90,6 +96,14 @@ class ComputerUseTool(BaseTool):
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "Modifier keys: ['ctrl', 'shift', 'alt', 'win']",
+            },
+            "window_title": {
+                "type": "string",
+                "description": "Window title to focus (for focus_window action) or verify active (for type/press_key with require_window)",
+            },
+            "require_window": {
+                "type": "string",
+                "description": "If set, verifies this window title is active before typing/pressing. Errors if wrong window is focused.",
             },
         },
         "required": ["action"],
@@ -139,6 +153,8 @@ class ComputerUseTool(BaseTool):
         interval: float = 0.05,
         modifiers: Optional[list[str]] = None,
         dpi_scale: float = 1.0,
+        require_window: Optional[str] = None,
+        window_title: Optional[str] = None,
         **_,
     ) -> ToolResult:
         """Execute computer control action.
@@ -156,6 +172,24 @@ class ComputerUseTool(BaseTool):
             modifiers = modifiers or []
             # Apply DPI scaling to coordinates
             sx, sy = self._scale(x, y, dpi_scale)
+
+            # Active-window focus verification (for type/press_key actions)
+            if require_window and action in ("type", "press_key", "key_down", "key_up"):
+                try:
+                    import pygetwindow as gw
+                    active = gw.getActiveWindow()
+                    active_title = active.title if active else ""
+                    if require_window.lower() not in active_title.lower():
+                        return ToolResult(
+                            output="",
+                            error=(
+                                f"Window focus mismatch: expected '{require_window}', "
+                                f"active window is '{active_title}'. "
+                                "Use focus_window action first to switch to the correct window."
+                            ),
+                        )
+                except Exception:
+                    pass  # Window check is advisory — proceed if unavailable
 
             if action == "move_mouse":
                 if sx is None or sy is None:
@@ -241,6 +275,57 @@ class ComputerUseTool(BaseTool):
             elif action == "get_mouse_position":
                 x, y = pyautogui.position()
                 return ToolResult(output=f"Mouse position: ({x}, {y})")
+
+            elif action == "get_active_window":
+                """Return the title of the currently active (foreground) window."""
+                try:
+                    import pygetwindow as gw
+                    win = gw.getActiveWindow()
+                    title = win.title if win else "(no active window)"
+                    return ToolResult(output=f"Active window: {title}")
+                except Exception:
+                    return ToolResult(output="Active window: (unknown — pygetwindow not available)")
+
+            elif action == "focus_window":
+                """Bring a window to the foreground by title substring."""
+                window_title = kwargs.get("window_title") or kwargs.get("title", "")
+                if not window_title:
+                    return ToolResult(output="", error="window_title required for focus_window")
+                try:
+                    import pygetwindow as gw
+                    matches = gw.getWindowsWithTitle(window_title)
+                    if not matches:
+                        return ToolResult(output="", error=f"No window found matching: {window_title}")
+                    target = matches[0]
+                    await asyncio.to_thread(target.activate)
+                    return ToolResult(output=f"Focused window: {target.title}")
+                except Exception as exc:
+                    return ToolResult(output="", error=f"Failed to focus window: {exc}")
+
+            elif action == "hover_and_verify":
+                """Move mouse to (x,y), capture screenshot, return hover confirmation."""
+                if sx is None or sy is None:
+                    return ToolResult(output="", error="x and y required for hover_and_verify")
+                # Move to position
+                await asyncio.to_thread(pyautogui.moveTo, sx, sy, duration=0.25)
+                await asyncio.sleep(0.2)  # Short pause for UI to respond
+                # Capture screenshot
+                try:
+                    import mss
+                    with mss.mss() as sct:
+                        monitor = sct.monitors[0]
+                        shot = sct.grab(monitor)
+                        from PIL import Image as _PIL
+                        img = _PIL.frombytes("RGB", shot.size, shot.rgb)
+                        buf = BytesIO()
+                        img.save(buf, format="PNG")
+                        b64 = base64.b64encode(buf.getvalue()).decode()
+                except Exception:
+                    b64 = None
+                return ToolResult(
+                    output=f"Hovering at ({sx}, {sy})",
+                    base64_image=b64,
+                )
 
             else:
                 return ToolResult(output="", error=f"Unknown action: {action}")

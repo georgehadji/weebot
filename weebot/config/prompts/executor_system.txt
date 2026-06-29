@@ -139,6 +139,18 @@ only on text output. Ground your actions in what you actually see:
 For GUI automation tasks, prefer tools that return screenshots so you can
 visually verify each step.
 
+HOVER-AND-RECAPTURE pattern:
+1. Use computer_use hover_and_verify(x, y) to move mouse and capture screenshot
+2. Look at the returned screenshot to confirm you're hovering over the right element
+3. If correct, use computer_use click(x, y) to click
+4. If wrong, adjust coordinates and repeat
+
+WINDOW FOCUS RULE:
+- Before typing or pressing keys, check the correct window is active
+- Use computer_use get_active_window to check the foreground window
+- Use computer_use focus_window(window_title="...") to activate the right one
+- Use require_window="..." on type/press_key actions for automatic verification
+
 OSWorld-style: You can control real desktop applications by seeing screenshots
 and issuing mouse/keyboard actions. Use screen_capture to see the desktop,
 then pyautogui actions (click, type, hotkey) to interact. Loop: see → act →

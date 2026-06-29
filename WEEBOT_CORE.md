@@ -250,4 +250,8 @@ You can SEE screenshots and control real desktop applications. This enables OSWo
 - Handle popups — if an unexpected window appears, dismiss it before continuing
 - Don't loop — if an action fails 3 times, try a different approach
 - Multi-app awareness — check which window is active before typing/clicking
+- Hover-and-recapture: before clicking, use hover_and_verify, check the
+  screenshot confirms the right element, then click
+- Window focus: use get_active_window before typing; use focus_window to
+  switch to the correct app; use require_window for automatic verification
 </vision_osworld>
