@@ -1065,6 +1065,53 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             description="Grok Imagine (Quality) — xAI's text-to-image model with photorealism focus. High prompt adherence."
         ),
+        "x-ai/grok-voice-latest": ModelInfo(
+            model_name="x-ai/grok-voice-latest",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=1.5e-05, output_cost_per_token=1.5e-05,
+            max_input_tokens=131072, max_output_tokens=16384,
+            supports_function_calling=True, supports_vision=False,
+            supports_audio_input=True, supports_audio_output=True,
+            supports_system_messages=True,
+            description="Grok Voice Agent (Latest) — xAI's real-time bidirectional audio and voice assistant model."
+        ),
+        "x-ai/grok-voice-think-fast-1.0": ModelInfo(
+            model_name="x-ai/grok-voice-think-fast-1.0",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=2e-05, output_cost_per_token=2e-05,
+            max_input_tokens=131072, max_output_tokens=16384,
+            supports_function_calling=True, supports_vision=False,
+            supports_audio_input=True, supports_audio_output=True,
+            supports_system_messages=True,
+            description="Grok Voice Agent (Think Fast 1.0) — flagship voice model with native real-time reasoning and deep analysis capabilities."
+        ),
+        "x-ai/grok-imagine-video-1.5": ModelInfo(
+            model_name="x-ai/grok-imagine-video-1.5",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=0.0005, output_cost_per_token=0.0,
+            max_input_tokens=4096, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=True,
+            supports_system_messages=True,
+            description="Grok Imagine Video 1.5 — high-fidelity image-to-video and cinematic animation model. $0.50 per generation."
+        ),
+        "x-ai/grok-4.3": ModelInfo(
+            model_name="x-ai/grok-4.3",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=2e-06, output_cost_per_token=1e-05,
+            max_input_tokens=131072, max_output_tokens=16384,
+            supports_function_calling=True, supports_vision=True,
+            supports_system_messages=True, supports_response_schema=True,
+            description="Grok 4.3 — xAI's flagship text generation, reasoning, and structured output model."
+        ),
+        "x-ai/grok-4.20-multi-agent": ModelInfo(
+            model_name="x-ai/grok-4.20-multi-agent",
+            provider=ModelProvider.XAI,
+            input_cost_per_token=5e-06, output_cost_per_token=2.5e-05,
+            max_input_tokens=131072, max_output_tokens=16384,
+            supports_function_calling=True, supports_vision=True,
+            supports_system_messages=True, supports_response_schema=True,
+            description="Grok 4.20 Multi-Agent — specialized real-time multi-agent orchestrator model for deep multi-step tasks."
+        ),
 
         # ── ByteDance Seedream ──────────────────────────────────────
         "bytedance-seed/seedream-4.5": ModelInfo(
@@ -1098,6 +1145,153 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=False,
             description="NVIDIA Nemotron Rerank VL 1B — free-tier rerank model via OpenRouter."
+        ),
+        "z-ai/glm-5v-turbo": ModelInfo(
+            model_name="z-ai/glm-5v-turbo",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=2.6e-06,
+            output_cost_per_token=2.6e-06,
+            max_input_tokens=202752,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Z.AI's GLM-5V-Turbo. Strong VLM coding model, excels in GUI agent tasks and pixel-level replication."
+        ),
+        "z-ai/glm-4.6v": ModelInfo(
+            model_name="z-ai/glm-4.6v",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=6e-07,
+            output_cost_per_token=6e-07,
+            max_input_tokens=131072,
+            max_output_tokens=4096,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Z.AI's GLM-4.6V - Native multimodal model with support for mixed inputs and visual tool use."
+        ),
+        "z-ai/glm-ocr": ModelInfo(
+            model_name="z-ai/glm-ocr",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1e-07,
+            output_cost_per_token=1e-07,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=False,
+            supports_vision=True,
+            supports_system_messages=True,
+            description="Z.AI's GLM-OCR - Lightweight 0.9B layout parsing and high-accuracy text extraction model."
+        ),
+        "z-ai/glm-image": ModelInfo(
+            model_name="z-ai/glm-image",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=4e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's GLM-Image - Autoregressive-diffusion model for high-fidelity text-to-image generation."
+        ),
+        "z-ai/cogview-4": ModelInfo(
+            model_name="z-ai/cogview-4",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's CogView-4 - High-performance bilingual image generator with strong prompt adherence."
+        ),
+        "z-ai/cogvideox-3": ModelInfo(
+            model_name="z-ai/cogvideox-3",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.0002,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's CogVideoX-3 - Video generation model featuring new frame generation capabilities for high stability and clarity. $0.20 per video."
+        ),
+        "z-ai/vidu-q1": ModelInfo(
+            model_name="z-ai/vidu-q1",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.0004,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's Vidu Q1 - Next-generation high-quality video generation model, delivering photorealistic 1080P video clips. $0.40 per video."
+        ),
+        "z-ai/vidu-2": ModelInfo(
+            model_name="z-ai/vidu-2",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.0002,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's Vidu 2 - Next-generation fast and efficient video generation model, optimized for pan-entertainment and e-commerce. $0.20 per video."
+        ),
+        "z-ai/glm-asr-2512": ModelInfo(
+            model_name="z-ai/glm-asr-2512",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=1e-07,
+            output_cost_per_token=1e-07,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_audio_input=True,
+            supports_system_messages=True,
+            description="Z.AI's GLM-ASR-2512 - Next-generation speech recognition model enabling real-time audio transcription with extremely low character error rate (CER 0.0717)."
+        ),
+        "z-ai/glm-agent-slide": ModelInfo(
+            model_name="z-ai/glm-agent-slide",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=7e-07,
+            output_cost_per_token=7e-07,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's GLM Slide/Poster Agent - Natural language visual generation, smart search synthesis, and layout design. $0.70 per million tokens."
+        ),
+        "z-ai/glm-agent-translation": ModelInfo(
+            model_name="z-ai/glm-agent-translation",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=3e-06,
+            output_cost_per_token=3e-06,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's Translation Agent - Expert-level multilingual translation with terminology/glossary support and reflective optimization modes. $3.00 per million tokens."
+        ),
+        "z-ai/glm-agent-video-template": ModelInfo(
+            model_name="z-ai/glm-agent-video-template",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.0002,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Z.AI's Video Effect Template Agent - Single-image professional video generation using pre-defined templates (French Kiss, Bodyshake, etc.). $0.20 per video."
         ),
     }
 

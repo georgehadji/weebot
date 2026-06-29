@@ -71,6 +71,14 @@ class OpenAIAdapter(LLMPort):
             kwargs["tool_choice"] = tool_choice
         if response_format:
             kwargs["response_format"] = response_format
+
+        # Strip suffix ':thinking' if present and configure Z.AI / general thinking parameters
+        if isinstance(kwargs["model"], str) and kwargs["model"].endswith(":thinking"):
+            kwargs["model"] = kwargs["model"].removesuffix(":thinking")
+            kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
+            kwargs["extra_body"]["thinking"] = {"type": "enabled"}
+            if "reasoning_effort" not in kwargs and not reasoning_effort:
+                kwargs["reasoning_effort"] = "max"
         
         # GPT models and reasoning models (o1, o3) often do not support 
         # the temperature parameter or use a fixed default of 1.
@@ -90,10 +98,35 @@ class OpenAIAdapter(LLMPort):
 
         # GLM-5.2 / Z.ai thinking mode: disable for short queries to avoid
         # truncation (thinking consumes max_tokens before visible output).
-        effective_model = model or self._default_model
-        if effective_model and "glm" in effective_model.lower() and max_tokens and max_tokens < 500:
-            kwargs["extra_body"] = kwargs.get("extra_body", {})
+        effective_model = kwargs["model"]
+        if effective_model and "glm" in effective_model.lower() and kwargs.get("max_tokens") and kwargs["max_tokens"] < 500:
+            kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
             kwargs["extra_body"]["chat_template_kwargs"] = {"enable_thinking": False}
+
+        # x.AI Grok-specific reasoning and parameter cleanup
+        if "grok" in model_id:
+            # For Grok reasoning or multi-agent models:
+            # 1. Remove presence_penalty, frequency_penalty, and stop if present to avoid API rejection errors
+            kwargs.pop("presence_penalty", None)
+            kwargs.pop("frequency_penalty", None)
+            kwargs.pop("stop", None)
+            
+            # 2. For grok-4.20-multi-agent, remove max_tokens as it is unsupported
+            if "grok-4.20-multi-agent" in model_id:
+                kwargs.pop("max_tokens", None)
+                
+            # 3. Map reasoning_effort/thinking to x.AI format "reasoning": {"effort": ...}
+            grok_effort = reasoning_effort or kwargs.get("reasoning_effort")
+            if grok_effort:
+                if grok_effort in ("max", "xhigh"):
+                    grok_effort = "xhigh" if "multi-agent" in model_id else "high"
+                elif grok_effort in ("medium", "high"):
+                    grok_effort = "high" if grok_effort == "high" else "medium"
+                elif grok_effort == "minimal":
+                    grok_effort = "low"
+                    
+                kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
+                kwargs["extra_body"]["reasoning"] = {"effort": grok_effort}
 
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
