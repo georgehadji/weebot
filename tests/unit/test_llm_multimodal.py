@@ -12,6 +12,7 @@ from weebot.infrastructure.adapters.llm._multimodal import (
     convert_messages,
     model_supports_vision,
 )
+from tests.unit.conftest import VISION_TEST_MODEL
 
 _B64 = "aGVsbG8="  # "hello"
 
@@ -106,7 +107,7 @@ def test_build_image_message_omits_empty_text():
 
 @pytest.mark.parametrize(
     "model",
-    ["claude-opus-4-8", "claude-sonnet-4-6", "claude-3-5-sonnet", "gpt-4o", "o3-mini", "gpt-4.1"],
+    [VISION_TEST_MODEL, "claude-sonnet-4-6", "claude-3-5-sonnet", "gpt-4o", "o3-mini", "gpt-4.1"],
 )
 def test_model_supports_vision_true_for_known_families(model):
     assert model_supports_vision(model) is True
@@ -127,3 +128,25 @@ def test_convert_does_not_mutate_input():
 
     # Assert — input list untouched (neutral shape preserved for the other adapter)
     assert messages[0]["content"][1] == original_block
+
+
+# ── B3 regression: short markers must not false-positive inside longer tokens ─
+
+@pytest.mark.parametrize("model", [
+    "openai/o1",
+    "o1-mini",
+    "o1-preview",
+    "openai/o3-mini",
+    "o3",
+])
+def test_o1_o3_match_as_exact_segments(model):
+    assert model_supports_vision(model) is True
+
+
+@pytest.mark.parametrize("model", [
+    "vendor/coral-o1dering",   # "o1" inside a longer token
+    "provider/tool3-engine",   # no "o3" segment
+    "gpto1-variant",           # "o1" not at segment boundary
+])
+def test_o1_o3_do_not_false_positive_on_substrings(model):
+    assert model_supports_vision(model) is False
