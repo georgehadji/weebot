@@ -38,6 +38,18 @@ class KnowledgeGraphPort(ABC):
         ...
 
     @abstractmethod
+    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+        """Fetch a single node by its unique ID.
+
+        Args:
+            node_id: The node's primary key.
+
+        Returns:
+            KnowledgeNode if found, None otherwise.
+        """
+        ...
+
+    @abstractmethod
     async def query(
         self, label: Optional[str] = None, filters: Optional[dict[str, Any]] = None
     ) -> list[KnowledgeNode]:

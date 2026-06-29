@@ -112,6 +112,50 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                     CREATE VIRTUAL TABLE IF NOT EXISTS kg_nodes_fts
                     USING fts5(name, properties, content='kg_nodes', content_rowid='rowid');
                 """)
+
+                # ── Sync triggers for external-content FTS5 ─────────────
+                # Without these triggers, kg_nodes_fts is never populated
+                # and search() silently falls through to the LIKE fallback.
+                conn.executescript("""
+                    CREATE TRIGGER IF NOT EXISTS kg_nodes_ai
+                    AFTER INSERT ON kg_nodes BEGIN
+                        INSERT INTO kg_nodes_fts(rowid, name, properties)
+                        VALUES (new.rowid, new.name, new.properties);
+                    END;
+
+                    CREATE TRIGGER IF NOT EXISTS kg_nodes_ad
+                    AFTER DELETE ON kg_nodes BEGIN
+                        INSERT INTO kg_nodes_fts(kg_nodes_fts, rowid, name, properties)
+                        VALUES ('delete', old.rowid, old.name, old.properties);
+                    END;
+
+                    CREATE TRIGGER IF NOT EXISTS kg_nodes_au
+                    AFTER UPDATE ON kg_nodes BEGIN
+                        INSERT INTO kg_nodes_fts(kg_nodes_fts, rowid, name, properties)
+                        VALUES ('delete', old.rowid, old.name, old.properties);
+                        INSERT INTO kg_nodes_fts(rowid, name, properties)
+                        VALUES (new.rowid, new.name, new.properties);
+                    END;
+                """)
+
+                # ── One-time backfill for existing rows ─────────────
+                # Runs only when the FTS table is empty but kg_nodes has
+                # rows — migration-safe and idempotent.
+                fts_count = conn.execute(
+                    "SELECT COALESCE(COUNT(*), 0) AS cnt FROM kg_nodes_fts"
+                ).fetchone()["cnt"]
+                node_count = conn.execute(
+                    "SELECT COALESCE(COUNT(*), 0) AS cnt FROM kg_nodes"
+                ).fetchone()["cnt"]
+                if fts_count == 0 and node_count > 0:
+                    logger.info(
+                        "Backfilling kg_nodes_fts with %d existing nodes",
+                        node_count,
+                    )
+                    conn.execute(
+                        "INSERT INTO kg_nodes_fts(kg_nodes_fts) VALUES('rebuild')"
+                    )
+
             except sqlite3.OperationalError:
                 # FTS5 may not be available in all SQLite builds
                 logger.warning("FTS5 not available — KG full-text search disabled")
@@ -120,11 +164,33 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     # ── Core operations ─────────────────────────────────────────────
 
+    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+        """Fetch a single node by its ID."""
+        return await self._run_db(self._get_node_sync, node_id)
+
+    def _get_node_sync(self, node_id: str) -> Optional[KnowledgeNode]:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM kg_nodes WHERE id = ?", (node_id,)
+            ).fetchone()
+            return self._row_to_node(row) if row else None
+
     async def upsert_node(self, node: KnowledgeNode) -> KnowledgeNode:
         """Insert or update a knowledge graph node."""
         now = datetime.now(timezone.utc).isoformat()
         props_json = json.dumps(node.properties, default=str)
+        return await self._run_db(self._upsert_node_sync, node, now, props_json)
 
+    def _upsert_node_sync(self, node: KnowledgeNode, now: str, props_json: str) -> KnowledgeNode:
+        """Synchronous body of upsert_node — runs in thread pool.
+
+        The merge policy (confidence-weighted, recency-aware) lives in
+        ``KnowledgeGraphService.merge_properties()`` in the application
+        layer.  By the time properties reach this adapter they have
+        already been merged by the service.  This method is a simple
+        write-through: it persists whatever ``properties`` dict is
+        passed, bumps the version, and snapshots the change.
+        """
         with self._get_conn() as conn:
             existing = conn.execute(
                 "SELECT * FROM kg_nodes WHERE id = ?",
@@ -132,45 +198,31 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             ).fetchone()
 
             if existing:
-                old_props = json.loads(existing["properties"])
+                old_props_json = existing["properties"]
                 new_version = existing["version"] + 1
 
-                # Confidence-weighted merge
-                old_confidence = old_props.get("_confidence", 0.0)
-                new_confidence = node.properties.get("_confidence", 0.0)
-
-                if new_confidence >= old_confidence:
-                    # New info is more confident — merge, overwriting old values
-                    merged = dict(old_props)
-                    merged.update(node.properties)
-                    merged_props = merged
-                else:
-                    # Old info is more confident — keep old values, add new keys
-                    merged = dict(node.properties)
-                    merged.update(old_props)
-                    merged_props = merged
-
-                merged_json = json.dumps(merged_props, default=str)
+                effective_label = node.label or existing["label"]
+                effective_name = node.name or existing["name"]
 
                 conn.execute(
                     """UPDATE kg_nodes
-                       SET properties = ?, version = ?, updated_at = ?
+                       SET label = ?, name = ?, properties = ?, version = ?, updated_at = ?
                        WHERE id = ?""",
-                    (merged_json, new_version, now, node.id),
+                    (effective_label, effective_name, props_json, new_version, now, node.id),
                 )
 
                 # Snapshot the change
                 conn.execute(
                     """INSERT INTO kg_snapshots (node_id, timestamp, previous_properties, new_properties)
                        VALUES (?, ?, ?, ?)""",
-                    (node.id, now, props_json, merged_json),
+                    (node.id, now, old_props_json, props_json),
                 )
 
                 node = KnowledgeNode(
                     id=node.id,
-                    label=node.label or existing["label"],
-                    name=node.name or existing["name"],
-                    properties=merged_props,
+                    label=effective_label,
+                    name=effective_name,
+                    properties=node.properties,
                     created_at=datetime.fromisoformat(existing["created_at"]),
                     source_session_id=node.source_session_id or existing["source_session_id"],
                     version=new_version,
@@ -201,6 +253,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     async def add_edge(self, edge: KnowledgeEdge) -> KnowledgeEdge:
         """Add a typed relationship between two nodes."""
+        return await self._run_db(self._add_edge_sync, edge)
+
+    def _add_edge_sync(self, edge: KnowledgeEdge) -> KnowledgeEdge:
+        """Synchronous body of add_edge — runs in thread pool."""
         with self._get_conn() as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO kg_edges (source_id, target_id, relation, confidence, evidence, created_at)
@@ -234,6 +290,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
         query += " ORDER BY updated_at DESC LIMIT 100"
 
+        return await self._run_db(self._query_sync, query, params)
+
+    def _query_sync(self, query: str, params: list[Any]) -> list[KnowledgeNode]:
+        """Synchronous body of query — runs in thread pool."""
         with self._get_conn() as conn:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_node(row) for row in rows]
@@ -242,6 +302,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         self, node_id: str, depth: int = 1
     ) -> dict[str, list[dict[str, Any]]]:
         """Get neighboring nodes and edges."""
+        return await self._run_db(self._get_neighbors_sync, node_id)
+
+    def _get_neighbors_sync(self, node_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Synchronous body of get_neighbors — runs in thread pool."""
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
 
@@ -278,6 +342,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     async def snapshot(self, node_id: str) -> Optional[KnowledgeSnapshot]:
         """Get the most recent snapshot of a node's properties."""
+        return await self._run_db(self._snapshot_sync, node_id)
+
+    def _snapshot_sync(self, node_id: str) -> Optional[KnowledgeSnapshot]:
+        """Synchronous body of snapshot — runs in thread pool."""
         with self._get_conn() as conn:
             row = conn.execute(
                 """SELECT * FROM kg_snapshots
@@ -297,6 +365,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     async def search(self, query: str, limit: int = 10) -> list[KnowledgeNode]:
         """Full-text search across node names and properties."""
+        return await self._run_db(self._search_sync, query, limit)
+
+    def _search_sync(self, query: str, limit: int = 10) -> list[KnowledgeNode]:
+        """Synchronous body of search — runs in thread pool."""
         results: list[KnowledgeNode] = []
         with self._get_conn() as conn:
             # Try FTS5 first
@@ -329,6 +401,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     async def get_stats(self) -> dict[str, Any]:
         """Get summary statistics about the knowledge graph."""
+        return await self._run_db(self._get_stats_sync)
+
+    def _get_stats_sync(self) -> dict[str, Any]:
+        """Synchronous body of get_stats — runs in thread pool."""
         with self._get_conn() as conn:
             node_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_nodes").fetchone()["cnt"]
             edge_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_edges").fetchone()["cnt"]
