@@ -6,7 +6,9 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 COPY weebot-ui/package.json weebot-ui/package-lock.json* ./
-RUN npm ci --only=production
+# Full install (incl. devDependencies) — next build needs tailwindcss/postcss/typescript.
+# The runner stage uses Next standalone output, so dev deps never reach the final image.
+RUN npm ci
 
 # ── Stage 2: builder ──────────────────────────────────────────────────
 FROM node:20-alpine AS builder
