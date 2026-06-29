@@ -378,6 +378,7 @@ def test_no_flat_files_at_root():
         "docs",
         "domain",
         "GitNexus-main",  # Vendored dependency
+        "osworld",         # OSWorld agent adapter (drop-in for eval harness)
         "infrastructure",
         "interfaces",
         "mcp",

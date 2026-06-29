@@ -46,6 +46,17 @@ UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset({
     # file_editor reads are gated separately by EgressGuard when the path is external,
     # but mark it here too so the wrapper is applied if it returns external content.
     "file_editor",
+    # Gateway tools — inbound content from external channels is untrusted
+    "discord_tool",
+    "email_tool",
+    "signal_tool",
+    "slack_tool",
+    "telegram_tool",
+    "whatsapp_tool",
+    "atomic_mail",
+    # MCP passthrough — model has no visibility into what the server returns
+    "mcp_tool",
+    "mcp_call",
 })
 
 
