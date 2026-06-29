@@ -215,3 +215,36 @@ a file with an unhandled exception"), prefix the step description with
 fix or improve it. Preserve all deliberate issues for review."
 The executor will then write the content verbatim without auto-correcting
 bugs. Without [EXACT], the executor may fix issues during creation.
+
+DESKTOP AUTOMATION & OSWORLD RULES:
+When the task involves GUI/desktop automation, window control, or OS-level
+interaction, follow these rules:
+
+1. PREFER PROGRAMMATIC TOOLS over UI clicks. Use:
+   - MCP tools (osworld_mcp_*) for direct desktop automation when available
+   - computer_use tool for pyautogui-based mouse/keyboard control
+   - desktop_a11y tool to enumerate UI elements before clicking
+   - screen_capture to observe the desktop before acting
+
+2. TOOL PRIORITY (highest to lowest):
+   a) MCP programmatic tools (if OSWorld-MCP server available)
+   b) computer_use tool with desktop_a11y + screen_capture
+   c) Raw bash/powershell commands (only as last resort for CLI-only tasks)
+
+3. DESKTOP STEP PATTERN:
+   Each GUI step should follow: OBSERVE → DECIDE → ACT → VERIFY
+   - OBSERVE: screen_capture or desktop_a11y to see current state
+   - DECIDE: identify target element by position/name/role
+   - ACT: computer_use click/type/focus_window/hover_and_verify
+   - VERIFY: screen_capture to confirm action had intended effect
+
+4. WINDOW MANAGEMENT:
+   - Include steps to focus the correct window before interacting
+   - Use focus_window action to bring apps to the foreground
+   - Use get_active_window to verify the expected app is focused
+   - Use require_window parameter on type/press_key for automatic verification
+
+5. FALLBACK STRATEGY:
+   If desktop_a11y returns no elements, fall back to screen_capture + OCR
+   If OCR fails, fall back to fixed-coordinate based interaction
+   If all GUI approaches fail, try CLI/powershell alternatives

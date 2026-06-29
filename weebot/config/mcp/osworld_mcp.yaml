@@ -1,0 +1,58 @@
+# OSWorld-MCP Server Configuration
+# ================================
+# Point weebot to the OSWorld-MCP tool suite for hybrid programmatic+GUI
+# desktop automation. Uncomment and configure when the MCP server is deployed.
+#
+# Usage: Point mcp_servers_config_path to this file in .env:
+#   MCP_SERVERS_CONFIG_PATH=weebot/config/mcp/osworld_mcp.yaml
+#
+# Transport modes:
+#   stdio: Local Python process (osworld-mcp installed via pip)
+#   sse:   Remote HTTP endpoint (OSWorld VM running MCP server)
+#   streamable-http: Remote with streaming support
+
+servers:
+  # ── Primary: local stdio (recommended for dev/testing) ────────────────
+  # osworld:
+  #   transport: stdio
+  #   command: python
+  #   args:
+  #     - "-m"
+  #     - "osworld_mcp"
+  #     - "--vm-id"
+  #     - "${OSWORLD_VM_ID:-osworld-ubuntu-1}"
+  #     - "--host"
+  #     - "${OSWORLD_HOST:-localhost}"
+  #     - "--port"
+  #     - "${OSWORLD_PORT:-8080}"
+  #   env:
+  #     OSWORLD_API_TOKEN: "${OSWORLD_API_TOKEN:-}"
+  #     OSWORLD_SCREEN_WIDTH: "${OSWORLD_SCREEN_WIDTH:-1920}"
+  #     OSWORLD_SCREEN_HEIGHT: "${OSWORLD_SCREEN_HEIGHT:-1080}"
+
+  # ── Alternative: remote SSE endpoint ──────────────────────────────────
+  # osworld:
+  #   transport: sse
+  #   url: "http://${OSWORLD_HOST:-localhost}:${OSWORLD_PORT:-8080}/sse"
+  #   headers:
+  #     Authorization: "Bearer ${OSWORLD_API_TOKEN:-}"
+
+# ── Tool Registry ──────────────────────────────────────────────────────
+# When the MCP server is connected, these tools become available.
+# The agent can use them via the prefixed name: mcp_osworld_<tool_name>
+#
+# Expected tools (from OSWorld-MCP server):
+#   - mcp_osworld_screenshot:      Capture current VM screenshot (returns base64 PNG)
+#   - mcp_osworld_execute:         Execute a command inside the VM
+#   - mcp_osworld_click:           Click at (x, y) in the VM
+#   - mcp_osworld_type:            Type text in the VM
+#   - mcp_osworld_hotkey:          Press hotkey combination
+#   - mcp_osworld_scroll:          Scroll at position
+#   - mcp_osworld_get_a11y_tree:   Fetch desktop accessibility tree
+#   - mcp_osworld_get_file:        Download file from VM
+#   - mcp_osworld_put_file:        Upload file to VM
+#   - mcp_osworld_reset:           Reset VM to snapshot
+#   - mcp_osworld_evaluate:        Run evaluation script
+#
+# All MCP tools are automatically prefixed by mcp_<server_name>_ by the
+# MCPClientManager. Example: mcp_osworld_click(300, 500, button="left")
