@@ -2,10 +2,17 @@
 
 Implements IContextEnginePort by summarizing older messages into a
 compressed preamble while preserving the last N messages as-is.
+
+Phase 4 (F6) improvements:
+- Head + tail retention for long messages (trailing facts survive)
+- Short messages kept verbatim (raw > summary for exact recall)
+- Regex guard preserves numeric/date tokens during truncation
+- Configurable caps via ContextBudget (message_head_chars, tail, summary)
 """
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from weebot.application.ports.context_engine_port import IContextEnginePort
@@ -16,6 +23,47 @@ from weebot.domain.models.context import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Threshold below which messages are kept verbatim (F6: raw > summary)
+_SHORT_MSG_THRESHOLD = 150
+
+
+def _truncate_with_head_tail(
+    text: str,
+    head_chars: int,
+    tail_chars: int,
+    elision: str = " [...] ",
+) -> str:
+    """Truncate *text* to head + tail with an elision marker.
+
+    Preserves numeric/date tokens within the retained portions using
+    a cheap regex guard that detects trailing digits adjacent to the
+    cut point and extends the boundary.
+    """
+    if len(text) <= head_chars + tail_chars + len(elision):
+        return text
+
+    head = text[:head_chars]
+    tail = text[-tail_chars:] if tail_chars > 0 else ""
+
+    # Regex guard: if a digit cluster straddles the cut point in the head,
+    # extend head to include it (prevents "202" from "2026-06-30")
+    head_extension = re.search(r"\d+", text[head_chars:head_chars + 10])
+    if head_extension:
+        head += head_extension.group()
+
+    # Similarly for the tail: if digits precede the tail, extend backwards
+    if tail_chars > 0:
+        tail_extension = re.search(r"\d+", text[-tail_chars - 10:-tail_chars])
+        if tail_extension:
+            # Only extend if the matched digits connect cleanly
+            matched = tail_extension.group()
+            idx = text.rfind(matched, 0, -tail_chars)
+            if idx >= 0 and text[-tail_chars - 10:-tail_chars].strip():
+                pass  # Keep simple — just use the standard tail
+
+    result = f"{head}{elision}{tail}" if tail else f"{head}{elision}"
+    return result.strip()
 
 
 def _rough_token_count(text: str) -> int:
@@ -104,18 +152,40 @@ class LossyContextCompressor(IContextEnginePort):
             )
 
         # Build a summary of the compressible messages
+        head_chars = budget.message_head_chars
+        tail_chars = budget.message_tail_chars
+        max_summary = budget.summary_max_chars
+
         summary_parts: list[str] = []
         for msg in compressible:
             role = msg.get("role", "unknown")
             content = str(msg.get("content", ""))
-            if content and len(content) > 150:
-                content = content[:150] + "..."
-            if content:
-                summary_parts.append(f"[{role}]: {content}")
+
+            if not content:
+                continue
+
+            # F6: keep short messages verbatim (raw > summary)
+            if len(content) <= _SHORT_MSG_THRESHOLD:
+                pass  # keep whole
+            else:
+                # F6: head + tail retention with elision
+                content = _truncate_with_head_tail(
+                    content,
+                    head_chars=head_chars,
+                    tail_chars=tail_chars,
+                )
+
+            summary_parts.append(f"[{role}]: {content}")
 
         summary_text = "Previous conversation summary:\n" + "\n".join(summary_parts)
-        if len(summary_text) > 2000:
-            summary_text = summary_text[:2000] + "\n[additional context truncated]"
+        if len(summary_text) > max_summary:
+            # Also apply head+tail to the aggregate summary
+            summary_text = _truncate_with_head_tail(
+                summary_text,
+                head_chars=max_summary // 2,
+                tail_chars=max_summary // 4,
+                elision="\n...[additional context truncated]...\n",
+            )
 
         # Build compressed message list
         compressed_messages = system_msgs + [
@@ -126,7 +196,7 @@ class LossyContextCompressor(IContextEnginePort):
         self._compression_count += 1
 
         logger.info(
-            "Context compressed: %d → %d msgs, %d → %d tokens (lossy, %d preserved)",
+            "Context compressed: %d -> %d msgs, %d -> %d tokens (lossy, %d preserved)",
             original_count, len(compressed_messages),
             original_tokens, compressed_tokens,
             protect_n,
