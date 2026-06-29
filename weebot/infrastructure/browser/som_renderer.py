@@ -159,3 +159,105 @@ class SomRenderer:
         buf = _io.BytesIO()
         result.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+class DesktopSomRenderer(SomRenderer):
+    """Set-of-Mark renderer for desktop accessibility trees.
+
+    Same numbered-box logic as SomRenderer but uses coordinates from
+    DesktopA11yTool instead of browser DOM nodes. Works with OSWorld
+    VM screenshots and native desktop windows.
+
+    Key difference: bounds are absolute screen coordinates (x, y on the
+    whole desktop), not relative to a browser viewport. The renderer
+    clips boxes to the capture region when a region is specified.
+    """
+
+    async def render_desktop(
+        self,
+        screenshot_bytes: bytes,
+        elements: list[dict[str, Any]],
+        region: tuple[int, int, int, int] | None = None,
+        max_marks: int = 50,
+    ) -> str:
+        """Render numbered overlays on a desktop screenshot.
+
+        Args:
+            screenshot_bytes: PNG bytes of the desktop screenshot.
+            elements: List of element dicts with ``bounds`` sub-dict
+                      (``x``, ``y``, ``w``, ``h``) and ``name``/``role``.
+            region: Optional (x, y, w, h) capture region to clip to.
+                    Elements outside this region are filtered out.
+            max_marks: Maximum marks to draw (capped at 50).
+
+        Returns:
+            Base64-encoded PNG with numbered overlays.
+        """
+        if not _PILLOW_AVAILABLE:
+            return base64.b64encode(screenshot_bytes).decode()
+
+        # Filter elements with valid bounds, clip to region if specified
+        valid = []
+        for el in elements:
+            bounds = el.get("bounds", {})
+            if not all(k in bounds for k in ("x", "y", "w", "h")):
+                continue
+            ex, ey, ew, eh = bounds["x"], bounds["y"], bounds["w"], bounds["h"]
+            if ew <= 0 or eh <= 0:
+                continue
+            if region:
+                rx, ry, rw, rh = region
+                # Clip: element must intersect the region
+                if ex > rx + rw or ex + ew < rx or ey > ry + rh or ey + eh < ry:
+                    continue
+                # Offset to region-relative coordinates
+                bounds = {"x": ex - rx, "y": ey - ry, "w": ew, "h": eh}
+                el = {**el, "bounds": bounds}
+            valid.append(el)
+
+        # Create overlay from remaining elements
+        img, overlay, draw, font = await self._prepare_base(screenshot_bytes, region)
+        marked = 0
+        for number, el in enumerate(valid[:max_marks], start=1):
+            b = el["bounds"]
+            x, y, w, h = b["x"], b["y"], b["w"], b["h"]
+            if w < 4 or h < 4:
+                continue
+            draw.rectangle([x, y, x + w, y + h], fill=self._FILL_COLOR)
+            draw.rectangle([x, y, x + w, y + h], outline=self._BOX_COLOR, width=2)
+            label_text = str(number)
+            bbox = draw.textbbox((0, 0), label_text, font=font) if font else (0, 0, 14, 14)
+            lw = bbox[2] - bbox[0] + 6
+            lh = bbox[3] - bbox[1] + 4
+            draw.rectangle([x, y - lh, x + lw, y], fill=self._LABEL_BG)
+            draw.text((x + 3, y - lh + 2), label_text, fill=self._LABEL_FG, font=font)
+            marked += 1
+
+        result = Image.alpha_composite(img, overlay).convert("RGB")
+        buf = _io.BytesIO()
+        result.save(buf, format="PNG")
+        logger.info("DesktopSoM: %d marks rendered", marked)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    async def _prepare_base(
+        self,
+        screenshot_bytes: bytes,
+        region: tuple[int, int, int, int] | None = None,
+    ):
+        """Load image and prepare overlay canvas, clipped to region if given."""
+        import io as _io2
+        img = Image.open(_io2.BytesIO(screenshot_bytes)).convert("RGBA")
+        if region:
+            rx, ry, rw, rh = region
+            img = img.crop((rx, ry, rx + rw, ry + rh))
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        font = None
+        try:
+            font = ImageFont.truetype("arial.ttf", 14)
+        except Exception:
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", 14)
+            except Exception:
+                pass
+        return img, overlay, draw, font

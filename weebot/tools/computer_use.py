@@ -20,14 +20,20 @@ from weebot.tools.base import BaseTool, ToolResult
 
 
 class ComputerUseTool(BaseTool):
-    """Interactive computer control: mouse, keyboard, pointer tracking."""
+    """Interactive computer control: mouse, keyboard, pointer tracking.
+
+    Supports DPI-scaled coordinate translation for high-resolution displays.
+    Use ``dpi_scale`` param when the VM/remote screen has a different DPI
+    than the local display (e.g., OSWorld VM at 1.0 DPI on a 1.5 DPI host).
+    """
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 30
     name: str = "computer_use"
     description: str = (
         "Control the computer: move mouse, click, type, press keys. "
-        "Useful for desktop automation, form filling, web interactions."
+        "Useful for desktop automation, form filling, web interactions. "
+        "Supports dpi_scale param for high-DPI coordinate translation."
     )
     parameters: dict = {
         "type": "object",
@@ -49,11 +55,15 @@ class ComputerUseTool(BaseTool):
             },
             "x": {
                 "type": "integer",
-                "description": "X coordinate (pixels from left)",
+                "description": "X coordinate (pixels from left) — use logical coordinates; DPI scaling is applied automatically",
             },
             "y": {
                 "type": "integer",
-                "description": "Y coordinate (pixels from top)",
+                "description": "Y coordinate (pixels from top) — use logical coordinates; DPI scaling is applied automatically",
+            },
+            "dpi_scale": {
+                "type": "number",
+                "description": "DPI scaling factor (default 1.0). Set to 1.25 for 125% scaling, 1.5 for 150%, etc. Coordinates are divided by this factor to match physical pixels.",
             },
             "button": {
                 "type": "string",
@@ -105,6 +115,18 @@ class ComputerUseTool(BaseTool):
         except ImportError:
             return False
 
+    def _scale(self, x: Optional[int], y: Optional[int], dpi_scale: float = 1.0) -> tuple[Optional[int], Optional[int]]:
+        """Scale logical coordinates to physical pixels.
+
+        OSWorld VMs typically run at 1.0 DPI while the host may be at 1.25-2.0.
+        Dividing by dpi_scale maps logical positions to correct physical pixels.
+        """
+        if dpi_scale == 1.0:
+            return x, y
+        sx = int(x / dpi_scale) if x is not None else None
+        sy = int(y / dpi_scale) if y is not None else None
+        return sx, sy
+
     async def execute(
         self,
         action: str,
@@ -116,6 +138,7 @@ class ComputerUseTool(BaseTool):
         duration: float = 0.5,
         interval: float = 0.05,
         modifiers: Optional[list[str]] = None,
+        dpi_scale: float = 1.0,
         **_,
     ) -> ToolResult:
         """Execute computer control action.
@@ -124,38 +147,44 @@ class ComputerUseTool(BaseTool):
         asyncio.to_thread() so the event loop is never stalled. The 'type'
         action also applies a dynamic timeout (2× expected typing time, min 10s)
         to prevent runaway execution; fallback is a plain to_thread without timeout.
+
+        Args:
+            dpi_scale: DPI scaling factor. Set to 1.25 for 125%, 1.5 for 150%.
+                       Coordinates are divided by this factor automatically.
         """
         try:
             modifiers = modifiers or []
+            # Apply DPI scaling to coordinates
+            sx, sy = self._scale(x, y, dpi_scale)
 
             if action == "move_mouse":
-                if x is None or y is None:
+                if sx is None or sy is None:
                     return ToolResult(output="", error="x and y required for move_mouse")
-                await asyncio.to_thread(pyautogui.moveTo, x, y, duration=0.25)
-                return ToolResult(output=f"Moved mouse to ({x}, {y})")
+                await asyncio.to_thread(pyautogui.moveTo, sx, sy, duration=0.25)
+                return ToolResult(output=f"Moved mouse to ({sx}, {sy})")
 
             elif action == "click":
-                if x is None or y is None:
+                if sx is None or sy is None:
                     return ToolResult(output="", error="x and y required for click")
-                await asyncio.to_thread(pyautogui.click, x, y, button=button)
-                return ToolResult(output=f"Clicked at ({x}, {y}) with {button} button")
+                await asyncio.to_thread(pyautogui.click, sx, sy, button=button)
+                return ToolResult(output=f"Clicked at ({sx}, {sy}) with {button} button")
 
             elif action == "double_click":
-                if x is None or y is None:
+                if sx is None or sy is None:
                     return ToolResult(output="", error="x and y required for double_click")
-                await asyncio.to_thread(pyautogui.doubleClick, x, y)
-                return ToolResult(output=f"Double-clicked at ({x}, {y})")
+                await asyncio.to_thread(pyautogui.doubleClick, sx, sy)
+                return ToolResult(output=f"Double-clicked at ({sx}, {sy})")
 
             elif action == "drag":
-                if x is None or y is None:
+                if sx is None or sy is None:
                     return ToolResult(output="", error="x and y required for drag")
                 start_x, start_y = pyautogui.position()
                 await asyncio.to_thread(
-                    pyautogui.drag, x - start_x, y - start_y,
+                    pyautogui.drag, sx - start_x, sy - start_y,
                     duration=duration, button=button
                 )
                 return ToolResult(
-                    output=f"Dragged from ({start_x}, {start_y}) to ({x}, {y})"
+                    output=f"Dragged from ({start_x}, {start_y}) to ({sx}, {sy})"
                 )
 
             elif action == "type":

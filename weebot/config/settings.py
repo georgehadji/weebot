@@ -36,6 +36,7 @@ class WeebotSettings(BaseSettings):
         env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,  # allow both alias and field name for env vars
     )
 
     @classmethod
@@ -280,17 +281,23 @@ class WeebotSettings(BaseSettings):
     )
 
     # Feature flags (migrated from os.getenv — see Phase 3c)
+    # Supported env var names: WEEBOT_PLAN_REVIEW_ENABLED (legacy) or
+    # PLAN_REVIEW_ENABLED (current).  populate_by_name=True in model_config
+    # ensures both are accepted.
     plan_review_enabled: bool = Field(
         default=True,
-        description="Enable plan-review pause before execution (was WEEBOT_PLAN_REVIEW_ENABLED).",
+        alias="WEEBOT_PLAN_REVIEW_ENABLED",
+        description="Enable plan-review pause before execution.",
     )
     cove_enabled: bool = Field(
         default=True,
-        description="Enable Chain-of-Verification step (was WEEBOT_COVE_ENABLED).",
+        alias="WEEBOT_COVE_ENABLED",
+        description="Enable Chain-of-Verification step.",
     )
     cove_max_questions: int = Field(
         default=3,
-        description="Max verification questions in CoVE step (was WEEBOT_COVE_QUESTIONS).",
+        alias="WEEBOT_COVE_QUESTIONS",
+        description="Max verification questions in CoVE step.",
     )
 
     # =======================================================================
@@ -366,3 +373,92 @@ def ensure_workspace() -> None:
     """Ensure workspace and logs directories exist."""
     WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(exist_ok=True)
+
+
+# ========================================================================
+# OSWorld Settings (sandbox adapters for desktop automation benchmark)
+# ========================================================================
+
+class OSWorldSettings(BaseSettings):
+    """Configuration for the OSWorld sandbox environment.
+
+    Connects to a KVM/Docker container running an OSWorld-compatible VM.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).resolve().parent.parent.parent / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Sandbox backend type
+    osworld_sandbox_type: str = Field(
+        default="docker",
+        description="Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), or 'remote' (HTTP API)",
+    )
+
+    # Connection
+    osworld_host: str = Field(
+        default="localhost",
+        description="OSWorld VM host address",
+    )
+    osworld_port: int = Field(
+        default=8080,
+        description="OSWorld VM API port",
+    )
+    osworld_vm_id: str = Field(
+        default="osworld-ubuntu-1",
+        description="OSWorld VM instance identifier",
+    )
+    osworld_api_token: str = Field(
+        default="",
+        description="Auth token for OSWorld API",
+    )
+
+    # Timeouts
+    osworld_connect_timeout: int = Field(
+        default=30,
+        ge=1,
+        description="Connection timeout in seconds",
+    )
+    osworld_action_timeout: int = Field(
+        default=15,
+        ge=1,
+        description="Per-action timeout in seconds (click, type, screenshot)",
+    )
+    osworld_boot_timeout: int = Field(
+        default=120,
+        ge=10,
+        description="VM boot/wait timeout in seconds",
+    )
+    osworld_max_retries: int = Field(
+        default=3,
+        ge=0,
+        description="Max retries on transient failures",
+    )
+
+    # Screen calibration
+    osworld_screen_width: int = Field(
+        default=1920,
+        ge=640,
+        description="VM screen width in pixels",
+    )
+    osworld_screen_height: int = Field(
+        default=1080,
+        ge=480,
+        description="VM screen height in pixels",
+    )
+    osworld_dpi_scale: float = Field(
+        default=1.0,
+        ge=0.5,
+        le=4.0,
+        description="DPI scaling factor (1.0 = 96dpi)",
+    )
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.osworld_host}:{self.osworld_port}"
+
+    @property
+    def screen_resolution(self) -> tuple[int, int]:
+        return (self.osworld_screen_width, self.osworld_screen_height)
