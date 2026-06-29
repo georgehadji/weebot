@@ -366,8 +366,8 @@ try:
     with mss.mss() as sct:
         sct.shot(output='/tmp/screen.png')
 except ImportError:
-    import subprocess
-    subprocess.run(['apt-get', 'install', '-y', '-qq', 'python3-mss'], check=True)
+    import subprocess as _sp
+    _sp.run(['apt-get', 'install', '-y', '-qq', 'python3-mss'], check=True)
     import mss
     with mss.mss() as sct:
         sct.shot(output='/tmp/screen.png')
