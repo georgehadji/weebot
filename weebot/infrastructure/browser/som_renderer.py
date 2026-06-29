@@ -234,7 +234,8 @@ class DesktopSomRenderer(SomRenderer):
             marked += 1
 
         result = Image.alpha_composite(img, overlay).convert("RGB")
-        buf = _io.BytesIO()
+        import io as _io2
+        buf = _io2.BytesIO()
         result.save(buf, format="PNG")
         logger.info("DesktopSoM: %d marks rendered", marked)
         return base64.b64encode(buf.getvalue()).decode("utf-8")

@@ -66,10 +66,10 @@ class DesktopA11yTool(BaseTool):
             if truncated:
                 elements = elements[:_MAX_A11Y_ELEMENTS]
             return ToolResult(
-                output=json.dumps(elements, indent=2, ensure_ascii=False),
-                summary=(
+                output=(
                     f"Found {len(elements)}{' (truncated)' if truncated else ''} "
-                    f"interactive elements"
+                    f"interactive elements\n"
+                    + json.dumps(elements, indent=2, ensure_ascii=False)
                 ),
             )
         except Exception as exc:
