@@ -22,6 +22,7 @@ from weebot.domain.models.knowledge_graph import (
     KnowledgeEdge,
     KnowledgeNode,
     KnowledgeSnapshot,
+    ScoredNode,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,19 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             except sqlite3.OperationalError:
                 # FTS5 may not be available in all SQLite builds
                 logger.warning("FTS5 not available — KG full-text search disabled")
+
+            # ── Dense embedding sidecar table (Phase 2) ────────────────
+            # Stores float32 embedding vectors as JSON arrays in a separate
+            # table to keep kg_nodes and kg_nodes_fts lean.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS kg_node_vectors (
+                    node_id TEXT PRIMARY KEY,
+                    embedding TEXT NOT NULL DEFAULT '[]',
+                    dim INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (node_id) REFERENCES kg_nodes(id) ON DELETE CASCADE
+                )
+            """)
 
             conn.commit()
 
@@ -399,6 +413,225 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
         return results
 
+    # ── Phase 2: Hybrid search (sparse + dense + structured) ────────
+
+    async def _get_query_embedding(self, query: str) -> Optional[tuple[list[float], float]]:
+        """Compute query embedding outside the thread pool.
+
+        Returns (vector, l2_norm) or None if embedding is unavailable.
+        """
+        try:
+            from weebot.qmd_integration.embeddings import get_local_embeddings
+            emb = get_local_embeddings()
+            if not emb.is_available():
+                return None
+            result = await emb.embed_query(query)
+            vec = result.embedding
+            return (vec, _l2_norm(vec))
+        except Exception:
+            logger.debug("Query embedding unavailable — dense leg will be empty", exc_info=True)
+            return None
+
+    async def hybrid_search(
+        self,
+        query: str,
+        *,
+        label: Optional[str] = None,
+        filters: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        dense_weight: float = 0.4,
+        sparse_weight: float = 0.4,
+        structured_weight: float = 0.2,
+    ) -> list[ScoredNode]:
+        """Multi-mode search fusing FTS5, cosine, and structured results.
+
+        Dense leg is computed in the async path (embedding API call),
+        then the fused search runs in the thread pool (DB-only).
+        Skips the embedding call entirely when ``dense_weight == 0``
+        to avoid loading heavy ML dependencies unnecessarily.
+        """
+        query_embedding: Optional[tuple[list[float], float]] = None
+        if dense_weight > 0:
+            query_embedding = await self._get_query_embedding(query)
+        return await self._run_db(
+            self._hybrid_search_sync, query, label, filters, limit,
+            dense_weight, sparse_weight, structured_weight,
+            query_embedding,
+        )
+
+    def _hybrid_search_sync(
+        self,
+        query: str,
+        label: Optional[str],
+        filters: Optional[dict[str, Any]],
+        limit: int,
+        dense_weight: float,
+        sparse_weight: float,
+        structured_weight: float,
+        query_embedding: Optional[tuple[list[float], float]],
+    ) -> list[ScoredNode]:
+        """Synchronous body of hybrid_search — runs in thread pool."""
+        K = 60  # Standard RRF constant
+
+        with self._get_conn() as conn:
+            # ── Leg 1: Sparse (FTS5 BM25) ────────────────────────────
+            sparse_results: list[tuple[str, float]] = []
+            try:
+                rows = conn.execute(
+                    """SELECT n.id, f.rank
+                       FROM kg_nodes_fts f
+                       JOIN kg_nodes n ON n.rowid = f.rowid
+                       WHERE kg_nodes_fts MATCH ?
+                         AND (? = '' OR n.label = ?)
+                       ORDER BY rank
+                       LIMIT ?""",
+                    (query, label or "", label or "", limit * 2),
+                ).fetchall()
+                sparse_results = [(r["id"], float(r["rank"])) for r in rows]
+            except sqlite3.OperationalError:
+                pass
+
+            # ── Leg 2: Dense (cosine similarity) ─────────────────────
+            dense_results: list[tuple[str, float]] = []
+            if query_embedding is not None and dense_weight > 0:
+                try:
+                    query_vec, q_norm = query_embedding
+                    # Lazy backfill embeddings for sparse-matched nodes
+                    node_ids_needed = [nid for nid, _ in sparse_results]
+                    self._ensure_embeddings_sync(conn, node_ids_needed)
+
+                    vec_rows = conn.execute(
+                        "SELECT node_id, embedding FROM kg_node_vectors WHERE dim > 0"
+                    ).fetchall()
+                    for vr in vec_rows:
+                        try:
+                            stored = json.loads(vr["embedding"])
+                            if stored and len(stored) == len(query_vec):
+                                cos = _cosine_similarity(query_vec, stored, q_norm)
+                                dense_results.append((vr["node_id"], cos))
+                        except (json.JSONDecodeError, TypeError, ZeroDivisionError):
+                            continue
+                    dense_results.sort(key=lambda x: -x[1])
+                    dense_results = dense_results[:limit * 2]
+                except Exception:
+                    logger.debug("Dense search leg failed", exc_info=True)
+
+            # ── Leg 3: Structured (label/filter) ─────────────────────
+            struct_ids: set[str] = set()
+            if label or filters:
+                where = "WHERE 1=1"
+                params: list[Any] = []
+                if label:
+                    where += " AND label = ?"
+                    params.append(label)
+                if filters:
+                    for k, v in filters.items():
+                        where += " AND properties LIKE ?"
+                        params.append(f'%"{k}": "%{v}%"')
+                rows = conn.execute(
+                    f"SELECT id FROM kg_nodes {where} LIMIT ?",
+                    (*params, limit * 2),
+                ).fetchall()
+                struct_ids = {r["id"] for r in rows}
+
+            # ── Merge via RRF ────────────────────────────────────────
+            sparse_rank = {nid: i + 1 for i, (nid, _) in enumerate(sparse_results)}
+            dense_rank = {nid: i + 1 for i, (nid, _) in enumerate(dense_results)}
+
+            all_node_ids: set[str] = set()
+            for nid, _ in sparse_results:
+                all_node_ids.add(nid)
+            for nid, _ in dense_results:
+                all_node_ids.add(nid)
+            all_node_ids.update(struct_ids)
+
+            MISSING_RANK = limit * 3
+            rrf_scores: list[tuple[str, float, float, float, float]] = []
+            for nid in all_node_ids:
+                in_sparse = nid in sparse_rank
+                in_dense = nid in dense_rank
+                in_struct = nid in struct_ids
+
+                sr = sparse_rank.get(nid, MISSING_RANK)
+                dr = dense_rank.get(nid, MISSING_RANK)
+
+                sr_score = sparse_weight / (K + sr) if sparse_weight > 0 and in_sparse else 0.0
+                dr_score = dense_weight / (K + dr) if dense_weight > 0 and in_dense else 0.0
+                st_score = (structured_weight / (K + 1)
+                            if in_struct and structured_weight > 0
+                            else 0.0)
+                fused = sr_score + dr_score + st_score
+                rrf_scores.append((
+                    nid, fused,
+                    sr_score / sparse_weight if sparse_weight > 0 and in_sparse else 0.0,
+                    dr_score / dense_weight if dense_weight > 0 and in_dense else 0.0,
+                    st_score / structured_weight if structured_weight > 0 and in_struct else 0.0,
+                ))
+
+            rrf_scores.sort(key=lambda x: -x[1])
+
+            results: list[ScoredNode] = []
+            for nid, fused, s_score, d_score, st_score in rrf_scores[:limit]:
+                node = self._get_node_sync(nid)
+                if node:
+                    results.append(ScoredNode(
+                        node=node,
+                        score=min(fused, 1.0),
+                        sparse_score=min(s_score, 1.0),
+                        dense_score=min(d_score, 1.0),
+                        structured_score=min(st_score, 1.0),
+                    ))
+            return results
+
+    def _ensure_embeddings_sync(
+        self,
+        conn: sqlite3.Connection,
+        node_ids: list[str],
+    ) -> None:
+        """Compute and store embeddings for nodes that lack them (lazy backfill).
+
+        Runs inside the thread pool — uses the embedding singleton if available.
+        If no model is loaded, silently skips (graceful degradation).
+        """
+        if not node_ids:
+            return
+        try:
+            from weebot.qmd_integration.embeddings import get_local_embeddings
+            emb = get_local_embeddings()
+            if not emb.is_available():
+                return
+        except Exception:
+            return
+
+        placeholders = ",".join("?" * len(node_ids))
+        missing = conn.execute(
+            f"""SELECT n.id, n.name, n.properties
+                FROM kg_nodes n
+                LEFT JOIN kg_node_vectors v ON n.id = v.node_id
+                WHERE n.id IN ({placeholders})
+                  AND (v.node_id IS NULL OR v.dim = 0)""",
+            node_ids,
+        ).fetchall()
+        if not missing:
+            return
+
+        import asyncio as _asyncio
+        now = datetime.now(timezone.utc).isoformat()
+        for row in missing:
+            try:
+                props = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
+                text = _embed_text_for_node(row["name"], props)
+                # Run async embed_query synchronously in this thread-pool thread
+                result = _asyncio.run(emb.embed_query(text))
+                vec_json = json.dumps(result.embedding)
+                conn.execute(
+                    "INSERT OR REPLACE INTO kg_node_vectors (node_id, embedding, dim, updated_at) VALUES (?, ?, ?, ?)",
+                    (row["id"], vec_json, result.dimensions, now),
+                )
+            except Exception:
+                logger.debug("Failed to embed node %s", row["id"], exc_info=True)
+        conn.commit()
+
     async def get_stats(self) -> dict[str, Any]:
         """Get summary statistics about the knowledge graph."""
         return await self._run_db(self._get_stats_sync)
@@ -485,3 +718,44 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             source_session_id=col("source_session_id") or "",
             version=col("version") or 1,
         )
+
+
+# ── Module-level helpers (Phase 2: hybrid search) ──────────────────
+
+
+def _l2_norm(v: list[float]) -> float:
+    """L2 norm of a vector."""
+    import math
+    return math.sqrt(sum(x * x for x in v))
+
+
+def _cosine_similarity(
+    a: list[float], b: list[float], norm_a: float | None = None,
+) -> float:
+    """Cosine similarity between two vectors. Handles zero-vector edge cases."""
+    if len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_b = _l2_norm(b)
+    if norm_a is None:
+        norm_a = _l2_norm(a)
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _embed_text_for_node(name: str, properties: dict) -> str:
+    """Build a text representation of a node for embedding.
+
+    Combines the node name with the most semantically meaningful property
+    values (excluding metadata keys).
+    """
+    SKIP_PROPS = frozenset({
+        "_confidence", "_valid_from", "_valid_to", "_corroboration_count",
+        "source_session_id", "version",
+    })
+    parts = [name]
+    for k, v in properties.items():
+        if k not in SKIP_PROPS and isinstance(v, (str, int, float, bool)):
+            parts.append(f"{k}: {v}")
+    return " | ".join(parts)

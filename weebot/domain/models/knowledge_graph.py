@@ -80,6 +80,15 @@ class KnowledgeEdge(BaseModel):
     )
 
 
+class ScoredNode(BaseModel):
+    """A knowledge graph node with a relevance score from hybrid search."""
+    node: Optional[KnowledgeNode] = Field(default=None, description="The matched node (None when only scores are computed)")
+    score: float = Field(default=0.0, ge=0.0, le=1.0, description="Fused relevance score")
+    sparse_score: float = Field(default=0.0, ge=0.0, le=1.0, description="FTS5 BM25 component")
+    dense_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Cosine similarity component")
+    structured_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Label/filter component")
+
+
 class KnowledgeSnapshot(BaseModel):
     """Temporal record of changes to a knowledge graph node."""
     timestamp: datetime = Field(

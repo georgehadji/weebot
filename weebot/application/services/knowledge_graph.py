@@ -22,6 +22,7 @@ from weebot.domain.models.knowledge_graph import (
     KnowledgeEdge,
     KnowledgeNode,
     KnowledgeSnapshot,
+    ScoredNode,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,80 @@ def merge_properties(
     merged.update({k: v for k, v in new_props.items() if k not in old_props or old_props.get(k) == v})
     merged[CORROBORATION_KEY] = merged.get(CORROBORATION_KEY, 1) + 1
     return merged
+
+
+# ── Reciprocal Rank Fusion (Phase 2) ───────────────────────────────
+
+RRF_K = 60
+"""Default RRF constant. K=60 is the standard value from the fusion literature."""
+
+
+def reciprocal_rank_fusion(
+    sparse: list[tuple[str, float]],
+    dense: list[tuple[str, float]],
+    structured_ids: set[str],
+    *,
+    k: float = RRF_K,
+    sparse_weight: float = 0.4,
+    dense_weight: float = 0.4,
+    structured_weight: float = 0.2,
+    limit: int = 10,
+) -> list[ScoredNode]:
+    """Fuse three ranked result sets using Reciprocal Rank Fusion.
+
+    Args:
+        sparse: (node_id, raw_score) from FTS5, ordered by rank ASC.
+        dense: (node_id, similarity) from cosine, ordered DESC.
+        structured_ids: Set of node_ids matching the label/filter query.
+        k: RRF constant (default 60).
+        sparse_weight: Weight for the sparse leg.
+        dense_weight: Weight for the dense leg.
+        structured_weight: Weight for the structured leg.
+        limit: Max results.
+
+    Returns:
+        ScoredNode list sorted by descending fused score.
+        Each ScoredNode has ``score`` (fused), ``sparse_score``,
+        ``dense_score``, ``structured_score`` (normalized 0-1 components),
+        but ``node`` will be None — the caller must hydrate nodes.
+    """
+    sparse_rank = {nid: i + 1 for i, (nid, _) in enumerate(sparse)}
+    dense_rank = {nid: i + 1 for i, (nid, _) in enumerate(dense)}
+
+    all_ids: set[str] = set()
+    for nid, _ in sparse:
+        all_ids.add(nid)
+    for nid, _ in dense:
+        all_ids.add(nid)
+    all_ids.update(structured_ids)
+
+    MISSING = limit * 3
+    scored: list[ScoredNode] = []
+
+    for nid in all_ids:
+        in_sparse = nid in sparse_rank
+        in_dense = nid in dense_rank
+        in_struct = nid in structured_ids
+
+        sr = sparse_rank.get(nid, MISSING)
+        dr = dense_rank.get(nid, MISSING)
+
+        sr_score = sparse_weight / (k + sr) if sparse_weight > 0 and in_sparse else 0.0
+        dr_score = dense_weight / (k + dr) if dense_weight > 0 and in_dense else 0.0
+        st_score = (structured_weight / (k + 1)
+                    if in_struct and structured_weight > 0
+                    else 0.0)
+        fused = sr_score + dr_score + st_score
+        scored.append(ScoredNode(
+            node=None,  # caller hydrates
+            score=min(fused, 1.0),
+            sparse_score=min(sr_score / sparse_weight, 1.0) if sparse_weight > 0 and in_sparse else 0.0,
+            dense_score=min(dr_score / dense_weight, 1.0) if dense_weight > 0 and in_dense else 0.0,
+            structured_score=min(st_score / structured_weight, 1.0) if structured_weight > 0 and in_struct else 0.0,
+        ))
+
+    scored.sort(key=lambda x: -x.score)
+    return scored[:limit]
 
 
 def _has_conflict(
@@ -299,6 +374,43 @@ class KnowledgeGraphService:
             List of matching KnowledgeNode instances.
         """
         return await self._adapter.query(label=label, filters=filters or None)
+
+    async def hybrid_search(
+        self,
+        query: str,
+        *,
+        label: str | None = None,
+        filters: dict[str, Any] | None = None,
+        limit: int = 10,
+        dense_weight: float = 0.4,
+        sparse_weight: float = 0.4,
+        structured_weight: float = 0.2,
+    ) -> list[ScoredNode]:
+        """Multi-mode search fusing sparse (FTS5), dense (cosine), and structured results.
+
+        Delegates to the adapter which performs the fan-out and fusion.
+
+        Args:
+            query: Free-text search query.
+            label: Optional node label filter.
+            filters: Optional property key-value filters.
+            limit: Max results.
+            dense_weight: Weight for dense leg in RRF.
+            sparse_weight: Weight for sparse leg in RRF.
+            structured_weight: Weight for structured leg in RRF.
+
+        Returns:
+            List of ScoredNode sorted by fused relevance.
+        """
+        return await self._adapter.hybrid_search(
+            query,
+            label=label,
+            filters=filters,
+            limit=limit,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
+            structured_weight=structured_weight,
+        )
 
     async def search(self, query: str, limit: int = 10) -> list[KnowledgeNode]:
         """Full-text search across node names and properties.

@@ -7,7 +7,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
-from weebot.domain.models.knowledge_graph import KnowledgeEdge, KnowledgeNode, KnowledgeSnapshot
+from weebot.domain.models.knowledge_graph import KnowledgeEdge, KnowledgeNode, KnowledgeSnapshot, ScoredNode
 from weebot.infrastructure.persistence.postgresql.connection import get_pool
 
 
@@ -143,6 +143,34 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
             return KnowledgeSnapshot(node_id=row["id"], node_label=row["label"],
                                      node_name=row["name"], properties=row["properties"],
                                      version=row["version"], timestamp=row["updated_at"])
+
+    async def hybrid_search(
+        self,
+        query: str,
+        *,
+        label: Optional[str] = None,
+        filters: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        dense_weight: float = 0.4,
+        sparse_weight: float = 0.4,
+        structured_weight: float = 0.2,
+    ) -> list[ScoredNode]:
+        """Hybrid search — delegates to PG full-text search for now.
+
+        Dense leg (pgvector) is a future enhancement.  For now this falls
+        back to sparse (to_tsvector) + optional structured filter, with
+        the FTS rank mapped into ScoredNode.sparse_score.
+        """
+        nodes = await self.search(query, limit=limit)
+        if label or filters:
+            filtered = await self.query(label=label, filters=filters)
+            filtered_ids = {n.id for n in filtered}
+            nodes = [n for n in nodes if n.id in filtered_ids]
+        norm = 1.0 / max(len(nodes), 1)
+        return [
+            ScoredNode(node=n, score=1.0 - i * norm, sparse_score=1.0 - i * norm)
+            for i, n in enumerate(nodes[:limit])
+        ]
 
     async def search(self, query: str, limit: int = 10) -> list[KnowledgeNode]:
         pool = await get_pool("skills")
