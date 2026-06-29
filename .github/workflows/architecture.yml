@@ -64,12 +64,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build weebot-api image
         run: docker build -t weebot-api .
       - name: Build weebot-ui image
-        run: docker build -t weebot-ui -f weebot-ui/Dockerfile weebot-ui/
+        run: docker build -t weebot-ui -f weebot-ui/Dockerfile .
       - name: Start services (no .env — verify crash-free)
         run: |
           export OPENROUTER_API_KEY=ci-test-key
