@@ -134,7 +134,7 @@ class DesktopA11yTool(BaseTool):
             try:
                 for child in element.descendants():
                     walk(child, depth + 1)
-            except Exception:
+            except (AttributeError, RuntimeError, IndexError):
                 pass
 
         if window_title:

@@ -123,8 +123,8 @@ class ComputerUseTool(BaseTool):
         """
         if dpi_scale == 1.0:
             return x, y
-        sx = int(x / dpi_scale) if x is not None else None
-        sy = int(y / dpi_scale) if y is not None else None
+        sx = round(x / dpi_scale) if x is not None else None
+        sy = round(y / dpi_scale) if y is not None else None
         return sx, sy
 
     async def execute(

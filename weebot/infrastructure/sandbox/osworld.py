@@ -169,9 +169,17 @@ pyautogui.click({x}, {y}, button='{button}')
         await self._exec(["python3", "-c", f"import pyautogui; pyautogui.doubleClick({x}, {y})"])
 
     async def type_text(self, text: str) -> None:
-        """Type text into the currently focused element."""
-        escaped = text.replace("'", "'\\''")
-        await self._exec(["python3", "-c", f"import pyautogui; pyautogui.write('{escaped}', interval=0.05)"])
+        """Type text into the currently focused element.
+
+        Uses base64 encoding to avoid shell escaping issues.
+        """
+        import base64 as _b64
+        encoded = _b64.b64encode(text.encode()).decode()
+        await self._exec(["python3", "-c", f"""
+import base64, pyautogui
+text = base64.b64decode('{encoded}').decode()
+pyautogui.write(text, interval=0.05)
+"""])
 
     async def hotkey(self, *keys: str) -> None:
         """Press a hotkey combination (e.g., hotkey('ctrl', 'c'))."""
@@ -239,17 +247,24 @@ except ImportError:
         return await self._remote_get_file(remote_path)
 
     async def put_file(self, local_path: Path, remote_path: str) -> bool:
-        """Upload a file to the OSWorld VM."""
+        """Upload a file to the OSWorld VM.
+
+        Raises:
+            ValueError: If *remote_path* contains unsafe characters.
+        """
+        import re as _re
+        if not _re.match(r"^[a-zA-Z0-9/._\-\~]+$", remote_path):
+            raise ValueError(f"Unsafe remote_path: {remote_path}")
         content = local_path.read_bytes()
-        import json
-        payload = json.dumps({"path": remote_path, "content": base64.b64encode(content).decode()})
+        encoded = base64.b64encode(content).decode()
         if self._mode == "remote":
-            return await self._remote_put_file(remote_path, payload)
+            return await self._remote_put_file(remote_path, encoded)
         # Docker: write via Python
         result = await self._exec(["python3", "-c", f"""
 import base64
+data = base64.b64decode('{encoded}')
 with open('{remote_path}', 'wb') as f:
-    f.write(base64.b64decode({json.dumps(base64.b64encode(content).decode())}))
+    f.write(data)
 """])
         return result.success
 
@@ -329,15 +344,38 @@ with open('{remote_path}', 'wb') as f:
             )
 
     async def _docker_capture_screenshot(self) -> bytes:
-        """Capture screenshot from Docker container using import-display or scrot."""
-        result = await self._exec([
-            "python3", "-c",
-            "import subprocess; subprocess.run(['import', '-window', 'root', '/tmp/screen.png'])",
-        ])
+        """Capture screenshot from Docker container.
+
+        Tries backends in order: import (ImageMagick) → scrot → python mss.
+        One of these must be installed in the Docker container.
+        """
+        import shutil as _su
+        commands = [
+            ["import", "-window", "root", "/tmp/screen.png"],
+            ["scrot", "/tmp/screen.png"],
+        ]
+        for cmd in commands:
+            result = await self._exec(cmd)
+            if result.success:
+                file_result = await self._exec(["cat", "/tmp/screen.png"])
+                return file_result.stdout.encode()
+        # Fallback: mss (cross-platform, no extra deps)
+        result = await self._exec(["python3", "-c", """
+try:
+    import mss, base64
+    with mss.mss() as sct:
+        sct.shot(output='/tmp/screen.png')
+except ImportError:
+    import subprocess
+    subprocess.run(['apt-get', 'install', '-y', '-qq', 'python3-mss'], check=True)
+    import mss
+    with mss.mss() as sct:
+        sct.shot(output='/tmp/screen.png')
+"""])
         if result.success:
             file_result = await self._exec(["cat", "/tmp/screen.png"])
             return file_result.stdout.encode()
-        raise OSWorldConnectionError("Docker screenshot capture failed")
+        raise OSWorldConnectionError("Docker screenshot failed — install imagemagick, scrot, or mss in container")
 
     async def _remote_capture_screenshot(self) -> bytes:
         import httpx
