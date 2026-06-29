@@ -323,45 +323,187 @@ class KnowledgeGraphService:
         step_description: str,
         result: str,
         session_id: str,
+        user_input: str | None = None,
     ) -> int:
-        """Attempt to extract knowledge nodes from a step execution result.
+        """Extract knowledge nodes from a step execution result (F7).
 
-        Parses the result for structured facts and stores them as nodes
-        with edges to the step description.
+        Uses a cheap heuristic: scans for ``key: value`` lines in *result*.
+        Each match stores:
+        - The extracted ``value`` as a property
+        - The **surrounding lines** (±2 context) as ``evidence``
+        - Both the tool output (*result*) and optional *user_input* context
 
         Args:
             step_description: What the step was doing.
-            result: The execution result text.
+            result: The execution result text (tool output).
             session_id: Current session ID.
+            user_input: Optional user message that preceded this step.
+                When provided, it is stored as ``user_context`` on each
+                extracted node so both sides of the turn survive.
 
         Returns:
             Number of nodes created/updated.
         """
-        # Simple heuristic: look for "key: value" patterns in results
         count = 0
         lines = (result or "").split("\n")
-        for line in lines:
-            line = line.strip()
+        original_lines = list(lines)  # Keep non-stripped for context extraction
+
+        for i, raw_line in enumerate(original_lines):
+            line = raw_line.strip()
             if not line or ":" not in line:
                 continue
             key, _, value = line.partition(":")
             key = key.strip().lower()
             value = value.strip()
-            if key and value and len(value) < 200:
-                # Treat extracted facts as knowledge nodes
-                await self.discover_node(
-                    label=LABEL_FACT,
-                    name=key,
-                    properties={"value": value, "source": step_description},
-                    session_id=session_id,
-                    confidence=0.6,
-                )
-                count += 1
+            if not key or not value or len(value) >= 200:
+                continue
+
+            # Capture surrounding context as evidence (F7: preserve multi-hop)
+            start = max(0, i - 2)
+            end = min(len(original_lines), i + 3)
+            surrounding = "\n".join(original_lines[start:end])
+
+            evidence_lines = [f"line {i + 1}: {raw_line.strip()}"]
+            if surrounding:
+                evidence_lines.append(f"context:\n{surrounding}")
+
+            props: dict[str, Any] = {
+                "value": value,
+                "source": step_description,
+                "evidence": "\n---\n".join(evidence_lines),
+            }
+
+            # Store user context when available (F7: keep both turns)
+            if user_input:
+                props["user_context"] = user_input.strip()[:500]
+
+            await self.discover_node(
+                label=LABEL_FACT,
+                name=key,
+                properties=props,
+                session_id=session_id,
+                confidence=0.6,
+            )
+            count += 1
 
         if count:
             logger.info("Extracted %d knowledge nodes from step result", count)
 
         return count
+
+    async def extract_with_llm(
+        self,
+        step_description: str,
+        result: str,
+        session_id: str,
+        llm: Any = None,
+        user_input: str | None = None,
+    ) -> int:
+        """Extract entity–relation triplets using an LLM (gated).
+
+        This is an **optional** enhancement to the heuristic extraction.
+        Pass an *llm* with a ``chat()`` method (following ``LLMPort``
+        semantics) to enable schema-constrained triplet extraction.
+        When *llm* is ``None`` (the default), this method is a no-op
+        returning 0 — the caller must explicitly opt in.
+
+        Args:
+            step_description: What the step was doing.
+            result: The tool output text.
+            session_id: Current session ID.
+            llm: Optional LLMPort-compatible provider. If ``None``, skips.
+            user_input: Optional user message for context.
+
+        Returns:
+            Number of triplets stored.
+        """
+        if llm is None:
+            logger.debug("extract_with_llm skipped — no LLM provider passed")
+            return 0
+
+        # Build a structured extraction prompt
+        prompt = (
+            "Extract entity-relation triplets from the following text. "
+            "Return a JSON list of {head, relation, tail, confidence} objects. "
+            "Example:\n"
+            '[{"head": "Python", "relation": "is_a", "tail": "programming_language", "confidence": 1.0}]\n\n'
+            f"Tool output:\n{result[:3000]}\n"
+        )
+        if user_input:
+            prompt = f"User query:\n{user_input[:1000]}\n\n{prompt}"
+
+        try:
+            if hasattr(llm, "chat"):
+                response = await llm.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                )
+                content = response.get("content", "") if isinstance(response, dict) else str(response)
+            else:
+                logger.warning("LLM provider lacks chat() method — skipping extraction")
+                return 0
+
+            import json as _json
+            triplets = _json.loads(content)
+            if isinstance(triplets, dict) and "triplets" in triplets:
+                triplets = triplets["triplets"]
+            if not isinstance(triplets, list):
+                return 0
+
+            count = 0
+            for t in triplets:
+                head = t.get("head", "").strip()
+                relation = t.get("relation", "").strip()
+                tail = t.get("tail", "").strip()
+                confidence = float(t.get("confidence", 0.7))
+
+                if not head or not tail:
+                    continue
+
+                # Discover head entity
+                head_node = await self.discover_node(
+                    label=LABEL_FACT,
+                    name=head.lower(),
+                    properties={
+                        "canonical_name": head,
+                        "source": step_description,
+                        "extraction_method": "llm",
+                    },
+                    session_id=session_id,
+                    confidence=confidence,
+                )
+
+                # Discover tail entity
+                tail_node = await self.discover_node(
+                    label=LABEL_FACT,
+                    name=tail.lower(),
+                    properties={
+                        "canonical_name": tail,
+                        "source": step_description,
+                        "extraction_method": "llm",
+                    },
+                    session_id=session_id,
+                    confidence=confidence,
+                )
+
+                # Create the relationship edge
+                await self.relate_nodes(
+                    source_id=head_node.id,
+                    target_id=tail_node.id,
+                    relation=relation,
+                    confidence=confidence,
+                    evidence=f"LLM extracted from: {step_description[:200]}",
+                )
+                count += 1
+
+            if count:
+                logger.info("LLM extraction stored %d triplets", count)
+            return count
+
+        except Exception:
+            logger.warning("LLM extraction failed (non-fatal)", exc_info=True)
+            return 0
 
     async def query(self, label: str | None = None, **filters: Any) -> list[KnowledgeNode]:
         """Query knowledge nodes.

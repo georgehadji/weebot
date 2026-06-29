@@ -21,6 +21,7 @@ from weebot.domain.models.knowledge_graph import (
 )
 from weebot.application.services.knowledge_graph import (
     DEFAULT_CONFIDENCE_MARGIN,
+    KnowledgeGraphService,
     merge_properties,
     reciprocal_rank_fusion,
 )
@@ -425,3 +426,117 @@ class TestHybridSearch:
         results = await kg.hybrid_search("gravity", dense_weight=0.4, limit=5)
         assert len(results) >= 1
         assert all(r.sparse_score >= 0 for r in results)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 3 — Coverage-preserving extraction tests (F7)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestExtraction:
+    """Tests for extract_from_step_result and extract_with_llm."""
+
+    @pytest.mark.asyncio
+    async def test_extraction_preserves_surrounding_context(self, kg: SQLiteKnowledgeGraph) -> None:
+        """Extracted facts should include surrounding lines as evidence."""
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        svc = KnowledgeGraphService(adapter=kg)
+
+        result = (
+            "server stats:\n"
+            "  cpu: 45%\n"
+            "  memory: 8.2 GB\n"
+            "  disk: 234 GB free\n"
+            "  status: healthy\n"
+        )
+        count = await svc.extract_from_step_result(
+            step_description="check server health",
+            result=result,
+            session_id="sess-test-1",
+        )
+        assert count >= 4
+
+        # Each node should have evidence with surrounding context
+        node = await kg.get_node(
+            svc._make_node_id("fact", "memory")
+        )
+        assert node is not None
+        evidence = node.properties.get("evidence", "")
+        assert "cpu: 45%" in evidence, (
+            "Evidence should include preceding context lines"
+        )
+        assert "disk: 234 GB free" in evidence, (
+            "Evidence should include following context lines"
+        )
+
+    @pytest.mark.asyncio
+    async def test_extraction_keeps_user_and_tool_lines(self, kg: SQLiteKnowledgeGraph) -> None:
+        """When user_input is provided, both user and tool turns survive."""
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        svc = KnowledgeGraphService(adapter=kg)
+
+        result = "price: $29.99\navailability: in stock\nrating: 4.5 stars"
+        count = await svc.extract_from_step_result(
+            step_description="check product details",
+            result=result,
+            session_id="sess-test-2",
+            user_input="What is the price of the premium plan?",
+        )
+        assert count >= 3
+
+        node = await kg.get_node(
+            svc._make_node_id("fact", "price")
+        )
+        assert node is not None
+        user_ctx = node.properties.get("user_context", "")
+        assert "premium plan" in user_ctx, (
+            "User input context should be preserved on the fact"
+        )
+
+    @pytest.mark.asyncio
+    async def test_llm_extraction_noop_when_no_llm(self) -> None:
+        """extract_with_llm should be a no-op when llm=None."""
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        # No adapter needed for this test — the method returns 0 before touching DB
+        svc = KnowledgeGraphService(adapter=None)  # type: ignore[arg-type]
+
+        count = await svc.extract_with_llm(
+            step_description="test",
+            result="some text",
+            session_id="sess-test-3",
+            llm=None,
+        )
+        assert count == 0, "Should return 0 when llm is None"
+
+    @pytest.mark.asyncio
+    async def test_extraction_short_values_skipped(self, kg: SQLiteKnowledgeGraph) -> None:
+        """Lines without ':' or with empty values should be skipped."""
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        svc = KnowledgeGraphService(adapter=kg)
+
+        result = (
+            "header line\n"
+            "valid_key: valid_value\n"
+            "no-colon-here\n"
+            ": empty_key_skipped\n"
+            "another: value\n"
+        )
+        count = await svc.extract_from_step_result(
+            step_description="test",
+            result=result,
+            session_id="sess-test-4",
+        )
+        assert count == 2, "Only 2 valid key:value lines should be extracted"
+
+    @pytest.mark.asyncio
+    async def test_extraction_empty_result(self, kg: SQLiteKnowledgeGraph) -> None:
+        """Empty result string should produce 0 extractions."""
+        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+        svc = KnowledgeGraphService(adapter=kg)
+
+        count = await svc.extract_from_step_result(
+            step_description="test",
+            result="",
+            session_id="sess-test-5",
+        )
+        assert count == 0
