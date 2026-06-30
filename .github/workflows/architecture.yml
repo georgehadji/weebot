@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install import-linter
+          pip install import-linter ruff
       - name: Run import-linter
         run: make lint-imports
       - name: Run architecture fitness tests
