@@ -34,13 +34,13 @@ class ChatMessageState(FlowState):
         # ── Inject pending commitment summary ──────────────────
         if context._state_repo and hasattr(context._state_repo, 'get_pending_commitments'):
             try:
-                from weebot.application.services.commitment_engine import CommitmentEngine
+                from weebot.domain.services.commitment_engine import CommitmentEngine
                 engine = CommitmentEngine(state_repo=context._state_repo)
                 summary = await engine.get_pending_summary()
                 if summary:
                     prompt = summary + "\n\n───\n\n" + prompt
             except Exception:
-                pass
+                logger.debug("Failed to load pending summary from CommitmentEngine", exc_info=True)
 
         # --- CQRS delegate path ---
         if context._mediator:

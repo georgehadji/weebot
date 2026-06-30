@@ -58,7 +58,7 @@ _SENSITIVE_PATTERNS: list[re.Pattern] = [
     re.compile(r'AKIA[A-Z0-9]{16}', re.IGNORECASE),
     re.compile(r'-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----'),
     # DB connection strings
-    re.compile(r'(?:postgres|mysql|mongodb|redis)://[^\s<>"]+', re.IGNORECASE),
+    re.compile(r'(?:postgres|mysql|mongodb|redis|valkey)://[^\s<>"]+', re.IGNORECASE),
     # Bulk PII heuristic: CSV-ish row with email + number combo repeated ≥5 times
     re.compile(r'(?:[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[,;\t][^\n]{0,80}\n){5,}'),
 ]

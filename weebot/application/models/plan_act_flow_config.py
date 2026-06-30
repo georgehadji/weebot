@@ -58,6 +58,7 @@ class PlanActFlowConfig:
     max_steps: Optional[int] = None
     auto_terminate_on_plan_complete: bool = True
     termination_conditions: Optional[list] = None  # list[TerminationCondition]
+    planning_mode: str = "auto"  # "sequential", "dppm", or "auto" (dppm for complex tasks)
 
     # ── Critique & validation ───────────────────────────────────────
     truth_binder: Optional[Any] = None  # TruthBinder
@@ -118,3 +119,18 @@ class PlanActFlowConfig:
     """Optional event middleware pipeline (EventPipeline).
     When set, ``_emit()`` delegates to the pipeline; when None,
     the legacy inline implementation is used (backward-compatible)."""
+
+    def __post_init__(self):
+        """Auto-select per-model harness if harness_config is None and model is set."""
+        if self.harness_config is None and self.model:
+            try:
+                from weebot.config.model_refs import get_harness_for_model
+                harness_path = get_harness_for_model(self.model)
+                # Only import if a per-model variant exists (get_harness_for_model
+                # returns the default path if no per-model file exists, which means
+                # we'd load the default harness — that's fine, it's just redundant)
+                if "/models/" in harness_path:  # Per-model variant exists
+                    from weebot.config.harness.schema import HarnessConfig
+                    self.harness_config = HarnessConfig.from_yaml(harness_path)
+            except Exception:
+                pass  # Graceful fallback — use default harness

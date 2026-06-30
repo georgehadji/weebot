@@ -12,6 +12,7 @@ from typing import Any
 
 from weebot.application.ports.intent_review_port import IntentReviewPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
 from weebot.domain.models.idea_contract import IdeaContract
 from weebot.domain.models.intent_review import IntentReview, IntentVerdict
 
@@ -28,7 +29,7 @@ Return ONLY valid JSON:
 {"verdict": "ready" | "not_ready" | "blocked", "reasoning": "...", "clarification_needed": [...]}"""
 
 _TIMEOUT = 5.0
-_MAX_TOKENS = 300
+_MAX_TOKENS = MAX_TOKENS_CONCISE
 
 
 class IntentReviewService(IntentReviewPort):
@@ -51,7 +52,7 @@ class IntentReviewService(IntentReviewPort):
                             f"Evidence: {', '.join(contract.evidence[:5])}"
                         )},
                     ],
-                    temperature=0.1,
+                    temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,
                 ),
                 timeout=self._timeout,

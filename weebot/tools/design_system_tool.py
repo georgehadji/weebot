@@ -94,11 +94,11 @@ class DesignSystemTool(BaseTool):
                 if "not found" in result.stderr.lower() or "enoent" in result.stderr.lower():
                     try:
                         install = subprocess.run(
-                            "npm install -g skillui",
+                            ["npm", "install", "-g", "skillui"],
                             capture_output=True,
                             text=True,
                             timeout=60,
-                            shell=True,
+                            shell=False,
                         )
                         if install.returncode != 0:
                             return ToolResult.error_result(

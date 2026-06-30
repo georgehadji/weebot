@@ -206,22 +206,43 @@ class MCPToolRegistryBridge:
         return total
 
     def _register_single_tool(self, server_name: str, tool_info: MCPToolInfo) -> None:
-        """Register a single MCP tool into the tool registry."""
+        """Register a single MCP tool into the tool registry.
+
+        Write tools (matching ``write_tools`` patterns on the server config)
+        are registered to **admin-only** at **restricted** tier.  Read tools
+        register to all four roles at **controlled** tier.
+        """
         namespaced = tool_info.namespaced_name
 
-        # Add to all admin and automation roles so the agent can call it
-        for role in ["admin", "automation", "researcher", "coder"]:
+        # Check if this tool matches any write-tool patterns
+        config = self._server_configs.get(server_name)
+        write_patterns = config.tools.write_tools if config and config.tools.write_tools else []
+        is_write = any(fnmatch.fnmatch(tool_info.original_name, p) for p in write_patterns)
+
+        if is_write:
+            # Write tools: admin-only + restricted tier
+            roles = ["admin"]
+            tier = "restricted"
+        else:
+            # Read tools: all roles + controlled tier
+            roles = ["admin", "automation", "researcher", "coder"]
+            tier = "controlled"
+
+        for role in roles:
             try:
                 self._registry.add_tool_to_role(role, namespaced)
             except ValueError:
                 # Role doesn't exist yet — create it
                 self._registry.add_role(role, [namespaced])
 
-        # Add to tool tiers (default to "controlled" for MCP tools)
+        # Set tier
         if self._registry.get_tool_tier(namespaced) == "public":
-            self._registry.set_tool_tier(namespaced, "controlled")
+            self._registry.set_tool_tier(namespaced, tier)
 
-        logger.debug("Bridge: registered MCP tool %s (server: %s)", namespaced, server_name)
+        logger.debug(
+            "Bridge: registered MCP tool %s (server: %s, write=%s, tier=%s)",
+            namespaced, server_name, is_write, tier,
+        )
 
     async def reload(self) -> int:
         """Re-discover and re-register all MCP tools.

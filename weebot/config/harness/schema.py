@@ -54,6 +54,26 @@ class TrajectoryConfig(BaseModel):
     exhaustion_ratio: float = Field(default=0.9, ge=0.0, le=1.0)
 
 
+class MiddlewareRule(BaseModel):
+    """A named middleware rule — intercepts tool execution based on a trigger.
+
+    Middleware rules are structural harness components that the Self-Harness
+    proposer can suggest to address recurring failure patterns.  Gated by
+    ``HarnessSafetyGate`` (human approval required for auto-promotion).
+
+    Example from the Self-Harness paper:
+      - ``tool_error_handler`` — redirect when consecutive tool errors exceed threshold
+      - ``loop_breaker`` — force summarisation after N identical tool calls
+      - ``artifact_ensurer`` — verify required artifacts exist before concluding
+    """
+
+    name: str = Field(description="Unique middleware rule name")
+    description: str = Field(default="", description="What this rule does")
+    trigger: str = Field(description="Trigger condition (e.g. tool_error_after:3, loop_detected)")
+    action: str = Field(description="Action when triggered (e.g. redirect_to_recovery, force_replan)")
+    enabled: bool = Field(default=True, description="Whether this rule is active")
+
+
 class HarnessConfig(BaseModel):
     """Top-level harness configuration — one versioned artifact.
 
@@ -89,6 +109,11 @@ class HarnessConfig(BaseModel):
     subagents: SubagentConfig = Field(
         default_factory=SubagentConfig,
         description="Subagent declarations for parallel delegation",
+    )
+    middleware: list[MiddlewareRule] = Field(
+        default_factory=list,
+        description="Middleware rules — tool-execution interceptors. "
+                    "Safety-gated (human approval required for auto-promotion).",
     )
     skill_selection: SkillSelectionConfig = Field(
         default_factory=SkillSelectionConfig,

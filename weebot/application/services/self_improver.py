@@ -6,6 +6,7 @@ execution before being applied. Patches are git-backed for rollback.
 """
 from __future__ import annotations
 
+import asyncio
 import difflib
 import json
 import logging
@@ -151,15 +152,15 @@ class SelfImprover(SelfImprovementPort):
         path = self._project_root / patch.target_file
         if path.suffix in (".yaml", ".yml"):
             try:
-                with open(path) as f:
-                    yaml.safe_load(f)
+                content = await asyncio.to_thread(path.read_text, encoding="utf-8")
+                yaml.safe_load(content)
                 return 0.7
             except Exception:
                 return 0.0
         elif path.suffix == ".json":
             try:
-                with open(path) as f:
-                    json.load(f)
+                content = await asyncio.to_thread(path.read_text, encoding="utf-8")
+                json.loads(content)
                 return 0.7
             except Exception:
                 return 0.0
@@ -182,7 +183,7 @@ class SelfImprover(SelfImprovementPort):
             return False
 
         try:
-            current = path.read_text(encoding="utf-8")
+            current = await asyncio.to_thread(path.read_text, encoding="utf-8")
             # Apply diff
             new = self._apply_diff(current, patch.diff)
             if new is None:
@@ -196,7 +197,7 @@ class SelfImprover(SelfImprovementPort):
                 return False
 
             # Write
-            path.write_text(new, encoding="utf-8")
+            await asyncio.to_thread(path.write_text, new, encoding="utf-8")
             patch.applied = True
             logger.info("Applied patch to %s", patch.target_file)
             return True
@@ -224,7 +225,7 @@ class SelfImprover(SelfImprovementPort):
             return False
 
         try:
-            current = path.read_text(encoding="utf-8")
+            current = await asyncio.to_thread(path.read_text, encoding="utf-8")
             # Reverse the diff
             reversed_diff = self._reverse_diff(patch.diff)
             reverted = self._apply_diff(current, reversed_diff)
@@ -232,7 +233,7 @@ class SelfImprover(SelfImprovementPort):
                 logger.error("Failed to reverse patch for %s", patch.target_file)
                 return False
 
-            path.write_text(reverted, encoding="utf-8")
+            await asyncio.to_thread(path.write_text, reverted, encoding="utf-8")
             patch.reverted = True
             logger.info("Reverted patch on %s", patch.target_file)
             return True

@@ -136,7 +136,7 @@ class TaskRunner:
             _get_tr_metrics().session_active.inc()
             _get_tr_metrics().session_total.inc()
         except Exception:
-            pass
+            logger.debug("Failed to increment session metrics", exc_info=True)
 
         try:
             async for event in flow.run(session.context.get("last_prompt", "")):
@@ -194,7 +194,7 @@ class TaskRunner:
             try:
                 _get_tr_metrics().session_active.dec()
             except Exception:
-                pass
+                logger.debug("Failed to decrement session active metric", exc_info=True)
 
     async def resume_session(
         self,

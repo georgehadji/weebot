@@ -19,16 +19,21 @@ logger = logging.getLogger(__name__)
 
 
 class EvolutionTracker:
-    """Generates and appends epoch narratives to Skill.evolution_log."""
+    """Generates and appends epoch narratives to Skill.evolution_log.
+
+    Also tracks evaluator replacements when co-evolution (R3) is active.
+    """
 
     def __init__(self, llm: LLMPort) -> None:
         self._llm = llm
+        self._evaluator_lineage: list[dict] = []  # evaluator_id -> replacement history
 
     async def record_epoch(
         self,
         skill: Skill,
         prev_skill: Skill,
         epoch_event: EpochCompleted,
+        evaluator_replacement: Optional[dict] = None,
     ) -> Skill:
         """Generate a narrative for the completed epoch and return the updated Skill.
 
@@ -36,11 +41,17 @@ class EvolutionTracker:
             skill: The skill at the END of the epoch (post slow-update).
             prev_skill: The skill at the START of the epoch.
             epoch_event: The EpochCompleted event emitted by SkillOptFlow.
+            evaluator_replacement: Optional dict from evaluator co-evolution
+                ``{"old_id": ..., "new_id": ..., "old_acc": ..., "new_acc": ...}``.
+                If provided, appended to evaluator lineage.
 
         Returns:
             A new Skill with the epoch's EvolutionEntry appended to evolution_log.
         """
-        narrative = await self._generate_narrative(skill, prev_skill, epoch_event)
+        narrative = await self._generate_narrative(
+            skill, prev_skill, epoch_event,
+            evaluator_replacement=evaluator_replacement,
+        )
         prev_best = prev_skill.best.validation_score or 0.0
 
         entry = EvolutionEntry(
@@ -52,13 +63,54 @@ class EvolutionTracker:
             score_delta=epoch_event.best_validation_score - prev_best,
             slow_update_applied=epoch_event.slow_update_applied,
         )
-        return skill.add_evolution_entry(entry)
+        skill = skill.add_evolution_entry(entry)
+
+        # Track evaluator replacement if one occurred
+        if evaluator_replacement:
+            self._evaluator_lineage.append(evaluator_replacement)
+            self._evaluator_lineage.append({
+                "epoch": epoch_event.epoch,
+                "old_evaluator_id": evaluator_replacement.get("old_id"),
+                "new_evaluator_id": evaluator_replacement.get("new_id"),
+                "old_accuracy": evaluator_replacement.get("old_acc"),
+                "new_accuracy": evaluator_replacement.get("new_acc"),
+            })
+
+        return skill
+
+    def track_evaluator_replacement(
+        self,
+        old_evaluator_id: str,
+        new_evaluator_id: str,
+        old_accuracy: float,
+        new_accuracy: float,
+        epoch: int,
+    ) -> None:
+        """Record an evaluator replacement for lineage tracking."""
+        entry = {
+            "old_evaluator_id": old_evaluator_id,
+            "new_evaluator_id": new_evaluator_id,
+            "old_accuracy": old_accuracy,
+            "new_accuracy": new_accuracy,
+            "epoch": epoch,
+        }
+        self._evaluator_lineage.append(entry)
+        logger.info(
+            "Evaluator lineage: %s → %s (acc %.3f → %.3f) at epoch %d",
+            old_evaluator_id, new_evaluator_id, old_accuracy, new_accuracy, epoch,
+        )
+
+    @property
+    def evaluator_lineage(self) -> list[dict]:
+        """Return the evaluator replacement history."""
+        return list(self._evaluator_lineage)
 
     async def _generate_narrative(
         self,
         skill: Skill,
         prev_skill: Skill,
         epoch_event: EpochCompleted,
+        evaluator_replacement: Optional[dict] = None,
     ) -> str:
         """Call the LLM with epoch stats + diff summary, return narrative string."""
         try:
@@ -74,6 +126,16 @@ class EvolutionTracker:
 
         prior_narratives = [e.narrative for e in skill.evolution_log[-3:]]
 
+        # Include evaluator replacement context if present
+        evaluator_context = ""
+        if evaluator_replacement:
+            evaluator_context = (
+                f"Evaluator replaced: {evaluator_replacement.get('old_id')} → "
+                f"{evaluator_replacement.get('new_id')} "
+                f"(accuracy {evaluator_replacement.get('old_acc', 0):.3f} → "
+                f"{evaluator_replacement.get('new_acc', 0):.3f})"
+            )
+
         user_msg = json.dumps(
             {
                 "epoch": epoch_event.epoch,
@@ -84,6 +146,7 @@ class EvolutionTracker:
                 "lines_added_sample": added,
                 "lines_removed_sample": removed,
                 "prior_narratives": prior_narratives,
+                "evaluator_context": evaluator_context,
             },
             indent=2,
         )

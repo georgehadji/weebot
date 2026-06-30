@@ -114,6 +114,83 @@ class OptimizerAgent(OptimizerPort):
         ])
         return self._flatten(results)
 
+    @staticmethod
+    def _evaluator_reflection_prompt() -> str:
+        return (
+            "You are improving an evaluator (judge) that scores agent task outputs.\n\n"
+            "The evaluator has this scoring prompt:\n{current_prompt}\n\n"
+            "Recent task trajectories were scored by this evaluator. "
+            "Analyse how well the evaluator's scoring rubric captured the quality "
+            "of these outputs. Consider:\n"
+            "- Did the rubric miss important quality dimensions?\n"
+            "- Did the rubric weigh dimensions correctly?\n"
+            "- Were there false positives or false negatives?\n\n"
+            "Read the trajectories below, then propose a concrete improvement to "
+            "the evaluator's scoring prompt.\n\n"
+            "{trajectory_summary}\n\n"
+            "Respond with a JSON object:\n"
+            '{"new_prompt": "...updated evaluator prompt...", '
+            '"rationale": "why this change improves scoring"}'
+        )
+
+    async def reflect_on_evaluator(
+        self,
+        batch: "OptimizationBatch",
+        current_evaluator: "EvaluatorState",
+        evolution_context: str = "",
+    ) -> list["SkillEdit"]:
+        """Analyse trajectories and propose edits to the evaluator's prompt.
+
+        Same frontier-model optimizer, different target — edits the evaluator's
+        scoring prompt instead of the skill document.
+        """
+        from weebot.domain.models.evaluator_state import EvaluatorState
+        from weebot.domain.models.skill_edit import SkillEdit
+
+        if not batch.trajectories:
+            return []
+
+        # Build a compact trajectory summary
+        lines = []
+        for i, t in enumerate(batch.trajectories[:10]):
+            lines.append(f"Task {i+1}: passed={t.passed}")
+            for m in (t.failure_modes or []):
+                lines.append(f"  - {m}")
+        trajectory_summary = "\n".join(lines)
+
+        prompt = self._evaluator_reflection_prompt().format(
+            current_prompt=current_evaluator.prompt,
+            trajectory_summary=trajectory_summary,
+        )
+
+        try:
+            response = await self._llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+                max_tokens=1000,
+            )
+            if not response or not response.content:
+                return []
+
+            import json
+            parsed = json.loads(response.content)
+            new_prompt = parsed.get("new_prompt", "")
+            if not new_prompt:
+                return []
+
+            return [
+                SkillEdit(
+                    op="replace",
+                    target="evaluator_prompt",
+                    content=new_prompt,
+                    description=parsed.get("rationale", "Evaluator prompt improvement"),
+                )
+            ]
+        except Exception as exc:
+            logger.warning("Evaluator reflection failed: %s", exc, exc_info=True)
+            return []
+
     async def merge_edits(
         self,
         failure_edits: list[SkillEdit],

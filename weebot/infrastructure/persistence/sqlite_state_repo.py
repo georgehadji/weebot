@@ -1,6 +1,7 @@
 """SQLite-backed state repository with connection pooling."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -39,6 +40,10 @@ class SQLiteStateRepository(StateRepositoryPort):
         # Per-instance FTS5 index tracker (session_id → event count indexed).
         # Must be instance-level to avoid cross-instance pollution in tests.
         self._fts5_indexed: dict[str, int] = {}
+        # Per-session locks to prevent concurrent FTS5 indexing races.
+        # Two concurrent save_session() for the same session ID must not
+        # interleave reads and writes of _fts5_indexed.
+        self._fts5_locks: dict[str, asyncio.Lock] = {}
 
     async def _get_pool(self) -> SQLiteConnectionPool:
         """Get or initialize the connection pool."""
@@ -277,21 +282,31 @@ class SQLiteStateRepository(StateRepositoryPort):
             logger.debug(f"Session saved: {session.id}")
             
             # Index only NEW events for FTS5 search (avoid write amplification)
-            last_indexed = self._fts5_indexed.get(session.id, 0)
-            new_events = session.events[last_indexed:]
-            for event in new_events:
-                event_type = getattr(event, "type", "unknown")
-                summary = getattr(event, "message", "") or getattr(event, "summary", "") or event_type
-                content = ""
-                if hasattr(event, "details") and event.details:
-                    content = str(event.details)[:1000]
-                try:
-                    await index_event(
-                        conn, session.id, str(event_type), str(summary), content,
-                    )
-                except Exception:
-                    logger.warning("Failed to index event for FTS5", exc_info=True)
-            self._fts5_indexed[session.id] = len(session.events)
+            # Protected by per-session lock to prevent concurrent save_session
+            # for the same session from double-indexing.
+            if session.id not in self._fts5_locks:
+                self._fts5_locks[session.id] = asyncio.Lock()
+            async with self._fts5_locks[session.id]:
+                last_indexed = self._fts5_indexed.get(session.id, 0)
+                new_events = session.events[last_indexed:]
+                for event in new_events:
+                    event_type = getattr(event, "type", "unknown")
+                    summary = getattr(event, "message", "") or getattr(event, "summary", "") or event_type
+                    content = ""
+                    if hasattr(event, "details") and event.details:
+                        content = str(event.details)[:1000]
+                    try:
+                        await index_event(
+                            conn, session.id, str(event_type), str(summary), content,
+                        )
+                    except Exception:
+                        logger.warning("Failed to index event for FTS5", exc_info=True)
+                self._fts5_indexed[session.id] = len(session.events)
+            # Clean up lock dict to prevent unbounded growth
+            if session.id in self._fts5_locks:
+                # Only remove if no one is waiting — asyncio.Lock doesn't expose
+                # a "no waiters" property, so we keep it; locks are cheap.
+                pass
     
     async def load_session(self, session_id: str) -> Optional[Session]:
         """Load a session by ID."""

@@ -1,0 +1,20 @@
+# Self-Harness Evaluation Tasks
+# 
+# Held-in tasks are shown to the proposer for weakness mining.
+# Held-out tasks are used only for regression testing — never shown to the proposer.
+# 
+# Each task is a prompt string passed to PlanActFlow.
+
+held_in_tasks:
+  - "Create a Python script that reads a CSV file and outputs summary statistics (mean, median, std) for each numeric column."
+  - "Write a bash script to find all files modified in the last 24 hours and compress them into a tar.gz archive."
+  - "Create a simple HTTP server using Python's built-in http.server module that serves a directory listing."
+  - "Write a Python function that validates an email address using regex and returns True/False."
+  - "Create a markdown file documenting how to use the file_editor tool to create and edit files."
+
+held_out_tasks:
+  - "Write a Python script to download a webpage, extract all links, and save them to a text file."
+  - "Create a bash one-liner that counts lines of code in all Python files in a directory tree (excluding venv)."
+  - "Write a Python function that merges two sorted lists into one sorted list without using built-in sort."
+  - "Create a JSON configuration file for a hypothetical data pipeline with input, transform, and output stages."
+  - "Write a Python script that monitors a directory for new files and logs their names and sizes."

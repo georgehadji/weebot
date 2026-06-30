@@ -137,5 +137,6 @@ skills-lock.json
 /project_layout_overview.md
 /Weebot Commands.md
 /.agents/
-graphify-out/.graphify_root
-graphify-out/manifest.json
+graphify-out/
+/implementation_audit_report.md
+/implementation_plan.md

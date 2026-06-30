@@ -81,6 +81,17 @@ def wrap_untrusted(source: str, content: str) -> str:
 
 
 
+_MCP_NAMESPACE_PREFIX = "mcp__"
+
+
 def is_untrusted_tool(tool_name: str) -> bool:
-    """Return True if the named tool produces untrusted external content."""
-    return tool_name in UNTRUSTED_OUTPUT_TOOLS
+    """Return True if the named tool produces untrusted external content.
+
+    Checks both the literal name in UNTRUSTED_OUTPUT_TOOLS and the
+    ``mcp__`` namespace prefix.  Every namespaced MCP tool (e.g.
+    ``mcp__xapi__search_posts``) is treated as untrusted passthrough
+    because the model cannot inspect what the remote server returns.
+    """
+    if tool_name in UNTRUSTED_OUTPUT_TOOLS:
+        return True
+    return tool_name.startswith(_MCP_NAMESPACE_PREFIX)

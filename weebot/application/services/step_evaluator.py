@@ -11,6 +11,7 @@ from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.step_evaluator_port import StepEvaluation, StepEvaluatorPort
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.domain.models.plan import Plan, Step
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,7 @@ class LLMStepEvaluator(StepEvaluatorPort):
             resp = await self._llm.chat(
                 messages=[{"role": "user", "content": prompt}],
                 model=self._model,
-                temperature=0.0,
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
             data = json.loads(resp.content or "{}")
             score = float(data.get("score", 1.0))

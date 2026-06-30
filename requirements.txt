@@ -101,7 +101,7 @@ cryptography==46.0.6
 jinja2>=3.1.0
 
 # Caching / Message Queue
-redis==7.2.0
+valkey==1.0.0  # Drop-in redis replacement (BSD-3-Clause, Linux Foundation)
 
 # Scheduling
 apscheduler>=3.10.0

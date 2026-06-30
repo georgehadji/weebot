@@ -47,6 +47,8 @@ class TaskRunReport:
     pass_rate: float = 0.0
     composite_score: float = 0.0
     errors: list[str] = field(default_factory=list)
+    fast_rejected: bool = False
+    """True if the candidate was fast-rejected by CodeQualitySignal before held-out eval."""
 
     @classmethod
     def from_results(
@@ -118,6 +120,8 @@ class RegressionGate:
         auto_accept: bool = False,
         min_held_out_tasks: int = 2,
         composite_weights: Optional[dict[str, float]] = None,
+        code_quality_signal: Optional[object] = None,
+        code_quality_threshold: float = 0.3,
     ):
         """Initialize the gate.
 
@@ -131,11 +135,19 @@ class RegressionGate:
             min_held_out_tasks: Minimum held-out tasks required for a valid
                 evaluation.  Below this floor, the candidate is rejected.
             composite_weights: Override for the composite metric weights.
+            code_quality_signal: Optional ``CodeQualitySignal`` instance.
+                When provided, outputs from the task runner are pre-scored
+                and candidates with very low composite quality are fast-rejected
+                without running the held-out evaluation.
+            code_quality_threshold: Composite quality below this triggers
+                fast rejection (default 0.3).
         """
         self._task_runner = task_runner
         self._auto_accept = auto_accept
         self._min_held_out_tasks = min_held_out_tasks
         self._weights = composite_weights or _DEFAULT_WEIGHTS
+        self._code_quality_signal = code_quality_signal
+        self._code_quality_threshold = code_quality_threshold
 
     # ── Public API ─────────────────────────────────────────────────
 
@@ -194,6 +206,8 @@ class RegressionGate:
                 reason=reason,
             )
 
+
+
         # ── Phase 1: held-in evaluation ───────────────────────────
         logger.info(
             "RegressionGate: evaluating %d held-in tasks (baseline vs candidate)",
@@ -206,6 +220,19 @@ class RegressionGate:
             candidate=candidate,
             repeats=repeats,
         )
+
+        # ── Phase 1.5: code quality fast-reject on held-in outputs ─
+        if candidate_in_report.fast_rejected:
+            logger.info(
+                "CodeQualitySignal: fast-reject (held-in composite=%.4f, poor quality)",
+                candidate_in_report.composite_score,
+            )
+            return PromotionDecision(
+                accepted=False,
+                delta_in=0.0,
+                delta_ho=0.0,
+                reason="Fast-rejected: code quality below threshold on held-in tasks",
+            )
 
         # Composite delta (primary signal)
         delta_composite_in = (
@@ -304,6 +331,10 @@ class RegressionGate:
     ) -> tuple[TaskRunReport, TaskRunReport]:
         """Run both baseline and candidate on *task_ids*, return reports.
 
+        If ``_code_quality_signal`` is configured, scores the candidate's
+        failed task outputs and sets ``fast_rejected`` on the candidate
+        report if the majority are poor quality.
+
         Aggregates across ``repeats`` runs for stochastic stability.
         """
         if not task_ids:
@@ -327,5 +358,30 @@ class RegressionGate:
         candidate_report = TaskRunReport.from_results(
             all_candidate_results, weights=self._weights,
         )
+
+        # ── Code quality fast-reject check ────────────────────────
+        if self._code_quality_signal is not None:
+            poor_quality = 0
+            total_checked = 0
+            for r in all_candidate_results:
+                if not r.get("passed", False):
+                    total_checked += 1
+                    output = str(r.get("trace", r.get("error", r.get("task_id", ""))))
+                    try:
+                        reject = await self._code_quality_signal.fast_reject(
+                            task_prompt=r.get("task_id", ""),
+                            agent_output=output,
+                        )
+                        if reject:
+                            poor_quality += 1
+                    except Exception:
+                        pass  # signal failure → don't count toward rejection
+
+            if total_checked > 0 and poor_quality > total_checked // 2:
+                logger.debug(
+                    "CodeQualitySignal: fast-reject (%d/%d failed tasks poor quality)",
+                    poor_quality, total_checked,
+                )
+                candidate_report.fast_rejected = True
 
         return baseline_report, candidate_report

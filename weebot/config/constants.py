@@ -150,6 +150,8 @@ TEMPERATURE_PRECISE: float = 0.1
 """Very low randomness — code review, critique, trajectory building, CoVe."""
 
 # TEMPERATURE (imported from settings) = 0.2 — general-purpose default
+TEMPERATURE_DEFAULT: float = TEMPERATURE
+"""General-purpose default — imported from settings (0.2)."""
 TEMPERATURE_BALANCED: float = 0.3
 """Moderate creativity — summarization, synthesis, debate, memory operations."""
 

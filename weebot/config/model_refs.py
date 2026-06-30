@@ -527,6 +527,42 @@ MODEL_PRICE_GPT4O_MINI: str = "minimax/minimax-m3"
 MODEL_PRICE_KIMI: str = "minimax/minimax-m3"
 MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Per-Model Harness Resolution
+# ═══════════════════════════════════════════════════════════════════════
+
+def sanitize_model_id(model_id: str) -> str:
+    """Sanitize a model ID for use as a filename.
+
+    Model IDs from OpenRouter contain ``/`` and sometimes ``:``
+    (e.g. ``"z-ai/glm-5.2"`` or ``"deepseek/deepseek-v4-flash:thinking"``).
+    These are replaced with ``_`` to produce valid filenames.
+    """
+    return model_id.replace("/", "_").replace(":", "_")
+
+
+def get_harness_for_model(model_id: str) -> str:
+    """Return the path to the per-model harness config for *model_id*.
+
+    Returns the per-model variant path if it exists; otherwise falls
+    back to the default shared harness.  This lets the Self-Harness
+    loop tune harnesses independently per model.
+
+    Args:
+        model_id: e.g. ``"z-ai/glm-5.2"`` or ``"deepseek/deepseek-v4-flash"``.
+
+    Returns:
+        Relative path to the YAML harness config file.
+    """
+    from pathlib import Path
+    safe_name = sanitize_model_id(model_id)
+    model_file = Path(f"weebot/config/harness/models/{safe_name}.yaml")
+    if model_file.exists():
+        return str(model_file)
+    return "weebot/config/harness/v0.2.0.yaml"
+
+
 # ========================================================================
 # Free-tier models (canonical list)
 # ========================================================================

@@ -31,6 +31,10 @@ class HarnessEdit(BaseModel):
     target_surface: str = Field(
         description="Dot-separated path (e.g. 'instructions.bootstrap')",
     )
+    edit_type: str = Field(
+        default="instruction",
+        description="Type of edit: instruction, middleware, subagent, or tool_policy",
+    )
     old_value: str = Field(default="", description="Value before the edit")
     new_value: str = Field(default="", description="Value after the edit")
     targeted_mechanism: str = Field(

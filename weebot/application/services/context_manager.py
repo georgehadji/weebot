@@ -79,6 +79,22 @@ class ContextManager:
         if not should:
             return None
 
+        # ── Pre-truncation: cap input size to prevent OOM on very large
+        #     contexts (e.g. 2.6M chars from a long TDD session).  Keep
+        #     the first 20% + last 80% of messages — recent context is
+        #     more valuable for summarization.
+        _MAX_COMPRESSION_CHARS = 500_000
+        _total_chars = sum(len(str(m.get("content", ""))) for m in messages)
+        if _total_chars > _MAX_COMPRESSION_CHARS:
+            _keep_first = max(1, len(messages) // 5)
+            _keep_last = max(1, len(messages) - _keep_first)
+            messages = messages[:_keep_first] + messages[-_keep_last:]
+            logger.debug(
+                "ContextManager: pre-truncated %d→%d chars before compression",
+                _total_chars,
+                sum(len(str(m.get("content", ""))) for m in messages),
+            )
+
         result = await self._engine.compress(messages, self._budget)
         self._compression_count += 1
 

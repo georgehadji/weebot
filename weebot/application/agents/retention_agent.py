@@ -12,6 +12,7 @@ from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.retention_agent_port import RetentionAgentPort
+from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
 from weebot.domain.models.retention_review import RetentionReview, RetentionVerdict
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ Return ONLY valid JSON:
  "improvement_notes": ["..."]}"""
 
 _TIMEOUT = 6.0
-_MAX_TOKENS = 300
+_MAX_TOKENS = MAX_TOKENS_CONCISE
 
 
 class RetentionAgent(RetentionAgentPort):
@@ -68,7 +69,7 @@ class RetentionAgent(RetentionAgentPort):
                             f"Recommendation:"
                         )},
                     ],
-                    temperature=0.1,
+                    temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,
                 ),
                 timeout=self._timeout,

@@ -146,6 +146,24 @@ class PlanHistory:
 
         return hashlib.sha256(":".join(parts).encode()).hexdigest()[:8]
 
+    @staticmethod
+    def _tokenize(plan: TPlan) -> set[str]:
+        """Tokenize a plan into a set of normalized word tokens for Jaccard comparison.
+
+        Includes step count and individual step words (length > 2) so that
+        plans with different structures or different descriptions produce
+        different token sets.
+        """
+        tokens: set[str] = set()
+        steps = getattr(plan, "steps", [])
+        tokens.add(f"_steps_{len(steps)}")
+        for step in steps:
+            desc = getattr(step, "description", "") or ""
+            for word in desc.strip().lower().split():
+                if len(word) > 2:
+                    tokens.add(word)
+        return tokens
+
     def is_too_similar(
         self,
         new_plan: TPlan,
@@ -154,25 +172,38 @@ class PlanHistory:
     ) -> bool:
         """Check if *new_plan* is too similar to recent plans.
 
-        Compares the fingerprint of *new_plan* against the last *window*
-        plans in the undo stack.  Two plans are similar if they share
-        the same fingerprint.
+        Uses Jaccard similarity on tokenized step descriptions so that
+        plans with similar wording are rejected even if their SHA-256
+        fingerprints differ.
 
         Args:
             new_plan: The newly generated plan to check.
-            threshold: Similarity threshold (0-1).  Currently binary:
-                       same fingerprint = 1.0, different = 0.0.
+            threshold: Jaccard similarity threshold (0-1).  1.0 = identical,
+                       0.0 = completely different.  Default 0.7 means plans
+                       sharing 70%+ tokens are too similar.
             window: Number of recent plans to compare against.
 
         Returns:
-            True if the plan is too similar to any recent plan.
+            True if the plan exceeds the similarity threshold for ALL
+            recent plans checked.
         """
-        new_fp = self.plan_fingerprint(new_plan)
+        new_tokens = self._tokenize(new_plan)
+        if not new_tokens:
+            return False
         recent = self._undo_stack[-window:] if len(self._undo_stack) >= window else self._undo_stack
+        if not recent:
+            return False
 
         for old_plan in recent:
-            old_fp = self.plan_fingerprint(old_plan)
-            if old_fp == new_fp:
-                return True
+            old_tokens = self._tokenize(old_plan)
+            if not old_tokens:
+                continue
+            intersection = new_tokens & old_tokens
+            union = new_tokens | old_tokens
+            jaccard = len(intersection) / len(union) if union else 0.0
+            if jaccard < threshold:
+                # At least one recent plan is different enough — not stuck
+                return False
 
-        return False
+        # All recent plans exceed the similarity threshold
+        return True
