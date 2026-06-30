@@ -228,7 +228,6 @@ class TestHarnessOptFlow:
             llm=llm,
             target=target,
             trajectory_repo=repo,
-            flow_factory=lambda s: AsyncMock(),
             held_in_tasks=[],
             held_out_tasks=[],
         )
@@ -252,7 +251,6 @@ class TestHarnessOptFlow:
         target = HarnessOptimizationTarget("weebot/config/harness/v0.2.0.yaml")
         flow = HarnessOptFlow(
             llm=llm, target=target, trajectory_repo=repo,
-            flow_factory=lambda s: AsyncMock(),
             held_in_tasks=["test-task"],
         )
 
@@ -286,7 +284,6 @@ class TestHarnessOptFlow:
 
         flow = HarnessOptFlow(
             llm=llm, target=target, trajectory_repo=repo,
-            flow_factory=lambda s: AsyncMock(),
             max_proposals=1,
         )
 

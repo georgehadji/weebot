@@ -1258,3 +1258,58 @@ def test_core_no_application_imports():
     assert "Contracts: 5 kept" in result.stdout or "5 kept" in result.stdout, (
         f"import-linter failed:\n{result.stdout}\n{result.stderr}"
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WP-8: Architecture 8-of-10 plan enforcement (A3, A4, B4, B2, C3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_browser_tool_has_protocol_bridge():
+    """BrowserTool must have name, description, parameters class attributes
+    and async def execute() to satisfy the BaseTool protocol via duck
+    typing without class hierarchy changes (A3)."""
+    from weebot.tools.browser_tool import BrowserTool
+    tool = BrowserTool()
+    # Class-level attributes accessible on instances satisfy BaseTool protocol
+    assert tool.name == "browser_navigator"
+    assert "Chrome browser" in tool.description
+    assert "task" in tool.parameters.get("properties", {})
+    # async execute method
+    assert hasattr(tool, "execute")
+    import inspect
+    assert inspect.iscoroutinefunction(tool.execute), "execute() must be async"
+
+
+def test_harness_opt_flow_no_flow_factory():
+    """HarnessOptFlow must NOT accept a flow_factory parameter (A4)."""
+    import inspect
+    from weebot.application.flows.harness_opt_flow import HarnessOptFlow
+    sig = inspect.signature(HarnessOptFlow.__init__)
+    params = list(sig.parameters.keys())
+    assert "flow_factory" not in params, (
+        f"flow_factory must be removed from HarnessOptFlow.__init__ params. "
+        f"Current params: {params}"
+    )
+
+
+def test_no_b006_violations():
+    """Ruff B006 (mutable default argument) must not be ignored (B4)."""
+    import subprocess
+    result = subprocess.run(
+        ["ruff", "check", "--isolated", "--select", "B006", "weebot/", "cli/", "scripts/"],
+        capture_output=True, text=True, cwd=ROOT.parent,
+    )
+    assert result.returncode == 0, (
+        f"B006 violations found:\n{result.stdout}\n{result.stderr}"
+    )
+
+
+def test_session_context_has_trace_id():
+    """SessionContext must have a trace_id field for observability (C3)."""
+    from weebot.domain.models.session import SessionContext
+    ctx = SessionContext()
+    assert hasattr(ctx, "trace_id"), "SessionContext must have trace_id field"
+    assert ctx.trace_id == "", "Default trace_id should be empty string"
+    # Verify it's settable
+    ctx.trace_id = "test-trace-123"
+    assert ctx.trace_id == "test-trace-123"

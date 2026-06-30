@@ -249,9 +249,6 @@ def harness_evolve(
                           "the optimizer can mine existing failure patterns "
                           "but cannot validate proposals.[/yellow]")
 
-        # Create flow factory for evaluation
-        flow_factory = container._create_target_flow_factory(db_path=db)
-
         for iteration in range(iterations):
             console.print(f"\n[bold]Iteration {iteration + 1}/{iterations}[/bold]")
 
@@ -259,7 +256,6 @@ def harness_evolve(
                 llm=llm,
                 target=target,
                 trajectory_repo=trajectory_repo,
-                flow_factory=flow_factory,
                 held_in_tasks=list(held_in_tasks),
                 held_out_tasks=list(held_out_tasks),
                 max_proposals=max_proposals,

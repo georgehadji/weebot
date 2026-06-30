@@ -60,6 +60,31 @@ reduce one of the failure patterns.  Requirements:
 3. **Diversity**: If you've already proposed an edit for one mechanism,
    choose a DIFFERENT mechanism for the next proposal.
 
+Editable surfaces (choose ONE per proposal):
+
+**Instruction surfaces** (text changes only, auto-approvable):
+- ``instructions.bootstrap`` — guidance for the very first action on a task
+- ``instructions.execution`` — guidance for how to approach execution
+- ``instructions.verification`` — guidance for verifying outcomes
+- ``instructions.failure_recovery`` — guidance for recovering from failures
+- ``instructions.system_prompt_extension`` — arbitrary text appended to system prompt
+
+**Middleware rules** (structural additions, require human review):
+- ``middleware.add:{name}`` — add a middleware rule with trigger + action
+  Example: a tool-error handler that redirects after 3 consecutive errors,
+          a loop-breaker that forces summarisation after N identical calls,
+          an artifact-ensurer that verifies required files before concluding.
+  ``value`` should be a JSON object: {"name": "...", "trigger": "...", "action": "..."}
+
+**Subagent definitions** (structural additions, require human review):
+- ``subagents.add:{name}`` — add a subagent definition
+  Example: an artifact-ensurer subagent, a dependency-verifier subagent.
+  ``value`` should be a JSON object: {"name": "...", "role": "...", "prompt": "..."}
+
+**Tool policies** (setting changes, require human review):
+- ``tool_policies.max_retries`` — max retries for failed tool calls
+- ``tool_policies.retry_delay_seconds`` — backoff delay between retries
+
 Respond with a JSON object:
 {{
   "target": "instructions.bootstrap",
@@ -83,21 +108,21 @@ class HarnessOptFlow(BaseFlow):
         llm: "LLMPort",
         target: HarnessOptimizationTarget,
         trajectory_repo: "TrajectoryRepositoryPort",
-        flow_factory: Callable,
         held_in_tasks: Optional[list[str]] = None,
         held_out_tasks: Optional[list[str]] = None,
         max_proposals: int = 3,
         gate: Optional[RegressionGate] = None,
         tools: Optional[Any] = None,
+        code_quality_signal: Optional[Any] = None,
     ):
         self._llm = llm
         self._tools = tools
         self._target = target
         self._trajectory_repo = trajectory_repo
-        self._flow_factory = flow_factory
         self._held_in_tasks = held_in_tasks or []
         self._held_out_tasks = held_out_tasks or []
         self._max_proposals = max_proposals
+        self._code_quality_signal = code_quality_signal
         self._done = False
 
         # Injected gate; defaults to stub (always-accept) when no gate
@@ -107,6 +132,7 @@ class HarnessOptFlow(BaseFlow):
         # with the candidate harness config injected.
         self._gate = gate or RegressionGate(
             task_runner=self._make_task_runner(),
+            code_quality_signal=code_quality_signal,
         )
 
     def is_done(self) -> bool:
@@ -273,6 +299,7 @@ class HarnessOptFlow(BaseFlow):
                     session=session,
                     task_passed=task_passed,
                 )
+
                 result: dict = {
                     "passed": task_passed,
                     "task_id": task_id,
