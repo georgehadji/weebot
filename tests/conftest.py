@@ -51,7 +51,16 @@ def reset_connection_pool():
     The module-level _pool_lock must be re-created per test so it is bound
     to the current event loop. Without this, a lock created in one
     per-function event loop is reused in the next (closed) loop and deadlocks.
+
+    Pools opened during the test MUST be closed (not just dropped from the
+    registry) before the next test's reset. Each aiosqlite connection runs
+    a non-daemon worker thread; clearing the registry without closing them
+    orphans those threads, and Python's shutdown sequence blocks joining
+    every non-daemon thread — with enough leaked pools across a full test
+    run, the interpreter never exits and CI kills the job on timeout instead
+    of a real pass/fail.
     """
+    import asyncio
     import sys
     mod = sys.modules.get("weebot.infrastructure.persistence.connection_pool")
     if mod is not None:
@@ -60,6 +69,11 @@ def reset_connection_pool():
     yield
     mod = sys.modules.get("weebot.infrastructure.persistence.connection_pool")
     if mod is not None:
+        if mod._pool_registry:
+            try:
+                asyncio.run(mod.close_all_pools())
+            except Exception:
+                pass
         mod._pool_lock = None
         mod._pool_registry.clear()
 
