@@ -70,16 +70,16 @@ Editable surfaces (choose ONE per proposal):
 - ``instructions.system_prompt_extension`` — arbitrary text appended to system prompt
 
 **Middleware rules** (structural additions, require human review):
-- ``middleware.add:{name}`` — add a middleware rule with trigger + action
+- ``middleware.add:{{name}}`` — add a middleware rule with trigger + action
   Example: a tool-error handler that redirects after 3 consecutive errors,
           a loop-breaker that forces summarisation after N identical calls,
           an artifact-ensurer that verifies required files before concluding.
-  ``value`` should be a JSON object: {"name": "...", "trigger": "...", "action": "..."}
+  ``value`` should be a JSON object: {{"name": "...", "trigger": "...", "action": "..."}}
 
 **Subagent definitions** (structural additions, require human review):
-- ``subagents.add:{name}`` — add a subagent definition
+- ``subagents.add:{{name}}`` — add a subagent definition
   Example: an artifact-ensurer subagent, a dependency-verifier subagent.
-  ``value`` should be a JSON object: {"name": "...", "role": "...", "prompt": "..."}
+  ``value`` should be a JSON object: {{"name": "...", "role": "...", "prompt": "..."}}
 
 **Tool policies** (setting changes, require human review):
 - ``tool_policies.max_retries`` — max retries for failed tool calls
