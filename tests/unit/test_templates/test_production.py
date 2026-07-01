@@ -220,7 +220,7 @@ class TestRedisCache:
             mock_redis.return_value = mock_instance
             
             from weebot.templates.production import RedisCache
-            cache = RedisCache(redis_url="redis://localhost:6379/0")
+            cache = RedisCache(valkey_url="redis://localhost:6379/0")
             cache.redis = mock_instance
             
             yield cache
