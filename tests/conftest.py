@@ -1,5 +1,14 @@
 """Shared fixtures and mock adapters for weebot test suite."""
 import os
+
+# browser_use defaults ANONYMIZED_TELEMETRY to True and phones home to
+# posthog (eu.i.posthog.com) on first use. That client leaves a connection
+# open that blocks interpreter shutdown after the test session finishes —
+# pytest prints its summary, then the process hangs until CI's job timeout
+# kills it (surfaces as "cancelled", not "failed"). Must be set before any
+# test module imports browser_use, so this runs at conftest import time.
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+
 import pytest
 import tempfile
 from pathlib import Path

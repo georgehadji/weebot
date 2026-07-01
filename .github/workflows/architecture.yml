@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+env:
+  # browser_use defaults telemetry to ON and phones home to posthog; that
+  # client can leave the process unable to exit cleanly after tests finish,
+  # which GitHub reports as a job timeout/cancellation rather than a failure.
+  ANONYMIZED_TELEMETRY: "false"
+
 jobs:
   architecture-fitness:
     name: Architecture Fitness Tests
