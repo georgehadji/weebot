@@ -1,6 +1,8 @@
 """Tests for MCPClientManager auth header glue and timeout threading."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
 
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
@@ -27,10 +29,12 @@ class TestBearerAuthHeader:
         # Collect what headers would be passed
         captured_headers = {}
 
+        @asynccontextmanager
         async def mock_streamable_http(**params):
             nonlocal captured_headers
             captured_headers = params.get("headers", {})
             raise RuntimeError("Connection refused (expected)")
+            yield  # pragma: no cover — unreachable, required to make this a CM
 
         monkeypatch.setattr(
             "weebot.infrastructure.mcp.mcp_client_manager.streamablehttp_client",
@@ -59,10 +63,12 @@ class TestBearerAuthHeader:
         mgr = MCPClientManager(config=config, max_retries=1)
         captured_headers = {}
 
+        @asynccontextmanager
         async def mock_streamable_http(**params):
             nonlocal captured_headers
             captured_headers = params.get("headers", {})
             raise RuntimeError("Connection refused (expected)")
+            yield  # pragma: no cover — unreachable, required to make this a CM
 
         monkeypatch.setattr(
             "weebot.infrastructure.mcp.mcp_client_manager.streamablehttp_client",
@@ -90,10 +96,12 @@ class TestBearerAuthHeader:
         mgr = MCPClientManager(config=config, max_retries=1)
         captured_params = {}
 
+        @asynccontextmanager
         async def mock_streamable_http(**params):
             nonlocal captured_params
             captured_params = params
             raise RuntimeError("Connection refused (expected)")
+            yield  # pragma: no cover — unreachable, required to make this a CM
 
         monkeypatch.setattr(
             "weebot.infrastructure.mcp.mcp_client_manager.streamablehttp_client",

@@ -37,7 +37,7 @@ export default function BehaviorSettingsPage() {
         setMessage("Settings saved!");
         setTimeout(() => setMessage(""), 3000);
       }
-    } catch (e) {
+    } catch {
       setMessage("Failed to save settings");
     } finally {
       setLoading(false);
