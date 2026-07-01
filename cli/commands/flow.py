@@ -102,7 +102,8 @@ def flow_resume(session_id: str, answer: str) -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
-        runner = AgentRunner(llm=llm, state_repo=state_repo, use_rich=False)
+        mediator = _get_mediator()
+        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
 
         async for event in runner.resume_session(session_id, answer):

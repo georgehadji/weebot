@@ -296,7 +296,7 @@ class FactoriesMixin:
         from weebot.infrastructure.mcp.config_loader import expand_env, ConfigError
 
         # Feature flag: X MCP servers are opt-in
-        if os.environ.get("WEEBOT_ENABLE_X_MCP", "0").strip("\"'") in ("", "0", "false", "False"):
+        if _os.environ.get("WEEBOT_ENABLE_X_MCP", "0").strip("\"'") in ("", "0", "false", "False"):
             return MCPClientManager(config={})
 
         # Try to load server configs from WeebotSettings

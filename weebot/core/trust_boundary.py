@@ -94,4 +94,4 @@ def is_untrusted_tool(tool_name: str) -> bool:
     """
     if tool_name in UNTRUSTED_OUTPUT_TOOLS:
         return True
-    return tool_name.startswith(_MCP_NAMESPACE_PREFIX)
+    return len(tool_name) > len(_MCP_NAMESPACE_PREFIX) and tool_name.startswith(_MCP_NAMESPACE_PREFIX)

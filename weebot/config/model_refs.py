@@ -252,6 +252,9 @@ MODEL_IMAGE_PHOTOREALISTIC: str = "black-forest-labs/flux.2-pro"
 MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
 """Website image generation: Gemini 2.5 Flash Image — diagrams, UI mockups, illustrations."""
 
+MODEL_IMAGE_LITE: str = "google/gemini-3.1-flash-lite-image"
+"""Ultra-budget image generation: Gemini 3.1 Flash Lite Image — cheapest image-capable model.
+Best for: simple diagrams, low-fidelity mockups, icon drafts, social thumbnails where cost > quality."""
 
 MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
 """Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
@@ -264,6 +267,7 @@ def get_image_models() -> list[str]:
         "black-forest-labs/flux.2-klein-4b",
         "recraft/recraft-v4.1-pro-vector",
         "recraft/recraft-v4.1-pro",
+        "google/gemini-3.1-flash-lite-image",
         "google/gemini-2.5-flash-image",
         "x-ai/grok-imagine-image-quality",
         "bytedance-seed/seedream-4.5",
@@ -295,9 +299,10 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Small icons, favicons, UI elements ──────────────────────────
     "icon": [
-        "black-forest-labs/flux.2-klein-4b",     # 1st: cheapest paid — fast
-        "recraft/recraft-v4.1-pro-vector",       # 2nd: paid — clean vector
-        "black-forest-labs/flux.2-flex",          # 3rd: paid — batch-optimized
+        "google/gemini-3.1-flash-lite-image",     # 1st: cheapest — ultra-budget image
+        "black-forest-labs/flux.2-klein-4b",      # 2nd: cheapest paid — fast
+        "recraft/recraft-v4.1-pro-vector",         # 3rd: paid — clean vector
+        "black-forest-labs/flux.2-flex",            # 4th: paid — batch-optimized
     ],
 
     # ── Photorealistic — products, people, places ───────────────────
@@ -310,16 +315,17 @@ IMAGE_CASCADE: dict[str, list[str]] = {
 
     # ── Diagrams, charts, UI mockups, technical illustrations ───────
     "diagram": [
-        "google/gemini-3.1-flash-image-preview", # 1st: FREE — experimental Gemini
-        "google/gemini-2.5-flash-image",          # 2nd: cheap — specialized
-        "recraft/recraft-v4.1-pro-vector",        # 3rd: paid — vector output
+        "google/gemini-3.1-flash-lite-image",     # 1st: cheapest — ultra-budget image
+        "google/gemini-2.5-flash-image",           # 2nd: cheap — specialized
+        "recraft/recraft-v4.1-pro-vector",         # 3rd: paid — vector output
     ],
 
     # ── Social media, thumbnails — fast, cheap, decent ──────────────
     "social": [
-        "black-forest-labs/flux.2-klein-4b",      # 1st: cheapest paid — fast
-        "black-forest-labs/flux.2-flex",           # 2nd: batch-optimized
-        "x-ai/grok-imagine-image-quality",        # 3rd: cheap (~$0.05/img) — direct xAI
+        "google/gemini-3.1-flash-lite-image",      # 1st: cheapest — ultra-budget image
+        "black-forest-labs/flux.2-klein-4b",        # 2nd: cheapest paid — fast
+        "black-forest-labs/flux.2-flex",             # 3rd: batch-optimized
+        "x-ai/grok-imagine-image-quality",          # 4th: cheap (~$0.05/img) — direct xAI
     ],
 
     # ── Text-heavy images — signs, banners with text ────────────────

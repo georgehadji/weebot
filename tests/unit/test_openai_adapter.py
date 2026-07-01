@@ -109,6 +109,10 @@ async def test_openai_adapter_grok_parameter_cleaning():
         # Verify reasoning effort is translated to x.AI's 'reasoning' body structure
         assert called_kwargs["extra_body"]["reasoning"] == {"effort": "high"}
 
+        # Regression guard: x.AI rejects requests with both reasoning_effort
+        # and extra_body.reasoning.effort set ("conflicting values" 400).
+        assert "reasoning_effort" not in called_kwargs
+
 
 @pytest.mark.asyncio
 async def test_openai_adapter_grok_multi_agent_cleaning():
@@ -141,4 +145,8 @@ async def test_openai_adapter_grok_multi_agent_cleaning():
         
         # Verify max maps to xhigh for multi-agent
         assert called_kwargs["extra_body"]["reasoning"] == {"effort": "xhigh"}
+
+        # Regression guard: x.AI rejects requests with both reasoning_effort
+        # and extra_body.reasoning.effort set ("conflicting values" 400).
+        assert "reasoning_effort" not in called_kwargs
 

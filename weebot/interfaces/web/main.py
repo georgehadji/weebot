@@ -7,6 +7,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
+# ── Load .env into os.environ before any weebot module reads API keys ──
+# pydantic-settings loads .env into its own store but does NOT populate
+# os.environ. Several modules (openai_adapter.py, model_registry/_service.py,
+# browser_tool.py, image_gen_tool.py, openrouter_enhanced_cascade.py) read
+# keys via bare os.getenv(). Without this call, those paths fall back to a
+# stale system/User environment variable instead of the current .env value.
+#
+# override=True: .env values take priority over stale system environment
+# variables (e.g. an old OPENROUTER_API_KEY persisted in the OS profile).
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
