@@ -44,7 +44,22 @@ class HarnessOptimizationTarget(OptimizationTarget):
         self,
         harness_path: str | Path = "weebot/config/harness/v0.2.0.yaml",
         output_dir: str | Path | None = None,
+        model_id: str | None = None,
     ) -> None:
+        self._model_id = model_id
+        if model_id:
+            from weebot.config.model_refs import sanitize_model_id
+            safe_name = sanitize_model_id(model_id)
+            models_dir = Path("weebot/config/harness/models")
+            models_dir.mkdir(parents=True, exist_ok=True)
+            harness_path = models_dir / f"{safe_name}.yaml"
+            if not harness_path.exists():
+                # First run — copy the default harness as starting point
+                default = Path("weebot/config/harness/v0.2.0.yaml")
+                if default.exists():
+                    import shutil
+                    shutil.copy(default, harness_path)
+            output_dir = output_dir or models_dir / f"{safe_name}_evolved"
         self._harness_path = Path(harness_path)
         self._output_dir = (
             Path(output_dir) if output_dir
@@ -174,7 +189,26 @@ class HarnessOptimizationTarget(OptimizationTarget):
                 logger.warning("Skipping edit with empty target")
                 continue
 
-            # Navigate dot-separated path
+            # ── Structural edits (middleware add, subagent add) ────
+            if target.startswith("middleware.add:") or target.startswith("subagents.add:"):
+                prefix, name = target.split(":", 1)
+                if prefix == "middleware.add":
+                    if "middleware" not in data:
+                        data["middleware"] = []
+                    entry = value if isinstance(value, dict) else {"name": name, "trigger": str(value), "action": str(value)}
+                    data["middleware"].append(entry)
+                    logger.info("Applied structural edit: added middleware '%s'", name)
+                elif prefix == "subagents.add":
+                    if "subagents" not in data:
+                        data["subagents"] = {"definitions": []}
+                    if "definitions" not in data["subagents"]:
+                        data["subagents"]["definitions"] = []
+                    entry = value if isinstance(value, dict) else {"name": name, "role": str(value)}
+                    data["subagents"]["definitions"].append(entry)
+                    logger.info("Applied structural edit: added subagent '%s'", name)
+                continue
+
+            # ── Standard field edits (dot-separated path) ──────────
             parts = target.split(".")
             current = data
             for part in parts[:-1]:

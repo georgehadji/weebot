@@ -150,6 +150,18 @@ class BaseTool(ABC, BaseModel):
         """
         return True
 
+    async def close(self) -> None:
+        """Release external resources acquired by this tool.
+
+        Override in tools that allocate OS resources (browser, subprocess,
+        MCP client, voice/audio streams).  Called by the tool registry or
+        task runner when a tool session ends.
+
+        Default implementation is a no-op — tools that don't acquire
+        external resources don't need to override this.
+        """
+        return
+
     def to_param(self) -> dict:
         """Convert to OpenAI function spec for tool calling."""
         return {

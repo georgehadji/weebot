@@ -19,6 +19,13 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
 
+from weebot.config.constants import (
+    MAX_TOKENS_BRIEF,
+    MAX_TOKENS_SHORT,
+    TEMPERATURE_BALANCED,
+    TEMPERATURE_CREATIVE,
+)
+
 logger = logging.getLogger(__name__)
 
 _NUM_CANDIDATES = 3
@@ -88,8 +95,8 @@ class TreeOfThoughtsScorer:
             response = await asyncio.wait_for(
                 self._llm.chat(
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=500,
+                    temperature=TEMPERATURE_CREATIVE,
+                    max_tokens=MAX_TOKENS_SHORT,
                 ),
                 timeout=_GENERATE_TIMEOUT,
             )
@@ -122,8 +129,8 @@ class TreeOfThoughtsScorer:
                             ),
                         },
                     ],
-                    temperature=0.2,
-                    max_tokens=100,
+                    temperature=TEMPERATURE_BALANCED,
+                    max_tokens=MAX_TOKENS_BRIEF,
                 ),
                 timeout=_SCORE_TIMEOUT,
             )

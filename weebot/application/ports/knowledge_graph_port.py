@@ -4,7 +4,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from weebot.domain.models.knowledge_graph import KnowledgeEdge, KnowledgeNode, KnowledgeSnapshot
+from weebot.domain.models.knowledge_graph import (
+    KnowledgeEdge,
+    KnowledgeNode,
+    KnowledgeSnapshot,
+    ScoredNode,
+)
 
 
 class KnowledgeGraphPort(ABC):
@@ -34,6 +39,18 @@ class KnowledgeGraphPort(ABC):
 
         Returns:
             The stored edge.
+        """
+        ...
+
+    @abstractmethod
+    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+        """Fetch a single node by its unique ID.
+
+        Args:
+            node_id: The node's primary key.
+
+        Returns:
+            KnowledgeNode if found, None otherwise.
         """
         ...
 
@@ -76,6 +93,35 @@ class KnowledgeGraphPort(ABC):
 
         Returns:
             KnowledgeSnapshot if the node exists, None otherwise.
+        """
+        ...
+
+    @abstractmethod
+    async def hybrid_search(
+        self,
+        query: str,
+        *,
+        label: Optional[str] = None,
+        filters: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        dense_weight: float = 0.4,
+        sparse_weight: float = 0.4,
+        structured_weight: float = 0.2,
+    ) -> list[ScoredNode]:
+        """Multi-mode search with RRF fusion of sparse, dense, and structured results.
+
+        Args:
+            query: Free-text search query.
+            label: Optional node label filter.
+            filters: Optional property key-value filters.
+            limit: Max results to return.
+            dense_weight: Weight for dense (cosine) leg in RRF fusion.
+            sparse_weight: Weight for sparse (FTS5 BM25) leg.
+            structured_weight: Weight for structured (label/filter) leg.
+
+        Returns:
+            List of ScoredNode sorted by descending fused score.
+            Falls back gracefully when dense leg is unavailable.
         """
         ...
 

@@ -32,6 +32,7 @@ _ZERO_ADAPTER_PORTS = {
     "SpeechPort": "WhisperSpeechAdapter exists but is not found by conservative scan (nested package)",
     "TaskQueuePort": "InMemoryTaskQueue exists but is not found by conservative scan (nested package)",
     "OptimizerPort": "OptimizerAgent inherits OptimizerPort but is not found by conservative scan (deep import path)",
+    "CanonicalizerPort": "Docstring documents an ActionCanonicalizer implementation that was never written — genuinely unimplemented, not a scan gap. See docs/plans/ARCHITECTURE_9_PLAN.md.",
 }
 
 

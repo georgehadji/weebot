@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Optional
 
+from weebot.config.constants import MAX_TOKENS_PROBE, TEMPERATURE_DETERMINISTIC
+
 logger = logging.getLogger(__name__)
 
 # ── Public API ──────────────────────────────────────────────────────
@@ -34,8 +36,8 @@ async def check_default_model(llm, model_id: str, timeout: float = 10.0) -> bool
             llm.chat(
                 messages=[{"role": "user", "content": "ping"}],
                 model=model_id,
-                temperature=0.0,
-                max_tokens=5,
+                temperature=TEMPERATURE_DETERMINISTIC,
+                max_tokens=MAX_TOKENS_PROBE,
             ),
             timeout=timeout,
         )

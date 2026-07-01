@@ -127,11 +127,16 @@ class OpenAIAdapter(LLMPort):
                     
                 kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
                 kwargs["extra_body"]["reasoning"] = {"effort": grok_effort}
+            # x.AI rejects requests where both reasoning_effort and
+            # extra_body.reasoning.effort are set ("conflicting values").
+            # Grok always uses the extra_body form above, so the top-level
+            # key must not be reintroduced below.
+            kwargs.pop("reasoning_effort", None)
 
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
-        if reasoning_effort is not None:
+        if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
 
         response = None

@@ -7,6 +7,7 @@ Inspired by Honcho (plastic-labs/honcho) dialectic user modeling.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -86,7 +87,8 @@ class UserModelingService:
         """Load a user model, creating a new one if none exists."""
         path = self._dir / f"{user_id}.json"
         if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
+            raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
+            data = json.loads(raw)
             return UserModel(
                 user_id=data["user_id"],
                 observations=[UserObservation(**o) for o in data.get("observations", [])],
@@ -131,4 +133,4 @@ class UserModelingService:
             "preferences": model.preferences,
             "interaction_count": model.interaction_count,
         }
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        await asyncio.to_thread(path.write_text, json.dumps(data, indent=2), encoding="utf-8")

@@ -1,10 +1,13 @@
 """PostgreSQL knowledge graph adapter."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
+logger = logging.getLogger(__name__)
+
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
-from weebot.domain.models.knowledge_graph import KnowledgeEdge, KnowledgeNode, KnowledgeSnapshot
+from weebot.domain.models.knowledge_graph import KnowledgeEdge, KnowledgeNode, KnowledgeSnapshot, ScoredNode
 from weebot.infrastructure.persistence.postgresql.connection import get_pool
 
 
@@ -38,6 +41,20 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
                 CREATE INDEX IF NOT EXISTS idx_kg_nodes_label ON kg_nodes(label);
             """)
 
+    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+        """Fetch a single node by its ID."""
+        pool = await get_pool("skills")
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM kg_nodes WHERE id = $1", node_id,
+            )
+            if row is None:
+                return None
+            return KnowledgeNode(
+                id=row["id"], label=row["label"], name=row["name"],
+                properties=row["properties"], version=row["version"],
+            )
+
     async def upsert_node(self, node: KnowledgeNode) -> KnowledgeNode:
         pool = await get_pool("skills")
         async with pool.acquire() as conn:
@@ -70,6 +87,7 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
 
     async def query(self, label: Optional[str] = None,
                     filters: Optional[dict[str, Any]] = None) -> list[KnowledgeNode]:
+        from weebot.domain.services.filter_key_validator import validate_filter_keys
         pool = await get_pool("skills")
         async with pool.acquire() as conn:
             sql = "SELECT * FROM kg_nodes WHERE 1=1"
@@ -77,8 +95,8 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
             if label:
                 sql += " AND label = $" + str(len(params) + 1)
                 params.append(label)
-            if filters:
-                for k, v in filters.items():
+            if filters is not None:
+                for k, v in validate_filter_keys(filters).items():
                     sql += f" AND properties->>'{k}' = $" + str(len(params) + 1)
                     params.append(str(v))
             sql += " LIMIT 100"
@@ -125,6 +143,34 @@ class PostgreSQLKnowledgeGraph(KnowledgeGraphPort):
             return KnowledgeSnapshot(node_id=row["id"], node_label=row["label"],
                                      node_name=row["name"], properties=row["properties"],
                                      version=row["version"], timestamp=row["updated_at"])
+
+    async def hybrid_search(
+        self,
+        query: str,
+        *,
+        label: Optional[str] = None,
+        filters: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        dense_weight: float = 0.4,
+        sparse_weight: float = 0.4,
+        structured_weight: float = 0.2,
+    ) -> list[ScoredNode]:
+        """Hybrid search — delegates to PG full-text search for now.
+
+        Dense leg (pgvector) is a future enhancement.  For now this falls
+        back to sparse (to_tsvector) + optional structured filter, with
+        the FTS rank mapped into ScoredNode.sparse_score.
+        """
+        nodes = await self.search(query, limit=limit)
+        if label or filters:
+            filtered = await self.query(label=label, filters=filters)
+            filtered_ids = {n.id for n in filtered}
+            nodes = [n for n in nodes if n.id in filtered_ids]
+        norm = 1.0 / max(len(nodes), 1)
+        return [
+            ScoredNode(node=n, score=1.0 - i * norm, sparse_score=1.0 - i * norm)
+            for i, n in enumerate(nodes[:limit])
+        ]
 
     async def search(self, query: str, limit: int = 10) -> list[KnowledgeNode]:
         pool = await get_pool("skills")

@@ -61,6 +61,11 @@ class HarnessMetrics(BaseModel):
         default=0.0, ge=0.0, le=1.0,
         description="Fraction of evaluation tasks solved",
     )
+    code_quality_score: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Cheap LLM-judge score: artifact presence, verification evidence, structure quality. "
+                    "Faster to compute than full task execution.",
+    )
 
     def composite(self, weights: Optional[dict[str, float]] = None) -> float:
         """Weighted composite score for the RegressionGate.
@@ -91,11 +96,12 @@ class HarnessMetrics(BaseModel):
             score = (
                 self.task_pass_rate * 2.0
                 + self.verification_strength * 2.0
+                + self.code_quality_score * 0.5
                 + self.trajectory_efficiency * 1.0
                 + self.recovery_ability * 1.0
                 + self.state_consistency * 0.5
                 + self.replayability * 0.5
-            ) / 7.0
+            ) / 7.5
 
         return max(0.0, min(1.0, score))
 

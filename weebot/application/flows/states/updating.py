@@ -140,7 +140,7 @@ class UpdatingState(FlowState):
                 DeprecationWarning, stacklevel=2,
             )
             # ── HyperAgents Enhancement 3: inject avoidance prompt ──
-            from weebot.application.services.plan_novelty import PlanNoveltyTracker
+            from weebot.domain.services.plan_novelty import PlanNoveltyTracker
             tracker = PlanNoveltyTracker()
             plans = context._plan_history.get_all()  # snapshot history
             avoidance = tracker.avoidance_prompt(plans) if plans else ""

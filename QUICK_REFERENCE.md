@@ -26,7 +26,7 @@ from weebot.templates.production import ProductionTemplateEngine
 
 engine = ProductionTemplateEngine(
     database_url="postgresql+asyncpg://user:pass@localhost/weebot",
-    redis_url="redis://localhost:6379/0",
+    valkey_url="valkey://localhost:6379/0",  # Also accepts redis:// (auto-normalized)
     enable_adaptive=True,
 )
 
@@ -76,8 +76,8 @@ flags.enable_for_user("adaptive_suggestions", "user123")
 # Database
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost/weebot
 
-# Redis
-REDIS_URL=redis://localhost:6379/0
+# Valkey (Redis-compatible, BSD-3-Clause)
+VALKEY_URL=valkey://localhost:6379/0
 
 # Adaptive
 ENABLE_ADAPTIVE_SUGGESTIONS=true
@@ -150,7 +150,7 @@ print(f"Memory usage: {stats['used_memory_mb']:.1f} MB")
 
 - [ ] API keys rotated regularly
 - [ ] Database encrypted at rest
-- [ ] Redis AUTH enabled
+- [ ] Valkey AUTH enabled
 - [ ] Rate limiting configured
 - [ ] GDPR compliance enabled (`privacy_mode=strict`)
 - [ ] Audit logging active
@@ -178,10 +178,10 @@ psql -U user -d weebot -c "SELECT 1"
 python scripts/migrate.py
 ```
 
-### Redis Connection Failed
+### Valkey Connection Failed
 ```bash
-# Check Redis
-redis-cli ping
+# Check Valkey connectivity
+valkey-cli ping
 
 # Fallback to memory
 RATE_LIMIT_BACKEND=memory

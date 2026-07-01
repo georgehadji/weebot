@@ -109,6 +109,7 @@ class MCPClientManager:
         command = config.get("command")
         args = config.get("args", [])
         env = config.get("env", {})
+        timeout = config.get("timeout_seconds", 30)
         if not command:
             raise ValueError(f"Server {server_name} missing command")
         params = StdioServerParameters(
@@ -121,12 +122,13 @@ class MCPClientManager:
         session = await self._exit_stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
-        await session.initialize()
+        await asyncio.wait_for(session.initialize(), timeout=timeout)
         self._clients[server_name] = session
         await self._cache_tools(server_name, session)
 
     async def _connect_sse(self, server_name: str, config: Dict[str, Any]) -> None:
         url = config.get("url")
+        timeout = config.get("timeout_seconds", 30)
         if not url:
             raise ValueError(f"Server {server_name} missing url")
         transport = await self._exit_stack.enter_async_context(sse_client(url))
@@ -134,7 +136,7 @@ class MCPClientManager:
         session = await self._exit_stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
-        await session.initialize()
+        await asyncio.wait_for(session.initialize(), timeout=timeout)
         self._clients[server_name] = session
         await self._cache_tools(server_name, session)
 
@@ -142,9 +144,15 @@ class MCPClientManager:
         if not HAS_STREAMABLE_HTTP:
             raise RuntimeError("streamable-http client not available in this MCP version")
         url = config.get("url")
+        timeout = config.get("timeout_seconds", 30)
         if not url:
             raise ValueError(f"Server {server_name} missing url")
-        headers = config.get("headers", {})
+        headers = dict(config.get("headers", {}))
+        # Map auth config to Authorization header (Gap A — bearer auth glue)
+        auth = config.get("auth") or {}
+        if auth.get("type") == "bearer" and auth.get("token") and "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {auth['token']}"
+            logger.debug("Added Bearer auth header for streamable-http server %s", server_name)
         params: Dict[str, Any] = {"url": url}
         if headers:
             params["headers"] = headers
@@ -156,7 +164,7 @@ class MCPClientManager:
         session = await self._exit_stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
-        await session.initialize()
+        await asyncio.wait_for(session.initialize(), timeout=timeout)
         self._clients[server_name] = session
         await self._cache_tools(server_name, session)
 

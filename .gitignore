@@ -104,3 +104,39 @@ arxiv_*.xml
 arxiv_*.html
 paper_*.html
 skills-lock.json
+
+# Generated website demos (regenerable output, not source)
+/plastic-surgery-website/
+/thessaloniki-clinic/
+/vadarli-website/
+
+# Scratch / scratchpad artifacts (root-level dumps, not source)
+/*.txt
+/*.zip
+*.exe
+*.corrupt.bak
+/extract_*.py
+/extract_pdf*.py
+/count_classes.ps1
+/youtube_page.html
+/portfolio.html
+/.git-stage-cmds.sh
+/tmp_check_req
+/REASONIX.md
+/proposal_draft.md
+/draft_proposal.md
+/test_output.md
+/weebot_full_structure.csv
+/scripts/tb_query*.py
+/scripts/extract_papers.py
+/scripts/stress_test.py
+/scripts/all_three_tasks.py
+/scripts/cascade_compressor_eventbus_tests.py
+/atomic-mail-agentic-main/
+/architecture_audit_report.md
+/project_layout_overview.md
+/Weebot Commands.md
+/.agents/
+graphify-out/
+/implementation_audit_report.md
+/implementation_plan.md

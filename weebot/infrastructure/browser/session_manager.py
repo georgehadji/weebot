@@ -1,6 +1,7 @@
 """Browser session persistence manager."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -62,7 +63,7 @@ class BrowserSessionManager:
                 "storage_state": storage_state,
             }
 
-            path.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+            await asyncio.to_thread(path.write_text, json.dumps(session_data, indent=2), encoding="utf-8")
             logger.info(f"Saved browser session '{name}' to {path}")
             return True
 
@@ -86,7 +87,8 @@ class BrowserSessionManager:
                 logger.debug(f"Session '{name}' not found at {path}")
                 return False
 
-            session_data = json.loads(path.read_text(encoding="utf-8"))
+            raw = await asyncio.to_thread(path.read_text, encoding="utf-8")
+            session_data = json.loads(raw)
             storage_state = session_data.get("storage_state", {})
 
             # Restore cookies

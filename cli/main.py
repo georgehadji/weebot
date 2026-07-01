@@ -14,6 +14,20 @@ export      Export project state
 costs       Αναφορά κόστους
 monitor     Real-time monitoring
 """
+import sys
+
+# ── Force UTF-8 stdio (must run before any click/print output) ─────────
+# Windows consoles default stdout/stderr to the system codepage (e.g.
+# cp1253 on Greek locale), which cannot encode characters like the '→'
+# used throughout CLI help text and log messages — this crashes every
+# command's --help with UnicodeEncodeError on non-English Windows locales.
+# errors="replace" degrades to '?' instead of crashing if a console still
+# can't render a glyph after the encoding fix.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import click
 import asyncio
 import json

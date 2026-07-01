@@ -5,6 +5,7 @@ Supports delivery to Telegram, Discord, Slack, file paths, or no delivery
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,7 @@ class CronDeliveryService:
         """Write result to a file."""
         output_path = Path(path or f"cron-output/{job.id}.txt")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(text, encoding="utf-8")
+        await asyncio.to_thread(output_path.write_text, text, encoding="utf-8")
         logger.info("Cron job %s: delivered to %s", job.id, output_path)
         return True
 

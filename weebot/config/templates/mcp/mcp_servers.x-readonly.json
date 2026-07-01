@@ -1,0 +1,14 @@
+{
+  "x-docs": {
+    "transport": "streamable-http",
+    "url": "https://docs.x.com/mcp",
+    "enabled": true
+  },
+  "xapi": {
+    "transport": "streamable-http",
+    "url": "https://api.x.com/mcp",
+    "enabled": true,
+    "auth": { "type": "bearer", "token": "${X_BEARER}" },
+    "tools": { "exclude": ["*bookmark*", "*article*", "create_*", "publish_*", "delete_*"] }
+  }
+}

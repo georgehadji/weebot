@@ -62,6 +62,12 @@ class SkillOptFlow(BaseFlow):
         use_planning: bool = False,
         self_improver: Optional[SelfImprover] = None,
         self_improve_contracts: bool = False,
+        evaluator_slot: Optional[Any] = None,
+        evaluator_selector: Optional[Any] = None,
+        selective_erasure: Optional[Any] = None,
+        adversarial_pool: Optional[Any] = None,
+        use_archive_search: bool = False,
+        thompson_sampler: Optional[Any] = None,
     ):
         self._skill_name = skill_name
         self._target_flow_factory = target_flow_factory
@@ -81,11 +87,30 @@ class SkillOptFlow(BaseFlow):
         self._use_planning = use_planning
         self._self_improver = self_improver
         self._self_improve_contracts = self_improve_contracts
+        self._evaluator_slot = evaluator_slot
+        self._evaluator_selector = evaluator_selector
+        self._selective_erasure = selective_erasure
+        self._adversarial_pool = adversarial_pool
+        self._use_archive_search = use_archive_search
+        self._thompson_sampler = thompson_sampler
 
         self._scheduler = LearningRateScheduler(
             initial=8, floor=2, schedule="cosine"
         )
         self._done = False
+
+    async def _ensure_archive_seeded(self, skill: Any, epoch: int) -> None:
+        """Ensure the archive has a root node before archive search begins."""
+        if self._thompson_sampler is not None and not self._thompson_sampler.archive.nodes:
+            from weebot.domain.models.skill_archive import SkillArchiveNode
+            root = SkillArchiveNode(
+                node_id=f"root-e{epoch}",
+                parent_id=None,
+                skill_version=skill.current_version,
+                created_at_epoch=epoch,
+            )
+            self._thompson_sampler.archive.add_node(root)
+            logger.info("Archive: seeded root node from skill %s", skill.current_version)
 
     def is_done(self) -> bool:
         return self._done
@@ -107,10 +132,89 @@ class SkillOptFlow(BaseFlow):
             epoch_accepted = 0
             epoch_rejected = 0
 
-            for step in range(self._steps_per_epoch):
+            steps_iter = range(self._steps_per_epoch)
+
+            # ── Archive-based search (Thompson sampling) ──────────
+            if self._use_archive_search and self._thompson_sampler is not None:
+                steps_iter = range(self._steps_per_epoch * 2)  # More steps for tree search
+                await self._ensure_archive_seeded(skill, epoch)
+
+            for step in steps_iter:
                 budget = self._scheduler.budget_for_step(step_counter, total_steps)
                 step_counter += 1
 
+                # ── Archive-based step (Thompson sampling) ────────
+                if self._use_archive_search and self._thompson_sampler is not None:
+                    decision, parent_node, child_node = await self._thompson_sampler.step(
+                        epoch, skill, self._train_tasks,
+                    )
+
+                    if decision == "expand" and child_node is not None:
+                        # Propose edits from the parent skill
+                        batch = await self._run_rollout(skill, epoch, step)
+                        evolution_ctx = self._build_evolution_context(skill)
+
+                        failure_edits = await self._optimizer.reflect_on_failures(
+                            batch, skill,
+                            evolution_context=evolution_ctx,
+                        )
+                        success_edits = await self._optimizer.reflect_on_successes(
+                            batch, skill,
+                            evolution_context=evolution_ctx,
+                        )
+
+                        if failure_edits or success_edits:
+                            merged = await self._optimizer.merge_edits(
+                                failure_edits, success_edits,
+                            )
+                            ranked = await self._optimizer.rank_edits(
+                                merged, budget, skill,
+                            )
+                            if ranked:
+                                # Apply the best edit to create a new skill variant
+                                cmd = ApplySkillEditsCommand(
+                                    skill_name=self._skill_name,
+                                    edits=[e.to_dict() for e in ranked],
+                                    source="archive_search",
+                                )
+                                result = await self._mediator.send(cmd)
+                                if result.success:
+                                    skill = result.skill
+                                    epoch_accepted += 1
+                                else:
+                                    epoch_rejected += 1
+
+                        # Continue to next step — archive handles evaluation separately
+                        continue
+
+                    elif decision == "evaluate":
+                        # Evaluate the selected node's skill on a train task
+                        if self._train_tasks:
+                            import random
+                            task = random.choice(self._train_tasks)
+                            try:
+                                session = Session(
+                                    id=f"archive-eval-{uuid.uuid4().hex[:8]}",
+                                    user_id="skillopt",
+                                    agent_id="skillopt-agent",
+                                )
+                                flow = self._target_flow_factory(session)
+                                async for _ in flow.run(task):
+                                    pass
+                                passed = True
+                            except Exception:
+                                passed = False
+
+                            node_id = parent_node.node_id if parent_node else None
+                            if node_id:
+                                await self._thompson_sampler.record_evaluation(node_id, passed)
+                                if passed:
+                                    epoch_accepted += 1
+                                else:
+                                    epoch_rejected += 1
+                        continue
+
+                # ── Standard linear step (fallback) ──────────────
                 # 1. ROLLOUT — collect trajectories
                 batch = await self._run_rollout(skill, epoch, step)
 
@@ -203,6 +307,95 @@ class SkillOptFlow(BaseFlow):
                     skill = skill.model_copy(update={"meta_skill": meta})
                 await self._skill_store.save(skill)
 
+            # ── Evaluator co-evolution at epoch boundaries ────────
+            evaluator_replacement_data = None
+            if self._evaluator_slot is not None and self._evaluator_selector is not None and epoch > 0:
+                try:
+                    # Score the current evaluator on the anchor dataset
+                    scored_current = await self._evaluator_selector.score_evaluator(
+                        self._evaluator_slot,
+                    )
+
+                    # Build adversarial context if there's a pool from prior replacements
+                    eval_evolution_ctx = ""
+                    if self._adversarial_pool is not None:
+                        adv_obj = self._adversarial_pool.build_adversarial_objective(epoch)
+                        if adv_obj:
+                            eval_evolution_ctx = f"\n\n{adv_obj}"
+                            logger.info(
+                                "Adversarial regularisation: %d artifacts in pool for epoch %d",
+                                len(self._adversarial_pool.get_artifacts_for_epoch(epoch)), epoch,
+                            )
+
+                    # Propose evaluator edits from trajectories
+                    batch = await self._run_rollout(skill, epoch, 0)
+                    evaluator_edits = await self._optimizer.reflect_on_evaluator(
+                        batch, scored_current,
+                        evolution_context=eval_evolution_ctx,
+                    )
+
+                    if evaluator_edits and self._selective_erasure is not None:
+                        # Create a challenger with updated prompt
+                        new_prompt = evaluator_edits[-1].content  # Use best edit
+                        challenger = scored_current.model_copy(update={
+                            "prompt": new_prompt,
+                            "anchor_accuracy": 0.0,  # Force re-scoring
+                            "anchor_total": 0,
+                            "evaluator_id": f"{scored_current.evaluator_id}_challenger",
+                        })
+
+                        # Compare incumbent vs challenger
+                        promoted, result_evaluator, reason = (
+                            await self._evaluator_selector.compare_and_replace(
+                                incumbent=scored_current,
+                                challenger=challenger,
+                                epoch=epoch,
+                            )
+                        )
+
+                        if promoted:
+                            self._evaluator_slot = result_evaluator
+                            if self._selective_erasure is not None:
+                                self._selective_erasure.on_evaluator_replaced(
+                                    old_evaluator_id=scored_current.evaluator_id,
+                                    new_evaluator_id=result_evaluator.evaluator_id,
+                                    epoch=epoch,
+                                )
+                            evaluator_replacement_data = {
+                                "old_id": scored_current.evaluator_id,
+                                "new_id": result_evaluator.evaluator_id,
+                                "old_acc": scored_current.anchor_accuracy,
+                                "new_acc": result_evaluator.anchor_accuracy,
+                            }
+
+                            # Populate adversarial pool from old evaluator's mis-scored artifacts
+                            if self._adversarial_pool is not None and hasattr(
+                                self._evaluator_selector, "_anchor_tasks",
+                            ):
+                                artifacts = [
+                                    {
+                                        "task_id": task.get("prompt", "")[:80],
+                                        "description": task.get("prompt", "")[:120],
+                                        "evaluator_score": scored_current.anchor_accuracy,
+                                        "ground_truth": task.get("ground_truth_score", 0.5),
+                                    }
+                                    for task in getattr(
+                                        self._evaluator_selector, "_anchor_tasks", []
+                                    )
+                                ]
+                                self._adversarial_pool.on_evaluator_replaced(
+                                    old_evaluator_id=scored_current.evaluator_id,
+                                    new_evaluator_id=result_evaluator.evaluator_id,
+                                    epoch=epoch,
+                                    artifacts=artifacts,
+                                )
+
+                            logger.info(
+                                "Evaluator co-evolution: %s at epoch %d", reason, epoch,
+                            )
+                except Exception as exc:
+                    logger.warning("Evaluator co-evolution failed at epoch %d: %s", epoch, exc)
+
             best_score = skill.best.validation_score or 0.0
             epoch_event = EpochCompleted(
                 skill_name=self._skill_name,
@@ -217,7 +410,8 @@ class SkillOptFlow(BaseFlow):
             if self._evolution_tracker is not None:
                 try:
                     skill = await self._evolution_tracker.record_epoch(
-                        skill, previous_skill, epoch_event
+                        skill, previous_skill, epoch_event,
+                        evaluator_replacement=evaluator_replacement_data,
                     )
                     await self._skill_store.save(skill)
                 except Exception as exc:

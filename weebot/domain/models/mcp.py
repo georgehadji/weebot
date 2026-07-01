@@ -49,6 +49,14 @@ class MCPToolFilterConfig(BaseModel):
     exclude: list[str] | None = Field(default=None, description="Glob patterns to exclude")
     include_prompts: bool = Field(default=False, description="Expose prompts as tools")
     include_resources: bool = Field(default=False, description="Expose resources as tools")
+    write_tools: list[str] | None = Field(
+        default=None,
+        description=(
+            "Glob patterns for write/destructive tools that should be "
+            "admin-only + restricted tier.  If None, all tools are gated "
+            "equally (legacy behaviour)."
+        ),
+    )
 
 
 class MCPSamplingPolicy(BaseModel):

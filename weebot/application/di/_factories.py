@@ -285,9 +285,19 @@ class FactoriesMixin:
         """Create an MCPClientManager from config.
 
         Reads server configurations from the configured config path.
+        Environment variables (``${VAR}``) are expanded via
+        ``config_loader.expand_env`` so secrets are resolved from env.
         Returns an empty (no-op) manager if no servers are configured.
+
+        Gated behind ``WEEBOT_ENABLE_X_MCP`` — the DI factory returns an
+        empty manager unless the flag is explicitly enabled.
         """
         from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
+        from weebot.infrastructure.mcp.config_loader import expand_env, ConfigError
+
+        # Feature flag: X MCP servers are opt-in
+        if _os.environ.get("WEEBOT_ENABLE_X_MCP", "0").strip("\"'") in ("", "0", "false", "False"):
+            return MCPClientManager(config={})
 
         # Try to load server configs from WeebotSettings
         try:
@@ -304,7 +314,11 @@ class FactoriesMixin:
                         servers = yaml.safe_load(raw)
                     else:
                         servers = json.loads(raw)
+                    # Expand env vars in all string values
+                    servers = expand_env(servers)
                     return MCPClientManager(config={"mcpServers": servers})
+        except ConfigError:
+            raise  # Let ConfigError propagate — it's a clear user-facing error
         except Exception as exc:
             import logging
             logging.getLogger(__name__).warning(

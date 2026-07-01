@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+env:
+  # browser_use defaults telemetry to ON and phones home to posthog; that
+  # client can leave the process unable to exit cleanly after tests finish,
+  # which GitHub reports as a job timeout/cancellation rather than a failure.
+  ANONYMIZED_TELEMETRY: "false"
+
 jobs:
   architecture-fitness:
     name: Architecture Fitness Tests
@@ -19,11 +25,13 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install import-linter
+          pip install import-linter ruff
       - name: Run import-linter
         run: make lint-imports
       - name: Run architecture fitness tests
         run: pytest tests/unit/test_architecture_fitness.py -v --tb=short
+      - name: Run check-arch (all architecture gates)
+        run: make check-arch
       - name: Run event bridge contract tests
         run: pytest tests/integration/test_event_bridge_contract.py -v --tb=short
       - name: Run security penetration tests
@@ -69,7 +77,7 @@ jobs:
       - name: Build weebot-api image
         run: docker build -t weebot-api .
       - name: Build weebot-ui image
-        run: docker build -t weebot-ui -f weebot-ui/Dockerfile weebot-ui/
+        run: docker build -t weebot-ui -f weebot-ui/Dockerfile .
       - name: Start services (no .env — verify crash-free)
         run: |
           export OPENROUTER_API_KEY=ci-test-key

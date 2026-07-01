@@ -150,6 +150,8 @@ TEMPERATURE_PRECISE: float = 0.1
 """Very low randomness — code review, critique, trajectory building, CoVe."""
 
 # TEMPERATURE (imported from settings) = 0.2 — general-purpose default
+TEMPERATURE_DEFAULT: float = TEMPERATURE
+"""General-purpose default — imported from settings (0.2)."""
 TEMPERATURE_BALANCED: float = 0.3
 """Moderate creativity — summarization, synthesis, debate, memory operations."""
 
@@ -165,8 +167,17 @@ TEMPERATURE_KIMI: float = 1.0
 # ========================================================================
 # max_tokens presets — semantic names for agent-specific output limits
 # ========================================================================
-MAX_TOKENS_PROBE: int = 5
-"""Liveness / health-probe calls — single-word or yes/no ping."""
+MAX_TOKENS_PROBE: int = 100
+"""Liveness / health-probe calls — single-word or yes/no ping.
+
+Must stay above what reasoning models (e.g. z-ai/glm-5.2) spend on
+``reasoning_tokens`` before any visible content, even for a trivial
+"ping" prompt — some OpenRouter routes do not honor the
+``chat_template_kwargs.enable_thinking: False`` hint used elsewhere in
+the codebase to suppress thinking mode. A budget of 5 was consumed
+entirely by reasoning tokens (finish_reason="length", content=None),
+making every reasoning-model health check a false-negative "unhealthy".
+"""
 
 MAX_TOKENS_VERDICT: int = 10
 """Hard yes/no or score-only gate responses — verification classifiers."""

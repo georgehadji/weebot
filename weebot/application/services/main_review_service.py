@@ -10,6 +10,7 @@ import logging
 
 from weebot.application.ports.main_review_port import MainReviewPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
 from weebot.domain.models.idea_contract import IdeaContract
 from weebot.domain.models.intent_review import IntentReview
 from weebot.domain.models.main_review import MainReview, MainVerdict, RiskBand
@@ -31,7 +32,7 @@ Return ONLY valid JSON:
  "rationale": "..."}"""
 
 _TIMEOUT = 8.0
-_MAX_TOKENS = 400
+_MAX_TOKENS = MAX_TOKENS_SHORT
 
 
 class MainReviewService(MainReviewPort):
@@ -58,7 +59,7 @@ class MainReviewService(MainReviewPort):
                             f"Heat score: {contract.heat_score:.2f}"
                         )},
                     ],
-                    temperature=0.1,
+                    temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,
                 ),
                 timeout=self._timeout,

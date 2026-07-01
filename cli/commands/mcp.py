@@ -276,7 +276,11 @@ def _get_config_path() -> Path:
 
 
 def _load_server_configs() -> dict:
-    """Load MCP server configurations from disk."""
+    """Load MCP server configurations from disk.
+
+    Environment variables (``${VAR}``) are expanded via
+    ``config_loader.expand_env`` so secrets are resolved from env.
+    """
     path = _get_config_path()
     if not path.exists():
         return {}
@@ -284,8 +288,12 @@ def _load_server_configs() -> dict:
         raw = path.read_text(encoding="utf-8")
         if path.suffix in (".yaml", ".yml"):
             import yaml
-            return yaml.safe_load(raw) or {}
-        return json.loads(raw) or {}
+            servers = yaml.safe_load(raw) or {}
+        else:
+            servers = json.loads(raw) or {}
+        # Expand env vars in all string values
+        from weebot.infrastructure.mcp.config_loader import expand_env
+        return expand_env(servers)
     except Exception as exc:
         logger.warning("Failed to load MCP config from %s: %s", path, exc)
         return {}
@@ -314,8 +322,8 @@ def _save_server_config(config: "MCPServerConfig") -> None:
 def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
     """Perform OAuth login flow for an MCP server.
 
-    Uses loopback callback server for interactive login and falls
-    back to paste-back for headless environments.
+    For X (Twitter) servers, print xurl auth instructions instead of
+    claiming we open a browser.  Falls back to paste-token for other servers.
     """
     from weebot.config.settings import WeebotSettings
     settings = WeebotSettings()
@@ -329,8 +337,33 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
 
     auth_config = server_config.get("auth", {})
     client_id = auth_config.get("oauth_client_id")
-    scopes = auth_config.get("oauth_scopes", [])
+    transport = server_config.get("transport", "stdio")
+    command = server_config.get("command", "")
 
+    # X MCP servers delegate OAuth to xurl
+    if "xurl" in command or name in ("xapi", "x-docs"):
+        console.print()
+        console.print(Panel.fit(
+            "[bold]X (Twitter) MCP — OAuth via xurl[/bold]\n\n"
+            "weebot delegates OAuth to the xurl CLI.  Run this once outside weebot:\n\n"
+            "  [bold]xurl auth oauth2 --headless[/bold]\n\n"
+            "This caches your token in ~/.xurl so weebot's stdio connection\n"
+            "reuses it without opening a browser on subsequent starts.\n\n"
+            "For Path A (read-only), set X_BEARER in your .env instead of using OAuth.\n"
+            "For Path B (writes), after pre-auth, use this config in your MCP servers file:\n\n"
+            "  [dim]{\n"
+            '    "transport": "stdio",\n'
+            '    "command": "npx",\n'
+            '    "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],\n'
+            '    "env": { "CLIENT_ID": "${X_CLIENT_ID}", "CLIENT_SECRET": "${X_CLIENT_SECRET}" },\n'
+            '    "timeout_seconds": 300\n'
+            "  }[/dim]",
+            style="bold cyan",
+        ))
+        console.print()
+        return
+
+    # Generic OAuth flow (non-X servers)
     if not client_id:
         console.print("[yellow]No OAuth client ID configured for this server.[/yellow]")
         console.print("  Use 'mcp configure' to set one, or paste your token manually.")
@@ -343,11 +376,12 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
 
     console.print(f"[yellow]Opening browser for OAuth login to {name}...[/yellow]")
     console.print(f"  Client ID: {client_id}")
+    scopes = auth_config.get("oauth_scopes", [])
     if scopes:
         console.print(f"  Scopes: {', '.join(scopes)}")
     console.print()
-    console.print("[dim]In a full implementation, this would open a browser for OAuth. "
-                  "For now, paste your token below.[/dim]")
+    console.print("[dim]For headless environments, pre-authenticate out-of-band.\n"
+                  "Paste your token below after completing the browser flow.[/dim]")
 
     token = Prompt.ask("Paste OAuth token", password=True)
     if token:

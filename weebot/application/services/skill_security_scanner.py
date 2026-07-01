@@ -93,7 +93,7 @@ class SkillSecurityScanner:
                                 "location": str(script_file),
                             })
                     except Exception:
-                        pass
+                        logger.debug("Failed to scan bundled script %s", script_file.name, exc_info=True)
 
         # Determine risk tier
         if len(self._findings) >= 3:

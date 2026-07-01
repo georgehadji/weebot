@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Set, Tuple, Optional
 
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+
 
 class RiskLevel(Enum):
     """Risk classification for commands."""
@@ -72,7 +74,12 @@ class CommandSecurityAnalyzer:
         # Obfuscation techniques
         (r'\\x[0-9a-fA-F]{2}', "hex escape sequences"),
         (r'\$\{.*:#.*\}', "parameter expansion obfuscation"),
-        (r'`.*`.*`', "nested backticks"),
+        # Backtick is PowerShell's escape character (`n=newline, `t=tab).
+        # Single-char escapes are syntax, not injection.  Only flag
+        # backtick groups with 3+ chars of substantive content as potential
+        # injection — this allows PowerShell batch commands with embedded
+        # newlines while still blocking real backtick-based command injection.
+        (r'`[^`]{3,}`[^`]*`[^`]{3,}`', "nested backtick injection"),
         (r'\$\(\$\(', "nested command substitution"),
 
         # ── PowerShell-specific injection vectors ────────────────────
@@ -191,7 +198,7 @@ class CommandSecurityAnalyzer:
                 prompt=f"{system_prompt}\n\n{prompt}",
                 task_type=TaskType.ANALYSIS,
                 use_cache=True,
-                temperature=0.0
+                temperature=TEMPERATURE_DETERMINISTIC
             )
 
             content = response.get("content", "{}")
@@ -422,13 +429,30 @@ class CommandSecurityAnalyzer:
         return entropy
 
     def _looks_like_base64(self, data: str) -> bool:
-        """Check if string looks like base64 (uses base64 character set)."""
-        if len(data) < 10:  # Too short to reliably determine
+        """Check if string looks like base64 (uses base64 character set).
+
+        Real base64 strings mix character classes: uppercase, lowercase,
+        digits, and often ``+``/``/``/``=``.  A string of ONLY lowercase
+        letters (e.g. a filepath) is NOT base64 — this prevents false
+        positives on PowerShell commands containing long filesystem paths.
+        """
+        if len(data) < 12:  # Too short to reliably determine
             return False
-            
+
         # Check if string contains only base64 characters
         base64_chars = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
-        return all(c in base64_chars for c in data)
+        if not all(c in base64_chars for c in data):
+            return False
+
+        # Require at least ONE signal of real base64:
+        # uppercase letter, digit, '+' char, or '=' padding.
+        # Pure-lowercase strings (filepaths, variable names) fail this.
+        has_upper = any(c.isupper() for c in data)
+        has_digit = any(c.isdigit() for c in data)
+        has_plus = '+' in data
+        has_padding = data.endswith('=')
+
+        return has_upper or has_digit or has_plus or has_padding
 
 
 # Singleton instance for reuse

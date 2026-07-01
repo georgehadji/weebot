@@ -33,6 +33,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.llm_port import LLMResponse
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 from weebot.tools.computer_use import ScreenshotWithOCRTool as ScreenshotOCRTool
+from tests.unit.conftest import VISION_TEST_MODEL
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ def test_vision_off_no_injection(b64: str) -> None:
     """With flag OFF, injection must NOT happen even for a vision-capable model."""
     _head("Step 2 — vision flag OFF: image must NOT appear in conversation buffer")
 
-    ex = _make_executor("claude-opus-4-8", vision_flag=False)
+    ex = _make_executor(VISION_TEST_MODEL, vision_flag=False)
     assert not ex._vision_enabled(), "Expected _vision_enabled() == False"
 
     # Simulate what executor does when it processes a tool result
@@ -119,7 +120,7 @@ def test_vision_on_injection_and_format(b64: str) -> None:
     """With flag ON + vision model, image block must appear and convert to Anthropic shape."""
     _head("Step 3 — vision flag ON: image block must appear in conversation buffer")
 
-    ex = _make_executor("claude-opus-4-8", vision_flag=True)
+    ex = _make_executor(VISION_TEST_MODEL, vision_flag=True)
     assert ex._vision_enabled(), "Expected _vision_enabled() == True with Claude model + flag"
 
     # Replicate executor injection call site
@@ -166,7 +167,7 @@ def test_lifecycle_oldest_screenshot_downgraded(b64: str) -> None:
     """After two screenshots, only the newest image block stays live."""
     _head("Step 5 — lifecycle: older screenshot becomes placeholder after second injection")
 
-    ex = _make_executor("claude-opus-4-8", vision_flag=True)
+    ex = _make_executor(VISION_TEST_MODEL, vision_flag=True)
     ex._inject_screenshot("computer_use", b64)   # first screenshot
     ex._inject_screenshot("screen_tool", b64)    # second screenshot
 

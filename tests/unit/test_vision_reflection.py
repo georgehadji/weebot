@@ -131,12 +131,18 @@ class TestReflectionEnabled:
         ex = _make_executor(VISION_TEST_MODEL)
         assert ex._reflection_enabled() is True
 
-    def test_reflection_off_for_non_vision_model(self, monkeypatch):
+    def test_reflection_enabled_regardless_of_current_model(self, monkeypatch):
+        """_reflection_enabled() only checks the two feature flags.
+
+        Model-capability gating (switching to a VLM when a screenshot needs
+        analysis) is a separate concern handled by _needs_vision +
+        _resolve_model_for_step — see _reflection_enabled()'s docstring.
+        """
         import weebot.config.feature_flags as ff
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
         ex = _make_executor("deepseek-chat")
-        assert ex._reflection_enabled() is False
+        assert ex._reflection_enabled() is True
 
 
 class TestReflectOnScreenshot:

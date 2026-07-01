@@ -246,7 +246,7 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="true").inc()
                     except Exception:
-                        pass
+                        logger.debug("Failed to increment tool call metric for %s", _name, exc_info=True)
 
                 # Phase 5: Cache store (after successful execution)
                 if self._cache is not None and not result.is_error:
@@ -276,7 +276,7 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="false").inc()
                     except Exception:
-                        pass
+                        logger.debug("Failed to increment tool error metric for %s", _name, exc_info=True)
 
                 retry_count += 1
 

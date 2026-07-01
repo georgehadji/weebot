@@ -236,18 +236,18 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
         ),
         
         # Performance/Best Value Models
-        "claude-4.6-sonnet": ModelInfo(
-            model_name="claude-4.6-sonnet",
+        "claude-4.6-sonnet": ModelInfo(  # Map to Sonnet 5 — drop-in replacement
+            model_name="openrouter/anthropic/claude-sonnet-5",
             provider=ModelProvider.ANTHROPIC,
             input_cost_per_token=3e-06,  # $3.0 per 1M tokens
             output_cost_per_token=1.5e-05,  # $15.0 per 1M tokens
-            max_input_tokens=200000,  # 200K context (1M beta)
-            max_output_tokens=4096,
+            max_input_tokens=200000,  # 200K context
+            max_output_tokens=8192,
             supports_function_calling=True,
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Sonnet 4.6 - Best value for coding agents and production use. 72.5% OSWorld (near Opus), 79.6% SWE-bench, 94% on real insurance workflows."
+            description="Anthropic's Claude Sonnet 5 via OpenRouter — drop-in upgrade from Sonnet 4.6. Best value for coding agents and production use."
         ),
         "gpt-5.1": ModelInfo(
             model_name="gpt-5.1",

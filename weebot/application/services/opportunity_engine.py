@@ -97,7 +97,7 @@ class OpportunityEngine:
                 stats.get("edge_count", 0),
             )
         except Exception:
-            pass
+            logger.debug("Failed to log opportunity scan stats", exc_info=True)
 
         # Rank and filter
         proposals.sort(key=lambda p: p.confidence, reverse=True)
