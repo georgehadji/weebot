@@ -9,15 +9,21 @@ from weebot.config.model_refs import (
 )
 
 
-def test_rerank_model_free_is_nvidia_nemotron():
-    """RERANK_MODEL_FREE points to the NVIDIA Nemotron 1B free model."""
-    assert RERANK_MODEL_FREE == "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
+def test_rerank_model_free_is_cheapest_paid_cohere():
+    """RERANK_MODEL_FREE points to Cohere Rerank 4 Fast (cheapest paid tier).
+
+    Was previously nvidia/llama-nemotron-rerank-vl-1b-v2:free, but that
+    endpoint was unconfirmed against the Cohere-compatible rerank API and
+    RERANK_MODEL_FREE now aliases RERANK_MODEL_FAST directly — see the
+    constant's docstring in weebot/config/model_refs.py.
+    """
+    assert RERANK_MODEL_FREE == "cohere/rerank-4-fast"
+    assert RERANK_MODEL_FREE == RERANK_MODEL_FAST
 
 
-def test_rerank_model_free_is_distinct():
-    """RERANK_MODEL_FREE is distinct from the paid Cohere models."""
+def test_rerank_model_free_is_distinct_from_pro_and_v35():
+    """RERANK_MODEL_FREE is distinct from the higher/lower Cohere tiers."""
     assert RERANK_MODEL_FREE != RERANK_MODEL_PRO
-    assert RERANK_MODEL_FREE != RERANK_MODEL_FAST
     assert RERANK_MODEL_FREE != RERANK_MODEL_V35
 
 
@@ -42,11 +48,9 @@ def test_unknown_case_defaults_to_free():
     assert get_rerank_model_for("nonexistent") == RERANK_MODEL_FREE
 
 
-def test_model_is_in_registry():
-    """The free model is registered in the model registry."""
-    from weebot.config.model_registry import get_model_info
-    info = get_model_info(RERANK_MODEL_FREE)
-    assert info is not None
-    assert info.model_name == "nvidia/llama-nemotron-rerank-vl-1b-v2:free"
-    assert info.input_cost_per_token == 0.0
-    assert info.output_cost_per_token == 0.0
+def test_free_model_matches_fast_tier():
+    """RERANK_MODEL_FREE is priced per-search (Cohere), not per-token — it
+    isn't expected to appear in the token-cost model registry the way the
+    old free-tier nvidia model was. It should just track RERANK_MODEL_FAST.
+    """
+    assert RERANK_MODEL_FREE == RERANK_MODEL_FAST
