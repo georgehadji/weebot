@@ -37,11 +37,11 @@ class AgentToolsMixin:
     def _build_plan_act_flow_for_session(self, session):
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
-        from weebot.tools.tool_registry import RoleBasedToolRegistry
         from weebot.config.constants import SUBAGENT_MAX_STEPS
         from weebot.application.ports.llm_port import LLMPort
         from weebot.config.harness.schema import HarnessConfig
-        registry = RoleBasedToolRegistry()
+
+        registry = self.get("tool_registry")
         tools = registry.create_tool_collection("admin", llm_port=self._maybe_get(LLMPort))
         cfg = PlanActFlowConfig(
             llm=self.get(LLMPort),
@@ -54,5 +54,8 @@ class AgentToolsMixin:
             skill_retriever=self._maybe_get_str("skill_retriever"),
             skill_distiller=self._maybe_get_str("skill_distiller"),
             harness_config=self._maybe_get(HarnessConfig),
+            tool_registry=registry,
+            mcp_bridge=self._maybe_get_str("mcp_bridge"),
+            native_tool_selector=self._maybe_get_str("native_tool_selector"),
         )
         return PlanActFlow(cfg)

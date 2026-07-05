@@ -9,6 +9,7 @@ and manages the lifecycle of per-server tool registrations.
 """
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import logging
 from typing import Any
@@ -100,8 +101,12 @@ class MCPToolRegistryBridge:
         self._mcp_client = mcp_client
         self._registry = registry or RoleBasedToolRegistry()
         self._server_configs: dict[str, MCPServerConfig] = {}
-        self._registered_tools: dict[str, list[str]] = {}  # server_name -> [namespaced_names]
+        # server_name -> [namespaced_names]
+        self._registered_tools: dict[str, list[str]] = {}
+        # server_name -> [MCPToolInfo]
+        self._registered_tool_infos: dict[str, list[MCPToolInfo]] = {}
         self._skill_indexer = None  # MCPToolSkillIndexer, wired by DI
+        self._retrieval_service: Any = None  # McpToolRetrievalService, wired by DI
 
     def set_mcp_client(self, client: Any) -> None:
         """Set or replace the MCP client (useful for DI)."""
@@ -118,6 +123,14 @@ class MCPToolRegistryBridge:
             indexer: An ``MCPToolSkillIndexer`` instance, or ``None`` to disable.
         """
         self._skill_indexer = indexer
+
+    def set_retrieval_service(self, service) -> None:
+        """Wire the McpToolRetrievalService for scoped tool retrieval (H1).
+
+        Args:
+            service: An ``McpToolRetrievalService`` instance, or ``None`` to disable.
+        """
+        self._retrieval_service = service
 
     async def initialize(self) -> int:
         """Connect to all configured servers and register their tools.
@@ -136,12 +149,27 @@ class MCPToolRegistryBridge:
                 continue
             try:
                 # The MCPClientManager handles caching internally
-                logger.info("Bridge: server %s configured (transport=%s)", server_name, config.transport.value)
+                logger.info(
+                    "Bridge: server %s configured (transport=%s)",
+                    server_name,
+                    config.transport.value,
+                )
             except Exception as exc:
                 logger.error("Bridge: failed to configure server %s: %s", server_name, exc)
 
         # Register all cached tools
-        return await self._register_all_tools()
+        total = await self._register_all_tools()
+
+        # H1: index external MCP tools for scoped retrieval
+        if self._retrieval_service is not None and total > 0:
+            all_tool_infos = [
+                info
+                for infos in self._registered_tool_infos.values()
+                for info in infos
+            ]
+            await self._retrieval_service.index_all_tools(all_tool_infos)
+
+        return total
 
     async def _register_all_tools(self) -> int:
         """Read cached MCP tools, apply filters, and register into the tool registry."""
@@ -192,6 +220,7 @@ class MCPToolRegistryBridge:
                 registered_names.append(tool_info.namespaced_name)
 
             self._registered_tools[server_name] = registered_names
+            self._registered_tool_infos[server_name] = filtered
             total += len(registered_names)
             logger.info(
                 "Bridge: registered %d tools from MCP server '%s' (%d filtered out)",
@@ -266,6 +295,49 @@ class MCPToolRegistryBridge:
 
         return await self._register_all_tools()
 
+    async def scope_for_query(self, query: str) -> list[str]:
+        """Return the scoped subset of MCP tool names relevant to *query*.
+
+        If scoped retrieval is not wired, falls back to returning all
+        registered MCP tool names for backward compatibility.
+
+        This method mutates the shared registry so that callers using the
+        traditional "apply and return" pattern still work.  New code should
+        prefer :meth:`select_for_query` to avoid mutating global state.
+
+        Returns:
+            List of namespaced tool names.
+        """
+        if self._retrieval_service is None:
+            return [
+                name
+                for names in self._registered_tools.values()
+                for name in names
+            ]
+
+        relevant = await self._retrieval_service.scope_for_query(query)
+        return [tool.namespaced_name for tool in relevant]
+
+    async def select_for_query(self, query: str) -> list[str]:
+        """Return the scoped subset of MCP tool names without mutating the registry.
+
+        Falls back to all registered MCP names when scoped retrieval is
+        disabled.  Use this from PlanActFlow to build a fresh ToolCollection
+        instead of relying on a globally mutated registry.
+
+        Returns:
+            List of namespaced tool names.
+        """
+        if self._retrieval_service is None:
+            return [
+                name
+                for names in self._registered_tools.values()
+                for name in names
+            ]
+
+        relevant = await self._retrieval_service.retrieve_for_query(query)
+        return [tool.namespaced_name for tool in relevant]
+
     async def unregister_server_tools(self, server_name: str) -> int:
         """Remove all tools belonging to a specific MCP server.
 
@@ -273,12 +345,11 @@ class MCPToolRegistryBridge:
             Number of tools unregistered.
         """
         registered = self._registered_tools.pop(server_name, [])
+        self._registered_tool_infos.pop(server_name, None)
         for namespaced in registered:
             for role in list(self._registry.list_roles()):
-                try:
+                with contextlib.suppress(ValueError, KeyError):
                     self._registry.remove_tool_from_role(role, namespaced)
-                except (ValueError, KeyError):
-                    pass
         logger.info("Bridge: unregistered %d tools from server '%s'", len(registered), server_name)
         return len(registered)
 

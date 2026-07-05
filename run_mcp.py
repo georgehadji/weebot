@@ -35,8 +35,10 @@ def _try_attach(module_path: str, class_name: str, label: str) -> object | None:
 
 def _build_server():
     """Construct a WeebotMCPServer with optional managers attached."""
+    from weebot.config.settings import WeebotSettings
     from weebot.mcp.server import WeebotMCPServer
 
+    settings = WeebotSettings()
     state_manager = _try_attach(
         "weebot.infrastructure.persistence.sqlite_state_repo",
         "StateManager",
@@ -47,7 +49,11 @@ def _build_server():
         "SchedulingManager",
         "SchedulingManager",
     )
-    return WeebotMCPServer(state_manager=state_manager, scheduler=scheduler)
+    return WeebotMCPServer(
+        state_manager=state_manager,
+        scheduler=scheduler,
+        composite_tools_enabled=settings.mcp_composite_tools_enabled,
+    )
 
 
 def main() -> None:

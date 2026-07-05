@@ -7,17 +7,17 @@ from the original ExecutorAgent god class.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncGenerator
 from collections import deque
 
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.domain.models.event import AgentEvent, MessageEvent
-from weebot.domain.models.session import Session
-from weebot.domain.models.plan import Step
 from weebot.tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -126,10 +126,8 @@ class ToolExecutor:
         tool_obj = self._tools.get_tool(name)
         timeout = float(getattr(tool_obj, "default_timeout_seconds", 60) if tool_obj else 60)
         if "timeout" in args:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 timeout = min(float(args["timeout"]) + 5.0, 305.0)
-            except (ValueError, TypeError):
-                pass
 
         # Pre-tool hook
         if self._hooks is not None:
@@ -169,7 +167,7 @@ class ToolExecutor:
             })
         return result
 
-    async def _execute_single_tool_call(self, tc: Dict[str, Any]) -> ToolResult:
+    async def _execute_single_tool_call(self, tc: dict[str, Any]) -> ToolResult:
         """Thin wrapper: parse tool call dict and delegate to execute_tool."""
         return await self.execute_tool(
             tc["function"]["name"], tc["function"].get("arguments", "{}"),

@@ -9,7 +9,6 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -185,32 +184,38 @@ class TestPingTool:
     @pytest.mark.asyncio
     async def test_ping_returns_ok_status(self) -> None:
         """ping tool returns {"status": "ok", ...}."""
+        from mcp.types import CallToolResult
         from weebot.mcp.server import WeebotMCPServer
 
         server = WeebotMCPServer()
-        content, _ = await server.mcp.call_tool("ping", {})
-        data = json.loads(content[0].text)
+        result = await server.mcp.call_tool("ping", {})
+        assert isinstance(result, CallToolResult)
+        data = json.loads(result.content[0].text)
         assert data["status"] == "ok"
 
     @pytest.mark.asyncio
     async def test_ping_returns_version(self) -> None:
         """ping response includes 'version' key."""
+        from mcp.types import CallToolResult
         from weebot.mcp.server import WeebotMCPServer
 
         server = WeebotMCPServer()
-        content, _ = await server.mcp.call_tool("ping", {})
-        data = json.loads(content[0].text)
+        result = await server.mcp.call_tool("ping", {})
+        assert isinstance(result, CallToolResult)
+        data = json.loads(result.content[0].text)
         assert "version" in data
 
     @pytest.mark.asyncio
     async def test_ping_returns_valid_iso_timestamp(self) -> None:
         """ping 'timestamp' field is a valid ISO 8601 datetime string."""
         from datetime import datetime
+        from mcp.types import CallToolResult
         from weebot.mcp.server import WeebotMCPServer
 
         server = WeebotMCPServer()
-        content, _ = await server.mcp.call_tool("ping", {})
-        data = json.loads(content[0].text)
+        result = await server.mcp.call_tool("ping", {})
+        assert isinstance(result, CallToolResult)
+        data = json.loads(result.content[0].text)
 
         assert "timestamp" in data
         # datetime.fromisoformat raises ValueError if the string is not valid ISO 8601

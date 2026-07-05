@@ -11,24 +11,23 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from weebot.core.activity_stream import ActivityStream
+from weebot.mcp.sanitize import sanitize_json_fields
 
 _log = logging.getLogger(__name__)
 _INTERNAL_ERROR = "internal_error"
 
 if TYPE_CHECKING:
     # Import only for type hints — avoids circular imports at runtime.
-    from weebot.application.skills.skill_registry import SkillRegistry
-    from weebot.state_manager import StateManager
-    from weebot.scheduling.scheduler import SchedulingManager
+    pass
 
 
 def build_activity_json(stream: ActivityStream, n: int = 50) -> str:
     """Return the last *n* activity events as a JSON string (newest-first)."""
     events = stream.recent(n)
-    return json.dumps(
+    data = sanitize_json_fields(
         [
             {
                 "project_id": e.project_id,
@@ -37,12 +36,12 @@ def build_activity_json(stream: ActivityStream, n: int = 50) -> str:
                 "timestamp": e.timestamp.isoformat(),
             }
             for e in events
-        ],
-        indent=2,
+        ]
     )
+    return json.dumps(data, indent=2)
 
 
-def build_state_json(state_manager: Optional[Any] = None) -> str:
+def build_state_json(state_manager: Any | None = None) -> str:
     """Return an agent state snapshot as a JSON string.
 
     Args:
@@ -52,11 +51,13 @@ def build_state_json(state_manager: Optional[Any] = None) -> str:
     """
     if state_manager is None:
         return json.dumps(
-            {
-                "status": "idle",
-                "version": "1.0.0",
-                "note": "Pass state_manager= to WeebotMCPServer for live data.",
-            },
+            sanitize_json_fields(
+                {
+                    "status": "idle",
+                    "version": "1.0.0",
+                    "note": "Pass state_manager= to WeebotMCPServer for live data.",
+                }
+            ),
             indent=2,
         )
 
@@ -64,13 +65,15 @@ def build_state_json(state_manager: Optional[Any] = None) -> str:
         projects = state_manager.list_projects()
         active = [p for p in projects if p.get("status") not in ("completed", "failed")]
         return json.dumps(
-            {
-                "status": "active" if active else "idle",
-                "version": "1.0.0",
-                "total_projects": len(projects),
-                "active_projects": len(active),
-                "projects": projects[:10],  # cap to avoid huge payloads
-            },
+            sanitize_json_fields(
+                {
+                    "status": "active" if active else "idle",
+                    "version": "1.0.0",
+                    "total_projects": len(projects),
+                    "active_projects": len(active),
+                    "projects": projects[:10],  # cap to avoid huge payloads
+                }
+            ),
             indent=2,
         )
     except Exception as exc:
@@ -81,7 +84,7 @@ def build_state_json(state_manager: Optional[Any] = None) -> str:
         )
 
 
-def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
+def build_roadmap_json(product_db_path: str | None = None) -> str:
     """Return all requirements grouped by category as a JSON string.
 
     Args:
@@ -91,10 +94,12 @@ def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
     """
     if product_db_path is None:
         return json.dumps(
-            {
-                "requirements": [],
-                "note": "Pass product_db_path= to WeebotMCPServer for live data.",
-            },
+            sanitize_json_fields(
+                {
+                    "requirements": [],
+                    "note": "Pass product_db_path= to WeebotMCPServer for live data.",
+                }
+            ),
             indent=2,
         )
 
@@ -119,11 +124,13 @@ def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
             projects.setdefault(pid, {}).setdefault(cat, []).append(req)
 
         return json.dumps(
-            {
-                "total": len(rows),
-                "projects": projects,
-                "generated_at": _dt.datetime.now().isoformat(),
-            },
+            sanitize_json_fields(
+                {
+                    "total": len(rows),
+                    "projects": projects,
+                    "generated_at": _dt.datetime.now().isoformat(),
+                }
+            ),
             indent=2,
         )
     except Exception as exc:
@@ -132,23 +139,26 @@ def build_roadmap_json(product_db_path: Optional[str] = None) -> str:
 
 
 async def build_tools_json(
-    tool_discovery: Optional[Any] = None,
-    role: Optional[str] = None,
+    tool_discovery: Any | None = None,
+    role: str | None = None,
 ) -> str:
     """Return the tool catalog as a JSON string.
 
     Args:
-        tool_discovery: Optional :class:`~weebot.application.ports.tool_discovery_port.ToolDiscoveryPort`
-                        instance.  When provided, live tool manifests are returned;
-                        when omitted a static stub is returned.
+        tool_discovery: Optional
+            :class:`~weebot.application.ports.tool_discovery_port.ToolDiscoveryPort`
+            instance.  When provided, live tool manifests are returned;
+            when omitted a static stub is returned.
         role: Optional role filter (e.g. ``"researcher"``, ``"admin"``).
     """
     if tool_discovery is None:
         return json.dumps(
-            {
-                "tools": [],
-                "note": "Pass tool_discovery= to WeebotMCPServer for live tool catalog.",
-            },
+            sanitize_json_fields(
+                {
+                    "tools": [],
+                    "note": "Pass tool_discovery= to WeebotMCPServer for live tool catalog.",
+                }
+            ),
             indent=2,
         )
 
@@ -167,11 +177,13 @@ async def build_tools_json(
             for m in manifests
         ]
         return json.dumps(
-            {
-                "tools": tools,
-                "total": len(tools),
-                "role_filter": role,
-            },
+            sanitize_json_fields(
+                {
+                    "tools": tools,
+                    "total": len(tools),
+                    "role_filter": role,
+                }
+            ),
             indent=2,
         )
     except Exception as exc:
@@ -179,7 +191,7 @@ async def build_tools_json(
         return json.dumps({"tools": [], "error": _INTERNAL_ERROR}, indent=2)
 
 
-def build_costs_json(cascade_tracker: Optional[Any] = None) -> str:
+def build_costs_json(cascade_tracker: Any | None = None) -> str:
     """Return current-session cost and cascade statistics as a JSON string.
 
     Args:
@@ -189,15 +201,17 @@ def build_costs_json(cascade_tracker: Optional[Any] = None) -> str:
     """
     if cascade_tracker is None:
         return json.dumps(
-            {
-                "total_decisions": 0,
-                "per_tier": {},
-                "total_cost_estimate": 0.0,
-                "avg_latency_ms": 0.0,
-                "cascade_hit_rate": 1.0,
-                "recent_decisions": [],
-                "note": "Pass cascade_tracker= to WeebotMCPServer for live cost data.",
-            },
+            sanitize_json_fields(
+                {
+                    "total_decisions": 0,
+                    "per_tier": {},
+                    "total_cost_estimate": 0.0,
+                    "avg_latency_ms": 0.0,
+                    "cascade_hit_rate": 1.0,
+                    "recent_decisions": [],
+                    "note": "Pass cascade_tracker= to WeebotMCPServer for live cost data.",
+                }
+            ),
             indent=2,
         )
 
@@ -217,7 +231,7 @@ def build_costs_json(cascade_tracker: Optional[Any] = None) -> str:
             }
             for d in recent
         ]
-        return json.dumps(summary, indent=2)
+        return json.dumps(sanitize_json_fields(summary), indent=2)
     except Exception as exc:
         _log.exception("Failed to build costs resource payload: %s", exc)
         return json.dumps(
@@ -226,7 +240,7 @@ def build_costs_json(cascade_tracker: Optional[Any] = None) -> str:
         )
 
 
-def build_skills_json(skill_registry: Optional[Any] = None) -> str:
+def build_skills_json(skill_registry: Any | None = None) -> str:
     """Return installed skills as a JSON string.
 
     Args:
@@ -236,11 +250,13 @@ def build_skills_json(skill_registry: Optional[Any] = None) -> str:
     """
     if skill_registry is None:
         return json.dumps(
-            {
-                "skills": [],
-                "total": 0,
-                "note": "Pass skill_registry= to WeebotMCPServer for live skill data.",
-            },
+            sanitize_json_fields(
+                {
+                    "skills": [],
+                    "total": 0,
+                    "note": "Pass skill_registry= to WeebotMCPServer for live skill data.",
+                }
+            ),
             indent=2,
         )
 
@@ -256,13 +272,13 @@ def build_skills_json(skill_registry: Optional[Any] = None) -> str:
             }
             for s in skills
         ]
-        return json.dumps({"skills": data, "total": len(data)}, indent=2)
+        return json.dumps(sanitize_json_fields({"skills": data, "total": len(data)}), indent=2)
     except Exception as exc:
         _log.exception("Failed to build skills resource payload: %s", exc)
         return json.dumps({"skills": [], "error": _INTERNAL_ERROR}, indent=2)
 
 
-def build_schedule_json(scheduler: Optional[Any] = None) -> str:
+def build_schedule_json(scheduler: Any | None = None) -> str:
     """Return the current schedule list as a JSON string.
 
     Args:
@@ -272,10 +288,12 @@ def build_schedule_json(scheduler: Optional[Any] = None) -> str:
     """
     if scheduler is None:
         return json.dumps(
-            {
-                "jobs": [],
-                "note": "Pass scheduler= to WeebotMCPServer for live schedule data.",
-            },
+            sanitize_json_fields(
+                {
+                    "jobs": [],
+                    "note": "Pass scheduler= to WeebotMCPServer for live schedule data.",
+                }
+            ),
             indent=2,
         )
 
@@ -293,7 +311,9 @@ def build_schedule_json(scheduler: Optional[Any] = None) -> str:
                     if val is not None:
                         entry[field] = str(val)
             serialised.append(entry)
-        return json.dumps({"jobs": serialised, "total": len(serialised)}, indent=2)
+        return json.dumps(
+            sanitize_json_fields({"jobs": serialised, "total": len(serialised)}), indent=2
+        )
     except Exception as exc:
         _log.exception("Failed to build schedule resource payload: %s", exc)
         return json.dumps(

@@ -132,7 +132,6 @@ ignore_imports =
     # reaching into application, they are core using the tool abstraction layer.
     weebot.core.agent -> weebot.tools.browser_tool
     weebot.core.agent -> weebot.tools.powershell_tool
-    weebot.core.agent_factory -> weebot.tools.base
     weebot.core.agent_factory -> weebot.tools.tool_registry
     # agent_factory imports agent_core_v2 which bridges into application.
     # This is a legacy dependency tracked for migration.

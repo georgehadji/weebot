@@ -57,5 +57,6 @@ runtime_control:
 subagents:
   definitions: []
   max_parallel: 0
+middleware: []
 skill_selection:
   active_skills: []

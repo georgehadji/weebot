@@ -9,9 +9,9 @@ Each test:
 from __future__ import annotations
 
 import inspect
+import os
 from abc import ABC
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -28,11 +28,26 @@ _NON_PORT_CLASSES = {
 
 # Ports known to have zero adapters (tracked for future implementation)
 _ZERO_ADAPTER_PORTS = {
-    "SwarmEventBusPort": "SwarmEventBus exists but does not inherit the port interface",
-    "SpeechPort": "WhisperSpeechAdapter exists but is not found by conservative scan (nested package)",
-    "TaskQueuePort": "InMemoryTaskQueue exists but is not found by conservative scan (nested package)",
-    "OptimizerPort": "OptimizerAgent inherits OptimizerPort but is not found by conservative scan (deep import path)",
-    "CanonicalizerPort": "Docstring documents an ActionCanonicalizer implementation that was never written — genuinely unimplemented, not a scan gap. See docs/plans/ARCHITECTURE_9_PLAN.md.",
+    "SwarmEventBusPort": (
+        "SwarmEventBus exists but does not inherit the port interface"
+    ),
+    "SpeechPort": (
+        "WhisperSpeechAdapter exists but is not found by "
+        "conservative scan (nested package)"
+    ),
+    "TaskQueuePort": (
+        "InMemoryTaskQueue exists but is not found by "
+        "conservative scan (nested package)"
+    ),
+    "OptimizerPort": (
+        "OptimizerAgent inherits OptimizerPort but is not found by "
+        "conservative scan (deep import path)"
+    ),
+    "CanonicalizerPort": (
+        "Docstring documents an ActionCanonicalizer implementation that was "
+        "never written — genuinely unimplemented, not a scan gap. "
+        "See docs/plans/ARCHITECTURE_9_PLAN.md."
+    ),
 }
 
 
@@ -58,16 +73,30 @@ def _discover_ports() -> list[type]:
     return ports
 
 
+# Modules that import heavy third-party SDKs at import time.  On local
+# developer machines these can block indefinitely (e.g. OpenAI SDK loading
+# native deps).  They are still exercised in CI where the environment is clean.
+_HEAVY_SDK_MODULES = {
+    "weebot.infrastructure.adapters.llm.openai_adapter",
+    "weebot.infrastructure.adapters.llm.anthropic_adapter",
+    "weebot.infrastructure.adapters.llm.openrouter_adapter",
+}
+
+
 def _get_adapter_classes(port_cls: type) -> list[type]:
     """Find all concrete subclasses of *port_cls* across the codebase.
 
     Uses a conservative scan through ``weebot.infrastructure``,
     ``weebot.application.services``, and ``weebot.application.agents``.
+
+    Heavy SDK modules are skipped locally to avoid import hangs; CI still
+    scans them.  See ``_HEAVY_SDK_MODULES``.
     """
     import importlib
     import pkgutil
 
     adapters: list[type] = []
+    in_ci = bool(os.environ.get("CI"))
 
     packages_to_scan = [
         "weebot.infrastructure",
@@ -83,14 +112,16 @@ def _get_adapter_classes(port_cls: type) -> list[type]:
             pkg_path = getattr(pkg, "__path__", None)
             if not pkg_path:
                 continue
-            for importer, mod_name, is_pkg in pkgutil.walk_packages(
+            for _importer, mod_name, _is_pkg in pkgutil.walk_packages(
                 pkg_path, prefix=f"{pkg_name}.",
             ):
+                if not in_ci and mod_name in _HEAVY_SDK_MODULES:
+                    continue
                 try:
                     mod = importlib.import_module(mod_name)
                 except (ImportError, Exception):
                     continue
-                for name, obj in inspect.getmembers(mod, inspect.isclass):
+                for _name, obj in inspect.getmembers(mod, inspect.isclass):
                     if (
                         issubclass(obj, port_cls)
                         and obj is not port_cls
@@ -132,6 +163,23 @@ class TestPortContracts:
                 f"{port_cls.__name__}: {_ZERO_ADAPTER_PORTS[port_cls.__name__]}"
             )
         adapters = _get_adapter_classes(port_cls)
+
+        # Heavy SDK adapters (e.g. OpenAI/Anthropic LLM adapters) are skipped
+        # locally to avoid import hangs.  Fall back to DI resolution for the
+        # known LLMPort case.
+        if not adapters and not os.environ.get("CI") and port_cls.__name__ == "LLMPort":
+            try:
+                container = Container()
+                container.configure_defaults()
+                instance = container.get(port_cls)  # type: ignore[type-abstract]
+                if isinstance(instance, port_cls):
+                    pytest.skip(
+                        "LLMPort adapter resolved via DI "
+                        "(heavy SDK modules skipped locally)"
+                    )
+            except Exception:
+                pass
+
         assert len(adapters) > 0, (
             f"{port_cls.__name__} has no registered adapter. "
             f"See docs/plans/ARCHITECTURE_9_PLAN.md for tracking."

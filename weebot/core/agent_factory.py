@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from weebot.core.agent_context import AgentContext
 
 if TYPE_CHECKING:
-    from weebot.tools.base import ToolCollection
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
-    from weebot.agent_core_v2 import AgentConfig, WeebotAgent
+    from weebot.agent_core_v2 import WeebotAgent
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +43,9 @@ class AgentFactory:
         parent_agent_id: str,
         parent_context: AgentContext,
         role: str,
-        tools_subset: Optional[List[str]] = None,
-        config_overrides: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None
+        tools_subset: list[str] | None = None,
+        config_overrides: dict[str, Any] | None = None,
+        description: str | None = None
     ) -> WeebotAgent:
         """Spawn a specialized child agent.
 
@@ -92,7 +90,7 @@ class AgentFactory:
         # causing confusing "Unknown tool" errors at runtime instead of spawn time.
         if tools_subset is not None:
             # Explicit caller-provided list: validate against known class map.
-            known_names = set(self.tool_registry._build_tool_class_map().keys())
+            known_names = set(self.tool_registry.build_tool_class_map().keys())
             empty_tools = [t for t in allowed_tools if not t or not str(t).strip()]
             unknown_tools = [t for t in allowed_tools if t and t not in known_names]
             if empty_tools:
@@ -108,7 +106,8 @@ class AgentFactory:
             invalid_tools = [t for t in allowed_tools if not t]
             if invalid_tools:
                 raise ValueError(
-                    f"Registry returned invalid (empty) tool names for role '{role}': {invalid_tools}"
+                    f"Registry returned invalid (empty) tool names for role "
+                    f"'{role}': {invalid_tools}"
                 )
 
         # Create child config (inherited + overridden)
@@ -157,8 +156,8 @@ class AgentFactory:
         self,
         orchestrator_context: AgentContext,
         orchestrator_agent_id: str,
-        agent_specs: List[Dict[str, Any]]
-    ) -> Dict[str, WeebotAgent]:
+        agent_specs: list[dict[str, Any]]
+    ) -> dict[str, WeebotAgent]:
         """Spawn multiple child agents from an orchestrator.
 
         Convenience method for spawning multiple specialized agents at once.
@@ -205,7 +204,7 @@ class AgentFactory:
                 "set different descriptions to differentiate agents with similar tasks."
             )
 
-        spawned: Dict[str, WeebotAgent] = {}
+        spawned: dict[str, WeebotAgent] = {}
 
         for spec in agent_specs:
             role = spec["role"]
@@ -242,7 +241,7 @@ class AgentFactory:
             and agent._context is not None
         )
 
-    def get_agent_info(self, agent: WeebotAgent) -> Dict[str, Any]:
+    def get_agent_info(self, agent: WeebotAgent) -> dict[str, Any]:
         """Get metadata about an agent created by this factory.
 
         Args:

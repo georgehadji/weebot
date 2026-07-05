@@ -117,6 +117,12 @@ from cli.commands.scheduling import cron, companion  # type: ignore[attr-defined
 from cli.commands.guard import guard as guard_group
 from cli.commands.analytics import analytics as analytics_group
 from cli.commands.soul import soul as soul_group
+from cli.commands.ponytail import (
+    cmd_ponytail,
+    cmd_ponytail_review,
+    cmd_ponytail_audit,
+    cmd_ponytail_help,
+)
 
 console = Console()
 
@@ -720,6 +726,12 @@ from cli.commands.gateway import gateway as gateway_group
 cli.add_command(gateway_group)
 from cli.commands.cron_agent import cron_agent as cron_agent_group
 cli.add_command(cron_agent_group)
+
+# Ponytail lazy-senior-dev commands
+cli.add_command(cmd_ponytail)
+cli.add_command(cmd_ponytail_review)
+cli.add_command(cmd_ponytail_audit)
+cli.add_command(cmd_ponytail_help)
 
 
 # ── Benchmark / profile / scheduling commands ─────────────────────────────

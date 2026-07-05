@@ -116,6 +116,8 @@ DEFAULT_SKILLOPT_MINIBATCH_SIZE: int = 8
 MCP_MAX_RETRIES: int = 3
 MCP_RETRY_BASE_DELAY: float = 1.0
 MCP_RETRY_MAX_DELAY: float = 10.0
+MCP_DEFAULT_SCOPE_K: int = 8
+"""Default number of MCP-bridged tools to expose per turn with scoped aggregation."""
 EXTERNAL_SERVICE_TIMEOUT: int = 30
 EXTERNAL_SERVICE_RETRIES: int = 3
 

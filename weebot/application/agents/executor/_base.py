@@ -1,38 +1,38 @@
 """Execution agent — executes a single step using available tools."""
 from __future__ import annotations
 
-import asyncio
-import json
+import contextlib
 import logging
-import re
 from collections import deque
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
+    from weebot.models.structured_output import VisionReflection
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
-from weebot.application.ports.llm_port import LLMPort, LLMResponse
-from weebot.application.services.conversation_compressor import ConversationCompressor
+from weebot.application.ports.llm_port import LLMPort
 from weebot.application.services.step_budget import StepBudget
-from weebot.application.services.token_budget_monitor import TokenBudgetMonitor
 from weebot.config.settings import WORKSPACE_ROOT
 from weebot.config.constants import (
     MAX_EXECUTOR_STEPS,
-    MAX_TOKENS_SHORT,
-    TEMPERATURE_BALANCED,
-    TEMPERATURE_DETERMINISTIC,
 )
 from weebot.config.model_refs import (
-    MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2,
-    MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4,
-    MODEL_CODE_REVIEW,
+    MODEL_CASCADE_TIER1,
 )
-from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
-from weebot.application.agents.executor._error_handler import normalize_text, tool_signature, follow_up_like, parse_args_for_event, classify_tool_error, build_stuck_error, is_expected_failure
+from weebot.application.agents.executor._error_handler import (
+    build_stuck_error,
+    classify_tool_error,
+    follow_up_like,
+    is_expected_failure,
+    normalize_text,
+    parse_args_for_event,
+    tool_signature,
+)
 from weebot.domain.models.event import (
     AgentEvent,
     ErrorEvent,
@@ -54,47 +54,61 @@ logger = logging.getLogger(__name__)
 
 # EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
 # An inline fallback is kept for environments where the file is not available.
-_EXECUTOR_SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "executor_system.txt"
+_EXECUTOR_SYSTEM_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "prompts"
+    / "executor_system.txt"
+)
 
-_EXECUTOR_SYSTEM_PROMPT_FALLBACK = """You are an execution agent. You have access to tools.
-Your job is to execute ONE step from a larger plan. Do not try to complete the entire task in one go.
-
-IMPORTANT RULES:
-1. Use tools to execute the CURRENT step only
-2. Do NOT call 'terminate' after completing just one step - only call it when the ENTIRE task is finished
-3. Ask for human input ONLY when you genuinely need missing information and use the ask_human tool for that
-4. Never ask follow-up questions as plain assistant text when a pause/resume is required
-
-TOOL SELECTION GUIDELINES:
-- For DATA RETRIEVAL (weather, facts, prices, news, definitions), use LIGHTWEIGHT tools FIRST:
-  * weather → weather/forecast data (fast, no browser needed)
-  * web_search → find information, URLs, or quick facts
-  * bash (curl) → call APIs directly
-- Use advanced_browser ONLY when you need to:
-  * Interact with a page (click, fill forms, scroll)
-  * Extract JavaScript-rendered content that web_search can't get
-  * Take screenshots after navigating
-- Do NOT open the browser just to read text you could get from web_search
-- If a lightweight tool gets what you need, stop — don't also open the browser
-
-POWERSHELL SYNTAX RULES (Windows 11):
-- Static .NET method calls: [ClassName]::MethodName() — e.g., [Math]::Round(x, 2)
-  NOT ::Round(x, 2) which is invalid syntax.
-- Format-Table, Format-List, Format-Wide are DISPLAY cmdlets, not disk operations — safe to use.
-- Get-ChildItem full-disk recursion (-Recurse -ErrorAction SilentlyContinue) on C:\\ takes
-  several minutes; use -Depth 2 or -Depth 3 for faster partial scans, then widen if needed.
-- PowerShell background jobs (Start-Job) are scoped to the current process and do NOT
-  persist across separate powershell.exe invocations. Use single-call approaches instead.
-- Long timeout: pass the 'timeout' parameter on the tool call (max 300s).
-  Do NOT use Start-Sleep to work around the tool timeout.
-
-EFFICIENCY:
-- Aim to complete each step in 5 tool calls or fewer
-- Don't repeat the same tool call with the same arguments — if it didn't work, try a DIFFERENT approach
-- If you've taken 10+ tool calls on one step, something is wrong — summarize what you found and move on
-
-You will be called repeatedly for each step. Focus only on the current step and wait for the next one.
-"""
+_EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
+    "You are an execution agent. You have access to tools.\n"
+    "Your job is to execute ONE step from a larger plan. Do not try to complete the entire task in "
+    "one go.\n"
+    "\n"
+    "IMPORTANT RULES:\n"
+    "1. Use tools to execute the CURRENT step only\n"
+    "2. Do NOT call 'terminate' after completing just one step - only call it when the ENTIRE task "
+    "is finished\n"
+    "3. Ask for human input ONLY when you genuinely need missing information and use the ask_human "
+    "tool for that\n"
+    "4. Never ask follow-up questions as plain assistant text when a pause/resume is required\n"
+    "\n"
+    "TOOL SELECTION GUIDELINES:\n"
+    "- For DATA RETRIEVAL (weather, facts, prices, news, definitions), use LIGHTWEIGHT tools "
+    "FIRST:\n"
+    "  * weather → weather/forecast data (fast, no browser needed)\n"
+    "  * web_search → find information, URLs, or quick facts\n"
+    "  * bash (curl) → call APIs directly\n"
+    "- Use advanced_browser ONLY when you need to:\n"
+    "  * Interact with a page (click, fill forms, scroll)\n"
+    "  * Extract JavaScript-rendered content that web_search can't get\n"
+    "  * Take screenshots after navigating\n"
+    "- Do NOT open the browser just to read text you could get from web_search\n"
+    "- If a lightweight tool gets what you need, stop — don't also open the browser\n"
+    "\n"
+    "POWERSHELL SYNTAX RULES (Windows 11):\n"
+    "- Static .NET method calls: [ClassName]::MethodName() — e.g., [Math]::Round(x, 2)\n"
+    "  NOT ::Round(x, 2) which is invalid syntax.\n"
+    "- Format-Table, Format-List, Format-Wide are DISPLAY cmdlets, not disk operations — "
+    "safe to use.\n"
+    "- Get-ChildItem full-disk recursion (-Recurse -ErrorAction SilentlyContinue) on C:\\ takes\n"
+    "  several minutes; use -Depth 2 or -Depth 3 for faster partial scans, then widen if needed.\n"
+    "- PowerShell background jobs (Start-Job) are scoped to the current process and do NOT\n"
+    "  persist across separate powershell.exe invocations. Use single-call approaches instead.\n"
+    "- Long timeout: pass the 'timeout' parameter on the tool call (max 300s).\n"
+    "  Do NOT use Start-Sleep to work around the tool timeout.\n"
+    "\n"
+    "EFFICIENCY:\n"
+    "- Aim to complete each step in 5 tool calls or fewer\n"
+    "- Don't repeat the same tool call with the same arguments — if it didn't work, try a "
+    "DIFFERENT approach\n"
+    "- If you've taken 10+ tool calls on one step, something is wrong — summarize what you "
+    "found and move on\n"
+    "\n"
+    "You will be called repeatedly for each step. Focus only on the current step and wait for the "
+    "next one.\n"
+)
 
 
 def _load_executor_system_prompt() -> str:
@@ -104,18 +118,16 @@ def _load_executor_system_prompt() -> str:
     (source checkout), (3) inline fallback constant.
     """
     # 1. Try importlib.resources (works when weebot is installed as a package)
-    try:
+    with contextlib.suppress(Exception):
         from importlib.resources import files as _resource_files
-        return _resource_files("weebot.config.prompts").joinpath("executor_system.txt").read_text(encoding="utf-8")
-    except Exception:
-        pass
+        return _resource_files("weebot.config.prompts").joinpath(
+            "executor_system.txt"
+        ).read_text(encoding="utf-8")
 
     # 2. Try filesystem path (works in development / source checkout)
-    try:
+    with contextlib.suppress(Exception):
         if _EXECUTOR_SYSTEM_PROMPT_PATH.exists():
             return _EXECUTOR_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-    except Exception:
-        pass
 
     # 3. Inline fallback — kept in sync with executor_system.txt
     return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
@@ -131,10 +143,10 @@ class ExecutorAgent:
         self,
         llm: LLMPort,
         tools: ToolCollection,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
         max_steps: int = MAX_EXECUTOR_STEPS,
-        skill_prompt: Optional[str] = None,
+        skill_prompt: str | None = None,
         max_context_turns: int = 15,
         auto_compress: bool = True,
         context_window: int = 128_000,
@@ -144,9 +156,9 @@ class ExecutorAgent:
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
         agent_role: str | None = None,  # Agent role for per-role model selection
-        hooks: "Optional[HookRegistryPort]" = None,  # HookRegistryPort for pre/post tool call events
+        hooks: HookRegistryPort | None = None,  # HookRegistryPort for pre/post tool call events
         harness_instruction_block: str | None = None,  # Self-Harness behavioural instructions
-        middleware_chain: Optional["MiddlewareChain"] = None,  # MiddlewareChain — interceptor pipeline
+        middleware_chain: MiddlewareChain | None = None,  # MiddlewareChain — interceptor pipeline
     ):
         self._llm = llm
         self._tools = tools
@@ -162,16 +174,16 @@ class ExecutorAgent:
         self._behavioral_learner = behavioral_learner
         self._prompt_variant_id = prompt_variant_id
         self._harness_instruction_block = harness_instruction_block or None
-        self._middleware_chain: Optional["MiddlewareChain"] = middleware_chain
+        self._middleware_chain: MiddlewareChain | None = middleware_chain
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         self._trajectory_monitor = TrajectoryMonitor()
         # Phase 2: skill-gap signals collected during retrieval; processed at session end
         self._skill_gaps: list[dict] = []
         self._max_context_turns = max_context_turns
-        self._system_prompt: Optional[str] = None
-        self._conversation_buffer: deque[Dict[str, Any]] = deque(maxlen=max_context_turns)
-        self._facts: Dict[str, Any] = {}
+        self._system_prompt: str | None = None
+        self._conversation_buffer: deque[dict[str, Any]] = deque(maxlen=max_context_turns)
+        self._facts: dict[str, Any] = {}
         self._should_terminate = False
         # Token tracking + auto-compress
         self._auto_compress = auto_compress
@@ -240,7 +252,7 @@ class ExecutorAgent:
             await self._event_bus.publish(event)
 
     @property
-    def facts(self) -> Dict[str, Any]:
+    def facts(self) -> dict[str, Any]:
         return dict(self._facts)
 
     def clear_facts(self) -> None:
@@ -273,15 +285,15 @@ class ExecutorAgent:
 
 
     @property
-    def _last_expected_outcome(self) -> Optional[str]:
+    def _last_expected_outcome(self) -> str | None:
         return self._context_compressor._last_expected_outcome
 
     @_last_expected_outcome.setter
-    def _last_expected_outcome(self, value: Optional[str]) -> None:
+    def _last_expected_outcome(self, value: str | None) -> None:
         self._context_compressor._last_expected_outcome = value
 
     @property
-    def token_usage(self) -> Dict[str, int]:
+    def token_usage(self) -> dict[str, int]:
         """Cumulative real token usage for this executor instance."""
         prompt = self._context_compressor.total_prompt_tokens
         completion = self._context_compressor.total_completion_tokens
@@ -313,7 +325,7 @@ class ExecutorAgent:
         """Forward to context compressor (kept for test compatibility)."""
         self._context_compressor.inject_screenshot(tool_name, image_b64)
 
-    def _inject_reflection(self, reflection: "VisionReflection") -> None:
+    def _inject_reflection(self, reflection: VisionReflection) -> None:
         """Forward to context compressor (inject_reflection stores expected_outcome)."""
         self._context_compressor.inject_reflection(reflection)
 
@@ -339,7 +351,7 @@ class ExecutorAgent:
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
         consecutive_error_class_counts: dict[str, int] = {}
-        last_error_class: Optional[str] = None
+        last_error_class: str | None = None
 
         system_prompt = self._load_prompt()
 
@@ -418,7 +430,9 @@ class ExecutorAgent:
         if not hasattr(self, '_user_profile_cache'):
             try:
                 import hashlib
-                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                from weebot.infrastructure.persistence.sqlite_state_repo import (
+                    SQLiteStateRepository,
+                )
                 repo = SQLiteStateRepository()
                 key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
                 for row in await repo.get_low_salience_entries(threshold=1.01, limit=5):
@@ -463,7 +477,6 @@ class ExecutorAgent:
             # Build a rich context message so the LLM knows the full task,
             # how far along the plan is, and what the current step requires.
             completed_steps = [s for s in plan.steps if s.is_done()]
-            pending_steps = [s for s in plan.steps if not s.is_done()]
             try:
                 current_idx = plan.steps.index(step) + 1
             except ValueError:
@@ -479,9 +492,9 @@ class ExecutorAgent:
                 done_summary = "; ".join(s.description for s in completed_steps[-3:])
                 context_lines.append(f"Recently completed: {done_summary}")
             context_lines += [
-                f"",
+                "",
                 f"Current step to execute: {step.description}",
-                f"",
+                "",
                 "Use available tools to execute this specific step.",
             ]
             self._conversation_buffer.append({
@@ -502,12 +515,12 @@ class ExecutorAgent:
             })
 
         step_result = ""
-        loop_error: Optional[str] = None
+        loop_error: str | None = None
         abort_step = False
         repeated_assistant_turns = 0
         last_assistant_text = ""
         repeated_tool_calls = 0
-        last_tool_signature: Optional[str] = None
+        last_tool_signature: str | None = None
         recent_tool_signatures: deque[str] = deque(maxlen=6)
         thought_iteration: int = 0
         tool_calls_attempted: int = 0
@@ -544,7 +557,9 @@ class ExecutorAgent:
                     ),
                 })
                 # One more LLM call to produce the summary, then break
-                messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
+                messages = [
+                    {"role": "system", "content": self._system_prompt}
+                ] + list(self._conversation_buffer)
                 try:
                     response = await self._cascade.call_with_cascade(
                         messages=messages,
@@ -562,7 +577,9 @@ class ExecutorAgent:
             # ── Pre-call compaction: ensure the LLM sees compacted context ──
             await self._context_compressor._maybe_compress()
 
-            messages = [{"role": "system", "content": self._system_prompt}] + list(self._conversation_buffer)
+            messages = [
+                {"role": "system", "content": self._system_prompt}
+            ] + list(self._conversation_buffer)
 
             # ── Middleware: before_request ──────────────────────────────────
             if self._middleware_chain is not None and not self._middleware_chain.is_empty():
@@ -576,7 +593,9 @@ class ExecutorAgent:
 
             # Cost cascade: try budget model first, fall back to primary on failure.
             try:
-                response = await self._cascade.call_with_cascade(messages, description=step.description)
+                response = await self._cascade.call_with_cascade(
+                    messages, description=step.description
+                )
             except AllModelsTrippedError as exc:
                 yield ErrorEvent(error=str(exc))
                 yield MessageEvent(
@@ -695,7 +714,7 @@ class ExecutorAgent:
             )
 
             # ── Process results in declared order ───────────────
-            for tc, result in zip(_batch_tool_calls, results):
+            for tc, result in zip(_batch_tool_calls, results, strict=False):
                 tool_name = tc["function"]["name"]
                 raw_arguments = tc["function"].get("arguments", "{}")
                 event_args = parse_args_for_event(raw_arguments)
@@ -736,8 +755,11 @@ class ExecutorAgent:
                         if semantic_loop_recoveries < _MAX_SEMANTIC_LOOP_RECOVERIES:
                             semantic_loop_recoveries += 1
                             logger.warning(
-                                "SEMANTIC_LOOP for step %s — injecting recovery hint (attempt %d/%d)",
-                                step.id, semantic_loop_recoveries, _MAX_SEMANTIC_LOOP_RECOVERIES,
+                                "SEMANTIC_LOOP for step %s — injecting recovery hint "
+                                "(attempt %d/%d)",
+                                step.id,
+                                semantic_loop_recoveries,
+                                _MAX_SEMANTIC_LOOP_RECOVERIES,
                             )
                             continue
 
@@ -753,7 +775,11 @@ class ExecutorAgent:
                         # Enrich the abort message with policy context if the trajectory
                         # degenerated due to security blocks rather than true semantic repetition
                         security_context = ""
-                        if last_error_class in ("security_blocked", "policy_denied", "confirmation_required"):
+                        if last_error_class in (
+                            "security_blocked",
+                            "policy_denied",
+                            "confirmation_required",
+                        ):
                             count = consecutive_error_class_counts.get(last_error_class, 0)
                             security_context = (
                                 f" (underlying cause: {count}× consecutive '{last_error_class}' "
@@ -783,18 +809,22 @@ class ExecutorAgent:
                             consecutive_error_class_counts = {err_class: 1}
                             last_error_class = err_class
 
-                        if consecutive_error_class_counts.get(err_class, 0) >= _MAX_SAME_ERROR_CLASS:
+                        if (
+                            consecutive_error_class_counts.get(err_class, 0)
+                            >= _MAX_SAME_ERROR_CLASS
+                        ):
                             loop_error = (
                                 f"Step '{step.id}' is stuck: the same error class '{err_class}' "
-                                f"has triggered {consecutive_error_class_counts[err_class]} consecutive times. "
+                                f"has triggered {consecutive_error_class_counts[err_class]} "
+                                "consecutive times. "
                                 f"Last error: {(result.error or result.output)[:300]}. "
                                 "Requesting user input to unblock."
                             )
                             yield ErrorEvent(error=loop_error)
                             yield WaitForUserEvent(
                                 question=(
-                                    f"The agent is blocked by a '{err_class}' policy and cannot proceed "
-                                    f"with step: {step.description!r}.\n"
+                                    f"The agent is blocked by a '{err_class}' policy and cannot "
+                                    f"proceed with step: {step.description!r}.\n"
                                     f"Last error: {(result.error or result.output)[:500]}\n\n"
                                     "Please either:\n"
                                     "  1. Rephrase the task to avoid the blocked operation, or\n"
@@ -897,15 +927,20 @@ class ExecutorAgent:
     async def _handle_step_completion(
         self,
         abort_step: bool,
-        loop_error: Optional[str],
+        loop_error: str | None,
         step_result: str,
         recent_tool_signatures: list,
         tool_calls_attempted: int,
         tool_calls_succeeded: int,
-        step: "Step",
+        step: Step,
     ):
         """Handle post-execution step completion: success, failure, stuck, or hollow."""
-        if not abort_step and loop_error is None and self._step_budget.exhausted and not step_result:
+        if (
+            not abort_step
+            and loop_error is None
+            and self._step_budget.exhausted
+            and not step_result
+        ):
             loop_error = build_stuck_error(
                 step=step,
                 reason="max step budget reached",
@@ -942,7 +977,11 @@ class ExecutorAgent:
 # ── Phase 2 helpers ────────────────────────────────────────────────────────────
 
 
-def _maybe_record_skill_gap(executor: "ExecutorAgent", step_description: str, best_score: float) -> None:
+def _maybe_record_skill_gap(
+    executor: ExecutorAgent,
+    step_description: str,
+    best_score: float,
+) -> None:
     """Record a skill-gap signal when retrieval misses the creation threshold.
 
     Two output paths:

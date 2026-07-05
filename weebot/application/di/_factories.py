@@ -4,18 +4,29 @@ Contains the 23 @staticmethod / instance factory methods that create adapters.
 """
 from __future__ import annotations
 
+import logging as _logging
 import os as _os
-from typing import Any, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.ports.steering_port import SteeringPort
-from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.config.harness.schema import HarnessConfig
 from weebot.config.model_refs import MODEL_DI_DEFAULT
+
+if TYPE_CHECKING:
+    from weebot.application.agents.dreamer import DreamerAgent
+    from weebot.application.agents.retention_agent import RetentionAgent
+    from weebot.application.services.code_reviewer_service import CodeReviewerService
+    from weebot.application.services.idea_gate import IdeaGate
+    from weebot.application.services.intent_review_service import IntentReviewService
+    from weebot.application.services.main_review_service import MainReviewService
+    from weebot.application.services.mcp_tool_registry_bridge import MCPToolRegistryBridge
+    from weebot.application.services.trust_report_service import TrustReportService
+    from weebot.application.middleware.event_middleware import EventPipeline
+
+logger = _logging.getLogger(__name__)
 
 
 class FactoriesMixin:
@@ -105,7 +116,7 @@ class FactoriesMixin:
         return create_default_sandbox()
 
     @staticmethod
-    def _create_llm(default_model: Optional[str]) -> LLMPort:
+    def _create_llm(default_model: str | None) -> LLMPort:
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
         from weebot.config.model_registry import ModelProvider
         model = default_model or MODEL_DI_DEFAULT
@@ -184,7 +195,7 @@ class FactoriesMixin:
         return FileSystemSoulProvider()
 
     @staticmethod
-    def _create_llm_for_role(role: str) -> "LLMPort":
+    def _create_llm_for_role(role: str) -> LLMPort:
         """Create an LLMPort for a specific role from ROLE_MODEL_CONFIG.
 
         Falls back to the default model if the role is not configured.
@@ -195,19 +206,19 @@ class FactoriesMixin:
         return FactoriesMixin._create_llm(model)
 
     @staticmethod
-    def _create_intent_review_service() -> "IntentReviewService":
+    def _create_intent_review_service() -> IntentReviewService:
         from weebot.application.services.intent_review_service import IntentReviewService
         llm = FactoriesMixin._create_llm_for_role("critic")
         return IntentReviewService(llm=llm)
 
     @staticmethod
-    def _create_main_review_service() -> "MainReviewService":
+    def _create_main_review_service() -> MainReviewService:
         from weebot.application.services.main_review_service import MainReviewService
         llm = FactoriesMixin._create_llm_for_role("verifier")
         return MainReviewService(llm=llm)
 
     @staticmethod
-    def _create_idea_gate() -> "IdeaGate":
+    def _create_idea_gate() -> IdeaGate:
         from weebot.application.services.idea_gate import IdeaGate
         from weebot.application.services.intent_review_service import IntentReviewService
         from weebot.application.services.main_review_service import MainReviewService
@@ -218,26 +229,26 @@ class FactoriesMixin:
         return IdeaGate(intent_reviewer=intent_reviewer, main_reviewer=main_reviewer)
 
     @staticmethod
-    def _create_dreamer_agent() -> "DreamerAgent":
+    def _create_dreamer_agent() -> DreamerAgent:
         from weebot.application.agents.dreamer import DreamerAgent
         llm = FactoriesMixin._create_llm_for_role("dreamer")
         return DreamerAgent(llm=llm, max_contracts=5)
 
     @staticmethod
-    def _create_code_reviewer() -> "CodeReviewerService":
+    def _create_code_reviewer() -> CodeReviewerService:
         from weebot.application.services.code_reviewer_service import CodeReviewerService
         from weebot.application.di._factories import FactoriesMixin
         llm = FactoriesMixin._create_llm_for_role("reviewer")
         return CodeReviewerService(llm=llm, timeout_seconds=8.0)
 
     @staticmethod
-    def _create_retention_agent() -> "RetentionAgent":
+    def _create_retention_agent() -> RetentionAgent:
         from weebot.application.agents.retention_agent import RetentionAgent
         llm = FactoriesMixin._create_llm_for_role("subagent")
         return RetentionAgent(llm=llm)
 
     @staticmethod
-    def _create_trust_report_service() -> "TrustReportService":
+    def _create_trust_report_service() -> TrustReportService:
         from weebot.application.services.trust_report_service import TrustReportService
         return TrustReportService()
 
@@ -305,7 +316,8 @@ class FactoriesMixin:
             settings = WeebotSettings()
             config_path = settings.mcp_servers_config_path
             if config_path:
-                import json, yaml
+                import json
+                import yaml
                 from pathlib import Path
                 path = Path(config_path)
                 if path.exists():
@@ -327,24 +339,121 @@ class FactoriesMixin:
 
         return MCPClientManager(config={})
 
+    @staticmethod
+    def _create_mcp_tool_retrieval_service(registry):
+        """Create the McpToolRetrievalService for scoped MCP tool aggregation (H1).
+
+        Args:
+            registry: The concrete ``RoleBasedToolRegistry`` instance that the
+                bridge uses.  The retrieval service mutates this same registry
+                so scoping affects the active tool set.
+
+        Returns ``None`` when ``mcp_scoped_aggregation`` is disabled so the
+        bridge falls back to registering all external tools.
+        """
+        from weebot.config.settings import WeebotSettings
+
+        settings = WeebotSettings()
+        if not settings.mcp_scoped_aggregation:
+            return None
+
+        from weebot.config.constants import MCP_DEFAULT_SCOPE_K
+        from weebot.infrastructure.adapters.mcp_tool_registry_adapter import (
+            RoleBasedToolRegistryAdapter,
+        )
+        from weebot.infrastructure.adapters.mcp_tool_retrieval_adapter import (
+            LocalEmbeddingMcpToolRetrievalAdapter,
+        )
+        from weebot.application.services.mcp_tool_retrieval_service import (
+            McpToolRetrievalService,
+        )
+
+        registration_adapter = RoleBasedToolRegistryAdapter(registry)
+        retrieval_adapter = LocalEmbeddingMcpToolRetrievalAdapter()
+        return McpToolRetrievalService(
+            retrieval_port=retrieval_adapter,
+            registration_port=registration_adapter,
+            k=MCP_DEFAULT_SCOPE_K,
+        )
+
+    def _create_native_tool_selector(self):
+        """Create the NativeToolRetrievalService for scoped native tools (Fix 3).
+
+        Returns ``None`` when ``mcp_scope_native_tools`` is disabled so the
+        flow keeps all native tools available (backward-compatible).
+        """
+        from weebot.config.settings import WeebotSettings
+
+        settings = WeebotSettings()
+        if not settings.mcp_scope_native_tools:
+            return None
+
+        from weebot.config.constants import MCP_DEFAULT_SCOPE_K
+        from weebot.application.services.native_tool_retrieval_service import (
+            NativeToolRetrievalService,
+        )
+        from weebot.infrastructure.adapters.mcp_tool_retrieval_adapter import (
+            LocalEmbeddingMcpToolRetrievalAdapter,
+        )
+        registry = self.get("tool_registry")
+        adapter = LocalEmbeddingMcpToolRetrievalAdapter()
+        service = NativeToolRetrievalService(
+            registry=registry,
+            retrieval_adapter=adapter,
+            k=MCP_DEFAULT_SCOPE_K,
+        )
+        return service
+
+    @staticmethod
+    def _create_composite_tool_registry():
+        """Create the CompositeToolRegistry for H2 composite MCP tools."""
+        from weebot.application.services.composite_tool_registry import (
+            CompositeToolRegistry,
+        )
+        return CompositeToolRegistry()
+
+    @staticmethod
+    def _create_tool_registry():
+        """Create the shared RoleBasedToolRegistry (H1 single source of truth).
+
+        The same registry instance is used by the MCP bridge and by
+        PlanActFlow so that scoped retrieval mutations are visible to
+        the agent's tool collection on every turn.
+        """
+        from weebot.tools.tool_registry import RoleBasedToolRegistry
+
+        return RoleBasedToolRegistry()
+
     def _create_mcp_bridge(self):
         """Create an MCPToolRegistryBridge with the MCP client injected.
 
         Enhancement 3: wires the ``MCPToolSkillIndexer`` when
         ``SEMANTIC_SKILL_RETRIEVAL_ENABLED`` is True, so discovered
         MCP tools are automatically indexed as retrievable skills.
+
+        Enhancement H1: wires ``McpToolRetrievalService`` when scoped
+        aggregation is enabled.  The bridge shares the container's
+        ``tool_registry`` singleton with PlanActFlow.
         """
         from weebot.application.services.mcp_tool_registry_bridge import (
             MCPToolRegistryBridge,
         )
-        from weebot.tools.tool_registry import RoleBasedToolRegistry
 
         client = self._maybe_get_str("mcp_client")
-        registry = RoleBasedToolRegistry()
+        registry = self.get("tool_registry")
         bridge = MCPToolRegistryBridge(
             mcp_client=client,
             registry=registry,
         )
+
+        # H1: wire scoped retrieval service (shares the bridge's registry)
+        try:
+            retrieval_service = self._create_mcp_tool_retrieval_service(registry)
+            if retrieval_service is not None:
+                bridge.set_retrieval_service(retrieval_service)
+                logger.info("MCP bridge: scoped retrieval service wired (H1)")
+        except Exception as exc:
+            logger.debug("MCP bridge: scoped retrieval service not wired — %s", exc)
 
         # Enhancement 3: wire skill indexer for MCP-to-skill bridging
         try:
@@ -364,18 +473,15 @@ class FactoriesMixin:
 
         return bridge
 
-    def build_mcp_bridge(self) -> "MCPToolRegistryBridge":
+    def build_mcp_bridge(self) -> MCPToolRegistryBridge:
         """Build and initialize the MCP bridge singleton."""
-        from weebot.application.services.mcp_tool_registry_bridge import (
-            MCPToolRegistryBridge,
-        )
         bridge = self._maybe_get_str("mcp_bridge")
         if bridge is None:
             bridge = self._create_mcp_bridge()
             self.register_instance("mcp_bridge", bridge)
         return bridge
 
-    def build_event_pipeline(self) -> "EventPipeline":
+    def build_event_pipeline(self) -> EventPipeline:
         """Build the default event middleware pipeline.
 
         Middlewares run in registration order — each feeds into the next.

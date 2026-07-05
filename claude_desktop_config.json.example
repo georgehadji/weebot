@@ -49,6 +49,23 @@
       "env": {
         "OPENAI_API_KEY": "sk-..."
       }
+    },
+
+    "xapi": {
+      "_comment": "X (Twitter) API MCP — full read/write access via OAuth2. Requires X Developer app.",
+      "command": "npx",
+      "args": [
+        "-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"
+      ],
+      "env": {
+        "CLIENT_ID": "YOUR_X_APP_CLIENT_ID",
+        "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET"
+      }
+    },
+
+    "x-docs": {
+      "_comment": "X Docs MCP — search and read X API documentation on demand. No auth required.",
+      "url": "https://docs.x.com/mcp"
     }
 
   }
