@@ -13,6 +13,10 @@ class CreateSessionRequest(BaseModel):
     agent_id: str = Field(default="weebot-web", description="Agent identifier")
     model: Optional[str] = Field(default=None, description="LLM model to use")
     session_id: Optional[str] = Field(default=None, description="Optional custom session ID")
+    ponytail_mode: Optional[str] = Field(
+        default=None,
+        description="Optional Ponytail lazy-senior-dev mode: off | lite | full | ultra",
+    )
 
 
 class SendMessageRequest(BaseModel):

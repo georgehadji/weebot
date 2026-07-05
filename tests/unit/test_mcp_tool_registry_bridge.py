@@ -235,7 +235,8 @@ class TestMCPToolRegistryBridgeRetrieval:
         bridge = MCPToolRegistryBridge(mcp_client=None, registry=registry)
         bridge._registered_tools["srv"] = ["mcp__srv__a", "mcp__srv__b"]
 
-        result = await bridge.scope_for_query("anything")
+        with pytest.warns(DeprecationWarning, match="scope_for_query"):
+            result = await bridge.scope_for_query("anything")
 
         assert sorted(result) == ["mcp__srv__a", "mcp__srv__b"]
 
@@ -258,7 +259,8 @@ class TestMCPToolRegistryBridgeRetrieval:
         bridge.set_retrieval_service(service)
         bridge._registered_tool_infos["srv"] = tools
 
-        result = await bridge.scope_for_query("weather")
+        with pytest.warns(DeprecationWarning, match="scope_for_query"):
+            result = await bridge.scope_for_query("weather")
 
         assert result == ["mcp__srv__get_weather"]
 

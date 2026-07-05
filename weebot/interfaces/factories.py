@@ -11,7 +11,6 @@ under ``~/.weebot/profiles/<name>/SOUL.md``.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Optional
 
 from weebot.application.flows.base_flow import BaseFlow
@@ -35,52 +34,14 @@ _shared_container_lock = threading.Lock()
 def _build_ponytail_skill_prompt(existing: str | None) -> str | None:
     """Append Ponytail skill instructions when ponytail_mode is active.
 
-    Reads ``WeebotSettings.ponytail_mode`` (and falls back to the project-local
-    ``.weebot/ponytail_mode.json`` written by the CLI) and, if not ``off``,
-    loads the ``ponytail`` built-in skill and prepends an intensity header to
-    its content. The result is appended to any *existing* skill prompt so other
-    skills are not displaced.
+    Delegates to the Application-layer helper so CLI and web share the same
+    resolution logic.
     """
-    mode = "off"
-    try:
-        from weebot.config.settings import WeebotSettings
+    from weebot.application.services.ponytail_skill_prompt import (
+        build_ponytail_skill_prompt,
+    )
 
-        mode = WeebotSettings().ponytail_mode
-    except Exception:
-        pass
-
-    if mode == "off":
-        # Fallback to project-local mode file written by `cli.main ponytail ...`
-        mode_file = Path.cwd() / ".weebot" / "ponytail_mode.json"
-        if mode_file.exists():
-            try:
-                import json
-
-                data = json.loads(mode_file.read_text(encoding="utf-8"))
-                mode = str(data.get("mode", "off")).strip().lower()
-            except Exception:
-                mode = "off"
-
-    if mode not in {"lite", "full", "ultra"}:
-        return existing
-
-    try:
-        from weebot.application.skills.skill_registry import SkillRegistry
-
-        registry = SkillRegistry()
-        registry.load_all()
-        skill = registry.get("ponytail")
-        if skill is None:
-            return existing
-    except Exception:
-        return existing
-
-    header = f"[Ponytail mode: {mode}]\n\n"
-    ponytail_text = header + skill.content
-
-    if existing:
-        return f"{existing}\n\n{ponytail_text}"
-    return ponytail_text
+    return build_ponytail_skill_prompt(existing)
 
 
 def _cached(key: str):

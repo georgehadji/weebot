@@ -16,6 +16,7 @@ from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.base import AgentStatus
 from weebot.application.flows.flow_router import FlowRouter
 from weebot.application.flows.mcp_scope import apply_mcp_tool_scope
+from weebot.application.flows.mcp_scope_config import McpScopeConfig
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -547,7 +548,15 @@ class PlanActFlow(BaseFlow):
         )
 
         # ── Enhancement H1: scope external MCP tools to the current query ────
-        scoped_tools = await apply_mcp_tool_scope(self, effective_prompt)
+        scope_config = McpScopeConfig(
+            bridge=self._mcp_bridge,
+            registry=self._tool_registry,
+            native_tool_selector=self._native_tool_selector,
+            llm=self._llm,
+            agent_role=self._agent_role or "admin",
+            logger=self._stdlib_logger,
+        )
+        scoped_tools = await apply_mcp_tool_scope(scope_config, effective_prompt)
         if scoped_tools is not None:
             self._tools = scoped_tools
             if self._executor is not None and hasattr(self._executor, "set_tools"):

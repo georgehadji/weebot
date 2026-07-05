@@ -12,6 +12,8 @@ from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.code_reviewer_port import CodeReviewerPort
+from weebot.application.services.ponytail_skill_prompt import get_ponytail_mode
+from weebot.application.services.ponytail_static_review import static_ponytail_review
 from weebot.domain.models.code_review import CodeReviewResult
 from weebot.domain.models.plan import Step
 
@@ -56,6 +58,16 @@ _MAX_TOKENS = 512
 _TEMPERATURE = 0.1
 
 
+def _ponytail_system_addendum(mode: str) -> str:
+    return (
+        f"\n\n[Ponytail mode: {mode}]\n"
+        "Respect The Ladder: prefer stdlib, built-ins, and direct code over "
+        "new abstractions, dependencies, or configuration. Flag any step that "
+        "adds an abstraction with only one implementation, duplicates stdlib "
+        "behavior, or installs a dependency for a one-liner."
+    )
+
+
 class CodeReviewerService(CodeReviewerPort):
     """LLM-backed code reviewer. Fail-open: returns approved on any failure."""
 
@@ -75,13 +87,22 @@ class CodeReviewerService(CodeReviewerPort):
 
     async def review(self, step: Step, context: dict[str, Any]) -> CodeReviewResult:
         """Review a completed step's output. Never raises — returns approved on failure."""
+        ponytail_mode = get_ponytail_mode()
+        static_findings: list[str] = []
+        if ponytail_mode != "off":
+            static_findings = static_ponytail_review(step.result or "")
+
+        system_prompt = _REVIEWER_SYSTEM_PROMPT
+        if ponytail_mode != "off":
+            system_prompt += _ponytail_system_addendum(ponytail_mode)
+
         for attempt in range(2):  # retry once on parse failure
             try:
-                prompt = self._build_prompt(step, context)
+                prompt = self._build_prompt(step, context, static_findings)
                 response = await asyncio.wait_for(
                     self._llm.chat(
                         messages=[
-                            {"role": "system", "content": _REVIEWER_SYSTEM_PROMPT},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt},
                         ],
                         max_tokens=_MAX_TOKENS,
@@ -99,10 +120,13 @@ class CodeReviewerService(CodeReviewerPort):
                 data = json.loads(raw)
                 # Clamp confidence to [0.0, 1.0] before constructing the model
                 conf = min(1.0, max(0.0, float(data.get("confidence", 1.0))))
+                issues = data.get("issues", [])
+                if static_findings:
+                    issues = static_findings + issues
                 result = CodeReviewResult(
                     step_id=step.id,
                     verdict=data.get("verdict", "approved"),
-                    issues=data.get("issues", []),
+                    issues=issues,
                     hint=data.get("hint", ""),
                     confidence=conf,
                     severity=data.get("severity", "info"),
@@ -133,7 +157,8 @@ class CodeReviewerService(CodeReviewerPort):
                 self._consecutive_failures += 1
                 log_fn = logger.error if self._consecutive_failures >= 3 else logger.warning
                 log_fn(
-                    "Code reviewer failed for step %s (%s) [consecutive=%d]. Proceeding as approved.",
+                    "Code reviewer failed for step %s (%s) [consecutive=%d]. "
+                    "Proceeding as approved.",
                     step.id, exc, self._consecutive_failures,
                 )
                 return CodeReviewResult(step_id=step.id, verdict="approved")
@@ -142,7 +167,9 @@ class CodeReviewerService(CodeReviewerPort):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _build_prompt(self, step: Step, context: dict[str, Any]) -> str:
+    def _build_prompt(
+        self, step: Step, context: dict[str, Any], static_findings: list[str] | None = None
+    ) -> str:
         task = context.get("task", "unknown task")
         plan_title = context.get("plan_title", "")
         n_complete = context.get("completed_steps", 0)
@@ -156,12 +183,20 @@ class CodeReviewerService(CodeReviewerPort):
             else "Result reported: (none)"
         )
 
+        ponytail_section = ""
+        if static_findings:
+            ponytail_section = (
+                "\n\n## Static Ponytail Hints\n"
+                + "\n".join(f"- {finding}" for finding in static_findings)
+            )
+
         return (
             f"## Task\n{task}\n\n"
             f"## Plan\n{plan_title}  (step {n_complete + 1})\n\n"
             f"## Step Description\n{step.description}\n\n"
             f"## {result_section}\n\n"
             f"## Tool Calls Made\n{tool_lines or '(no tool call events recorded)'}"
+            f"{ponytail_section}"
         )
 
     @staticmethod

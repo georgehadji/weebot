@@ -12,28 +12,29 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from weebot.application.flows.mcp_scope_config import McpScopeConfig
+
 logger = logging.getLogger(__name__)
 
 # Namespace prefix used by MCPToolRegistryBridge for external MCP tools.
 _MCP_TOOL_PREFIX = "mcp__"
 
 
-async def apply_mcp_tool_scope(flow: Any, prompt: str) -> Any:
+async def apply_mcp_tool_scope(scope_config: McpScopeConfig, prompt: str) -> Any:
     """Build a scoped ToolCollection for *prompt* without mutating the registry.
 
     Args:
-        flow: The PlanActFlow instance.  Must expose ``_mcp_bridge``,
-            ``_tool_registry``, ``_agent_role``, ``_llm``, ``_stdlib_logger``,
-            and optionally ``_native_tool_selector``.
+        scope_config: Typed configuration exposing the bridge, registry,
+            native-tool selector, LLM port, agent role, and logger.
         prompt: The effective user prompt used for relevance scoring.
 
     Returns:
         The rebuilt ``ToolCollection`` for the scoped turn, or ``None`` if
         scoping is unavailable or fails.
     """
-    bridge = getattr(flow, "_mcp_bridge", None)
-    registry = getattr(flow, "_tool_registry", None)
-    stdlib_logger = getattr(flow, "_stdlib_logger", logger)
+    bridge = scope_config.bridge
+    registry = scope_config.registry
+    stdlib_logger = scope_config.logger or logger
 
     if bridge is None or registry is None:
         return None
@@ -51,7 +52,7 @@ async def apply_mcp_tool_scope(flow: Any, prompt: str) -> Any:
         )
         return None
 
-    role = getattr(flow, "_agent_role", None) or "admin"
+    role = scope_config.agent_role or "admin"
     try:
         current_names = registry.get_tools_for_role(role)
     except ValueError:
@@ -60,7 +61,7 @@ async def apply_mcp_tool_scope(flow: Any, prompt: str) -> Any:
     native_names = [name for name in current_names if not name.startswith(_MCP_TOOL_PREFIX)]
 
     # ── Optional native-tool scoping (Fix 3) ────────────────────────────
-    selector = getattr(flow, "_native_tool_selector", None)
+    selector = scope_config.native_tool_selector
     if selector is not None and hasattr(selector, "select_for_query"):
         try:
             selected_native = await selector.select_for_query(prompt)
@@ -82,7 +83,7 @@ async def apply_mcp_tool_scope(flow: Any, prompt: str) -> Any:
     try:
         scoped_tools = registry.create_tool_collection_from_names(
             scoped_tool_names,
-            llm_port=getattr(flow, "_llm", None),
+            llm_port=scope_config.llm,
         )
     except Exception as exc:
         stdlib_logger.warning(

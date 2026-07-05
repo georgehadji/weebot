@@ -261,10 +261,16 @@ class TaskRunner:
         tools: ToolCollection,
         event_bus: Optional[EventBusPort] = None,
         model: Optional[str] = None,
+        ponytail_mode: str | None = None,
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances."""
         from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.application.services.ponytail_skill_prompt import (
+            build_ponytail_skill_prompt,
+        )
+
         state_repo = self._state_repo
+        skill_prompt = build_ponytail_skill_prompt(existing=None, mode=ponytail_mode)
 
         def _factory(session: Session) -> BaseFlow:
             return PlanActFlow(
@@ -273,6 +279,7 @@ class TaskRunner:
                 session=session,
                 event_bus=event_bus,
                 model=model,
+                skill_prompt=skill_prompt,
                 state_repo=state_repo,
             )
         return _factory

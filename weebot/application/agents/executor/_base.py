@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.application.services.ponytail_post_processor import PonytailPostProcessor
 from weebot.application.services.step_budget import StepBudget
 from weebot.config.settings import WORKSPACE_ROOT
 from weebot.config.constants import (
@@ -228,6 +229,16 @@ class ExecutorAgent:
         re-creating the executor.
         """
         self._harness_instruction_block = block or None
+
+    def _maybe_truncate_ponytail(self, text: str) -> str:
+        """Truncate trailing prose after code fences when Ponytail is active.
+
+        Returns *text* unchanged when the Ponytail skill is not present or
+        when no code fence is found.
+        """
+        if not self._skill_prompt or "[Ponytail mode:" not in self._skill_prompt:
+            return text
+        return PonytailPostProcessor().truncate(text)
 
     @property
     def should_terminate(self) -> bool:
@@ -659,6 +670,7 @@ class ExecutorAgent:
                     yield ErrorEvent(error=loop_error)
                     break
 
+                step_result = self._maybe_truncate_ponytail(step_result)
                 yield MessageEvent(role="assistant", message=step_result)
                 break
 
@@ -875,7 +887,9 @@ class ExecutorAgent:
                 if tool_name == "terminate":
                     logger.info("Terminate tool called, task completed")
                     self._should_terminate = True
-                    step_result = result.output or "Task completed"
+                    step_result = self._maybe_truncate_ponytail(
+                        result.output or "Task completed"
+                    )
                     yield MessageEvent(role="assistant", message=step_result)
                     self._step_budget.refund(self._step_budget.remaining)
                     abort_step = True

@@ -123,3 +123,37 @@ is managed separately and may be scoped in a future phase.
 - ``weebot/infrastructure/adapters/composite_tool_executor.py`` — composite execution
 - ``weebot/mcp/composite_tools.py`` — composite specifications
 - ``weebot/mcp/server.py`` — decomposed file tools and structured errors
+
+---
+
+## Evolution (Phase 2)
+
+After the initial ADR was approved, three new components were introduced to make
+scoping safer and to raise the abstraction level of the MCP surface.
+
+### ``CompositeToolBuilder``
+
+``weebot/application/services/composite_tool_builder.py`` packages atomic
+handlers into FastMCP-compatible composite tools. It builds a dynamic
+``inspect.Signature`` from the runtime arguments referenced by
+``${var_name}`` templates inside a ``CompositeToolSpec``, and delegates
+execution to a ``CompositeExecutorLike`` callable. This keeps the MCP server's
+top-level surface small without losing the atomic tools that composites use
+internally.
+
+### ``NativeToolRetrievalService``
+
+``weebot/application/services/native_tool_retrieval_service.py`` provides
+semantic scoping for *native* Weebot tools. It indexes native tools as
+``MCPToolInfo`` objects (with ``server_name="native"``) and retrieves the
+top-``k`` relevant names for a query. This is the mechanism behind the
+``mcp_scope_native_tools`` setting that keeps the total per-turn tool count
+within the ≤ 12 budget.
+
+### Non-mutating scoping decision
+
+``MCPToolRegistryBridge.select_for_query()`` is now the preferred path used by
+``PlanActFlow``. It returns the scoped subset of external MCP tool names
+without modifying the shared ``RoleBasedToolRegistry``. The legacy
+``scope_for_query()`` method still exists for backward compatibility but is
+deprecated: it mutates the registry and emits a ``DeprecationWarning``.

@@ -36,6 +36,7 @@ from weebot.interfaces.web.routers.chat_router import router as chat_router
 from weebot.interfaces.web.routers.sse import router as sse_router
 from weebot.interfaces.web.routers.webhook import router as webhook_router
 from weebot.interfaces.web.routers.discord_webhook import router as discord_router
+from weebot.interfaces.web.routers.ponytail import router as ponytail_router
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -301,6 +302,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(discord_router)
     app.include_router(ops_router)
+    app.include_router(ponytail_router, prefix="/api")
     
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")

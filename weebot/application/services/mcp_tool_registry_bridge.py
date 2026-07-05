@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import fnmatch
 import logging
+import warnings
 from typing import Any
 
 from weebot.domain.models.mcp import MCPServerConfig, MCPToolInfo
@@ -296,18 +297,24 @@ class MCPToolRegistryBridge:
         return await self._register_all_tools()
 
     async def scope_for_query(self, query: str) -> list[str]:
-        """Return the scoped subset of MCP tool names relevant to *query*.
+        """DEPRECATED: Mutates the registry to scope tools for *query*.
+
+        Use :meth:`select_for_query` instead, which returns the scoped subset
+        without side effects. This method is retained for backward compatibility
+        with existing callers and tests.
 
         If scoped retrieval is not wired, falls back to returning all
-        registered MCP tool names for backward compatibility.
-
-        This method mutates the shared registry so that callers using the
-        traditional "apply and return" pattern still work.  New code should
-        prefer :meth:`select_for_query` to avoid mutating global state.
+        registered MCP tool names.
 
         Returns:
             List of namespaced tool names.
         """
+        warnings.warn(
+            "MCPToolRegistryBridge.scope_for_query() is deprecated; "
+            "use select_for_query() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if self._retrieval_service is None:
             return [
                 name
