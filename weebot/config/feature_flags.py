@@ -100,6 +100,13 @@ VISION_REFLECTION_ENABLED: bool = _env_bool(
 )
 
 
+# ── B2. OpenTelemetry tracing (ARCH-AUDIT-V2) ───────────────────────────────
+# When True, PlanActFlow and ExecutorAgent create OTEL spans.  Default OFF
+# until an OTEL collector endpoint is configured.
+OTEL_TRACING_ENABLED: bool = _env_bool(
+    "WEEBOT_OTEL_TRACING", default=False
+)
+
 # ── C2. Durable task queue backend (ARCH-AUDIT-V2) ──────────────────────────
 # Controls which queue backend the TaskRunner uses.
 #   "memory" (default) — asyncio.PriorityQueue, non-durable, no external deps.

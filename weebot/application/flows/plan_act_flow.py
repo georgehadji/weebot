@@ -533,14 +533,19 @@ class PlanActFlow(BaseFlow):
 
         # ── OTEL tracing: plan_act_iteration span ────────────────────
         # ARCH-AUDIT-V2 B2 — root span for the full Plan-Act-Reflect loop.
+        # Uses start_span (not start_as_current_span) because the generator
+        # body makes context-manager teardown unreliable.  The span is
+        # ended explicitly at the method's exit point below.
+        # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
+        _run_span = None
         if self._tracing_port is not None:
-            span = self._tracing_port.start_as_current_span("plan_act_iteration")
-            span.set_attribute("session.id", self._session.id)
-            trace_id = getattr(self._session, "trace_id", None)
-            if trace_id:
-                span.set_attribute("trace_id", trace_id)
-
-        # --- Task context preservation ---
+            from weebot.config.feature_flags import is_enabled
+            if is_enabled("OTEL_TRACING_ENABLED"):
+                _run_span = self._tracing_port.start_span("plan_act_iteration")
+                _run_span.set_attribute("session.id", self._session.id)
+                trace_id = getattr(self._session, "trace_id", None)
+                if trace_id:
+                    _run_span.set_attribute("trace_id", trace_id)
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
         # can be enriched with it when a brand-new plan is needed.
         original_task: str = self._session.context.get("_original_task", "")
@@ -977,6 +982,10 @@ class PlanActFlow(BaseFlow):
                 self._session.id,
                 exc_info=True,
             )
+
+        # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
+        if _run_span is not None:
+            _run_span.end()
 
     def _get_tracing_port(self):
         """Return the tracing port injected at construction time, or None."""

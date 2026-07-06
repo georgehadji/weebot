@@ -12,8 +12,6 @@ forbidden_modules =
     weebot.interfaces
     weebot.core
     weebot.tools
-    weebot.nlp_understanding
-    weebot.notifications
 
 [importlinter:contract:tools-no-db]
 name = Tools must not access databases directly

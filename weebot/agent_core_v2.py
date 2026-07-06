@@ -4,6 +4,11 @@
 # ⚠️ LEGACY — Frozen. No new features.
 # Superseded by PlanActFlow / Session domain model.
 # Target sunset: 2027-03-01
+#
+# ARCH-AUDIT-V2 A5: Inline stubs (_ModelRouter, _NotificationManager,
+# _CostTracker) replaced the 3 deleted root shims so this module stays
+# self-contained until callers migrate.  Deferred full removal to the
+# 2027-03-01 sunset; tracked in #ARCH-AUDIT-V2.
 # ═══════════════════════════════════════════════════════════════════════
 """DEPRECATED — agent_core_v2.py
 

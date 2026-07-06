@@ -364,10 +364,17 @@ class ExecutorAgent:
 
         # ── OTEL tracing: executor_step span ─────────────────────────
         # ARCH-AUDIT-V2 B2 — span for a single step within PlanActFlow.
+        # Uses start_span (not start_as_current_span) for the same reason
+        # as plan_act_iteration — the generator body makes context-manager
+        # teardown unreliable.  Ended explicitly at the method's exit.
+        # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
+        _step_span = None
         if self._tracing_port is not None:
-            step_span = self._tracing_port.start_as_current_span("executor_step")
-            step_span.set_attribute("step.id", step.id)
-            step_span.set_attribute("step.description", step.description[:200])
+            from weebot.config.feature_flags import is_enabled
+            if is_enabled("OTEL_TRACING_ENABLED"):
+                _step_span = self._tracing_port.start_span("executor_step")
+                _step_span.set_attribute("step.id", step.id)
+                _step_span.set_attribute("step.description", step.description[:200])
         self._current_step_id = step.id
         self._current_session_id = session_id or getattr(self, '_current_session_id', 'unknown')
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
@@ -946,6 +953,10 @@ class ExecutorAgent:
             yield event
             if isinstance(event, ErrorEvent):
                 loop_error = event.error
+
+        # End the executor_step span (ARCH-AUDIT-V2 B2)
+        if _step_span is not None:
+            _step_span.end()
 
     # ── Phase 2: Parallel tool execution ─────────────────────────
     # Per-tool semaphore gating is handled by ToolCollection.execute().

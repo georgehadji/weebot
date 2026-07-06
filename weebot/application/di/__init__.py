@@ -219,7 +219,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             mediator=self._maybe_get(Mediator),
             state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
-            tracing_port=self._maybe_get(TracingPort),
+            tracing_port=self._maybe_get(TracingPort) if self._is_tracing_enabled() else None,
         ))
 
         # ChatFlow — lightweight conversational flow
@@ -294,6 +294,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         )
 
     # ── internal helpers ───────────────────────────────────────────
+
+    @staticmethod
+    def _is_tracing_enabled() -> bool:
+        from weebot.config.feature_flags import OTEL_TRACING_ENABLED
+        return OTEL_TRACING_ENABLED
 
     def _maybe_get(self, port_type: type) -> Any | None:
         """Return registered instance or None if not bound."""
