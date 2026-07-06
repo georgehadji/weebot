@@ -134,12 +134,13 @@ class FactoriesMixin:
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.config.feature_flags import WEEBOT_QUEUE_BACKEND as _queue_backend
 
-        task_queue = None
         if _queue_backend == "redis":
             from weebot.infrastructure.queue.redis_task_queue import RedisTaskQueue
             task_queue = RedisTaskQueue()
             logger.info("Task queue backend: Redis Streams (durable)")
         else:
+            from weebot.infrastructure.queue.in_memory_task_queue import InMemoryTaskQueue
+            task_queue = InMemoryTaskQueue()
             logger.info("Task queue backend: in-memory (non-durable)")
 
         return TaskRunner(
