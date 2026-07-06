@@ -44,10 +44,12 @@ class FactoriesMixin:
         )
         return SQLiteStateRepository(db_path=db_path)
 
-    @staticmethod
-    def _create_event_bus() -> EventBusPort:
-        from weebot.infrastructure.event_bus import AsyncEventBus
-        return AsyncEventBus()
+    def _create_event_bus(self) -> EventBusPort:
+        from weebot.infrastructure.event_bus import AsyncEventBus, DurableEventBus
+        from weebot.application.ports.event_store_port import EventStorePort
+        inner = AsyncEventBus()
+        event_store = self.get(EventStorePort)
+        return DurableEventBus(inner=inner, event_store=event_store)
 
     @staticmethod
     def _create_tracing():
@@ -130,9 +132,20 @@ class FactoriesMixin:
         from weebot.application.services.task_runner import TaskRunner
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.config.feature_flags import WEEBOT_QUEUE_BACKEND as _queue_backend
+
+        task_queue = None
+        if _queue_backend == "redis":
+            from weebot.infrastructure.queue.redis_task_queue import RedisTaskQueue
+            task_queue = RedisTaskQueue()
+            logger.info("Task queue backend: Redis Streams (durable)")
+        else:
+            logger.info("Task queue backend: in-memory (non-durable)")
+
         return TaskRunner(
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
+            task_queue=task_queue,
         )
 
     @staticmethod
@@ -507,3 +520,18 @@ class FactoriesMixin:
             PersistenceMiddleware(),
         ])
         return pipeline
+
+    def _create_browser_pool(self):
+        """Create a BrowserSessionPool as a DI-managed singleton.
+
+        The pool is started lazily on first use and closed via shutdown hook.
+        """
+        import os
+        from weebot.infrastructure.browser.session_pool import BrowserSessionPool
+
+        pool = BrowserSessionPool(
+            min_sessions=int(os.environ.get("BROWSER_POOL_MIN", "1")),
+            max_sessions=int(os.environ.get("BROWSER_POOL_SIZE", "4")),
+            headless=os.environ.get("BROWSER_HEADLESS", "1").lower() in ("1", "true"),
+        )
+        return pool  # Started lazily on first use

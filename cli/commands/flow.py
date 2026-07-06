@@ -154,6 +154,33 @@ def flow_cancel(session_id: str) -> None:
     _run_async(_run)
 
 
+@flow.command("retry")
+@click.argument("session_id")
+def flow_retry(session_id: str) -> None:
+    """Retry a failed session (dead-letter queue).
+
+    Re-enters the session at the last saved state with a full retry budget.
+    Only works for sessions in FAILED status.
+    """
+    async def _run() -> None:
+        global _container
+        if _container is None:
+            _container = Container()
+            _container.configure_defaults()
+        from weebot.application.services.task_runner import TaskRunner
+        runner = _container.get(TaskRunner)
+        ok = await runner.rerun_failed_session(session_id)
+        if ok:
+            console.print(f"[green]Retrying failed session {session_id}[/green]")
+        else:
+            console.print(
+                f"[yellow]Session {session_id} is not in FAILED status "
+                f"or has no flow factory cached[/yellow]"
+            )
+
+    _run_async(_run)
+
+
 @flow.command("undo")
 @click.argument("session_id")
 def flow_undo(session_id: str) -> None:

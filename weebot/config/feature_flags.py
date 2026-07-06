@@ -100,6 +100,13 @@ VISION_REFLECTION_ENABLED: bool = _env_bool(
 )
 
 
+# ── C2. Durable task queue backend (ARCH-AUDIT-V2) ──────────────────────────
+# Controls which queue backend the TaskRunner uses.
+#   "memory" (default) — asyncio.PriorityQueue, non-durable, no external deps.
+#   "redis"            — Redis Streams, durable, requires a running Redis instance.
+WEEBOT_QUEUE_BACKEND: str = os.environ.get("WEEBOT_QUEUE_BACKEND", "memory").strip().lower()
+
+
 def is_enabled(flag_name: str) -> bool:
     """Check if a feature flag is enabled by name."""
     return globals().get(flag_name, False)

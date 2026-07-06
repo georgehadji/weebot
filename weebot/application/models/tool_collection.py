@@ -50,7 +50,8 @@ def _truncate(output: str, limit: int, strategy: str) -> str:
     # "head" (default)
     return output[:limit] + f"\n...[{removed} chars omitted]"
 
-from weebot.tools.base import BaseTool, ToolResult
+from weebot.domain.models.base_tool import BaseTool
+from weebot.domain.models.tool_result import ToolResult
 
 # Phase 5: Optional result cache (lazy import to avoid circular deps)
 _cache_module = None

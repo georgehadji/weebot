@@ -17,7 +17,8 @@ from typing import Any, Optional
 
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import Skill, SkillMetadata
-from weebot.tools.base import BaseTool, ToolCollection
+from weebot.domain.models.base_tool import BaseTool
+from weebot.tools.base import ToolCollection
 
 logger = logging.getLogger(__name__)
 

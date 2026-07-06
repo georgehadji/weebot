@@ -37,10 +37,67 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from .ai_router import ModelRouter, TaskType
-from .notifications import NotificationManager
+from weebot.domain.models.task_type import TaskType
+from weebot.application.services.nlp_understanding import (
+    NaturalLanguageProcessor,
+    IntentRecognitionResult,
+)
 from .state_manager import StateManager, ResumableTask, ProjectStatus
-from .nlp_understanding import NaturalLanguageProcessor, IntentRecognitionResult
+
+
+# ── Inline stubs for deleted root shims ──────────────────────────────────
+# These used to live in weebot/notifications.py, weebot/ai_router.py.
+# Removed in ARCH-AUDIT-V2 A5 — kept inline so existing callers of
+# WeebotAgent continue to compile until 2027-03-01 sunset.
+
+class _CostTracker:
+    """Minimal cost tracker stub for legacy compatibility."""
+
+    @staticmethod
+    def get_stats() -> dict:
+        return {"today": 0.0, "total": 0.0, "tokens": 0}
+
+
+class _ModelRouter:
+    """Legacy model router stub — frozen, no real routing."""
+
+    def __init__(self, daily_budget: float = 10.0) -> None:
+        self.daily_budget = daily_budget
+        self.cost_tracker = _CostTracker()
+
+    @staticmethod
+    def select_model(task_type: TaskType, budget_constraint: float | None = None) -> str:
+        return "deepseek/deepseek-r1"
+
+    @staticmethod
+    async def generate_with_fallback(
+        prompt: str,
+        task_type: TaskType,
+        use_cache: bool = True,
+    ) -> dict:
+        return {"content": "", "model": "deepseek/deepseek-r1", "cost": 0.0}
+
+
+class _NotificationManager:
+    """Legacy notification stub — all methods are no-ops."""
+
+    @staticmethod
+    async def notify_project_start(project_id: str, description: str) -> None:
+        pass
+
+    @staticmethod
+    async def notify_checkpoint(project_id: str, message: str) -> None:
+        pass
+
+    @staticmethod
+    async def notify_completion(project_id: str, message: str) -> None:
+        pass
+
+    @staticmethod
+    async def notify_error(
+        project_id: str, message: str, critical: bool = False
+    ) -> None:
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +134,8 @@ class WeebotAgent:
             stacklevel=2,
         )
         self.config = config
-        self.router = ModelRouter(daily_budget=config.daily_budget)
-        self.notifier = NotificationManager()
+        self.router = _ModelRouter(daily_budget=config.daily_budget)
+        self.notifier = _NotificationManager()
         self.state_manager = StateManager()
         self.tools = {}  # Registered tools
         self.nlp_processor = NaturalLanguageProcessor()  # Enhanced NLP capabilities

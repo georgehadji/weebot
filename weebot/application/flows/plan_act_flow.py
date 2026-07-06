@@ -15,8 +15,8 @@ from weebot.application.flows.states.planning import PlanningState
 from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.base import AgentStatus
 from weebot.application.flows.flow_router import FlowRouter
-from weebot.application.flows.mcp_scope import apply_mcp_tool_scope
-from weebot.application.flows.mcp_scope_config import McpScopeConfig
+from weebot.application.flows.collaborators.fact_resolver import FactResolver
+from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -142,6 +142,7 @@ class PlanActFlow(BaseFlow):
         self._model = cfg.model
         self._mediator = cfg.mediator
         self._state_repo = cfg.state_repo
+        self._fact_resolver = FactResolver(state_repo=self._state_repo)
         self._steering = cfg.steering
         self._truth_binder = cfg.truth_binder
         self._plan_critic = cfg.plan_critic
@@ -181,7 +182,7 @@ class PlanActFlow(BaseFlow):
 
         self._skill_prompt = cfg.skill_prompt
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
-        self._tracing_port = None
+        self._tracing_port = cfg.tracing_port
         self._persistence_adapter = None
         # ── Event pipeline middleware (WP-4) ──────────────────────
         # Built in ``configure_defaults`` and injected via config.
@@ -247,6 +248,8 @@ class PlanActFlow(BaseFlow):
             if self._harness_instruction_block
             else None,
             middleware_chain=cfg.middleware_chain,
+            state_repo=cfg.state_repo,
+            tracing_port=self._tracing_port,
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
@@ -528,6 +531,15 @@ class PlanActFlow(BaseFlow):
         self._flow_started_at = _time.monotonic()
         self._log.info(f"PlanActFlow started for session {self._session.id}")
 
+        # ── OTEL tracing: plan_act_iteration span ────────────────────
+        # ARCH-AUDIT-V2 B2 — root span for the full Plan-Act-Reflect loop.
+        if self._tracing_port is not None:
+            span = self._tracing_port.start_as_current_span("plan_act_iteration")
+            span.set_attribute("session.id", self._session.id)
+            trace_id = getattr(self._session, "trace_id", None)
+            if trace_id:
+                span.set_attribute("trace_id", trace_id)
+
         # --- Task context preservation ---
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
         # can be enriched with it when a brand-new plan is needed.
@@ -548,19 +560,20 @@ class PlanActFlow(BaseFlow):
         )
 
         # ── Enhancement H1: scope external MCP tools to the current query ────
-        scope_config = McpScopeConfig(
-            bridge=self._mcp_bridge,
-            registry=self._tool_registry,
-            native_tool_selector=self._native_tool_selector,
-            llm=self._llm,
-            agent_role=self._agent_role or "admin",
-            logger=self._stdlib_logger,
+        if not hasattr(self, "_tool_assembler"):
+            self._tool_assembler = ToolAssembler(
+                registry=self._tool_registry,
+                mcp_bridge=self._mcp_bridge,
+                native_tool_selector=self._native_tool_selector,
+                llm=self._llm,
+                agent_role=self._agent_role or "admin",
+                logger=self._stdlib_logger,
+            )
+        self._tools = await self._tool_assembler.assemble(
+            effective_prompt=effective_prompt,
+            tools=self._tools,
+            executor=self._executor,
         )
-        scoped_tools = await apply_mcp_tool_scope(scope_config, effective_prompt)
-        if scoped_tools is not None:
-            self._tools = scoped_tools
-            if self._executor is not None and hasattr(self._executor, "set_tools"):
-                self._executor.set_tools(scoped_tools)
 
         # ── Resolve initial state via FlowRouter ───────────────────────────
         initial_state, self._session = FlowRouter.resolve_initial_state(
@@ -836,7 +849,7 @@ class PlanActFlow(BaseFlow):
         self._planner = self._context_switcher.update_agents_with_model(
             model=model,
             skill_prompt=self._skill_prompt,
-            facts=self._session.get_facts(),
+            facts=self._fact_resolver.resolve_for_session(self._session),
             episodic_memory=self._episodic_memory,
         )
 

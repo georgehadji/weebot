@@ -45,12 +45,12 @@ def test_vision_enabled_follows_feature_flag_only(monkeypatch):
     assert _make_executor("deepseek-chat")._vision_enabled() is True
 
 
-def test_inject_keeps_only_latest_screenshot():
+async def test_inject_keeps_only_latest_screenshot():
     ex = _make_executor(VISION_TEST_MODEL)
 
     # Act — two screenshots injected in sequence
-    ex._inject_screenshot("advanced_browser", _B64)
-    ex._inject_screenshot("computer_use", _B64)
+    await ex._inject_screenshot("advanced_browser", _B64)
+    await ex._inject_screenshot("computer_use", _B64)
 
     # Assert — exactly one live image block remains; the earlier one is a placeholder
     buf = list(ex._conversation_buffer)
@@ -73,11 +73,11 @@ def test_inject_keeps_only_latest_screenshot():
     assert len(placeholders) == 1
 
 
-def test_inject_does_not_disturb_plain_string_messages():
+async def test_inject_does_not_disturb_plain_string_messages():
     ex = _make_executor(VISION_TEST_MODEL)
     ex._conversation_buffer.append({"role": "user", "content": "hello"})
 
-    ex._inject_screenshot("screen_tool", _B64)
+    await ex._inject_screenshot("screen_tool", _B64)
 
     # The plain-string message is untouched; the image message is appended.
     assert ex._conversation_buffer[0] == {"role": "user", "content": "hello"}
@@ -86,7 +86,7 @@ def test_inject_does_not_disturb_plain_string_messages():
 
 # ── B2 regression: _inject_screenshot must not mutate original dicts ──────────
 
-def test_inject_screenshot_does_not_mutate_original_dicts():
+async def test_inject_screenshot_does_not_mutate_original_dicts():
     ex = _make_executor(VISION_TEST_MODEL)
 
     original_msg = {
@@ -98,7 +98,7 @@ def test_inject_screenshot_does_not_mutate_original_dicts():
     }
     ex._conversation_buffer.append(original_msg)
 
-    ex._inject_screenshot("computer_use", "bmV3")
+    await ex._inject_screenshot("computer_use", "bmV3")
 
     buf = list(ex._conversation_buffer)
     old_in_buf = buf[0]

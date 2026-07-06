@@ -51,6 +51,7 @@ class PlanActFlowConfig:
     state_repo: Any | None = None  # StateRepositoryPort
     checkpoint_port: Any | None = None  # CheckpointPort
     steering: Any | None = None  # SteeringPort — mid-execution user feedback (Phase 5)
+    tracing_port: Any | None = None  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
 
     # ── Execution limits ────────────────────────────────────────────
     max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS

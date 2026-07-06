@@ -189,6 +189,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             return LLMPool(max_concurrent=WeebotSettings().llm_max_concurrent_requests)
         self.register("llm_pool", _create_llm_pool)
 
+        # Browser pool — DI-managed singleton replacing module-level _global_pool
+        self.register("browser_pool", self._create_browser_pool)
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
         self.register("tool_registry", self._create_tool_registry)
@@ -217,6 +219,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             mediator=self._maybe_get(Mediator),
             state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
+            tracing_port=self._maybe_get(TracingPort),
         ))
 
         # ChatFlow — lightweight conversational flow

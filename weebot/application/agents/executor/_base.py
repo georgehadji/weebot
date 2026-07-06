@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.ponytail_post_processor import PonytailPostProcessor
 from weebot.application.services.step_budget import StepBudget
 from weebot.config.settings import WORKSPACE_ROOT
@@ -49,7 +50,7 @@ from weebot.domain.exceptions import AllModelsTrippedError
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.trajectory import TrajectoryHealth
 from weebot.application.models.tool_collection import ToolCollection
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,8 @@ class ExecutorAgent:
         hooks: HookRegistryPort | None = None,  # HookRegistryPort for pre/post tool call events
         harness_instruction_block: str | None = None,  # Self-Harness behavioural instructions
         middleware_chain: MiddlewareChain | None = None,  # MiddlewareChain — interceptor pipeline
+        state_repo: StateRepositoryPort | None = None,  # State repository for user profile etc.
+        tracing_port: Any | None = None,  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
     ):
         self._llm = llm
         self._tools = tools
@@ -176,6 +179,8 @@ class ExecutorAgent:
         self._prompt_variant_id = prompt_variant_id
         self._harness_instruction_block = harness_instruction_block or None
         self._middleware_chain: MiddlewareChain | None = middleware_chain
+        self._state_repo: StateRepositoryPort | None = state_repo
+        self._tracing_port: Any | None = tracing_port
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         self._trajectory_monitor = TrajectoryMonitor()
@@ -332,9 +337,9 @@ class ExecutorAgent:
         """
         return self._context_compressor.vision_enabled
 
-    def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:
+    async def _inject_screenshot(self, tool_name: str, image_b64: str) -> None:
         """Forward to context compressor (kept for test compatibility)."""
-        self._context_compressor.inject_screenshot(tool_name, image_b64)
+        await self._context_compressor.inject_screenshot(tool_name, image_b64)
 
     def _inject_reflection(self, reflection: VisionReflection) -> None:
         """Forward to context compressor (inject_reflection stores expected_outcome)."""
@@ -356,6 +361,13 @@ class ExecutorAgent:
         self._facts.clear()
         self._should_terminate = False
         self._conversation_buffer.clear()
+
+        # ── OTEL tracing: executor_step span ─────────────────────────
+        # ARCH-AUDIT-V2 B2 — span for a single step within PlanActFlow.
+        if self._tracing_port is not None:
+            step_span = self._tracing_port.start_as_current_span("executor_step")
+            step_span.set_attribute("step.id", step.id)
+            step_span.set_attribute("step.description", step.description[:200])
         self._current_step_id = step.id
         self._current_session_id = session_id or getattr(self, '_current_session_id', 'unknown')
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
@@ -441,19 +453,20 @@ class ExecutorAgent:
         if not hasattr(self, '_user_profile_cache'):
             try:
                 import hashlib
-                from weebot.infrastructure.persistence.sqlite_state_repo import (
-                    SQLiteStateRepository,
-                )
-                repo = SQLiteStateRepository()
-                key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-                for row in await repo.get_low_salience_entries(threshold=1.01, limit=5):
-                    if row.get("entry_hash") == key:
-                        txt = row.get("entry_text", "")
-                        if txt and txt != "No user data collected yet.":
-                            self._user_profile_cache = txt[:500]
-                        else:
-                            self._user_profile_cache = ""
-                        break
+
+                repo = self._state_repo
+                if repo is not None:
+                    key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
+                    for row in await repo.get_low_salience_entries(threshold=1.01, limit=5):
+                        if row.get("entry_hash") == key:
+                            txt = row.get("entry_text", "")
+                            if txt and txt != "No user data collected yet.":
+                                self._user_profile_cache = txt[:500]
+                            else:
+                                self._user_profile_cache = ""
+                            break
+                    else:
+                        self._user_profile_cache = ""
                 else:
                     self._user_profile_cache = ""
             except Exception:
@@ -908,7 +921,7 @@ class ExecutorAgent:
                 # state a tool produced, instead of driving blind off DOM/OCR text.
                 if getattr(result, "base64_image", None) and self._vision_enabled():
                     self._needs_vision = True  # Next LLM call must use a VLM
-                    self._context_compressor.inject_screenshot(tool_name, result.base64_image)
+                    await self._context_compressor.inject_screenshot(tool_name, result.base64_image)
                     # Phase 2: structured observe→plan reflection (extra LLM call, opt-in).
                     # Grounded in the step description so the model can judge progress.
                     reflection = await self._context_compressor.reflect_on_screenshot(
