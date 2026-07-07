@@ -356,15 +356,6 @@ def test_no_flat_files_at_root():
     """Only allowed shim files and directories may exist at ``weebot/`` root."""
     allowed_files = {
         "__init__.py",
-        # Legacy files (Bucket D — frozen, no new features)
-        "agent_core_v2.py",
-        "agent_selection.py",
-        "failure_recovery.py",
-        "tray.py",
-        # Legacy root modules (pre-date architecture enforcement)
-        "ai_router.py",
-        "nlp_understanding.py",
-        "notifications.py",
     }
     allowed_dirs = {
         "__pycache__",
@@ -443,7 +434,7 @@ def test_core_modules_in_correct_package():
     """
     # Modules classified as Application (should not import infrastructure)
     app_modules = {
-        "agent.py", "agent_context.py", "agent_factory.py",
+        "agent.py", "agent_context.py",
         "agent_profile.py", "tool_agent.py", "workflow_orchestrator.py",
         "workflow_tracer.py", "dependency_graph.py",
     }

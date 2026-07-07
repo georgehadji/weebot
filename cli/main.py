@@ -78,21 +78,11 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress
 
-from weebot.state_manager import StateManager, ProjectStatus
 
 
-def _deprecated_agent(project_id: str, description: str = "", budget: float | None = None) -> tuple:
-    """Lazy-import the deprecated agent_core_v2 module.
-
-    Importing at the top level triggers a DeprecationWarning on every CLI
-    invocation (even for non-deprecated commands).  Lazy import confines
-    the warning to the 5 deprecated commands that actually use the module.
-    """
-    from weebot.agent_core_v2 import WeebotAgent, AgentConfig
-    cfg = AgentConfig(project_id=project_id, description=description)
-    if budget is not None:
-        cfg.daily_budget = budget
-    return WeebotAgent(cfg), cfg
+# _deprecated_agent() and the 5 [DEPRECATED] CLI commands were removed
+# in ARCH-AUDIT-V2 (agent_core_v2 sunset). Use 'weebot flow *' commands instead.
+# See cli/commands/flow.py for the replacement commands.
 from weebot.interfaces.cli.support import (
     init_project,
     init_hooks,
@@ -104,7 +94,7 @@ from weebot.interfaces.cli.support import (
 )
 from weebot.agents.registry import AgentRegistry
 from weebot.agents.router import PersonaRouter
-from weebot.core.agent_factory import AgentFactory
+# agent_factory.py sunset in ARCH-AUDIT-V2 A5
 from weebot.core.agent_context import AgentContext
 from weebot.tools.tool_registry import RoleBasedToolRegistry
 from weebot.interfaces.cli.behavior_commands import behavior_cli
@@ -134,33 +124,58 @@ def cli() -> None:
     configure_logging()
 
 
+@cli.result_callback()
+def _handle_cli_exceptions(result, **kwargs):
+    """Catch unhandled exceptions and return structured CLI errors."""
+    pass  # Click's built-in exception handling is sufficient for CLI
+
+
+def _wrap_main() -> None:
+    """Entry-point wrapper with global exception handling."""
+    import sys
+    from weebot.domain.exceptions import WeebotError
+    try:
+        cli()
+    except WeebotError as exc:
+        from rich.console import Console
+        console = Console()
+        console.print(f"[red]Error [/{exc.code.value if exc.code else 'unknown'}]: {exc.message}[/red]")
+        sys.exit(1)
+    except Exception as exc:
+        from rich.console import Console
+        console = Console()
+        console.print(f"[red]Unexpected error: {exc}[/red]")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    _wrap_main()
+
+
 @cli.command()
 @click.argument("project_id")
 @click.argument("description")
-@click.option("--budget", default=10.0, help="Daily AI budget")
-def create(project_id: str, description: str, budget: float) -> None:
-    """[DEPRECATED] Use 'flow' commands instead. Create new project."""
-    agent, _ = _deprecated_agent(project_id, description, budget)
-    console.print(Panel(f"Created project: {project_id}", style="green"))
+def create(project_id: str, description: str) -> None:
+    """[DEPRECATED] Use 'flow run' instead. Create new project."""
+    console.print(f"[yellow]Command 'create' is deprecated. Use 'flow run' instead.[/yellow]")
 
 
 @cli.command()
 def list_projects() -> None:
     """[DEPRECATED] Use 'flow' commands instead. List all projects."""
-    sm = StateManager()
-    projects = sm.list_projects()
+    state_repo = _get_state_repo()
+    sessions = asyncio.run(state_repo.list_sessions())
 
-    table = Table(title="Active Projects")
-    table.add_column("Project ID", style="cyan")
+    table = Table(title="Active Sessions")
+    table.add_column("Session ID", style="cyan")
     table.add_column("Status", style="magenta")
-    table.add_column("Last Updated", style="green")
+    table.add_column("Created", style="green")
 
-    for proj in projects:
-        state = sm.load_state(proj["project_id"])
+    for session in sessions:
         table.add_row(
-            proj["project_id"],
-            state.status.value if state else "unknown",
-            str(proj["updated_at"])
+            session.session_id,
+            session.status.value if session.status else "unknown",
+            str(session.created_at) if session.created_at else "-",
         )
 
     console.print(table)
@@ -169,58 +184,23 @@ def list_projects() -> None:
 @cli.command()
 @click.argument("project_id")
 def status(project_id: str) -> None:
-    """[DEPRECATED] Use 'flow' commands instead. Check project status."""
-    agent, _ = _deprecated_agent(project_id, "")
-    stats = agent.get_status()
-    
-    console.print(Panel.fit(
-        f"Status: {stats['status']}\n"
-        f"Progress: {stats['progress']} tasks completed\n"
-        f"Current: {stats['current_task'] or 'None'}\n"
-        f"Pending Checkpoints: {stats['pending_checkpoints']}\n"
-        f"Cost Today: ${stats['cost_stats']['today']:.4f}",
-        title=f"Project: {project_id}"
-    ))
+    """[DEPRECATED] Use 'flow list' instead. Check project status."""
+    console.print(f"[yellow]Command 'status' is deprecated. Use 'flow list' instead.[/yellow]")
 
 
 @cli.command()
 @click.argument("project_id")
 @click.argument("plan_file", type=click.Path(exists=True))
 def run(project_id: str, plan_file: str) -> None:
-    """[DEPRECATED] Use 'flow' commands instead. Execute task plan from JSON file."""
-    import json
-    
-    plan = json.loads(Path(plan_file).read_text())
-    
-    agent, _ = _deprecated_agent(
-        project_id,
-        description=f"Running plan from {plan_file}",
-    )
-    
-    with Progress() as progress:
-        task = progress.add_task("[cyan]Executing tasks...", total=len(plan))
-        
-        async def execute():
-            for item in plan:
-                progress.update(task, advance=1, description=f"[cyan]Task: {item['name']}")
-                await agent.run([item])
-        
-        asyncio.run(execute())
-    
-    console.print("[green]Plan execution complete![/green]")
+    """[DEPRECATED] Use 'flow run' instead. Execute task plan from JSON file."""
+    console.print(f"[yellow]Command 'run' is deprecated. Use 'flow run' instead.[/yellow]")
 
 
 @cli.command()
 @click.argument("project_id")
 def resume(project_id: str) -> None:
-    """[DEPRECATED] Use 'flow' commands instead. Resume paused project."""
-    agent, _ = _deprecated_agent(project_id, "")
-
-    # Resume from current state
-    console.print(f"[yellow]Resuming project: {project_id}[/yellow]")
-
-    # Implementation would continue from last checkpoint
-    console.print("[green]Resumed successfully![/green]")
+    """[DEPRECATED] Use 'flow resume' instead. Resume paused project."""
+    console.print(f"[yellow]Command 'resume' is deprecated. Use 'flow resume' instead.[/yellow]")
 
 
 @cli.command()
@@ -229,9 +209,7 @@ def resume(project_id: str) -> None:
 @click.argument("response")
 def checkpoint(project_id: str, checkpoint_id: str, response: str) -> None:
     """[DEPRECATED] Use 'flow' commands instead. Resolve pending checkpoint."""
-    sm = StateManager()
-    sm.resolve_checkpoint(checkpoint_id, response)
-    console.print(f"[green]Resolved checkpoint {checkpoint_id}: {response}[/green]")
+    console.print(f"[yellow]Command 'checkpoint' is deprecated. Use 'flow' commands instead.[/yellow]")
 
 
 @cli.command()
@@ -248,19 +226,19 @@ def delete(project_id: str) -> None:
 @click.option("--output", "-o", default="export.json")
 def export(project_id: str, output: str) -> None:
     """Export project state."""
-    sm = StateManager()
-    state = sm.load_state(project_id)
+    state_repo = _get_state_repo()
+    session = asyncio.run(state_repo.load_session(project_id))
 
-    if state:
+    if session:
         import json
-        from dataclasses import asdict
+        from pydantic import BaseModel
 
         Path(output).write_text(
-            json.dumps(asdict(state), indent=2, default=str)
+            json.dumps(session.model_dump(), indent=2, default=str)
         )
         console.print(f"[green]Exported to: {output}[/green]")
     else:
-        console.print(f"[red]Project not found: {project_id}[/red]")
+        console.print(f"[red]Session not found: {project_id}[/red]")
 
 
 @cli.command()
@@ -593,30 +571,18 @@ def upgrade(template_filter: str | None, marketplace_url: str | None, dry_run: b
 @cli.command()
 @click.argument("spec_file", type=click.Path(exists=True))
 @click.option("--output", "-o", default="plan.json", help="Output plan JSON file")
-@click.option("--project-id", default=None, help="Project ID to execute under")
-@click.option("--execute", is_flag=True, help="Execute plan after generation")
-def implement(spec_file: str, output: str, project_id: str | None, execute: bool) -> None:
-    """Generate a task plan from a spec and optionally execute it."""
+def implement(spec_file: str, output: str) -> None:
+    """Generate a task plan from a spec.
+
+    The --execute flag was removed (agent_core_v2 sunset).
+    Use 'weebot flow run' to execute the generated plan.
+    """
     spec_path = Path(spec_file)
     plan = build_plan_from_spec(spec_path.read_text(encoding="utf-8"))
 
     Path(output).write_text(json.dumps(plan, indent=2), encoding="utf-8")
     console.print(f"[green]Plan generated: {output} ({len(plan)} tasks)[/green]")
-
-    if execute:
-        if not project_id:
-            project_id = spec_path.stem
-        agent, _ = _deprecated_agent(
-            project_id,
-            description=f"Implementing {spec_path.name}",
-        )
-
-        async def run_plan():
-            for item in plan:
-                await agent.run([item])
-
-        asyncio.run(run_plan())
-        console.print("[green]Plan execution complete[/green]")
+    console.print("[dim]Use 'weebot flow run' to execute this plan.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -740,11 +706,4 @@ cli.add_command(cmd_ponytail_help)
 
 
 if __name__ == "__main__":
-    try:
-        cli()
-    except Exception as exc:
-        import logging
-        import sys
-        logging.exception("Unhandled CLI exception: %s", exc)
-        sys.stderr.write(f"\nError: {exc}\n")
-        sys.exit(1)
+    _wrap_main()

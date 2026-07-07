@@ -5,14 +5,11 @@ import typing as _t
 import warnings
 
 
-_DEPRECATED = frozenset({
-    "WeebotAgent", "AgentConfig",
-})
+# ARCH-AUDIT-V2 A5: agent_core_v2 fully sunset.
+# Root lazy imports removed — use Container.build_agent_runner() instead.
+_DEPRECATED: frozenset[str] = frozenset()
 
-_LAZY_MAP = {
-    "WeebotAgent": ".agent_core_v2",
-    "AgentConfig": ".agent_core_v2",
-}
+_LAZY_MAP: dict[str, str] = {}
 
 
 def __getattr__(name: str) -> _t.Any:
@@ -31,7 +28,4 @@ def __getattr__(name: str) -> _t.Any:
     raise AttributeError(msg)
 
 
-__all__ = [
-    "WeebotAgent",
-    "AgentConfig",
-]
+__all__: list[str] = []
