@@ -71,8 +71,8 @@ _SENSITIVE_PATTERNS: list[re.Pattern] = [
 _BASH_EGRESS_RE = re.compile(
     r"""
     (?:
-        # curl/wget with data payload
-        \bcurl\b [^#\n]* (?:-d|--data|-F|--form|-T|--upload-file|@\S)
+        # curl/wget with data payload (--data, --data-binary, --data-raw, --data-urlencode)
+        \bcurl\b [^#\n]* (?:-d|--data(?:-[a-z]+)?|-F|--form|-T|--upload-file|@\S)
         |
         \bwget\b [^#\n]* (?:--post-(?:data|file)|--body-(?:data|file))
         |

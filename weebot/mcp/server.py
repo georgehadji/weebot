@@ -75,7 +75,7 @@ class WeebotMCPServer:
     Args:
         activity_stream: Optional shared ActivityStream for logging tool calls.
                          A new empty stream is created if not provided.
-        state_manager:   Optional :class:`~weebot.state_manager.StateManager`
+        state_manager:   Optional :class:`~weebot.application.ports.state_repo_port.StateRepositoryPort`
                          instance.  When provided ``weebot://state`` returns
                          live project data instead of a static stub.
         scheduler:       Optional :class:`~weebot.scheduling.scheduler.SchedulingManager`

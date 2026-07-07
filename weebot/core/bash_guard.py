@@ -427,8 +427,43 @@ class BashGuard:
 
     @staticmethod
     def _normalize(command: str) -> str:
-        """Normalize shell command — strip backslash-escaped spaces."""
-        return re.sub(r"\\\s+", " ", command)
+        """Normalize shell command — backslash-escaped spaces, destructive-command
+        flag variants so the pattern matcher sees a single canonical form.
+        """
+        cmd = re.sub(r"\\\s+", " ", command)
+        # ── Canonicalize rm flag variants ──────────────────────────
+        # rm -fr X, rm -Rf X, rm -RF X, rm -rF X (both flags in one token) → rm -rf X
+        # NOTE: bare -r without -f is NOT normalized — it's already caught by
+        # the BLOCKED patterns (r"rm\s+-rf?\s*/\s*$" with f? absent).
+        cmd = re.sub(
+            r"\brm\s+-(?:[fF][rR]|[rR][fF])\b",
+            "rm -rf",
+            cmd,
+        )
+        # rm -r -f X, rm -f -r X (space-separated flags) → rm -rf X
+        cmd = re.sub(
+            r"\brm\s+(?:-[rR]\s+-[fF]\b|-[fF]\s+-[rR]\b)",
+            "rm -rf",
+            cmd,
+        )
+        # rm --recursive --force X (long options) → rm -rf X
+        cmd = re.sub(
+            r"\brm\s+(?:--recursive\s+--force\b|--force\s+--recursive\b)",
+            "rm -rf",
+            cmd,
+        )
+        # rm --recursive -f X, rm --force -r X (mixed long/short) → rm -rf X
+        cmd = re.sub(
+            r"\brm\s+--recursive\s+-[fF]\b",
+            "rm -rf",
+            cmd,
+        )
+        cmd = re.sub(
+            r"\brm\s+--force\s+-[rR]\b",
+            "rm -rf",
+            cmd,
+        )
+        return cmd
 
     def evaluate(self, command: str) -> tuple[RiskLevel, list[SafetyCheck]]:
         """Evaluate a command for safety.

@@ -516,11 +516,12 @@ class RoleBasedToolRegistry:
                 # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine)
                 if hasattr(tool, "set_rerank"):
                     try:
-                        from weebot.application.di import Container
-                        from weebot.application.ports.rerank_port import RerankPort
-                        c = Container()
-                        c.configure_defaults()
-                        rerank = c.get(RerankPort)
+                        import importlib as _il
+                        _rerank_mod = _il.import_module("weebot.application.ports.rerank_port")
+                        RerankPort = _rerank_mod.RerankPort
+                        _c = _il.import_module("weebot.application.di").Container()
+                        _c.configure_defaults()
+                        rerank = _c.get(RerankPort)
                         tool.set_rerank(rerank)
                         logger.debug("Injected RerankPort into %s", name)
                     except Exception:

@@ -39,10 +39,10 @@ def _build_server():
     from weebot.mcp.server import WeebotMCPServer
 
     settings = WeebotSettings()
-    state_manager = _try_attach(
+    state_repo = _try_attach(
         "weebot.infrastructure.persistence.sqlite_state_repo",
-        "StateManager",
-        "StateManager",
+        "SQLiteStateRepository",
+        "SQLiteStateRepository",
     )
     scheduler = _try_attach(
         "weebot.infrastructure.scheduling.scheduler",
@@ -50,7 +50,7 @@ def _build_server():
         "SchedulingManager",
     )
     return WeebotMCPServer(
-        state_manager=state_manager,
+        state_manager=state_repo,
         scheduler=scheduler,
         composite_tools_enabled=settings.mcp_composite_tools_enabled,
     )

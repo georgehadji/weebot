@@ -1,25 +1,45 @@
-"""Counterfactual Simulation and Safety mechanisms."""
+"""Counterfactual Simulation and Safety mechanisms.
+
+Decoupled from LangChain per ADR-009 (core = no I/O, no framework deps).
+Uses LLMPort for all LLM interactions.
+"""
+from __future__ import annotations
+
 from typing import Any, Dict
-from langchain_core.prompts import PromptTemplate
-from weebot.config.constants import TEMPERATURE_DETERMINISTIC
+
+from weebot.application.ports.llm_port import LLMPort
 from weebot.core.approval_policy import ExecApprovalPolicy
+
+
+COUNTERFACTUAL_SIMULATION_PROMPT = """
+You are a safety module performing Counterfactual Simulation.
+
+Original Action: {action}
+Context: {context}
+
+Before executing this potentially destructive action, simulate:
+1. What could go wrong?
+2. What is the safest alternative approach (Plan B)?
+3. Can we achieve the goal non-destructively?
+
+Provide:
+- risk_assessment: Brief risk analysis
+- plan_b: Alternative safer approach
+- confirmation_required: yes/no
+- backup_suggestion: How to backup before proceeding
+"""
 
 
 class SafetyChecker:
     """Implements Counterfactual Simulation for critical operations.
 
-    The LLM instance is now per-instance (default) or injectable via
-    the ``llm`` parameter for testing.  Register via DI container.
+    Requires an ``LLMPort`` instance (injected via DI container).
     """
 
     CRITICAL_KEYWORDS = ["delete", "remove", "format", "kill", "stop-process", "rm", "del"]
 
-    def __init__(self, llm: Any = None):
-        if llm is not None:
-            self.llm = llm
-        else:
-            from langchain_openai import ChatOpenAI
-            self.llm = ChatOpenAI(temperature=TEMPERATURE_DETERMINISTIC)
+    def __init__(self, llm: LLMPort):
+        self.llm = llm
         self.approval_policy = ExecApprovalPolicy()
     
     def is_critical_operation(self, action: str, tool: str) -> bool:
@@ -35,33 +55,13 @@ class SafetyChecker:
         Generate alternative plan before executing critical action.
         Counterfactual Simulation: "What if this goes wrong?"
         """
-        prompt = PromptTemplate(
-            template="""
-            You are a safety module performing Counterfactual Simulation.
-            
-            Original Action: {action}
-            Context: {context}
-            
-            Before executing this potentially destructive action, simulate:
-            1. What could go wrong?
-            2. What is the safest alternative approach (Plan B)?
-            3. Can we achieve the goal non-destructively?
-            
-            Provide:
-            - risk_assessment: Brief risk analysis
-            - plan_b: Alternative safer approach
-            - confirmation_required: yes/no
-            - backup_suggestion: How to backup before proceeding
-            """,
-            input_variables=["action", "context"]
+        prompt_text = COUNTERFACTUAL_SIMULATION_PROMPT.format(
+            action=original_action,
+            context=context,
         )
-        
-        chain = prompt | self.llm
-        result = await chain.ainvoke({
-            "action": original_action,
-            "context": context
-        })
-        
+        messages = [{"role": "user", "content": prompt_text}]
+        result = await self.llm.chat(messages=messages)
+
         approval = self.approval_policy.evaluate(original_action)
         return {
             "simulation_result": self._parse_safety_response(result.content),

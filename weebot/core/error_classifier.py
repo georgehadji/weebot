@@ -161,48 +161,4 @@ class ErrorClassifier:
                 return True
         return False
 
-    @classmethod
-    def classify(cls, exc: BaseException) -> ErrorCategory:
-        """Return the ErrorCategory for *exc*."""
-        combined = f"{type(exc).__name__} {str(exc)}".lower()
-        for pattern, category in _PATTERNS:
-            if re.search(pattern, combined):
-                return category
-        return ErrorCategory.UNKNOWN
 
-    @classmethod
-    def should_compact(cls, exc: BaseException) -> bool:
-        """True when the error warrants triggering a ConversationCompressor."""
-        return cls.classify(exc) == ErrorCategory.CONTEXT_LENGTH
-
-    @classmethod
-    def should_fail_fast(cls, exc: BaseException) -> bool:
-        """True when retrying is pointless (auth errors)."""
-        return cls.classify(exc) == ErrorCategory.AUTH
-
-    @classmethod
-    def is_path_error(cls, error_text: str) -> bool:
-        """Return True if *error_text* is a filesystem path/exploration error.
-
-        These are normal during exploratory steps — the executor is probing
-        for file locations and some paths won't exist.  They should NOT count
-        toward the cross-step failure threshold.
-        """
-        combined = error_text.lower()
-        path_patterns = [
-            r"cannot find path",
-            r"does not exist",
-            r"access to the path.*is denied",
-            r"cannot find.*because it does",
-            r"get-childitem.*cannot find",
-            r"no such file or directory",
-        ]
-        for pattern in path_patterns:
-            if re.search(pattern, combined):
-                return True
-        return False
-
-    @classmethod
-    def should_fallback_model(cls, exc: BaseException) -> bool:
-        """True when a different model should be tried."""
-        return cls.recommend_action(exc) == RecoveryAction.FALLBACK_MODEL

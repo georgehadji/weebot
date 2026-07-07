@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 # Tools whose results are NEVER cached (side effects or non-deterministic).
 NON_CACHEABLE_TOOLS: frozenset[str] = frozenset({

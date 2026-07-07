@@ -15,8 +15,13 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
-from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.session import Session, SessionStatus
+from typing import Any
+
+
+def _get_tool_collection_cls():
+    import importlib as _il
+    return _il.import_module("weebot.application.models.tool_collection").ToolCollection
 from weebot.domain.models.sub_agent import (
     AgentTier,
     DispatchStrategy,
@@ -44,7 +49,7 @@ class SubAgentFactory(SubAgentFactoryPort):
     def __init__(
         self,
         llm: LLMPort,
-        tools: ToolCollection,
+        tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
         cost_tracker: SubAgentCostTrackerPort,
         swarm_bus: Optional[SwarmEventBusPort] = None,
         flow_factory: Optional[callable] = None,

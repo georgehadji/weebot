@@ -27,6 +27,7 @@ try:
         BrowserSession,
         get_browser_pool,
         close_global_pool,
+        reset_global_pool,
     )
     SESSION_POOL_AVAILABLE = True
 except ImportError:
@@ -45,10 +46,11 @@ __all__ = [
     # Adapters
     "PlaywrightAdapter",
     "PLAYWRIGHT_AVAILABLE",
-    # Session pool
+    # Session pool (DEPRECATED — use container.get("browser_pool"))
     "BrowserSessionPool",
     "BrowserSession",
     "get_browser_pool",
     "close_global_pool",
+    "reset_global_pool",
     "SESSION_POOL_AVAILABLE",
 ]

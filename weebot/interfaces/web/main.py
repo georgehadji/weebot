@@ -204,6 +204,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
+    # Close browser session pool if initialized
+    try:
+        pool = container.get("browser_pool")
+        await pool.close()
+        logger.info("Browser pool closed")
+    except Exception:
+        pass  # Browser pool not configured
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools
@@ -224,6 +231,40 @@ def create_app() -> FastAPI:
         version="2.6.0",
         lifespan=lifespan,
     )
+
+    # ── Global exception handlers ──────────────────────────────────
+    from weebot.domain.exceptions import WeebotError, ErrorCode
+
+    @app.exception_handler(WeebotError)
+    async def weebot_exception_handler(request: Request, exc: WeebotError) -> JSONResponse:
+        status_code = {
+            ErrorCode.RESOURCE_EXHAUSTED: 429,
+            ErrorCode.SECURITY_VIOLATION: 403,
+            ErrorCode.TOOL_EXECUTION_FAILED: 502,
+            ErrorCode.RESOURCE_NOT_FOUND: 404,
+            ErrorCode.INTERNAL_ERROR: 500,
+            ErrorCode.VALIDATION_ERROR: 422,
+        }.get(exc.code, 500)
+        logger.error("WeebotError: %s (code=%s severity=%s)", exc.message, exc.code, exc.severity)
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "error_code": exc.code.value if exc.code else "unknown",
+                "detail": exc.message,
+                "severity": exc.severity.value if exc.severity else "error",
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def fallback_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled exception: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "internal_error",
+                "detail": "An unexpected error occurred. Check server logs for details.",
+            },
+        )
     
     # CORS middleware — allow only known origins, never wildcard with credentials
     _allowed_origins = [

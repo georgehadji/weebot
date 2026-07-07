@@ -18,7 +18,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.domain.models.event import AgentEvent, MessageEvent
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
 

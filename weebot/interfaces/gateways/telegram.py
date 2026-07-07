@@ -49,7 +49,7 @@ class TelegramAdapter(GatewayAdapter):
         profile_name: str | None = None,
         command_dispatcher: GatewayCommandDispatcher | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._token = token
         self._api = f"https://api.telegram.org/bot{token}"
         self._state_repo = state_repo

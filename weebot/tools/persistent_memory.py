@@ -91,10 +91,10 @@ class PersistentMemoryTool(BaseTool):
         """
         super().__init__(**kwargs)
         if memory is None:
-            from weebot.application.di import Container
-            container = Container()
-            container.configure_defaults()
-            memory = container.get(MemoryPort)
+            import importlib as _il
+            _c = _il.import_module("weebot.application.di").Container()
+            _c.configure_defaults()
+            memory = _c.get(MemoryPort)
         self._memory = memory
 
     async def execute(

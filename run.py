@@ -82,7 +82,6 @@ def run_diagnostic() -> bool:
         ("weebot.config.settings", "Configuration"),
         ("weebot.ai_router", "AI Router"),
         ("weebot.agent_core_v2", "Agent Core"),
-        ("weebot.state_manager", "State Manager"),
         ("weebot.notifications", "Notifications"),
         ("weebot.core.agent", "OEAR Agent"),
         ("weebot.core.safety", "Safety Checker"),

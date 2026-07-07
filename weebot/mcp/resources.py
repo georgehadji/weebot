@@ -41,37 +41,44 @@ def build_activity_json(stream: ActivityStream, n: int = 50) -> str:
     return json.dumps(data, indent=2)
 
 
-def build_state_json(state_manager: Any | None = None) -> str:
+def build_state_json(state_repo: Any | None = None) -> str:
     """Return an agent state snapshot as a JSON string.
 
     Args:
-        state_manager: Optional :class:`~weebot.state_manager.StateManager`
-                       instance.  When provided, the snapshot reflects live
-                       project data; when omitted a static stub is returned.
+        state_repo: Optional :class:`~weebot.application.ports.state_repo_port.StateRepositoryPort`
+                    instance.  When provided, the snapshot reflects live
+                    session data; when omitted a static stub is returned.
     """
-    if state_manager is None:
+    if state_repo is None:
         return json.dumps(
             sanitize_json_fields(
                 {
                     "status": "idle",
                     "version": "1.0.0",
-                    "note": "Pass state_manager= to WeebotMCPServer for live data.",
+                    "note": "Pass state_repo= to WeebotMCPServer for live data.",
                 }
             ),
             indent=2,
         )
 
     try:
-        projects = state_manager.list_projects()
-        active = [p for p in projects if p.get("status") not in ("completed", "failed")]
+        import asyncio
+        sessions = asyncio.run(state_repo.list_sessions())
+        active = [s for s in sessions if s.status.value not in ("completed", "failed")]
         return json.dumps(
             sanitize_json_fields(
                 {
                     "status": "active" if active else "idle",
                     "version": "1.0.0",
-                    "total_projects": len(projects),
-                    "active_projects": len(active),
-                    "projects": projects[:10],  # cap to avoid huge payloads
+                    "total_sessions": len(sessions),
+                    "active_sessions": len(active),
+                    "sessions": [
+                        {
+                            "session_id": s.session_id,
+                            "status": s.status.value if s.status else "unknown",
+                        }
+                        for s in sessions[:10]
+                    ],
                 }
             ),
             indent=2,

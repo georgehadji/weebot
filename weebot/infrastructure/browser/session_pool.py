@@ -402,10 +402,20 @@ class BrowserSessionPool:
         """Async context manager exit."""
         await self.close()
 
+    async def reset(self) -> None:
+        """Close and re-initialize the pool for test isolation.
+
+        Replaces the global reset_global_pool() pattern.
+        """
+        await self.close()
+        self.__init__()
+        await self.start()
+
 
 # Global pool instance for application-wide reuse
 _global_pool: Optional[BrowserSessionPool] = None
 _pool_lock = asyncio.Lock()
+_DI_WARNED: bool = False
 
 
 async def get_browser_pool(
@@ -413,18 +423,18 @@ async def get_browser_pool(
     max_sessions: int = 5,
     **kwargs
 ) -> BrowserSessionPool:
+    """[DEPRECATED] Use container.get(\"browser_pool\") instead.
+
+    This global-singleton pattern is being replaced by DI-managed
+    lifecycle (Step 2.3 of Architecture 9 Plan).
     """
-    Get or create the global browser pool.
-    
-    Args:
-        min_sessions: Minimum warm sessions
-        max_sessions: Maximum concurrent sessions
-        **kwargs: Additional pool configuration
-    
-    Returns:
-        BrowserSessionPool instance
-    """
-    global _global_pool
+    global _global_pool, _DI_WARNED
+    if not _DI_WARNED:
+        logger.warning(
+            "get_browser_pool() is deprecated. "
+            "Use container.get('browser_pool')."
+        )
+        _DI_WARNED = True
     
     async with _pool_lock:
         if _global_pool is None:
@@ -434,25 +444,28 @@ async def get_browser_pool(
                 **kwargs
             )
             await _global_pool.start()
-            logger.info("Global browser pool initialized")
+            logger.info("Global browser pool initialized (deprecated path)")
         
         return _global_pool
 
 
 async def close_global_pool() -> None:
-    """Close the global browser pool."""
-    global _global_pool
+    """[DEPRECATED] Use container.get(\"browser_pool\").close() instead."""
+    global _global_pool, _DI_WARNED
+    if not _DI_WARNED:
+        logger.warning(
+            "close_global_pool() is deprecated. "
+            "Use container.get('browser_pool').close()."
+        )
+        _DI_WARNED = True
     
     async with _pool_lock:
         if _global_pool:
             await _global_pool.close()
             _global_pool = None
-            logger.info("Global browser pool closed")
+            logger.info("Global browser pool closed (deprecated path)")
 
 
 async def reset_global_pool() -> None:
-    """Reset the global pool — close if running, clear reference.
-
-    Used by test fixtures for clean isolation.
-    """
+    """[DEPRECATED] Use container.get(\"browser_pool\").reset() instead."""
     await close_global_pool()

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from weebot.application.ports.llm_port import LLMPort
 from weebot.core.safety import SafetyChecker
 
 
@@ -53,8 +54,13 @@ _DOCUMENT_DIRECTIVE = "[[as_document]]"
 class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
 
-    def __init__(self) -> None:
-        self._safety = SafetyChecker()
+    def __init__(self, llm_port: LLMPort | None = None) -> None:
+        if llm_port is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            llm_port = c.get(LLMPort)
+        self._safety = SafetyChecker(llm=llm_port)
 
     @abstractmethod
     async def start(self) -> None:

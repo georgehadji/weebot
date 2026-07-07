@@ -1,23 +1,21 @@
 """Unit tests for SafetyChecker critical operation detection."""
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+
 from weebot.core.safety import SafetyChecker
 
 
 @pytest.fixture
 def checker():
-    """SafetyChecker with mocked LLM to avoid real API calls.
-
-    SafetyChecker imports ChatOpenAI lazily inside __init__; patch the source
-    module so the constructor receives a mock instead of making real API calls.
-    """
-    with patch("langchain_openai.ChatOpenAI") as mock_cls:
-        mock_llm = MagicMock()
-        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
-            content='{"confirmation_required": "yes", "plan_b": "backup first"}'
-        ))
-        mock_cls.return_value = mock_llm
-        yield SafetyChecker()
+    """SafetyChecker with mocked LLMPort to avoid real API calls."""
+    mock_llm = MagicMock()
+    mock_llm.chat = AsyncMock(return_value=MagicMock(
+        content='{"confirmation_required": "yes", "plan_b": "backup first"}'
+    ))
+    yield SafetyChecker(llm=mock_llm)
 
 
 class TestIsCriticalOperation:
