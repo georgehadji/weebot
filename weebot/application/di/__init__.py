@@ -255,7 +255,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
     def build_mediator(self) -> Mediator:
         """Build a configured Mediator with default handlers registered."""
+        from weebot.application.cqrs.behaviors.validation import ValidationBehavior
+
         mediator = Mediator()
+        mediator.add_pipeline_behavior(ValidationBehavior())
         mediator.add_pipeline_behavior(LoggingBehavior())
         mediator.add_pipeline_behavior(TelemetryBehavior())
         mediator.add_pipeline_behavior(
