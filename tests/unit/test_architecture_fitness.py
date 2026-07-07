@@ -277,7 +277,7 @@ def test_ports_have_adapters():
     # Known port → adapter mapping (add new ports here).
     # Adapters may live in infrastructure/ OR application/services/.
     port_adapter_map: dict[str, list[str]] = {
-        "EventBusPort": ["AsyncEventBus"],
+        "EventBusPort": ["AsyncEventBus", "DurableEventBus"],
         "EventPublisherPort": ["WebSocketEventBroadcaster"],  # in interfaces/ not infra/
         "LLMPort": ["OpenRouterAdapter", "AnthropicAdapter", "DeepSeekAdapter",
                      "OpenAIAdapter", "ResilientAdapter"],
@@ -360,8 +360,6 @@ def test_no_flat_files_at_root():
         "agent_core_v2.py",
         "agent_selection.py",
         "failure_recovery.py",
-        "state_coordinator.py",
-        "state_manager.py",
         "tray.py",
         # Legacy root modules (pre-date architecture enforcement)
         "ai_router.py",
@@ -1327,3 +1325,39 @@ def test_session_context_has_trace_id():
     # Verify it's settable
     ctx.trace_id = "test-trace-123"
     assert ctx.trace_id == "test-trace-123"
+
+
+def test_ignore_imports_under_target():
+    """.importlinter ignore_imports must not exceed the Architecture 9 Plan target."""
+    with open(".importlinter") as f:
+        content = f.read()
+    count = len([l for l in content.split('\n')
+                 if '->' in l and not l.strip().startswith('#')])
+    assert count <= 35, f"{count} ignore_imports (target ≤ 35)"
+
+
+def test_no_direct_agent_calls_in_mutating_states():
+    """Flow states that mutate state must route through the CQRS mediator.
+
+    Non-mutating states (base, idle, meta_analysis, reviewing, etc.) are
+    helpers that don't call agents — they don't need the mediator.
+    """
+    # Only the 4 core mutating states need this enforcement
+    mutating_states = {"planning.py", "executing.py", "summarizing.py", "updating.py"}
+    import os
+    states_dir = os.path.join("weebot", "application", "flows", "states")
+    for sf in mutating_states:
+        path = os.path.join(states_dir, sf)
+        with open(path, encoding="utf-8") as fh:
+            content = fh.read()
+        # SummarizingState has a documented fallback with DeprecationWarning
+        if sf == "summarizing.py":
+            assert "DeprecationWarning" in content or "context._executor.summarize" not in content, \
+                f"{sf}: direct executor call must have DeprecationWarning"
+        else:
+            assert "context._mediator.send" in content, \
+                f"{sf}: must route through CQRS mediator"
+            assert "context._planner.create_plan" not in content, \
+                f"{sf}: direct planner call bypassing mediator"
+            assert "context._executor.summarize" not in content, \
+                f"{sf}: direct executor call bypassing mediator"

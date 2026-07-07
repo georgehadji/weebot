@@ -12,6 +12,7 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.task_queue_port import TaskQueuePort
 from weebot.config.harness.schema import HarnessConfig
 from weebot.config.model_refs import MODEL_DI_DEFAULT
 
@@ -132,22 +133,25 @@ class FactoriesMixin:
         from weebot.application.services.task_runner import TaskRunner
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
-        from weebot.config.feature_flags import WEEBOT_QUEUE_BACKEND as _queue_backend
-
-        if _queue_backend == "redis":
-            from weebot.infrastructure.queue.redis_task_queue import RedisTaskQueue
-            task_queue = RedisTaskQueue()
-            logger.info("Task queue backend: Redis Streams (durable)")
-        else:
-            from weebot.infrastructure.queue.in_memory_task_queue import InMemoryTaskQueue
-            task_queue = InMemoryTaskQueue()
-            logger.info("Task queue backend: in-memory (non-durable)")
 
         return TaskRunner(
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
-            task_queue=task_queue,
+            task_queue=self.get(TaskQueuePort),
         )
+
+    @staticmethod
+    def _create_task_queue() -> TaskQueuePort:
+        from weebot.config.feature_flags import WEEBOT_QUEUE_BACKEND as _queue_backend
+
+        if _queue_backend == "redis":
+            from weebot.infrastructure.queue.redis_task_queue import RedisTaskQueue
+            logger.info("Task queue backend: Redis Streams (durable)")
+            return RedisTaskQueue()
+
+        from weebot.infrastructure.queue.in_memory_task_queue import InMemoryTaskQueue
+        logger.info("Task queue backend: in-memory (non-durable)")
+        return InMemoryTaskQueue()
 
     @staticmethod
     def _create_steering():

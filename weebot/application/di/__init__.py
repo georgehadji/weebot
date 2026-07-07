@@ -39,6 +39,7 @@ from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
 from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
 from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
+from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
 from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
@@ -123,6 +124,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("activity_stream", lambda: self._create_activity_stream())
         self.register("response_cache", lambda: self._create_response_cache())
         self.register(Mediator, self._create_mediator)
+        self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
         self.register(SteeringPort, self._create_steering)
         self.register(HarnessConfig, self._create_harness_config)

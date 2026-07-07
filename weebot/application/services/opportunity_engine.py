@@ -54,7 +54,7 @@ class OpportunityEngine:
         Args:
             knowledge_graph: Optional KnowledgeGraphPort for querying nodes.
             fts5_search: Optional FTS5 search service for pattern discovery.
-            state_repo: Optional SQLiteStateRepository for persistent storage.
+            state_repo: Optional StateRepositoryPort for persistent storage.
         """
         self._kg = knowledge_graph
         self._fts5 = fts5_search

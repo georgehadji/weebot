@@ -56,7 +56,7 @@ class BehavioralLearner(BehavioralLearnerPort):
             min_corrections_for_rule: Minimum corrections on the same
                 topic before auto-extracting a rule. Default 1.
             store: In-memory rule store (used when state_repo is None).
-            state_repo: Optional SQLiteStateRepository for persistent storage.
+            state_repo: Optional StateRepositoryPort for persistent storage.
         """
         self._llm = llm
         self._min_corrections = min_corrections_for_rule
