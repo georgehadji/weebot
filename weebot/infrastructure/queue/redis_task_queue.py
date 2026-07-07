@@ -108,7 +108,10 @@ class RedisTaskQueue(TaskQueuePort):
             await r.xgroup_create(_STREAM_KEY, _CONSUMER_GROUP, id="0", mkstream=True)
         except Exception as exc:
             # BUSYGROUP: group already exists — expected on reconnects.
-            if "BUSYGROUP" not in str(exc):
+            # Use string check as fallback since redis-py doesn't expose a
+            # dedicated exception subtype for this error code.
+            exc_str = str(exc)
+            if "BUSYGROUP" not in exc_str:
                 logger.warning("Redis consumer group setup: %s", exc)
 
     async def enqueue(
@@ -137,10 +140,10 @@ class RedisTaskQueue(TaskQueuePort):
 
     async def dequeue(self) -> QueuedSession | None:
         r = await self._get_redis()
-        await self._ensure_group()
 
         while not self._closed:
             try:
+                await self._ensure_group()
                 result = await r.xreadgroup(
                     groupname=_CONSUMER_GROUP,
                     consumername=self._consumer_id,

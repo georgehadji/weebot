@@ -657,6 +657,8 @@ class PlanActFlow(BaseFlow):
                     if _result.should_terminate:
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
+                        if _run_span is not None:
+                            _run_span.end()
                         self.set_state(CompletedState(termination_reason=_result.reason))
                         return
 
@@ -718,6 +720,8 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
+                if _run_span is not None:
+                    _run_span.end()
                 return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization

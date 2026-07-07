@@ -191,10 +191,18 @@ class TaskRunner:
                     if reloaded:
                         await self._start_direct(reloaded, factory)
                         return
-            session = session.set_status(SessionStatus.FAILED)
-            await self._state_repo.save_session(session)
-            # Dead-letter queue: track sessions that exhausted all retries
-            self._failed_sessions[session_id] = self._max_session_retries
+            try:
+                session = session.set_status(SessionStatus.FAILED)
+                await self._state_repo.save_session(session)
+            except Exception as persist_exc:
+                logger.error(
+                    "Double failure: state repo write failed after flow crash "
+                    "for session %s — session may be orphaned in RUNNING state. "
+                    "Error: %s", session_id, persist_exc,
+                )
+            finally:
+                # Dead-letter queue: track sessions that exhausted all retries
+                self._failed_sessions[session_id] = self._max_session_retries
         else:
             # Sync flow-mutated state (facts, compaction) back into
             # the local session before final save. The flow modifies
