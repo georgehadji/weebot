@@ -1103,14 +1103,14 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True, supports_response_schema=True,
             description="Grok 4.3 — xAI's flagship text generation, reasoning, and structured output model."
         ),
-        "x-ai/grok-4.20-multi-agent": ModelInfo(
-            model_name="x-ai/grok-4.20-multi-agent",
+        "x-ai/grok-4.5": ModelInfo(
+            model_name="x-ai/grok-4.5",
             provider=ModelProvider.XAI,
-            input_cost_per_token=5e-06, output_cost_per_token=2.5e-05,
-            max_input_tokens=131072, max_output_tokens=16384,
+            input_cost_per_token=3e-06, output_cost_per_token=1.5e-05,
+            max_input_tokens=2000000, max_output_tokens=16384,
             supports_function_calling=True, supports_vision=True,
             supports_system_messages=True, supports_response_schema=True,
-            description="Grok 4.20 Multi-Agent — specialized real-time multi-agent orchestrator model for deep multi-step tasks."
+            description="Grok 4.5 — xAI's flagship reasoning, agentic, and structured-output model. 2M context, successor to Grok 4.3."
         ),
 
         # ── ByteDance Seedream ──────────────────────────────────────

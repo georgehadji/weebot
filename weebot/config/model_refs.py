@@ -81,6 +81,17 @@ MODEL_SUMMARIZE: str = "deepseek/deepseek-v4-flash"
 """Summary: DeepSeek V4 Flash — fast, cheap, good summarization via DEEPSEEK_API_KEY."""
 
 # ========================================================================
+# Web Search — Perplexity Sonar models (via OpenRouter)
+# ========================================================================
+MODEL_SEARCH_PERPLEXITY_SONAR: str = "perplexity/sonar"
+"""Primary web search: Sonar — lightweight, fast, search-grounded with citations.
+$1/$1 per 1M tokens, 127K context. Returns search_results + citations alongside prose."""
+
+MODEL_SEARCH_PERPLEXITY_SONAR_FALLBACK: str = "perplexity/sonar-pro"
+"""Fallback web search: Sonar Pro — deeper multi-step queries, 2× citations.
+$3/$15 per 1M tokens, 200K context. Use when Sonar returns insufficient results."""
+
+# ========================================================================
 # Per-Agent (Role) Model Selection
 # ========================================================================
 MODEL_ROLE_RESEARCHER: str = "x-ai/grok-build-0.1"
