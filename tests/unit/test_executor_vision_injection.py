@@ -5,7 +5,7 @@ Covers the gating (feature flag + model capability) and the image lifecycle
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,8 +16,19 @@ from tests.unit.conftest import VISION_TEST_MODEL
 _B64 = "aGVsbG8="
 
 
+async def _build_multimodal_message(role, text, image_base64, media_type="image/png"):
+    """Mirror LLMPort.build_multimodal_message's default shape for mocked LLMs."""
+    content = []
+    if text:
+        content.append({"type": "text", "text": text})
+    content.append({"type": "image", "data": image_base64, "media_type": media_type})
+    return {"role": role, "content": content}
+
+
 def _make_executor(model: str) -> ExecutorAgent:
-    return ExecutorAgent(llm=MagicMock(), tools=ToolCollection(), model=model)
+    llm = MagicMock()
+    llm.build_multimodal_message = AsyncMock(side_effect=_build_multimodal_message)
+    return ExecutorAgent(llm=llm, tools=ToolCollection(), model=model)
 
 
 def test_vision_disabled_by_default(monkeypatch):
