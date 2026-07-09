@@ -67,7 +67,7 @@ class TestBuildServer:
         mock_sm = MagicMock()
 
         def fake_attach(module_path: str, class_name: str, label: str):
-            if class_name == "StateManager":
+            if class_name == "SQLiteStateRepository":
                 return mock_sm
             return None
 
