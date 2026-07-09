@@ -67,6 +67,11 @@ def _discover_ports() -> list[type]:
         for name, obj in inspect.getmembers(mod, inspect.isclass):
             if name in _NON_PORT_CLASSES:
                 continue
+            # Only classes actually *defined* in this module are ports —
+            # re-exported/imported classes (e.g. a type-hint dependency
+            # like `FlowFactory = Callable[[Session], BaseFlow]`) are not.
+            if obj.__module__ != mod_name:
+                continue
             if issubclass(obj, ABC) and obj is not ABC:
                 if hasattr(obj, "__abstractmethods__") and obj.__abstractmethods__:
                     ports.append(obj)
