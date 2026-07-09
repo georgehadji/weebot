@@ -24,6 +24,27 @@ if TYPE_CHECKING:
     pass
 
 
+def _run_async(coro: Any) -> Any:
+    """Run *coro* to completion, whether or not a loop is already running.
+
+    FastMCP resource handlers stay sync so they can be unit-tested without a
+    running server, but the MCP SDK dispatches them from inside its own
+    event loop — plain ``asyncio.run()`` raises there. Fall back to running
+    the coroutine in a fresh loop on a worker thread in that case.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def build_activity_json(stream: ActivityStream, n: int = 50) -> str:
     """Return the last *n* activity events as a JSON string (newest-first)."""
     events = stream.recent(n)
@@ -62,8 +83,7 @@ def build_state_json(state_repo: Any | None = None) -> str:
         )
 
     try:
-        import asyncio
-        sessions = asyncio.run(state_repo.list_sessions())
+        sessions = _run_async(state_repo.list_sessions())
         active = [s for s in sessions if s.status.value not in ("completed", "failed")]
         return json.dumps(
             sanitize_json_fields(

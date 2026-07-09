@@ -353,7 +353,7 @@ class TestResourceStubNotes:
     """Stubs include a helpful 'note' when managers are not provided."""
 
     def test_state_stub_contains_note(self) -> None:
-        data = json.loads(build_state_json(state_manager=None))
+        data = json.loads(build_state_json(state_repo=None))
         assert "note" in data
 
     def test_schedule_stub_contains_note(self) -> None:
@@ -429,32 +429,26 @@ class TestLiveResources:
     """State and schedule resources return live data when managers provided."""
 
     def test_state_json_with_state_manager_returns_projects(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {
-                "list_projects": lambda self: [
-                    {"project_id": "p1", "status": "active"},
-                    {"project_id": "p2", "status": "completed"},
-                ]
-            },
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "p1", "status": SessionStatus.RUNNING})()
+        session2 = type("S", (), {"session_id": "p2", "status": SessionStatus.COMPLETED})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1, session2])}
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
-        assert data["total_projects"] == 2
-        assert data["active_projects"] == 1
+        data = json.loads(build_state_json(state_repo=mock_repo))
+        assert data["total_sessions"] == 2
+        assert data["active_sessions"] == 1
         assert data["status"] == "active"
 
     def test_state_json_no_active_projects_reports_idle(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {
-                "list_projects": lambda self: [
-                    {"project_id": "p1", "status": "completed"}
-                ]
-            },
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "p1", "status": SessionStatus.COMPLETED})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
+        data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "idle"
 
     def test_schedule_json_with_scheduler_returns_jobs(self) -> None:
@@ -480,16 +474,12 @@ class TestLiveResources:
         assert data["error"] == "internal_error"
 
     def test_state_json_error_is_sanitized(self) -> None:
-        mock_sm = type(
-            "SM",
+        mock_repo = type(
+            "Repo",
             (),
-            {
-                "list_projects": lambda self: (_ for _ in ()).throw(
-                    RuntimeError("DB password leaked")
-                )
-            },
+            {"list_sessions": AsyncMock(side_effect=RuntimeError("DB password leaked"))},
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
+        data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "error"
         assert data["error"] == "internal_error"
 
@@ -500,13 +490,14 @@ class TestLiveResources:
 
     @pytest.mark.asyncio
     async def test_server_passes_state_manager_to_resource(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {"list_projects": lambda self: [{"project_id": "live", "status": "active"}]},
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "live", "status": SessionStatus.RUNNING})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
         )()
-        server = WeebotMCPServer(state_manager=mock_sm)
+        server = WeebotMCPServer(state_manager=mock_repo)
         contents = await server.mcp.read_resource("weebot://state")
         data = json.loads(contents[0].content)
-        assert data["total_projects"] == 1
+        assert data["total_sessions"] == 1
         assert data["status"] == "active"
