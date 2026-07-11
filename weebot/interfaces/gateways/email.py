@@ -22,6 +22,8 @@ from typing import Any
 
 import aiohttp
 
+from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
     GatewayAdapter,
     GatewayMessage,
@@ -30,18 +32,26 @@ from weebot.interfaces.gateways.base import (
 
 logger = logging.getLogger(__name__)
 
+# Senders never processed, even if allowlisted — replying to these risks an
+# infinite autoresponder loop between weebot and another automated system.
+_AUTOMATED_SENDER_MARKERS = ("mailer-daemon", "no-reply", "noreply", "postmaster")
+
 
 class EmailAdapter(GatewayAdapter):
     """Adapter for email messaging via IMAP/SMTP."""
 
     def __init__(
         self,
+        state_repo: StateRepositoryPort,
+        llm: LLMPort,
         imap_server: str = "imap.gmail.com",
         imap_user: str | None = None,
         imap_password: str | None = None,
         smtp_server: str = "smtp.gmail.com",
         smtp_port: int = 587,
         from_address: str | None = None,
+        poll_interval_seconds: float = 30.0,
+        profile_name: str | None = None,
     ) -> None:
         super().__init__()
         self._imap_server = imap_server
@@ -50,15 +60,98 @@ class EmailAdapter(GatewayAdapter):
         self._smtp_server = smtp_server
         self._smtp_port = smtp_port
         self._from_address = from_address or imap_user
+        self._state_repo = state_repo
+        self._llm = llm
+        self._poll_interval_seconds = poll_interval_seconds
+        self._profile_name = profile_name
         self._running = False
 
     async def start(self) -> None:
         self._running = True
+        self._poll_task = asyncio.create_task(self._poll_loop())
         logger.info("EmailAdapter started (account: %s)", self._imap_user)
 
     async def stop(self) -> None:
         self._running = False
+        self._poll_task.cancel()
+        try:
+            await self._poll_task
+        except asyncio.CancelledError:
+            pass
         logger.info("EmailAdapter stopped")
+
+    async def _poll_loop(self) -> None:
+        while self._running:
+            try:
+                messages = await self.receive_messages()
+                for msg in messages:
+                    try:
+                        text = await self._process_message(msg)
+                        if text:
+                            await self.send_response(
+                                GatewayResponse(
+                                    text=text, platform="email", external_id=msg.external_id,
+                                )
+                            )
+                    except Exception as exc:
+                        logger.warning("Error processing email message: %s", exc)
+            except Exception as exc:
+                logger.error("Email poll error: %s", exc)
+            await asyncio.sleep(self._poll_interval_seconds)
+
+    async def _process_message(self, message: GatewayMessage) -> str:
+        """Run an inbound email through PlanActFlow.
+
+        Returns the response text, or ``""`` if the message was dropped
+        (own address, automated sender, unauthorized sender, or safety
+        block) — an empty return means no reply email is sent.
+        """
+        sender = message.external_id.strip().lower()
+
+        # Anti-loop guards: never reply to ourselves or an automated
+        # sender — email autoresponders can trigger infinite reply loops
+        # between two bots, unlike chat platforms.
+        if self._from_address and sender == self._from_address.strip().lower():
+            return ""
+        if any(marker in sender for marker in _AUTOMATED_SENDER_MARKERS):
+            return ""
+
+        if not self.is_authorized("email", sender):
+            logger.warning("Email message rejected by gateway allowlist: from=%s", sender)
+            return ""
+
+        text = await self.handle(message)
+        if text is None:
+            return "Message blocked by safety check."
+
+        import uuid
+
+        from weebot.domain.models.session import Session
+        from weebot.interfaces.factories import build_tools, create_flow
+
+        session_id = f"email-{sender}-{uuid.uuid4().hex[:6]}"
+        session = Session(
+            id=session_id,
+            user_id=f"email-{sender}",
+            agent_id="email-agent",
+        )
+
+        tools = await build_tools(role="admin")
+        flow = create_flow(
+            flow_type="plan_act",
+            session=session,
+            llm=self._llm,
+            tools=tools,
+            state_repo=self._state_repo,
+            profile_name=self._profile_name,
+        )
+
+        response = ""
+        async for event in flow.run(text):
+            if getattr(event, "type", "") == "message":
+                response = getattr(event, "message", "") or response
+
+        return response or "(no response produced)"
 
     async def send_response(self, response: GatewayResponse) -> bool:
         """Send an email response via SMTP."""

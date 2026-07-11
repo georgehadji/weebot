@@ -1,7 +1,7 @@
 """Unit tests for WhatsApp, Signal, and Email gateway adapters."""
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -27,6 +27,8 @@ class TestWhatsAppAdapter:
         self.adapter = WhatsAppAdapter(
             token="test-token",
             phone_number_id="123456789",
+            state_repo=AsyncMock(),
+            llm=MagicMock(),
         )
 
     @pytest.mark.asyncio
@@ -88,6 +90,8 @@ class TestSignalAdapter:
 
     def setup_method(self):
         self.adapter = SignalAdapter(
+            state_repo=AsyncMock(),
+            llm=MagicMock(),
             rest_url="http://localhost:8080",
             account_number="+1234567890",
         )
@@ -110,6 +114,8 @@ class TestEmailAdapter:
 
     def setup_method(self):
         self.adapter = EmailAdapter(
+            state_repo=AsyncMock(),
+            llm=MagicMock(),
             imap_server="imap.test.com",
             imap_user="test@test.com",
             imap_password="test-pass",

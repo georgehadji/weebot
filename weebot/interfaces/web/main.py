@@ -25,6 +25,7 @@ from weebot.interfaces.web.routers.sse import router as sse_router
 from weebot.interfaces.web.routers.webhook import router as webhook_router
 from weebot.interfaces.web.routers.discord_webhook import router as discord_router
 from weebot.interfaces.web.routers.slack_webhook import router as slack_router
+from weebot.interfaces.web.routers.whatsapp_webhook import router as whatsapp_router
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -202,11 +203,58 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     else:
         logger.info("Telegram gateway disabled (set TELEGRAM_BOT_TOKEN to enable)")
 
+    # ── Signal gateway (long-polling via signal-cli REST API) ───
+    signal_adapter = None
+    if _settings.signal_account_number:
+        try:
+            from weebot.interfaces.gateways.signal import SignalAdapter
+
+            signal_adapter = SignalAdapter(
+                state_repo=container.get(StateRepositoryPort),
+                llm=container.get(LLMPort),
+                rest_url=_settings.signal_cli_rest_url,
+                account_number=_settings.signal_account_number,
+            )
+            await signal_adapter.start()
+            app.state.signal_adapter = signal_adapter
+        except Exception as exc:
+            logger.warning("Signal gateway failed to start: %s", exc)
+    else:
+        logger.info("Signal gateway disabled (set SIGNAL_ACCOUNT_NUMBER to enable)")
+
+    # ── Email gateway (IMAP polling) ─────────────────────────────
+    email_adapter = None
+    if _settings.email_imap_user and _settings.email_imap_password:
+        try:
+            from weebot.interfaces.gateways.email import EmailAdapter
+
+            email_adapter = EmailAdapter(
+                state_repo=container.get(StateRepositoryPort),
+                llm=container.get(LLMPort),
+                imap_server=_settings.email_imap_server,
+                imap_user=_settings.email_imap_user,
+                imap_password=_settings.email_imap_password,
+                smtp_server=_settings.email_smtp_server,
+                smtp_port=_settings.email_smtp_port,
+                from_address=_settings.email_from_address,
+                poll_interval_seconds=_settings.email_poll_interval_seconds,
+            )
+            await email_adapter.start()
+            app.state.email_adapter = email_adapter
+        except Exception as exc:
+            logger.warning("Email gateway failed to start: %s", exc)
+    else:
+        logger.info("Email gateway disabled (set EMAIL_IMAP_USER and EMAIL_IMAP_PASSWORD to enable)")
+
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────
     if telegram_adapter is not None:
         await telegram_adapter.stop()
+    if signal_adapter is not None:
+        await signal_adapter.stop()
+    if email_adapter is not None:
+        await email_adapter.stop()
     if hasattr(app.state, "heartbeat"):
         await app.state.heartbeat.stop()
     # Persist circuit breaker state before shutdown
@@ -320,6 +368,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(discord_router)
     app.include_router(slack_router)
+    app.include_router(whatsapp_router)
     app.include_router(ops_router)
     
     # Metrics endpoint — Prometheus scrape target

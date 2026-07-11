@@ -82,6 +82,7 @@ ignore_imports =
     weebot.interfaces.web.routers.chat_router -> weebot.application.di
     weebot.interfaces.web.routers.discord_webhook -> weebot.application.di
     weebot.interfaces.web.routers.slack_webhook -> weebot.application.di
+    weebot.interfaces.web.routers.whatsapp_webhook -> weebot.application.di
     weebot.interfaces.web.routers.health -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.webhook -> weebot.application.di

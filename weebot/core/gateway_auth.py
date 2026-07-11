@@ -38,7 +38,7 @@ class GatewayAuth:
             except Exception as exc:
                 logger.warning("Failed to load gateway auth config: %s", exc)
         return {
-            "allowed_platforms": ["telegram", "discord", "slack"],
+            "allowed_platforms": ["telegram", "discord", "slack", "whatsapp", "signal", "email"],
             "allowed_chats": {},       # platform -> [chat_id]
             "allowed_users": {},       # platform -> [user_id]
             "blocked_users": {},       # platform -> [user_id]
