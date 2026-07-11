@@ -81,6 +81,7 @@ ignore_imports =
     # Web routers use DI to resolve services per-request.
     weebot.interfaces.web.routers.chat_router -> weebot.application.di
     weebot.interfaces.web.routers.discord_webhook -> weebot.application.di
+    weebot.interfaces.web.routers.slack_webhook -> weebot.application.di
     weebot.interfaces.web.routers.health -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.webhook -> weebot.application.di
@@ -116,6 +117,8 @@ ignore_imports =
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications
     # Shutdown handler closes all DB connection pools to prevent leaks.
     weebot.interfaces.web.main -> weebot.infrastructure.persistence.connection_pool
+    # Web server wires the Telegram gateway's session store at startup.
+    weebot.interfaces.web.main -> weebot.infrastructure.persistence.gateway_session_store
 
 
 [importlinter:contract:core-no-app]

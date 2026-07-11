@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from weebot.core.gateway_auth import GatewayAuth
 from weebot.core.safety import SafetyChecker
 
 
@@ -56,6 +57,41 @@ class GatewayAdapter(ABC):
 
     def __init__(self) -> None:
         self._safety = SafetyChecker()
+        self._auth = GatewayAuth()
+
+    def is_authorized(self, platform: str, chat_id: str, user_id: str = "") -> bool:
+        """Check an inbound chat/user against the gateway allowlist.
+
+        Denies by default: a chat must be explicitly allowlisted (or
+        ``allow_all_by_default`` set) via ``python -m cli.main gateway
+        allowlist add``. Set ``WEEBOT_GATEWAY_AUTH_ENABLED=0`` to bypass
+        entirely for trusted, non-public deployments.
+
+        The chat-level allowlist is the primary gate (matches the single
+        ``gateway allowlist add --platform X --id <chat_id>`` workflow). A
+        per-user allowlist, if configured for the platform, adds a further
+        restriction; an explicit user block always applies.
+        """
+        from weebot.config.settings import WeebotSettings
+        from weebot.domain.models.gateway_session import GatewaySessionKey
+
+        if not WeebotSettings().gateway_auth_enabled:
+            return True
+        if not self._auth.is_platform_allowed(platform):
+            return False
+        key = GatewaySessionKey(platform=platform, chat_type="private", chat_id=str(chat_id))
+        if not self._auth.is_chat_allowed(key):
+            return False
+
+        config = self._auth.get_config()
+        if user_id:
+            user_id = str(user_id)
+            if user_id in config.get("blocked_users", {}).get(platform, []):
+                return False
+            has_user_allowlist = bool(config.get("allowed_users", {}).get(platform))
+            if has_user_allowlist and not self._auth.is_user_allowed(platform, user_id):
+                return False
+        return True
 
     @abstractmethod
     async def start(self) -> None:

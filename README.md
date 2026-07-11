@@ -102,6 +102,42 @@ WEEBOT_SESSIONS_DB=...   # Custom DB path
 
 ---
 
+## Running from Slack / Telegram
+
+Weebot's chat gateways run inside the FastAPI web server:
+
+```bash
+python -m weebot.interfaces.web.main
+# or: uvicorn weebot.interfaces.web.main:app --host 0.0.0.0 --port 8000
+```
+
+**Telegram** — create a bot with [@BotFather](https://t.me/BotFather), then set
+`TELEGRAM_BOT_TOKEN` in `.env`. The bot starts long-polling automatically
+when the web server boots — no public URL required.
+
+**Slack** — create a Slack app, enable the Events API, and subscribe to
+`message.channels` and `app_mention`. Set the request URL to
+`https://<your-host>/api/gateway/slack/events` (needs a public/tunnelled
+host — e.g. `ngrok http 8000` for local testing). Set `SLACK_BOT_TOKEN`
+(from OAuth & Permissions) and `SLACK_SIGNING_SECRET` (from Basic
+Information) in `.env`.
+
+**Access control** — inbound chats are denied by default. Allowlist a chat
+before the bot will respond to it:
+
+```bash
+python -m cli.main gateway allowlist add --platform telegram --id <chat_id>
+python -m cli.main gateway allowlist add --platform slack --id <channel_id>
+python -m cli.main gateway allowlist list           # view current rules
+python -m cli.main gateway sessions list             # active conversations
+```
+
+Set `WEEBOT_GATEWAY_AUTH_ENABLED=0` to disable the allowlist entirely
+(only for a private, single-user deployment). See `.env.example` for the
+full list of gateway environment variables.
+
+---
+
 ## CLI Reference
 
 ### Flow

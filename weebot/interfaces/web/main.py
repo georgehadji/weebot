@@ -24,6 +24,7 @@ from weebot.interfaces.web.routers.chat_router import router as chat_router
 from weebot.interfaces.web.routers.sse import router as sse_router
 from weebot.interfaces.web.routers.webhook import router as webhook_router
 from weebot.interfaces.web.routers.discord_webhook import router as discord_router
+from weebot.interfaces.web.routers.slack_webhook import router as slack_router
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -173,9 +174,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.debug("Circuit breaker state restore skipped: %s", exc)
 
+    # ── Telegram gateway (long-polling) ─────────────────────────
+    from weebot.config.settings import WeebotSettings
+    _settings = WeebotSettings()
+    telegram_adapter = None
+    if _settings.telegram_bot_token:
+        try:
+            from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
+            from weebot.infrastructure.persistence.gateway_session_store import SQLiteGatewaySessionStore
+            from weebot.interfaces.gateways.telegram import TelegramAdapter
+
+            flow_resolver = GatewayFlowResolver(
+                store=SQLiteGatewaySessionStore(),
+                session_ttl_seconds=_settings.gateway_session_ttl_seconds,
+                max_sessions_per_platform=_settings.gateway_max_sessions_per_platform,
+            )
+            telegram_adapter = TelegramAdapter(
+                token=_settings.telegram_bot_token,
+                state_repo=container.get(StateRepositoryPort),
+                llm=container.get(LLMPort),
+                flow_resolver=flow_resolver,
+            )
+            await telegram_adapter.start()
+            app.state.telegram_adapter = telegram_adapter
+        except Exception as exc:
+            logger.warning("Telegram gateway failed to start: %s", exc)
+    else:
+        logger.info("Telegram gateway disabled (set TELEGRAM_BOT_TOKEN to enable)")
+
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────
+    if telegram_adapter is not None:
+        await telegram_adapter.stop()
     if hasattr(app.state, "heartbeat"):
         await app.state.heartbeat.stop()
     # Persist circuit breaker state before shutdown
@@ -288,6 +319,7 @@ def create_app() -> FastAPI:
     app.include_router(sse_router)
     app.include_router(webhook_router)
     app.include_router(discord_router)
+    app.include_router(slack_router)
     app.include_router(ops_router)
     
     # Metrics endpoint — Prometheus scrape target

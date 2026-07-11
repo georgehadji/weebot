@@ -85,6 +85,11 @@ class WeebotSettings(BaseSettings):
     telegram_chat_id: str | None = None
     slack_webhook_url: str | None = None
 
+    # Slack gateway (Events API) — required to run weebot from Slack.
+    # Distinct from slack_webhook_url above (outbound notifications only).
+    slack_bot_token: str | None = None       # env: SLACK_BOT_TOKEN
+    slack_signing_secret: str | None = None  # env: SLACK_SIGNING_SECRET
+
     # Budget
     daily_ai_budget: float = 10.0
 
@@ -232,6 +237,14 @@ class WeebotSettings(BaseSettings):
     gateway_allowed_platforms: list[str] = Field(
         default_factory=lambda: ["telegram", "discord", "slack"],
         description="List of enabled gateway platforms.",
+    )
+    gateway_auth_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enforce the gateway allowlist (see `python -m cli.main gateway "
+            "allowlist`) for inbound Slack/Telegram/Discord messages. Chats "
+            "must be allowlisted before the bot will respond to them."
+        ),
     )
 
     # =======================================================================
