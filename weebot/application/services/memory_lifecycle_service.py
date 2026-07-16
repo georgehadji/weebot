@@ -135,7 +135,8 @@ class MemoryLifecycleService:
 
         Args:
             repo: An object with ``get_low_salience_entries()`` and
-                  ``delete_memory_entries()`` methods (e.g. SQLiteStateRepository).
+                  ``delete_memory_entries()`` methods (e.g. SQLiteStateRepository
+                  or InMemoryStateRepository).
 
         Returns:
             Dict with ``checked``, ``evicted`` counts.

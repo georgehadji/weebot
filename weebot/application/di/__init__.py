@@ -17,50 +17,52 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
-from weebot.application.cqrs.behaviors.save_policy import SavePolicyBehavior
-from weebot.application.cqrs.handlers import register_default_handlers
-from weebot.application.cqrs.behaviors.logging import LoggingBehavior
-from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior
-from weebot.application.cqrs.mediator import Mediator
-from weebot.application.ports.audit_port import AuditPort
-from weebot.application.ports.backend_port import BackendPort
-from weebot.application.ports.config_port import ConfigPort
-from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.application.ports.event_store_port import EventStorePort
-from weebot.application.ports.llm_port import LLMPort
-from weebot.application.ports.memory_port import MemoryPort
-from weebot.application.ports.metrics_port import MetricsPort
-from weebot.application.ports.sandbox_port import SandboxPort
-from weebot.application.ports.speech_port import SpeechPort
-from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.ports.steering_port import SteeringPort
-from weebot.application.ports.task_router_port import TaskRouterPort
-from weebot.application.ports.tool_repository_port import ToolRepositoryPort
-from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
-from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
-from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
-from weebot.application.ports.tracing_port import TracingPort
-from weebot.application.ports.rerank_port import RerankPort
-from weebot.application.services.task_runner import TaskRunner
-from weebot.config.harness.schema import HarnessConfig
-from weebot.domain.ports import EventPublisher
+from weebot.application.cqrs.behaviors.save_policy import SavePolicyBehavior  # noqa: E402
+from weebot.application.cqrs.handlers import register_default_handlers  # noqa: E402
+from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E402
+from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
+from weebot.application.cqrs.mediator import Mediator  # noqa: E402
+from weebot.application.ports.audit_port import AuditPort  # noqa: E402
+from weebot.application.ports.backend_port import BackendPort  # noqa: E402
+from weebot.application.ports.config_port import ConfigPort  # noqa: E402
+from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
+from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
+from weebot.application.ports.llm_port import LLMPort  # noqa: E402
+from weebot.application.ports.memory_port import MemoryPort  # noqa: E402
+from weebot.application.ports.metrics_port import MetricsPort  # noqa: E402
+from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
+from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
+from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
+from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
+from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
+from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
+from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
+from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
+from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort  # noqa: E402
+from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort  # noqa: E402
+from weebot.application.ports.tracing_port import TracingPort  # noqa: E402
+from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
+from weebot.application.services.task_runner import TaskRunner  # noqa: E402
+from weebot.config.harness.schema import HarnessConfig  # noqa: E402
+from weebot.domain.ports import EventPublisher  # noqa: E402
 
-from weebot.application.di._factories import FactoriesMixin
-from weebot.application.di._agent_tools import AgentToolsMixin
-from weebot.application.di._capabilities import CapabilitiesMixin
+from weebot.application.di._factories import FactoriesMixin  # noqa: E402
+from weebot.application.di._agent_tools import AgentToolsMixin  # noqa: E402
+from weebot.application.di._capabilities import CapabilitiesMixin  # noqa: E402
 
 
 def _lazy_cost_tracker():
     """Lazy-import SubAgentCostTracker to avoid top-level infra import."""
     from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
     return SubAgentCostTracker(budget_usd=0.50)
-from weebot.application.di._skills import SkillsMixin
-from weebot.application.di._skillopt import SkillOptMixin
-from weebot.application.di._learning import LearningMixin
+from weebot.application.di._skills import SkillsMixin  # noqa: E402
+from weebot.application.di._skillopt import SkillOptMixin  # noqa: E402
+from weebot.application.di._learning import LearningMixin  # noqa: E402
 
 
 @dataclass
@@ -122,6 +124,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("activity_stream", lambda: self._create_activity_stream())
         self.register("response_cache", lambda: self._create_response_cache())
         self.register(Mediator, self._create_mediator)
+        self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
         self.register(SteeringPort, self._create_steering)
         self.register(HarnessConfig, self._create_harness_config)
@@ -188,17 +191,21 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             return LLMPool(max_concurrent=WeebotSettings().llm_max_concurrent_requests)
         self.register("llm_pool", _create_llm_pool)
 
+        # Browser pool — DI-managed singleton replacing module-level _global_pool
+        self.register("browser_pool", self._create_browser_pool)
         # MCP Client — connects to external MCP servers (Track 1)
         self.register("mcp_client", self._create_mcp_client)
+        self.register("tool_registry", self._create_tool_registry)
         self.register("mcp_bridge", self._create_mcp_bridge)
+        self.register("native_tool_selector", self._create_native_tool_selector)
         # Deployment-time learning (Memento-Skills; all flags default OFF)
         self.configure_learning(db_path=db_path)
 
     # ── high-level builders ─────────────────────────────────────────
 
-    def build_flow_registry(self) -> "FlowRegistry":
+    def build_flow_registry(self) -> FlowRegistry:  # noqa: F821
         """Build and populate the flow registry, then return it."""
-        from weebot.application.abstractions import FlowRegistry
+        from weebot.application.abstractions import FlowRegistry  # noqa: F401
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.flows.chat_flow import ChatFlow
 
@@ -214,6 +221,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             mediator=self._maybe_get(Mediator),
             state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
+            tracing_port=self._maybe_get(TracingPort) if self._is_tracing_enabled() else None,
         ))
 
         # ChatFlow — lightweight conversational flow
@@ -228,9 +236,9 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         return registry
 
-    def build_scheduler(self) -> "SchedulingManager":
+    def build_scheduler(self) -> SchedulingManager:  # noqa: F821
         """Return the DI-managed SchedulingManager singleton."""
-        from weebot.scheduling.scheduler import SchedulingManager
+        from weebot.scheduling.scheduler import SchedulingManager  # noqa: F401
         return self.get("scheduler")
 
     def build_agent_runner(self, role="admin", mcp_config=None, use_rich=True):
@@ -247,7 +255,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
     def build_mediator(self) -> Mediator:
         """Build a configured Mediator with default handlers registered."""
+        from weebot.application.cqrs.behaviors.validation import ValidationBehavior
+
         mediator = Mediator()
+        mediator.add_pipeline_behavior(ValidationBehavior())
         mediator.add_pipeline_behavior(LoggingBehavior())
         mediator.add_pipeline_behavior(TelemetryBehavior())
         mediator.add_pipeline_behavior(
@@ -289,14 +300,19 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
     # ── internal helpers ───────────────────────────────────────────
 
-    def _maybe_get(self, port_type: type) -> Optional[Any]:
+    @staticmethod
+    def _is_tracing_enabled() -> bool:
+        from weebot.config.feature_flags import OTEL_TRACING_ENABLED
+        return OTEL_TRACING_ENABLED
+
+    def _maybe_get(self, port_type: type) -> Any | None:
         """Return registered instance or None if not bound."""
         try:
             return self.get(port_type)
         except KeyError:
             return None
 
-    def _maybe_get_str(self, key: str) -> Optional[Any]:
+    def _maybe_get_str(self, key: str) -> Any | None:
         """Return string-keyed registered instance or None if not bound."""
         try:
             return self.get(key)
@@ -335,7 +351,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             role="admin", sandbox_port=sandbox,
         )
 
-        from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER4, MODEL_ROLE_CODER
+        from weebot.config.model_refs import (
+            MODEL_CASCADE_TIER2,
+            MODEL_CASCADE_TIER4,
+            MODEL_ROLE_CODER,
+        )
         from weebot.domain.models.sub_agent import AgentTier
         _TIER_MODEL: dict[AgentTier, str] = {
             AgentTier.BUDGET: MODEL_CASCADE_TIER2,
@@ -380,7 +400,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             mediator=self._maybe_get(Mediator),
         )
 
-    def _maybe_get_model(self) -> Optional[str]:
+    def _maybe_get_model(self) -> str | None:
         """Return the default model string if LLM is bound."""
         return getattr(self, "_default_model", None)
 

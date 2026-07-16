@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from weebot.domain.models.audit import AuditReport
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 
 class AuditPort(ABC):

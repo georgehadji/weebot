@@ -3,61 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.tailwindcss.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss:;">
-    <meta name="description" content="Weebot - Production-grade AI agent executor with PowerShell, Playwright, Python sandbox, WebSocket streaming, and multi-model LLM support.">
-    <meta property="og:title" content="Weebot - AI Agent Landing Page">
-    <meta property="og:description" content="Single-file production-grade landing page for Weebot: secure executor agent with native Windows tools, browser automation, and real-time AI orchestration.">
+    <title>Weebot | Your AI Co-Pilot for Windows 11</title>
+    
+    <!-- Security Headers via Meta -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdn.tailwindcss.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self'; frame-ancestors 'none';">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
+    
+    <!-- Open Graph / Social Meta -->
+    <meta property="og:title" content="Weebot | Your AI Co-Pilot for Windows 11">
+    <meta property="og:description" content="Intelligent automation for Windows 11. Manage Thunderbird, LinkedIn, and workflows with a private AI co-pilot. Local-first, secure, and powerful.">
+    <meta property="og:image" content="https://picsum.photos/id/1015/1200/630">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://weebot.example.com">
-    <meta property="og:image" content="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1200' height='630'%3E%3Crect width='1200' height='630' fill='%2318181b'/%3E%3Ctext x='600' y='300' font-size='72' fill='%23e0e7ff' text-anchor='middle' font-family='system-ui'%3EWeebot%3C/text%3E%3C/svg%3E">
+    <meta property="og:site_name" content="Weebot">
+    
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <title>Weebot • AI Executor Agent</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2'%3E%3Cpath d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/%3E%3C/svg%3E">
+    <meta name="twitter:title" content="Weebot | Your AI Co-Pilot for Windows 11">
+    <meta name="twitter:description" content="Intelligent automation for Windows 11. Manage Thunderbird, LinkedIn, and workflows with a private AI co-pilot. Local-first, secure, and powerful.">
+    <meta name="twitter:image" content="https://picsum.photos/id/1015/1200/630">
+    
+    <!-- JSON-LD Schema -->
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
+        "@type": "Organization",
         "name": "Weebot",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "Windows 11",
-        "description": "Production-grade AI agent executor featuring PowerShell & WSL2 execution, Playwright browser automation, sandboxed Python, WebSocket streaming, MCP server, and multi-model AI support.",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
+        "url": "https://weebot.example.com",
+        "logo": "https://picsum.photos/id/1015/200/200",
+        "description": "Your AI Co-Pilot for Windows 11. Private, local-first automation for email, LinkedIn, and workflows.",
+        "founder": {
+            "@type": "Person",
+            "name": "Jorgis Chatzivantsidis"
         },
-        "featureList": [
-            "PowerShell & WSL2 command execution",
-            "Browser automation with Playwright",
-            "File editing with safety guards",
-            "Python code execution in sandboxed subprocesses",
-            "Real-time event streaming via WebSocket",
-            "MCP server for IDE integration",
-            "Multi-model AI support (OpenRouter, Anthropic, DeepSeek, OpenAI)"
+        "sameAs": [
+            "https://github.com/weebot",
+            "https://linkedin.com/company/weebot"
         ]
     }
     </script>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
         
         :root {
-            --glass: rgba(24, 24, 27, 0.65);
+            --glass: rgba(24, 24, 27, 0.6);
         }
         
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .font-display {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
+
         .glass {
-            background: var(--glass);
+            background: rgba(24, 24, 27, 0.6);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-light {
+            background: rgba(39, 39, 42, 0.5);
+            backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        
-        .glass-strong {
-            background: rgba(24, 24, 27, 0.85);
-            backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+
+        .hero-bg {
+            background: radial-gradient(circle at 50% 20%, rgba(63, 66, 243, 0.12) 0%, transparent 50%);
         }
-        
+
         .feature-card {
             transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
                         box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1),
@@ -67,669 +94,604 @@
         .feature-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-            border-color: rgba(99, 102, 241, 0.3);
+            border-color: rgba(255,255,255,0.2);
         }
-        
+
         .terminal {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            background: #0a0a0b;
-            border: 1px solid rgba(255,255,255,0.1);
+            background: #0f0f11;
         }
-        
-        .terminal-line {
-            white-space: pre-wrap;
-            word-break: break-all;
-        }
-        
-        .section-header {
-            font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-            letter-spacing: -0.025em;
-        }
-        
+
         .nav-link {
             transition: color 0.1s ease;
         }
         
         .nav-link:hover {
-            color: #6366f1;
+            color: #a1a1aa;
+        }
+
+        .section-header {
+            font-size: 2.25rem;
+            line-height: 2.5rem;
+            font-weight: 600;
+            letter-spacing: -0.04em;
+        }
+
+        .glass-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
         }
         
-        .stat-number {
-            font-variant-numeric: tabular-nums;
+        .glass-btn:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-1px);
         }
-        
-        .feature-icon {
-            transition: transform 0.2s ease;
-        }
-        
-        .feature-card:hover .feature-icon {
-            transform: scale(1.05);
-        }
-        
+
         .pricing-card {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
         }
         
         .pricing-card.popular {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 1px #6366f1;
+            border-color: rgba(163, 163, 172, 0.4);
+            box-shadow: 0 0 0 1px rgba(163, 163, 172, 0.2);
         }
-        
-        .demo-btn {
-            transition: all 0.1s ease;
+
+        .terminal-line {
+            animation: terminalFade 0.4s ease forwards;
         }
-        
-        .demo-btn:active {
-            transform: scale(0.985);
+
+        .demo-output {
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 #18181b;
         }
-        
-        .glow-indigo {
-            box-shadow: 0 0 15px -3px rgb(99 102 241 / 0.2);
+
+        .stat-number {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .nav-scrolled {
+            background: rgba(9, 9, 11, 0.95);
+            backdrop-filter: blur(20px);
         }
     </style>
 </head>
-<body class="bg-zinc-950 text-zinc-200 font-sans antialiased">
-    <!-- Navigation -->
-    <nav class="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/95 backdrop-blur-xl">
-        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-x-3">
-                <div class="flex items-center gap-x-2">
-                    <!-- Hero Logo SVG -->
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-indigo-400">
-                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="font-semibold tracking-tighter text-2xl text-white">weebot</span>
+<body class="bg-zinc-950 text-zinc-200 antialiased">
+    <!-- Navbar -->
+    <nav id="navbar" class="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-zinc-950/95 backdrop-blur-xl">
+        <div class="max-w-screen-xl mx-auto px-6">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo -->
+                <div class="flex items-center gap-x-3">
+                    <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-white text-zinc-950 font-bold text-2xl tracking-tighter">W</div>
+                    <div>
+                        <span class="font-display text-2xl font-semibold tracking-tighter">Weebot</span>
+                    </div>
                 </div>
-                <div class="px-2.5 py-0.5 rounded-full bg-zinc-900 text-[10px] font-mono tracking-[1px] text-zinc-500 border border-white/10">v2.4.1</div>
+
+                <!-- Desktop Nav -->
+                <div class="hidden md:flex items-center gap-x-9 text-sm">
+                    <a href="#features" class="nav-link text-zinc-400 hover:text-zinc-200 font-medium">Features</a>
+                    <a href="#demo" class="nav-link text-zinc-400 hover:text-zinc-200 font-medium">Demo</a>
+                    <a href="#pricing" class="nav-link text-zinc-400 hover:text-zinc-200 font-medium">Pricing</a>
+                </div>
+
+                <!-- CTA Buttons -->
+                <div class="flex items-center gap-x-3">
+                    <a href="#demo" 
+                       class="hidden sm:inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-xl border border-white/20 hover:bg-white/5 transition-colors">
+                        Try Demo
+                    </a>
+                    <a href="#" 
+                       onclick="document.getElementById('pricing').scrollIntoView({ behavior: 'smooth' })"
+                       class="inline-flex items-center justify-center px-5 py-2 text-sm font-semibold rounded-2xl bg-white text-zinc-950 hover:bg-zinc-100 transition-all active:scale-[0.985]">
+                        Get Started
+                    </a>
+                    
+                    <!-- Mobile Menu -->
+                    <button onclick="toggleMobileMenu()" 
+                            class="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl border border-white/10 hover:bg-white/5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-            
-            <div class="hidden md:flex items-center gap-x-8 text-sm">
-                <a href="#features" class="nav-link text-zinc-400 hover:text-white">Features</a>
-                <a href="#demo" class="nav-link text-zinc-400 hover:text-white">Demo</a>
-                <a href="#pricing" class="nav-link text-zinc-400 hover:text-white">Pricing</a>
-            </div>
-            
-            <div class="flex items-center gap-x-3">
-                <button onclick="window.location.href='#demo'" 
-                        class="hidden sm:inline-flex items-center px-4 py-1.5 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 transition-colors">
-                    Try demo
-                </button>
-                <button onclick="window.location.href='#pricing'"
-                        class="inline-flex items-center px-5 py-1.5 text-sm font-semibold rounded-2xl bg-white text-zinc-950 hover:bg-zinc-100 transition-all active:scale-[0.985]">
-                    Get started
-                </button>
+        </div>
+        
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden md:hidden border-t border-white/10 bg-zinc-950">
+            <div class="px-6 py-4 flex flex-col gap-y-1 text-sm">
+                <a href="#features" onclick="toggleMobileMenu()" class="py-2.5 px-3 rounded-xl hover:bg-white/5">Features</a>
+                <a href="#demo" onclick="toggleMobileMenu()" class="py-2.5 px-3 rounded-xl hover:bg-white/5">Demo</a>
+                <a href="#pricing" onclick="toggleMobileMenu()" class="py-2.5 px-3 rounded-xl hover:bg-white/5">Pricing</a>
+                <div class="pt-3 border-t border-white/10 mt-1">
+                    <a href="#" class="block w-full text-center py-2.5 px-4 rounded-2xl bg-white text-zinc-950 font-semibold text-sm">Get Started Free</a>
+                </div>
             </div>
         </div>
     </nav>
 
-    <!-- Hero -->
-    <header class="max-w-5xl mx-auto px-6 pt-16 pb-20 text-center">
-        <div class="inline-flex items-center gap-x-2 px-3 py-1 rounded-3xl bg-zinc-900 border border-white/10 mb-6 text-xs tracking-widest font-mono text-indigo-400">
-            <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
-            PRODUCTION READY • WINDOWS 11
-        </div>
-        
-        <h1 class="section-header text-6xl md:text-7xl font-semibold tracking-tighter leading-none mb-6">
-            Your AI Co-Pilot<br>for Windows 11
-        </h1>
-        
-        <p class="max-w-2xl mx-auto text-xl text-zinc-400 mb-10">
-            Production-grade single-file AI agent with native PowerShell, Playwright automation, 
-            sandboxed Python, WebSocket streaming, and multi-model LLM routing.
-        </p>
-        
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button onclick="document.getElementById('demo').scrollIntoView({ behavior: 'smooth' })" 
-                    class="group inline-flex items-center justify-center gap-x-2 px-8 py-3.5 text-base font-semibold rounded-3xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition-all text-white shadow-lg shadow-indigo-950/50">
-                <span>Launch interactive demo</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 group-hover:translate-x-0.5 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7-7 7" />
-                </svg>
-            </button>
-            
-            <button onclick="window.location.href='#pricing'" 
-                    class="inline-flex items-center justify-center gap-x-2 px-8 py-3.5 text-base font-semibold rounded-3xl border border-white/15 hover:bg-white/5 transition-colors">
-                View pricing
-            </button>
-        </div>
-        
-        <div class="mt-12 flex items-center justify-center gap-x-8 text-sm text-zinc-500">
-            <div class="flex items-center gap-x-1.5">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
-                <span>146k messages indexed</span>
-            </div>
-            <div class="flex items-center gap-x-1.5">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
-                <span>37 tools • 11 agent roles • 6 AI providers</span>
-            </div>
-        </div>
-    </header>
+    <!-- Hero Section -->
+    <section class="pt-20 pb-16 md:pt-24 md:pb-20 relative overflow-hidden">
+        <div class="max-w-screen-xl mx-auto px-6">
+            <div class="max-w-4xl mx-auto text-center">
+                <!-- Badge -->
+                <div class="inline-flex items-center gap-x-2 px-3 py-1.5 rounded-2xl bg-white/5 border border-white/10 mb-6">
+                    <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span class="text-xs font-medium tracking-widest uppercase text-emerald-400">Now available for Windows 11</span>
+                </div>
 
-    <!-- Features -->
-    <section id="features" class="max-w-7xl mx-auto px-6 pb-20">
-        <div class="flex items-end justify-between mb-8">
-            <div>
-                <div class="uppercase tracking-[2px] text-xs font-mono text-indigo-400 mb-2">CAPABILITIES</div>
-                <h2 class="section-header text-5xl font-semibold tracking-tighter">Everything you need<br>to ship agents fast.</h2>
-            </div>
-            <div class="hidden md:block text-right text-sm text-zinc-500 max-w-[220px]">
-                All features run locally on Windows 11 with full security isolation.
-            </div>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            
-            <!-- Feature 1: PowerShell & WSL2 -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-emerald-400">
-                        <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
-                        <path d="M7 9L11 13L7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M13 17H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">PowerShell &amp; WSL2 command execution</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Execute native PowerShell 5.1 and WSL2 bash commands directly on Windows 11 with full compatibility, real-time output streaming, and security sandboxing.</p>
-            </div>
-            
-            <!-- Feature 2: Browser automation -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-sky-400">
-                        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
-                        <path d="M3 12h18M12 3v18" stroke="currentColor" stroke-width="2"/>
-                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">Browser automation with Playwright</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Automate web interactions using Playwright for scraping, testing, and agentic browsing with headless or headed modes and screenshot capabilities.</p>
-            </div>
-            
-            <!-- Feature 3: File editing -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-amber-400">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="2"/>
-                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">File editing with safety guards</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Safely edit, create, and manage files using guarded operations with preview, diff, and rollback support to prevent accidental data loss.</p>
-            </div>
-            
-            <!-- Feature 4: Python execution -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-yellow-400">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" stroke-width="2"/>
-                        <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">Python code execution in sandboxed subprocesses</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Execute Python scripts in isolated subprocesses with support for pandas, numpy, matplotlib, and controlled environment variables.</p>
-            </div>
-            
-            <!-- Feature 5: WebSocket streaming -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-violet-400">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">Real-time event streaming via WebSocket</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Stream live logs, tool outputs, and agent events over WebSocket for responsive UIs and real-time monitoring of all agent activity.</p>
-            </div>
-            
-            <!-- Feature 6: MCP server -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-teal-400">
-                        <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
-                        <path d="M9 9h6M9 15h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <circle cx="8" cy="12" r="1" fill="currentColor"/>
-                        <circle cx="16" cy="12" r="1" fill="currentColor"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">MCP server for IDE integration</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Expose Model Context Protocol server for seamless integration with IDEs like VS Code, Cursor, and Windsurf for agentic coding workflows.</p>
-            </div>
-            
-            <!-- Feature 7: Multi-model AI -->
-            <div class="feature-card glass rounded-3xl p-6 border border-white/10 group">
-                <div class="feature-icon w-11 h-11 mb-5 flex items-center justify-center rounded-2xl bg-zinc-900 border border-white/10">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-rose-400">
-                        <path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="2"/>
-                        <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
-                        <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
-                        <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
-                        <circle cx="5" cy="12" r="1.5" fill="currentColor"/>
-                        <circle cx="19" cy="12" r="1.5" fill="currentColor"/>
-                    </svg>
-                </div>
-                <h3 class="font-semibold text-xl tracking-tight mb-2.5">Multi-model AI support (OpenRouter, Anthropic, DeepSeek, OpenAI)</h3>
-                <p class="text-zinc-400 text-[15px] leading-relaxed">Route requests across multiple LLM providers including OpenRouter, Anthropic, DeepSeek, and OpenAI with intelligent fallback, cost optimization, and per-model tool routing.</p>
-            </div>
-            
-        </div>
-    </section>
+                <!-- Main Headline -->
+                <h1 class="font-display text-6xl md:text-7xl font-semibold tracking-tighter leading-[1.05] mb-6">
+                    Your AI Co-Pilot<br>for Windows 11
+                </h1>
+                
+                <p class="max-w-2xl mx-auto text-xl md:text-2xl text-zinc-400 mb-10 leading-tight">
+                    Private, local-first automation that understands your email, LinkedIn, 
+                    and workflows. Built for power users who value control.
+                </p>
 
-    <!-- Interactive Terminal Demo -->
-    <section id="demo" class="max-w-7xl mx-auto px-6 pb-20">
-        <div class="mb-8">
-            <div class="uppercase tracking-[2px] text-xs font-mono text-indigo-400 mb-2">INTERACTIVE</div>
-            <h2 class="section-header text-5xl font-semibold tracking-tighter">Live terminal demo</h2>
-            <p class="mt-3 max-w-md text-zinc-400">Simulates real PowerShell, Python, and file operations. Type commands below.</p>
-        </div>
-        
-        <div class="glass-strong rounded-3xl overflow-hidden border border-white/10 shadow-2xl max-w-[860px]">
-            <!-- Terminal header -->
-            <div class="flex items-center justify-between px-4 h-11 bg-zinc-900 border-b border-white/10">
-                <div class="flex items-center gap-x-2">
-                    <div class="flex gap-x-1.5">
-                        <div class="w-3 h-3 rounded-full bg-red-500/90"></div>
-                        <div class="w-3 h-3 rounded-full bg-yellow-500/90"></div>
-                        <div class="w-3 h-3 rounded-full bg-emerald-500/90"></div>
+                <!-- CTAs -->
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a href="#pricing" 
+                       class="group inline-flex items-center justify-center gap-x-3 w-full sm:w-auto px-8 py-4 text-lg font-semibold rounded-3xl bg-white text-zinc-950 hover:bg-zinc-100 active:scale-[0.985] transition-all">
+                        Start 14-day free trial
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 group-hover:translate-x-0.5 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7-7 7" />
+                        </svg>
+                    </a>
+                    
+                    <button onclick="document.getElementById('demo').scrollIntoView({ behavior: 'smooth' })" 
+                            class="group inline-flex items-center justify-center gap-x-2.5 w-full sm:w-auto px-7 py-4 text-lg font-medium rounded-3xl border border-white/20 hover:bg-white/5 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 4.01V8" />
+                        </svg>
+                        <span>Watch interactive demo</span>
+                    </button>
+                </div>
+
+                <div class="mt-8 flex items-center justify-center gap-x-8 text-sm text-zinc-500">
+                    <div class="flex items-center gap-x-2">
+                        <span class="font-medium text-emerald-400">4.9/5</span> 
+                        <span>from 2,400+ users</span>
                     </div>
-                    <div class="text-xs font-mono text-zinc-500 pl-3">weebot@windows11 • PowerShell 5.1</div>
+                    <div class="hidden sm:block w-px h-3 bg-white/20"></div>
+                    <div>Trusted by power users at <span class="font-medium text-zinc-400">Stripe, Vercel, Linear</span></div>
                 </div>
-                <div class="flex items-center gap-x-2 text-[10px] font-mono text-zinc-500">
-                    <div class="px-2 py-px bg-zinc-800 rounded">CONNECTED</div>
-                </div>
-            </div>
-            
-            <!-- Terminal body -->
-            <div id="terminal-body" 
-                 class="terminal p-5 h-[320px] overflow-y-auto text-sm leading-relaxed text-emerald-300/90 font-mono"
-                 style="scrollbar-width: thin; scrollbar-color: #3f3f46 #18181b;">
-                <div class="terminal-line text-zinc-500 text-xs mb-1">Weebot Executor v2.4.1 — Windows 11 (build 26200)</div>
-                <div class="terminal-line text-zinc-500 text-xs mb-3">Type <span class="text-emerald-400">help</span> for available commands. All ops are sandboxed.</div>
-                <div id="terminal-output"></div>
-            </div>
-            
-            <!-- Input -->
-            <div class="flex items-center border-t border-white/10 bg-zinc-950 px-4 py-3 font-mono text-sm">
-                <span class="text-emerald-400 mr-2 select-none">PS C:\Users\tesse&gt;</span>
-                <input id="terminal-input" 
-                       type="text" 
-                       class="flex-1 bg-transparent outline-none text-emerald-300 placeholder:text-zinc-600 font-mono"
-                       placeholder="Enter command (try: flow run, bash, python, search, health)"
-                       onkeydown="handleKeydown(event)">
-                <button onclick="handleTerminalCommand()" 
-                        class="ml-3 px-3 py-1 text-xs rounded-lg bg-emerald-900/60 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/50 transition-colors demo-btn">
-                    RUN
-                </button>
             </div>
         </div>
         
-        <div class="mt-4 flex flex-wrap gap-2 text-xs">
-            <button onclick="quickCommand('weebot flow run build a REST API')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">flow run</button>
-            <button onclick="quickCommand('bash Get-Process | Select -First 5')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">bash</button>
-            <button onclick="quickCommand('python_execute import pandas; print(pandas.__version__)')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">python</button>
-            <button onclick="quickCommand('web_search latest AI agent frameworks 2025')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">search</button>
-            <button onclick="quickCommand('file_editor view ./weebot/config/settings.py')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">file_editor</button>
-            <button onclick="quickCommand('schedule list')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">schedule</button>
-            <button onclick="quickCommand('health')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">health</button>
-            <button onclick="quickCommand('rm -rf /')" class="demo-btn px-3 py-1 rounded-2xl bg-red-950 hover:bg-red-900 border border-red-800/30 text-red-400 text-xs font-mono">⚠ rm -rf /</button>
-            <button onclick="quickCommand('help')" class="demo-btn px-3 py-1 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 text-xs font-mono">help</button>
+        <!-- Subtle hero visual / gradient -->
+        <div class="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+    </section>
+
+    <!-- Trust Bar -->
+    <div class="border-y border-white/10 bg-zinc-900/50 py-4">
+        <div class="max-w-screen-xl mx-auto px-6">
+            <div class="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-xs uppercase tracking-[1.5px] text-zinc-500 font-medium">
+                <div>Works offline</div>
+                <div>End-to-end encrypted</div>
+                <div>100% local processing</div>
+                <div>Thunderbird native</div>
+                <div>Windows 11 optimized</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <section id="features" class="max-w-screen-xl mx-auto px-6 pt-20 pb-16">
+        <div class="text-center mb-12">
+            <div class="inline-block px-3 py-1 rounded-full bg-white/5 text-xs font-semibold tracking-widest mb-3 border border-white/10">CAPABILITIES</div>
+            <h2 class="section-header tracking-tighter">Everything you need.<br>Nothing you don't.</h2>
+            <p class="mt-3 max-w-md mx-auto text-zinc-400">Seven core capabilities designed for serious productivity on Windows 11.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <!-- Feature 1 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">🪟</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Native Windows 11 Integration</h3>
+                <p class="text-zinc-400 text-[15px]">Deep hooks into Windows shell, Task Scheduler, and File Explorer. Runs as a native tray app with full system privileges when needed.</p>
+            </div>
+
+            <!-- Feature 2 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">📧</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Thunderbird Mastery</h3>
+                <p class="text-zinc-400 text-[15px]">Full access to all 13 accounts, Gloda search, mbox parsing, and LinkedIn message extraction. Automate replies, tagging, and archiving.</p>
+            </div>
+
+            <!-- Feature 3 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-violet-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">🔗</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">LinkedIn Automation</h3>
+                <p class="text-zinc-400 text-[15px]">190+ LinkedIn messages indexed. Smart filtering, bulk connection management, and AI-assisted response drafting without ever leaving your desktop.</p>
+            </div>
+
+            <!-- Feature 4 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-amber-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">🖥️</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Interactive AI Terminal</h3>
+                <p class="text-zinc-400 text-[15px]">Powerful command-line interface with natural language. Run complex workflows like "scan all Gmail inboxes for LinkedIn invites" in seconds.</p>
+            </div>
+
+            <!-- Feature 5 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-rose-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">🔒</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Privacy-First Architecture</h3>
+                <p class="text-zinc-400 text-[15px]">All AI inference runs locally via Ollama or your chosen model. Zero telemetry. Full data sovereignty. No cloud required.</p>
+            </div>
+
+            <!-- Feature 6 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-sky-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">⚡</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Local-First Workflows</h3>
+                <p class="text-zinc-400 text-[15px]">Build and run automations entirely offline. Supports Python scripts, PowerShell, and custom agents with full access to your local data stores.</p>
+            </div>
+
+            <!-- Feature 7 -->
+            <div class="feature-card glass rounded-3xl p-6 border border-white/10">
+                <div class="w-11 h-11 rounded-2xl bg-teal-500/10 flex items-center justify-center mb-5">
+                    <span class="text-2xl">🧠</span>
+                </div>
+                <h3 class="font-semibold text-xl mb-2 tracking-tight">Context-Aware Intelligence</h3>
+                <p class="text-zinc-400 text-[15px]">Understands your entire Thunderbird profile, LinkedIn network, and Windows environment. Remembers context across sessions.</p>
+            </div>
         </div>
     </section>
 
-    <!-- Pricing -->
-    <section id="pricing" class="max-w-7xl mx-auto px-6 pb-24">
-        <div class="text-center mb-10">
-            <div class="uppercase tracking-[2px] text-xs font-mono text-indigo-400 mb-2">PRICING</div>
-            <h2 class="section-header text-5xl font-semibold tracking-tighter">Simple, transparent pricing.</h2>
-            <p class="mt-3 text-zinc-400">Start free. Scale when you need production power.</p>
+    <!-- Interactive Demo Section -->
+    <section id="demo" class="max-w-screen-xl mx-auto px-6 py-16 border-t border-white/10">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-10">
+                <div class="inline-block px-3 py-1 rounded-full bg-white/5 text-xs font-semibold tracking-widest mb-3 border border-white/10">LIVE DEMO</div>
+                <h2 class="section-header tracking-tighter">Try the terminal.<br>Right here.</h2>
+                <p class="mt-3 text-zinc-400">Simulated Weebot shell. Type real commands or click the suggestions below.</p>
+            </div>
+
+            <!-- Terminal -->
+            <div class="glass rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+                <!-- Terminal Header -->
+                <div class="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-white/10">
+                    <div class="flex items-center gap-x-2">
+                        <div class="flex gap-x-1.5">
+                            <div class="w-3 h-3 rounded-full bg-red-500/90"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500/90"></div>
+                            <div class="w-3 h-3 rounded-full bg-emerald-500/90"></div>
+                        </div>
+                        <div class="ml-3 text-xs font-mono text-zinc-400">weebot@windows11 — ~</div>
+                    </div>
+                    <div class="text-[10px] font-mono px-2 py-0.5 bg-zinc-800 rounded text-zinc-500">v2.4.1</div>
+                </div>
+
+                <!-- Terminal Body -->
+                <div id="terminal-body" 
+                     class="terminal p-5 h-[320px] overflow-y-auto text-sm leading-relaxed demo-output text-emerald-300 font-mono"
+                     style="scroll-behavior: smooth;">
+                    <div class="text-zinc-500 text-xs mb-3">Weebot Terminal — Type commands below. Press Enter to execute.</div>
+                    <!-- Dynamic content injected by JS -->
+                </div>
+
+                <!-- Input Line -->
+                <div class="flex items-center px-5 py-3.5 border-t border-white/10 bg-zinc-900/70">
+                    <div class="font-mono text-emerald-400 mr-2 select-none">$</div>
+                    <input id="terminal-input" 
+                           type="text" 
+                           class="flex-1 bg-transparent outline-none font-mono text-sm placeholder:text-zinc-600 text-emerald-300"
+                           placeholder="weebot scan linkedin --account 8alassa@gmail.com"
+                           onkeydown="if (event.key === 'Enter') executeTerminalCommand()">
+                    <button onclick="executeTerminalCommand()" 
+                            class="px-3 py-1 text-xs font-medium bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+                        RUN
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Commands -->
+            <div class="mt-5 flex flex-wrap gap-2 justify-center">
+                <button onclick="runQuickCommand('weebot status')" 
+                        class="text-xs px-3 py-1.5 rounded-2xl border border-white/10 hover:bg-white/5 transition-colors font-mono">weebot status</button>
+                <button onclick="runQuickCommand('weebot scan linkedin')" 
+                        class="text-xs px-3 py-1.5 rounded-2xl border border-white/10 hover:bg-white/5 transition-colors font-mono">weebot scan linkedin</button>
+                <button onclick="runQuickCommand('weebot list accounts')" 
+                        class="text-xs px-3 py-1.5 rounded-2xl border border-white/10 hover:bg-white/5 transition-colors font-mono">weebot list accounts</button>
+                <button onclick="runQuickCommand('weebot export thunderbird --profile fzore7k9')" 
+                        class="text-xs px-3 py-1.5 rounded-2xl border border-white/10 hover:bg-white/5 transition-colors font-mono">weebot export thunderbird</button>
+                <button onclick="runQuickCommand('weebot help')" 
+                        class="text-xs px-3 py-1.5 rounded-2xl border border-white/10 hover:bg-white/5 transition-colors font-mono">weebot help</button>
+            </div>
         </div>
-        
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="max-w-screen-xl mx-auto px-6 py-16 border-t border-white/10">
+        <div class="text-center mb-12">
+            <div class="inline-block px-3 py-1 rounded-full bg-white/5 text-xs font-semibold tracking-widest mb-3 border border-white/10">PRICING</div>
+            <h2 class="section-header tracking-tighter">Simple pricing.<br>Powerful results.</h2>
+            <p class="mt-3 text-zinc-400">Start free. Upgrade when you need more power.</p>
+        </div>
+
         <div class="grid md:grid-cols-3 gap-5 max-w-5xl mx-auto">
-            
-            <!-- Free -->
+            <!-- Free Tier -->
             <div class="pricing-card glass rounded-3xl p-8 border border-white/10 flex flex-col">
                 <div>
-                    <div class="text-sm font-medium text-zinc-400">Starter</div>
+                    <div class="text-sm font-semibold tracking-widest text-emerald-400">STARTER</div>
                     <div class="mt-3 flex items-baseline">
-                        <span class="text-6xl font-semibold tracking-tighter">$0</span>
-                        <span class="text-zinc-500 ml-1">/mo</span>
+                        <span class="text-5xl font-semibold tracking-tighter">$0</span>
                     </div>
-                    <div class="text-sm text-zinc-500 mt-1">For personal projects &amp; testing</div>
+                    <div class="text-sm text-zinc-400 mt-1">Forever free</div>
                 </div>
                 
-                <ul class="mt-8 space-y-3 text-sm flex-1">
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>PowerShell &amp; WSL2 execution</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Python sandbox (limited)</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Basic file editing</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>1 concurrent WebSocket</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>OpenRouter + 1 model</span></li>
+                <ul class="mt-8 space-y-3.5 text-sm flex-1">
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>1 Windows 11 device</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Basic Thunderbird integration</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>LinkedIn message viewer</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Local AI (Ollama)</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Community support</span></li>
                 </ul>
                 
-                <button onclick="selectPlan('free')" 
-                        class="mt-8 w-full py-3 rounded-2xl border border-white/15 hover:bg-white/5 text-sm font-semibold transition-colors">
-                    Start for free
-                </button>
+                <a href="#" class="mt-8 block text-center py-3.5 rounded-2xl border border-white/20 hover:bg-white/5 font-medium transition-colors">Get started for free</a>
             </div>
-            
-            <!-- Pro (popular) -->
-            <div class="pricing-card popular glass-strong rounded-3xl p-8 border-2 border-indigo-500 flex flex-col relative">
-                <div class="absolute -top-3 right-6 px-4 py-0.5 text-xs font-semibold tracking-widest bg-indigo-600 text-white rounded-3xl">MOST POPULAR</div>
+
+            <!-- Pro Tier (Popular) -->
+            <div class="pricing-card glass rounded-3xl p-8 border border-white/10 flex flex-col relative popular">
+                <div class="absolute -top-3 right-6 px-4 py-1 bg-white text-zinc-950 text-xs font-bold tracking-widest rounded-full">MOST POPULAR</div>
                 
                 <div>
-                    <div class="text-sm font-medium text-indigo-400">Pro</div>
+                    <div class="text-sm font-semibold tracking-widest text-violet-400">PRO</div>
                     <div class="mt-3 flex items-baseline">
-                        <span class="text-6xl font-semibold tracking-tighter">$29</span>
-                        <span class="text-zinc-500 ml-1">/mo</span>
+                        <span class="text-5xl font-semibold tracking-tighter">$19</span>
+                        <span class="ml-1.5 text-zinc-400">/mo</span>
                     </div>
-                    <div class="text-sm text-zinc-500 mt-1">For serious builders &amp; teams</div>
+                    <div class="text-sm text-zinc-400 mt-1">Billed annually or $24 monthly</div>
                 </div>
                 
-                <ul class="mt-8 space-y-3 text-sm flex-1">
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Everything in Starter</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Full Playwright automation</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Safety guards + rollback</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Unlimited WebSocket streams</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Full MCP server + IDE sync</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>All models (OpenAI, Anthropic, DeepSeek, OpenRouter)</span></li>
+                <ul class="mt-8 space-y-3.5 text-sm flex-1">
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Unlimited devices</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Full Thunderbird + Gloda access</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Advanced LinkedIn automation</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Custom agents &amp; workflows</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Priority local model support</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Private Discord community</span></li>
                 </ul>
                 
-                <button onclick="selectPlan('pro')" 
-                        class="mt-8 w-full py-3 rounded-2xl bg-white text-zinc-950 hover:bg-zinc-100 font-semibold text-sm transition-all active:scale-[0.985]">
-                    Start 14-day trial
-                </button>
+                <a href="#" onclick="selectPlan('pro')" class="mt-8 block text-center py-3.5 rounded-2xl bg-white text-zinc-950 font-semibold hover:bg-zinc-100 transition-colors">Start 14-day trial</a>
             </div>
-            
+
             <!-- Enterprise -->
             <div class="pricing-card glass rounded-3xl p-8 border border-white/10 flex flex-col">
                 <div>
-                    <div class="text-sm font-medium text-zinc-400">Enterprise</div>
+                    <div class="text-sm font-semibold tracking-widest text-amber-400">ENTERPRISE</div>
                     <div class="mt-3 flex items-baseline">
-                        <span class="text-6xl font-semibold tracking-tighter">Custom</span>
+                        <span class="text-5xl font-semibold tracking-tighter">Custom</span>
                     </div>
-                    <div class="text-sm text-zinc-500 mt-1">For production teams &amp; agencies</div>
+                    <div class="text-sm text-zinc-400 mt-1">For teams &amp; power users</div>
                 </div>
                 
-                <ul class="mt-8 space-y-3 text-sm flex-1">
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Everything in Pro</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Self-hosted deployment</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Private model endpoints</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>SSO + audit logs</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Dedicated support &amp; SLA</span></li>
-                    <li class="flex items-start gap-x-2.5"><span class="text-emerald-400 mt-1">✓</span> <span>Custom tool development</span></li>
+                <ul class="mt-8 space-y-3.5 text-sm flex-1">
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Everything in Pro</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Self-hosted deployment</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Team collaboration features</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Custom model fine-tuning</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>SSO + audit logs</span></li>
+                    <li class="flex items-start gap-3"><span class="mt-1 text-emerald-400">✓</span> <span>Dedicated support &amp; SLA</span></li>
                 </ul>
                 
-                <button onclick="selectPlan('enterprise')" 
-                        class="mt-8 w-full py-3 rounded-2xl border border-white/15 hover:bg-white/5 text-sm font-semibold transition-colors">
-                    Talk to sales
-                </button>
+                <a href="#" onclick="selectPlan('enterprise')" class="mt-8 block text-center py-3.5 rounded-2xl border border-white/20 hover:bg-white/5 font-medium transition-colors">Talk to sales</a>
             </div>
-            
         </div>
+        
+        <p class="text-center text-xs text-zinc-500 mt-8">All plans include full source access for self-hosting. Cancel anytime.</p>
     </section>
 
-    <!-- Footer -->
-    <footer class="border-t border-white/10 bg-zinc-950">
-        <div class="max-w-7xl mx-auto px-6 py-12 text-sm flex flex-col md:flex-row justify-between items-center gap-y-4 text-zinc-500">
-            <div>© 2025 Weebot. Built for Windows 11 agents.</div>
-            <div class="flex gap-x-6">
-                <a href="docs.html" class="hover:text-white transition-colors">Docs</a>
-                <a href="#" class="hover:text-white transition-colors">GitHub</a>
-                <a href="#" class="hover:text-white transition-colors">Status</a>
-                <a href="#" class="hover:text-white transition-colors">Security</a>
+    <!-- Final CTA -->
+    <div class="max-w-screen-xl mx-auto px-6 pb-16">
+        <div class="glass rounded-3xl p-10 md:p-14 text-center border border-white/10">
+            <h3 class="font-display text-4xl tracking-tighter font-semibold">Ready to take control of your Windows 11 experience?</h3>
+            <p class="mt-3 text-lg text-zinc-400 max-w-md mx-auto">Download Weebot today. Your data stays yours.</p>
+            
+            <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="#" class="inline-flex items-center justify-center px-8 py-4 rounded-3xl bg-white text-zinc-950 font-semibold text-lg hover:bg-zinc-100 transition-all">Download for Windows 11</a>
+                <a href="#demo" class="inline-flex items-center justify-center px-8 py-4 rounded-3xl border border-white/20 hover:bg-white/5 font-medium text-lg transition-all">Explore the demo first</a>
             </div>
-            <div class="text-xs">Single-file. Zero dependencies.</div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 bg-zinc-900/60">
+        <div class="max-w-screen-xl mx-auto px-6 py-10">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-y-6 text-sm">
+                <div class="flex items-center gap-x-3">
+                    <div class="flex items-center justify-center w-7 h-7 rounded-lg bg-white text-zinc-950 font-bold text-lg tracking-tighter">W</div>
+                    <span class="font-medium">Weebot</span>
+                    <span class="text-zinc-500">© 2026</span>
+                </div>
+                
+                <div class="flex flex-wrap gap-x-6 gap-y-1 text-zinc-400">
+                    <a href="#" class="hover:text-zinc-200">Documentation</a>
+                    <a href="#" class="hover:text-zinc-200">GitHub</a>
+                    <a href="#" class="hover:text-zinc-200">Privacy</a>
+                    <a href="#" class="hover:text-zinc-200">Security</a>
+                    <a href="#" class="hover:text-zinc-200">Status</a>
+                </div>
+                
+                <div class="text-zinc-500 text-xs md:text-sm">
+                    Built for privacy. Made in Greece.
+                </div>
+            </div>
         </div>
     </footer>
 
+    <!-- Tailwind Script + Custom JS -->
     <script>
-        // Tailwind script
-        function initializeTailwind() {
-            document.documentElement.style.setProperty('--accent', '#6366f1');
+        // Tailwind script configuration
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#3b82f6');
+            
+            // Tailwind script already loaded via CDN
+            // Additional config if needed
+            console.log('%c[Weebot] Tailwind initialized', 'color:#3f3f46');
         }
-        
-        // Terminal logic
-        let terminalOutput = document.getElementById('terminal-output');
-        let terminalInput = document.getElementById('terminal-input');
-        let terminalBody = document.getElementById('terminal-body');
-        
-        function addTerminalLine(text, type = 'output') {
-            const line = document.createElement('div');
-            line.className = `terminal-line mb-0.5 ${type === 'input' ? 'text-emerald-400' : type === 'error' ? 'text-red-400' : 'text-emerald-300/90'}`;
-            line.textContent = text;
-            terminalOutput.appendChild(line);
-            terminalBody.scrollTop = terminalBody.scrollHeight;
-        }
-        
-        function addTerminalHTML(html) {
-            const line = document.createElement('div');
-            line.className = 'terminal-line mb-1 text-emerald-300/90';
-            line.innerHTML = html;
-            terminalOutput.appendChild(line);
-            terminalBody.scrollTop = terminalBody.scrollHeight;
-        }
-        
-        function asyncType(steps) {
-            let delay = 0;
-            steps.forEach(step => {
-                delay += step.delay || 200;
-                setTimeout(() => {
-                    addTerminalHTML(step.html);
-                }, delay);
+
+        // Navbar scroll effect
+        function initNavbar() {
+            const navbar = document.getElementById('navbar');
+            
+            window.addEventListener('scroll', () => {
+                if (window.scrollY > 20) {
+                    navbar.classList.add('nav-scrolled');
+                } else {
+                    navbar.classList.remove('nav-scrolled');
+                }
             });
         }
-        
-        function handleKeydown(e) {
-            if (e.key === 'Enter') { handleTerminalCommand(); return; }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (historyIdx < cmdHistory.length - 1) {
-                    historyIdx++;
-                    terminalInput.value = cmdHistory[historyIdx];
-                }
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (historyIdx > 0) { historyIdx--; terminalInput.value = cmdHistory[historyIdx]; }
-                else { historyIdx = -1; terminalInput.value = ''; }
-            }
-        }
-        
-        // Command history
-        let cmdHistory = [];
-        let historyIdx = -1;
 
-        function handleTerminalCommand() {
-            const input = terminalInput.value.trim();
-            if (!input) return;
-            
-            cmdHistory.unshift(input);
-            historyIdx = -1;
-            addTerminalLine('PS C:\\Users\\tesse> ' + input, 'input');
-            terminalInput.value = '';
-            
-            const cmd = input.toLowerCase();
-            const raw = input;
-            
-            setTimeout(() => {
-                if (cmd === 'help') {
-                    addTerminalHTML(`
-                        <div class="text-indigo-400 text-xs font-semibold mb-2">🤖 Weebot Agent — 37 Tools Available</div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0.5 text-xs">
-                            <div><span class="text-emerald-400">bash</span> &lt;command&gt; — PowerShell/WSL2 execution</div>
-                            <div><span class="text-emerald-400">python_execute</span> &lt;code&gt; — sandboxed Python</div>
-                            <div><span class="text-emerald-400">file_editor</span> view|create|str_replace &lt;path&gt;</div>
-                            <div><span class="text-emerald-400">web_search</span> &lt;query&gt; — DuckDuckGo + Bing</div>
-                            <div><span class="text-emerald-400">advanced_browser</span> goto|click|fill &lt;url&gt;</div>
-                            <div><span class="text-emerald-400">schedule</span> list|create|pause — APScheduler</div>
-                            <div><span class="text-emerald-400">mcp status</span> — MCP server info</div>
-                            <div><span class="text-emerald-400">health</span> — system health check</div>
-                            <div><span class="text-emerald-400">weebot flow run</span> &lt;task&gt; — Plan-Act agent</div>
-                            <div><span class="text-emerald-400">dispatch_parallel_tasks</span> — multi-agent</div>
-                            <div><span class="text-emerald-400">image_gen</span> &lt;prompt&gt; — SVG/raster gen</div>
-                            <div><span class="text-emerald-400">clear</span> — reset terminal</div>
-                        </div>
-                        <div class="text-zinc-500 text-[10px] mt-2">5-layer security: BashGuard → CommandValidator → PathValidator → ApprovalPolicy → CapabilityGate</div>
-                    `);
-                } else if (cmd === 'ls' || cmd === 'dir' || cmd.startsWith('bash') && (cmd.includes('ls') || cmd.includes('dir') || cmd.includes('get-childitem'))) {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:bash | timeout:30s | shell:powershell</span>`);
-                    addTerminalLine('    Directory: E:\\Documents\\Vibe-Coding\\weebot');
-                    addTerminalHTML(`<div class="text-xs pl-1 leading-5">
-                        Mode         LastWriteTime       Length Name<br>
-                        ----         -------------       ------ ----<br>
-                        d----   06/12/2025  14:47              <span class="text-sky-400">weebot/</span><br>
-                        d----   06/12/2025  14:35              <span class="text-sky-400">tests/</span><br>
-                        d----   06/12/2025  14:20              <span class="text-sky-400">weebot-ui/</span><br>
-                        -a---   06/12/2025  14:47    39681     <span class="text-emerald-300">CLAUDE.md</span><br>
-                        -a---   06/12/2025  13:19     5510     <span class="text-emerald-300">requirements.txt</span><br>
-                        <span class="text-zinc-500">5 items | exit code: 0 | elapsed: 42ms</span>
-                    </div>`);
-                } else if (cmd.startsWith('python') || cmd.startsWith('python_execute')) {
-                    const code = raw.replace(/^python_execute\s*|^python\s*/i, '') || 'print(2 + 2)';
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:python_execute | sandbox:isolated | memory:256MB | timeout:30s</span>`);
-                    asyncType([
-                        {html: `<span class="text-yellow-400">⚡ Executing in sandboxed subprocess...</span>`, delay: 200},
-                        {html: `<span class="text-zinc-400">>>> ${code}</span>`, delay: 400},
-                        {html: `<span class="text-white font-medium">${code.includes('pandas') ? '2.2.3' : code.includes('version') ? '3.12.10' : '4'}</span>`, delay: 600},
-                        {html: `<span class="text-zinc-500 text-[10px]">exit code: 0 | elapsed: 84ms | peak memory: 28MB/256MB</span>`, delay: 200},
-                    ]);
-                } else if (cmd.startsWith('weebot flow run') || cmd.startsWith('flow run')) {
-                    const task = raw.replace(/^(weebot )?flow run\s*/i, '') || 'build a REST API';
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">flow:PlanActFlow | model:deepseek/deepseek-chat | session:${Math.random().toString(36).slice(2,10)}</span>`);
-                    asyncType([
-                        {html: `<span class="text-indigo-400">▸ Transition to state: PlanningState</span>`, delay: 300},
-                        {html: `<span class="text-zinc-400">  Planning: "${task}"...</span>`, delay: 800},
-                        {html: `<span class="text-emerald-400">  ✓ Plan created (3 steps)</span>`, delay: 600},
-                        {html: `<span class="text-indigo-400">▸ Transition to state: ExecutingState</span>`, delay: 300},
-                        {html: `<span class="text-zinc-400">  Step 1/3: Initialize project structure</span>`, delay: 500},
-                        {html: `<span class="text-zinc-500 text-[10px]">    tool:bash | command: mkdir -p src/ tests/ | exit:0 | 32ms</span>`, delay: 400},
-                        {html: `<span class="text-zinc-400">  Step 2/3: Generate source code</span>`, delay: 500},
-                        {html: `<span class="text-zinc-500 text-[10px]">    tool:file_editor | command: create src/main.py | 156 lines | 1.2s</span>`, delay: 600},
-                        {html: `<span class="text-zinc-400">  Step 3/3: Write tests</span>`, delay: 500},
-                        {html: `<span class="text-zinc-500 text-[10px]">    tool:python_execute | pytest tests/ | 4 passed | 2.1s</span>`, delay: 600},
-                        {html: `<span class="text-indigo-400">▸ Transition to state: ReviewingState</span>`, delay: 300},
-                        {html: `<span class="text-emerald-400">  Code review: APPROVED (confidence: 94%)</span>`, delay: 400},
-                        {html: `<span class="text-indigo-400">▸ Transition to state: CompletedState</span>`, delay: 200},
-                        {html: `<span class="text-emerald-400 font-medium">✓ Flow completed in 6.2s | 3/3 steps | tokens: 4,821</span>`, delay: 300},
-                    ]);
-                } else if (cmd.startsWith('web_search') || cmd.startsWith('search')) {
-                    const query = raw.replace(/^(web_)?search\s*/i, '') || 'AI agent frameworks';
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:web_search | engine:DuckDuckGo | rerank:cross-encoder</span>`);
-                    asyncType([
-                        {html: `<span class="text-sky-400">Searching: "${query}"...</span>`, delay: 400},
-                        {html: `<div class="pl-2 border-l-2 border-sky-800 mt-1 text-xs"><span class="text-white">1.</span> <span class="text-sky-300">LangChain vs CrewAI vs AutoGen</span><br><span class="text-zinc-500">https://blog.example.com/ai-agents-2025</span><br><span class="text-zinc-400">Comprehensive comparison of agent frameworks...</span></div>`, delay: 300},
-                        {html: `<div class="pl-2 border-l-2 border-sky-800 mt-1 text-xs"><span class="text-white">2.</span> <span class="text-sky-300">Building Production AI Agents</span><br><span class="text-zinc-500">https://arxiv.org/abs/2025.12345</span><br><span class="text-zinc-400">Survey of 47 agent architectures with benchmarks...</span></div>`, delay: 300},
-                        {html: `<div class="pl-2 border-l-2 border-sky-800 mt-1 text-xs"><span class="text-white">3.</span> <span class="text-sky-300">Weebot: Windows-Native Agent Framework</span><br><span class="text-zinc-500">https://github.com/georgehadji/weebot</span><br><span class="text-zinc-400">Clean Architecture agent with 37 tools, MCP server...</span></div>`, delay: 300},
-                        {html: `<span class="text-zinc-500 text-[10px]">5 results | reranked | elapsed: 1.4s</span>`, delay: 200},
-                    ]);
-                } else if (cmd === 'health') {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">endpoint: /api/health</span>`);
-                    asyncType([
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> llm_providers: <span class="text-emerald-400">healthy</span> (4 available)</div>`, delay: 200},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> database: <span class="text-emerald-400">healthy</span> (SQLite WAL, 5 pool connections)</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> browser: <span class="text-emerald-400">healthy</span> (Playwright available)</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> sandbox: <span class="text-emerald-400">healthy</span> (NativeWindows, 5 capabilities)</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> scheduler: <span class="text-emerald-400">healthy</span> (3 jobs active)</div>`, delay: 150},
-                        {html: `<div class="text-xs mt-1 font-medium">Overall: <span class="text-emerald-400">HEALTHY</span> | Uptime: 4h 23m | Sessions: 12</div>`, delay: 200},
-                    ]);
-                } else if (cmd.startsWith('schedule')) {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:schedule | backend:APScheduler</span>`);
-                    asyncType([
-                        {html: `<div class="text-xs font-medium text-indigo-400 mb-1">Scheduled Jobs (3 active)</div>`, delay: 200},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> memory-compact | interval:4h | last: 2h ago | runs: 6</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> health-check | interval:5m | last: 30s ago | runs: 51</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> session-cleanup | cron:daily@3am | last: 21h ago | runs: 4</div>`, delay: 150},
-                    ]);
-                } else if (cmd.includes('rm -rf') || cmd.includes('format c:') || cmd.includes('mkfs')) {
-                    addTerminalHTML(`
-                        <div class="bg-red-950/50 border border-red-800/40 rounded-xl p-3 mt-1">
-                            <div class="text-red-400 font-semibold text-xs mb-1">✗ BLOCKED by BashGuard (Layer 1/5)</div>
-                            <div class="text-red-300/80 text-xs">Risk: <span class="font-mono bg-red-900/50 px-1 rounded">BLOCKED</span></div>
-                            <div class="text-red-300/80 text-xs mt-1">Reason: Attempting to delete root directory</div>
-                            <div class="text-zinc-500 text-[10px] mt-2">Suggestion: Use specific file paths instead of wildcards.</div>
-                            <div class="text-zinc-500 text-[10px]">This command will NEVER execute regardless of permissions.</div>
-                        </div>
-                    `);
-                } else if (cmd.startsWith('file_editor') || cmd.startsWith('edit')) {
-                    const file = cmd.split(' ')[1] || 'README.md';
-                    addTerminalHTML(`
-                        <span class="text-amber-400">Safety guard active</span><br>
-                        Preview diff for <span class="font-semibold">${file}</span>:<br>
-                        <span class="text-xs text-zinc-400">+3 lines, -1 line</span><br>
-                        <span class="text-emerald-400">Changes staged. Type "commit" to apply or "rollback".</span>
-                    `);
-                } else if (cmd.includes('websocket') || cmd.includes('ws')) {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">interface:WebSocket | port:8000</span>`);
-                    asyncType([
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> /ws — global events (connected)</div>`, delay: 150},
-                        {html: `<div class="text-xs"><span class="text-emerald-400">●</span> /ws/sessions/d8df09ba — session stream (active)</div>`, delay: 150},
-                        {html: `<div class="text-xs mt-1">Auth: token-based (hmac.compare_digest) | Latency: 8ms</div>`, delay: 200},
-                        {html: `<div class="text-xs">Events/sec: 12.4 | Total published: 1,847</div>`, delay: 150},
-                    ]);
-                } else if (cmd.includes('mcp')) {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">server:FastMCP | transport:stdio+SSE</span>`);
-                    asyncType([
-                        {html: `<span class="text-teal-400">MCP Server: weebot@127.0.0.1:8765</span>`, delay: 200},
-                        {html: `<div class="text-xs mt-1">Tools exposed: bash, python_execute, web_search, file_editor, ping</div>`, delay: 200},
-                        {html: `<div class="text-xs">Resources: weebot://activity, weebot://state, weebot://costs, weebot://tools</div>`, delay: 200},
-                        {html: `<div class="text-xs">Auth: ${Math.random() > 0.5 ? '<span class="text-emerald-400">enabled</span> (WEEBOT_MCP_API_KEY)' : '<span class="text-amber-400">disabled</span> (set WEEBOT_MCP_API_KEY)'}</div>`, delay: 200},
-                        {html: `<div class="text-xs">Rate limits: bash(10/s), python(5/s), search(5/0.5s), editor(20/5s)</div>`, delay: 150},
-                    ]);
-                } else if (cmd.startsWith('bash') || cmd.startsWith('powershell')) {
-                    const shellCmd = raw.replace(/^(bash|powershell)\s*/i, '');
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:bash | shell:powershell | security:5-layer | timeout:30s</span>`);
-                    asyncType([
-                        {html: `<span class="text-emerald-400">PS&gt;</span> ${shellCmd || 'Get-Process | Select -First 3'}`, delay: 200},
-                        {html: `<div class="text-xs text-zinc-300">Handles  NPM(K)  PM(K)   WS(K) CPU(s)   Id  ProcessName</div>`, delay: 300},
-                        {html: `<div class="text-xs text-zinc-300">   1242      72   1844   12456   0.12  4824 weebot-agent</div>`, delay: 100},
-                        {html: `<div class="text-xs text-zinc-300">    384      22    512    8420   0.04  1200 python</div>`, delay: 100},
-                        {html: `<div class="text-xs text-zinc-300">    892      45   2048   24560   1.84   920 chrome</div>`, delay: 100},
-                        {html: `<span class="text-zinc-500 text-[10px]">exit code: 0 | elapsed: 156ms</span>`, delay: 200},
-                    ]);
-                } else if (cmd.startsWith('advanced_browser') || cmd.startsWith('playwright') || cmd.startsWith('browser')) {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:advanced_browser | engine:Playwright | mode:headless</span>`);
-                    asyncType([
-                        {html: `<span class="text-sky-400">🌐 Launching Chromium...</span>`, delay: 300},
-                        {html: `<span class="text-zinc-400">   goto: https://github.com/georgehadji/weebot</span>`, delay: 500},
-                        {html: `<span class="text-zinc-400">   title: "georgehadji/weebot: AI Agent Framework"</span>`, delay: 300},
-                        {html: `<span class="text-emerald-400">   ✓ Screenshot saved: ./screenshot-001.png (1920×1080)</span>`, delay: 400},
-                        {html: `<span class="text-zinc-500 text-[10px]">page loaded | 18 actions available | elapsed: 2.1s</span>`, delay: 200},
-                    ]);
-                } else if (cmd === 'clear') {
-                    terminalOutput.innerHTML = '';
-                } else {
-                    addTerminalHTML(`<span class="text-zinc-500 text-[10px]">tool:bash | passthrough</span>`);
-                    asyncType([
-                        {html: `<span class="text-emerald-300">${raw}</span>`, delay: 100},
-                        {html: `<span class="text-zinc-400 text-xs">Command executed successfully.</span>`, delay: 300},
-                        {html: `<span class="text-zinc-500 text-[10px]">exit code: 0 | streamed via WebSocket | elapsed: 89ms</span>`, delay: 200},
-                    ]);
-                }
-            }, 120);
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
         }
+
+        // Terminal Demo Logic
+        let terminalHistory = [];
         
-        function quickCommand(cmd) {
-            terminalInput.value = cmd;
-            handleTerminalCommand();
-        }
-        
-        // Pricing selection
-        function selectPlan(plan) {
-            const btns = document.querySelectorAll('#pricing button');
-            let message = '';
+        function addTerminalLine(text, isCommand = false, isError = false) {
+            const body = document.getElementById('terminal-body');
+            const line = document.createElement('div');
+            line.className = `terminal-line mb-1 ${isCommand ? 'text-emerald-400' : isError ? 'text-red-400' : 'text-emerald-300'}`;
             
-            if (plan === 'free') {
-                message = 'Thanks! Redirecting to free signup...';
-            } else if (plan === 'pro') {
-                message = 'Starting your 14-day Pro trial...';
+            if (isCommand) {
+                line.innerHTML = `<span class="text-emerald-500">$</span> ${text}`;
             } else {
-                message = 'Opening enterprise contact form...';
+                line.textContent = text;
             }
+            
+            body.appendChild(line);
+            body.scrollTop = body.scrollHeight;
+            
+            // Keep history limited
+            if (body.children.length > 22) {
+                body.removeChild(body.children[0]);
+            }
+        }
+
+        function executeTerminalCommand() {
+            const input = document.getElementById('terminal-input');
+            const command = input.value.trim();
+            
+            if (!command) return;
+            
+            const body = document.getElementById('terminal-body');
+            
+            // Echo command
+            addTerminalLine(command, true);
+            
+            // Process command
+            setTimeout(() => {
+                let response = '';
+                const lowerCmd = command.toLowerCase();
+                
+                if (lowerCmd === 'weebot status') {
+                    response = 'Weebot v2.4.1 • Active\nProfile: fzore7k9.default-release\nAccounts: 13 (12 mail + 1 feeds)\nLinkedIn messages indexed: 190\nLocal model: phi3:mini (Ollama)\nStatus: All systems nominal';
+                } 
+                else if (lowerCmd.includes('scan linkedin')) {
+                    response = 'Scanning LinkedIn folders...\nFound 109 conversation threads\n190 total messages across 3 accounts\nTop category: "Invitation to connect" (53)\n\nResults saved to ~/weebot/linkedin-scan-2026-06-12.json';
+                } 
+                else if (lowerCmd === 'weebot list accounts' || lowerCmd.includes('list accounts')) {
+                    response = 'Active accounts:\n• 8alassanews@gmail.com (default)\n• 8alassa@gmail.com\n• hatzivantsidis@gmail.com\n• yorgides@gmail.com\n• 8alassamarketing@gmail.com\n• ... + 8 more\nLocal Folders: server2';
+                } 
+                else if (lowerCmd.includes('export thunderbird')) {
+                    response = 'Exporting Thunderbird profile...\nProfile: fzore7k9.default-release\nExtracted 146,300 messages\nLinkedIn subset: 190 messages\nOutput: E:\\Output\\weebot-export-2026-06-12.zip\nDone in 11.4s';
+                } 
+                else if (lowerCmd === 'weebot help' || lowerCmd === 'help') {
+                    response = 'Available commands:\n  weebot status\n  weebot scan linkedin\n  weebot list accounts\n  weebot export thunderbird\n  weebot analyze --folder "Social Networks"\n  weebot run workflow "daily-linkedin"\n\nType any command to simulate.';
+                } 
+                else if (lowerCmd.includes('analyze')) {
+                    response = 'Analyzing folder...\nDetected 37 LinkedIn messages in Social Networks\nSentiment: 68% neutral, 21% positive\nTop senders: Stella Kasdagli, Fast Type\nRecommendations generated.';
+                } 
+                else {
+                    response = `Command executed: ${command}\nResult: Success. (Demo simulation)\nTip: Try "weebot scan linkedin" or "weebot status"`;
+                }
+                
+                // Split multi-line responses
+                response.split('\n').forEach(line => {
+                    addTerminalLine(line);
+                });
+                
+                // Add subtle success note
+                if (!lowerCmd.includes('help')) {
+                    setTimeout(() => {
+                        addTerminalLine('✓ Command completed successfully.', false);
+                    }, 420);
+                }
+            }, 280);
+            
+            // Clear input
+            input.value = '';
+        }
+
+        function runQuickCommand(cmd) {
+            const input = document.getElementById('terminal-input');
+            const body = document.getElementById('terminal-body');
+            
+            // Clear previous if too long
+            if (body.children.length > 15) {
+                body.innerHTML = '<div class="text-zinc-500 text-xs mb-3">Weebot Terminal — Type commands below. Press Enter to execute.</div>';
+            }
+            
+            input.value = cmd;
+            executeTerminalCommand();
+        }
+
+        // Initialize terminal with welcome message
+        function initTerminal() {
+            const body = document.getElementById('terminal-body');
+            body.innerHTML = `
+                <div class="text-zinc-500 text-xs mb-3">Weebot Terminal — Type commands below. Press Enter to execute.</div>
+                <div class="terminal-line mb-1 text-emerald-300">Weebot initialized. 13 accounts loaded. 190 LinkedIn messages indexed.</div>
+                <div class="terminal-line mb-1 text-emerald-300">Ready. Type "weebot help" for available commands.</div>
+            `;
+            
+            // Focus input on click anywhere in terminal
+            const terminalContainer = body.parentElement;
+            terminalContainer.addEventListener('click', () => {
+                document.getElementById('terminal-input').focus();
+            });
+            
+            // Keyboard hint
+            setTimeout(() => {
+                const hint = document.createElement('div');
+                hint.className = 'text-[10px] text-zinc-600 mt-2';
+                hint.textContent = 'Tip: Click suggestions above or type your own command';
+                body.appendChild(hint);
+            }, 1800);
+        }
+
+        // Pricing plan selection
+        function selectPlan(plan) {
+            const msg = plan === 'pro' 
+                ? 'Thanks! Redirecting to checkout for Pro plan (demo mode).'
+                : 'Thanks! Our sales team will contact you shortly (demo).';
             
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 glass-strong px-6 py-3 rounded-3xl text-sm border border-white/10 shadow-xl flex items-center gap-x-3 z-[100]';
+            toast.className = `fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl glass border border-white/10 text-sm shadow-xl z-[100]`;
             toast.innerHTML = `
-                <span>${message}</span>
-                <button onclick="this.parentElement.remove()" class="text-xs px-3 py-1 bg-white/10 rounded-2xl">OK</button>
+                <div class="flex items-center gap-x-3">
+                    <span>${msg}</span>
+                    <button onclick="this.parentElement.remove()" class="text-xs px-3 py-1 bg-white/10 rounded-xl">OK</button>
+                </div>
             `;
             document.body.appendChild(toast);
             
@@ -737,68 +699,88 @@
                 if (toast.parentElement) toast.remove();
             }, 4200);
         }
-        
-        // Keyboard support for terminal
-        function setupKeyboard() {
+
+        // Keyboard shortcuts
+        function initKeyboardShortcuts() {
             document.addEventListener('keydown', function(e) {
                 if (e.key === '/' && document.activeElement.tagName === 'BODY') {
                     e.preventDefault();
-                    const input = document.getElementById('terminal-input');
-                    if (input) input.focus();
+                    const demo = document.getElementById('demo');
+                    demo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => {
+                        document.getElementById('terminal-input').focus();
+                    }, 650);
+                }
+                
+                if (e.metaKey && e.key === 'k') {
+                    e.preventDefault();
+                    document.getElementById('terminal-input').focus();
                 }
             });
             
-            // Auto focus hint
-            const termInput = document.getElementById('terminal-input');
-            if (termInput) {
-                termInput.addEventListener('focus', () => {
-                    if (!termInput.placeholder.includes('focused')) {
-                        termInput.placeholder = 'Type command and press Enter (or / to focus)';
+            // Add hint in console
+            console.log('%c[Weebot] Keyboard shortcuts: Press "/" to jump to demo. Cmd/Ctrl+K focuses terminal.', 'color:#52525b');
+        }
+
+        // Smooth scroll for anchor links
+        function initSmoothScroll() {
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        e.preventDefault();
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        
+                        // Close mobile menu if open
+                        const mobile = document.getElementById('mobile-menu');
+                        if (!mobile.classList.contains('hidden')) {
+                            mobile.classList.add('hidden');
+                        }
                     }
                 });
-            }
+            });
         }
-        
-        // Initialize everything
-        function init() {
-            initializeTailwind();
-            setupKeyboard();
+
+        // Boot everything
+        function bootWeebotLanding() {
+            initTailwind();
+            initNavbar();
+            initTerminal();
+            initKeyboardShortcuts();
+            initSmoothScroll();
             
-            // Seed initial terminal output
+            // Easter egg: type "weebot" in console
+            console.log('%c[Weebot] Landing page ready. All systems green.', 'color:#27272a');
+            
+            // Optional: Preload a demo command after 9 seconds if user hasn't interacted
             setTimeout(() => {
-                const output = document.getElementById('terminal-output');
-                if (output && output.children.length === 0) {
-                    const seed = document.createElement('div');
-                    seed.className = 'terminal-line text-xs text-zinc-500 mb-2';
-                    seed.textContent = 'Ready. All 7 features available in this demo.';
-                    output.appendChild(seed);
+                const body = document.getElementById('terminal-body');
+                if (body && body.children.length < 6) {
+                    // Only if still at initial state
+                    const hint = document.createElement('div');
+                    hint.className = 'text-[10px] text-zinc-600 mt-1 italic';
+                    hint.textContent = 'Try clicking one of the quick command buttons above ↑';
+                    body.appendChild(hint);
                 }
-            }, 800);
-            
-            // Subtle hero animation on load
-            const hero = document.querySelector('header');
-            if (hero) {
-                hero.style.opacity = '0';
-                hero.style.transform = 'translateY(8px)';
-                setTimeout(() => {
-                    hero.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
-                    hero.style.opacity = '1';
-                    hero.style.transform = 'translateY(0)';
-                }, 80);
-            }
-            
-            // Accessibility: announce features count
-            console.log('%c[Weebot] Landing initialized — 7 feature cards populated with inline SVGs.', 'color:#52525b');
+            }, 9000);
         }
+
+        // Boot on load
+        window.onload = bootWeebotLanding;
         
-        // Boot
-        window.onload = init;
-        
-        // Bonus: expose quick demo in console for devs
-        window.weebotDemo = { run: (cmd) => { 
-            const i = document.getElementById('terminal-input'); 
-            if (i) { i.value = cmd; i.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); } 
-        }};
+        // Expose a couple of helpers for debugging / advanced users
+        window.weebotDemo = {
+            run: (cmd) => {
+                const input = document.getElementById('terminal-input');
+                input.value = cmd;
+                const event = new KeyboardEvent('keydown', { key: 'Enter' });
+                input.dispatchEvent(event);
+            },
+            clear: () => {
+                const body = document.getElementById('terminal-body');
+                body.innerHTML = '<div class="text-zinc-500 text-xs mb-3">Terminal cleared.</div>';
+            }
+        };
     </script>
 </body>
 </html>

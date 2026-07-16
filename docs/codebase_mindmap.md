@@ -1,6 +1,37 @@
 # ARCHITECTURE MINDMAP — Forensic Reconstruction
 
-> **Date:** 2026-06-07
+> **Date:** 2026-06-22 (last full reconstruction: 2026-06-07; delta updates applied 2026-06-22)
+
+## DELTA UPDATE — 2026-06-22 (15 commits since last reconstruction)
+
+### New Additions
+- **SemanticTaskRouter** (`commit 2985ae4`): New ML-based task-to-model router replacing keyword-only classifier. Accuracy: 52%→80% across 3 cycles (`a6c35cb` → `b9329a5` → `402207c`).
+- **Model-aware tool selection (P8)** (`commit dcf8669`): Phase 4 EXPAND feature — selects tools based on model capability profiles rather than static catalogs. Part of the ongoing 4-phase hardening cycle.
+- **Credit pre-check** (`commit 233f8ba`): Pre-validation of user credit before task execution, preventing wasted tool calls on quota-exhausted accounts.
+
+### Deletions
+- **Dead code removed** (`commit 4d02697`): Phase 3 SIMPLIFY — deleted unused functions, deduplicated catalog entries, consolidated role configuration files.
+- **Catalog generator deprecated** (`commit a257f9a`): Added to deferred items list; browser audit also deferred.
+
+### Fixes & Hardening
+- **Kimi/Moonshot native routing** (`dcf8669`): P4 fixed — direct API routing for Kimi K2 models bypassing OpenRouter.
+- **DeepSeek P3 verified** (`53045cf`): Model routing confirmed working.
+- **Rate limiter P5** (`53045cf`): Fixed connection reuse and retry timing.
+- **BashGuard enhanced** (`8ebbe01`): Added Windows-specific danger patterns, encoded payload detection, relaxed false-positive rm patterns.
+- **GLM-5.2 thinking mode** (`e822e1f`): Disabled for short queries to reduce latency.
+- **Tool-call budget** (`abc6250`): Raised to 12, `OUTPUT_ROOT` env var injection added.
+- **10 remediation items** closed across 3 hardening cycles (RC-1 through RC-9, plus P3/P4/P5).
+
+### Architecture Violations Fixed
+- Layer classifier updated with `weebot/config`, `weebot/models`, `weebot/utils` prefixes (`commit 70cb904`)
+- Zero unknown modules achieved (`commit 79ed4d9`): all 4690 files classified into known layers.
+- Zero core→application violations confirmed.
+
+### Pending
+- Browser audit: deferred (`a257f9a`)
+- Catalog generator: deferred (`a257f9a`)
+- Cascade cross-reference validation: deferred (`a257f9a`)
+
 > **Method:** Full codebase traversal (3+ levels deep) with file:line citations
 > **Confidence taxonomy:** CONFIRMED (direct evidence) | LIKELY (strong indirect) | SPECULATIVE (plausible, flag for Uncertainty Log)
 
@@ -498,5 +529,14 @@ graph LR
 | Low | 0 | All 2 Low findings deferred with conditions |
 | Architecture tests | 191 | 150 passed, 41 skipped (deprecated ports), 0 failed |
 
+### Hardening Cycle Status (from latest 4-phase meta-orchestration)
+
+| Cycle | Mode | Status | Key Change |
+|-------|------|--------|------------|
+| HARDEN 1 | HARDEN | ✅ | xAI routing fix, catalog validation, health monitoring, credit pre-check |
+| HARDEN 2 | HARDEN | ✅ | RC-7 to RC-9 fixes, api_key_env cleanup, dead code removal |
+| SIMPLIFY 1 | SIMPLIFY | ✅ | Dead code deletion, catalog dedup, role config consolidation |
+| EXPAND 1 | EXPAND | ✅ | Model-aware tool selection (P8) |
+
 ---
-*Forensic reconstruction complete. All claims traceable to specific file:line citations from the 2026-06-07 codebase traversal.*
+*Forensic reconstruction complete. Delta update: 2026-06-22. All claims traceable to specific file:line citations from the 2026-06-07 + 2026-06-22 codebase traversals.*

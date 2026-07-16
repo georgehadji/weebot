@@ -105,21 +105,17 @@ class OpenAIAdapter(LLMPort):
 
         # x.AI Grok-specific reasoning and parameter cleanup
         if "grok" in model_id:
-            # For Grok reasoning or multi-agent models:
+            # For Grok reasoning models:
             # 1. Remove presence_penalty, frequency_penalty, and stop if present to avoid API rejection errors
             kwargs.pop("presence_penalty", None)
             kwargs.pop("frequency_penalty", None)
             kwargs.pop("stop", None)
-            
-            # 2. For grok-4.20-multi-agent, remove max_tokens as it is unsupported
-            if "grok-4.20-multi-agent" in model_id:
-                kwargs.pop("max_tokens", None)
-                
-            # 3. Map reasoning_effort/thinking to x.AI format "reasoning": {"effort": ...}
+
+            # 2. Map reasoning_effort/thinking to x.AI format "reasoning": {"effort": ...}
             grok_effort = reasoning_effort or kwargs.get("reasoning_effort")
             if grok_effort:
                 if grok_effort in ("max", "xhigh"):
-                    grok_effort = "xhigh" if "multi-agent" in model_id else "high"
+                    grok_effort = "high"
                 elif grok_effort in ("medium", "high"):
                     grok_effort = "high" if grok_effort == "high" else "medium"
                 elif grok_effort == "minimal":
@@ -127,11 +123,16 @@ class OpenAIAdapter(LLMPort):
                     
                 kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
                 kwargs["extra_body"]["reasoning"] = {"effort": grok_effort}
+            # x.AI rejects requests where both reasoning_effort and
+            # extra_body.reasoning.effort are set ("conflicting values").
+            # Grok always uses the extra_body form above, so the top-level
+            # key must not be reintroduced below.
+            kwargs.pop("reasoning_effort", None)
 
         # DeepSeek thinking mode: extra_body and reasoning_effort
         if extra_body is not None:
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
-        if reasoning_effort is not None:
+        if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
 
         response = None

@@ -14,15 +14,9 @@ from typing import Any, Dict, List, Optional
 
 from weebot.templates.engine import ExecutionContext
 
-# Import Weebot agent system
-try:
-    from weebot.agent_core_v2 import WeebotAgent, AgentConfig
-    from weebot.core.agent_factory import AgentFactory
-    from weebot.core.agent_context import AgentContext
-    from weebot.core.agent_profile import AgentProfile
-    HAS_AGENT_SYSTEM = True
-except ImportError:
-    HAS_AGENT_SYSTEM = False
+# ARCH-AUDIT-V2 A5: agent_core_v2 fully sunset.
+# Agent system integration uses simulation mode (HAS_AGENT_SYSTEM = False).
+HAS_AGENT_SYSTEM = False
 
 _log = logging.getLogger(__name__)
 
@@ -70,19 +64,15 @@ class TemplateAgentManager:
         },
     }
     
-    def __init__(self, agent_factory: Optional[AgentFactory] = None):
+    def __init__(self, agent_factory=None):
+        """Initialize the agent manager.
+
+        agent_core_v2 + agent_factory.py sunset in ARCH-AUDIT-V2 A5.
+        All methods run in simulation mode.
         """
-        Initialize the agent manager.
-        
-        Args:
-            agent_factory: Optional AgentFactory instance. If None, creates default.
-        """
-        if not HAS_AGENT_SYSTEM:
-            raise RuntimeError("Agent system not available. Cannot create TemplateAgentManager.")
-        
-        self.agent_factory = agent_factory or AgentFactory()
-        self._agent_cache: Dict[str, WeebotAgent] = {}
-        self._parent_context: Optional[AgentContext] = None
+        self.agent_factory = agent_factory  # unused, kept for compat
+        self._agent_cache: Dict[str, Any] = {}
+        self._parent_context = None
     
     def set_parent_context(self, context: AgentContext) -> None:
         """Set the parent context for all spawned agents."""

@@ -144,8 +144,6 @@ def agents_pack_list() -> None:
 def agents_pack_apply(division: str, execute: bool) -> None:
     """Create or spawn a division pack."""
     from weebot.agents.registry import AgentRegistry
-    from weebot.core.agent_context import AgentContext
-    from weebot.core.agent_factory import AgentFactory
     from weebot.tools.tool_registry import RoleBasedToolRegistry
     registry = AgentRegistry(Path.cwd()); personas = registry.pack(division)
     if not personas:
@@ -162,11 +160,6 @@ def agents_pack_apply(division: str, execute: bool) -> None:
             tools = tool_registry.get_tools_for_role("custom")
         specs.append({"role": role, "description": persona.mission or persona.description or persona.name,
                       "tools": tools, "config_overrides": {"daily_budget": 10.0}})
-    if not execute:
-        console.print("[yellow]Dry run — use --execute to spawn agents[/yellow]")
-        console.print_json(json.dumps(specs)); return
-    async def _spawn():
-        ctx = AgentContext.create_orchestrator()
-        await AgentFactory().spawn_orchestrator_agents(ctx, ctx.agent_id, specs)
-    asyncio.run(_spawn())
-    console.print(f"[green]Spawned {len(specs)} agent(s) for division {division}[/green]")
+    console.print("[yellow]Agent spawning is deprecated (agent_factory.py sunset in ARCH-AUDIT-V2).[/yellow]")
+    console.print("[dim]Use 'weebot hyper' for multi-agent workflows.[/dim]")
+    console.print_json(json.dumps(specs))

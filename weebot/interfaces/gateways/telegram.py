@@ -49,7 +49,7 @@ class TelegramAdapter(GatewayAdapter):
         profile_name: str | None = None,
         command_dispatcher: GatewayCommandDispatcher | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._token = token
         self._api = f"https://api.telegram.org/bot{token}"
         self._state_repo = state_repo
@@ -319,9 +319,12 @@ class TelegramAdapter(GatewayAdapter):
                         data = aiohttp.FormData()
                         data.add_field("chat_id", chat_id)
                         data.add_field("caption", caption)
-                        data.add_field(endpoint.replace("send", "").lower(),
-                                       open(path, "rb"),
-                                       filename=_os.path.basename(path))
+                        with open(path, "rb") as f:
+                            data.add_field(
+                                endpoint.replace("send", "").lower(),
+                                f,
+                                filename=_os.path.basename(path),
+                            )
                         async with s.post(url, data=data) as resp:
                             if resp.status not in (200, 201):
                                 error_body = await resp.text()

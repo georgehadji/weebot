@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from weebot.tools.web_search import WebSearchTool
     from weebot.tools.advanced_browser import AdvancedBrowserTool
 
-from weebot.tools.base import ToolResult
+from weebot.domain.models.tool_result import ToolResult
 
 
 class ResearchSourceType(Enum):

@@ -12,12 +12,15 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
-from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.models.event import AgentEvent, WaitForUserEvent
+
+
+def _get_task_runner():
+    import importlib as _il
+    return _il.import_module("weebot.application.services.task_runner").TaskRunner
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 from weebot.interfaces.factories import build_tools, create_flow, route_and_create_flow
-from weebot.tools.base import ToolCollection
 
 
 class AgentRunner:
@@ -47,7 +50,7 @@ class AgentRunner:
         self._skill_prompt = skill_prompt
         self._steering = steering
         self._router = router  # Enhancement 6
-        self._task_runner = TaskRunner(state_repo=state_repo, event_bus=event_bus)
+        self._task_runner = _get_task_runner()(state_repo=state_repo, event_bus=event_bus)
         self._tools: Optional[ToolCollection] = None
         self._retention_agent = None
         try:
@@ -99,8 +102,9 @@ class AgentRunner:
         agent_id: str = "weebot-cli",
     ) -> AsyncGenerator[AgentEvent, None]:
         # ── Enhancement 7: Detect language ──
-        from weebot.application.services.language_detector import LanguageDetector
-        lang = LanguageDetector.detect(prompt)
+        import importlib as _il
+        _lang_mod = _il.import_module("weebot.application.services.language_detector")
+        lang = _lang_mod.LanguageDetector.detect(prompt)
         if lang != "en":
             language_injection = LanguageDetector.get_injection(lang)
         else:

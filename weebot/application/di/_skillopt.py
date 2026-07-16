@@ -26,6 +26,8 @@ class SkillOptMixin:
         self, skill_name, train_tasks, validation_tasks=None,
         output_path="best_skill.md", epochs=4, steps_per_epoch=5,
         batch_size=40, use_planning=False,
+        use_archive_search: bool = False,
+        use_evaluator_slot: bool = False,
     ):
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
         mediator = self.build_mediator()
@@ -46,6 +48,36 @@ class SkillOptMixin:
             evolution_tracker=self._maybe_get_str("evolution_tracker"),
             llm_port=llm,
         )
+        # ── Optional evaluator co-evolution (R3) ─────────────────
+        evaluator_kwargs = {}
+        if use_evaluator_slot:
+            from weebot.domain.models.evaluator_state import EvaluatorState
+            from weebot.application.services.evaluator_selector import EvaluatorSelector
+            from weebot.application.services.selective_erasure import SelectiveErasure
+            from weebot.application.services.adversarial_pool import AdversarialPool
+            from weebot.application.ports.llm_port import LLMPort
+            evaluator_llm = self._maybe_get(LLMPort)
+            evaluator_kwargs["evaluator_slot"] = EvaluatorState(
+                evaluator_id="skillopt-evaluator",
+                evaluator_type="scorer",
+                prompt="Score the agent output from 0.0 to 1.0.",
+            )
+            evaluator_kwargs["evaluator_selector"] = EvaluatorSelector(llm=evaluator_llm)
+            evaluator_kwargs["selective_erasure"] = SelectiveErasure()
+            evaluator_kwargs["adversarial_pool"] = AdversarialPool()
+
+        # ── Optional archive search (R5) ───────────────────────────
+        archive_kwargs = {}
+        if use_archive_search:
+            from weebot.application.services.thompson_sampler import ThompsonSampler
+            from weebot.application.ports.optimizer_port import OptimizerPort
+            archive_kwargs["use_archive_search"] = True
+            archive_kwargs["thompson_sampler"] = ThompsonSampler(
+                optimizer=self.get(OptimizerPort),
+                skill_store=self.get("skill_store"),
+                trajectory_repo=self.get("trajectory_repo"),
+            )
+
         flow = SkillOptFlow(
             skill_name=skill_name, train_tasks=train_tasks,
             validation_tasks=validation_tasks, output_path=output_path,
@@ -58,6 +90,8 @@ class SkillOptMixin:
             scorer=self._create_scorer(harness),
             trajectory_repo=self.get("trajectory_repo"),
             evolution_tracker=self._maybe_get_str("evolution_tracker"),
+            **evaluator_kwargs,
+            **archive_kwargs,
         )
         return flow
 

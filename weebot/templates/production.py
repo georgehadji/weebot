@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 
-import redis
+import valkey as redis  # Valkey is a drop-in replacement for Redis 7.2.4+
 from sqlalchemy import (
     Column, String, Integer, Float, DateTime, Boolean, Text,
     create_engine, ForeignKey, Index
@@ -532,31 +532,38 @@ class DatabaseManager:
 
 # ==================== Redis Caching ====================
 
-class RedisCache:
+class ValkeyCache:
     """
-    Redis-based caching for templates and results.
+    Valkey-based caching for templates and results.
+
+    Fully compatible with Valkey 8+ via valkey-py.
+    Automatically normalizes ``redis://`` URLs to ``valkey://``.
     """
-    
+
     def __init__(
         self,
-        redis_url: str = "redis://localhost:6379/0",
+        valkey_url: str = "valkey://localhost:6379/0",
         default_ttl: int = 3600,
     ):
-        self.redis = redis.from_url(redis_url, decode_responses=True)
+        # Support fallback to redis:// URLs automatically
+        if valkey_url.startswith("redis://"):
+            valkey_url = valkey_url.replace("redis://", "valkey://", 1)
+
+        self.redis = redis.from_url(valkey_url, decode_responses=True)
         self.default_ttl = default_ttl
-    
+
     def get_template(self, name: str, version: str) -> Optional[WorkflowTemplate]:
         """Get cached template."""
         key = f"template:{name}:{version}"
         data = self.redis.get(key)
-        
+
         if data:
             from weebot.templates.parser import TemplateParser
             parser = TemplateParser()
             return parser.parse(data)
-        
+
         return None
-    
+
     def set_template(
         self,
         name: str,
@@ -566,7 +573,7 @@ class RedisCache:
     ):
         """Cache template."""
         key = f"template:{name}:{version}"
-        
+
         import yaml
         data = yaml.dump({
             "name": template.name,
@@ -585,20 +592,20 @@ class RedisCache:
             "workflow": template.workflow,
             "output": template.output,
         })
-        
+
         self.redis.setex(key, ttl or self.default_ttl, data)
-    
+
     def get_execution_result(self, execution_id: str) -> Optional[TemplateExecutionResult]:
         """Get cached execution result."""
         key = f"execution:{execution_id}"
         data = self.redis.get(key)
-        
+
         if data:
             result_dict = json.loads(data)
             return TemplateExecutionResult(**result_dict)
-        
+
         return None
-    
+
     def set_execution_result(
         self,
         execution_id: str,
@@ -616,14 +623,14 @@ class RedisCache:
             "execution_time_ms": result.execution_time_ms,
             "task_results": result.task_results,
         })
-        
+
         self.redis.setex(key, ttl or 300, data)  # 5 min default for results
-    
+
     def invalidate_template(self, name: str, version: str):
         """Invalidate cached template."""
         key = f"template:{name}:{version}"
         self.redis.delete(key)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics."""
         info = self.redis.info("memory")
@@ -635,6 +642,10 @@ class RedisCache:
                 self.redis.info("stats").get("keyspace_misses", 1)
             ),
         }
+
+
+# Backward-compatible alias for code that imports RedisCache directly
+RedisCache = ValkeyCache
 
 
 # ==================== Health Checks ====================
@@ -704,7 +715,7 @@ class HealthChecker:
             return False  # Database not available
     
     def check_redis(self) -> bool:
-        """Check Redis connectivity."""
+        """Check Redis/Valkey connectivity."""
         if not self.redis:
             return True  # No Redis configured
         
@@ -713,6 +724,10 @@ class HealthChecker:
             return True
         except Exception:
             return False  # Redis not available
+    
+    def check_valkey(self) -> bool:
+        """Check Valkey connectivity (alias for check_redis)."""
+        return self.check_redis()
 
 
 import asyncio

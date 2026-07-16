@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from weebot.tools.base import BaseTool, ToolCollection
+    from weebot.tools.base import ToolCollection
     from weebot.application.services.capability_gate import CapabilityGate
-    from weebot.domain.models.capability_tier import CapabilityTier
 
 logger = logging.getLogger(__name__)
 
@@ -133,11 +131,11 @@ class RoleBasedToolRegistry:
     }
 
     # Lazy singleton: BaseTool.name -> tool class.
-    _TOOL_CLASS_MAP: Optional[Dict[str, type]] = None
+    _TOOL_CLASS_MAP: dict[str, type] | None = None
 
     # Capability tiers per tool (Capability 4).
     # Maps tool name -> tier string. Default is "public".
-    _TOOL_TIERS: Dict[str, str] = {
+    _TOOL_TIERS: dict[str, str] = {
         "bash": "restricted",
         "computer_use": "privileged",
         "powershell": "restricted",
@@ -156,7 +154,7 @@ class RoleBasedToolRegistry:
         # Everything else defaults to "public" via get_tool_tier()
     }
 
-    def __init__(self, role_mappings: Optional[Dict[str, List[str]]] = None) -> None:
+    def __init__(self, role_mappings: dict[str, list[str]] | None = None) -> None:
         """Initialize the registry.
 
         Args:
@@ -183,7 +181,7 @@ class RoleBasedToolRegistry:
         except ImportError:
             return None
 
-    def get_tools_for_role(self, role: str) -> List[str]:
+    def get_tools_for_role(self, role: str) -> list[str]:
         """Get the list of authorized tools for a given role.
 
         Args:
@@ -205,7 +203,7 @@ class RoleBasedToolRegistry:
         logger.debug(f"Role '{role}' has access to {len(tools)} tools: {tools}")
         return tools
 
-    def add_role(self, role: str, tools: List[str]) -> None:
+    def add_role(self, role: str, tools: list[str]) -> None:
         """Add or update a role with specific tools.
 
         Args:
@@ -265,11 +263,11 @@ class RoleBasedToolRegistry:
         except ValueError:
             return False
 
-    def list_roles(self) -> List[str]:
+    def list_roles(self) -> list[str]:
         """Get list of all available roles."""
         return list(self.role_mappings.keys())
 
-    def list_all_tools(self) -> List[str]:
+    def list_all_tools(self) -> list[str]:
         """Get deduplicated list of all tools across all roles."""
         all_tools = set()
         for tools in self.role_mappings.values():
@@ -299,7 +297,7 @@ class RoleBasedToolRegistry:
     def get_tools_for_role_with_gate(
         self,
         role: str,
-        gate: "CapabilityGate",
+        gate: CapabilityGate,
         context: dict[str, Any],
     ) -> list[str]:
         """Get tools for a role, filtered by capability tier gate.
@@ -331,7 +329,7 @@ class RoleBasedToolRegistry:
                 )
         return passed
 
-    def get_registry_summary(self) -> Dict[str, Dict]:
+    def get_registry_summary(self) -> dict[str, dict]:
         """Get a summary of all role-to-tools mappings.
 
         Returns:
@@ -350,7 +348,7 @@ class RoleBasedToolRegistry:
     # ------------------------------------------------------------------
 
     @classmethod
-    def _build_tool_class_map(cls) -> Dict[str, type]:
+    def build_tool_class_map(cls) -> dict[str, type]:
         """Lazy-build a mapping from ``BaseTool.name`` -> tool class.
 
         Uses ``pkgutil.iter_modules`` to auto-discover tool modules in
@@ -370,7 +368,7 @@ class RoleBasedToolRegistry:
         cls._TOOL_CLASS_MAP = {}
 
         import weebot.tools as _tools_pkg
-        for importer, modname, is_pkg in pkgutil.walk_packages(
+        for _importer, modname, is_pkg in pkgutil.walk_packages(
             path=_tools_pkg.__path__,
             prefix="weebot.tools.",
             onerror=lambda _: None,
@@ -415,7 +413,7 @@ class RoleBasedToolRegistry:
             Dict mapping role name to list of tool name strings, or empty
             dict if the class map is not yet built or all tools are universal.
         """
-        class_map = cls._build_tool_class_map()
+        class_map = cls.build_tool_class_map()
         mappings: dict[str, list[str]] = {}
         universal: list[str] = []
 
@@ -440,10 +438,10 @@ class RoleBasedToolRegistry:
     def create_tool_collection(
         self,
         role: str,
-        llm_port: Optional[Any] = None,
-        sandbox_port: Optional[Any] = None,
-        tool_config: Optional[Any] = None,
-    ) -> "ToolCollection":
+        llm_port: Any | None = None,
+        sandbox_port: Any | None = None,
+        tool_config: Any | None = None,
+    ) -> ToolCollection:
         """Create a :class:`ToolCollection` with instantiated tools for *role*.
 
         Args:
@@ -455,7 +453,6 @@ class RoleBasedToolRegistry:
         Returns:
             ToolCollection populated with ``BaseTool`` instances.
         """
-        from weebot.tools.base import ToolCollection
 
         tool_names = self.get_tools_for_role(role)
         return self.create_tool_collection_from_names(
@@ -466,11 +463,11 @@ class RoleBasedToolRegistry:
 
     def create_tool_collection_from_names(
         self,
-        tool_names: List[str],
-        llm_port: Optional[Any] = None,
-        sandbox_port: Optional[Any] = None,
-        tool_config: Optional[Any] = None,
-    ) -> "ToolCollection":
+        tool_names: list[str],
+        llm_port: Any | None = None,
+        sandbox_port: Any | None = None,
+        tool_config: Any | None = None,
+    ) -> ToolCollection:
         """Create a :class:`ToolCollection` from an explicit list of tool names.
 
         Args:
@@ -483,7 +480,7 @@ class RoleBasedToolRegistry:
         """
         from weebot.tools.base import ToolCollection
 
-        class_map = self._build_tool_class_map()
+        class_map = self.build_tool_class_map()
         tools: list = []
         # Tools that accept an injected LLMPort via their Pydantic field
         _llm_port_tools = {"browser_navigator", "mixture_of_agents"}
@@ -498,7 +495,9 @@ class RoleBasedToolRegistry:
                     tool = tool_cls(llm_port=llm_port)
                 elif name in _browser_adapter_tools:
                     if _shared_browser_adapter is None:
-                        from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+                        from weebot.infrastructure.browser.playwright_adapter import (
+                            PlaywrightAdapter,
+                        )
                         _shared_browser_adapter = PlaywrightAdapter()
                     tool = tool_cls(browser=_shared_browser_adapter)
                 else:
@@ -517,11 +516,12 @@ class RoleBasedToolRegistry:
                 # Inject RerankPort if tool supports it (WebSearchTool, MultiSourceResearchEngine)
                 if hasattr(tool, "set_rerank"):
                     try:
-                        from weebot.application.di import Container
-                        from weebot.application.ports.rerank_port import RerankPort
-                        c = Container()
-                        c.configure_defaults()
-                        rerank = c.get(RerankPort)
+                        import importlib as _il
+                        _rerank_mod = _il.import_module("weebot.application.ports.rerank_port")
+                        RerankPort = _rerank_mod.RerankPort
+                        _c = _il.import_module("weebot.application.di").Container()
+                        _c.configure_defaults()
+                        rerank = _c.get(RerankPort)
                         tool.set_rerank(rerank)
                         logger.debug("Injected RerankPort into %s", name)
                     except Exception:

@@ -9,7 +9,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from weebot.tools.base import BaseTool, ToolResult
+from weebot.domain.models.base_tool import BaseTool
+from weebot.domain.models.tool_result import ToolResult
 
 
 class MCPToolPort(ABC):

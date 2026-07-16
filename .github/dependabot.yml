@@ -1,0 +1,73 @@
+# Dependabot configuration (ARCH-AUDIT-V2 C5)
+# Keeps pip and npm dependencies up-to-date with weekly PRs.
+
+version: 2
+updates:
+
+  # ── Python (pip) ─────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Athens"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+    # Ignore transient patches for vendored/internal deps
+    ignore:
+      - dependency-name: "weebot"  # self-referential, never published
+    # Group minor/patch bumps into single PRs to reduce noise
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Node.js (npm) ────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/weebot-ui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Athens"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── GitHub Actions ───────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Athens"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore"
+      include: "scope"

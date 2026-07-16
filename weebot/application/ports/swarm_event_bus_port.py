@@ -17,8 +17,12 @@ class SwarmEventBusPort(ABC):
         """Publish an inter-agent message to all subscribers of its topic."""
 
     @abstractmethod
-    async def subscribe(self, topic: str, handler: SwarmEventHandler) -> None:
-        """Register a handler to receive messages on a topic."""
+    async def subscribe_handler(self, topic: str, handler: SwarmEventHandler) -> None:
+        """Register a callback handler to receive messages on a topic.
+
+        For async iteration use ``subscribe(topic)`` returning a
+        ``SwarmSubscription`` (adapter-specific, not part of this port).
+        """
 
     @abstractmethod
     def get_history(self, topic: str) -> list[InterAgentMessage]:

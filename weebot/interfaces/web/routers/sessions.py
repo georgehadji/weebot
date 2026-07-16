@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -13,7 +13,6 @@ from weebot.interfaces.web.schemas import (
     ResumeSessionRequest,
     SessionResponse,
     SessionListResponse,
-    ErrorResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,11 +68,15 @@ async def create_session(
     """Create a new session."""
     
     import uuid
+    context: dict[str, Any] = {"last_prompt": request.prompt, "model": request.model}
+    if request.ponytail_mode is not None:
+        context["ponytail_mode"] = request.ponytail_mode
+
     session = Session(
         id=request.session_id or str(uuid.uuid4()),
         user_id=request.user_id,
         agent_id=request.agent_id,
-        context={"last_prompt": request.prompt, "model": request.model},
+        context=context,
     )
     
     await state_repo.save_session(session)
@@ -231,12 +234,17 @@ async def run_session(
         llm = container.get(LLMPort)
         event_bus = container.get(EventBusPort)
         model = session.context.get("model") or None
+        ponytail_mode = session.context.get("ponytail_mode") or None
 
         from weebot.interfaces.factories import build_tools
         tools = await build_tools(role="admin")
         try:
             factory = task_runner.create_plan_act_factory(
-                llm=llm, tools=tools, event_bus=event_bus, model=model
+                llm=llm,
+                tools=tools,
+                event_bus=event_bus,
+                model=model,
+                ponytail_mode=ponytail_mode,
             )
             session = await task_runner.start_session(session, factory)
         except Exception:

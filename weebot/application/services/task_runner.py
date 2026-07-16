@@ -10,6 +10,7 @@ from weebot.application.abstractions import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSession
 from weebot.application.services.memory_archivist import MemoryArchivist
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
@@ -39,30 +40,47 @@ class TaskRunner:
         archivist: Optional[MemoryArchivist] = None,
         max_pending: int = 100,
         max_session_retries: int = 3,
+        task_queue: TaskQueuePort | None = None,
     ):
         self._state_repo = state_repo
         self._event_bus = event_bus
         self._archivist = archivist
         self._max_session_retries = max_session_retries
         self._tasks: Dict[str, asyncio.Task] = {}
-        self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending)
+        self._task_queue: TaskQueuePort | None = task_queue
+        # Fallback to asyncio.PriorityQueue when no external queue is provided
+        self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending) if task_queue is None else None  # type: ignore[assignment]
         self._worker_task: Optional[asyncio.Task] = None
         self._retry_counts: Dict[str, int] = {}  # session_id -> attempts remaining
         self._flow_factories: Dict[str, FlowFactory] = {}  # session_id -> factory for retries
+        self._failed_sessions: Dict[str, int] = {}  # session_id -> retry count exhausted (dead-letter queue)
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
             self._worker_task = asyncio.create_task(self._worker(), name="weebot-taskrunner-worker")
 
     async def _worker(self) -> None:
-        """Background worker that consumes the priority queue."""
-        while True:
-            try:
-                prioritized = await self._priority_queue.get()
-            except asyncio.CancelledError:
-                break
-            await self._start_direct(prioritized.session, prioritized.flow_factory)
-            self._priority_queue.task_done()
+        """Background worker that consumes the task queue."""
+        if self._task_queue is not None:
+            # External queue (Redis) — use TaskQueuePort interface
+            while True:
+                try:
+                    item = await self._task_queue.dequeue()
+                except asyncio.CancelledError:
+                    break
+                if item is None:
+                    break  # Queue was closed
+                await self._start_direct(item.session, item.flow_factory)
+                await self._task_queue.ack(item)
+        else:
+            # Legacy in-memory queue
+            while True:
+                try:
+                    prioritized = await self._priority_queue.get()
+                except asyncio.CancelledError:
+                    break
+                await self._start_direct(prioritized.session, prioritized.flow_factory)
+                self._priority_queue.task_done()
 
     async def _start_direct(
         self,
@@ -121,7 +139,10 @@ class TaskRunner:
     ) -> Session:
         """Enqueue a session with priority for later execution."""
         self._ensure_worker()
-        await self._priority_queue.put(PrioritizedSession(priority, session, flow_factory))
+        if self._task_queue is not None:
+            await self._task_queue.enqueue(session, flow_factory, priority=priority)
+        else:
+            await self._priority_queue.put(PrioritizedSession(priority, session, flow_factory))
         return session
 
     async def _run_flow(self, session_id: str, flow: BaseFlow) -> None:
@@ -136,7 +157,7 @@ class TaskRunner:
             _get_tr_metrics().session_active.inc()
             _get_tr_metrics().session_total.inc()
         except Exception:
-            pass
+            logger.debug("Failed to increment session metrics", exc_info=True)
 
         try:
             async for event in flow.run(session.context.get("last_prompt", "")):
@@ -170,8 +191,18 @@ class TaskRunner:
                     if reloaded:
                         await self._start_direct(reloaded, factory)
                         return
-            session = session.set_status(SessionStatus.FAILED)
-            await self._state_repo.save_session(session)
+            try:
+                session = session.set_status(SessionStatus.FAILED)
+                await self._state_repo.save_session(session)
+            except Exception as persist_exc:
+                logger.error(
+                    "Double failure: state repo write failed after flow crash "
+                    "for session %s — session may be orphaned in RUNNING state. "
+                    "Error: %s", session_id, persist_exc,
+                )
+            finally:
+                # Dead-letter queue: track sessions that exhausted all retries
+                self._failed_sessions[session_id] = self._max_session_retries
         else:
             # Sync flow-mutated state (facts, compaction) back into
             # the local session before final save. The flow modifies
@@ -194,7 +225,7 @@ class TaskRunner:
             try:
                 _get_tr_metrics().session_active.dec()
             except Exception:
-                pass
+                logger.debug("Failed to decrement session active metric", exc_info=True)
 
     async def resume_session(
         self,
@@ -232,8 +263,58 @@ class TaskRunner:
             return True
         return False
 
+    async def rerun_failed_session(self, session_id: str) -> bool:
+        """Re-enter a permanently-failed session at the last saved state.
+
+        Restores the session from the state repo and re-submits it through
+        the original flow factory.  Resets the retry counter so the newly
+        spawned attempt gets a full retry budget.
+
+        Returns:
+            True if the session was found and re-started, False otherwise.
+        """
+        session = await self._state_repo.load_session(session_id)
+        if session is None:
+            logger.warning("rerun_failed_session: session %s not found", session_id)
+            return False
+        if session.status != SessionStatus.FAILED:
+            logger.warning(
+                "rerun_failed_session: session %s status is %s, not FAILED",
+                session_id, session.status.value,
+            )
+            return False
+
+        factory = self._flow_factories.pop(session_id, None)
+        if factory is None:
+            # Try the default PlanActFlow factory builder fallback
+            logger.warning(
+                "rerun_failed_session: no flow factory cached for %s "
+                "— attempting resume with default factory",
+                session_id,
+            )
+            return False
+
+        # Clear dead-letter and retry state so the new attempt gets a clean
+        # retry budget.
+        self._failed_sessions.pop(session_id, None)
+        self._retry_counts.pop(session_id, None)
+
+        await self._start_direct(session, factory)
+        logger.info("Rerun initiated for failed session %s", session_id)
+        return True
+
+    async def list_failed_sessions(self) -> Dict[str, int]:
+        """Return sessions in the dead-letter queue with retry counts.
+
+        Returns:
+            Dict mapping session_id → number of retries attempted.
+        """
+        return dict(self._failed_sessions)
+
     async def shutdown(self) -> None:
         """Cancel worker and wait for queue drain."""
+        if self._task_queue is not None:
+            await self._task_queue.close()
         if self._worker_task and not self._worker_task.done():
             self._worker_task.cancel()
             try:
@@ -261,10 +342,16 @@ class TaskRunner:
         tools: ToolCollection,
         event_bus: Optional[EventBusPort] = None,
         model: Optional[str] = None,
+        ponytail_mode: str | None = None,
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances."""
         from weebot.application.flows.plan_act_flow import PlanActFlow
+        from weebot.application.services.ponytail_skill_prompt import (
+            build_ponytail_skill_prompt,
+        )
+
         state_repo = self._state_repo
+        skill_prompt = build_ponytail_skill_prompt(existing=None, mode=ponytail_mode)
 
         def _factory(session: Session) -> BaseFlow:
             return PlanActFlow(
@@ -273,6 +360,7 @@ class TaskRunner:
                 session=session,
                 event_bus=event_bus,
                 model=model,
+                skill_prompt=skill_prompt,
                 state_repo=state_repo,
             )
         return _factory

@@ -18,8 +18,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+from weebot.application.ports.llm_port import LLMPort
 from weebot.core.safety import SafetyChecker
 
 
@@ -40,7 +40,7 @@ class GatewayResponse:
     platform: str
     external_id: str
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
     media_paths: list[str] = field(default_factory=list)
     as_document: bool = False
     as_voice: bool = False
@@ -54,8 +54,13 @@ _DOCUMENT_DIRECTIVE = "[[as_document]]"
 class GatewayAdapter(ABC):
     """Base class for external platform adapters."""
 
-    def __init__(self) -> None:
-        self._safety = SafetyChecker()
+    def __init__(self, llm_port: LLMPort | None = None) -> None:
+        if llm_port is None:
+            from weebot.application.di import Container
+            c = Container()
+            c.configure_defaults()
+            llm_port = c.get(LLMPort)
+        self._safety = SafetyChecker(llm=llm_port)
 
     @abstractmethod
     async def start(self) -> None:
@@ -72,7 +77,7 @@ class GatewayAdapter(ABC):
         """Send a response back to the external platform."""
         ...
 
-    async def handle(self, message: GatewayMessage) -> Optional[str]:
+    async def handle(self, message: GatewayMessage) -> str | None:
         """Route an incoming message through safety checks.
 
         Returns the response text, or None if blocked by safety.
@@ -80,6 +85,51 @@ class GatewayAdapter(ABC):
         if self._safety.is_critical_operation(message.text, "gateway"):
             return None  # Blocked by safety
         return message.text
+
+    async def handle_ponytail_command(self, text: str) -> str | None:
+        """Handle ``ponytail [mode]`` commands and return a reply, or None.
+
+        Args:
+            text: The incoming message text.
+
+        Returns:
+            Response text for the gateway to send back, or None if the text
+            is not a Ponytail command.
+        """
+        is_command, mode = self.parse_ponytail_command(text)
+        if not is_command:
+            return None
+
+        from cli.commands.ponytail import read_ponytail_mode, write_ponytail_mode
+        if mode is None:
+            return f"🐴 Ponytail mode is currently: {read_ponytail_mode()}"
+        write_ponytail_mode(mode)
+        return f"🐴 Ponytail mode set to: {mode}"
+
+    @staticmethod
+    def parse_ponytail_command(text: str) -> tuple[bool, str | None]:
+        """Parse a Ponytail mode command from gateway message text.
+
+        Supported forms:
+        - ``ponytail``          → return current mode (reply mode is None)
+        - ``ponytail off``      → set mode to off
+        - ``ponytail lite``     → set mode to lite
+        - ``ponytail full``     → set mode to full
+        - ``ponytail ultra``    → set mode to ultra
+
+        Returns:
+            ``(is_command, mode_or_none)``. When *mode_or_none* is ``None``
+            the caller should reply with the current mode.
+        """
+        allowed = {"off", "lite", "full", "ultra"}
+        normalized = text.strip().lower()
+        if normalized == "ponytail":
+            return True, None
+        if normalized.startswith("ponytail "):
+            mode = normalized[len("ponytail "):].strip()
+            if mode in allowed:
+                return True, mode
+        return False, None
 
     @staticmethod
     def extract_media(text: str) -> tuple[str, list[str], bool, bool]:
@@ -97,8 +147,6 @@ class GatewayAdapter(ABC):
             Tuple of ``(cleaned_text, media_paths, as_document, as_voice)``.
             Directives are stripped from the returned text.
         """
-        import re
-
         as_voice = _AUDIO_VOICE_DIRECTIVE in text
         as_doc = _DOCUMENT_DIRECTIVE in text
 

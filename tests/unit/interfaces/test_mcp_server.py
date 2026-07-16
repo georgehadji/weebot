@@ -12,9 +12,10 @@ Coverage:
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from mcp.types import CallToolResult
 
 from weebot.core.activity_stream import ActivityStream
 from weebot.mcp.resources import (
@@ -85,11 +86,19 @@ class TestWeebotMCPServerConstruction:
         assert isinstance(server._activity, ActivityStream)
 
     @pytest.mark.asyncio
-    async def test_exposes_all_four_tools(self) -> None:
+    async def test_exposes_core_tools(self) -> None:
         server = WeebotMCPServer()
         tools = await server.mcp.list_tools()
         names = {t.name for t in tools}
-        assert {"bash", "python_execute", "web_search", "file_editor"} <= names
+        assert {"bash", "python_execute"} <= names
+
+    @pytest.mark.asyncio
+    async def test_exposes_decomposed_file_tools(self) -> None:
+        server = WeebotMCPServer()
+        tools = await server.mcp.list_tools()
+        names = {t.name for t in tools}
+        expected = {"file_view", "file_create", "file_str_replace", "file_insert"}
+        assert expected <= names
 
     @pytest.mark.asyncio
     async def test_exposes_core_resources(self) -> None:
@@ -103,8 +112,31 @@ class TestWeebotMCPServerConstruction:
             "weebot://products",
         } <= uris
 
+    @pytest.mark.asyncio
+    async def test_exposes_composite_tools(self) -> None:
+        server = WeebotMCPServer()
+        tools = await server.mcp.list_tools()
+        names = {t.name for t in tools}
+        assert "analyze_and_edit" in names
+        assert "research_and_summarize" in names
 
-# ─── MCP tool call tests ──────────────────────────────────────────────────────
+    @pytest.mark.asyncio
+    async def test_composite_tools_hide_covered_atomics(self) -> None:
+        server = WeebotMCPServer()
+        tools = await server.mcp.list_tools()
+        names = {t.name for t in tools}
+        # analyze_and_edit hides file_editor; research_and_summarize hides web_search
+        assert "file_editor" not in names
+        assert "web_search" not in names
+
+    @pytest.mark.asyncio
+    async def test_composite_tools_disabled_restores_atomics(self) -> None:
+        server = WeebotMCPServer(composite_tools_enabled=False)
+        tools = await server.mcp.list_tools()
+        names = {t.name for t in tools}
+        assert "file_editor" in names
+        assert "web_search" in names
+        assert "analyze_and_edit" not in names
 
 
 class TestMCPToolCalls:
@@ -117,18 +149,22 @@ class TestMCPToolCalls:
             "weebot.tools.bash_tool.BashTool.execute",
             new=AsyncMock(return_value=ToolResult(output="hello from bash")),
         ):
-            content, _ = await server.mcp.call_tool("bash", {"command": "echo hello"})
-        assert any("hello from bash" in item.text for item in content)
+            result = await server.mcp.call_tool("bash", {"command": "echo hello"})
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("hello from bash" in item.text for item in result.content)
 
     @pytest.mark.asyncio
-    async def test_bash_error_raises_tool_error(self) -> None:
+    async def test_bash_error_returns_structured_error(self) -> None:
         server = WeebotMCPServer()
         with patch(
             "weebot.tools.bash_tool.BashTool.execute",
             new=AsyncMock(return_value=ToolResult(output="", error="Command denied by policy")),
         ):
-            with pytest.raises(Exception, match="Command denied"):
-                await server.mcp.call_tool("bash", {"command": "format c:"})
+            result = await server.mcp.call_tool("bash", {"command": "format c:"})
+        assert isinstance(result, CallToolResult)
+        assert result.isError
+        assert any("Command denied" in item.text for item in result.content)
 
     @pytest.mark.asyncio
     async def test_python_execute_returns_stdout(self) -> None:
@@ -137,18 +173,100 @@ class TestMCPToolCalls:
             "weebot.tools.python_tool.PythonExecuteTool.execute",
             new=AsyncMock(return_value=ToolResult(output="42\n")),
         ):
-            content, _ = await server.mcp.call_tool("python_execute", {"code": "print(6*7)"})
-        assert any("42" in item.text for item in content)
+            result = await server.mcp.call_tool("python_execute", {"code": "print(6*7)"})
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("42" in item.text for item in result.content)
+
+    @pytest.mark.asyncio
+    async def test_python_execute_error_returns_structured_error(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.python_tool.PythonExecuteTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="", error="SyntaxError")),
+        ):
+            result = await server.mcp.call_tool("python_execute", {"code": "bad syntax"})
+        assert isinstance(result, CallToolResult)
+        assert result.isError
 
     @pytest.mark.asyncio
     async def test_web_search_returns_results(self) -> None:
-        server = WeebotMCPServer()
+        # Disable composites so the atomic web_search tool is exposed.
+        server = WeebotMCPServer(composite_tools_enabled=False)
         with patch(
             "weebot.tools.web_search.WebSearchTool.execute",
             new=AsyncMock(return_value=ToolResult(output="Result 1: Python asyncio guide")),
         ):
-            content, _ = await server.mcp.call_tool("web_search", {"query": "python asyncio"})
-        assert any("Result" in item.text for item in content)
+            result = await server.mcp.call_tool("web_search", {"query": "python asyncio"})
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("Result" in item.text for item in result.content)
+
+    @pytest.mark.asyncio
+    async def test_file_view_returns_numbered_lines(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="1 | hello\n2 | world")),
+        ):
+            result = await server.mcp.call_tool("file_view", {"path": "test.txt"})
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("hello" in item.text for item in result.content)
+
+    @pytest.mark.asyncio
+    async def test_file_create_writes_new_file(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="created test.txt")),
+        ):
+            result = await server.mcp.call_tool(
+                "file_create", {"path": "test.txt", "file_text": "hello"}
+            )
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+
+    @pytest.mark.asyncio
+    async def test_file_str_replace_requires_old_str(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="replaced")),
+        ):
+            result = await server.mcp.call_tool(
+                "file_str_replace",
+                {"path": "test.txt", "old_str": "hello", "new_str": "hi"},
+            )
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+
+    @pytest.mark.asyncio
+    async def test_file_editor_legacy_still_works(self) -> None:
+        # Disable composites so the legacy file_editor tool is exposed.
+        server = WeebotMCPServer(composite_tools_enabled=False)
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="legacy result")),
+        ):
+            result = await server.mcp.call_tool(
+                "file_editor",
+                {"command": "view", "path": "test.txt"},
+            )
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("legacy result" in item.text for item in result.content)
+
+    @pytest.mark.asyncio
+    async def test_file_view_error_returns_structured_error(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="", error="file not found")),
+        ):
+            result = await server.mcp.call_tool("file_view", {"path": "missing.txt"})
+        assert isinstance(result, CallToolResult)
+        assert result.isError
 
     @pytest.mark.asyncio
     async def test_bash_logs_to_activity_stream(self) -> None:
@@ -161,6 +279,29 @@ class TestMCPToolCalls:
             await server.mcp.call_tool("bash", {"command": "echo hi"})
         events = stream.recent()
         assert any("bash:" in e.message for e in events)
+
+    @pytest.mark.asyncio
+    async def test_composite_analyze_and_edit_runs_sub_tools(self) -> None:
+        server = WeebotMCPServer()
+        with patch(
+            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+            new=AsyncMock(
+                side_effect=[
+                    ToolResult(output="1 | old line"),
+                    ToolResult(output="replaced"),
+                ]
+            ),
+        ), patch(
+            "weebot.tools.python_tool.PythonExecuteTool.execute",
+            new=AsyncMock(return_value=ToolResult(output="syntax ok")),
+        ):
+            result = await server.mcp.call_tool(
+                "analyze_and_edit",
+                {"path": "test.txt", "old_str": "old line", "new_str": "new line"},
+            )
+        assert isinstance(result, CallToolResult)
+        assert not result.isError
+        assert any("file_str_replace" in item.text for item in result.content)
 
 
 # ─── MCP resource read tests ──────────────────────────────────────────────────
@@ -212,7 +353,7 @@ class TestResourceStubNotes:
     """Stubs include a helpful 'note' when managers are not provided."""
 
     def test_state_stub_contains_note(self) -> None:
-        data = json.loads(build_state_json(state_manager=None))
+        data = json.loads(build_state_json(state_repo=None))
         assert "note" in data
 
     def test_schedule_stub_contains_note(self) -> None:
@@ -245,13 +386,12 @@ class TestSettingsTimeout:
     @pytest.mark.asyncio
     async def test_bash_execute_uses_explicit_timeout_over_default(self) -> None:
         """Explicit timeout= kwarg overrides the settings default."""
-        from unittest.mock import AsyncMock
         from weebot.tools.bash_tool import BashTool
         from weebot.application.ports.sandbox_port import SandboxResult, SandboxPort
 
         captured: list[float] = []
 
-        from weebot.application.ports.sandbox_port import SandboxType, SandboxCapability
+        from weebot.application.ports.sandbox_port import SandboxType
 
         class FakeSandbox(SandboxPort):
             @property
@@ -264,7 +404,9 @@ class TestSettingsTimeout:
             def get_capabilities(self):
                 return set()
 
-            async def execute(self, command, timeout=None, cwd=None, env=None, memory_limit_mb=None):
+            async def execute(
+                self, command, timeout=None, cwd=None, env=None, memory_limit_mb=None
+            ):
                 return SandboxResult(stdout="", stderr="", returncode=0, elapsed_ms=1)
 
             async def execute_shell(self, script, shell="bash", timeout=30.0, cwd=None, **kw):
@@ -287,32 +429,26 @@ class TestLiveResources:
     """State and schedule resources return live data when managers provided."""
 
     def test_state_json_with_state_manager_returns_projects(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {
-                "list_projects": lambda self: [
-                    {"project_id": "p1", "status": "active"},
-                    {"project_id": "p2", "status": "completed"},
-                ]
-            },
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "p1", "status": SessionStatus.RUNNING})()
+        session2 = type("S", (), {"session_id": "p2", "status": SessionStatus.COMPLETED})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1, session2])}
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
-        assert data["total_projects"] == 2
-        assert data["active_projects"] == 1
+        data = json.loads(build_state_json(state_repo=mock_repo))
+        assert data["total_sessions"] == 2
+        assert data["active_sessions"] == 1
         assert data["status"] == "active"
 
     def test_state_json_no_active_projects_reports_idle(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {
-                "list_projects": lambda self: [
-                    {"project_id": "p1", "status": "completed"}
-                ]
-            },
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "p1", "status": SessionStatus.COMPLETED})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
+        data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "idle"
 
     def test_schedule_json_with_scheduler_returns_jobs(self) -> None:
@@ -338,16 +474,12 @@ class TestLiveResources:
         assert data["error"] == "internal_error"
 
     def test_state_json_error_is_sanitized(self) -> None:
-        mock_sm = type(
-            "SM",
+        mock_repo = type(
+            "Repo",
             (),
-            {
-                "list_projects": lambda self: (_ for _ in ()).throw(
-                    RuntimeError("DB password leaked")
-                )
-            },
+            {"list_sessions": AsyncMock(side_effect=RuntimeError("DB password leaked"))},
         )()
-        data = json.loads(build_state_json(state_manager=mock_sm))
+        data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "error"
         assert data["error"] == "internal_error"
 
@@ -358,13 +490,14 @@ class TestLiveResources:
 
     @pytest.mark.asyncio
     async def test_server_passes_state_manager_to_resource(self) -> None:
-        mock_sm = type(
-            "SM",
-            (),
-            {"list_projects": lambda self: [{"project_id": "live", "status": "active"}]},
+        from weebot.domain.models.session import SessionStatus
+
+        session1 = type("S", (), {"session_id": "live", "status": SessionStatus.RUNNING})()
+        mock_repo = type(
+            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
         )()
-        server = WeebotMCPServer(state_manager=mock_sm)
+        server = WeebotMCPServer(state_manager=mock_repo)
         contents = await server.mcp.read_resource("weebot://state")
         data = json.loads(contents[0].content)
-        assert data["total_projects"] == 1
+        assert data["total_sessions"] == 1
         assert data["status"] == "active"

@@ -62,7 +62,6 @@ class TestLayerForModule:
     def test_agents_classified_as_application(self):
         """weebot/agents/* previously 'unknown' — now application."""
         assert layer_for_module("weebot/agents/parser.py") == "application"
-        assert layer_for_module("weebot/agent_core_v2.py") == "application"
 
     def test_tests(self):
         assert layer_for_module("tests/unit/test_layer_classifier.py") == "tests"

@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+env:
+  # browser_use defaults telemetry to ON and phones home to posthog; that
+  # client can leave the process unable to exit cleanly after tests finish,
+  # which GitHub reports as a job timeout/cancellation rather than a failure.
+  ANONYMIZED_TELEMETRY: "false"
+
 jobs:
   architecture-fitness:
     name: Architecture Fitness Tests
@@ -19,11 +25,13 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install import-linter
+          pip install import-linter ruff
       - name: Run import-linter
         run: make lint-imports
       - name: Run architecture fitness tests
         run: pytest tests/unit/test_architecture_fitness.py -v --tb=short
+      - name: Run check-arch (all architecture gates)
+        run: make check-arch
       - name: Run event bridge contract tests
         run: pytest tests/integration/test_event_bridge_contract.py -v --tb=short
       - name: Run security penetration tests
@@ -57,6 +65,38 @@ jobs:
       - name: Run unit tests with coverage
         run: pytest tests/unit/ -v --tb=short -x --cov=weebot --cov-report=term --cov-fail-under=48
 
+  cqrs-integration:
+    name: CQRS Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run CQRS handler integration tests
+        run: pytest tests/integration/test_cqrs_handlers.py -v --tb=short --timeout=30
+
+  e2e-tests:
+    name: E2E / Performance / Chaos Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run E2E tests (non-external)
+        run: pytest tests/e2e/ -v --tb=short --timeout=60 -m "not external"
+      - name: Run performance smoke test
+        run: pytest tests/e2e/test_flow_e2e.py::TestConcurrentFlows -v --tb=short --timeout=120
+      - name: Run chaos recovery test
+        run: pytest tests/e2e/test_flow_e2e.py::TestChaosRecovery -v --tb=short --timeout=60
+
   docker-smoke:
     name: Docker Build Smoke Test
     runs-on: ubuntu-latest
@@ -69,7 +109,7 @@ jobs:
       - name: Build weebot-api image
         run: docker build -t weebot-api .
       - name: Build weebot-ui image
-        run: docker build -t weebot-ui -f weebot-ui/Dockerfile weebot-ui/
+        run: docker build -t weebot-ui -f weebot-ui/Dockerfile .
       - name: Start services (no .env — verify crash-free)
         run: |
           export OPENROUTER_API_KEY=ci-test-key

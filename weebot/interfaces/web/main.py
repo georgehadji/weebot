@@ -7,6 +7,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
+# ── Load .env into os.environ before any weebot module reads API keys ──
+# pydantic-settings loads .env into its own store but does NOT populate
+# os.environ. Several modules (openai_adapter.py, model_registry/_service.py,
+# browser_tool.py, image_gen_tool.py, openrouter_enhanced_cascade.py) read
+# keys via bare os.getenv(). Without this call, those paths fall back to a
+# stale system/User environment variable instead of the current .env value.
+#
+# override=True: .env values take priority over stale system environment
+# variables (e.g. an old OPENROUTER_API_KEY persisted in the OS profile).
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -24,6 +36,7 @@ from weebot.interfaces.web.routers.chat_router import router as chat_router
 from weebot.interfaces.web.routers.sse import router as sse_router
 from weebot.interfaces.web.routers.webhook import router as webhook_router
 from weebot.interfaces.web.routers.discord_webhook import router as discord_router
+from weebot.interfaces.web.routers.ponytail import router as ponytail_router
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -191,6 +204,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Circuit breaker state persisted to %s", cb_path)
     except Exception as exc:
         logger.debug("Circuit breaker state persist skipped: %s", exc)
+    # Close browser session pool if initialized
+    try:
+        pool = container.get("browser_pool")
+        await pool.close()
+        logger.info("Browser pool closed")
+    except Exception:
+        pass  # Browser pool not configured
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools
@@ -211,6 +231,40 @@ def create_app() -> FastAPI:
         version="2.6.0",
         lifespan=lifespan,
     )
+
+    # ── Global exception handlers ──────────────────────────────────
+    from weebot.domain.exceptions import WeebotError, ErrorCode
+
+    @app.exception_handler(WeebotError)
+    async def weebot_exception_handler(request: Request, exc: WeebotError) -> JSONResponse:
+        status_code = {
+            ErrorCode.RESOURCE_EXHAUSTED: 429,
+            ErrorCode.SECURITY_VIOLATION: 403,
+            ErrorCode.TOOL_EXECUTION_FAILED: 502,
+            ErrorCode.RESOURCE_NOT_FOUND: 404,
+            ErrorCode.INTERNAL_ERROR: 500,
+            ErrorCode.VALIDATION_ERROR: 422,
+        }.get(exc.code, 500)
+        logger.error("WeebotError: %s (code=%s severity=%s)", exc.message, exc.code, exc.severity)
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "error_code": exc.code.value if exc.code else "unknown",
+                "detail": exc.message,
+                "severity": exc.severity.value if exc.severity else "error",
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def fallback_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("Unhandled exception: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "internal_error",
+                "detail": "An unexpected error occurred. Check server logs for details.",
+            },
+        )
     
     # CORS middleware — allow only known origins, never wildcard with credentials
     _allowed_origins = [
@@ -289,6 +343,7 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(discord_router)
     app.include_router(ops_router)
+    app.include_router(ponytail_router, prefix="/api")
     
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")

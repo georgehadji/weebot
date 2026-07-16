@@ -140,14 +140,12 @@ class ContextCompressor:
         from weebot.config.feature_flags import is_enabled
         return self.vision_enabled and is_enabled("VISION_REFLECTION_ENABLED")
 
-    def inject_screenshot(self, tool_name: str, image_b64: str) -> None:
+    async def inject_screenshot(self, tool_name: str, image_b64: str) -> None:
         """Append the latest screenshot as an image message for the next LLM call.
 
         Bounds token cost by keeping only the most recent screenshot live —
         image blocks already in the buffer are downgraded to a text placeholder.
         """
-        from weebot.infrastructure.adapters.llm._multimodal import build_image_message
-
         updated = []
         for msg in self._conversation_buffer:
             content = msg.get("content")
@@ -164,9 +162,12 @@ class ContextCompressor:
         self._conversation_buffer.clear()
         for m in updated:
             self._conversation_buffer.append(m)
-        self._conversation_buffer.append(
-            build_image_message(f"Current screen after {tool_name}:", image_b64)
+        multimodal_msg = await self._llm.build_multimodal_message(
+            role="user",
+            text=f"Current screen after {tool_name}:",
+            image_base64=image_b64,
         )
+        self._conversation_buffer.append(multimodal_msg)
 
     async def reflect_on_screenshot(
         self, tool_name: str, image_b64: str, task_context: str = "",

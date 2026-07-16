@@ -47,3 +47,21 @@ class StateRepositoryPort(ABC):
             List of {session_id, event_type, summary, content, score}.
         """
         ...
+
+    @abstractmethod
+    async def get_low_salience_entries(
+        self, threshold: float = 0.3, limit: int = 50
+    ) -> list[dict]:
+        """Get memory entries below the salience threshold.
+
+        Used for eviction candidates and user profile consolidation.
+
+        Args:
+            threshold: Maximum salience score to include (default 0.3).
+            limit: Maximum results (default 50).
+
+        Returns:
+            List of dicts with keys ``entry_hash``, ``entry_text``, ``source``,
+            ``salience``, ``access_count``, ``last_accessed``, ``created_at``.
+        """
+        ...

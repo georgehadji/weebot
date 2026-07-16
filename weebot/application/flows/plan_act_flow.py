@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from enum import Enum
-from typing import AsyncGenerator, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
@@ -12,11 +13,10 @@ from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.planning import PlanningState
 from weebot.application.flows.states.executing import ExecutingState
-from weebot.application.flows.states.updating import UpdatingState
-from weebot.application.flows.states.summarizing import SummarizingState
-from weebot.application.flows.states.completed import CompletedState
 from weebot.application.flows.states.base import AgentStatus
 from weebot.application.flows.flow_router import FlowRouter
+from weebot.application.flows.collaborators.fact_resolver import FactResolver
+from weebot.application.flows.collaborators.tool_assembler import ToolAssembler
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -38,27 +38,23 @@ class PlanStuckError(RuntimeError):
     operator rather than silently retrying with identical plans.
     """
     pass
-from weebot.domain.services.continuation_detector import (
+from weebot.domain.services.continuation_detector import (  # noqa: E402
     ContinuationDetector,
 )
-from weebot.application.services.plan_critic import PlanCriticService
-from weebot.application.services.truth_binder import TruthBinder
-from weebot.domain.models.event import (
+from weebot.application.services.plan_critic import PlanCriticService  # noqa: E402
+from weebot.application.services.truth_binder import TruthBinder  # noqa: E402
+from weebot.domain.models.event import (  # noqa: E402
     AgentEvent,
-    DoneEvent,
     ErrorEvent,
-    MessageEvent,
-    PlanEvent,
-    PlanStatus,
-    StepEvent,
-    StepStatus,
-    WaitForUserEvent,
 )
-from weebot.domain.models.plan import Plan, Step
-from weebot.domain.models.session import Session, SessionStatus
-from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
-from weebot.application.models.tool_collection import ToolCollection
-from weebot.config.constants import DEFAULT_MAX_STEP_REPETITIONS, DEFAULT_MAX_FLOW_ITERATIONS
+from weebot.domain.models.plan import Plan  # noqa: E402
+from weebot.domain.models.session import Session, SessionStatus  # noqa: E402
+from weebot.application.models.plan_act_flow_config import PlanActFlowConfig  # noqa: E402
+from weebot.application.models.tool_collection import ToolCollection  # noqa: E402
+from weebot.config.constants import (  # noqa: E402
+    DEFAULT_MAX_STEP_REPETITIONS,
+    DEFAULT_MAX_FLOW_ITERATIONS,
+)
 
 if TYPE_CHECKING:
     from weebot.application.cqrs.mediator import Mediator
@@ -69,7 +65,7 @@ if TYPE_CHECKING:
 # The module-level logger is a fallback for static/class methods only.
 logger = logging.getLogger(__name__)
 
-from weebot.application.services.metrics_bridge import get_metrics as _get_metrics_bridge
+from weebot.application.services.metrics_bridge import get_metrics as _get_metrics_bridge  # noqa: E402
 
 
 class PlanActFlow(BaseFlow):
@@ -84,28 +80,28 @@ class PlanActFlow(BaseFlow):
         llm: LLMPort = None,
         tools: ToolCollection = None,
         session: Session = None,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
-        skill_prompt: Optional[str] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
+        skill_prompt: str | None = None,
         episodic_memory = None,
-        mediator: Optional[Mediator] = None,
-        state_repo: Optional[StateRepositoryPort] = None,
+        mediator: Mediator | None = None,
+        state_repo: StateRepositoryPort | None = None,
         steering = None,
         max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
         max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
         auto_terminate_on_plan_complete: bool = True,
         context_aware_model_selection: bool = True,
-        max_steps: Optional[int] = None,
-        truth_binder: Optional[TruthBinder] = None,
-        plan_critic: Optional[PlanCriticService] = None,
-        code_reviewer: Optional[Any] = None,  # CodeReviewerPort
-        knowledge_graph: Optional[Any] = None,
-        behavioral_learner: Optional[Any] = None,
-        logger: Optional["StructuredLogger"] = None,
-        checkpoint_port: Optional["CheckpointPort"] = None,
-        profile_name: Optional[str] = None,
+        max_steps: int | None = None,
+        truth_binder: TruthBinder | None = None,
+        plan_critic: PlanCriticService | None = None,
+        code_reviewer: Any | None = None,  # CodeReviewerPort
+        knowledge_graph: Any | None = None,
+        behavioral_learner: Any | None = None,
+        logger: StructuredLogger | None = None,
+        checkpoint_port: CheckpointPort | None = None,
+        profile_name: str | None = None,
         personality = None,
-        agent_role: Optional[str] = None,
+        agent_role: str | None = None,
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -146,12 +142,13 @@ class PlanActFlow(BaseFlow):
         self._model = cfg.model
         self._mediator = cfg.mediator
         self._state_repo = cfg.state_repo
+        self._fact_resolver = FactResolver(state_repo=self._state_repo)
         self._steering = cfg.steering
         self._truth_binder = cfg.truth_binder
         self._plan_critic = cfg.plan_critic
         self._plan_critique = None  # Set by CritiquingState
         self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
-        self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress evaluation
+        self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
@@ -167,7 +164,7 @@ class PlanActFlow(BaseFlow):
         self._stdlib_logger = logging.getLogger(__name__)
         self.status = AgentStatus.IDLE
         self._state: FlowState = None  # Will be set in run()
-        self._plan: Optional[Plan] = None
+        self._plan: Plan | None = None
         self._compactor = MemoryCompactor()
         self._plan_history = PlanHistory()
         self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
@@ -185,11 +182,18 @@ class PlanActFlow(BaseFlow):
 
         self._skill_prompt = cfg.skill_prompt
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
-        self._tracing_port = None
+        self._tracing_port = cfg.tracing_port
         self._persistence_adapter = None
         # ── Event pipeline middleware (WP-4) ──────────────────────
         # Built in ``configure_defaults`` and injected via config.
-        self._event_pipeline = getattr(cfg, "event_pipeline", None) or getattr(cfg, "_event_pipeline", None)
+        self._event_pipeline = getattr(cfg, "event_pipeline", None) or getattr(
+            cfg, "_event_pipeline", None
+        )
+
+        # ── Enhancement H1: scoped MCP tool aggregation ─────────────
+        self._tool_registry = cfg.tool_registry
+        self._mcp_bridge = cfg.mcp_bridge
+        self._native_tool_selector = cfg.native_tool_selector
 
         # ── Self-Harness: behavioural instruction block + resolver ──
         self._harness_instruction_block: str = ""
@@ -244,6 +248,8 @@ class PlanActFlow(BaseFlow):
             if self._harness_instruction_block
             else None,
             middleware_chain=cfg.middleware_chain,
+            state_repo=cfg.state_repo,
+            tracing_port=self._tracing_port,
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
@@ -251,10 +257,8 @@ class PlanActFlow(BaseFlow):
 
         # Enhancement 5: subscribe to SkillGapDetected domain events
         if self._event_bus is not None and self._misalignment_journal is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._event_bus.subscribe_domain(self._on_skill_gap_detected)
-            except Exception:
-                pass  # subscription is best-effort
 
     # ── Skill catalog for planner ───────────────────────────────────
 
@@ -389,7 +393,10 @@ class PlanActFlow(BaseFlow):
             correction_text="Consider authoring a new skill for this capability",
         )
         await self._misalignment_journal.record(entry)
-        self._log.debug("Skill gap recorded for step: %s", getattr(event, "step_description", "")[:80])
+        self._log.debug(
+            "Skill gap recorded for step: %s",
+            getattr(event, "step_description", "")[:80],
+        )
 
     @property
     def _log(self):
@@ -494,12 +501,10 @@ class PlanActFlow(BaseFlow):
         if hasattr(self, "_state") and self._state is not None:
             _m = _get_metrics_bridge()
             if _m:
-                try:
+                with contextlib.suppress(Exception):
                     _m.flow_step_duration_seconds.labels(
                         state=type(self._state).__name__,
                     ).observe(prev_duration)
-                except Exception:
-                    pass  # metrics must never break state transitions
 
         # Each FlowState subclass declares its own status class attribute
         # so adding a new state does not require modifying this method.
@@ -526,7 +531,21 @@ class PlanActFlow(BaseFlow):
         self._flow_started_at = _time.monotonic()
         self._log.info(f"PlanActFlow started for session {self._session.id}")
 
-        # --- Task context preservation ---
+        # ── OTEL tracing: plan_act_iteration span ────────────────────
+        # ARCH-AUDIT-V2 B2 — root span for the full Plan-Act-Reflect loop.
+        # Uses start_span (not start_as_current_span) because the generator
+        # body makes context-manager teardown unreliable.  The span is
+        # ended explicitly at the method's exit point below.
+        # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
+        _run_span = None
+        if self._tracing_port is not None:
+            from weebot.config.feature_flags import is_enabled
+            if is_enabled("OTEL_TRACING_ENABLED"):
+                _run_span = self._tracing_port.start_span("plan_act_iteration")
+                _run_span.set_attribute("session.id", self._session.id)
+                trace_id = getattr(self._session, "trace_id", None)
+                if trace_id:
+                    _run_span.set_attribute("trace_id", trace_id)
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
         # can be enriched with it when a brand-new plan is needed.
         original_task: str = self._session.context.get("_original_task", "")
@@ -545,6 +564,22 @@ class PlanActFlow(BaseFlow):
             event_count=len(self._session.events),
         )
 
+        # ── Enhancement H1: scope external MCP tools to the current query ────
+        if not hasattr(self, "_tool_assembler"):
+            self._tool_assembler = ToolAssembler(
+                registry=self._tool_registry,
+                mcp_bridge=self._mcp_bridge,
+                native_tool_selector=self._native_tool_selector,
+                llm=self._llm,
+                agent_role=self._agent_role or "admin",
+                logger=self._stdlib_logger,
+            )
+        self._tools = await self._tool_assembler.assemble(
+            effective_prompt=effective_prompt,
+            tools=self._tools,
+            executor=self._executor,
+        )
+
         # ── Resolve initial state via FlowRouter ───────────────────────────
         initial_state, self._session = FlowRouter.resolve_initial_state(
             session=self._session,
@@ -557,7 +592,11 @@ class PlanActFlow(BaseFlow):
             self.set_state(initial_state)
         elif isinstance(initial_state, PlanningState):
             # Record misalignment if user rejected the plan, then re-plan
-            was_rejected = self._session.context.extra.get("_plan_modification_request") if self._session.context and self._session.context.extra else None
+            was_rejected = (
+                self._session.context.extra.get("_plan_modification_request")
+                if self._session.context and self._session.context.extra
+                else None
+            )
             if was_rejected and self._misalignment_journal is not None:
                 await FlowRouter.record_misalignment(
                     session=self._session,
@@ -618,6 +657,8 @@ class PlanActFlow(BaseFlow):
                     if _result.should_terminate:
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
+                        if _run_span is not None:
+                            _run_span.end()
                         self.set_state(CompletedState(termination_reason=_result.reason))
                         return
 
@@ -650,7 +691,7 @@ class PlanActFlow(BaseFlow):
             # Only pass the prompt if it's the first iteration or it's a re-planning loop
             # where the prompt is the original task.
             state_prompt = effective_prompt if not prompt_consumed else ""
-            
+
             try:
                 result = self._state.execute(self, state_prompt)
                 # States may be async generators (yield events) or regular
@@ -679,6 +720,8 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
+                if _run_span is not None:
+                    _run_span.end()
                 return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
@@ -725,21 +768,31 @@ class PlanActFlow(BaseFlow):
 
                             # Keep only the last few message events
                             keep_last = max(2, kept - 1)  # -1 for the summary
-                            recent = msg_events[-keep_last:] if keep_last < len(msg_events) else msg_events
+                            recent = (
+                                msg_events[-keep_last:]
+                                if keep_last < len(msg_events)
+                                else msg_events
+                            )
 
                             summary_event = MessageEvent(
                                 role="system",
-                                message=f"[Compressed context — earlier messages summarized]\n{summary[:500]}",
+                                message=(
+                                    "[Compressed context — earlier messages summarized]\n"
+                                    f"{summary[:500]}"
+                                ),
                             )
 
                             # Reconstruct: preserved non-message events → summary → recent messages
                             new_events = preserved + [summary_event] + recent
                             self._session = self._session.model_copy(update={"events": new_events})
                             self._log.info(
-                                "Turn-boundary compression: %d→%d tokens, %d→%d events (iteration %d)",
+                                "Turn-boundary compression: %d→%d tokens, "
+                                "%d→%d events (iteration %d)",
                                 result["original_token_count"],
                                 result["compressed_token_count"],
-                                len(self._session.events) if hasattr(self._session, "events") else 0,
+                                len(self._session.events)
+                                if hasattr(self._session, "events")
+                                else 0,
                                 len(new_events),
                                 iteration_count,
                             )
@@ -777,7 +830,7 @@ class PlanActFlow(BaseFlow):
         """Check if the last WaitForUserEvent in the session has not been resolved."""
         return self._session.has_unresolved_wait_event()
 
-    def _maybe_switch_model_for_context(self) -> Optional[str]:
+    def _maybe_switch_model_for_context(self) -> str | None:
         """Dynamically select model based on context size if enabled.
 
         Delegates to ContextSwitcher service.
@@ -805,7 +858,7 @@ class PlanActFlow(BaseFlow):
         self._planner = self._context_switcher.update_agents_with_model(
             model=model,
             skill_prompt=self._skill_prompt,
-            facts=self._session.get_facts(),
+            facts=self._fact_resolver.resolve_for_session(self._session),
             episodic_memory=self._episodic_memory,
         )
 
@@ -846,12 +899,12 @@ class PlanActFlow(BaseFlow):
 
         self._plan_history.snapshot(self._plan)
 
-    def undo(self) -> Optional[Plan]:
+    def undo(self) -> Plan | None:
         """Revert to the previous plan state if available."""
         self._plan = self._plan_history.undo(self._plan)
         return self._plan
 
-    def redo(self) -> Optional[Plan]:
+    def redo(self) -> Plan | None:
         """Re-apply a plan state that was previously undone."""
         self._plan = self._plan_history.redo(self._plan)
         return self._plan
@@ -933,6 +986,10 @@ class PlanActFlow(BaseFlow):
                 self._session.id,
                 exc_info=True,
             )
+
+        # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
+        if _run_span is not None:
+            _run_span.end()
 
     def _get_tracing_port(self):
         """Return the tracing port injected at construction time, or None."""

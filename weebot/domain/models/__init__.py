@@ -2,6 +2,7 @@
 import warnings
 
 from weebot.domain.models.task_type import TaskType
+from weebot.domain.models.tool_result import ToolResult
 
 # Suppress the module-level DeprecationWarning from legacy_models
 # during this backward-compatibility re-export.  Consumers that import
@@ -39,4 +40,5 @@ __all__ = [
     "Memory",
     "AgentRelationship",
     "TaskType",
+    "ToolResult",
 ]

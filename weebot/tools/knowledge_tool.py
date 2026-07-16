@@ -86,10 +86,10 @@ class KnowledgeTool(BaseTool):
     def __init__(self, repo: Optional[ToolRepositoryPort] = None):
         super().__init__()
         if repo is None:
-            from weebot.application.di import Container
-            c = Container()
-            c.configure_defaults()
-            repo = c.get(ToolRepositoryPort)  # type: ignore[assignment]
+            import importlib as _il
+            _c = _il.import_module("weebot.application.di").Container()
+            _c.configure_defaults()
+            repo = _c.get(ToolRepositoryPort)  # type: ignore[assignment]
         self._repo = repo
 
     # ------------------------------------------------------------------

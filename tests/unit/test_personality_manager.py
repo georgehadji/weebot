@@ -184,7 +184,15 @@ class TestRoleSectionMapping:
 
     def test_admin_gets_all_sections(self):
         sections = RoleSectionMapping.sections_for_role("admin")
-        assert sections == ["identity", "invariant_rules", "operating_principles", "response_style"]
+        assert sections == [
+            "identity",
+            "invariant_rules",
+            "operating_principles",
+            "response_style",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
+        ]
 
     def test_researcher_gets_subset(self):
         sections = RoleSectionMapping.sections_for_role("researcher")
@@ -194,7 +202,13 @@ class TestRoleSectionMapping:
 
     def test_automation_gets_minimal(self):
         sections = RoleSectionMapping.sections_for_role("automation")
-        assert sections == ["identity", "invariant_rules"]
+        assert sections == [
+            "identity",
+            "invariant_rules",
+            "web_3d_motion",
+            "youtube_downloads",
+            "vision_osworld",
+        ]
 
     def test_unknown_role_falls_back(self):
         sections = RoleSectionMapping.sections_for_role("unknown_role")

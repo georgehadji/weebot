@@ -7,8 +7,9 @@ isolate LLM-calling logic from step orchestration.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.di import Container
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
@@ -160,7 +161,7 @@ class CascadeExecutor:
 
     async def _cascade_try_chat(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_id: str,
         timeout: float = 15.0,
         fast_fail: bool = False,
@@ -234,7 +235,7 @@ class CascadeExecutor:
 
     async def call_with_cascade(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         description: str = "",
     ) -> LLMResponse:
         """Per-role cascade: primary → fallback1 → fallback2 → tier3 → tier4.
@@ -288,10 +289,10 @@ class CascadeExecutor:
                         pf.cancel()
                     for pf in pending:
                         if not pf.cancelled():
-                            try:
+                            with contextlib.suppress(
+                                asyncio.InvalidStateError, asyncio.CancelledError
+                            ):
                                 pf.exception()
-                            except (asyncio.InvalidStateError, asyncio.CancelledError):
-                                pass
                     if self._on_success:
                         await self._on_success(resp)
                     return resp
@@ -330,7 +331,7 @@ class CascadeExecutor:
 
     async def _live_model_rescue(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> LLMResponse | None:
         """Last-resort: fetch available models from OpenRouter and try the best.
 
@@ -370,7 +371,6 @@ class CascadeExecutor:
 
         candidates.sort(key=lambda m: m["ctx"], reverse=True)
         rescue_id = candidates[0]["id"]
-        is_free = ":free" in rescue_id
         logger.warning(
             "Live model rescue: trying %s (from %d paid + %d free candidates)",
             rescue_id, len(paid_models), len(free_models),

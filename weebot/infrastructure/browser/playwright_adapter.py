@@ -1,6 +1,7 @@
 """PlaywrightAdapter — Browser automation using Playwright."""
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Optional
 
@@ -43,6 +44,7 @@ class PlaywrightAdapter(BrowserPort):
         self._context: Any | None = None
         self._page: Any | None = None
         self._config: BrowserConfig | None = None
+        self._lock = asyncio.Lock()
     
     @property
     def page(self):
@@ -135,19 +137,20 @@ class PlaywrightAdapter(BrowserPort):
     
     async def close(self) -> None:
         """Close the browser session and cleanup resources."""
-        if self._context:
-            await self._context.close()
-            self._context = None
-        
-        if self._browser:
-            await self._browser.close()
-            self._browser = None
-        
-        if self._playwright:
-            await self._playwright.stop()
-            self._playwright = None
-        
-        self._page = None
+        async with self._lock:
+            if self._context:
+                await self._context.close()
+                self._context = None
+
+            if self._browser:
+                await self._browser.close()
+                self._browser = None
+
+            if self._playwright:
+                await self._playwright.stop()
+                self._playwright = None
+
+            self._page = None
     
     async def navigate(self, url: str, wait_until: str = "networkidle") -> NavigationResult:
         """Navigate to a URL.
@@ -159,14 +162,16 @@ class PlaywrightAdapter(BrowserPort):
         Returns:
             NavigationResult with navigation details.
         """
-        if not self._page:
-            return NavigationResult(
-                success=False,
-                url="",
-                status_code=0,
-                error="Browser not started",
-                load_time_ms=0.0,
-            )
+        async with self._lock:
+            page = self._page
+            if not page:
+                return NavigationResult(
+                    success=False,
+                    url="",
+                    status_code=0,
+                    error="Browser not started",
+                    load_time_ms=0.0,
+                )
         
         # Map wait_until values
         wait_until_map = {
@@ -180,7 +185,7 @@ class PlaywrightAdapter(BrowserPort):
         t_start = time.monotonic()
         
         try:
-            response = await self._page.goto(url, wait_until=playwright_wait)
+            response = await page.goto(url, wait_until=playwright_wait)
             elapsed_ms = (time.monotonic() - t_start) * 1000
             
             if response:
@@ -194,7 +199,7 @@ class PlaywrightAdapter(BrowserPort):
             else:
                 return NavigationResult(
                     success=True,
-                    url=self._page.url,
+                    url=page.url,
                     status_code=0,
                     error=None,
                     load_time_ms=elapsed_ms,
@@ -211,20 +216,22 @@ class PlaywrightAdapter(BrowserPort):
     
     async def get_state(self) -> BrowserState:
         """Get current browser state."""
-        if not self._page:
-            return BrowserState(
-                url="",
-                title="",
-                ready_state="",
-                viewport=(0, 0),
-            )
+        async with self._lock:
+            page = self._page
+            if not page:
+                return BrowserState(
+                    url="",
+                    title="",
+                    ready_state="",
+                    viewport=(0, 0),
+                )
         
-        viewport = self._page.viewport_size or {"width": 0, "height": 0}
+        viewport = page.viewport_size or {"width": 0, "height": 0}
         
         return BrowserState(
-            url=self._page.url,
-            title=await self._page.title(),
-            ready_state=await self._page.evaluate("document.readyState"),
+            url=page.url,
+            title=await page.title(),
+            ready_state=await page.evaluate("document.readyState"),
             viewport=(viewport["width"], viewport["height"]),
         )
     
@@ -238,24 +245,28 @@ class PlaywrightAdapter(BrowserPort):
         Returns:
             Screenshot image data as PNG bytes.
         """
-        if not self._page:
-            return b""
+        async with self._lock:
+            page = self._page
+            if not page:
+                return b""
         
         if selector:
-            element = await self._page.query_selector(selector)
+            element = await page.query_selector(selector)
             if element:
                 return await element.screenshot()
             return b""
         
-        return await self._page.screenshot(full_page=full_page)
+        return await page.screenshot(full_page=full_page)
     
     async def click(self, selector: str, button: str = "left", click_count: int = 1) -> ActionResult:
         """Click an element."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
-            await self._page.click(
+            await page.click(
                 selector,
                 button=button,
                 click_count=click_count,
@@ -266,60 +277,68 @@ class PlaywrightAdapter(BrowserPort):
     
     async def fill(self, selector: str, value: str, clear_first: bool = True) -> ActionResult:
         """Fill an input field."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
             if clear_first:
-                await self._page.fill(selector, value)
+                await page.fill(selector, value)
             else:
                 # Get current value and append
-                element = await self._page.query_selector(selector)
+                element = await page.query_selector(selector)
                 if element:
                     current = await element.input_value()
-                    await self._page.fill(selector, current + value)
+                    await page.fill(selector, current + value)
                 else:
-                    await self._page.fill(selector, value)
+                    await page.fill(selector, value)
             return ActionResult(success=True)
         except Exception as e:
             return ActionResult(success=False, error=str(e))
     
     async def type_text(self, selector: str, text: str, delay_ms: int = 0) -> ActionResult:
         """Type text into an element (simulating keypresses)."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
             delay = delay_ms / 1000.0  # Convert to seconds
-            await self._page.type(selector, text, delay=delay)
+            await page.type(selector, text, delay=delay)
             return ActionResult(success=True)
         except Exception as e:
             return ActionResult(success=False, error=str(e))
     
     async def get_text(self, selector: str | None = None) -> str:
         """Get text content from page or element."""
-        if not self._page:
-            return ""
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ""
         
         try:
             if selector:
-                element = await self._page.query_selector(selector)
+                element = await page.query_selector(selector)
                 if element:
                     return await element.inner_text() or ""
                 return ""
             else:
                 # Get all visible text
-                return await self._page.inner_text("body") or ""
+                return await page.inner_text("body") or ""
         except Exception:
             return ""
     
     async def get_element_info(self, selector: str) -> ElementInfo | None:
         """Get information about an element."""
-        if not self._page:
-            return None
+        async with self._lock:
+            page = self._page
+            if not page:
+                return None
         
         try:
-            element = await self._page.query_selector(selector)
+            element = await page.query_selector(selector)
             if not element:
                 return None
             
@@ -345,11 +364,13 @@ class PlaywrightAdapter(BrowserPort):
     
     async def get_elements(self, selector: str) -> list[ElementInfo]:
         """Get information about all matching elements."""
-        if not self._page:
-            return []
+        async with self._lock:
+            page = self._page
+            if not page:
+                return []
         
         try:
-            elements = await self._page.query_selector_all(selector)
+            elements = await page.query_selector_all(selector)
             results = []
             
             for element in elements:
@@ -379,95 +400,107 @@ class PlaywrightAdapter(BrowserPort):
     
     async def scroll(self, x: int, y: int, selector: str | None = None) -> ActionResult:
         """Scroll the page or element."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
             if selector:
-                element = await self._page.query_selector(selector)
+                element = await page.query_selector(selector)
                 if element:
                     await element.evaluate(f"el => el.scrollBy({x}, {y})")
                 else:
                     return ActionResult(success=False, error=f"Element not found: {selector}")
             else:
-                await self._page.evaluate(f"window.scrollBy({x}, {y})")
+                await page.evaluate(f"window.scrollBy({x}, {y})")
             return ActionResult(success=True)
         except Exception as e:
             return ActionResult(success=False, error=str(e))
     
     async def hover(self, selector: str) -> ActionResult:
         """Hover over an element."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
-            await self._page.hover(selector)
+            await page.hover(selector)
             return ActionResult(success=True)
         except Exception as e:
             return ActionResult(success=False, error=str(e))
     
     async def select_option(self, selector: str, value: str | list[str]) -> ActionResult:
         """Select option(s) in a select element."""
-        if not self._page:
-            return ActionResult(success=False, error="Browser not started")
+        async with self._lock:
+            page = self._page
+            if not page:
+                return ActionResult(success=False, error="Browser not started")
         
         try:
             if isinstance(value, list):
-                await self._page.select_option(selector, value)
+                await page.select_option(selector, value)
             else:
-                await self._page.select_option(selector, value)
+                await page.select_option(selector, value)
             return ActionResult(success=True)
         except Exception as e:
             return ActionResult(success=False, error=str(e))
     
     async def evaluate(self, script: str, selector: str | None = None) -> Any:
         """Execute JavaScript in the browser."""
-        if not self._page:
-            return None
+        async with self._lock:
+            page = self._page
+            if not page:
+                return None
         
         try:
             if selector:
-                element = await self._page.query_selector(selector)
+                element = await page.query_selector(selector)
                 if element:
                     return await element.evaluate(script)
                 return None
             else:
-                return await self._page.evaluate(script)
+                return await page.evaluate(script)
         except Exception as e:
             return {"error": str(e)}
     
     async def wait_for_selector(self, selector: str, timeout: float = 30.0, state: str = "visible") -> bool:
         """Wait for an element to match selector criteria."""
-        if not self._page:
-            return False
+        async with self._lock:
+            page = self._page
+            if not page:
+                return False
         
         try:
             timeout_ms = timeout * 1000
-            await self._page.wait_for_selector(selector, state=state, timeout=timeout_ms)
+            await page.wait_for_selector(selector, state=state, timeout=timeout_ms)
             return True
         except Exception:
             return False
     
     async def go_back(self) -> NavigationResult:
         """Navigate back in browser history."""
-        if not self._page:
-            return NavigationResult(
-                success=False,
-                url="",
-                status_code=0,
-                error="Browser not started",
-                load_time_ms=0.0,
-            )
+        async with self._lock:
+            page = self._page
+            if not page:
+                return NavigationResult(
+                    success=False,
+                    url="",
+                    status_code=0,
+                    error="Browser not started",
+                    load_time_ms=0.0,
+                )
         
         t_start = time.monotonic()
         
         try:
-            response = await self._page.go_back()
+            response = await page.go_back()
             elapsed_ms = (time.monotonic() - t_start) * 1000
             
             return NavigationResult(
                 success=True,
-                url=self._page.url,
+                url=page.url,
                 status_code=response.status if response else 0,
                 error=None,
                 load_time_ms=elapsed_ms,
@@ -484,24 +517,26 @@ class PlaywrightAdapter(BrowserPort):
     
     async def go_forward(self) -> NavigationResult:
         """Navigate forward in browser history."""
-        if not self._page:
-            return NavigationResult(
-                success=False,
-                url="",
-                status_code=0,
-                error="Browser not started",
-                load_time_ms=0.0,
-            )
+        async with self._lock:
+            page = self._page
+            if not page:
+                return NavigationResult(
+                    success=False,
+                    url="",
+                    status_code=0,
+                    error="Browser not started",
+                    load_time_ms=0.0,
+                )
         
         t_start = time.monotonic()
         
         try:
-            response = await self._page.go_forward()
+            response = await page.go_forward()
             elapsed_ms = (time.monotonic() - t_start) * 1000
             
             return NavigationResult(
                 success=True,
-                url=self._page.url,
+                url=page.url,
                 status_code=response.status if response else 0,
                 error=None,
                 load_time_ms=elapsed_ms,
@@ -518,24 +553,26 @@ class PlaywrightAdapter(BrowserPort):
     
     async def reload(self) -> NavigationResult:
         """Reload current page."""
-        if not self._page:
-            return NavigationResult(
-                success=False,
-                url="",
-                status_code=0,
-                error="Browser not started",
-                load_time_ms=0.0,
-            )
+        async with self._lock:
+            page = self._page
+            if not page:
+                return NavigationResult(
+                    success=False,
+                    url="",
+                    status_code=0,
+                    error="Browser not started",
+                    load_time_ms=0.0,
+                )
         
         t_start = time.monotonic()
         
         try:
-            response = await self._page.reload()
+            response = await page.reload()
             elapsed_ms = (time.monotonic() - t_start) * 1000
             
             return NavigationResult(
                 success=True,
-                url=self._page.url,
+                url=page.url,
                 status_code=response.status if response else 0,
                 error=None,
                 load_time_ms=elapsed_ms,

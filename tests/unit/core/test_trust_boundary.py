@@ -44,6 +44,28 @@ class TestIsUntrustedTool:
     def test_unknown_tool_is_trusted(self):
         assert not is_untrusted_tool("some_internal_tool_xyz")
 
+    # ── MCP namespace prefix tests (Phase 1 — X MCP integration) ──
+
+    def test_mcp_xapi_is_untrusted(self):
+        assert is_untrusted_tool("mcp__xapi__search_posts")
+
+    def test_mcp_x_docs_is_untrusted(self):
+        assert is_untrusted_tool("mcp__x_docs__search_x")
+
+    def test_mcp_xapi_bookmark_is_untrusted(self):
+        assert is_untrusted_tool("mcp__xapi__bookmark_tweet")
+
+    def test_mcp_article_publish_is_untrusted(self):
+        assert is_untrusted_tool("mcp__xapi__article_publish")
+
+    def test_mcp_stripe_tool_is_untrusted(self):
+        """Any namespace mcp__ tool is untrusted, not just X."""
+        assert is_untrusted_tool("mcp__stripe__create_payment")
+
+    def test_mcp_prefix_alone_is_not_a_tool(self):
+        """The bare prefix string is not a valid tool name."""
+        assert not is_untrusted_tool("mcp__")
+
 
 class TestWrapUntrusted:
     def test_output_contains_source(self):

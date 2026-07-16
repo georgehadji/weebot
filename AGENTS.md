@@ -122,6 +122,10 @@ Both `pyproject.toml` and `pytest.ini` configure pytest. `pytest.ini` currently 
 | `python -m cli.main dream scan` | `cli/main.py` | DreamerAgent + IdeaGate cycle |
 | `python -m cli.main skills list` | `cli/main.py` | List installed skills |
 | `python -m cli.main agents list` | `cli/main.py` | List personas |
+| `python -m cli.main ponytail [lite\|full\|ultra\|off]` | `cli/main.py` | Activate/deactivate Ponytail lazy-senior-dev mode |
+| `python -m cli.main ponytail-review` | `cli/main.py` | Review git diff for over-engineering |
+| `python -m cli.main ponytail-audit` | `cli/main.py` | Audit workspace for bloat and YAGNI targets |
+| `python -m cli.main ponytail-help` | `cli/main.py` | Show Ponytail reference card |
 | `python run_mcp.py` | `run_mcp.py` | Start the MCP server (stdio or SSE) |
 | `python -m weebot.interfaces.web.main` | `weebot/interfaces/web/main.py` | Start FastAPI backend on port 8000 |
 | `cd weebot-ui && npm run dev` | `weebot-ui/package.json` | Start Next.js frontend on port 3000 |
@@ -316,6 +320,7 @@ Copy `.env.example` to `.env` and configure at minimum one AI provider key. Impo
 - `WEEBOT_MCP_API_KEY` — auth token for MCP SSE transport.
 - `BASH_TIMEOUT`, `PYTHON_TIMEOUT`, `SANDBOX_MAX_OUTPUT_BYTES`, `SANDBOX_ALLOW_NETWORK` — sandbox limits.
 - `DAILY_AI_BUDGET` — max daily AI spend in USD (default: 10.0).
+- `WEEBOT_PONYTAIL_MODE` — Ponytail lazy-senior-dev intensity: `off`, `lite`, `full`, or `ultra` (default: `off`). When active, the `ponytail` built-in skill is injected into PlanActFlow's system prompt.
 
 Settings are loaded by `weebot.config.settings.WeebotSettings` using Pydantic Settings, with priority: constructor kwargs > `.env` > system environment.
 

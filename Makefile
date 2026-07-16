@@ -21,6 +21,20 @@ lint-imports:
 	lint-imports --config .importlinter
 	@echo "All architecture contracts satisfied."
 
+lint-async-io:
+	@echo "=== Async I/O Blocking Check ==="
+	@python scripts/lint_async_io.py
+
+lint-bare-except-pass:
+	@echo "=== Bare except Exception: pass check ==="
+	@! grep -Prn "except\s+(\w+(\.\w+)?|\([^)]+\)):\s*pass\s*$$" \
+	    --include="*.py" \
+	    --exclude-dir=tests \
+	    --exclude-dir=.venv \
+	    --exclude-dir=Output \
+	    weebot/ cli/ \
+	    || (echo "ERROR: except Exception: pass found. Must use logger.debug()." && exit 1)
+
 check-arch:
 	@echo "=== Architecture Fitness Tests ==="
 	pytest tests/unit/test_architecture_fitness.py -v --tb=short
@@ -34,5 +48,5 @@ check-arch:
 	@echo "=== E2E Persistence Tests ==="
 	pytest tests/e2e/test_persistence.py -v --tb=short
 
-check: test check-arch lint-imports
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io
 	@echo "=== All checks passed ==="

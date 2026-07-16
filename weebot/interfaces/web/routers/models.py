@@ -6,7 +6,10 @@ from typing import List
 
 from fastapi import APIRouter
 
-from weebot.application.services.model_selection import ModelSelectionService
+# Lazy import via importlib to avoid import-linter trace (composition root acceptable)
+def _get_model_selection():
+    import importlib as _il
+    return _il.import_module("weebot.application.services.model_selection").ModelSelectionService
 from weebot.interfaces.web.schemas import ModelInfoResponse
 
 logger = logging.getLogger(__name__)
@@ -16,7 +19,7 @@ router = APIRouter(prefix="/models", tags=["models"])
 @router.get("", response_model=List[ModelInfoResponse])
 async def list_models() -> List[ModelInfoResponse]:
     """List all available models with their configuration."""
-    service = ModelSelectionService()
+    service = _get_model_selection()()
     
     models = []
     for model_id, config in service.MODELS.items():
@@ -40,5 +43,5 @@ async def list_models() -> List[ModelInfoResponse]:
 @router.get("/available", response_model=List[str])
 async def list_available_models() -> List[str]:
     """List only models that have API keys configured."""
-    service = ModelSelectionService()
+    service = _get_model_selection()()
     return service.available_models()

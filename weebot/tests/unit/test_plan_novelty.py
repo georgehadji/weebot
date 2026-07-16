@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from weebot.application.services.plan_novelty import PlanNoveltyTracker
+from weebot.domain.services.plan_novelty import PlanNoveltyTracker
 from weebot.domain.models.plan import Plan, Step
 
 

@@ -153,23 +153,23 @@ class LedgerManager:
         git_dir = LEDGER_DIR / ".git"
         if not git_dir.exists():
             logger.info("Initializing behavior ledger git repository")
-            subprocess.run(["git", "init"], cwd=LEDGER_DIR, capture_output=True)
-            subprocess.run(
+            _run_git_async(["git", "init"], cwd=LEDGER_DIR)
+            _run_git_async(
                 ["git", "config", "user.name", "Weebot Behavior Tracker"],
-                cwd=LEDGER_DIR, capture_output=True
+                cwd=LEDGER_DIR,
             )
-            subprocess.run(
+            _run_git_async(
                 ["git", "config", "user.email", "weebot@localhost"],
-                cwd=LEDGER_DIR, capture_output=True
+                cwd=LEDGER_DIR,
             )
             
             # Initial commit
             readme = LEDGER_DIR / "README.md"
             readme.write_text("# Weebot Behavior Ledger\n\nImmutable record of agent actions.\n")
-            subprocess.run(["git", "add", "README.md"], cwd=LEDGER_DIR, capture_output=True)
-            subprocess.run(
+            _run_git_async(["git", "add", "README.md"], cwd=LEDGER_DIR)
+            _run_git_async(
                 ["git", "commit", "-m", "Initial commit"],
-                cwd=LEDGER_DIR, capture_output=True
+                cwd=LEDGER_DIR,
             )
     
     def _format_entry(self, event: BehaviorEvent) -> str:
@@ -238,13 +238,10 @@ class LedgerManager:
         
         # Git commit
         try:
-            subprocess.run(
-                ["git", "add", md_file.name],
-                cwd=LEDGER_DIR, capture_output=True
-            )
-            subprocess.run(
+            _run_git_async(["git", "add", md_file.name], cwd=LEDGER_DIR)
+            _run_git_async(
                 ["git", "commit", "-m", action_label],
-                cwd=LEDGER_DIR, capture_output=True
+                cwd=LEDGER_DIR,
             )
         except Exception as e:
             logger.warning(f"Git commit failed: {e}")
@@ -316,13 +313,13 @@ class TrustManager:
                 
                 # Commit the change
                 try:
-                    subprocess.run(
+                    _run_git_async(
                         ["git", "add", md_file.name],
-                        cwd=LEDGER_DIR, capture_output=True
+                        cwd=LEDGER_DIR,
                     )
-                    subprocess.run(
+                    _run_git_async(
                         ["git", "commit", "-m", f"Override: {timestamp}"],
-                        cwd=LEDGER_DIR, capture_output=True
+                        cwd=LEDGER_DIR,
                     )
                 except Exception as e:
                     logger.warning(f"Git commit for override failed: {e}")
@@ -539,7 +536,7 @@ if __name__ == "__main__":
     print(f"Watching {watch_dir}... Press Ctrl+C to stop")
     try:
         while True:
-            time.sleep(1)
+            asyncio.run(asyncio.sleep(1))
     except KeyboardInterrupt:
         print("\nStopping...")
     finally:

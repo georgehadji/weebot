@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
     from weebot.domain.models.plan import Plan
 
+from weebot.config.constants import MAX_TOKENS_COMPACT, TEMPERATURE_EXPLORATORY
+
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are a pre-mortem analyst. Imagine it is 3 months from now
@@ -62,8 +64,8 @@ class PremortmAnalyzer:
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user", "content": user_msg},
                     ],
-                    temperature=0.4,
-                    max_tokens=200,
+                    temperature=TEMPERATURE_EXPLORATORY,
+                    max_tokens=MAX_TOKENS_COMPACT,
                 ),
                 timeout=self._timeout,
             )

@@ -1,0 +1,40 @@
+# Evaluator Ground-Truth Anchor Dataset
+#
+# These tasks have human judgments for comparing evaluator accuracy.
+# Used at epoch boundaries to decide whether to promote a challenger
+# evaluator over the incumbent.
+#
+# Each task: prompt + ground_truth_score (0.0-1.0) + criteria
+
+tasks:
+  - prompt: "Write a Python function that validates an email address."
+    ground_truth_score: 1.0
+    criteria: ["correctness", "completeness"]
+
+  - prompt: "Create a bash script to list the 10 largest files in a directory."
+    ground_truth_score: 1.0
+    criteria: ["correctness", "efficiency"]
+
+  - prompt: "Write a short explanation of how hash tables work."
+    ground_truth_score: 0.8
+    criteria: ["clarity", "accuracy"]
+
+  - prompt: "Find the bug in this code: for i in range(10): print(i) if i=5: break"
+    ground_truth_score: 0.9
+    criteria: ["correctness", "explanation"]
+
+  - prompt: "Write a SQL query to join users and orders tables."
+    ground_truth_score: 1.0
+    criteria: ["correctness", "completeness"]
+
+  - prompt: "Explain the difference between TCP and UDP in one paragraph."
+    ground_truth_score: 0.7
+    criteria: ["clarity", "accuracy"]
+
+  - prompt: "Write a regex pattern to match phone numbers in format (555) 123-4567."
+    ground_truth_score: 1.0
+    criteria: ["correctness"]
+
+  - prompt: "Create a simple HTML page with a form that submits to /submit."
+    ground_truth_score: 0.8
+    criteria: ["completeness", "structure"]

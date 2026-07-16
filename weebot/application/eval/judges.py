@@ -12,6 +12,7 @@ from typing import Optional
 
 from weebot.application.ports.judge_port import CriterionScore, JudgePort, JudgeVerdict
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class ModelJudge(JudgePort):
                     {"role": "user", "content": prompt},
                 ],
                 model=self._model,
-                temperature=0.0,
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
             data = json.loads(resp.content or "{}")
             criterion_scores = data.get("criteria", [])

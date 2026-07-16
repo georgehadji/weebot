@@ -84,15 +84,16 @@ def test_mixed_block_order_is_preserved():
 
 
 def test_unknown_block_degrades_to_text_without_raising():
-    # Arrange
-    messages = [{"role": "user", "content": [{"type": "audio", "data": "x"}]}]
+    # Arrange — "audio" is a recognized block type (maps to input_audio for
+    # openai); use a genuinely unhandled type to exercise the fallback path.
+    messages = [{"role": "user", "content": [{"type": "carrier_pigeon", "data": "x"}]}]
 
     # Act
     out = convert_messages(messages, "openai")
 
     # Assert
     assert out[0]["content"][0]["type"] == "text"
-    assert "audio" in out[0]["content"][0]["text"]
+    assert "carrier_pigeon" in out[0]["content"][0]["text"]
 
 
 def test_build_image_message_omits_empty_text():

@@ -23,7 +23,6 @@ import pytest
 
 import weebot.tools.advanced_browser as _ab_mod
 from weebot.scheduling.scheduler import ScheduledJob, SchedulingManager
-from weebot.state_manager import ProjectStatus, ResumableTask, StateManager
 from weebot.tools.computer_use import ComputerUseTool
 
 
@@ -53,6 +52,7 @@ def _cleanup(d: Path) -> None:
 #   • the original error silently discarded
 # ===========================================================================
 
+@pytest.mark.skip(reason="ResumableTask is deprecated — removed with state_manager.py")
 class TestResumableTaskDoubleException:
     """save_state() is called in BOTH __aenter__ and __aexit__.  All tests
     use an 'aenter_complete' flag to allow the aenter calls to succeed and

@@ -65,7 +65,7 @@ class CreatePlanHandler(CommandHandler):
             # meta_notes is passed to PlannerAgent.create_plan(), not __init__().
             meta_list = list(command.meta_notes or [])
             try:
-                from weebot.application.services.plan_template_cache import (
+                from weebot.domain.services.plan_template_cache import (
                     build_meta_notes,
                     find_matching_templates,
                 )
@@ -78,7 +78,7 @@ class CreatePlanHandler(CommandHandler):
                         try:
                             await self._state_repo.increment_template_use(tpl.template_id)
                         except Exception:
-                            pass
+                            logger.debug("Failed to increment template use count", exc_info=True)
                     logger.info(
                         "Seeding planner with %d template(s) for %s",
                         len(templates), command.session_id[:8],

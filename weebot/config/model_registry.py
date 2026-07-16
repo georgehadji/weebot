@@ -236,18 +236,18 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
         ),
         
         # Performance/Best Value Models
-        "claude-4.6-sonnet": ModelInfo(
-            model_name="claude-4.6-sonnet",
+        "claude-4.6-sonnet": ModelInfo(  # Map to Sonnet 5 — drop-in replacement
+            model_name="openrouter/anthropic/claude-sonnet-5",
             provider=ModelProvider.ANTHROPIC,
             input_cost_per_token=3e-06,  # $3.0 per 1M tokens
             output_cost_per_token=1.5e-05,  # $15.0 per 1M tokens
-            max_input_tokens=200000,  # 200K context (1M beta)
-            max_output_tokens=4096,
+            max_input_tokens=200000,  # 200K context
+            max_output_tokens=8192,
             supports_function_calling=True,
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Sonnet 4.6 - Best value for coding agents and production use. 72.5% OSWorld (near Opus), 79.6% SWE-bench, 94% on real insurance workflows."
+            description="Anthropic's Claude Sonnet 5 via OpenRouter — drop-in upgrade from Sonnet 4.6. Best value for coding agents and production use."
         ),
         "gpt-5.1": ModelInfo(
             model_name="gpt-5.1",
@@ -1103,14 +1103,14 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True, supports_response_schema=True,
             description="Grok 4.3 — xAI's flagship text generation, reasoning, and structured output model."
         ),
-        "x-ai/grok-4.20-multi-agent": ModelInfo(
-            model_name="x-ai/grok-4.20-multi-agent",
+        "x-ai/grok-4.5": ModelInfo(
+            model_name="x-ai/grok-4.5",
             provider=ModelProvider.XAI,
-            input_cost_per_token=5e-06, output_cost_per_token=2.5e-05,
-            max_input_tokens=131072, max_output_tokens=16384,
+            input_cost_per_token=3e-06, output_cost_per_token=1.5e-05,
+            max_input_tokens=2000000, max_output_tokens=16384,
             supports_function_calling=True, supports_vision=True,
             supports_system_messages=True, supports_response_schema=True,
-            description="Grok 4.20 Multi-Agent — specialized real-time multi-agent orchestrator model for deep multi-step tasks."
+            description="Grok 4.5 — xAI's flagship reasoning, agentic, and structured-output model. 2M context, successor to Grok 4.3."
         ),
 
         # ── ByteDance Seedream ──────────────────────────────────────
