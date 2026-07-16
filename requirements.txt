@@ -85,7 +85,7 @@ uuid-utils>=0.0.0
 # pyzotero>=1.5.0
 
 # Filesystem watching (behavior_tracker)
-watchdog==5.0.3
+watchdog==6.0.0
 
 # MCP Server
 mcp==1.27.0
