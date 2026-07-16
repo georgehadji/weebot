@@ -1,0 +1,22 @@
+{
+  "_comment": "X (Twitter) MCP — full read/write Path B. Requires: xurl auth oauth2 --headless.",
+  "x-docs": {
+    "transport": "streamable-http",
+    "url": "https://docs.x.com/mcp",
+    "enabled": false
+  },
+  "xapi": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+    "env": {
+      "CLIENT_ID": "${X_CLIENT_ID}",
+      "CLIENT_SECRET": "${X_CLIENT_SECRET}"
+    },
+    "enabled": false,
+    "timeout_seconds": 300,
+    "tools": {
+      "write_tools": ["*bookmark*", "*article*", "publish_*", "delete_*"]
+    }
+  }
+}

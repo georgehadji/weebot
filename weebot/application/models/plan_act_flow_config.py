@@ -16,8 +16,8 @@ Usage::
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -39,82 +39,112 @@ class PlanActFlowConfig:
     llm: LLMPort
     """Language model adapter used by PlannerAgent and ExecutorAgent."""
 
-    tools: Optional[ToolCollection]
+    tools: ToolCollection | None
     """Tool collection for the executor.  May be ``None`` in SkillOpt mode."""
 
     session: Session
     """The session this flow operates on."""
 
     # ── Infrastructure ports (optional, wired by DI) ────────────────
-    event_bus: Optional[EventBusPort] = None
-    mediator: Optional[Any] = None  # Mediator (avoids circular import)
-    state_repo: Optional[Any] = None  # StateRepositoryPort
-    checkpoint_port: Optional[Any] = None  # CheckpointPort
-    steering: Optional[Any] = None  # SteeringPort — mid-execution user feedback (Phase 5)
+    event_bus: EventBusPort | None = None
+    mediator: Any | None = None  # Mediator (avoids circular import)
+    state_repo: Any | None = None  # StateRepositoryPort
+    checkpoint_port: Any | None = None  # CheckpointPort
+    steering: Any | None = None  # SteeringPort — mid-execution user feedback (Phase 5)
+    tracing_port: Any | None = None  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
 
     # ── Execution limits ────────────────────────────────────────────
     max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS
     max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS
-    max_steps: Optional[int] = None
+    max_steps: int | None = None
     auto_terminate_on_plan_complete: bool = True
-    termination_conditions: Optional[list] = None  # list[TerminationCondition]
+    termination_conditions: list | None = None  # list[TerminationCondition]
+    planning_mode: str = "auto"  # "sequential", "dppm", or "auto" (dppm for complex tasks)
 
     # ── Critique & validation ───────────────────────────────────────
-    truth_binder: Optional[Any] = None  # TruthBinder
-    plan_critic: Optional[Any] = None  # PlanCriticService
-    code_reviewer: Optional[Any] = None  # CodeReviewerPort — per-step code review
-    step_evaluator: Optional[Any] = None  # StepEvaluatorPort — per-step progress evaluation
+    truth_binder: Any | None = None  # TruthBinder
+    plan_critic: Any | None = None  # PlanCriticService
+    code_reviewer: Any | None = None  # CodeReviewerPort — per-step code review
+    step_evaluator: Any | None = None  # StepEvaluatorPort — per-step progress evaluation
 
     # ── Learning & memory ───────────────────────────────────────────
-    episodic_memory: Optional[Any] = None
-    behavioral_learner: Optional[Any] = None
-    knowledge_graph: Optional[Any] = None
-    skill_prompt: Optional[str] = None
-    skill_retriever: Optional[Any] = None  # SkillRetrieverPort — Tier 1.2
-    skill_distiller: Optional[Any] = None  # AutonomousSkillCreator — Phase 1 distillation
+    episodic_memory: Any | None = None
+    behavioral_learner: Any | None = None
+    knowledge_graph: Any | None = None
+    skill_prompt: str | None = None
+    skill_retriever: Any | None = None  # SkillRetrieverPort — Tier 1.2
+    skill_distiller: Any | None = None  # AutonomousSkillCreator — Phase 1 distillation
 
     # ── Identity ────────────────────────────────────────────────────
-    model: Optional[str] = None
-    profile_name: Optional[str] = None  # SOUL.md profile (e.g. "coder", "researcher")
-    agent_role: Optional[str] = None  # Agent role for per-role model selection
-    personality: Optional[Any] = None  # PersonalityManager
+    model: str | None = None
+    profile_name: str | None = None  # SOUL.md profile (e.g. "coder", "researcher")
+    agent_role: str | None = None  # Agent role for per-role model selection
+    personality: Any | None = None  # PersonalityManager
     context_aware_model_selection: bool = True
 
     # ── Enhancement 4: Trust report ─────────────────────────────────
-    trust_report_service: Optional[Any] = None  # TrustReportPort
+    trust_report_service: Any | None = None  # TrustReportPort
 
     # ── Enhancement 5: Retention agent ─────────────────────────────
-    retention_agent: Optional[Any] = None  # RetentionAgentPort
+    retention_agent: Any | None = None  # RetentionAgentPort
 
     # ── Misalignment journal ─────────────────────────────────────────
-    misalignment_journal: Optional[Any] = None  # MisalignmentJournalPort
+    misalignment_journal: Any | None = None  # MisalignmentJournalPort
     """Service computing TrustReport from code review + CoVe evidence."""
 
     # ── Phase 5: Task preset (cost/quality tier) ────────────────────
-    task_preset: Optional[Any] = None  # TaskPreset — avoids domain model import
+    task_preset: Any | None = None  # TaskPreset — avoids domain model import
     """Optional task preset controlling quality gates and model selection.
     If None, flow uses its hardcoded defaults (backward-compatible)."""
 
     # ── Self-Harness: behavioural harness configuration ─────────────
-    harness_config: Optional[Any] = None  # HarnessConfig
+    harness_config: Any | None = None  # HarnessConfig
     """Optional behavioural harness config (``HarnessConfig`` from
     ``weebot.config.harness.schema``).  When set, the executor's system
     prompt is augmented with instruction blocks from this config.
     When None, behaviour is unchanged (backward-compatible)."""
 
     # ── Cross-cutting ───────────────────────────────────────────────
-    logger: Optional[StructuredLogger] = None
-    hooks: Optional[Any] = None  # HookRegistryPort
+    logger: StructuredLogger | None = None
+    hooks: Any | None = None  # HookRegistryPort
     """Optional hook registry for PlanActFlow lifecycle callbacks.
 
     Pass any object satisfying ``weebot.application.ports.hook_registry_port.HookRegistryPort``
     (e.g. ``weebot.templates.hooks.HookRegistry``).  Typed as ``Optional[Any]`` to avoid
     importing the templates layer into the application models module."""
 
-    middleware_chain: Optional[Any] = None  # MiddlewareChain — interceptor pipeline for LLM calls
+    middleware_chain: Any | None = None  # MiddlewareChain — interceptor pipeline for LLM calls
     """Optional middleware chain wrapping every executor LLM request."""
 
-    event_pipeline: Optional[Any] = None  # EventPipeline — processes events in _emit()
+    event_pipeline: Any | None = None  # EventPipeline — processes events in _emit()
     """Optional event middleware pipeline (EventPipeline).
     When set, ``_emit()`` delegates to the pipeline; when None,
     the legacy inline implementation is used (backward-compatible)."""
+
+    # ── Enhancement H1: Scoped MCP tool aggregation ─────────────────
+    tool_registry: Any | None = None  # RoleBasedToolRegistry
+    """Shared registry instance.  When ``mcp_bridge`` is also supplied,
+    the flow scopes the registry to the current prompt before each turn."""
+
+    mcp_bridge: Any | None = None  # MCPToolRegistryBridge
+    """MCP bridge used to scope external tools per query."""
+
+    native_tool_selector: Any | None = None  # NativeToolRetrievalService
+    """Optional native-tool selector.  When ``mcp_scope_native_tools`` is
+    enabled, this service scopes the native tool set alongside external
+    MCP tools so the total per-turn count stays within budget."""
+
+    def __post_init__(self):
+        """Auto-select per-model harness if harness_config is None and model is set."""
+        if self.harness_config is None and self.model:
+            try:
+                from weebot.config.model_refs import get_harness_for_model
+                harness_path = get_harness_for_model(self.model)
+                # Only import if a per-model variant exists (get_harness_for_model
+                # returns the default path if no per-model file exists, which means
+                # we'd load the default harness — that's fine, it's just redundant)
+                if "/models/" in harness_path:  # Per-model variant exists
+                    from weebot.config.harness.schema import HarnessConfig
+                    self.harness_config = HarnessConfig.from_yaml(harness_path)
+            except Exception:
+                pass  # Graceful fallback — use default harness

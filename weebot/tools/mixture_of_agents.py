@@ -200,7 +200,7 @@ class MixtureOfAgentsTool(BaseTool):
                 model=aggregator_model,
                 tools=None,
                 tool_choice=None,
-                temperature=0.3,
+                temperature=TEMPERATURE_BALANCED,
                 max_tokens=MAX_TOKENS_EXTENDED,
             )
             return response.content or "(aggregator returned empty response)"

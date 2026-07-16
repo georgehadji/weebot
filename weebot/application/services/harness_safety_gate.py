@@ -19,6 +19,8 @@ from weebot.domain.models.harness_edit import HarnessEdit
 # Surfaces that can be auto-promoted without human review.
 # These are the paper's primary edit targets — instruction text changes
 # that do not affect the agent's capabilities or safety boundaries.
+# Patterns ending with ``.*`` match any surface starting with that prefix
+# (e.g. ``"instructions.*"`` matches ``"instructions.bootstrap"``).
 AUTONOMOUS_SURFACES: frozenset[str] = frozenset({
     # Instruction surfaces — the paper's primary edit targets
     "instructions.system_prompt_extension",  # Policy note: broad but safe (text only)
@@ -40,12 +42,17 @@ AUTONOMOUS_SURFACES: frozenset[str] = frozenset({
 # Surfaces that require human approval before promotion.
 # Changes here can affect safety (tool errors, loop detection) or
 # agent delegation (subagent definitions).
+# Patterns ending with ``.*`` match any surface starting with that prefix
+# (e.g. ``"middleware.*"`` matches ``"middleware.add:loop_breaker"``).
 GATED_SURFACES: frozenset[str] = frozenset({
     "runtime_control.enabled",
     "runtime_control.max_recent_tool_errors",
     "runtime_control.max_total_tool_messages",
     "runtime_control.loop_detection_instruction",
     "subagents.definitions",
+    "subagents.*",
+    "middleware.*",
+    "tool_policies.*",
 })
 
 
@@ -76,9 +83,9 @@ class HarnessSafetyGate:
 
         for edit in edits:
             surface = edit.target_surface
-            if surface in AUTONOMOUS_SURFACES:
+            if _matches_any(surface, AUTONOMOUS_SURFACES):
                 autonomous.append(edit)
-            elif surface in GATED_SURFACES:
+            elif _matches_any(surface, GATED_SURFACES):
                 gated.append(edit)
             else:
                 # Unknown surface — treat as gated (fail-safe)
@@ -119,6 +126,23 @@ class SafetyCheckResult:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
+
+def _matches_any(surface: str, patterns: frozenset[str]) -> bool:
+    """Check if *surface* matches any pattern in *patterns*.
+
+    Supports two match modes:
+    - Exact: ``surface in patterns`` (fast path)
+    - Prefix: if a pattern ends with ``.*``, match any surface starting
+      with that prefix (e.g. ``"middleware.*"`` matches
+      ``"middleware.add:loop_breaker"``)
+    """
+    if surface in patterns:
+        return True
+    for pattern in patterns:
+        if pattern.endswith(".*") and surface.startswith(pattern[:-2]):
+            return True
+    return False
+
 
 def _build_approval_prompt(
     autonomous: list[HarnessEdit],

@@ -36,3 +36,8 @@ class InMemoryStateRepository(StateRepositoryPort):
 
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
         return []
+
+    async def get_low_salience_entries(
+        self, threshold: float = 0.3, limit: int = 50
+    ) -> list[dict]:
+        return []

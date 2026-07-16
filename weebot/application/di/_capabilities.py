@@ -79,7 +79,7 @@ class CapabilitiesMixin:
         _cmt_repo = SQLiteStateRepository(db_path=str(Path("./weebot_sessions.db")))
         async def commitment_heartbeat():
             try:
-                from weebot.application.services.commitment_engine import CommitmentEngine
+                from weebot.domain.services.commitment_engine import CommitmentEngine
                 engine = CommitmentEngine(state_repo=_cmt_repo)
                 stats = await engine.heartbeat()
                 logger.info(
@@ -141,7 +141,7 @@ class CapabilitiesMixin:
                 promoted = 0
                 for skill in candidates:
                     try:
-                        from weebot.application.services.skill_promotion_gate import SkillPromotionGate
+                        from weebot.domain.services.skill_promotion_gate import SkillPromotionGate
                         gate = SkillPromotionGate(
                             chain_of_verification=None,  # will be lazy-initialized
                             harness_scorer=None,
@@ -171,29 +171,84 @@ class CapabilitiesMixin:
                     TrajectoryRepository,
                 )
                 from weebot.application.ports.llm_port import LLMPort
+                from weebot.interfaces.factories import build_tools, create_flow
 
                 llm_port = self._maybe_get(LLMPort)
                 if llm_port is None:
                     logger.warning("Self-Harness skipped: no LLM configured")
                     return
 
-                target = HarnessOptimizationTarget()
-                await target.load()
-                trajectory_repo = TrajectoryRepository()
+                # Load evaluation tasks
+                import yaml
+                from pathlib import Path
+                eval_tasks_path = Path("weebot/config/harness/eval_tasks.yaml")
+                if eval_tasks_path.exists():
+                    with open(eval_tasks_path) as f:
+                        task_cfg = yaml.safe_load(f)
+                    held_in = task_cfg.get("held_in_tasks", [])
+                    held_out = task_cfg.get("held_out_tasks", [])
+                else:
+                    logger.warning("eval_tasks.yaml not found — Self-Harness will only mine")
+                    held_in = []
+                    held_out = []
 
-                flow = HarnessOptFlow(
-                    llm=llm_port,
-                    target=target,
-                    trajectory_repo=trajectory_repo,
-                    flow_factory=lambda s: None,  # Stub — mining only
-                    max_proposals=3,
+                # Build shared tools and flow factory for RegressionGate
+                tools = await build_tools(role="admin", llm_port=llm_port)
+
+                # Cheap surrogate signal for fast-reject in RegressionGate
+                from weebot.application.services.code_quality_signal import (
+                    CodeQualitySignal,
                 )
-                async for event in flow.run():
-                    if hasattr(event, "message") and event.message:
-                        logger.info("Self-Harness: %s", event.message)
+                code_quality_signal = CodeQualitySignal(llm=llm_port)
 
-                await trajectory_repo.close()
-                logger.info("Self-Harness weekly evolution complete")
+                async def _eval_flow_factory(session):
+                    return create_flow(
+                        flow_type="plan_act",
+                        session=session,
+                        llm=llm_port,
+                        tools=tools,
+                    )
+
+                # Cascade models to evolve independently
+                from weebot.config.model_refs import (
+                    MODEL_CASCADE_TIER1, MODEL_CASCADE_TIER2,
+                    MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4,
+                    get_harness_for_model,
+                )
+                cascade_models = [
+                    MODEL_CASCADE_TIER1,
+                    MODEL_CASCADE_TIER2,
+                    MODEL_CASCADE_TIER3,
+                    MODEL_CASCADE_TIER4,
+                ]
+
+                for model_id in cascade_models:
+                    logger.info("Self-Harness: evolving harness for %s", model_id)
+                    trajectory_repo = TrajectoryRepository()
+
+                    target = HarnessOptimizationTarget(
+                        model_id=model_id,
+                    )
+                    await target.load()
+
+                    flow = HarnessOptFlow(
+                        llm=llm_port,
+                        target=target,
+                        trajectory_repo=trajectory_repo,
+                        tools=tools,
+                        held_in_tasks=held_in,
+                        held_out_tasks=held_out,
+                        max_proposals=3,
+                        code_quality_signal=code_quality_signal,
+                    )
+                    async for event in flow.run():
+                        if hasattr(event, "message") and event.message:
+                            logger.info("Self-Harness [%s]: %s", model_id, event.message)
+
+                    await trajectory_repo.close()
+                    logger.info("Self-Harness evolution complete for %s", model_id)
+
+                logger.info("Self-Harness weekly evolution complete (all models)")
             except Exception as exc:
                 logger.error("Self-Harness weekly failed: %s", exc, exc_info=True)
 

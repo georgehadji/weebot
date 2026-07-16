@@ -37,7 +37,7 @@ class SignalAdapter(GatewayAdapter):
         account_number: str | None = None,
         profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._rest_url = rest_url.rstrip("/")
         self._account_number = account_number
         self._state_repo = state_repo

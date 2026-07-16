@@ -1,0 +1,68 @@
+# Harness v0.2.0 — Default configuration with behavioural instruction surfaces.
+#
+# Extends v0.1.0 with the InstructionConfig / RuntimeControlConfig /
+# SubagentConfig / SkillSelectionConfig surfaces that Self-Harness can evolve.
+# Like v0.1.0, this harness is model-agnostic and contains sensible
+# defaults for all models.
+#
+# To evolve: run `python -m cli.main harness evolve --harness-version v0.2.0`.
+version: "0.2.0"
+description: "Default harness — contracts + BM25 skills + trajectory regulation + behavioural instructions"
+evolved_from: "0.1.0"
+
+canonicalizer:
+  strict_mode: false
+  coerce_types: true
+  contracts_dir: "config/contracts/"
+
+skill_retrieval:
+  enabled: true
+  retriever: "auto"
+  top_k: 3
+  index_path: null
+
+trajectory:
+  repetition_threshold: 4
+  stagnation_window: 3
+  budget_hotspot_ratio: 0.4
+  exhaustion_ratio: 0.9
+
+# ── Behavioural instruction surfaces (Self-Harness editable) ──────────────
+instructions:
+  system_prompt_extension: ""
+  bootstrap: >
+    Start by inspecting the workspace and identifying the task scope.
+    For any web research, use the web_search TOOL directly — never use
+    bash with curl, wget, or Invoke-WebRequest.
+  execution: >
+    Use the right tool for each sub-task:
+    web_search for finding information online (NEVER bash curl/wget),
+    file_editor for creating and editing files (NEVER bash echo/cat),
+    python_execute for running Python scripts,
+    bash ONLY for system commands (ls, mkdir, pip install, git).
+    Keep edits tightly scoped. Aim for 5 tool calls or fewer per step.
+  verification: >
+    Before concluding a step, verify the result with the most targeted
+    check available: run tests, parse output, or read the file you created.
+    Do not skip verification.
+  failure_recovery: >
+    If a tool call fails or produces the same output twice, SWITCH to a
+    completely different tool. Do not retry bash with a variation of the
+    same command. If web_search is available, use it instead of bash for
+    any web access.
+
+# ── Runtime policy knobs (safety-gated — not auto-evolvable) ──────────────
+runtime_control:
+  enabled: false
+  max_recent_tool_errors: null
+  max_total_tool_messages: null
+  loop_detection_instruction: null
+
+# ── Subagent declarations ─────────────────────────────────────────────────
+subagents:
+  definitions: []
+  max_parallel: 0
+
+# ── Skill selection ───────────────────────────────────────────────────────
+skill_selection:
+  active_skills: []

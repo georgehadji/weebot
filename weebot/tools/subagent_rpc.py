@@ -292,6 +292,12 @@ class SubagentRPCTool(BaseTool):
             output = stdout.decode("utf-8", errors="replace")
             error = stderr.decode("utf-8", errors="replace")
 
+            # _rpc_loop returns as soon as stdout EOFs, which can race ahead
+            # of the child actually being reaped — proc.returncode may still
+            # be None here. Wait for it explicitly so the exit-code check
+            # below is reliable.
+            await proc.wait()
+
             if proc.returncode != 0:
                 return ToolResult(
                     output=output,

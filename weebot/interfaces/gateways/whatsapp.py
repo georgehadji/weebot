@@ -42,7 +42,7 @@ class WhatsAppAdapter(GatewayAdapter):
         app_secret: str | None = None,
         profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._token = token
         self._phone_number_id = phone_number_id
         self._webhook_verify_token = webhook_verify_token or "weebot-verify"

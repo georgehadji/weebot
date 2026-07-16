@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 # BrowserTool provides name/description/parameters as class attributes
 # so the ToolRegistry can inspect them without instantiation.
 
+from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 from weebot.tools.base import ToolResult
 
 if TYPE_CHECKING:
@@ -38,6 +39,7 @@ class BrowserTool:
 
     max_concurrent: int = 1
     default_timeout_seconds: int = 60
+    # Class-level attributes allow ToolRegistry to inspect without instantiation
     name: str = "browser_navigator"
     description: str = """Open a real Chrome browser and perform web tasks using AI.
     Use for: logging into websites, filling login forms, posting content,
@@ -45,6 +47,16 @@ class BrowserTool:
     Can handle authentication, 2FA (manual intervention), and file uploads.
     Opens a visible browser window — you'll see it working.
     Input: describe what to do in natural language."""
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "task": {
+                "type": "string",
+                "description": "What to do: navigate to URL, log in, fill forms, post content, click buttons, extract data",
+            },
+        },
+        "required": ["task"],
+    }
 
     browser: Optional[Any] = None
 
@@ -92,7 +104,7 @@ class BrowserTool:
             llm = LLMPortLangChainAdapter(
                 llm_port=self._llm_port,
                 model=self._model,
-                temperature=0,
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
             return self._add_provider_attr(llm)
 
@@ -117,7 +129,7 @@ class BrowserTool:
                 model=_os.environ.get("OPENROUTER_MODEL", MODEL_DI_DEFAULT),
                 openai_api_key=or_key,
                 openai_api_base="https://openrouter.ai/api/v1",
-                temperature=0,
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
             logger.debug("BrowserTool using OpenRouter: %s", llm.model)
             return self._add_provider_attr(llm)
@@ -175,20 +187,11 @@ class BrowserTool:
         return await self._run_browser_task(task)
 
     # ── weebot BaseTool compatibility ────────────────────────────────
-    # BrowserTool extends langchain's BaseTool, but weebot's ToolCollection
-    # expects execute(**kwargs) + to_param(). These bridge methods provide
-    # that interface.
-
-    parameters: dict = {
-        "type": "object",
-        "properties": {
-            "task": {
-                "type": "string",
-                "description": "What to do: navigate to URL, log in, fill forms, post content, click buttons, extract data",
-            },
-        },
-        "required": ["task"],
-    }
+    # BrowserTool does not extend weebot's BaseTool to avoid triggering
+    # network calls at import time (langchain import).  The class-level
+    # name/description/parameters attributes and async execute() method
+    # satisfy the BaseTool protocol contract via duck typing — no class
+    # hierarchy change needed.
 
     def to_param(self) -> dict:
         """Convert to OpenAI function spec (weebot-compatible)."""
@@ -200,6 +203,16 @@ class BrowserTool:
                 "parameters": self.parameters,
             },
         }
+
+    async def close(self) -> None:
+        """Close the browser instance and release resources."""
+        if self._browser:
+            try:
+                await self._browser.close()
+            except Exception:
+                logger.warning("Failed to close browser cleanly", exc_info=True)
+            finally:
+                self._browser = None
 
     async def execute(self, task: str = "", **kwargs):
         """weebot-compatible execute: delegates to _arun."""

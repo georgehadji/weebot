@@ -42,6 +42,10 @@ def _make_flow(plan=None):
     session.context = ctx
     session.model_copy = lambda update=None: MagicMock(context=update.get("context", ctx) if update else ctx)
     flow._session = session
+    # No persistence in these tests — a bare MagicMock() is truthy, which
+    # would make PlanReviewState's `if context._state_repo:` guard try to
+    # await save_session() on a non-awaitable MagicMock.
+    flow._state_repo = None
     return flow
 
 

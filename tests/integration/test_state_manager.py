@@ -1,159 +1,134 @@
-"""Integration tests for StateManager (real SQLite, no mocks)."""
+"""Integration tests for SQLiteStateRepository (real SQLite, no mocks).
+
+Replaces the original StateManager tests which were deleted with the
+deprecated state_manager.py module.  Tests the StateRepositoryPort
+contract via its live SQLite implementation.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
 import pytest
-import asyncio
-from datetime import datetime
-from weebot.state_manager import StateManager, ProjectState, ProjectStatus, ResumableTask
+
+from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.models.session import Session, SessionStatus
+from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
 
 
 @pytest.fixture
-def sm(tmp_db):
-    """StateManager backed by a temp SQLite database."""
-    return StateManager(db_path=str(tmp_db))
+async def repo(tmp_db) -> StateRepositoryPort:
+    """SQLiteStateRepository backed by a temp database."""
+    r = SQLiteStateRepository(db_path=str(tmp_db))
+    # Force pool initialization
+    await r._get_pool()
+    return r
 
 
-class TestCreateAndLoad:
-    def test_create_project_returns_state(self, sm):
-        state = sm.create_project("proj-001", "Test project")
-        assert isinstance(state, ProjectState)
-        assert state.project_id == "proj-001"
+@pytest.fixture
+def sample_session() -> Session:
+    """A sample session for testing."""
+    return Session(
+        id="test-session-001",
+        user_id="test-user",
+        status=SessionStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
 
-    def test_created_state_is_pending(self, sm):
-        state = sm.create_project("proj-002", "Test")
-        assert state.status == ProjectStatus.PENDING
 
-    def test_load_returns_none_for_unknown_project(self, sm):
-        assert sm.load_state("nonexistent") is None
+class TestSaveAndLoad:
+    """Core save/load roundtrip testing."""
 
-    def test_save_and_load_roundtrip(self, sm):
-        sm.create_project("proj-003", "Roundtrip test")
-        loaded = sm.load_state("proj-003")
+    @pytest.mark.asyncio
+    async def test_save_and_load_roundtrip(self, repo: StateRepositoryPort, sample_session: Session):
+        await repo.save_session(sample_session)
+        loaded = await repo.load_session("test-session-001")
         assert loaded is not None
-        assert loaded.project_id == "proj-003"
-
-    def test_save_updates_existing_state(self, sm):
-        state = sm.create_project("proj-004", "Update test")
-        state.status = ProjectStatus.RUNNING
-        sm.save_state(state)
-        loaded = sm.load_state("proj-004")
-        assert loaded.status == ProjectStatus.RUNNING
-
-
-class TestListProjects:
-    def test_empty_list_when_no_projects(self, sm):
-        assert sm.list_projects() == []
-
-    def test_lists_all_created_projects(self, sm):
-        sm.create_project("p1", "first")
-        sm.create_project("p2", "second")
-        projects = sm.list_projects()
-        ids = [p["project_id"] for p in projects]
-        assert "p1" in ids
-        assert "p2" in ids
-
-    def test_list_returns_dicts_with_required_keys(self, sm):
-        sm.create_project("p3", "third")
-        projects = sm.list_projects()
-        assert "project_id" in projects[0]
-        assert "updated_at" in projects[0]
-
-
-class TestCheckpoints:
-    def test_add_checkpoint_returns_id(self, sm):
-        sm.create_project("cp-proj", "checkpoint test")
-        checkpoint_id = sm.add_checkpoint("cp-proj", "Review needed")
-        assert isinstance(checkpoint_id, str)
-        assert checkpoint_id.startswith("chk_")
-
-    def test_pending_checkpoints_listed(self, sm):
-        sm.create_project("cp-proj2", "test")
-        sm.add_checkpoint("cp-proj2", "Review step 1")
-        pending = sm.get_pending_checkpoints("cp-proj2")
-        assert len(pending) == 1
-
-    def test_resolved_checkpoint_not_in_pending(self, sm):
-        sm.create_project("cp-proj3", "test")
-        chk_id = sm.add_checkpoint("cp-proj3", "Review step 2")
-        sm.resolve_checkpoint(chk_id, "yes")
-        pending = sm.get_pending_checkpoints("cp-proj3")
-        assert len(pending) == 0
-
-    def test_multiple_checkpoints_tracked(self, sm):
-        sm.create_project("cp-proj4", "test")
-        sm.add_checkpoint("cp-proj4", "Step A")
-        sm.add_checkpoint("cp-proj4", "Step B")
-        pending = sm.get_pending_checkpoints("cp-proj4")
-        assert len(pending) == 2
-
-
-class TestResumableTask:
-    @pytest.mark.asyncio
-    async def test_task_marked_complete_on_success(self, sm):
-        sm.create_project("rt-proj", "resumable test")
-        async with ResumableTask(sm, "rt-proj", "task_alpha") as task:
-            assert task is not None  # not already completed
-
-        state = sm.load_state("rt-proj")
-        assert "task_alpha" in state.completed_tasks
+        assert loaded.id == sample_session.id
+        assert loaded.user_id == sample_session.user_id
 
     @pytest.mark.asyncio
-    async def test_already_completed_task_returns_none(self, sm):
-        sm.create_project("rt-proj2", "resumable test 2")
-        # Complete it once
-        async with ResumableTask(sm, "rt-proj2", "task_beta"):
-            pass
-        # Second entry should return None (skip)
-        async with ResumableTask(sm, "rt-proj2", "task_beta") as ctx:
-            assert ctx is None
+    async def test_load_returns_none_for_missing(self, repo: StateRepositoryPort):
+        loaded = await repo.load_session("nonexistent-id")
+        assert loaded is None
 
     @pytest.mark.asyncio
-    async def test_failed_task_logs_error(self, sm):
-        sm.create_project("rt-proj3", "error test")
-        try:
-            async with ResumableTask(sm, "rt-proj3", "task_gamma"):
-                raise RuntimeError("Simulated failure")
-        except RuntimeError:
-            pass
+    async def test_update_session_status(self, repo: StateRepositoryPort, sample_session: Session):
+        await repo.save_session(sample_session)
+        await repo.update_session_status(sample_session.id, SessionStatus.RUNNING)
+        loaded = await repo.load_session(sample_session.id)
+        assert loaded is not None
+        assert loaded.status == SessionStatus.RUNNING
 
-        state = sm.load_state("rt-proj3")
-        assert state.status == ProjectStatus.FAILED
-        assert any("Simulated failure" in e for e in state.error_log)
+
+class TestListSessions:
+    """Session listing tests."""
 
     @pytest.mark.asyncio
-    async def test_raises_for_unknown_project(self, sm):
-        with pytest.raises(ValueError, match="not found"):
-            async with ResumableTask(sm, "ghost-project", "task"):
-                pass
+    async def test_empty_when_no_sessions(self, repo: StateRepositoryPort):
+        sessions = await repo.list_sessions()
+        assert isinstance(sessions, list)
+
+    @pytest.mark.asyncio
+    async def test_lists_saved_sessions(self, repo: StateRepositoryPort):
+        s1 = Session(id="s1", user_id="u1", status=SessionStatus.PENDING,
+                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        s2 = Session(id="s2", user_id="u1", status=SessionStatus.COMPLETED,
+                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        await repo.save_session(s1)
+        await repo.save_session(s2)
+        sessions = await repo.list_sessions()
+        ids = [s.id for s in sessions]
+        assert "s1" in ids
+        assert "s2" in ids
+
+    @pytest.mark.asyncio
+    async def test_filter_by_user(self, repo: StateRepositoryPort):
+        s1 = Session(id="s1", user_id="user-a", status=SessionStatus.PENDING,
+                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        s2 = Session(id="s2", user_id="user-b", status=SessionStatus.PENDING,
+                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        await repo.save_session(s1)
+        await repo.save_session(s2)
+        sessions_a = await repo.list_sessions(user_id="user-a")
+        assert len(sessions_a) == 1
+        assert sessions_a[0].id == "s1"
 
 
-class TestSubSessions:
-    def test_create_project_has_empty_sub_sessions(self, sm):
-        state = sm.create_project("ss-proj", "sub-session test")
-        assert state.sub_sessions == []
+class TestDeleteSession:
+    """Session deletion testing."""
 
-    def test_start_sub_session_adds_entry(self, sm):
-        sm.create_project("ss-proj2", "test")
-        sm.start_sub_session("ss-proj2", "task_a", activity_kind="exec")
-        state = sm.load_state("ss-proj2")
-        assert len(state.sub_sessions) == 1
-        assert state.sub_sessions[0].name == "task_a"
-        assert state.sub_sessions[0].activity_kind == "exec"
+    @pytest.mark.asyncio
+    async def test_delete_removes_session(self, repo: StateRepositoryPort, sample_session: Session):
+        await repo.save_session(sample_session)
+        await repo.delete_session(sample_session.id)
+        loaded = await repo.load_session(sample_session.id)
+        assert loaded is None
 
-    def test_end_sub_session_sets_ended_at(self, sm):
-        sm.create_project("ss-proj3", "test")
-        sm.start_sub_session("ss-proj3", "task_b", activity_kind="read")
-        sm.end_sub_session("ss-proj3", "task_b", status="completed")
-        state = sm.load_state("ss-proj3")
-        assert state.sub_sessions[0].ended_at is not None
-        assert state.sub_sessions[0].status == "completed"
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_does_not_raise(self, repo: StateRepositoryPort):
+        # Should not raise on deleting a session that doesn't exist
+        await repo.delete_session("ghost-session")
 
-    def test_multiple_sub_sessions_tracked(self, sm):
-        sm.create_project("ss-proj4", "test")
-        sm.start_sub_session("ss-proj4", "step1", activity_kind="job")
-        sm.start_sub_session("ss-proj4", "step2", activity_kind="write")
-        state = sm.load_state("ss-proj4")
-        assert len(state.sub_sessions) == 2
 
-    def test_start_sub_session_unknown_project_raises(self, sm):
-        import pytest
-        with pytest.raises(ValueError, match="not found"):
-            sm.start_sub_session("nonexistent", "task", activity_kind="job")
+class TestSessionLifecycle:
+    """Complete session lifecycle: create -> run -> complete."""
+
+    @pytest.mark.asyncio
+    async def test_full_lifecycle(self, repo: StateRepositoryPort):
+        session = Session(
+            id="lifecycle-test",
+            user_id="tester",
+            status=SessionStatus.PENDING,
+        )
+        await repo.save_session(session)
+        loaded = await repo.load_session("lifecycle-test")
+        assert loaded is not None and loaded.status == SessionStatus.PENDING
+
+        await repo.update_session_status("lifecycle-test", SessionStatus.RUNNING)
+        loaded = await repo.load_session("lifecycle-test")
+        assert loaded is not None and loaded.status == SessionStatus.RUNNING
+
+        await repo.update_session_status("lifecycle-test", SessionStatus.COMPLETED)
+        loaded = await repo.load_session("lifecycle-test")
+        assert loaded is not None and loaded.status == SessionStatus.COMPLETED

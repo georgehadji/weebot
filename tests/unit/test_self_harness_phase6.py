@@ -186,7 +186,6 @@ class TestHarnessOptFlowSafetyIntegration:
             llm=llm,
             target=target,
             trajectory_repo=repo,
-            flow_factory=lambda s: AsyncMock(),
             held_in_tasks=["t1"],
             max_proposals=1,
             gate=gate,

@@ -36,7 +36,7 @@ class SlackAdapter(GatewayAdapter):
         llm: LLMPort,
         profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._signing_secret = signing_secret
         self._bot_token = bot_token
         self._state_repo = state_repo

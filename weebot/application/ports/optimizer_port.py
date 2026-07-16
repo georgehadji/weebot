@@ -105,6 +105,28 @@ class OptimizerPort(ABC):
         """
         ...
 
+    async def reflect_on_evaluator(
+        self,
+        batch: OptimizationBatch,
+        current_evaluator: "EvaluatorState",  # type: ignore[name-defined]  # noqa: F821
+        evolution_context: str = "",
+    ) -> list["SkillEdit"]:  # type: ignore[name-defined]  # noqa: F821
+        """Analyse trajectories and propose edits to the evaluator's prompt.
+
+        Same frontier-model optimizer, different target — edits the evaluator's
+        scoring prompt instead of the skill document.  Default implementation
+        returns an empty list (no evaluator editing).
+
+        Args:
+            batch: Trajectories collected during the epoch.
+            current_evaluator: The current evaluator state (prompt + accuracy).
+            evolution_context: Optional context from previous epochs.
+
+        Returns:
+            List of SkillEdit proposals (evaluator prompt edits).
+        """
+        return []
+
     async def plan_edits(
         self,
         batch: OptimizationBatch,

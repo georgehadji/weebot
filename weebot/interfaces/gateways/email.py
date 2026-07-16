@@ -53,7 +53,7 @@ class EmailAdapter(GatewayAdapter):
         poll_interval_seconds: float = 30.0,
         profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._imap_server = imap_server
         self._imap_user = imap_user
         self._imap_password = imap_password

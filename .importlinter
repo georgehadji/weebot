@@ -12,8 +12,6 @@ forbidden_modules =
     weebot.interfaces
     weebot.core
     weebot.tools
-    weebot.nlp_understanding
-    weebot.notifications
 
 [importlinter:contract:tools-no-db]
 name = Tools must not access databases directly
@@ -26,15 +24,38 @@ ignore_imports =
     weebot.scheduling.scheduler -> sqlite3
     # schedule_tool invokes the scheduler, which lazily wires DI at runtime.
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
-    # Tools use lazy DI fallbacks to resolve services at runtime.
-    # These are accepted patterns — the DI container itself owns the sqlite3 connection.
-    weebot.tools.audit_tool -> weebot.application.di
-    weebot.tools.knowledge_tool -> weebot.application.di
-    weebot.tools.persistent_memory -> weebot.application.di
-    weebot.tools.tool_registry -> weebot.application.di
-    weebot.tools.video_ingest_tool -> weebot.application.di
-    weebot.tools.voice_input_tool -> weebot.application.di
-    weebot.tools.voice_output_tool -> weebot.application.di
+
+[importlinter:contract:tools-no-infra]
+name = Tools must not bypass ports — no direct persistence or adapter imports
+type = forbidden
+source_modules = weebot.tools
+forbidden_modules =
+    weebot.infrastructure.persistence
+    weebot.infrastructure.adapters
+ignore_imports =
+    # persistent_memory directly manages filesystem-based memory persistence
+    # (non-DB, non-adapter). The filesystem store is an I/O detail that cannot
+    # go through ports without adding indirection that gains nothing.
+    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.filesystem_memory
+    # search_history queries the FTS5 index for session search — the FTS5
+    # adapter is a capability query, not a DB bypass for writes.
+    weebot.tools.search_history -> weebot.infrastructure.persistence.fts5_search
+    weebot.tools.search_history -> weebot.infrastructure.persistence.connection_pool
+    # atomic_mail_tool delegates to the Atomic Mail MCP server adapter.
+    weebot.tools.atomic_mail_tool -> weebot.infrastructure.adapters.atomicmail.mcp_server
+    # apify_presets uses the Apify service adapter for actor execution.
+    weebot.tools.apify_presets -> weebot.infrastructure.adapters.apify.apify_service
+    # persistent_memory lazily instantiates SQLiteStateRepository for
+    # user-profile consolidation. Pre-audited — ADR-ARCH-AUDIT-V2 A2
+    # moved the _base.py bypass to the port; this tool-level usage
+    # remains for Phase C cleanup.
+    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
+    # schedule_tool → scheduler → DI → adapters&persistence (transitive).
+    # Pre-audited — already in tools-no-db ignore_imports.
+    weebot.tools.schedule_tool -> weebot.scheduling.scheduler
+    # bash_security → model_selection → model_registry → adapter_factory
+    # (transitive). Model selection is an application service, not a bypass.
+    weebot.tools.bash_security -> weebot.application.services.model_selection
 
 [importlinter:contract:infra-no-app-services]
 name = Infrastructure must depend on ports, not application services/flows/agents
@@ -52,8 +73,6 @@ ignore_imports =
     weebot.infrastructure.adapters.tool_discovery -> weebot.tools.base
     # Apify actor registry wraps the Apify tool for actor-level discovery.
     weebot.infrastructure.adapters.apify.actor_registry -> weebot.tools.apify_actor_tool
-    # sub_agent_factory needs ToolCollection (a data transfer object in application.models).
-    weebot.infrastructure.adapters.sub_agent_factory -> weebot.application.models.tool_collection
     # External service integration extends tool base for capability routing.
     weebot.infrastructure.external_service_integration -> weebot.tools.base
     # Interface customization reads profile settings from the application service.
@@ -78,6 +97,7 @@ ignore_imports =
     # Web server bootstraps DI and wires LLM + metrics at startup.
     weebot.interfaces.web.main -> weebot.application.di
     weebot.interfaces.web.main -> weebot.infrastructure.observability.metrics
+    weebot.interfaces.web.main -> weebot.scheduling.default_jobs
     # Web routers use DI to resolve services per-request.
     weebot.interfaces.web.routers.chat_router -> weebot.application.di
     weebot.interfaces.web.routers.discord_webhook -> weebot.application.di
@@ -85,34 +105,17 @@ ignore_imports =
     weebot.interfaces.web.routers.whatsapp_webhook -> weebot.application.di
     weebot.interfaces.web.routers.health -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
-    weebot.interfaces.web.routers.webhook -> weebot.application.di
-    # Health router checks browser pool health directly.
-    weebot.interfaces.web.routers.health -> weebot.infrastructure.browser
-    weebot.interfaces.web.routers.health -> weebot.infrastructure.browser.session_pool
-    # Model selection routers query the model service.
-    weebot.interfaces.web.routers.health -> weebot.application.services.model_selection
-    weebot.interfaces.web.routers.models -> weebot.application.services.model_selection
-    # Sessions router runs sessions via task runner.
-    weebot.interfaces.web.routers.sessions -> weebot.application.services.task_runner
-    # Webhook router wires plan-act flow for incoming webhooks.
-    weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
-    # Factories build the full tool set including registry and Apify preset tools.
-    weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
-    weebot.interfaces.factories -> weebot.infrastructure.mcp.mcp_toolkit_adapter
-    weebot.interfaces.factories -> weebot.tools.apify_presets
-    weebot.interfaces.factories -> weebot.tools.base
-    weebot.interfaces.factories -> weebot.tools.tool_registry
-    # CLI agent runner uses tool base types for type hints.
-    weebot.interfaces.cli.agent_runner -> weebot.tools.base
-    # Previously allowed composition root imports.
-    weebot.interfaces.cli.agent_runner -> weebot.application.di
-    weebot.interfaces.cli.agent_runner -> weebot.application.services.task_runner
-    weebot.interfaces.factories -> weebot.application.di
-    weebot.interfaces.factories -> weebot.application.flows.chat_flow
-    # ops_router uses the CQRS mediator directly for command dispatch.
     weebot.interfaces.web.routers.ops_router -> weebot.application.cqrs.mediator
-    # Web server schedules background jobs at startup.
-    weebot.interfaces.web.main -> weebot.scheduling.default_jobs
+    weebot.interfaces.web.routers.sessions -> weebot.application.services.task_runner
+    weebot.interfaces.web.routers.webhook -> weebot.application.di
+    weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
+    # Factories wire up the full tool set (composition root).
+    weebot.interfaces.factories -> weebot.application.di
+    weebot.interfaces.factories -> weebot.application.flows.plan_act_flow
+    # CLI agent runner resolves services from DI.
+    weebot.interfaces.cli.agent_runner -> weebot.application.di
+    # Gateway adapters use DI fallback for SafetyChecker LLMPort.
+    weebot.interfaces.gateways.base -> weebot.application.di
     # Windows-specific interfaces wire native platform adapters.
     weebot.interfaces.windows -> weebot.infrastructure.adapters.windows_desktop
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications
@@ -130,14 +133,16 @@ forbidden_modules =
     weebot.application
     weebot.interfaces
 ignore_imports =
-    # Core agent factory imports tool types and the tool registry to build
+    # Core agent imports tool types and the tool registry to build
     # agent configurations. Tools legitimately depend on application ports
     # (e.g. sandbox_port, llm_port, memory_port) — these are NOT core
     # reaching into application, they are core using the tool abstraction layer.
+    # agent_core_v2.py + agent_factory.py sunset in ARCH-AUDIT-V2 A5.
     weebot.core.agent -> weebot.tools.browser_tool
     weebot.core.agent -> weebot.tools.powershell_tool
-    weebot.core.agent_factory -> weebot.tools.base
-    weebot.core.agent_factory -> weebot.tools.tool_registry
-    # agent_factory imports agent_core_v2 which bridges into application.
-    # This is a legacy dependency tracked for migration.
-    weebot.core.agent_factory -> weebot.agent_core_v2
+    # agent.py bridges SafetyChecker with LangChain fallback (DI container).
+    weebot.core.agent -> weebot.application.di
+    weebot.core.agent -> weebot.application.ports.llm_port
+    # safety.py uses LLMPort (port, not concrete adapter).  Acceptable per
+    # ADR-009: "port interfaces in core are allowed; framework deps are not."
+    weebot.core.safety -> weebot.application.ports.llm_port

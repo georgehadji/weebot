@@ -1,57 +1,116 @@
 """OSWorld Agent Adapter — weebot as an OSWorld-compatible agent.
 
-Plugs weebot's VLM-based executor into the OSWorld evaluation loop.
-Receives OSWorld observations (screenshots + a11y trees) and produces
-pyautogui actions in the format expected by DesktopEnv.step().
+Plugs weebot's resilient LLM stack into the OSWorld evaluation loop as a
+drop-in replacement for ``mm_agents.agent.PromptAgent``. It honors the exact
+contract that ``lib_run_single.run_single_example`` depends on:
 
-Usage with OSWorld run.py:
-    from weebot.osworld.agent_adapter import WeebotOSWorldAgent
-    agent = WeebotOSWorldAgent(model="openai/gpt-4o")
-    # Then pass to lib_run_single.run_single_example(agent, env, ...)
+    response, actions = agent.predict(instruction, obs)   # actions: list[str]
+    for action in actions:
+        obs, reward, done, info = env.step(action, ...)    # action: pyautogui code
+    ...
+    agent.reset(runtime_logger, vm_ip=env.vm_ip)
 
-This adapter implements the same interface as mm_agents.agent.PromptAgent
-so it can be used as a drop-in replacement in the OSWorld benchmark.
+``actions`` is a **list of pyautogui code strings** (or the special tokens
+``WAIT`` / ``DONE`` / ``FAIL``), matching ``action_space="pyautogui"``.
+
+The paper (OSWorld, Xie et al. 2024) frames each task as a POMDP: the agent
+observes a screenshot + accessibility (a11y) tree and emits an executable
+action, capped at ~15 steps, scored by an execution-based evaluator. This
+adapter implements the agent side of that loop.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import logging
-from io import BytesIO
+import re
 from typing import Any, Optional
-from pathlib import Path
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("desktopenv.agent")
 
-# OSWorld action space → weebot tool mapping
-_ACTION_MAP = {
-    "MOVE_TO": "move_mouse",
-    "CLICK": "click",
-    "DOUBLE_CLICK": "double_click",
-    "RIGHT_CLICK": "click",        # weebot: click with button="right"
-    "DRAG_TO": "drag",
-    "SCROLL": "scroll",
-    "TYPING": "type",
-    "PRESS": "press_key",
-    "KEY_DOWN": "key_down",
-    "KEY_UP": "key_up",
-    "HOTKEY": "press_key",         # weebot: press_key with modifiers
-    "WAIT": "wait",
-    "FAIL": "fail",
-    "DONE": "done",
-}
+# Special control tokens in the OSWorld pyautogui action space.
+_SPECIAL_ACTIONS = ("WAIT", "DONE", "FAIL")
 
-# OSWorld Scroll dy → weebot direction
-# Positive dy = scroll up (away from user) → weebot scroll positive
-# Negative dy = scroll down (toward user) → weebot scroll negative
+# System prompt instructing the VLM to emit pyautogui code, mirroring
+# OSWorld's SYS_PROMPT_IN_BOTH_OUT_CODE contract closely enough that the
+# shared parser (parse_pyautogui_code) can extract executable actions.
+_SYSTEM_PROMPT = """You are an autonomous agent controlling a real computer to complete a task.
+
+At each step you receive a screenshot of the current screen and (optionally) an
+accessibility tree describing on-screen elements with their coordinates. Decide
+the single next action and return it as Python code using the `pyautogui`
+library, wrapped in a fenced code block.
+
+Rules:
+- Return exactly ONE fenced ```python ... ``` block per step.
+- Use real pixel coordinates from the screenshot / accessibility tree.
+- Common calls: pyautogui.click(x, y), pyautogui.doubleClick(x, y),
+  pyautogui.rightClick(x, y), pyautogui.moveTo(x, y),
+  pyautogui.dragTo(x, y), pyautogui.write('text', interval=0.05),
+  pyautogui.press('enter'), pyautogui.hotkey('ctrl', 'c'),
+  pyautogui.scroll(amount).
+- You may chain a few related calls in the one block when they form a single
+  logical step.
+- When the task is fully complete, return the single word DONE (no code block).
+- When the task is impossible/infeasible, return the single word FAIL.
+- When you must wait for the screen to update, return the single word WAIT.
+
+Respond with the code block or one of DONE / FAIL / WAIT — no extra prose."""
+
+
+def parse_pyautogui_code(response: str) -> list[str]:
+    """Extract executable actions from a model response.
+
+    Mirrors the semantics of OSWorld's ``parse_code_from_string`` so the
+    adapter is a faithful drop-in and is unit-testable without OSWorld on the
+    path. Returns a list of pyautogui code strings and/or the special tokens
+    WAIT / DONE / FAIL, in order. Returns ``[]`` when nothing parses.
+    """
+    if not response:
+        return []
+
+    # Normalise semicolon-separated one-liners (OSWorld does the same).
+    normalized = "\n".join(
+        line.strip() for line in response.split(";") if line.strip()
+    )
+
+    # A bare special token is itself a valid action.
+    if normalized.strip() in _SPECIAL_ACTIONS:
+        return [normalized.strip()]
+
+    # Capture ```...``` or ```python ...``` fenced blocks.
+    blocks = re.findall(r"```(?:\w+\s+)?(.*?)```", normalized, re.DOTALL)
+
+    actions: list[str] = []
+    for block in blocks:
+        block = block.strip()
+        if block in _SPECIAL_ACTIONS:
+            actions.append(block)
+        elif block.split("\n")[-1] in _SPECIAL_ACTIONS:
+            # A trailing DONE/FAIL/WAIT after some code — keep both.
+            lines = block.split("\n")
+            if len(lines) > 1:
+                actions.append("\n".join(lines[:-1]))
+            actions.append(lines[-1])
+        else:
+            actions.append(block)
+
+    # Fallback: a response that is just a special token without fences but with
+    # surrounding whitespace/prose.
+    if not actions:
+        for token in _SPECIAL_ACTIONS:
+            if re.search(rf"\b{token}\b", normalized):
+                return [token]
+
+    return actions
 
 
 class WeebotOSWorldAgent:
-    """OSWorld-compatible agent backed by weebot's VLM and desktop tools.
+    """OSWorld-compatible agent backed by weebot's resilient LLM stack.
 
-    Implements the same predict() interface as OSWorld's PromptAgent
-    so it can be dropped into run.py as a replacement.
+    Drop-in replacement for ``mm_agents.agent.PromptAgent``: same
+    ``predict`` / ``reset`` / ``action_space`` surface consumed by
+    ``lib_run_single.run_single_example``.
     """
 
     def __init__(
@@ -63,7 +122,15 @@ class WeebotOSWorldAgent:
         action_space: str = "pyautogui",
         observation_type: str = "screenshot_a11y_tree",
         max_trajectory_length: int = 3,
-    ):
+        a11y_char_budget: int = 6000,
+        llm: Any | None = None,
+    ) -> None:
+        if action_space != "pyautogui":
+            # The adapter emits pyautogui code; computer_13 is not supported.
+            raise ValueError(
+                f"WeebotOSWorldAgent only supports action_space='pyautogui', "
+                f"got {action_space!r}"
+            )
         self.model = model
         self.max_tokens = max_tokens
         self.top_p = top_p
@@ -71,224 +138,166 @@ class WeebotOSWorldAgent:
         self.action_space = action_space
         self.observation_type = observation_type
         self.max_trajectory_length = max_trajectory_length
+        self.a11y_char_budget = a11y_char_budget
 
-        # Lazy-init: created on first call to avoid DI container overhead
-        self._llm = None
-        self._tools = None
-        self._executor = None
-        self._conversation_history: list[dict] = []
+        # Injected LLM (for tests) or lazily constructed weebot adapter.
+        self._llm = llm
+        self.vm_ip: Optional[str] = None
 
-    async def _ensure_initialized(self):
-        """Lazy-init the weebot LLM and tools."""
-        if self._llm is not None:
-            return
+        # Trajectory state (parallel lists, like PromptAgent).
+        self.observations: list[dict] = []
+        self.actions: list[list[str]] = []
+        self.responses: list[str] = []
 
-        # Minimal DI setup — avoid full container for benchmark speed
-        from weebot.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
-        from weebot.tools.base import ToolCollection
-        from weebot.tools.computer_use import ComputerUseTool
-        from weebot.tools.screen_tool import ScreenCaptureBaseTool
+    # ── OSWorld agent interface ─────────────────────────────────────
 
-        self._llm = OpenAIAdapter(
-            api_key=None,  # Loaded from env
-            model=self.model,
-        )
+    def predict(self, instruction: str, obs: dict[str, Any]) -> tuple[str, list[str]]:
+        """Return ``(response_text, actions)`` for the current observation.
 
-        self._tools = ToolCollection(
-            ComputerUseTool(),
-            ScreenCaptureBaseTool(),
-        )
-
-    # ── OSWorld Agent Interface ─────────────────────────────────────
-
-    def predict(
-        self,
-        instruction: str,
-        obs: dict[str, Any],
-        max_tokens: int | None = None,
-        chat_mode: bool = False,
-    ) -> tuple[str, list]:
-        """OSWorld-compatible predict() — returns (action_str, flags).
-
-        This is the primary interface OSWorld calls in its agent loop.
-
-        Args:
-            instruction: The task description.
-            obs: Observation dict with 'screenshot' (PNG bytes) and
-                 optionally 'accessibility_tree' (XML string).
-            max_tokens: Override for max tokens.
-            chat_mode: If True, return text response; if False, return action.
-
-        Returns:
-            (response, flags) — response is the action string or text,
-            flags is a list for compatibility (empty).
+        ``actions`` is a list of pyautogui code strings (or WAIT/DONE/FAIL),
+        exactly what ``run_single_example`` iterates over and feeds to
+        ``env.step``.
         """
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            return loop.run_until_complete(
-                self._async_predict(instruction, obs, chat_mode)
-            )
-        return asyncio.run(
-            self._async_predict(instruction, obs, chat_mode)
-        )
-
-    async def _async_predict(
-        self,
-        instruction: str,
-        obs: dict[str, Any],
-        chat_mode: bool = False,
-    ) -> tuple[str, list]:
-        """Async prediction using weebot's VLM."""
-        await self._ensure_initialized()
-
-        # Build messages with screenshot + a11y tree
         messages = self._build_messages(instruction, obs)
+        response_text = self._call_llm(messages)
+        actions = parse_pyautogui_code(response_text)
 
-        # Call VLM (GPT-4o) to decide next action
-        response = await self._llm.chat(
-            messages=messages,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
+        # Record trajectory (bounded by callers via max_trajectory_length).
+        self.observations.append(obs)
+        self.actions.append(actions)
+        self.responses.append(response_text)
+
+        return response_text, actions
+
+    def reset(self, _logger: Any | None = None, vm_ip: str | None = None, **kwargs: Any) -> None:
+        """Reset trajectory between tasks. Signature matches PromptAgent.reset."""
+        global logger
+        if _logger is not None:
+            logger = _logger
+        self.vm_ip = vm_ip
+        self.observations.clear()
+        self.actions.clear()
+        self.responses.clear()
+
+    # ── Message construction ────────────────────────────────────────
+
+    def _build_messages(self, instruction: str, obs: dict[str, Any]) -> list[dict]:
+        """Build the chat payload: system + recent trajectory + current obs."""
+        system_text = (
+            _SYSTEM_PROMPT
+            + "\n\nYou are asked to complete the following task: "
+            + instruction
         )
-
-        action_str = response.content or "WAIT"
-        action_str = action_str.strip()
-
-        # Parse action from VLM response
-        parsed = self._parse_action(action_str)
-        self._conversation_history.append({
-            "instruction": instruction,
-            "action": parsed,
-        })
-
-        return (parsed, [])
-
-    # ── Message Building ────────────────────────────────────────────
-
-    def _build_messages(
-        self,
-        instruction: str,
-        obs: dict[str, Any],
-    ) -> list[dict]:
-        """Build VLM messages with screenshot and optional a11y tree.
-
-        Follows the OSWorld protocol: screenshot as image, a11y tree
-        as pre-prompt text, action space as system prompt.
-        """
-        system_prompt = (
-            "You are a computer control agent. Given a task instruction, "
-            "a screenshot of the current desktop, and an accessibility tree, "
-            "decide the next action to take.\n\n"
-            "Available actions:\n"
-            + self._action_space_prompt()
-            + "\n\nRespond with ONLY the action JSON. No explanation."
-        )
-
-        user_content = []
-
-        # Screenshot (primary observation)
-        screenshot_png = obs.get("screenshot")
-        if screenshot_png:
-            b64 = base64.b64encode(screenshot_png).decode()
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
-            })
-
-        # Accessibility tree (secondary observation)
-        a11y_tree = obs.get("accessibility_tree")
-        if a11y_tree:
-            # Prune: limit to first 4000 chars for token budget
-            tree_text = self._format_a11y_tree(a11y_tree)
-            user_content.append({
-                "type": "text",
-                "text": f"Accessibility Tree:\n{tree_text[:4000]}",
-            })
-
-        # Task instruction
-        user_content.append({
-            "type": "text",
-            "text": f"Task: {instruction}\n\nWhat is the next action?",
-        })
-
-        # Trajectory history (last N actions)
-        if self._conversation_history:
-            history_text = "\n".join(
-                f"Step {i+1}: {h['action']}"
-                for i, h in enumerate(self._conversation_history[-self.max_trajectory_length:])
-            )
-            user_content.append({
-                "type": "text",
-                "text": f"Previous actions:\n{history_text}",
-            })
-
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
+        messages: list[dict] = [
+            {"role": "system", "content": [{"type": "text", "text": system_text}]}
         ]
 
-    def _action_space_prompt(self) -> str:
-        """Generate the action space description for the system prompt."""
-        return """{
-  "action": "CLICK",        // or: MOVE_TO, DOUBLE_CLICK, RIGHT_CLICK,
-                             //     DRAG_TO, SCROLL, TYPING, PRESS,
-                             //     KEY_DOWN, KEY_UP, HOTKEY
-  "x": 500,                 // pixel x (if applicable)
-  "y": 300,                 // pixel y (if applicable)
-  "button": "left",         // "left", "right", "middle" (if applicable)
-  "text": "hello",          // for TYPING
-  "key": "enter",           // for PRESS/KEY_DOWN/KEY_UP
-  "keys": ["ctrl", "c"],    // for HOTKEY
-  "dx": 0, "dy": -3,        // for SCROLL (negative dy = scroll down)
-  "num_clicks": 1           // for CLICK (1, 2, or 3)
-}
+        # Recent trajectory (last N obs/action pairs), oldest first.
+        if self.max_trajectory_length > 0 and self.observations:
+            recent_obs = self.observations[-self.max_trajectory_length:]
+            recent_actions = self.actions[-self.max_trajectory_length:]
+            for past_obs, past_actions in zip(recent_obs, recent_actions):
+                messages.append(self._obs_to_user_message(past_obs, history=True))
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "text", "text": "\n".join(past_actions) or "WAIT"}
+                        ],
+                    }
+                )
 
-Special actions:
-  {"action": "WAIT"}        — pause until next action
-  {"action": "FAIL"}        — task is impossible
-  {"action": "DONE"}        — task is complete"""
+        # Current observation.
+        messages.append(self._obs_to_user_message(obs, history=False))
+        return messages
 
-    def _format_a11y_tree(self, a11y_tree) -> str:
-        """Format a11y tree for VLM consumption.
+    def _obs_to_user_message(self, obs: dict[str, Any], *, history: bool) -> dict:
+        """Render one observation (a11y tree text + screenshot image)."""
+        content: list[dict] = []
 
-        OSWorld provides either a dict (parsed) or raw XML string.
-        """
-        if isinstance(a11y_tree, dict):
-            return json.dumps(a11y_tree, indent=2)
-        if isinstance(a11y_tree, str):
-            return a11y_tree
-        return str(a11y_tree)
+        a11y = self._format_a11y_tree(obs.get("accessibility_tree"))
+        prompt = (
+            "Given the screenshot"
+            + (" and accessibility tree" if a11y else "")
+            + " below, what is the next action?"
+        )
+        if a11y:
+            prompt += f"\n\nAccessibility tree:\n{a11y}"
+        content.append({"type": "text", "text": prompt})
 
-    # ── Action Parsing ──────────────────────────────────────────────
+        screenshot = obs.get("screenshot")
+        if screenshot:
+            b64 = self._encode_screenshot(screenshot)
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{b64}",
+                        "detail": "high",
+                    },
+                }
+            )
+        return {"role": "user", "content": content}
 
-    def _parse_action(self, action_str: str) -> str:
-        """Parse VLM response into OSWorld-compatible action string.
+    @staticmethod
+    def _encode_screenshot(screenshot: Any) -> str:
+        """Return a base64 PNG string from raw bytes or an existing b64 string."""
+        if isinstance(screenshot, (bytes, bytearray)):
+            return base64.b64encode(screenshot).decode()
+        # Already a base64 string (possibly a data URL).
+        text = str(screenshot)
+        return text.split("base64,", 1)[-1]
 
-        Expects JSON like: {"action": "CLICK", "x": 500, "y": 300}
-        Falls back to raw string if JSON parsing fails.
+    def _format_a11y_tree(self, a11y_tree: Any) -> str:
+        """Render the a11y tree as text within the char budget."""
+        if not a11y_tree:
+            return ""
+        if isinstance(a11y_tree, (bytes, bytearray)):
+            text = a11y_tree.decode(errors="replace")
+        else:
+            text = str(a11y_tree)
+        if len(text) > self.a11y_char_budget:
+            text = text[: self.a11y_char_budget] + "\n[... truncated]"
+        return text
+
+    # ── LLM invocation ──────────────────────────────────────────────
+
+    def _ensure_llm(self) -> Any:
+        """Lazily construct weebot's resilient OpenAI-compatible adapter."""
+        if self._llm is None:
+            from weebot.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
+
+            self._llm = OpenAIAdapter(api_key=None, default_model=self.model)
+        return self._llm
+
+    def _call_llm(self, messages: list[dict]) -> str:
+        """Run the async LLM call from this synchronous interface."""
+        llm = self._ensure_llm()
+        coro = llm.chat(
+            messages=messages,
+            model=self.model,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        response = self._run_coro(coro)
+        return (getattr(response, "content", None) or "").strip()
+
+    @staticmethod
+    def _run_coro(coro: Any) -> Any:
+        """Execute a coroutine, whether or not a loop is already running.
+
+        The OSWorld runner calls ``predict`` synchronously (no running loop),
+        so ``asyncio.run`` is the normal path. If a loop is already running we
+        execute on a dedicated background loop to avoid re-entrancy errors.
         """
         try:
-            # Try to extract JSON from the response
-            action_str = action_str.strip()
-            # Remove markdown code fences if present
-            if action_str.startswith("```"):
-                lines = action_str.split("\n")
-                action_str = "\n".join(lines[1:-1])
-            action = json.loads(action_str)
-        except (json.JSONDecodeError, ValueError):
-            # Fallback: return raw string (OSWorld handles parsing)
-            return action_str
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
 
-        # Validate and normalize
-        action_type = action.get("action", "WAIT").upper()
-        if action_type not in _ACTION_MAP:
-            logger.warning("Unknown action type: %s", action_type)
-            return "WAIT"
+        # A loop is already running in this thread — run the coroutine on a
+        # fresh loop in a worker thread to avoid "loop already running".
+        import concurrent.futures
 
-        return json.dumps(action)
-
-    # ── Reset between tasks ─────────────────────────────────────────
-
-    def reset(self):
-        """Reset conversation history for a new task."""
-        self._conversation_history.clear()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()

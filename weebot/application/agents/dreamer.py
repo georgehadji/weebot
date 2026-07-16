@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from weebot.application.ports.dreamer_port import DreamerPort
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_MODERATE, TEMPERATURE_BALANCED
 from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,8 @@ class DreamerAgent(DreamerPort):
                         {"role": "system", "content": _DREAMER_SYSTEM_PROMPT},
                         {"role": "user", "content": self._build_prompt(signals)},
                     ],
-                    temperature=0.3,
-                    max_tokens=800,
+                    temperature=TEMPERATURE_BALANCED,
+                    max_tokens=MAX_TOKENS_MODERATE,
                 ),
                 timeout=self._timeout,
             )

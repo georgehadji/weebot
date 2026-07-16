@@ -123,7 +123,7 @@ class WeebotSettings(BaseSettings):
     )  # env: AWESOME_AGENT_SKILLS_INDEX_URL
 
     # Sandbox / code execution
-    sandbox_mode: str = "auto"              # env: SANDBOX_MODE — "auto" | "native" | "docker" | "wsl2"
+    sandbox_mode: str = "auto"  # env: SANDBOX_MODE — "auto"|"native"|"docker"|"wsl2"
     bash_timeout: int = 30                  # env: BASH_TIMEOUT
     python_timeout: int = 30               # env: PYTHON_TIMEOUT
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
@@ -172,52 +172,52 @@ class WeebotSettings(BaseSettings):
     # ========================================================================
     # DRIFT MONITORING SETTINGS (v2.4.0+)
     # ========================================================================
-    
+
     # Enable/disable drift monitoring
     drift_monitoring_enabled: bool = True
-    
+
     # Baseline window for comparison
     drift_baseline_window_days: int = 7
-    
+
     # Detection check interval
     drift_detection_interval_minutes: int = 5
-    
+
     # Performance drift thresholds (multipliers of baseline)
     latency_p95_warning_multiplier: float = 1.20   # 20% increase
     latency_p95_critical_multiplier: float = 1.50  # 50% increase
     memory_warning_multiplier: float = 1.30         # 30% increase
     memory_critical_multiplier: float = 1.50         # 50% increase
-    
+
     # Error rate drift thresholds (multipliers of baseline)
     error_rate_warning_multiplier: float = 2.0       # 2x baseline
     error_rate_critical_multiplier: float = 5.0        # 5x baseline
-    
+
     # Data distribution drift thresholds (KL divergence)
     kl_divergence_warning: float = 0.5
     kl_divergence_critical: float = 1.0
-    
+
     # Cooldown periods (minutes)
     alert_cooldown_minutes: int = 15
     performance_alert_cooldown_minutes: int = 30
     data_drift_cooldown_minutes: int = 60
-    
+
     # Minimum samples for reliable detection
     drift_min_samples: int = 1000
-    
+
     # =======================================================================
     # HTTP CLIENT SETTINGS (v2.6.0+)
     # =======================================================================
-    
+
     # Default timeouts for HTTP requests
     http_timeout_default: float = 30.0
     http_timeout_connect: float = 10.0
     http_timeout_read: float = 60.0
-    
+
     # Connection pooling
     http_max_connections: int = 20
     http_max_keepalive: int = 10
     http_keepalive: bool = True
-    
+
     # Retry settings
     http_max_retries: int = 3
     http_retry_backoff: float = 1.0
@@ -240,6 +240,39 @@ class WeebotSettings(BaseSettings):
         default=True,
         description="Allow MCP servers to request sampling/createMessage.",
     )
+    mcp_scoped_aggregation: bool = Field(
+        default=True,
+        description="Enable per-request scoped retrieval of MCP-bridged external tools.",
+    )
+    mcp_scope_native_tools: bool = Field(
+        default=False,
+        description="When True, also scope native tools per query so total tools stay <= 12.",
+    )
+    mcp_composite_tools_enabled: bool = Field(
+        default=True,
+        description=(
+            "Expose composite workflow tools and hide covered atomic tools "
+            "on the MCP surface."
+        ),
+    )
+
+    # =======================================================================
+    # PONYTAIL MODE (lazy senior dev coding persona)
+    # =======================================================================
+
+    ponytail_mode: str = Field(
+        default="off",
+        description="Ponytail lazy-senior-dev intensity: off | lite | full | ultra",
+    )
+
+    @field_validator("ponytail_mode")
+    @classmethod
+    def validate_ponytail_mode(cls, v: str) -> str:
+        allowed = {"off", "lite", "full", "ultra"}
+        normalized = str(v).strip().lower()
+        if normalized not in allowed:
+            raise ValueError(f"ponytail_mode must be one of {sorted(allowed)}, got {v!r}")
+        return normalized
 
     # =======================================================================
     # GATEWAY SESSION SETTINGS (Track 2 — Hermes Audit)
@@ -426,7 +459,10 @@ class OSWorldSettings(BaseSettings):
     # Sandbox backend type
     osworld_sandbox_type: str = Field(
         default="docker",
-        description="Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), or 'remote' (HTTP API)",
+        description=(
+            "Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), "
+            "or 'remote' (HTTP API)"
+        ),
     )
 
     # Connection

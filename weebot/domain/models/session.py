@@ -28,6 +28,8 @@ class SessionContext(BaseModel):
 
     The ``original_task`` field stores the first substantive prompt so
     that short follow-ups ("proceed", "yes") can be enriched with it.
+    The ``trace_id`` field stores a unique identifier for distributed
+    tracing across agents, workflows, and log entries.
     """
     skill_name: str = ""
     skill_content: str = ""
@@ -38,6 +40,10 @@ class SessionContext(BaseModel):
     archived: bool = False
     archived_at: Optional[str] = None
     archive_ttl_days: int = 30
+    trace_id: str = Field(
+        default="",
+        description="Distributed trace ID propagated through StructuredLogger for observability (C3)",
+    )
     detected_language: str = Field(
         default="",
         description="ISO 639-1 language code detected from user input (Enhancement 7)",
@@ -74,7 +80,7 @@ class SessionContext(BaseModel):
         known = {"skill_name", "skill_content", "skill_version", "_original_task",
                  "original_task", "last_prompt", "facts",
                  "archived", "archived_at", "archive_ttl_days",
-                 "detected_language", "meta_notes", "extra"}
+                 "trace_id", "detected_language", "meta_notes", "extra"}
         result: dict[str, Any] = {}
         # Preserve any pre-existing extra dict (from a roundtrip dump)
         existing_extra = data.get("extra", {}) if isinstance(data.get("extra"), dict) else {}

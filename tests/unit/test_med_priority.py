@@ -94,7 +94,7 @@ class TestLLMPortContract:
 
 class TestCommitmentIdempotency:
     async def test_heartbeat_skips_already_overdue(self):
-        from weebot.application.services.commitment_engine import CommitmentEngine
+        from weebot.domain.services.commitment_engine import CommitmentEngine
         from weebot.domain.models.commitment import Commitment, CommitmentStatus
         from datetime import datetime, timedelta, timezone
 
@@ -117,7 +117,7 @@ class TestCommitmentIdempotency:
         assert stats2["marked_overdue"] == 0
 
     async def test_heartbeat_no_pending_commits(self):
-        from weebot.application.services.commitment_engine import CommitmentEngine
+        from weebot.domain.services.commitment_engine import CommitmentEngine
         repo = MagicMock()
         repo.list_commitments = AsyncMock(return_value=[])
         engine = CommitmentEngine(state_repo=repo)

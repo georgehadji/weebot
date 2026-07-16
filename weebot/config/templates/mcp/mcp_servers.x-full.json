@@ -1,0 +1,12 @@
+{
+  "xapi": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+    "env": { "CLIENT_ID": "${X_CLIENT_ID}", "CLIENT_SECRET": "${X_CLIENT_SECRET}" },
+    "enabled": true,
+    "timeout_seconds": 300,
+    "tools": { "write_tools": ["*bookmark*", "*article*", "publish_*", "delete_*"] }
+  },
+  "x-docs": { "transport": "streamable-http", "url": "https://docs.x.com/mcp", "enabled": true }
+}

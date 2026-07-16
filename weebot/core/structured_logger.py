@@ -453,6 +453,23 @@ def set_correlation_id(cid: str) -> None:
     _correlation_id.set(cid)
 
 
+def set_trace_id_from_session(session: Any) -> None:
+    """Propagate trace_id from a Session's context to the StructuredLogger.
+
+    If the session has a ``context.trace_id`` that is non-empty, set it as
+    the logging correlation_id so that all subsequent log entries within
+    this session are tagged with the trace ID for distributed tracing (C3).
+
+    Called from flow constructors and session initialization.
+    """
+    try:
+        trace_id = session.context.trace_id if session and hasattr(session, "context") else ""
+        if trace_id:
+            set_correlation_id(trace_id)
+    except (AttributeError, KeyError):
+        pass  # Session doesn't have trace_id yet — ignore gracefully
+
+
 def get_correlation_id() -> Optional[str]:
     """Get current correlation ID."""
     return _correlation_id.get()
@@ -470,6 +487,7 @@ __all__ = [
     "JSONLogFormatter",
     "get_logger",
     "set_correlation_id",
+    "set_trace_id_from_session",
     "get_correlation_id",
     "generate_correlation_id",
 ]

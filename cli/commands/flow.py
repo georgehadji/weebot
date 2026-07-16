@@ -102,7 +102,8 @@ def flow_resume(session_id: str, answer: str) -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
-        runner = AgentRunner(llm=llm, state_repo=state_repo, use_rich=False)
+        mediator = _get_mediator()
+        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, use_rich=False)
         subscriber = CLIEventSubscriber(use_rich=True)
 
         async for event in runner.resume_session(session_id, answer):
@@ -149,6 +150,33 @@ def flow_cancel(session_id: str) -> None:
             console.print(f"[green]Cancelled session {session_id}[/green]")
         else:
             console.print(f"[yellow]Session {session_id} was not active[/yellow]")
+
+    _run_async(_run)
+
+
+@flow.command("retry")
+@click.argument("session_id")
+def flow_retry(session_id: str) -> None:
+    """Retry a failed session (dead-letter queue).
+
+    Re-enters the session at the last saved state with a full retry budget.
+    Only works for sessions in FAILED status.
+    """
+    async def _run() -> None:
+        global _container
+        if _container is None:
+            _container = Container()
+            _container.configure_defaults()
+        from weebot.application.services.task_runner import TaskRunner
+        runner = _container.get(TaskRunner)
+        ok = await runner.rerun_failed_session(session_id)
+        if ok:
+            console.print(f"[green]Retrying failed session {session_id}[/green]")
+        else:
+            console.print(
+                f"[yellow]Session {session_id} is not in FAILED status "
+                f"or has no flow factory cached[/yellow]"
+            )
 
     _run_async(_run)
 

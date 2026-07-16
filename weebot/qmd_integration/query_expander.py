@@ -18,6 +18,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
+from weebot.config.constants import MAX_TOKENS_BRIEF
+
 _log = logging.getLogger(__name__)
 
 
@@ -187,7 +189,7 @@ Respond ONLY with the expanded query, no explanations."""
         # Generate
         result = self._model(
             prompt,
-            max_tokens=100,
+            max_tokens=MAX_TOKENS_BRIEF,
             temperature=self._temperature,
             stop=["\n", "Query:", "Result:"],
         )

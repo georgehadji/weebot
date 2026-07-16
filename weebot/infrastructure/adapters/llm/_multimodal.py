@@ -13,6 +13,7 @@ additive and low-risk.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Literal
 
 Provider = Literal["anthropic", "openai"]
@@ -32,14 +33,17 @@ _VISION_MODEL_MARKERS = (
     "gpt-4.1",
     "gpt-4-vision",
     "gpt-5",
-    "o1",
-    "o3",
     "gemini",
     "llava",
     "pixtral",
     "qwen2-vl",
     "qwen2.5-vl",
 )
+
+# Short model-family names that require segment-level matching (not bare substring)
+# to avoid false positives on model IDs that happen to contain these characters.
+_VISION_SEGMENT_MARKERS: frozenset = frozenset({"o1", "o3"})
+_SEGMENT_SPLIT = re.compile(r"[-/]")
 
 
 def model_supports_vision(model: str) -> bool:
@@ -49,7 +53,11 @@ def model_supports_vision(model: str) -> bool:
     or text-only models return False, so screenshot injection is skipped safely.
     """
     m = (model or "").lower()
-    return any(marker in m for marker in _VISION_MODEL_MARKERS)
+    if any(marker in m for marker in _VISION_MODEL_MARKERS):
+        return True
+    # "o1" and "o3" are too short for bare substring matching; split on
+    # path/dash separators and check for an exact segment match instead.
+    return bool(_VISION_SEGMENT_MARKERS & set(_SEGMENT_SPLIT.split(m)))
 
 
 def build_image_message(
@@ -108,6 +116,59 @@ def _convert_blocks(
             converted.append({"type": "text", "text": block.get("text", "")})
         elif btype == "image":
             converted.append(_image_block(block, target))
+        elif btype == "pdf":
+            data = block.get("data", "")
+            url = block.get("url", "")
+            filename = block.get("filename", "document.pdf")
+            if target == "anthropic":
+                converted.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": data,
+                    }
+                })
+            else:
+                file_data = f"data:application/pdf;base64,{data}" if data else url
+                converted.append({
+                    "type": "file",
+                    "file": {
+                        "filename": filename,
+                        "file_data": file_data
+                    }
+                })
+        elif btype == "audio":
+            data = block.get("data", "")
+            fmt = block.get("format", "wav")
+            if target == "openai":
+                converted.append({
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": data,
+                        "format": fmt
+                    }
+                })
+            else:
+                converted.append(
+                    {"type": "text", "text": f"[unsupported audio content block on {target}]"}
+                )
+        elif btype == "video":
+            data = block.get("data", "")
+            url = block.get("url", "")
+            media_type = block.get("media_type", "video/mp4")
+            if target == "openai":
+                video_url = f"data:{media_type};base64,{data}" if data else url
+                converted.append({
+                    "type": "video_url",
+                    "video_url": {
+                        "url": video_url
+                    }
+                })
+            else:
+                converted.append(
+                    {"type": "text", "text": f"[unsupported video content block on {target}]"}
+                )
         else:
             # Unknown block type — degrade to text rather than send an invalid
             # payload that the provider would reject.

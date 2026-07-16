@@ -29,11 +29,20 @@ class RecursiveWeebotAgent:
     Implements the OEAR (Observe-Evaluate-Act-Refine) loop.
     """
     
-    def __init__(self):
+    def __init__(self, llm_port=None):
         self.llm = ChatOpenAI(model=MODEL_COMMAND_DEFAULT, temperature=TEMPERATURE)
         from weebot.tools.heuristic_router import HeuristicRouter as _HR
         self.heuristic_router = _HR()
-        self.safety_checker = SafetyChecker()
+        # SafetyChecker requires an LLMPort; use a default one from the DI
+        # container if none provided.  agent.py LangChain deps are deferred
+        # to the agent_core_v2 sunset (2027-03-01) per ADR-009.
+        if llm_port is None:
+            from weebot.application.di import Container
+            from weebot.application.ports.llm_port import LLMPort
+            c = Container()
+            c.configure_defaults()
+            llm_port = c.get(LLMPort)
+        self.safety_checker = SafetyChecker(llm=llm_port)
         self.history: List[ExecutionStep] = []
         
         # Tools (lazy-imported to keep core independent of infrastructure at module level)

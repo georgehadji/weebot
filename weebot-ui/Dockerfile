@@ -1,17 +1,46 @@
-# Placeholder image — the Next.js frontend source isn't in this repo yet.
-# Serves a static "not yet available" page so `docker compose up` and CI's
-# Docker build smoke test succeed. Replace with a real Next.js build once
-# the weebot-ui frontend source is added.
-#
-# Intentionally copies nothing from the build context so this Dockerfile
-# builds the same way regardless of context root (CI builds with context
-# `weebot-ui/`, docker-compose builds with context `.`).
-FROM nginx:alpine
+# syntax=docker/dockerfile:1
+# Weebot UI — Next.js 14 frontend
 
-RUN set -eux; \
-    printf '<!doctype html>\n<html><head><title>Weebot UI</title></head>\n<body style="font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem;">\n<h1>Weebot UI</h1>\n<p>The frontend source isn'"'"'t included in this image yet. Use the API directly, or run <code>weebot-ui</code> from source once it'"'"'s added to the repo.</p>\n</body></html>\n' > /usr/share/nginx/html/index.html; \
-    printf 'server {\n    listen 3000;\n    server_name _;\n    location / {\n        root /usr/share/nginx/html;\n        index index.html;\n    }\n}\n' > /etc/nginx/conf.d/default.conf
+# ── Stage 1: deps ─────────────────────────────────────────────────────
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+COPY weebot-ui/package.json weebot-ui/package-lock.json* ./
+# Full install (incl. devDependencies) — next build needs tailwindcss/postcss/typescript.
+# The runner stage uses Next standalone output, so dev deps never reach the final image.
+RUN npm ci
+
+# ── Stage 2: builder ──────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY weebot-ui/package.json weebot-ui/package-lock.json* ./
+COPY --from=deps /app/node_modules ./node_modules
+COPY weebot-ui/ .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# ── Stage 3: runner ───────────────────────────────────────────────────
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 
 EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]

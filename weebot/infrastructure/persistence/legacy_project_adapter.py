@@ -1,5 +1,5 @@
 """LegacyProjectAdapter — wraps SQLiteStateRepository to provide a
-StateManager-compatible API for the MCP server and state_coordinator.
+StateManager-compatible API for the MCP server.
 
 This adapter exists solely so that code written against the deprecated
 StateManager can migrate to the Clean Architecture persistence layer

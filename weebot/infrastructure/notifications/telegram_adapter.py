@@ -49,6 +49,14 @@ class TelegramAdapter(NotificationPort):
         NotificationLevel.CRITICAL: "🚨",
     }
     
+    # Cleanup is handled via async context manager, explicit close(), or
+    # __del__ fallback. The aiohttp.ClientSession is created lazily and
+    # closed automatically when the adapter is exited or garbage-collected.
+    #
+    # Usage with automatic cleanup:
+    #   async with TelegramAdapter(bot_token="...", chat_id="...") as n:
+    #       await n.notify(...)
+
     def __init__(
         self,
         bot_token: Optional[str] = None,
@@ -110,9 +118,27 @@ class TelegramAdapter(NotificationPort):
     
     async def close(self) -> None:
         """Close the HTTP client."""
-        if self._http_client:
+        if self._http_client and not self._http_client.closed:
             await self._http_client.close()
             self._http_client = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.close()
+
+    def __del__(self):
+        if self._http_client is not None and not self._http_client.closed:
+            import asyncio as _asyncio
+            try:
+                loop = _asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop — safe to call asyncio.run()
+                _asyncio.run(self._http_client.close())
+            else:
+                # Running loop exists — schedule close on it
+                loop.create_task(self._http_client.close())
     
     def _format_message(self, notification: Notification) -> str:
         """Format notification as Telegram message.

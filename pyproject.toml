@@ -19,8 +19,6 @@ select = [
     "UP",   # pyupgrade
 ]
 ignore = [
-    # B006: mutable default argument — too noisy in existing code
-    "B006",
     # SIM102: collapsible if — style preference
     "SIM102",
     # SIM108: ternary — sometimes less readable
@@ -34,7 +32,8 @@ ignore = [
 # Violations are errors (not warnings) to block commits via pre-commit.
 [tool.ruff.lint.per-file-ignores]
 # Tests are allowed to use broad catches without logging
-"tests/**/*.py" = ["B110", "SIM"]
+# B011: bare except: pass without logging — requires logging in production code
+"tests/**/*.py" = ["B011", "SIM"]
 
 [tool.bandit]
 skips = []

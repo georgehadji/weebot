@@ -44,3 +44,17 @@ class ContextBudget(BaseModel):
     protect_last_n: int = Field(default=6, ge=0, description="Keep last N messages untouched")
     target_ratio: float = Field(default=0.5, ge=0.1, le=1.0, description="Target compression ratio")
     strategy: CompressionStrategy = Field(default=CompressionStrategy.LOSSY_SUMMARIZE)
+
+    # ── Phase 4 (F6): Lossy compression caps ────────────────────────
+    message_head_chars: int = Field(
+        default=120, ge=20, le=1000,
+        description="Keep this many chars from the start of a long message (F6).",
+    )
+    message_tail_chars: int = Field(
+        default=120, ge=0, le=1000,
+        description="Keep this many chars from the end of a long message (F6).",
+    )
+    summary_max_chars: int = Field(
+        default=2000, ge=200, le=50000,
+        description="Max chars for the aggregated summary preamble (F6).",
+    )

@@ -54,7 +54,7 @@ class OpportunityEngine:
         Args:
             knowledge_graph: Optional KnowledgeGraphPort for querying nodes.
             fts5_search: Optional FTS5 search service for pattern discovery.
-            state_repo: Optional SQLiteStateRepository for persistent storage.
+            state_repo: Optional StateRepositoryPort for persistent storage.
         """
         self._kg = knowledge_graph
         self._fts5 = fts5_search
@@ -97,7 +97,7 @@ class OpportunityEngine:
                 stats.get("edge_count", 0),
             )
         except Exception:
-            pass
+            logger.debug("Failed to log opportunity scan stats", exc_info=True)
 
         # Rank and filter
         proposals.sort(key=lambda p: p.confidence, reverse=True)

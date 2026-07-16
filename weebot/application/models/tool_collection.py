@@ -50,7 +50,8 @@ def _truncate(output: str, limit: int, strategy: str) -> str:
     # "head" (default)
     return output[:limit] + f"\n...[{removed} chars omitted]"
 
-from weebot.tools.base import BaseTool, ToolResult
+from weebot.domain.models.base_tool import BaseTool
+from weebot.domain.models.tool_result import ToolResult
 
 # Phase 5: Optional result cache (lazy import to avoid circular deps)
 _cache_module = None
@@ -246,7 +247,7 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="true").inc()
                     except Exception:
-                        pass
+                        logger.debug("Failed to increment tool call metric for %s", _name, exc_info=True)
 
                 # Phase 5: Cache store (after successful execution)
                 if self._cache is not None and not result.is_error:
@@ -276,7 +277,7 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="false").inc()
                     except Exception:
-                        pass
+                        logger.debug("Failed to increment tool error metric for %s", _name, exc_info=True)
 
                 retry_count += 1
 

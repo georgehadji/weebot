@@ -52,7 +52,7 @@ class DiscordAdapter(GatewayAdapter):
         llm: LLMPort,
         profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._public_key = public_key
         self._bot_token = bot_token
         self._application_id = application_id

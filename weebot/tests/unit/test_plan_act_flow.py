@@ -13,7 +13,7 @@ class TestPlanActFlowResume:
 
     def test_session_continuation_words_are_in_set(self) -> None:
         """Verify the CONTINUATION_WORDS set contains expected entries."""
-        from weebot.application.services.continuation_detector import (
+        from weebot.domain.services.continuation_detector import (
             ContinuationDetector, CONTINUATION_WORDS,
         )
         assert "proceed" in CONTINUATION_WORDS
@@ -30,7 +30,7 @@ class TestPlanActFlowResume:
 
     def test_is_vague_detects_short_inputs(self) -> None:
         """Verify is_vague returns True for ≤3 words."""
-        from weebot.application.services.continuation_detector import (
+        from weebot.domain.services.continuation_detector import (
             ContinuationDetector,
         )
         assert ContinuationDetector.is_vague("one")
@@ -40,7 +40,7 @@ class TestPlanActFlowResume:
 
     def test_resolve_prompt_enriches_continuation(self) -> None:
         """Verify vague prompts are enriched with original task."""
-        from weebot.application.services.continuation_detector import (
+        from weebot.domain.services.continuation_detector import (
             ContinuationDetector,
         )
         result = ContinuationDetector.resolve_prompt(
@@ -52,7 +52,7 @@ class TestPlanActFlowResume:
 
     def test_resolve_prompt_passes_through_substantive_input(self) -> None:
         """Verify non-vague inputs pass through unchanged."""
-        from weebot.application.services.continuation_detector import (
+        from weebot.domain.services.continuation_detector import (
             ContinuationDetector,
         )
         result = ContinuationDetector.resolve_prompt(

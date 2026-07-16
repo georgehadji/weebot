@@ -225,7 +225,7 @@ async def test_skillstore():
     persistence_ok = len(names_after_restart) == len(names_after) and all(n in names_after_restart for n in names_after)
     store_results.append({"op": "persistence_restart", "survived": persistence_ok, "count": len(names_after_restart)})
 
-        all_ok = all(
+    all_ok = all(
         r.get("ok") or r.get("status") == "success"
         or r.get("all_loaded") or r.get("version_grew") or r.get("buffer_grew")
         or r.get("survived") or r.get("removed") or r.get("slow_update_stripped")

@@ -109,36 +109,44 @@ async def test_openai_adapter_grok_parameter_cleaning():
         # Verify reasoning effort is translated to x.AI's 'reasoning' body structure
         assert called_kwargs["extra_body"]["reasoning"] == {"effort": "high"}
 
+        # Regression guard: x.AI rejects requests with both reasoning_effort
+        # and extra_body.reasoning.effort set ("conflicting values" 400).
+        assert "reasoning_effort" not in called_kwargs
+
 
 @pytest.mark.asyncio
-async def test_openai_adapter_grok_multi_agent_cleaning():
+async def test_openai_adapter_grok_max_effort_maps_to_high():
     # Arrange
-    adapter = OpenAIAdapter(api_key="sk-or-v1-testkey", default_model="x-ai/grok-4.20-multi-agent")
-    
+    adapter = OpenAIAdapter(api_key="sk-or-v1-testkey", default_model="x-ai/grok-4.5")
+
     mock_response = MagicMock()
     mock_choice = MagicMock()
-    mock_choice.message.content = "Multi-agent coordinated result"
+    mock_choice.message.content = "Grok 4.5 result"
     mock_choice.message.tool_calls = None
     mock_response.choices = [mock_choice]
-    mock_response.model = "x-ai/grok-4.20-multi-agent"
+    mock_response.model = "x-ai/grok-4.5"
     mock_response.usage = None
-    
+
     with patch.object(adapter._client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
         mock_create.return_value = mock_response
-        
+
         # Act
         response = await adapter.chat(
-            messages=[{"role": "user", "content": "Coordinate multi-agent task"}],
+            messages=[{"role": "user", "content": "Reason hard about this task"}],
             reasoning_effort="max",
-            max_tokens=2048
+            max_tokens=2048,
         )
-        
+
         # Assert
         called_kwargs = mock_create.call_args[1]
-        
-        # Verify max_tokens is popped
-        assert "max_tokens" not in called_kwargs
-        
-        # Verify max maps to xhigh for multi-agent
-        assert called_kwargs["extra_body"]["reasoning"] == {"effort": "xhigh"}
+
+        # Grok keeps max_tokens (adapter no longer strips it for any grok model)
+        assert called_kwargs["max_tokens"] == 2048
+
+        # 'max'/'xhigh' effort maps to x.AI's "high"
+        assert called_kwargs["extra_body"]["reasoning"] == {"effort": "high"}
+
+        # Regression guard: x.AI rejects requests with both reasoning_effort
+        # and extra_body.reasoning.effort set ("conflicting values" 400).
+        assert "reasoning_effort" not in called_kwargs
 

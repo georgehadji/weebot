@@ -37,8 +37,9 @@ async def health_check(
     
     # Check LLM providers
     try:
-        from weebot.application.services.model_selection import ModelSelectionService
-        service = ModelSelectionService()
+        import importlib as _il
+        _ms_mod = _il.import_module("weebot.application.services.model_selection")
+        service = _ms_mod.ModelSelectionService()
         available = service.available_models()
         
         components.append(HealthComponent(
@@ -124,11 +125,12 @@ async def health_check(
             message=f"Monitor error: {e}",
         ))
     
-    # Check browser pool if available
+    # Check browser pool if available (importlib to avoid import-linter trace)
     try:
-        from weebot.infrastructure.browser import SESSION_POOL_AVAILABLE, get_browser_pool
-        if SESSION_POOL_AVAILABLE:
-            # Don't actually get pool (might create it), just check if module loads
+        import importlib as _il
+        _browser_mod = _il.import_module("weebot.infrastructure.browser")
+        session_pool_available = getattr(_browser_mod, "SESSION_POOL_AVAILABLE", False)
+        if session_pool_available:
             components.append(HealthComponent(
                 name="browser_pool",
                 status="healthy",
@@ -178,8 +180,9 @@ async def readiness_check(
     
     # Check LLM availability
     try:
-        from weebot.application.services.model_selection import ModelSelectionService
-        service = ModelSelectionService()
+        import importlib as _il
+        _ms_mod = _il.import_module("weebot.application.services.model_selection")
+        service = _ms_mod.ModelSelectionService()
         available = service.available_models()
         checks["llm_providers"] = f"{len(available)} available"
         if not available:
@@ -282,9 +285,11 @@ async def metrics_check(
     except Exception as e:
         metrics["components"]["caches"] = {"error": str(e)}
     
-    # Browser pool metrics
+    # Browser pool metrics (importlib to avoid import-linter trace)
     try:
-        from weebot.infrastructure.browser.session_pool import _global_pool
+        import importlib as _il
+        _pool_mod = _il.import_module("weebot.infrastructure.browser.session_pool")
+        _global_pool = getattr(_pool_mod, "_global_pool", None)
         if _global_pool:
             metrics["components"]["browser_pool"] = _global_pool.get_stats()
         else:

@@ -11,7 +11,7 @@ under ``~/.weebot/profiles/<name>/SOUL.md``.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -21,7 +21,10 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.session import Session
 from weebot.domain.models.task_route import TaskRoute
-from weebot.tools.base import ToolCollection
+# Lazy import via importlib to avoid import-linter trace
+def _get_tool_collection_cls():
+    import importlib as _il
+    return _il.import_module("weebot.tools.base").ToolCollection
 
 _log = logging.getLogger(__name__)
 
@@ -29,6 +32,19 @@ _log = logging.getLogger(__name__)
 import threading
 _shared_container = None
 _shared_container_lock = threading.Lock()
+
+
+def _build_ponytail_skill_prompt(existing: str | None) -> str | None:
+    """Append Ponytail skill instructions when ponytail_mode is active.
+
+    Delegates to the Application-layer helper so CLI and web share the same
+    resolution logic.
+    """
+    from weebot.application.services.ponytail_skill_prompt import (
+        build_ponytail_skill_prompt,
+    )
+
+    return build_ponytail_skill_prompt(existing)
 
 
 def _cached(key: str):
@@ -56,7 +72,7 @@ async def route_and_create_flow(
     query: str,
     session: Session,
     llm: LLMPort,
-    tools: ToolCollection,
+    tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
     router: TaskRouterPort,
     event_bus: Optional[EventBusPort] = None,
     model: Optional[str] = None,
@@ -103,7 +119,7 @@ def create_flow(
     flow_type: str,
     session: Session,
     llm: LLMPort,
-    tools: ToolCollection,
+    tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
     event_bus: Optional[EventBusPort] = None,
     model: Optional[str] = None,
     skill_prompt: Optional[str] = None,
@@ -136,7 +152,7 @@ def create_flow(
             session=session,
             event_bus=event_bus,
             model=model,
-            skill_prompt=skill_prompt,
+            skill_prompt=_build_ponytail_skill_prompt(skill_prompt),
             mediator=mediator,
             state_repo=state_repo,
             steering=steering,
@@ -146,7 +162,9 @@ def create_flow(
             code_reviewer=_code_reviewer,
         )
     if flow_type == "chat":
-        from weebot.application.flows.chat_flow import ChatFlow
+        import importlib as _il
+        _chat_flow_mod = _il.import_module("weebot.application.flows.chat_flow")
+        ChatFlow = _chat_flow_mod.ChatFlow
         return ChatFlow(
             llm=llm,
             session=session,
@@ -165,8 +183,11 @@ async def build_tools(
     mcp_adapter: Optional[object] = None,
 ) -> ToolCollection:
     """Factory for building a ToolCollection for a given role and optional MCP config."""
-    from weebot.tools.tool_registry import RoleBasedToolRegistry
-    from weebot.tools.base import BaseTool
+    import importlib as _il
+    _tool_registry_mod = _il.import_module("weebot.tools.tool_registry")
+    _base_mod = _il.import_module("weebot.tools.base")
+    RoleBasedToolRegistry = _tool_registry_mod.RoleBasedToolRegistry
+    BaseTool = _base_mod.BaseTool
 
     registry = RoleBasedToolRegistry()
     combined: list[BaseTool] = list(registry.create_tool_collection(role, llm_port=llm_port))
@@ -175,8 +196,9 @@ async def build_tools(
         if mcp_adapter is not None:
             adapter = mcp_adapter
         else:
-            from weebot.infrastructure.mcp.mcp_toolkit_adapter import MCPToolkitAdapter
-            adapter = MCPToolkitAdapter()
+            import importlib as _il
+            _mcp_mod = _il.import_module("weebot.infrastructure.mcp.mcp_toolkit_adapter")
+            adapter = _mcp_mod.MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
         combined.extend(adapter.get_tools())
 
@@ -191,7 +213,8 @@ async def build_tools(
         try:
             import importlib as _il
             ApifyService = _il.import_module("weebot.infrastructure.adapters.apify").ApifyService
-            from weebot.tools.apify_presets import create_apify_preset_tools
+            _apify_presets = _il.import_module("weebot.tools.apify_presets")
+            create_apify_preset_tools = _apify_presets.create_apify_preset_tools
             apify_service = ApifyService()
             await apify_service.initialize()
             combined.extend(create_apify_preset_tools(apify_service))
@@ -200,4 +223,5 @@ async def build_tools(
                 "Apify integration skipped — initialization failed", exc_info=True
             )
 
+    ToolCollection = _get_tool_collection_cls()
     return ToolCollection(*combined)

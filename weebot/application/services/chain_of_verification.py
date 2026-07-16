@@ -16,6 +16,12 @@ import re
 from typing import Any, Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import (
+    MAX_TOKENS_CRISP,
+    MAX_TOKENS_SHORT,
+    MAX_TOKENS_STANDARD,
+    TEMPERATURE_PRECISE,
+)
 from weebot.domain.models.event import AgentEvent, MessageEvent
 
 logger = logging.getLogger(__name__)
@@ -192,8 +198,8 @@ class ChainOfVerificationService:
                 messages=[
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=500,
-                temperature=0.1,
+                max_tokens=MAX_TOKENS_SHORT,
+                temperature=TEMPERATURE_PRECISE,
             )
             return _extract_json_array(llm_response.content)
         except Exception as exc:
@@ -216,8 +222,8 @@ class ChainOfVerificationService:
                     messages=[
                         {"role": "user", "content": _fmt(_ANSWER_VERIFICATION_PROMPT, question=q)},
                     ],
-                    max_tokens=150,
-                    temperature=0.1,
+                    max_tokens=MAX_TOKENS_CRISP,
+                    temperature=TEMPERATURE_PRECISE,
                 )
                 return {"question": q, "answer": resp.content.strip()}
             except Exception as exc:
@@ -242,8 +248,8 @@ class ChainOfVerificationService:
                 messages=[
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=2000,
-                temperature=0.1,
+                max_tokens=MAX_TOKENS_STANDARD,
+                temperature=TEMPERATURE_PRECISE,
             )
             data = _extract_json_object(llm_response.content)
             corrected = data.get("corrected_response", response)
