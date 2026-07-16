@@ -102,6 +102,64 @@ WEEBOT_SESSIONS_DB=...   # Custom DB path
 
 ---
 
+## Running from Slack / Telegram / WhatsApp / Signal / Email
+
+Weebot's chat gateways run inside the FastAPI web server:
+
+```bash
+python -m weebot.interfaces.web.main
+# or: uvicorn weebot.interfaces.web.main:app --host 0.0.0.0 --port 8000
+```
+
+**Telegram** — create a bot with [@BotFather](https://t.me/BotFather), then set
+`TELEGRAM_BOT_TOKEN` in `.env`. The bot starts long-polling automatically
+when the web server boots — no public URL required.
+
+**Slack** — create a Slack app, enable the Events API, and subscribe to
+`message.channels` and `app_mention`. Set the request URL to
+`https://<your-host>/api/gateway/slack/events` (needs a public/tunnelled
+host — e.g. `ngrok http 8000` for local testing). Set `SLACK_BOT_TOKEN`
+(from OAuth & Permissions) and `SLACK_SIGNING_SECRET` (from Basic
+Information) in `.env`.
+
+**WhatsApp** — create a Meta app with the WhatsApp product enabled. Set the
+webhook request URL to `https://<your-host>/api/gateway/whatsapp/webhook`
+and a verify token of your choosing (`WHATSAPP_WEBHOOK_VERIFY_TOKEN`). Set
+`WHATSAPP_BUSINESS_API_TOKEN` and `WHATSAPP_BUSINESS_PHONE_NUMBER_ID` in
+`.env`; `WHATSAPP_APP_SECRET` is optional and enables signature
+verification on incoming events.
+
+**Signal** — run a [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api)
+instance linked to a phone number, then set `SIGNAL_CLI_REST_URL` and
+`SIGNAL_ACCOUNT_NUMBER` in `.env`. Polls the REST API in the background —
+no public URL required.
+
+**Email** — set `EMAIL_IMAP_USER`/`EMAIL_IMAP_PASSWORD` (use an app
+password for providers with 2FA, e.g. Gmail) plus the IMAP/SMTP server
+settings in `.env`. Polls IMAP for unseen mail in the background; replies
+are sent over SMTP. The adapter never auto-replies to its own address or
+to senders that look automated (`no-reply`, `mailer-daemon`, etc.) to
+avoid autoresponder loops.
+
+**Access control** — inbound chats are denied by default. Allowlist a chat
+before the bot will respond to it:
+
+```bash
+python -m cli.main gateway allowlist add --platform telegram --id <chat_id>
+python -m cli.main gateway allowlist add --platform slack --id <channel_id>
+python -m cli.main gateway allowlist add --platform whatsapp --id <phone_number>
+python -m cli.main gateway allowlist add --platform signal --id <phone_number>
+python -m cli.main gateway allowlist add --platform email --id <email_address>
+python -m cli.main gateway allowlist list           # view current rules
+python -m cli.main gateway sessions list             # active conversations
+```
+
+Set `WEEBOT_GATEWAY_AUTH_ENABLED=0` to disable the allowlist entirely
+(only for a private, single-user deployment). See `.env.example` for the
+full list of gateway environment variables.
+
+---
+
 ## CLI Reference
 
 ### Flow

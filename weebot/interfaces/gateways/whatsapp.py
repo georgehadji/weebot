@@ -9,11 +9,15 @@ in .env configuration.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
 from typing import Any
 
 import aiohttp
 
+from weebot.application.ports.llm_port import LLMPort
+from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.gateways.base import (
     GatewayAdapter,
     GatewayMessage,
@@ -32,12 +36,20 @@ class WhatsAppAdapter(GatewayAdapter):
         self,
         token: str,
         phone_number_id: str,
+        state_repo: StateRepositoryPort,
+        llm: LLMPort,
         webhook_verify_token: str | None = None,
+        app_secret: str | None = None,
+        profile_name: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(llm_port=llm)
         self._token = token
         self._phone_number_id = phone_number_id
         self._webhook_verify_token = webhook_verify_token or "weebot-verify"
+        self._app_secret = app_secret
+        self._state_repo = state_repo
+        self._llm = llm
+        self._profile_name = profile_name
         self._headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -51,6 +63,71 @@ class WhatsAppAdapter(GatewayAdapter):
     async def stop(self) -> None:
         self._running = False
         logger.info("WhatsAppAdapter stopped")
+
+    def verify_signature(self, body: bytes, signature: str) -> bool:
+        """Validate Meta's ``X-Hub-Signature-256`` header on incoming webhooks.
+
+        Returns ``True`` (unverified) if no app secret is configured, since
+        signature verification is optional for the WhatsApp Cloud API.
+        """
+        if not self._app_secret:
+            logger.warning(
+                "WHATSAPP_APP_SECRET not configured — accepting webhook without "
+                "signature verification"
+            )
+            return True
+        if not signature.startswith("sha256="):
+            return False
+        expected = "sha256=" + hmac.new(
+            self._app_secret.encode("utf-8"), body, hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+
+    async def process_message(self, message: GatewayMessage) -> str:
+        """Run an inbound WhatsApp message through PlanActFlow.
+
+        Returns the response text, or ``""`` if the message was dropped
+        (unauthorized sender or safety block).
+        """
+        if not self.is_authorized("whatsapp", message.external_id):
+            logger.warning(
+                "WhatsApp message rejected by gateway allowlist: from=%s",
+                message.external_id,
+            )
+            return ""
+
+        text = await self.handle(message)
+        if text is None:
+            return "Message blocked by safety check."
+
+        import uuid
+
+        from weebot.domain.models.session import Session
+        from weebot.interfaces.factories import build_tools, create_flow
+
+        session_id = f"whatsapp-{message.external_id}-{uuid.uuid4().hex[:6]}"
+        session = Session(
+            id=session_id,
+            user_id=f"whatsapp-{message.external_id}",
+            agent_id="whatsapp-agent",
+        )
+
+        tools = await build_tools(role="admin")
+        flow = create_flow(
+            flow_type="plan_act",
+            session=session,
+            llm=self._llm,
+            tools=tools,
+            state_repo=self._state_repo,
+            profile_name=self._profile_name,
+        )
+
+        response = ""
+        async for event in flow.run(text):
+            if getattr(event, "type", "") == "message":
+                response = getattr(event, "message", "") or response
+
+        return response or "(no response produced)"
 
     async def send_response(self, response: GatewayResponse) -> bool:
         """Send a text message back to a WhatsApp user."""

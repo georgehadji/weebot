@@ -85,6 +85,30 @@ class WeebotSettings(BaseSettings):
     telegram_chat_id: str | None = None
     slack_webhook_url: str | None = None
 
+    # Slack gateway (Events API) — required to run weebot from Slack.
+    # Distinct from slack_webhook_url above (outbound notifications only).
+    slack_bot_token: str | None = None       # env: SLACK_BOT_TOKEN
+    slack_signing_secret: str | None = None  # env: SLACK_SIGNING_SECRET
+
+    # WhatsApp gateway (Business Cloud API)
+    whatsapp_business_api_token: str | None = None        # env: WHATSAPP_BUSINESS_API_TOKEN
+    whatsapp_business_phone_number_id: str | None = None   # env: WHATSAPP_BUSINESS_PHONE_NUMBER_ID
+    whatsapp_webhook_verify_token: str | None = None       # env: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+    whatsapp_app_secret: str | None = None                 # env: WHATSAPP_APP_SECRET (optional, enables signature verification)
+
+    # Signal gateway (signal-cli REST API — requires a local signal-cli instance)
+    signal_cli_rest_url: str = "http://localhost:8080"     # env: SIGNAL_CLI_REST_URL
+    signal_account_number: str | None = None               # env: SIGNAL_ACCOUNT_NUMBER
+
+    # Email gateway (IMAP polling + SMTP send)
+    email_imap_server: str = "imap.gmail.com"              # env: EMAIL_IMAP_SERVER
+    email_imap_user: str | None = None                     # env: EMAIL_IMAP_USER
+    email_imap_password: str | None = None                 # env: EMAIL_IMAP_PASSWORD
+    email_smtp_server: str = "smtp.gmail.com"              # env: EMAIL_SMTP_SERVER
+    email_smtp_port: int = 587                             # env: EMAIL_SMTP_PORT
+    email_from_address: str | None = None                  # env: EMAIL_FROM_ADDRESS
+    email_poll_interval_seconds: float = 30.0              # env: EMAIL_POLL_INTERVAL_SECONDS
+
     # Budget
     daily_ai_budget: float = 10.0
 
@@ -265,6 +289,14 @@ class WeebotSettings(BaseSettings):
     gateway_allowed_platforms: list[str] = Field(
         default_factory=lambda: ["telegram", "discord", "slack"],
         description="List of enabled gateway platforms.",
+    )
+    gateway_auth_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enforce the gateway allowlist (see `python -m cli.main gateway "
+            "allowlist`) for inbound Slack/Telegram/Discord messages. Chats "
+            "must be allowlisted before the bot will respond to them."
+        ),
     )
 
     # =======================================================================

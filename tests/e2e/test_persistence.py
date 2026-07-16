@@ -14,12 +14,15 @@ from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepos
 
 
 @pytest.fixture
-def tmp_db(tmp_path: Path) -> StateRepositoryPort:
+async def tmp_db(tmp_path: Path) -> StateRepositoryPort:
     """Create a temporary SQLite repository for testing."""
     db_path = str(tmp_path / "test_sessions.db")
     repo = SQLiteStateRepository(db_path=db_path)
     yield repo
-    # No close needed — fixture scope handles cleanup
+    # Each repo registers its own pool (keyed by db_path) with non-daemon
+    # aiosqlite worker threads — leaving it open hangs the process after
+    # the test run completes until something force-kills it.
+    await repo.close()
 
 
 @pytest.mark.asyncio

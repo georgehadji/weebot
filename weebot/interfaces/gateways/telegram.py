@@ -119,12 +119,15 @@ class TelegramAdapter(GatewayAdapter):
         if not text or not chat_id:
             return None
 
+        sender = msg.get("from", {})
+
         return GatewayMessage(
             platform="telegram",
             external_id=str(chat_id),
             text=text.strip(),
             metadata={
                 "message_id": msg.get("message_id"),
+                "user_id": str(sender.get("id", "")),
                 "username": chat.get("username", ""),
                 "first_name": chat.get("first_name", ""),
                 "chat_type": chat.get("type", ""),
@@ -169,6 +172,19 @@ class TelegramAdapter(GatewayAdapter):
         text = await self.handle(message)
         if text is None:
             return "Message blocked by safety check."
+
+        meta = message.metadata or {}
+        sender_id = str(meta.get("user_id") or message.external_id)
+        if not self.is_authorized("telegram", message.external_id, sender_id):
+            logger.warning(
+                "Telegram message rejected by gateway allowlist: chat=%s user=%s",
+                message.external_id, sender_id,
+            )
+            return (
+                "🔒 This chat isn't authorized to use this bot yet.\n"
+                "Ask the admin to run:\n"
+                f"python -m cli.main gateway allowlist add --platform telegram --id {message.external_id}"
+            )
 
         # Build session key from message metadata
         key = self._build_session_key(message)

@@ -51,7 +51,12 @@ class SlackAdapter(GatewayAdapter):
 
     def verify_signature(self, body: bytes, timestamp: str, signature: str) -> bool:
         """Validate Slack's HMAC-SHA256 signature on incoming events."""
-        if abs(time.time() - int(timestamp)) > 300:
+        try:
+            timestamp_age = abs(time.time() - int(timestamp))
+        except (ValueError, TypeError):
+            logger.warning("Slack signature timestamp malformed: %r", timestamp)
+            return False
+        if timestamp_age > 300:
             logger.warning("Slack signature timestamp too old")
             return False
 
@@ -69,8 +74,16 @@ class SlackAdapter(GatewayAdapter):
     def parse_event(self, payload: dict) -> Optional[GatewayMessage]:
         """Extract a GatewayMessage from a Slack Events API payload."""
         event = payload.get("event", {})
-        if event.get("type") == "url_verification":
-            return None  # Handled separately
+
+        # Only handle actual messages/mentions — ignore reactions, channel
+        # changes, etc. that a workspace's event subscriptions might send.
+        if event.get("type") not in ("message", "app_mention"):
+            return None
+
+        # Ignore bot-authored messages (including our own replies) to
+        # prevent an infinite self-reply loop.
+        if event.get("bot_id") or event.get("subtype") == "bot_message":
+            return None
 
         text = event.get("text", "")
         channel = event.get("channel", "")
@@ -101,6 +114,13 @@ class SlackAdapter(GatewayAdapter):
         """Process a validated Slack event and return a response."""
         msg = self.parse_event(payload)
         if msg is None:
+            return None
+
+        if not self.is_authorized("slack", msg.external_id, msg.metadata.get("user", "")):
+            logger.warning(
+                "Slack message rejected by gateway allowlist: channel=%s user=%s",
+                msg.external_id, msg.metadata.get("user"),
+            )
             return None
 
         text = await self.handle(msg)
