@@ -17,7 +17,7 @@
     "date-fns": "^4.4.0",
     "lucide-react": "^1.24.0",
     "next": "14.2.35",
-    "react": "^18",
+    "react": "^19",
     "react-dom": "^18",
     "react-syntax-highlighter": "^16.1.1",
     "reactflow": "^11.11.4",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "@types/react": "^18",
+    "@types/react": "^19",
     "@types/react-dom": "^18",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
