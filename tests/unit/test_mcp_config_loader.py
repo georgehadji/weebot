@@ -27,11 +27,23 @@ class TestExpandEnv:
         finally:
             del os.environ["TEST_X_HOST"]
 
-    def test_unset_var_raises(self):
+    def test_unset_var_raises(self, monkeypatch):
+        # Establish the precondition rather than assuming it: entrypoints
+        # (run.py, run_mcp.py, cli/main.py) deliberately call load_dotenv() at
+        # import time, so importing any of them earlier in the session pulls the
+        # developer's .env into os.environ for the whole process. Asserting on
+        # the *ambient* absence of a variable made this pass alone and fail in a
+        # full run, depending purely on test order and whether a .env existed
+        # up-tree.
+        monkeypatch.delenv("X_BEARER", raising=False)
         with pytest.raises(ConfigError, match="X_BEARER"):
             expand_env("${X_BEARER}")
 
-    def test_unset_var_in_url_raises(self):
+    def test_unset_var_in_url_raises(self, monkeypatch):
+        # See test_unset_var_raises: .env defines X_CLIENT_ID, so this must
+        # guarantee the variable is unset instead of hoping it is.
+        monkeypatch.delenv("X_CLIENT_ID", raising=False)
+        monkeypatch.delenv("X_CLIENT_SECRET", raising=False)
         with pytest.raises(ConfigError, match="X_CLIENT_ID"):
             expand_env("https://${X_CLIENT_ID}:${X_CLIENT_SECRET}@api.x.com")
 

@@ -60,6 +60,21 @@ class TestSampledResponseCoercion:
         r = SampledResponse(text="a", probability=1.0)
         assert r.probability == 1.0
 
+    def test_bare_integer_read_as_percent(self):
+        """A bare int > 1 can only mean percent — the field is bounded to 0..1."""
+        r = SampledResponse(text="a", probability=12)
+        assert r.probability == 0.12
+
+    def test_integer_one_stays_certain(self):
+        """1 is a valid probability and must not be rescaled to 0.01."""
+        r = SampledResponse(text="a", probability=1)
+        assert r.probability == 1.0
+
+    def test_integer_zero_stays_zero(self):
+        """0 is a valid probability and must not be treated as percent."""
+        r = SampledResponse(text="a", probability=0)
+        assert r.probability == 0.0
+
 
 # ============================================================================
 # 2. SampledDistribution — selection

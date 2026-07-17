@@ -48,6 +48,33 @@ def test_reset_step_preserves_step_results(monitor):
     assert len(monitor._step_results) == 1  # preserved
 
 
+# ── Semantic-loop detector requires genuinely different calls ─────
+
+def test_semantic_loop_fires_for_different_tools_with_same_output(monitor):
+    """Distinct tool calls yielding identical output is a real semantic loop."""
+    for i, sig in enumerate(("tool_a", "tool_b", "tool_c")):
+        diag = monitor.diagnose(
+            step_id="step1", tool_signature=sig, tool_output="identical output",
+        )
+
+    assert diag.health == TrajectoryHealth.SEMANTIC_LOOP
+
+
+def test_semantic_loop_ignores_repeated_identical_call(monitor):
+    """Re-running one tool with identical output is detector #1's job, not #2.
+
+    Repeating a single signature is often legitimate (e.g. re-reading the same
+    file), and below the repetition threshold it must not be flagged at all.
+    """
+    for _ in range(3):
+        diag = monitor.diagnose(
+            step_id="step1", tool_signature="file_editor:view:a.py",
+            tool_output="identical output",
+        )
+
+    assert diag.health == TrajectoryHealth.HEALTHY
+
+
 # ── Cross-step failure detection ──────────────────────────────────
 
 def test_cross_step_failure_triggers_at_threshold(monitor):
