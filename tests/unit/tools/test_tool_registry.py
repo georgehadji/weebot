@@ -86,3 +86,30 @@ class TestRoleBasedToolRegistry:
 
         # Admin should have access to most tools
         assert len(admin_tools) >= len(all_tools) - 3  # Allow some exclusions
+
+
+class TestSandboxPortInjection:
+    """An explicitly supplied sandbox_port must reach the execution tools."""
+
+    def test_sandbox_port_is_injected_into_execution_tools(self):
+        registry = RoleBasedToolRegistry()
+        sentinel = object()
+
+        collection = registry.create_tool_collection_from_names(
+            ["bash", "python_execute"], sandbox_port=sentinel,
+        )
+
+        for name in ("bash", "python_execute"):
+            tool = collection.get_tool(name)
+            assert tool is not None, f"{name} should be in the collection"
+            assert tool._sandbox is sentinel, f"{name} did not receive the sandbox"
+
+    def test_tools_resolve_own_default_when_no_sandbox_supplied(self):
+        registry = RoleBasedToolRegistry()
+
+        collection = registry.create_tool_collection_from_names(["bash"])
+
+        bash = collection.get_tool("bash")
+        assert bash is not None
+        # No sandbox passed — the tool falls back to create_default_sandbox().
+        assert bash._sandbox is not None

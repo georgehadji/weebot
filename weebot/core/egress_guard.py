@@ -34,7 +34,13 @@ _log = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-_ENFORCE: bool = os.environ.get("WEEBOT_EGRESS_ENFORCE", "true").lower() not in ("false", "0", "no")
+def is_enforcing() -> bool:
+    """Return True when a blocking decision should actually block the call.
+
+    Read at call time rather than import time so the toggle takes effect for
+    already-imported callers (and so tests can flip it via monkeypatch).
+    """
+    return os.environ.get("WEEBOT_EGRESS_ENFORCE", "true").lower() not in ("false", "0", "no")
 
 # Allowlist file location (reuses the existing persistence dir convention)
 _ALLOWLIST_PATH: Path = Path(os.environ.get(

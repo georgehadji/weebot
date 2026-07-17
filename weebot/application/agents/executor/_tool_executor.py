@@ -17,10 +17,25 @@ from collections import deque
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
+from weebot.core.egress_guard import is_enforcing
+from weebot.core.trust_boundary import is_untrusted_tool
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+
+def _egress_blocked_result(name: str, decision) -> ToolResult:
+    """Build the ToolResult returned in place of a blocked outbound call."""
+    reasons_txt = ", ".join(r.value for r in decision.reasons)
+    recipient_txt = f" to '{decision.recipient}'" if decision.recipient else ""
+    message = (
+        f"Outbound action blocked — requires human approval. "
+        f"Tool '{name}'{recipient_txt} was stopped because: {reasons_txt}. "
+        f"Detected patterns: {decision.detected_patterns[:3] or 'none'}. "
+        f"To proceed, a human must explicitly approve this send."
+    )
+    return ToolResult.error_result(error=message, output=message, tool_name=name)
 
 
 class ToolExecutor:
@@ -38,6 +53,7 @@ class ToolExecutor:
         system_prompt: str | None = None,
         llm=None,  # LLMPort
         model: str | None = None,
+        egress_guard=None,  # EgressGuard | None — resolved from DI when omitted
     ) -> None:
         self._tools = tools
         self._hooks = hooks
@@ -47,6 +63,12 @@ class ToolExecutor:
         self._model = model
         self._current_step_id: str = ""
         self._current_session_id: str = ""
+        self._egress_guard = egress_guard
+        self._egress_guard_resolved: bool = egress_guard is not None
+        # True once any untrusted-output tool has run in this session. Egress
+        # after that point always needs approval — the injected content is the
+        # payload (the "lethal trifecta" escalation in egress_guard.py).
+        self._untrusted_context_active: bool = False
 
     # ── Dynamic context ────────────────────────────────────────────
 
@@ -57,6 +79,34 @@ class ToolExecutor:
 
     def _get_step_id(self) -> str:
         return self._current_step_id or "unknown"
+
+    # ── Egress guard ───────────────────────────────────────────────
+
+    def _get_egress_guard(self):
+        """Resolve the DI-managed EgressGuard singleton, once, lazily."""
+        if self._egress_guard_resolved:
+            return self._egress_guard
+        self._egress_guard_resolved = True
+        from weebot.core.egress_guard import EgressGuard
+        try:
+            from weebot.application.di import Container
+            container = Container()
+            container.configure_defaults()
+            self._egress_guard = container.get(EgressGuard)
+        except Exception:
+            logger.warning(
+                "egress_guard: DI resolution failed — constructing directly",
+                exc_info=True,
+            )
+            try:
+                self._egress_guard = EgressGuard()
+            except Exception:
+                logger.error(
+                    "egress_guard: unavailable — outbound tool calls will NOT be gated",
+                    exc_info=True,
+                )
+                self._egress_guard = None
+        return self._egress_guard
 
     # ── Batch execution ────────────────────────────────────────────
 
@@ -138,6 +188,24 @@ class ToolExecutor:
                 "tool_args": args,
             })
 
+        # Gate outbound sends before they execute: payloads carrying secrets,
+        # first-time recipients, and any egress from a session that has already
+        # ingested untrusted content.
+        guard = self._get_egress_guard()
+        if guard is not None:
+            decision = guard.classify(
+                name, args, untrusted_context_active=self._untrusted_context_active,
+            )
+            if decision.requires_approval:
+                if is_enforcing():
+                    logger.warning(
+                        "egress_guard: blocked outbound tool call — %s", decision.summary,
+                    )
+                    return _egress_blocked_result(name, decision)
+                logger.warning(
+                    "egress_guard: detect-only mode, allowing — %s", decision.summary,
+                )
+
         import time as _timer
         _t0 = _timer.monotonic()
         try:
@@ -165,6 +233,12 @@ class ToolExecutor:
                 "elapsed_ms": _elapsed,
                 "success": not isinstance(result, Exception),
             })
+
+        # External content has now entered the session; taint it so later egress
+        # needs approval even to an already-known recipient. Errors carry no
+        # external content, matching the wrap_untrusted condition in _base.py.
+        if is_untrusted_tool(name) and not getattr(result, "is_error", False):
+            self._untrusted_context_active = True
         return result
 
     async def _execute_single_tool_call(self, tc: dict[str, Any]) -> ToolResult:

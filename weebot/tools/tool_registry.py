@@ -487,12 +487,18 @@ class RoleBasedToolRegistry:
         # Tools that share a single PlaywrightAdapter instance
         _browser_adapter_tools = {"advanced_browser", "browser_inspector"}
         _shared_browser_adapter = None
+        # Tools that accept an injected SandboxPort for shell/code execution.
+        # When sandbox_port is None each of these resolves its own default via
+        # weebot.infrastructure.sandbox.factory.create_default_sandbox().
+        _sandbox_port_tools = {"bash", "powershell", "python_execute"}
 
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
                 if name in _llm_port_tools and llm_port is not None:
                     tool = tool_cls(llm_port=llm_port)
+                elif name in _sandbox_port_tools and sandbox_port is not None:
+                    tool = tool_cls(sandbox=sandbox_port)
                 elif name in _browser_adapter_tools:
                     if _shared_browser_adapter is None:
                         from weebot.infrastructure.browser.playwright_adapter import (

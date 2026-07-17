@@ -332,7 +332,8 @@ class SampledResponse(BaseModel):
         text: Candidate response text or JSON payload.
         probability: Verbalized probability.  Steering signal only —
             never surfaced as calibrated confidence.  Accepted formats:
-            0.12 (float), "0.12" (string), "12%" (string percent).
+            0.12 (float), "0.12" (string), "12%" (string percent),
+            12 (bare integer, read as percent).
     """
     text: str = Field(..., description="Candidate response text or JSON payload")
     probability: float = Field(
@@ -343,8 +344,15 @@ class SampledResponse(BaseModel):
     @field_validator("probability", mode="before")
     @classmethod
     def _coerce_prob(cls, v: Any) -> float:
-        """Coerce string/percent formats to 0..1 float."""
+        """Coerce string/percent/integer formats to 0..1 float.
+
+        Supports: 0.12 (float), "0.12" (string), "12%" (percent), and a bare
+        integer > 1, which can only have been meant as a percentage since the
+        field is bounded to 0..1.
+        """
         if isinstance(v, (int, float)):
+            if isinstance(v, int) and v > 1:
+                return float(v) / 100.0
             return float(v)
         if isinstance(v, str):
             v = v.strip()

@@ -128,10 +128,15 @@ class TrajectoryMonitor:
                     affected_step_ids=[step_id],
                 )
 
-        # 2. Semantic loop — different calls but same output
+        # 2. Semantic loop — genuinely DIFFERENT calls producing identical
+        #    output. Same-signature repetition is detector #1's job (higher
+        #    threshold) and is often legitimate, e.g. re-reading one file with
+        #    file_editor view, so require >= 2 distinct signatures before
+        #    flagging. Mirrors how detector #5 correlates signatures + hashes.
         if len(self._output_hashes) >= self._stagnation_window:
             recent = list(self._output_hashes)[-self._stagnation_window:]
-            if len(set(recent)) <= 1:
+            recent_sigs = list(self._tool_signatures)[-self._stagnation_window:]
+            if len(set(recent)) <= 1 and len(set(recent_sigs)) >= 2:
                 tool_hint = ""
                 if available_tools:
                     tool_hint = (
