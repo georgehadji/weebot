@@ -124,7 +124,9 @@ def _get_adapter_classes(port_cls: type) -> list[type]:
                     continue
                 try:
                     mod = importlib.import_module(mod_name)
-                except (ImportError, Exception):
+                except Exception:
+                    # Adapter modules may pull optional/heavy deps; a module we
+                    # cannot import simply contributes no adapters to the scan.
                     continue
                 for _name, obj in inspect.getmembers(mod, inspect.isclass):
                     if (
@@ -133,7 +135,7 @@ def _get_adapter_classes(port_cls: type) -> list[type]:
                         and not inspect.isabstract(obj)
                     ):
                         adapters.append(obj)
-        except (ImportError, Exception):
+        except Exception:
             continue
 
     return adapters
@@ -215,17 +217,33 @@ class TestPortContracts:
         if not adapters:
             pytest.skip("No adapter to test")
 
-        # Try to resolve through DI container (will work for wired ports)
+        # A port that isn't wired into configure_defaults() is a legitimate
+        # skip. A port that IS wired but blows up while constructing is a real
+        # bug, and must fail — catching everything here and skipping meant this
+        # test could never fail for the one thing it exists to catch.
+        container = Container()
+        container.configure_defaults()
+
+        # Ask the container whether the port is wired rather than inferring it
+        # from a KeyError: Container.get() raises KeyError for an unwired port,
+        # but a factory that itself raises KeyError (e.g. os.environ["MISSING"])
+        # would then be misread as "not wired" — the same silent pass this test
+        # is meant to eliminate.
+        is_wired = (
+            port_cls in container._bindings or port_cls in container._singletons
+        )
+        if not is_wired:
+            pytest.skip(f"{port_cls.__name__} not wired in configure_defaults()")
+
         try:
-            container = Container()
-            container.configure_defaults()
             instance = container.get(port_cls)  # type: ignore[type-abstract]
-            assert isinstance(instance, port_cls), (
-                f"DI returned {type(instance).__name__} which is not a "
-                f"{port_cls.__name__}"
-            )
         except Exception as exc:
-            # Some ports are not wired in defaults — that's OK, just log
-            pytest.skip(
-                f"{port_cls.__name__} not wired in configure_defaults(): {exc}"
+            pytest.fail(
+                f"{port_cls.__name__} is wired in configure_defaults() but its "
+                f"factory raised {type(exc).__name__}: {exc}"
             )
+
+        assert isinstance(instance, port_cls), (
+            f"DI returned {type(instance).__name__} which is not a "
+            f"{port_cls.__name__}"
+        )
