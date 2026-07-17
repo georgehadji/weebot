@@ -10,7 +10,7 @@ structlog==26.1.0
 prometheus-client>=0.25.0
 
 # Discord Integration
-pynacl>=1.5.0
+pynacl>=1.6.2
 
 # Web Navigation
 # Held at 0.11.13: browser-use 0.13.6 (dependabot #18) hard-pins
