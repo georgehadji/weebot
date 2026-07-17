@@ -17,7 +17,7 @@ pynacl>=1.5.0
 # aiohttp==3.13.4 and anthropic==0.76.0, which conflict with the aiohttp
 # 3.14.1 / anthropic 0.117.0 bumps in that same group. 0.11.13 uses ranges
 # (aiohttp>=3.13.3, anthropic<1.0,>=0.72.1) that accept both.
-browser-use==0.11.13
+browser-use==0.13.6
 playwright==1.61.0
 
 # Windows Integration
