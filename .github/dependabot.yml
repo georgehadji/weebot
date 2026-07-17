@@ -23,6 +23,16 @@ updates:
     # Ignore transient patches for vendored/internal deps
     ignore:
       - dependency-name: "weebot"  # self-referential, never published
+      # browser-use 0.13.x hard-pins aiohttp==3.13.4 and anthropic==0.76.0,
+      # which conflict with the aiohttp/anthropic bumps in the same group and
+      # make the group PR uninstallable (ResolutionImpossible). Block its
+      # minor/major bumps so the rest of the group can still upgrade; patch
+      # bumps (e.g. 0.11.x) stay allowed. Revisit when browser-use loosens
+      # its pins. See PR #18 / #29.
+      - dependency-name: "browser-use"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     # Group minor/patch bumps into single PRs to reduce noise
     groups:
       python-minor-patch:
