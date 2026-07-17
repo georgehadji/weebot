@@ -6,7 +6,7 @@ langchain-openai==1.1.12
 pydantic==2.12.5
 python-dotenv==1.2.2
 import-linter==2.1
-structlog==25.5.0
+structlog==26.1.0
 prometheus-client>=0.25.0
 
 # Discord Integration
