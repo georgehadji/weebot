@@ -174,6 +174,7 @@ def test_file_creation_no_result_text_falls_through(validator):
         step_events=[_file_created_event(result="")],
     )
     assert not r.passed
+    assert "empty" in r.reason
 
 
 def test_non_file_tool_does_not_bypass(validator):
