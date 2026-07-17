@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.BACKEND_URL || "http://localhost:8000/api";
 
 async function handler(
-  request: NextRequest, 
-  { params }: { params: { path?: string[] } }
+  request: NextRequest,
+  { params }: { params: Promise<{ path?: string[] }> }
 ) {
-  const path = params.path?.join("/") || "";
+  const { path: pathSegments } = await params;
+  const path = pathSegments?.join("/") || "";
   const url = new URL(request.url);
   const searchParams = url.search;
   
