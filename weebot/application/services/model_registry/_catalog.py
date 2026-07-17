@@ -2680,7 +2680,7 @@ MODELS: dict[str, ModelConfig] = {
         ),
         "openai/gpt-4o": ModelConfig(
             name="GPT-4o",
-            provider="openai",
+            provider="openrouter",
             cost_per_1k_tokens=0.00625,
             context_window=128000,
             strengths=[TaskType.CHAT, TaskType.DOCUMENTATION],
