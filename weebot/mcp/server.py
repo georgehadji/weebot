@@ -620,3 +620,17 @@ class WeebotMCPServer:
         )
         def costs_resource() -> str:
             return build_costs_json(cascade_tracker)
+
+        @mcp.resource(
+            "weebot://routing",
+            mime_type="application/json",
+            description=(
+                "ACR routing analytics — per-category model selection "
+                "distribution, success rates, latency, and budget usage."
+            ),
+        )
+        def routing_resource() -> str:
+            from weebot.mcp.resources import build_routing_json
+            return build_routing_json(
+                cascade_tracker=cascade_tracker,
+            )

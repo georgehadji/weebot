@@ -116,3 +116,56 @@ class TestEdgeCases:
         if len(checks) == 0:
             pytest.xfail("BUG: escaped whitespace bypasses guard regex")
         assert len(checks) >= 1
+
+
+class TestV7DefectHuntFixes:
+    """Proof-of-defect and regression tests for V7 autonomous defect hunt findings.
+
+    Each test verifies a previously confirmed bypass that is now fixed.
+    """
+
+    def test_D1_tab_separated_args_blocked(self, guard):
+        """D1: Tab-separated args no longer bypass BashGuard patterns."""
+        risk, checks = guard.evaluate("rm\t-rf\t/etc")
+        assert risk == RiskLevel.BLOCKED, (
+            f"Tab-separated rm -rf /etc should be BLOCKED, got {risk.value}"
+        )
+
+    def test_D5_no_preserve_root_blocked(self, guard):
+        """D5: rm --no-preserve-root / now detected as BLOCKED."""
+        risk, checks = guard.evaluate("rm --recursive --force --no-preserve-root /")
+        assert risk == RiskLevel.BLOCKED, (
+            f"rm --no-preserve-root / should be BLOCKED, got {risk.value}"
+        )
+
+    def test_D13_xargs_rm_detected(self, guard):
+        """D13: xargs-mediated rm -rf now detected as DANGEROUS."""
+        risk, checks = guard.evaluate("find . -type f | xargs rm -rf")
+        assert risk == RiskLevel.DANGEROUS, (
+            f"xargs rm -rf should be DANGEROUS, got {risk.value}"
+        )
+
+    def test_D1_tab_with_long_opts_blocked(self, guard):
+        """D1 boundary: tab-separated long options also caught."""
+        risk, checks = guard.evaluate("rm\t--recursive\t--force\t/etc")
+        assert risk == RiskLevel.BLOCKED
+
+    def test_D5_no_preserve_root_with_space(self, guard):
+        """D5 boundary: --no-preserve-root with trailing space still blocked."""
+        risk, checks = guard.evaluate("rm -rf --no-preserve-root / ")
+        assert risk == RiskLevel.BLOCKED
+
+    def test_regression_rm_rf_etc_still_blocked(self, guard):
+        """Regression: rm -rf /etc still BLOCKED after D5 fix."""
+        risk, _ = guard.evaluate("rm -rf /etc")
+        assert risk == RiskLevel.BLOCKED
+
+    def test_regression_rm_rf_root_still_blocked(self, guard):
+        """Regression: rm -rf / still BLOCKED after all fixes."""
+        risk, _ = guard.evaluate("rm -rf /")
+        assert risk == RiskLevel.BLOCKED
+
+    def test_regression_tab_args_dont_break_safe_commands(self, guard):
+        """Regression: tab-separated safe commands remain safe."""
+        risk, _ = guard.evaluate("echo\thello\tworld")
+        assert risk == RiskLevel.SAFE

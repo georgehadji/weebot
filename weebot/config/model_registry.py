@@ -88,7 +88,7 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
     """Infer provider from model name pattern.
 
     Covers both prefixed names (``openrouter/auto``) and bare names
-    (``deepseek-chat``, ``claude-3.5-sonnet``, ``kimi-k2-0905``).
+    (``deepseek-chat``, ``kimi-k2-0905``).
     """
     name = model_name.lower()
     # Known direct-provider prefixes (checked BEFORE the generic OpenRouter catch-all).
@@ -422,20 +422,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             description="Anthropic's fastest model"
         ),
         
-        # Google Models
-        "gemini/gemini-1.5-pro": ModelInfo(
-            model_name="gemini/gemini-1.5-pro",
-            provider=ModelProvider.GEMINI,
-            input_cost_per_token=1.25e-06,
-            output_cost_per_token=5e-06,
-            max_input_tokens=2000000,
-            max_output_tokens=8192,
-            supports_function_calling=True,
-            supports_vision=True,
-            supports_system_messages=True,
-            supports_response_schema=True,
-            description="Google's most capable multimodal model"
-        ),
+        # Google Models (gemini-1.5-pro removed — deprecated; use openrouter/google/gemini-2.5-pro)
         "gemini/gemini-1.5-flash": ModelInfo(
             model_name="gemini/gemini-1.5-flash",
             provider=ModelProvider.GEMINI,
@@ -663,19 +650,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_response_schema=True,
             description="Google Gemini 2.5 Flash via OpenRouter"
         ),
-        "openrouter/anthropic/claude-3.5-sonnet": ModelInfo(
-            model_name="openrouter/anthropic/claude-3.5-sonnet",
-            provider=ModelProvider.OPENROUTER,
-            input_cost_per_token=3e-06,
-            output_cost_per_token=1.5e-05,
-            max_input_tokens=200000,
-            max_output_tokens=8192,
-            supports_function_calling=True,
-            supports_vision=True,
-            supports_system_messages=True,
-            supports_response_schema=True,
-            description="Anthropic Claude 3.5 Sonnet via OpenRouter"
-        ),
+        # openrouter/anthropic/claude-3.5-sonnet removed — deprecated (no endpoints); use openrouter/anthropic/claude-3.7-sonnet
         "openrouter/openai/gpt-4o-mini": ModelInfo(
             model_name="openrouter/openai/gpt-4o-mini",
             provider=ModelProvider.OPENROUTER,

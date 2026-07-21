@@ -18,6 +18,14 @@ from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.config.model_refs import MODEL_CASCADE_TIER2, MODEL_CASCADE_TIER3, MODEL_CASCADE_TIER4
 from weebot.core.error_classifier import ErrorClassifier
 
+# Import for ACR telemetry enrichment (Phase P0)
+from weebot.core.model_cascade_tracker import (
+    CascadeDecision,
+    CascadeOutcome,
+    CascadeTier,
+    ModelCascadeTracker,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,14 +55,18 @@ class CascadeExecutor:
         except (TypeError, ValueError):
             return cls._OPENROUTER_MIN_CREDITS
 
+    _TASK_CATEGORY_CACHE: dict[str, str] = {}  # description → category lookup cache
+
     def __init__(
         self,
         llm: LLMPort,
         tools: ToolCollection,
         agent_role: str | None = None,
-        model_provider=None,  # Callable[[str], str] — resolves step model
+        model_provider=None,  # Callable[[str], str | list[str] | None] — resolves step model(s)
         llm_pool: Any = None,  # Optional concurrency semaphore
         on_success=None,  # Optional callback after successful response
+        tracker: ModelCascadeTracker | None = None,  # ACR telemetry sink (Phase P0)
+        acr_router=None,  # Optional AdaptiveCapabilityRouter for outcome recording
     ) -> None:
         self._llm = llm
         self._tools = tools
@@ -62,10 +74,33 @@ class CascadeExecutor:
         self._model_provider = model_provider
         self._llm_pool = llm_pool
         self._on_success = on_success
+        self._tracker = tracker or ModelCascadeTracker()
+        self._acr_router = acr_router  # Optional ACR router for bandit outcome recording
         # Per-session circuit breaker state
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
         self._server_error_models: set[str] = set()
+
+    @staticmethod
+    def _classify_description(description: str) -> str:
+        """Return the task category for *description*, cached.
+
+        Uses ``task_model_router.category_for_step`` for classification.
+        Once computed for a description, the result is cached in a class-level
+        dict for the lifetime of the process.
+        """
+        if not description:
+            return "general"
+        cached = CascadeExecutor._TASK_CATEGORY_CACHE.get(description)
+        if cached is not None:
+            return cached
+        try:
+            from weebot.application.services.task_model_router import category_for_step
+            cat = category_for_step(description)
+        except Exception:
+            cat = "general"
+        CascadeExecutor._TASK_CATEGORY_CACHE[description] = cat
+        return cat
 
     # ── Circuit breaker helpers ─────────────────────────────────────
 
@@ -149,6 +184,32 @@ class CascadeExecutor:
             )
         return filtered
 
+    def _record_decision(
+        self,
+        model_name: str,
+        tier: CascadeTier,
+        outcome: CascadeOutcome,
+        latency_ms: float,
+        token_count: int = 0,
+        cost_estimate: float = 0.0,
+        error_message: str = "",
+        task_category: str = "general",
+    ) -> None:
+        """Record a cascade decision to the tracker, and to the ACR router if wired."""
+        decision = CascadeDecision(
+            model_name=model_name,
+            tier=tier,
+            outcome=outcome,
+            latency_ms=latency_ms,
+            token_count=token_count,
+            cost_estimate=cost_estimate,
+            error_message=error_message,
+            task_category=task_category,
+        )
+        self._tracker.record(decision)
+        if self._acr_router is not None:
+            self._acr_router.record_cascade_outcome(decision)
+
     # ── Single model call (with retry + pool) ───────────────────────
 
     @staticmethod
@@ -166,15 +227,27 @@ class CascadeExecutor:
         timeout: float = 15.0,
         fast_fail: bool = False,
         first_error: dict[str, str] | None = None,
+        *,
+        tier: CascadeTier = CascadeTier.BUDGET,
+        task_category: str = "general",
     ) -> LLMResponse | None:
         """Try a single model call with tiered timeout.
 
         Returns LLMResponse on success, None on transient failure,
         raises on fatal errors (auth, context length).
+
+        Records a CascadeDecision via the internal tracker.
         """
         import time as _cascade_time
 
         if self.cascade_is_tripped(model_id):
+            self._record_decision(
+                model_name=model_id,
+                tier=tier,
+                outcome=CascadeOutcome.CIRCUIT_OPEN,
+                latency_ms=0.0,
+                task_category=task_category,
+            )
             return None
         effective = min(timeout, 15.0) if fast_fail else timeout
         start = _cascade_time.monotonic()
@@ -210,25 +283,62 @@ class CascadeExecutor:
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
                 logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
+                self._record_decision(
+                    model_name=model_id,
+                    tier=tier,
+                    outcome=CascadeOutcome.SUCCESS,
+                    latency_ms=elapsed,
+                    token_count=getattr(resp, "usage", {}).get("total_tokens", 0) if hasattr(resp, "usage") else 0,
+                    task_category=task_category,
+                )
                 return resp
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s returned empty in %.0fms", model_id, elapsed)
+            self._record_decision(
+                model_name=model_id,
+                tier=tier,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=elapsed,
+                error_message="empty response",
+                task_category=task_category,
+            )
             return None
         except asyncio.TimeoutError:
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s timed out after %.0fms", model_id, elapsed)
+            self._record_decision(
+                model_name=model_id,
+                tier=tier,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=elapsed,
+                error_message="timeout",
+                task_category=task_category,
+            )
             return None
         except Exception as exc:
             if ErrorClassifier.should_fail_fast(exc):
-                raise
-            if first_error is not None and model_id not in first_error:
-                first_error[model_id] = str(exc)[:300] or type(exc).__name__
-            self._cascade_record_failure(model_id)
-            # Track server errors so we skip this model in the current cascade run
-            from weebot.core.error_classifier import ErrorCategory
-            if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
-                self._server_error_models.add(model_id)
-                logger.debug("Server error from %s — skipping for rest of cascade", model_id)
+                # Fast-fail errors (401, 403, 404) are recorded as FAILED
+                # but do NOT raise — the cascade must try other models.
+                logger.warning("Fast-fail from %s: %s — suppressing to continue cascade",
+                               model_id, str(exc)[:200])
+            else:
+                if first_error is not None and model_id not in first_error:
+                    first_error[model_id] = str(exc)[:300] or type(exc).__name__
+                self._cascade_record_failure(model_id)
+                # Track server errors so we skip this model in the current cascade run
+                from weebot.core.error_classifier import ErrorCategory
+                if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
+                    self._server_error_models.add(model_id)
+                    logger.debug("Server error from %s — skipping for rest of cascade", model_id)
+                elapsed = (_cascade_time.monotonic() - start) * 1000
+                self._record_decision(
+                    model_name=model_id,
+                    tier=tier,
+                    outcome=CascadeOutcome.FAILED,
+                    latency_ms=elapsed,
+                    error_message=str(exc)[:200],
+                    task_category=task_category,
+                )
             return None
 
     # ── Full cascade orchestration ──────────────────────────────────
@@ -252,15 +362,29 @@ class CascadeExecutor:
         role_primary = role_cascade[0]
         role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
         role_fallback2 = role_cascade[2] if len(role_cascade) > 2 else self._TIER3_MODEL
-        task_model = self._model_provider(description) if self._model_provider else None
+
+        # model_provider returns a list (ACR) or a single model (static router)
+        task_model_raw = self._model_provider(description) if self._model_provider else None
+        if isinstance(task_model_raw, list):
+            acr_models = task_model_raw  # ordered candidate list from ACR
+            task_model = None
+        else:
+            acr_models = []
+            task_model = task_model_raw
+
+        # Classify the step description once for ACR telemetry
+        task_category = self._classify_description(description)
 
         fast_fail: bool = False
         first_error: dict[str, str] = {}
         self._server_error_models.clear()  # fresh per-run set
 
-        async def _try(model: str, tmo: float) -> LLMResponse | None:
+        async def _try(model: str, tmo: float, *, tier: CascadeTier = CascadeTier.BUDGET) -> LLMResponse | None:
             nonlocal fast_fail
-            resp = await self._cascade_try_chat(messages, model, tmo, fast_fail, first_error)
+            resp = await self._cascade_try_chat(
+                messages, model, tmo, fast_fail, first_error,
+                tier=tier, task_category=task_category,
+            )
             if resp is None and not fast_fail:
                 if any(self._is_fast_fail_error(ee) for ee in first_error.values() if ee):
                     fast_fail = True
@@ -271,7 +395,7 @@ class CascadeExecutor:
 
         # ── Credit pre-check: filter OpenRouter models if low credits ──
         all_models = list(dict.fromkeys(
-            m for m in (role_primary, task_model, role_fallback1) if m
+            m for m in (role_primary, *acr_models, task_model, role_fallback1) if m
         ))
         filtered_models = await self.get_credits_and_filter_direct(all_models)
 
@@ -280,7 +404,7 @@ class CascadeExecutor:
             m for m in filtered_models if m not in self._server_error_models
         ))
         if parallel:
-            tasks = {asyncio.ensure_future(_try(m, 90.0)): m for m in parallel}
+            tasks = {asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel}
             done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
             for fut in done:
                 resp = fut.result()
@@ -302,8 +426,9 @@ class CascadeExecutor:
                      if m and not self.cascade_is_tripped(m)
                      and m not in parallel
                      and m not in self._server_error_models]
-        for m in remaining:
-            resp = await _try(m, 60.0)
+        remaining_tiers = [CascadeTier.BUDGET, CascadeTier.PREMIUM]
+        for m, t in zip(remaining, remaining_tiers[:len(remaining)]):
+            resp = await _try(m, 60.0, tier=t)
             if resp is not None:
                 if self._on_success:
                     await self._on_success(resp)

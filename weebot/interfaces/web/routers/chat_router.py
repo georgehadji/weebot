@@ -8,13 +8,13 @@ Provides:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session
+from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
 from weebot.interfaces.web.schemas.chat_schemas import (
     ChatRequest,
     ChatResponse,
@@ -46,15 +46,17 @@ async def send_message(
     container = request.app.state.container
 
     # Load or create session
+    current_user = get_current_user_id(request)
     if body.session_id:
         session = await state_repo.load_session(body.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
+        await verify_session_ownership(request, session.user_id)
     else:
         import uuid
         session = Session(
             id=f"chat-{uuid.uuid4().hex[:8]}",
-            user_id="web-user",
+            user_id=current_user,
             agent_id="chat-agent",
         )
         await state_repo.save_session(session)
@@ -95,13 +97,15 @@ async def send_message(
 
 @router.get("/history", response_model=ChatSessionList)
 async def list_chat_sessions(
+    request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
     limit: int = 20,
     offset: int = 0,
 ) -> ChatSessionList:
-    """List recent chat sessions."""
+    """List recent chat sessions for the current user."""
+    current_user = get_current_user_id(request)
     sessions = await state_repo.list_sessions(
-        user_id="web-user",
+        user_id=current_user,
         limit=limit,
         offset=offset,
     )
@@ -122,12 +126,15 @@ async def list_chat_sessions(
 @router.get("/{session_id}")
 async def get_chat_session(
     session_id: str,
+    request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ):
     """Retrieve a chat session with full message history."""
     session = await state_repo.load_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    await verify_session_ownership(request, session.user_id)
 
     messages = [
         {

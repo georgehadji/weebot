@@ -90,8 +90,8 @@ _BASH_EGRESS_RE = re.compile(
         # Send-MailMessage
         \bSend-MailMessage\b
         |
-        # git push to a remote
-        \bgit\s+push\b [^#\n]* (?:https?://|git@)
+        # git push to a remote (with or without explicit URL)
+        \bgit\s+push\b
     )
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -105,7 +105,7 @@ _BROWSER_EGRESS_TOOLS: frozenset[str] = frozenset({
 })
 _BROWSER_EGRESS_ACTIONS: frozenset[str] = frozenset({
     "submit", "click_submit", "navigate_post", "fill_and_submit",
-    "form_submit", "post",
+    "form_submit", "post", "send_form",
 })
 
 # notification / messaging tools that always send outbound
@@ -268,8 +268,9 @@ class EgressGuard:
     ) -> tuple[Optional[str], bool]:
         """Return (stable_recipient_id, is_egress)."""
 
-        # Bash / powershell: check command string
-        if tool_name in ("bash_execute", "powershell", "bash", "shell"):
+        # Bash / powershell / terminal: check command string (case-insensitive)
+        tool_lower = tool_name.lower()
+        if tool_lower in ("bash_execute", "powershell", "bash", "shell", "cmd", "terminal"):
             cmd = str(args.get("command", ""))
             if _BASH_EGRESS_RE.search(cmd):
                 recipient = self._extract_host_from_cmd(cmd)

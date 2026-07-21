@@ -241,3 +241,29 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
         if count > 0:
             logger.info("Cleaned up %d expired gateway sessions", count)
         return count
+
+    async def delete_by_session_id(self, session_id: str) -> int:
+        """Delete all gateway sessions linked to a given flow session_id.
+
+        Called by :class:`~weebot.application.services.session_deletion_orchestrator.SessionDeletionOrchestrator`
+        during cascading session deletion.
+
+        Returns the number of rows deleted.
+        """
+
+        def _delete() -> int:
+            with self._get_connection() as conn:
+                result = conn.execute(
+                    "DELETE FROM gateway_sessions WHERE flow_session_id = ?",
+                    (session_id,),
+                )
+                conn.commit()
+                return result.rowcount
+
+        count = await asyncio.to_thread(_delete)
+        if count > 0:
+            logger.info(
+                "Deleted %d gateway session(s) for flow session %s",
+                count, session_id,
+            )
+        return count

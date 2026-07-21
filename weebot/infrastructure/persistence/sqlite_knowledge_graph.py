@@ -636,6 +636,44 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         """Get summary statistics about the knowledge graph."""
         return await self._run_db(self._get_stats_sync)
 
+    async def delete_by_session_id(self, session_id: str) -> int:
+        """Delete all nodes and related edges/snapshots for a given session.
+
+        Called by :class:`~weebot.application.services.session_deletion_orchestrator.SessionDeletionOrchestrator`
+        during cascading session deletion.
+        """
+
+        def _delete() -> int:
+            with self._get_conn() as conn:
+                # Find node IDs for this session
+                rows = conn.execute(
+                    "SELECT id FROM kg_nodes WHERE source_session_id = ?",
+                    (session_id,),
+                ).fetchall()
+                ids = [r["id"] for r in rows]
+                count = len(ids)
+                if ids:
+                    placeholders = ",".join("?" * len(ids))
+                    conn.execute(
+                        f"DELETE FROM kg_snapshots WHERE node_id IN ({placeholders})",
+                        ids,
+                    )
+                    conn.execute(
+                        f"DELETE FROM kg_edges WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})",
+                        ids * 2,
+                    )
+                    conn.execute(
+                        f"DELETE FROM kg_nodes WHERE id IN ({placeholders})",
+                        ids,
+                    )
+                conn.commit()
+                return count
+
+        deleted = await self._run_db(_delete)
+        if deleted > 0:
+            logger.info("Deleted %d knowledge graph node(s) for session %s", deleted, session_id)
+        return deleted
+
     def _get_stats_sync(self) -> dict[str, Any]:
         """Synchronous body of get_stats — runs in thread pool."""
         with self._get_conn() as conn:

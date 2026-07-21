@@ -481,6 +481,56 @@ class VerifyingState(FlowState):
                     failures.append("test_run_failed")
                     break
 
+        # Gate C: Image quality — detect placeholder SVGs disguised as
+        # real images, or image_gen results that signal degradation.
+        # Checks files written by image_gen tools for size < 10 KB
+        # (real photos are typically 50 KB+) and for SVG markup in
+        # files with image extensions.
+        _IMAGE_QUALITY_MIN_BYTES = 10_000  # 10 KB — real photos >50 KB
+
+        for event in session.events:
+            if not isinstance(event, _ToolEvent):
+                continue
+            if event.tool_name not in ("image_gen", "image_generator", "generate_image"):
+                continue
+
+            # Check 1: Result text suggests SVG fallback
+            result_text = (event.result or "").lower()
+            if "svg fallback" in result_text or "placeholder" in result_text:
+                _log.warning(
+                    "Artifact gate C: image_gen returned SVG fallback — "
+                    "not a real photo. Use search_images for stock photos.",
+                )
+                failures.append("image_placeholder")
+                continue
+
+            # Check 2: Inspect the output file on disk.
+            # If the tool wrote a path, check file size and content.
+            out_path = (event.function_args or {}).get("output_path", "")
+            if not out_path:
+                continue
+
+            try:
+                fsize = Path(out_path).stat().st_size
+            except (OSError, ValueError):
+                fsize = 0
+
+            if 0 < fsize < _IMAGE_QUALITY_MIN_BYTES:
+                try:
+                    with open(out_path, "r", encoding="utf-8", errors="ignore") as f:
+                        head = f.read(200)
+                    is_svg = "<?xml" in head or "<svg" in head[:100]
+                except Exception:
+                    is_svg = False
+
+                if is_svg:
+                    _log.warning(
+                        "Artifact gate C: %s is %d bytes with SVG markup — "
+                        "likely a placeholder disguise.",
+                        out_path, fsize,
+                    )
+                    failures.append(f"image_svg_disguised:{out_path}")
+
         return failures
 
     # ── Internal ─────────────────────────────────────────────────────

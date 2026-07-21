@@ -175,6 +175,39 @@ def create_flow(
     raise ValueError(f"Unknown flow type: {flow_type}")
 
 
+def _get_flow_factory(llm_port: Optional[LLMPort]) -> Any | None:
+    """Build a flow_factory for tools that spawn sub-agent PlanActFlows.
+
+    Returns ``None`` when LLM port is unavailable or Container wiring fails.
+    """
+    if llm_port is None:
+        return None
+    try:
+        from weebot.application.di import Container
+        c = Container()
+        c.configure_defaults()
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
+        state_repo = c.get(StateRepositoryPort)
+        from weebot.application.ports.event_bus_port import EventBusPort
+        event_bus = c.get(EventBusPort)
+
+        def _factory(session):
+            from weebot.application.flows.plan_act_flow import PlanActFlow
+            from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+            config = PlanActFlowConfig(
+                llm=llm_port,
+                tools=None,
+                session=session,
+                event_bus=event_bus,
+                state_repo=state_repo,
+            )
+            return PlanActFlow(config=config)
+
+        return _factory
+    except Exception:
+        return None
+
+
 async def build_tools(
     role: str = "admin",
     mcp_config: Optional[dict] = None,
@@ -190,7 +223,13 @@ async def build_tools(
     BaseTool = _base_mod.BaseTool
 
     registry = RoleBasedToolRegistry()
-    combined: list[BaseTool] = list(registry.create_tool_collection(role, llm_port=llm_port))
+
+    # Build flow_factory for tools that spawn sub-agents (debate, dispatch_parallel_tasks)
+    flow_factory = _get_flow_factory(llm_port)
+
+    combined: list[BaseTool] = list(registry.create_tool_collection(
+        role, llm_port=llm_port, flow_factory=flow_factory,
+    ))
 
     if mcp_config:
         if mcp_adapter is not None:

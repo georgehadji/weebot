@@ -39,7 +39,12 @@ class HeuristicRouter:
         browser_indicators = [
             "website", "webpage", "url", "click", "form", "login",
             "browser", "chrome", "edge", "navigate to", "scrape",
-            "extract from site", "online", "web search"
+            "extract from site", "online", "web search",
+            # Image-related tasks — route to search first
+            "image of", "photo of", "picture of", "stock photo",
+            "hero image", "banner image", "og image",
+            "trainer photo", "class image", "gym photo",
+            "generate image", "create image", "make an image",
         ]
         
         # VaneSearch indicators

@@ -207,12 +207,14 @@ class ExecutorAgent:
         )
         # Cascade executor -- manages per-role model cascade + circuit breakers
         from weebot.application.agents.executor._cascade import CascadeExecutor
+        from weebot.core.model_cascade_tracker import ModelCascadeTracker
         self._cascade: CascadeExecutor = CascadeExecutor(
             llm=llm,
             tools=tools,
             agent_role=agent_role,
             model_provider=self._resolve_model_for_step,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
+            tracker=ModelCascadeTracker(),
         )
         self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
@@ -274,30 +276,45 @@ class ExecutorAgent:
     def clear_facts(self) -> None:
         self._facts.clear()
 
-    def _resolve_model_for_step(self, description: str) -> str:
+    def _resolve_model_for_step(self, description: str) -> str | list[str]:
         """Return the best model for *description*, preferring vision when needed.
 
         Uses the task-model router for normal steps.  When ``_needs_vision`` is
         set (a screenshot was injected into the conversation buffer), returns a
         vision-capable VLM instead so the model can actually see the image.
+
+        When ``WEEBOT_ENABLE_ACR`` is active, the ACR router's ordered
+        candidate list is returned; ``CascadeExecutor`` handles list output.
         """
         if self._needs_vision:
             self._needs_vision = False  # Consume the flag for this call
             from weebot.config.model_refs import MODEL_VISION_PRIMARY
-            return MODEL_VISION_PRIMARY
+            return [MODEL_VISION_PRIMARY]
         return self._model_for_step(description)
 
     @staticmethod
-    def _model_for_step(description: str) -> str:
-        """Return the best model for *description* using the task-model router.
+    def _model_for_step(description: str) -> str | list[str]:
+        """Return the best model(s) for *description*.
 
-        Falls back to _TIER1_MODEL if the router can't load or classify.
+        When ``WEEBOT_ENABLE_ACR`` is True, returns an ordered candidate list
+        from the AdaptiveCapabilityRouter.  Otherwise returns the static
+        ``model_for_step(description)`` as a single-element list for
+        backward compatibility with the cascade executor.
+
+        Falls back to ``MODEL_CASCADE_TIER1`` if routing fails.
         """
         try:
+            from weebot.config.feature_flags import WEEBOT_ENABLE_ACR
+            if WEEBOT_ENABLE_ACR:
+                from weebot.application.services.routing.adaptive_capability_router import (
+                    AdaptiveCapabilityRouter,
+                )
+                router = AdaptiveCapabilityRouter()
+                return router.route(description)
             from weebot.application.services.task_model_router import model_for_step
-            return model_for_step(description)
+            return [model_for_step(description)]
         except Exception:
-            return MODEL_CASCADE_TIER1
+            return [MODEL_CASCADE_TIER1]
 
 
     @property

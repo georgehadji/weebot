@@ -727,7 +727,9 @@ class ImageGenTool(BaseTool):
         # All API models failed — fall back to SVG template
         return await self._fallback_svg(
             params, output_path,
-            f"All image models failed. Last error: {last_error}"
+            f"All {len(models_to_try)} image model(s) failed. "
+            f"Last error: {last_error}. "
+            f"Ensure OpenRouter image generation credits are available."
         )
 
     @staticmethod
@@ -844,6 +846,12 @@ class ImageGenTool(BaseTool):
                 "size_bytes": len(svg),
                 "format": "svg",
                 "fallback_reason": reason,
+                "is_placeholder": True,
+                "quality_warning": (
+                    "This is a geometric SVG placeholder, not a real photograph. "
+                    "Use search_images to find real stock photos if photorealism "
+                    "is required."
+                ),
             },
         )
 

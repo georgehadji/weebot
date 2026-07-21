@@ -42,7 +42,13 @@ class AgentToolsMixin:
         from weebot.config.harness.schema import HarnessConfig
 
         registry = self.get("tool_registry")
-        tools = registry.create_tool_collection("admin", llm_port=self._maybe_get(LLMPort))
+        def _flow_factory(s):
+            return self._build_plan_act_flow_for_session(s)
+        tools = registry.create_tool_collection(
+            "admin",
+            llm_port=self._maybe_get(LLMPort),
+            flow_factory=_flow_factory,
+        )
         cfg = PlanActFlowConfig(
             llm=self.get(LLMPort),
             tools=tools,

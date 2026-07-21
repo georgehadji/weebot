@@ -49,8 +49,10 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
         re.compile(r"\b(create|build|implement|develop|write)\s+.{0,25}(endpoint|route|api|function|class|module|component|service|script)\b", re.I),
     ],
     TaskCategory.FILE_OPS: [
+        # Merged from duplicate definitions — includes all unique patterns
         re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
         re.compile(r"\b(create|write|make)\s+(a|the|new)?\s*(file|directory|folder|dir)\b", re.I),
+        re.compile(r"\b(create|make)\s+.*(directory|folder|dir)\b", re.I),
         re.compile(r"\b(list|count|scan|enumerate)\s+(all|every)\s+(python\s+)?files?\b", re.I),
         re.compile(r"\b(str_replace|insert|edit|rename|copy|move|delete|remove)\b", re.I),
         re.compile(r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b", re.I),
@@ -72,41 +74,22 @@ _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
         re.compile(r"\b(scrape|extract|parse|crawl)\s+", re.I),
         re.compile(r"\b(linkedin|facebook|twitter|github)\s+(post|article|page|profile|feed)\b", re.I),
     ],
-    TaskCategory.FILE_OPS: [
-        re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
-        re.compile(r"\b(create|write|make)\s+(a|the|new)?\s*(file|directory|folder|dir)\b", re.I),
-        re.compile(r"\b(create|make)\s+.*(directory|folder|dir)\b", re.I),
-        re.compile(r"\b(list|count|scan|enumerate)\s+(all|every)\s+(python\s+)?files?\b", re.I),
-        re.compile(r"\b(str_replace|insert|edit|rename|copy|move|delete|remove)\b", re.I),
-        re.compile(r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b", re.I),
-        re.compile(r"\b(get-childitem|get-content|ls\s+-la|dir\s+/|find\s+\.)\b", re.I),
-    ],
     TaskCategory.REVIEW: [
+        # Merged from duplicate definitions — includes all unique patterns
         re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\b", re.I),
-        re.compile(r"\b(code\s*review|security\s*(audit|review)|quality\s*(check|review)|best\s*practice|convention|standard)\b", re.I),
-        re.compile(r"\b(find\s+(bugs|issues|vulnerabilities|problems)|identify\s+(issues|problems|bugs))\b", re.I),
-    ],
-    TaskCategory.PLANNING: [
-        re.compile(r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b", re.I),
-        re.compile(r"\b(create\s+(plan|roadmap|strategy)|task\s*(breakdown|decomposition))\b", re.I),
-    ],
-    TaskCategory.SECURITY: [
-        re.compile(r"\b(vulnerability|exploit|injection|xss|csrf)\b", re.I),
-        re.compile(r"\b(security|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential|sanitize|escape)\b", re.I),
-    ],
-    TaskCategory.REVIEW: [
         re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\s+(the|this|code|for|security|quality)\b", re.I),
         re.compile(r"\b(code\s*review|security\s*(audit|review)|quality\s*(check|review)|best\s*practice|convention|standard)\b", re.I),
         re.compile(r"\b(find\s+(bugs|issues|vulnerabilities|problems)|identify\s+(issues|problems|bugs))\b", re.I),
         re.compile(r"\b(unit\s*test|integration\s*test|e2e\s*test|test\s+coverage)\b", re.I),
-        re.compile(r"\b(code\s*review|security\s*(audit|review)|quality|best\s*practice|convention|standard)\b", re.I),
     ],
     TaskCategory.PLANNING: [
+        # Deduplicated — both definitions were identical
         re.compile(r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b", re.I),
         re.compile(r"\b(create\s+(plan|roadmap|strategy)|task\s*(breakdown|decomposition))\b", re.I),
     ],
     TaskCategory.SECURITY: [
-        re.compile(r"\b(security|vulnerability|exploit|injection|xss|csrf|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential)\b", re.I),
+        # Merged from duplicate definitions — includes all unique patterns
+        re.compile(r"\b(security|vulnerability|exploit|injection|xss|csrf|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential|sanitize|escape)\b", re.I),
         re.compile(r"\b(sandbox|isolate|quarantine|block|deny|allow|policy|guard|validate|sanitize|escape)\b", re.I),
     ],
     TaskCategory.SUMMARIZATION: [

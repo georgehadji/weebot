@@ -60,6 +60,12 @@ Weebot is an advanced AI Agent Framework specifically designed for Windows 11, f
 - **Prefer Powershell Tool**: When on Windows, prefer `powershell_tool` for complex scripts. `bash_tool` is optimized for simple cross-platform commands but uses PowerShell internally on Windows.
 - **Browser Timeouts**: If `advanced_browser` times out, fall back to `web_search` or try a different URL.
 
+### AI Orchestrator Delegation for Web & App Building
+- **Core Directive**: When instructed to build websites or build applications (React, Next.js, FastAPI, Django, full-stack scaffolding, multi-file projects, etc.), Weebot **must** prioritize delegating the task to the **AI Orchestrator** (the `multi_llm_orchestrator` skill located at `E:\Documents\Vibe-Coding\Ai Orchestrator`).
+- **Flow & Fallback**: 
+  1. Invoke the AI Orchestrator via its CLI from `E:\Documents\Vibe-Coding\Ai Orchestrator`.
+  2. If the AI Orchestrator execution fails or is unavailable, Weebot **can and must** fallback to building the website or application directly by itself.
+
 ### Security Guidelines
 - **Command Execution**: Never execute shell commands directly. Use `weebot.tools.bash_tool` which includes multi-layer safety checks.
 - **Sandboxing**: Python code execution must be performed within the sandboxed tool environment.

@@ -159,15 +159,16 @@ class TestSingleModelCall:
         # One failure shouldn't trip (need 5)
 
     @pytest.mark.asyncio
-    async def test_fast_fail_raises(
+    async def test_fast_fail_returns_none_not_raises(
         self, executor: CascadeExecutor, mock_llm
     ) -> None:
+        """Fast-fail errors (401, 403, 404) should return None so cascade continues."""
         mock_llm.chat.side_effect = ValueError("unauthorized")
-        with pytest.raises(ValueError, match="unauthorized"):
-            await executor._cascade_try_chat(
-                [{"role": "user", "content": "hello"}],
-                "auth/model",
-            )
+        resp = await executor._cascade_try_chat(
+            [{"role": "user", "content": "hello"}],
+            "auth/model",
+        )
+        assert resp is None, "Fast-fail should return None, not raise"
 
 
 # ── Cascade orchestration ─────────────────────────────────────────

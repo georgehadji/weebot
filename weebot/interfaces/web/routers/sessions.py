@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
+from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
 from weebot.interfaces.web.schemas import (
     CreateSessionRequest,
     ResumeSessionRequest,
@@ -23,6 +24,67 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
     """Resolve StateRepositoryPort from the application DI container."""
     container = request.app.state.container
     return container.get(StateRepositoryPort)
+
+
+def _build_deletion_orchestrator(
+    request: Request,
+    state_repo: StateRepositoryPort,
+) -> Any:
+    """Build a SessionDeletionOrchestrator with all available stores."""
+    from weebot.application.services.session_deletion_orchestrator import (
+        SessionDeletionOrchestrator,
+    )
+
+    orch = SessionDeletionOrchestrator(state_repo=state_repo)
+
+    # Register known extra stores if available in the container
+    container = request.app.state.container
+
+    # Event store
+    try:
+        from weebot.application.ports.event_bus_port import EventStorePort
+        event_store = container.get(EventStorePort)
+        if hasattr(event_store, "delete_session"):
+            orch.add_store("event_store", event_store, "delete_session")
+    except (KeyError, Exception):
+        pass
+
+    # Checkpoint store
+    try:
+        from weebot.infrastructure.persistence.checkpoint_store import (
+            SQLiteCheckpointStore,
+        )
+        checkpoint_store = container.get(SQLiteCheckpointStore)
+        if hasattr(checkpoint_store, "delete"):
+            orch.add_store("checkpoint_store", checkpoint_store, "delete")
+    except (KeyError, Exception):
+        pass
+
+    # Gateway session store
+    try:
+        from weebot.infrastructure.persistence.gateway_session_store import (
+            SQLiteGatewaySessionStore,
+        )
+        gateway_store = container.get(SQLiteGatewaySessionStore)
+        orch.add_store("gateway_session_store", gateway_store, "delete_by_session_id")
+    except (KeyError, Exception):
+        pass
+
+    # Knowledge graph
+    try:
+        import importlib as _kg_il
+        _kg_mod = _kg_il.import_module(
+            "weebot.infrastructure.persistence.sqlite_knowledge_graph"
+        )
+        _kg_cls = getattr(_kg_mod, "SQLiteKnowledgeGraph", None)
+        if _kg_cls is not None:
+            kg = container.get(_kg_cls)
+            if hasattr(kg, "delete_by_session_id"):
+                orch.add_store("knowledge_graph", kg, "delete_by_session_id")
+    except (KeyError, Exception):
+        pass
+
+    return orch
 
 
 def _session_to_response(session: Session) -> SessionResponse:
@@ -42,18 +104,19 @@ def _session_to_response(session: Session) -> SessionResponse:
 
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
-    user_id: Optional[str] = Query(default=None, description="Filter by user ID"),
-    status: Optional[str] = Query(default=None, description="Filter by status"),
+    http_request: Request,
+    status: str | None = Query(default=None, description="Filter by status"),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionListResponse:
-    """List all sessions with optional filtering."""
+    """List all sessions for the current user."""
+    effective_user = get_current_user_id(http_request)
     sessions = await state_repo.list_sessions(
-        user_id=user_id, status=status, limit=limit, offset=offset
+        user_id=effective_user, status=status, limit=limit, offset=offset
     )
-    total = await state_repo.count_sessions(user_id=user_id)
-    
+    total = await state_repo.count_sessions(user_id=effective_user)
+
     return SessionListResponse(
         sessions=[_session_to_response(s) for s in sessions],
         total=total,
@@ -62,23 +125,27 @@ async def list_sessions(
 
 @router.post("", response_model=SessionResponse)
 async def create_session(
-    request: CreateSessionRequest,
+    http_request: Request,
+    body: CreateSessionRequest,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionResponse:
     """Create a new session."""
-    
+
     import uuid
-    context: dict[str, Any] = {"last_prompt": request.prompt, "model": request.model}
-    if request.ponytail_mode is not None:
-        context["ponytail_mode"] = request.ponytail_mode
+    context: dict[str, Any] = {"last_prompt": body.prompt, "model": body.model}
+    if body.ponytail_mode is not None:
+        context["ponytail_mode"] = body.ponytail_mode
+
+    # Override user_id with the authenticated identity
+    current_user = get_current_user_id(http_request)
 
     session = Session(
-        id=request.session_id or str(uuid.uuid4()),
-        user_id=request.user_id,
-        agent_id=request.agent_id,
+        id=body.session_id or str(uuid.uuid4()),
+        user_id=current_user,
+        agent_id=body.agent_id,
         context=context,
     )
-    
+
     await state_repo.save_session(session)
     logger.info("Created session %s", session.id)
 
@@ -104,32 +171,41 @@ async def search_sessions(
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
+    http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionResponse:
     """Get a specific session by ID."""
-    
+
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    
+
+    await verify_session_ownership(http_request, session.user_id)
+
     return _session_to_response(session)
 
 
 @router.delete("/{session_id}")
 async def delete_session(
     session_id: str,
+    http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> dict:
-    """Delete a session."""
-    
+    """Delete a session and all associated data across stores."""
+
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    
-    await state_repo.delete_session(session_id)
-    logger.info("Deleted session %s", session_id)
 
-    return {"message": f"Session {session_id} deleted"}
+    await verify_session_ownership(http_request, session.user_id)
+
+    # Use orchestrator to cascade delete across all stores
+    orch = _build_deletion_orchestrator(http_request, state_repo)
+    results = await orch.delete_session(session_id)
+
+    logger.info("Deleted session %s (results: %s)", session_id, results)
+
+    return {"message": f"Session {session_id} deleted", "results": results}
 
 
 @router.post("/{session_id}/cancel")
@@ -143,6 +219,8 @@ async def cancel_session(
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
 
     # Cancel via TaskRunner if available, otherwise just mark status.
     # The TaskRunner owns the running asyncio.Task — we must stop it
@@ -165,7 +243,7 @@ async def cancel_session(
         session = await state_repo.load_session(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    
+
     logger.info("Cancelled session %s", session_id)
     return _session_to_response(session)
 
@@ -173,21 +251,24 @@ async def cancel_session(
 @router.post("/{session_id}/resume", response_model=SessionResponse)
 async def resume_session(
     session_id: str,
+    http_request: Request,
     request: ResumeSessionRequest,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
 ) -> SessionResponse:
     """Resume a waiting session with user answer."""
-    
+
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-    
+
+    await verify_session_ownership(http_request, session.user_id)
+
     if session.status != SessionStatus.WAITING:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Session {session_id} is not waiting for input (status: {session.status.value})"
         )
-    
+
     # Add user message and update status
     from weebot.domain.models.event import MessageEvent
     session = session.add_event(MessageEvent(role="user", message=request.answer))
@@ -213,6 +294,8 @@ async def run_session(
     session = await state_repo.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
 
     if session.status not in (SessionStatus.IDLE, SessionStatus.FAILED):
         raise HTTPException(
@@ -250,9 +333,9 @@ async def run_session(
         except Exception:
             await tools.teardown()
             raise
-    except Exception as exc:
-        logger.exception("Failed to start session %s: %s", session_id, exc)
-        raise HTTPException(status_code=500, detail=f"Failed to start task: {exc}")
+    except Exception:
+        logger.exception("Failed to start session %s", session_id)
+        raise HTTPException(status_code=500, detail="Failed to start task") from None
 
     logger.info("Started background task for session %s", session_id)
     return _session_to_response(session)
