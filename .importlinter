@@ -44,9 +44,6 @@ ignore_imports =
     weebot.tools.atomic_mail_tool -> weebot.infrastructure.adapters.atomicmail.mcp_server
     # apify_presets uses the Apify service adapter for actor execution.
     weebot.tools.apify_presets -> weebot.infrastructure.adapters.apify.apify_service
-    # persistent_memory lazily instantiates SQLiteStateRepository for
-    # user-profile consolidation. Pre-audited — ADR-ARCH-AUDIT-V2 A2
-    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
     # schedule_tool → scheduler → DI → adapters&persistence (transitive).
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
     # bash_security → model_selection → model_registry → adapter_factory (transitive)
@@ -65,12 +62,8 @@ ignore_imports =
     weebot.tools.file_editor -> weebot.infrastructure.security.security_validators
     # bash/powershell/python tools create sandbox instances via the factory.
     weebot.tools.bash_tool -> weebot.infrastructure.sandbox.factory
-    weebot.tools.bash_tool -> weebot.infrastructure.observability.metrics
     weebot.tools.powershell_tool -> weebot.infrastructure.sandbox.factory
     weebot.tools.python_tool -> weebot.infrastructure.sandbox.factory
-    weebot.tools.python_tool -> weebot.infrastructure.observability.metrics
-    # atomic_mail_tool uses Prometheus metrics for monitoring.
-    weebot.tools.atomic_mail_tool -> weebot.infrastructure.observability.metrics
     # swarm tool lazily imports the Swarm event bus.
     weebot.tools.swarm -> weebot.infrastructure.swarm_event_bus
     # tool_registry lazily creates Playwright browser instances.

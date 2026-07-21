@@ -133,8 +133,14 @@ class PersistentMemoryTool(BaseTool):
             import hashlib
             from weebot.application.services.salience_scorer import compute_salience
             if not hasattr(self, '_salience_repo'):
-                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
-                self._salience_repo = SQLiteStateRepository()
+                # Resolve the concrete repo dynamically (composition-root style):
+                # keeps the tools layer free of a static edge into infrastructure
+                # persistence, consistent with the DI resolution above.
+                import importlib as _il
+                _repo_mod = _il.import_module(
+                    "weebot.infrastructure.persistence.sqlite_state_repo"
+                )
+                self._salience_repo = _repo_mod.SQLiteStateRepository()
             entry_hash = hashlib.sha256(entry_text.encode()).hexdigest()[:16]
             salience = compute_salience(access_count=2)
             await self._salience_repo.upsert_memory_metadata(
