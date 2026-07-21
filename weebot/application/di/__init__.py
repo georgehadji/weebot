@@ -29,7 +29,6 @@ from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noq
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
 from weebot.application.ports.audit_port import AuditPort  # noqa: E402
 from weebot.application.ports.backend_port import BackendPort  # noqa: E402
-from weebot.application.ports.config_port import ConfigPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
@@ -133,7 +132,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("structured_logger", lambda: self._create_structured_logger())
         self.register(AuditPort, lambda: self._create_audit_service())
         self.register(MemoryPort, lambda: self._create_memory_adapter())
-        self.register(ConfigPort, lambda: self._create_config_adapter())
+        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
+        self.register(ConfigAdapter, lambda: self._create_config_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
