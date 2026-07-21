@@ -27,14 +27,12 @@ from weebot.application.cqrs.handlers import register_default_handlers  # noqa: 
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E402
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
-from weebot.application.ports.audit_port import AuditPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
 from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
-from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
 from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
 from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
@@ -122,12 +120,14 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(Mediator, self._create_mediator)
         self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
-        self.register(SteeringPort, self._create_steering)
+        from weebot.infrastructure.adapters.steering_adapter import InMemorySteeringAdapter
+        self.register(InMemorySteeringAdapter, self._create_steering)
         self.register(HarnessConfig, self._create_harness_config)
         self.register(TaskRouterPort, self._create_task_router)
         self.register("personality", self._create_personality)
         self.register("structured_logger", lambda: self._create_structured_logger())
-        self.register(AuditPort, lambda: self._create_audit_service())
+        from weebot.application.services.audit_service import AuditService
+        self.register(AuditService, lambda: self._create_audit_service())
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
         self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
         from weebot.infrastructure.adapters.config_adapter import ConfigAdapter

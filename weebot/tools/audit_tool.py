@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from weebot.application.ports.audit_port import AuditPort
+from weebot.application.services.audit_service import AuditService
 from weebot.tools.base import BaseTool, ToolResult
 
 
@@ -46,7 +46,7 @@ class AuditTool(BaseTool):
             _di_mod = _il.import_module("weebot.application.di")
             _c = _di_mod.Container()
             _c.configure_defaults()
-            service = _c.get(AuditPort)
+            service = _c.get(AuditService)
         object.__setattr__(self, "_service", service)
 
     async def execute(self, output: str, skill_name: str = "", **_: Any) -> ToolResult:
