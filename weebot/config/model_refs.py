@@ -327,6 +327,10 @@ MODEL_IMAGE_KREA_MEDIUM_TURBO: str = "krea/krea-2-medium-turbo"
 """Krea 2 Medium Turbo — speed-focused distilled image gen, $0.015/img.
 Rapid iteration, graphic design exploration, fast generation priority."""
 
+MODEL_IMAGE_KREA_MEDIUM: str = "krea/krea-2-medium"
+"""Krea 2 Medium — balanced, cost-efficient image gen, $0.03/img.
+Illustration, anime, painting, expressive artistic styles. Stable, consistent."""
+
 MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
 """Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
 
@@ -396,9 +400,10 @@ IMAGE_CASCADE: dict[str, list[str]] = {
     "social": [
         "google/gemini-3.1-flash-lite-image",      # 1st: cheapest — ultra-budget image
         "krea/krea-2-medium-turbo",               # 2nd: speed-focused — $0.015/img
-        "black-forest-labs/flux.2-klein-4b",        # 5th: cheapest paid — fast
-        "black-forest-labs/flux.2-flex",             # 5th: batch-optimized
-        "x-ai/grok-imagine-image-quality",          # 5th: cheap (~$0.05/img) — direct xAI
+        "krea/krea-2-medium",                        # 3rd: balanced artistic — $0.03/img
+        "black-forest-labs/flux.2-klein-4b",        # 6th: cheapest paid — fast
+        "black-forest-labs/flux.2-flex",             # 6th: batch-optimized
+        "x-ai/grok-imagine-image-quality",          # 6th: cheap (~$0.05/img) — direct xAI
     ],
 
     # ── Text-heavy images — signs, banners with text ────────────────
@@ -420,7 +425,8 @@ IMAGE_CASCADE: dict[str, list[str]] = {
         "x-ai/grok-imagine-image-quality",        # 1st: cheap (~$0.05/img) — direct xAI
         "black-forest-labs/flux.2-pro",            # 2nd: paid — photorealistic
         "krea/krea-2-large",                      # 3rd: raw photorealism — $0.06/img
-        "black-forest-labs/flux.2-flex",           # 4th: paid — batch-optimized
+        "krea/krea-2-medium",                      # 4th: balanced artistic — $0.03/img
+        "black-forest-labs/flux.2-flex",           # 5th: paid — batch-optimized
     ],
 }
 
