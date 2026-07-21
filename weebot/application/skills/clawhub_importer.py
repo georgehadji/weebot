@@ -14,10 +14,11 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from urllib.parse import urlparse
 
-from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
+if TYPE_CHECKING:
+    from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,12 @@ class ClawHubImporter:
                                           install_dir=Path.home() / ".weebot/skills")
     """
 
-    def __init__(self, repo_path: Optional[Path] = None, git_adapter: Optional[ClawHubGitAdapter] = None):
-        self._git_adapter = git_adapter or ClawHubGitAdapter(repo_path=repo_path)
+    def __init__(self, repo_path: Optional[Path] = None, git_adapter: Optional["ClawHubGitAdapter"] = None):
+        if git_adapter is not None:
+            self._git_adapter = git_adapter
+        else:
+            from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
+            self._git_adapter = ClawHubGitAdapter(repo_path=repo_path)
 
     @property
     def repo_path(self) -> Path:
