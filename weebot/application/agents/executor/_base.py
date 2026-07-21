@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
     from weebot.models.structured_output import VisionReflection
 
+from weebot.application.agents.executor._iteration_guard import IterationGuard, IterationGuardState
 from weebot.application.agents.executor._prompt_builder import build_executor_prompt
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
@@ -497,14 +498,15 @@ class ExecutorAgent:
                 "content": f"Next step: {step.description}",
             })
 
+        guard = IterationGuard(
+            step_id=step.id,
+            max_tool_calls_per_step=12,
+            max_repeated_assistant_turns=2,
+            repeated_tool_signature_limit=4,
+        )
         step_result = ""
         loop_error: str | None = None
         abort_step = False
-        repeated_assistant_turns = 0
-        last_assistant_text = ""
-        repeated_tool_calls = 0
-        last_tool_signature: str | None = None
-        recent_tool_signatures: deque[str] = deque(maxlen=6)
         thought_iteration: int = 0
         tool_calls_attempted: int = 0
         tool_calls_succeeded: int = 0
@@ -514,23 +516,17 @@ class ExecutorAgent:
         # ── Tier 1.3: TrajectoryMonitor — reset per-step windows, preserve cross-step ──
         if self._trajectory_monitor is not None:
             self._trajectory_monitor.reset_step()
-            # Pass step description for TDD RED-phase tolerance
             self._trajectory_monitor.set_step_context(step.description or "")
 
         self._step_budget.reset()
-        # Enhancement D: per-step tool-call cap (default 8).
-        # Prevents the executor from burning 30+ LLM calls on simple steps.
-        _tool_call_count = 0
-        _MAX_TOOL_CALLS_PER_STEP = 12
         while self._step_budget.consume():
-            _tool_call_count += 1
-            if _tool_call_count > _MAX_TOOL_CALLS_PER_STEP:
+            guard.record_iteration()
+            if guard.is_tool_call_budget_exhausted():
                 logger.warning(
                     "Step %s: tool-call budget exhausted (%d calls). "
                     "Completing step with current findings.",
-                    step.id, _MAX_TOOL_CALLS_PER_STEP,
+                    step.id, guard._max_tool_calls,
                 )
-                # Force the LLM to produce a summary instead of more tool calls
                 self._conversation_buffer.append({
                     "role": "user",
                     "content": (
@@ -539,7 +535,6 @@ class ExecutorAgent:
                         "any more tools."
                     ),
                 })
-                # One more LLM call to produce the summary, then break
                 messages = [
                     {"role": "system", "content": self._system_prompt}
                 ] + list(self._conversation_buffer)
@@ -621,23 +616,16 @@ class ExecutorAgent:
                 )
 
             if not response.tool_calls:
-                normalized = normalize_text(assistant_content)
-                if normalized and normalized == last_assistant_text:
-                    repeated_assistant_turns += 1
-                else:
-                    repeated_assistant_turns = 0
-                last_assistant_text = normalized
+                guard.record_assistant_turn(normalize_text(assistant_content))
 
                 step_result = assistant_content or "No result"
                 if follow_up_like(step_result):
                     step_result = "Step completed. Continuing to the next plan step."
 
-                if repeated_assistant_turns >= 2:
-                    loop_error = build_stuck_error(
-                        step=step,
+                if guard.is_assistant_turn_loop():
+                    loop_error = guard.build_stuck_error(
                         reason="repeated assistant-only responses with no tool progress",
-                        recent_signatures=recent_tool_signatures,
-                        max_steps=self._max_steps,
+                        step_description=step.description,
                     )
                     yield ErrorEvent(error=loop_error)
                     break
@@ -648,28 +636,17 @@ class ExecutorAgent:
 
             abort_step = False
             # ── Phase 2: Pre-flight checks (sequential) ─────────
-            # Check for repeated tool signatures before executing
-            # anything, so we don't waste parallel execution on a
-            # stuck sequence.
             _batch_tool_calls: list[dict] = []
             for tc in response.tool_calls:
                 tool_name = tc["function"]["name"]
                 raw_arguments = tc["function"].get("arguments", "{}")
                 signature = tool_signature(tool_name, raw_arguments)
-                recent_tool_signatures.append(signature)
+                guard.record_tool_call(signature)
 
-                if signature == last_tool_signature:
-                    repeated_tool_calls += 1
-                else:
-                    repeated_tool_calls = 1
-                    last_tool_signature = signature
-
-                if repeated_tool_calls >= 4:
-                    loop_error = build_stuck_error(
-                        step=step,
+                if guard.is_tool_signature_loop():
+                    loop_error = guard.build_stuck_error(
                         reason=f"repeated identical tool call '{tool_name}'",
-                        recent_signatures=recent_tool_signatures,
-                        max_steps=self._max_steps,
+                        step_description=step.description,
                     )
                     yield ErrorEvent(error=loop_error)
                     abort_step = True
