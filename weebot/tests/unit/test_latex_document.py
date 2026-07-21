@@ -10,10 +10,33 @@ from pathlib import Path
 
 import pytest
 
-from weebot.domain.models.book import CompileErrorCategory
+from weebot.application.document.book_assembler import assemble_main_tex, write_project
+from weebot.application.document.book_generation_flow import BookGenerationFlow
+from weebot.application.document.stub_content_provider import StubContentProvider
+from weebot.domain.models.book import (
+    Book,
+    Chapter,
+    CompileErrorCategory,
+    Section,
+)
 from weebot.infrastructure.document.latex_compiler import LatexCompilerService
 from weebot.infrastructure.document.log_parser import has_blocking_errors, parse_log
 from weebot.infrastructure.document.preflight import _parse_pdffonts, preflight_pdf
+
+
+def _sample_book() -> Book:
+    return Book(
+        title="Δοκιμαστικό Βιβλίο",
+        author="weebot",
+        chapters=[
+            Chapter(
+                label="chap:intro",
+                title="Εισαγωγή",
+                sections=[Section(label="sec:one", title="Πρώτη Ενότητα")],
+            )
+        ],
+        bib_entries=["@book{e,author={Euler},title={Introductio},year={1748}}"],
+    )
 
 
 # ── log parser ─────────────────────────────────────────────────────────────
@@ -97,6 +120,50 @@ def f(x):
 \backmatter\printbibliography
 \end{document}
 """
+
+
+# ── assembly (pure) ─────────────────────────────────────────────────────────
+
+def test_assemble_main_tex_structure():
+    tex = assemble_main_tex(_sample_book())
+    assert "\\input{preamble.tex}" in tex
+    assert "\\frontmatter" in tex and "\\mainmatter" in tex
+    assert "\\chapter{Εισαγωγή}" in tex and "\\label{chap:intro}" in tex
+    assert "\\section{Πρώτη Ενότητα}" in tex
+    assert "\\addbibresource{refs.bib}" in tex and "\\printbibliography" in tex
+
+
+def test_stub_content_provider_fills_empty_bodies():
+    authored = StubContentProvider().author(_sample_book())
+    body = authored.chapters[0].sections[0].body_tex
+    assert body.strip() and "$" in body  # non-empty, contains math
+
+
+def test_write_project_emits_files(tmp_path):
+    write_project(StubContentProvider().author(_sample_book()), tmp_path)
+    assert (tmp_path / "main.tex").exists()
+    assert (tmp_path / "refs.bib").exists()
+    assert "Euler" in (tmp_path / "refs.bib").read_text()
+
+
+# ── end-to-end flow (needs XeLaTeX) ─────────────────────────────────────────
+
+@pytest.mark.skipif(
+    not LatexCompilerService.toolchain_available(),
+    reason="XeLaTeX/latexmk toolchain not installed",
+)
+def test_generation_flow_produces_print_ready_pdf(tmp_path):
+    flow = BookGenerationFlow(
+        compiler=LatexCompilerService(),
+        content_provider=StubContentProvider(),
+        preflight=preflight_pdf,
+    )
+    result = flow.generate(_sample_book(), tmp_path / "book")
+
+    assert result.ok, f"remaining: {[e.message for e in result.remaining_errors]}"
+    assert result.print_ready
+    assert result.page_count and result.page_count >= 1
+    assert result.pdf_path and Path(result.pdf_path).exists()
 
 
 @pytest.mark.skipif(
