@@ -267,6 +267,71 @@ def build_costs_json(cascade_tracker: Any | None = None) -> str:
         )
 
 
+def build_routing_json(
+    cascade_tracker: Any | None = None,
+    bandit_selector: Any | None = None,
+) -> str:
+    """Return ACR routing analytics as a JSON string.
+
+    Exposes per-category model selection distribution, success rates,
+    latency, and cascade hit rates from the cascade tracker.
+
+    Args:
+        cascade_tracker: Optional ``ModelCascadeTracker`` for telemetry.
+        bandit_selector: Optional ``BanditSelector`` for budget stats.
+    """
+    if cascade_tracker is None:
+        return json.dumps(
+            sanitize_json_fields({
+                "per_category": {},
+                "total_decisions": 0,
+                "note": "Pass cascade_tracker= to WeebotMCPServer for live data.",
+            }),
+            indent=2,
+        )
+
+    try:
+        per_cat = cascade_tracker.per_category_stats()
+        summary = cascade_tracker.summary()
+
+        # Get bandit budget stats if available
+        bandit_stats = {}
+        if bandit_selector is not None:
+            try:
+                if hasattr(bandit_selector, "_total_count"):
+                    for cat in bandit_selector._total_count:
+                        bandit_stats[cat] = bandit_selector.get_budget_used(cat)
+            except Exception:
+                pass
+
+        result = {
+            "total_decisions": summary.get("total_decisions", 0),
+            "cascade_hit_rate": summary.get("cascade_hit_rate", 1.0),
+            "total_cost_estimate": summary.get("total_cost_estimate", 0.0),
+            "per_category": {},
+            "bandit_budget": bandit_stats if bandit_stats else None,
+        }
+
+        for cat, models in per_cat.items():
+            total_attempts = sum(m["attempts"] for m in models.values())
+            total_successes = sum(m["successes"] for m in models.values())
+            result["per_category"][cat] = {
+                "total_attempts": total_attempts,
+                "total_successes": total_successes,
+                "success_rate": round(total_successes / total_attempts, 4)
+                    if total_attempts else 0.0,
+                "models": models,
+            }
+
+        return json.dumps(sanitize_json_fields(result), indent=2)
+    except Exception as exc:
+        _log.exception("Failed to build routing resource payload: %s", exc)
+        return json.dumps(
+            {"error": _INTERNAL_ERROR, "total_decisions": 0},
+            indent=2,
+        )
+
+
 def build_skills_json(skill_registry: Any | None = None) -> str:
     """Return installed skills as a JSON string.
 

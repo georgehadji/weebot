@@ -24,6 +24,28 @@ from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
 
+
+async def _run_git_async(args: list[str], *, cwd: Path) -> None:
+    """Run a git command asynchronously and log failures without crashing."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", *args,
+            cwd=str(cwd),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            logger.debug(
+                "Git command 'git %s' failed (exit %d): %s",
+                " ".join(args), proc.returncode, stderr.decode(errors="replace")[:200],
+            )
+    except FileNotFoundError:
+        logger.debug("Git not found on PATH — skipping git commit")
+    except Exception as exc:
+        logger.debug("Git command 'git %s' error: %s", " ".join(args), exc)
+
+
 # Weebot ledger location
 WEEBOT_DIR = Path.home() / ".weebot"
 LEDGER_DIR = WEEBOT_DIR / "ledger"

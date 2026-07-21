@@ -14,28 +14,22 @@ interface WebSocketHook {
 // Backend WebSocket URL (must connect directly to backend)
 const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
-// Cache the WS token so we only fetch it once
+// Cache the WS token so we only resolve it once per session
 let _cachedWsToken: string | null = null;
-let _tokenFetchInFlight: Promise<string | null> | null = null;
 
 async function _resolveWsToken(): Promise<string | null> {
   if (_cachedWsToken !== null) return _cachedWsToken;
-  if (_tokenFetchInFlight) return _tokenFetchInFlight;
 
-  _tokenFetchInFlight = (async () => {
-    try {
-      const res = await fetch("/api/health");
-      if (!res.ok) return null;
-      const data = await res.json();
-      // If backend returns a ws_token, use it
-      _cachedWsToken = data.ws_token || null;
-      return _cachedWsToken;
-    } catch {
-      return null;
-    }
-  })();
-
-  return _tokenFetchInFlight;
+  // Read the API key from sessionStorage — same source used by api.ts for REST auth.
+  // The WebSocket auth compares the token against WEEBOT_API_KEY via hmac.compare_digest,
+  // so the API key itself is the correct token to pass.
+  if (typeof window === "undefined") return null;
+  try {
+    _cachedWsToken = sessionStorage.getItem("weebot_api_key");
+  } catch {
+    _cachedWsToken = null;
+  }
+  return _cachedWsToken;
 }
 
 // WebSocket ready states

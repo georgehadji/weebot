@@ -19,6 +19,8 @@ select = [
     "UP",   # pyupgrade
 ]
 ignore = [
+    # B008: Depends() in FastAPI dependency injection — safe pattern
+    "B008",
     # SIM102: collapsible if — style preference
     "SIM102",
     # SIM108: ternary — sometimes less readable

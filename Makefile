@@ -8,6 +8,11 @@ help:
 	@echo "  lint-imports  Run import-linter architecture checks"
 	@echo "  check-arch    Run all architecture verification gates"
 	@echo "  check         Run full suite: tests + arch + lint"
+	@echo "  generate-capabilities Generate capabilities schema for UI"
+
+generate-capabilities:
+	@echo "=== Generating Capabilities Atlas Schema ==="
+	python scripts/generate_capabilities_schema.py
 
 install:
 	pip install -r requirements.txt

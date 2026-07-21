@@ -1,0 +1,152 @@
+# Benchmark-seeded quality profiles for the Adaptive Capability Router (ACR).
+#
+# Each entry maps a model_id to quality scores on a 0..10 scale per axis.
+# Scores are seeded from published benchmark results and manual review.
+# They are overwritten with live telemetry measurements as the ACR learns.
+#
+# Format:
+#   <model_id>:
+#     axes:
+#       <axis>: <float>  # 0..10
+#     source: seed       # fixed for first-party seeds
+
+# ── CODING models ───────────────────────────────────────────────────
+x-ai/grok-build-0.1:
+  axes:
+    coding: 9.5
+    reasoning: 8.5
+    planning: 7.5
+    tool_use: 8.0
+    writing: 6.5
+  source: seed
+
+kwaipilot/kat-coder-pro-v2.5:
+  axes:
+    coding: 9.5
+    reasoning: 9.0
+    planning: 9.0
+    tool_use: 9.5
+    writing: 7.0
+    long_context: 9.5
+  source: seed
+
+kwaipilot/kat-coder-air-v2.5:
+  axes:
+    coding: 9.0
+    reasoning: 8.5
+    planning: 8.5
+    tool_use: 9.0
+    writing: 7.0
+    long_context: 9.5
+  source: seed
+
+deepseek/deepseek-v4-flash:
+  axes:
+    coding: 8.0
+    reasoning: 7.5
+    planning: 7.0
+    tool_use: 8.5
+    writing: 7.0
+    long_context: 9.0
+  source: seed
+
+deepseek/deepseek-v4-flash:thinking:
+  axes:
+    coding: 8.5
+    reasoning: 9.0
+    planning: 8.5
+    tool_use: 7.5
+    writing: 7.0
+    math: 8.5
+    long_context: 9.0
+  source: seed
+
+minimax/minimax-m3:
+  axes:
+    coding: 7.0
+    reasoning: 7.0
+    planning: 6.5
+    tool_use: 7.0
+    writing: 8.5
+    citation: 7.5
+  source: seed
+
+x-ai/grok-4.3:thinking:
+  axes:
+    coding: 8.0
+    reasoning: 9.5
+    planning: 9.0
+    tool_use: 7.5
+    writing: 8.0
+    math: 9.0
+  source: seed
+
+z-ai/glm-5.2:thinking:
+  axes:
+    coding: 7.5
+    reasoning: 8.5
+    planning: 9.0
+    tool_use: 7.0
+    writing: 7.5
+  source: seed
+
+# ── Fallback / general-purpose models ───────────────────────────────
+deepseek/deepseek-v4-pro:
+  axes:
+    coding: 9.0
+    reasoning: 8.5
+    planning: 8.0
+    tool_use: 8.0
+    writing: 7.0
+    math: 8.5
+  source: seed
+
+qwen/qwen3.7-max:
+  axes:
+    coding: 8.5
+    reasoning: 8.0
+    planning: 8.0
+    tool_use: 8.5
+    writing: 7.5
+    citation: 7.0
+  source: seed
+
+gpt-4o-mini:
+  axes:
+    coding: 7.5
+    reasoning: 7.0
+    planning: 7.0
+    tool_use: 8.0
+    writing: 8.0
+  source: seed
+
+gpt-4o:
+  axes:
+    coding: 8.5
+    reasoning: 8.5
+    planning: 8.0
+    tool_use: 8.5
+    writing: 9.0
+    math: 8.0
+  source: seed
+
+claude-sonnet-4-20250514:
+  axes:
+    coding: 9.0
+    reasoning: 9.0
+    planning: 8.5
+    tool_use: 9.0
+    writing: 9.0
+    math: 8.5
+    citation: 8.0
+    long_context: 9.0
+  source: seed
+
+claude-haiku-3-5-sonnet:
+  axes:
+    coding: 7.5
+    reasoning: 7.0
+    planning: 7.0
+    tool_use: 8.0
+    writing: 8.0
+  source: seed

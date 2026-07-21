@@ -28,6 +28,8 @@ jobs:
           pip install import-linter ruff
       - name: Run import-linter
         run: make lint-imports
+      - name: Secret scan
+        run: bash scripts/check-secrets.sh --ci
       - name: Run architecture fitness tests
         run: pytest tests/unit/test_architecture_fitness.py -v --tb=short
       - name: Run check-arch (all architecture gates)

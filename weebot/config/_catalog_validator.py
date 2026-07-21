@@ -227,6 +227,7 @@ class CatalogValidator:
             "minimax": "openrouter",  # MiniMax models route through OpenRouter
             "qwen": "openrouter",   # Qwen models go through OpenRouter
             "kimi": "openrouter",   # Kimi models go through OpenRouter
+            "kwaipilot": "openrouter",  # KwaiPilot models route through OpenRouter
             "nex-agi": "openrouter",
             "sourceful": "openrouter",
             "black-forest-labs": "openrouter",

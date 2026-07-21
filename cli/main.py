@@ -147,11 +147,6 @@ def _wrap_main() -> None:
         console.print(f"[red]Unexpected error: {exc}[/red]")
         sys.exit(1)
 
-
-if __name__ == "__main__":
-    _wrap_main()
-
-
 @cli.command()
 @click.argument("project_id")
 @click.argument("description")

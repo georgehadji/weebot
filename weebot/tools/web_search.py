@@ -1,4 +1,5 @@
-"""WebSearchTool — multi-engine web search with DuckDuckGo primary, Bing fallback.
+"""WebSearchTool — multi-engine web search with Perplexity Sonar primary,
+DuckDuckGo and Bing fallbacks.
 
 Supports optional cross-encoder reranking via ``RerankPort``.  When a reranker
 is injected, search results from all engines are deduplicated and reranked
@@ -13,7 +14,8 @@ from typing import Any
 import aiohttp
 from pydantic import PrivateAttr
 
-from weebot.config.api_endpoints import SEARCH_DDG_URL, SEARCH_BING_URL
+from weebot.config.api_endpoints import OPENROUTER_API_BASE, SEARCH_DDG_URL, SEARCH_BING_URL
+from weebot.config.model_refs import MODEL_SEARCH_PERPLEXITY_SONAR
 from weebot.tools.base import BaseTool, ToolResult
 
 _DDG_URL = SEARCH_DDG_URL
@@ -59,19 +61,26 @@ class WebSearchTool(BaseTool):
         errors: list[str] = []
         all_results: list[dict[str, str]] = []
 
-        # Primary: DuckDuckGo (no API key required)
-        ddg_ok = False
+        # Primary: Perplexity Sonar via OpenRouter (search-grounded, citations)
+        try:
+            pp_results = await self._search_perplexity(query, num_results)
+            all_results.extend(pp_results)
+        except Exception as e:
+            errors.append(f"Perplexity: {e}")
+
+        # Fallback 1: DuckDuckGo (no API key required)
         try:
             ddg_results = await self._search_duckduckgo(query, num_results * 2)
-            all_results.extend(ddg_results)
-            ddg_ok = True
+            seen_urls = {r.get("url", "") for r in all_results}
+            for r in ddg_results:
+                if r.get("url", "") not in seen_urls:
+                    all_results.append(r)
         except Exception as e:
             errors.append(f"DuckDuckGo: {e}")
 
-        # Fallback: Bing Web Search API (requires BING_API_KEY)
+        # Fallback 2: Bing Web Search API (requires BING_API_KEY)
         try:
             bing_results = await self._search_bing(query, num_results)
-            # Deduplicate by URL
             seen_urls = {r.get("url", "") for r in all_results}
             for r in bing_results:
                 if r.get("url", "") not in seen_urls:
@@ -112,6 +121,88 @@ class WebSearchTool(BaseTool):
                 logger.warning("Search rerank failed, using engine order: %s", exc)
 
         return ToolResult(output=self._format(all_results[:num_results]))
+
+    async def _search_perplexity(
+        self, query: str, num_results: int
+    ) -> list[dict[str, str]]:
+        """Search via Perplexity Sonar on OpenRouter.
+
+        Calls the OpenRouter chat completions API with ``perplexity/sonar``,
+        which returns both a prose answer and structured ``search_results``
+        (title / url / snippet / date).  We keep ``max_tokens`` low because
+        we only need the search results, not the prose synthesis.
+        """
+        key = os.getenv("OPENROUTER_API_KEY")
+        if not key:
+            raise ValueError("OPENROUTER_API_KEY not set — cannot use Perplexity Sonar")
+
+        url = f"{OPENROUTER_API_BASE}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": MODEL_SEARCH_PERPLEXITY_SONAR,
+            "messages": [{"role": "user", "content": query}],
+            "max_tokens": 512,
+        }
+
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.post(
+                url,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=20),
+            ) as resp:
+                data = await resp.json()
+
+        if resp.status != 200:
+            raise ValueError(
+                f"OpenRouter returned {resp.status}: {data.get('error', {}).get('message', str(data))}"
+            )
+
+        results: list[dict[str, str]] = []
+
+        # ── Try structured search_results first ──────────────────
+        search_results = data.get("search_results")
+        if isinstance(search_results, list):
+            for sr in search_results[:num_results]:
+                results.append({
+                    "title": sr.get("title", ""),
+                    "url": sr.get("url", ""),
+                    "snippet": sr.get("snippet", ""),
+                })
+
+        # ── Fallback: parse citations array ──────────────────────
+        if not results:
+            citations = data.get("citations")
+            choices = data.get("choices", [])
+            content = ""
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+
+            if isinstance(citations, list) and citations:
+                for i, url in enumerate(citations[:num_results]):
+                    # Try to extract a title/snippet from the content
+                    snippet = ""
+                    if content:
+                        # Look for bracketed citation references like [1], [2]
+                        snippet_match = re.search(
+                            rf"\[{i + 1}\][^\n]{{0,200}}",
+                            content,
+                        )
+                        if snippet_match:
+                            snippet = snippet_match.group(0).strip()
+                    results.append({
+                        "title": url.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").title(),
+                        "url": url,
+                        "snippet": snippet,
+                    })
+
+        if not results:
+            raise ValueError("No search results or citations returned from Perplexity Sonar")
+
+        logger.debug("Perplexity Sonar: %d results for query %r", len(results), query[:80])
+        return results[:num_results]
 
     async def _search_duckduckgo(
         self, query: str, num_results: int

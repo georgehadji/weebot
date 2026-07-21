@@ -92,6 +92,15 @@ MODEL_SEARCH_PERPLEXITY_SONAR_FALLBACK: str = "perplexity/sonar-pro"
 $3/$15 per 1M tokens, 200K context. Use when Sonar returns insufficient results."""
 
 # ========================================================================
+# KwaiPilot KAT-Coder Models (via OpenRouter)
+# ========================================================================
+MODEL_KWAIPILOT_KAT_CODER_PRO: str = "kwaipilot/kat-coder-pro-v2.5"
+"""KwaiPilot KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model."""
+
+MODEL_KWAIPILOT_KAT_CODER_AIR: str = "kwaipilot/kat-coder-air-v2.5"
+"""KwaiPilot KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding model."""
+
+# ========================================================================
 # Per-Agent (Role) Model Selection
 # ========================================================================
 MODEL_ROLE_RESEARCHER: str = "x-ai/grok-build-0.1"
@@ -130,13 +139,17 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "coder": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — fast coding
-        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash",             # fallback 3: DeepSeek V4 Flash — fast coding
+        "moonshotai/kimi-k2.6",                   # fallback 4: Kimi K2.6 — structured output
     ],
     "executor": [
         "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking — 1M ctx, reasoning xhigh
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
-        "moonshotai/kimi-k2.6:thinking",          # fallback 2: Kimi K2.6 :thinking — structured + CoT
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
+        "moonshotai/kimi-k2.6:thinking",          # fallback 4: Kimi K2.6 :thinking — structured + CoT
     ],
     "reviewer": [
         "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking — factual accuracy + CoT
@@ -150,8 +163,10 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "automation": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "deepseek/deepseek-v4-flash",             # fallback 1: DeepSeek V4 Flash — instruction following
-        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash",             # fallback 3: DeepSeek V4 Flash — instruction following
+        "moonshotai/kimi-k2.6",                   # fallback 4: Kimi K2.6
     ],
     "documentation": [
         "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast, cheap
@@ -160,23 +175,31 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "product_manager": [
         "moonshotai/kimi-k2.6",
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash",
         "minimax/minimax-m3",
     ],
     "planner": [
         "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — structured planning + CoT
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking
-        "x-ai/grok-build-0.1",                    # fallback 2: Grok Build — agentic
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking
+        "x-ai/grok-build-0.1",                    # fallback 4: Grok Build — agentic
     ],
     "planner_sub": [
         "moonshotai/kimi-k2.6:thinking",
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
         "deepseek/deepseek-v4-flash",             # primary: fast, cheap
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — layout & visual design experts
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5
         "moonshotai/kimi-k2.6",
-        "minimax/minimax-m3",                     # fallback 2: MiniMax M3 — paid, $0.30/$1.20
+        "minimax/minimax-m3",                     # fallback 4: MiniMax M3 — paid, $0.30/$1.20
     ],
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
@@ -231,6 +254,8 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "x-ai/grok-build-0.1",
     "qwen/qwen3.7-max",
     "x-ai/grok-4.3",
+    "kwaipilot/kat-coder-pro-v2.5",
+    "kwaipilot/kat-coder-air-v2.5",
     "minimax/minimax-m3",
 ]
 MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"

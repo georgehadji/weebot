@@ -76,6 +76,10 @@ opentelemetry-sdk==1.44.0
 opentelemetry-exporter-otlp-proto-http==1.44.0
 anyio==4.14.2
 
+# Web search & image search
+ddgs>=9.0
+duckduckgo-search>=7.0
+
 # Utilities
 pyyaml>=6.0.3
 toml==0.10.2

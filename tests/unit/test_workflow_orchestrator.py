@@ -446,3 +446,56 @@ class TestWorkflowOrchestratorCustomHandler:
         
         assert handler_calls == [("task_a", "custom_role")]
         assert result.task_results["task_a"].output == {"custom": "output"}
+
+
+class TestWorkflowOrchestratorTool:
+    """Tests for WorkflowOrchestratorTool and Tool Registry integration."""
+
+    @pytest.mark.asyncio
+    async def test_workflow_orchestrator_tool_instantiation_via_registry(self):
+        """Verify the workflow_orchestrator tool is created by the registry with dependencies."""
+        from weebot.tools.tool_registry import RoleBasedToolRegistry
+        from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
+
+        registry = RoleBasedToolRegistry()
+        mock_flow_factory = MagicMock()
+        
+        # Create the tool collection for 'admin' (which contains workflow_orchestrator)
+        collection = registry.create_tool_collection("admin", flow_factory=mock_flow_factory)
+        
+        tool = collection.get_tool("workflow_orchestrator")
+        assert tool is not None
+        assert isinstance(tool, WorkflowOrchestratorTool)
+        assert tool._flow_factory == mock_flow_factory
+
+    @pytest.mark.asyncio
+    async def test_workflow_orchestrator_tool_execution(self):
+        """Verify the workflow_orchestrator tool successfully executes tasks via flow_factory."""
+        from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
+        from weebot.tools.base import ToolResult
+
+        mock_flow = MagicMock()
+        mock_event = MagicMock()
+        mock_event.type = "message"
+        mock_event.content = "Sub-agent task completed successfully."
+
+        async def mock_run_generator(prompt):
+            yield mock_event
+
+        mock_flow.run = mock_run_generator
+        mock_flow_factory = MagicMock(return_value=mock_flow)
+
+        tool = WorkflowOrchestratorTool(flow_factory=mock_flow_factory)
+        
+        tasks = [
+            {"task_id": "fetch", "description": "Fetch some data", "deps": []},
+            {"task_id": "process", "description": "Process the fetched data", "deps": ["fetch"]}
+        ]
+
+        result = await tool.execute(tasks=tasks, max_parallel=2)
+        
+        assert isinstance(result, ToolResult)
+        assert result.data["success"] is True
+        assert result.data["total_tasks"] == 2
+        assert len(result.data["completed"]) == 2
+        assert mock_flow_factory.call_count == 2

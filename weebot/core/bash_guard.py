@@ -64,6 +64,12 @@ class BashGuard:
     # Destructive file operations
     DESTRUCTIVE_PATTERNS: list[tuple[str, RiskLevel, str, str]] = [
         (
+            r"rm\s+-rf?\s+--no-preserve-root\s+/",
+            RiskLevel.BLOCKED,
+            "Attempting to delete root directory (--no-preserve-root flag present)",
+            "This would destroy your entire system. Use specific file paths instead.",
+        ),
+        (
             r"rm\s+-rf?\s*/\s*$",
             RiskLevel.BLOCKED,
             "Attempting to delete root directory",
@@ -262,6 +268,12 @@ class BashGuard:
     # Resource exhaustion and attacks
     ATTACK_PATTERNS: list[tuple[str, RiskLevel, str, str]] = [
         (
+            r"\bxargs\s+.*\brm\s+-rf",
+            RiskLevel.DANGEROUS,
+            "xargs-mediated recursive force-delete",
+            "xargs chained with rm -rf can delete many files. Verify the input source.",
+        ),
+        (
             r":\s*\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\};\s*:",
             RiskLevel.BLOCKED,
             "Fork bomb detected",
@@ -427,10 +439,11 @@ class BashGuard:
 
     @staticmethod
     def _normalize(command: str) -> str:
-        """Normalize shell command — backslash-escaped spaces, destructive-command
+        """Normalize shell command — tabs, backslash-escaped spaces, destructive-command
         flag variants so the pattern matcher sees a single canonical form.
         """
-        cmd = re.sub(r"\\\s+", " ", command)
+        cmd = re.sub(r"\t+", " ", command)
+        cmd = re.sub(r"\\\s+", " ", cmd)
         # ── Canonicalize rm flag variants ──────────────────────────
         # rm -fr X, rm -Rf X, rm -RF X, rm -rF X (both flags in one token) → rm -rf X
         # NOTE: bare -r without -f is NOT normalized — it's already caught by

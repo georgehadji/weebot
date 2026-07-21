@@ -439,3 +439,58 @@ async def test_full_lifecycle_simulation():
     result = await cb.evaluate(entity)
     assert result.state == BreakerState.CLOSED
     assert result.allowed
+
+
+class TestV7DefectHuntCircuitBreakerFixes:
+    """Proof-of-defect and regression tests for V7 circuit breaker fixes."""
+
+    @pytest.mark.asyncio
+    async def test_D22_persist_state_no_longer_crashes(self):
+        """D22: persist_state no longer raises NameError for Path."""
+        import tempfile, os
+        cb = CircuitBreaker(failure_threshold=1)
+        await cb.record_failure("test_entity")
+        tmp = os.path.join(tempfile.gettempdir(), "test_cb_v7.json")
+        try:
+            cb.persist_state(tmp)
+            assert os.path.exists(tmp), "State file should be created"
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+    @pytest.mark.asyncio
+    async def test_D22_restore_state_no_longer_crashes(self):
+        """D22: restore_state no longer raises NameError for Path."""
+        import tempfile, os, json
+        cb = CircuitBreaker(failure_threshold=1)
+        await cb.record_failure("test_entity")
+        tmp = os.path.join(tempfile.gettempdir(), "test_cb_v7_restore.json")
+        try:
+            cb.persist_state(tmp)
+            cb2 = CircuitBreaker()
+            ok = cb2.restore_state(tmp)
+            assert ok, "restore_state should return True"
+            assert cb2.get_state("test_entity") == BreakerState.OPEN
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+    @pytest.mark.asyncio
+    async def test_D22_roundtrip_preserves_state(self):
+        """D22 regression: persist/restore roundtrip preserves circuit state."""
+        import tempfile, os
+        cb = CircuitBreaker(failure_threshold=2)
+        await cb.record_failure("e1")
+        await cb.record_failure("e1")
+        await cb.record_failure("e2")  # e2 has 1 failure, still CLOSED
+
+        tmp = os.path.join(tempfile.gettempdir(), "test_cb_v7_roundtrip.json")
+        try:
+            cb.persist_state(tmp)
+            cb2 = CircuitBreaker(failure_threshold=2)
+            cb2.restore_state(tmp)
+            assert cb2.get_state("e1") == BreakerState.OPEN
+            assert cb2.get_state("e2") == BreakerState.CLOSED
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)

@@ -72,6 +72,21 @@ class WeebotSettings(BaseSettings):
     openai_api_key: str | None = None
     openrouter_api_key: str | None = None   # env: OPENROUTER_API_KEY
 
+    # Reasoner API Settings
+    reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
+    reasoner_api_key: str | None = None              # env: REASONER_API_KEY
+    reasoner_dir: str = "E:\\Documents\\Vibe-Coding\\Reasoner"  # env: REASONER_DIR
+
+    # Berb Research API Settings
+    berb_api_url: str = "http://localhost:8004"      # env: BERB_API_URL
+    berb_api_key: str | None = None                  # env: BERB_API_KEY
+    berb_dir: str = "E:\\Documents\\Vibe-Coding\\Berb"  # env: BERB_DIR
+
+    # Scraper (Spacescraper) API Settings
+    scraper_api_url: str = "http://localhost:8000"  # env: SCRAPER_API_URL
+    scraper_api_key: str | None = None              # env: SCRAPER_API_KEY
+    scraper_dir: str = "E:\\Documents\\Vibe-Coding\\Scraper"  # env: SCRAPER_DIR
+
     # Web API Auth
     weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
 

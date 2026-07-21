@@ -381,6 +381,7 @@ def create_app() -> FastAPI:
                     return JSONResponse(
                         status_code=401,
                         content={"detail": "Unauthorized — provide valid X-API-Key header"},
+                        headers={"X-Error-Code": "UNAUTHORIZED"},
                     )
                 return await call_next(request)
 

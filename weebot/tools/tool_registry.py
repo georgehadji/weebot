@@ -27,6 +27,7 @@ class RoleBasedToolRegistry:
     DEFAULT_ROLE_MAPPINGS = {
         "researcher": [
             "web_search",
+            "search_images",
             "vane_search",
             "advanced_browser",
             "browser_inspector",
@@ -37,12 +38,18 @@ class RoleBasedToolRegistry:
             "weather",
             "swarm",
             "debate",
+            "reasoner",
+            "berb",
+            "spacescraper",
         ],
         "analyst": [
             "python_execute",
             "file_editor",
             "knowledge",
             "bash",
+            "reasoner",
+            "berb",
+            "spacescraper",
         ],
         "automation": [
             "bash",
@@ -52,6 +59,7 @@ class RoleBasedToolRegistry:
             "file_editor",
             "python_execute",
             "video_gen",
+            "search_images",
             "atomic_mail",
         ],
         "documentation": [
@@ -97,20 +105,26 @@ class RoleBasedToolRegistry:
             "ask_human",
             "ocr",
             "weather",
+            "search_images",
             "design_system",
             "persistent_memory",
             "mixture_of_agents",
             "atomic_mail",
+            "reasoner",
+            "berb",
+            "spacescraper",
         ],
         "coder": [
             "bash",
             "python_execute",
             "file_editor",
             "web_search",
+            "search_images",
             "image_gen",
             "video_gen",
         ],
         "designer": [
+            "search_images",
             "image_gen",
             "video_gen",
             "file_editor",
@@ -151,6 +165,8 @@ class RoleBasedToolRegistry:
         "debate": "controlled",
         "mixture_of_agents": "controlled",
         "audit_session": "restricted",
+        "reasoner": "controlled",
+        "berb": "controlled",
         # Everything else defaults to "public" via get_tool_tier()
     }
 
@@ -441,6 +457,7 @@ class RoleBasedToolRegistry:
         llm_port: Any | None = None,
         sandbox_port: Any | None = None,
         tool_config: Any | None = None,
+        flow_factory: Any | None = None,
     ) -> ToolCollection:
         """Create a :class:`ToolCollection` with instantiated tools for *role*.
 
@@ -449,6 +466,7 @@ class RoleBasedToolRegistry:
             llm_port: Optional LLMPort for tools that support it.
             sandbox_port: Optional SandboxPort for tools that support it.
             tool_config: Optional ToolConfig for tools that support it.
+            flow_factory: Optional flow factory callable for sub-agent tools.
 
         Returns:
             ToolCollection populated with ``BaseTool`` instances.
@@ -459,6 +477,7 @@ class RoleBasedToolRegistry:
             tool_names, llm_port=llm_port,
             sandbox_port=sandbox_port,
             tool_config=tool_config,
+            flow_factory=flow_factory,
         )
 
     def create_tool_collection_from_names(
@@ -467,12 +486,16 @@ class RoleBasedToolRegistry:
         llm_port: Any | None = None,
         sandbox_port: Any | None = None,
         tool_config: Any | None = None,
+        flow_factory: Any | None = None,
     ) -> ToolCollection:
         """Create a :class:`ToolCollection` from an explicit list of tool names.
 
         Args:
             tool_names: List of ``BaseTool.name`` strings.
             llm_port: Optional LLMPort for tools that support it (e.g., BrowserTool).
+            sandbox_port: Optional SandboxPort.
+            tool_config: Optional ToolConfig.
+            flow_factory: Optional flow factory callable for sub-agent tools.
 
         Returns:
             ToolCollection with matching ``BaseTool`` instances.
@@ -484,6 +507,10 @@ class RoleBasedToolRegistry:
         tools: list = []
         # Tools that accept an injected LLMPort via their Pydantic field
         _llm_port_tools = {"browser_navigator", "mixture_of_agents"}
+        # Tools that need flow_factory and llm
+        _flow_factory_llm_tools = {"debate", "swarm"}
+        # Tools that need flow_factory and optionally state_repo (no llm)
+        _flow_factory_state_tools = {"dispatch_parallel_tasks", "workflow_orchestrator"}
         # Tools that share a single PlaywrightAdapter instance
         _browser_adapter_tools = {"advanced_browser", "browser_inspector"}
         _shared_browser_adapter = None
@@ -495,10 +522,37 @@ class RoleBasedToolRegistry:
         for name in tool_names:
             tool_cls = class_map.get(name)
             if tool_cls is not None:
+                # If flow_factory is required but not provided, try to resolve it from the container
+                if name in _flow_factory_llm_tools or name in _flow_factory_state_tools:
+                    if flow_factory is None:
+                        try:
+                            import importlib as _il
+                            _c_mod = _il.import_module("weebot.application.di")
+                            _c = _c_mod.Container()
+                            _c.configure_defaults()
+                            flow_factory = lambda session: _c._build_plan_act_flow_for_session(session)
+                        except Exception:
+                            pass
+
                 if name in _llm_port_tools and llm_port is not None:
                     tool = tool_cls(llm_port=llm_port)
                 elif name in _sandbox_port_tools and sandbox_port is not None:
                     tool = tool_cls(sandbox=sandbox_port)
+                elif name in _flow_factory_llm_tools:
+                    tool = tool_cls(llm=llm_port, flow_factory=flow_factory)
+                elif name in _flow_factory_state_tools:
+                    state_repo = None
+                    try:
+                        import importlib as _il
+                        _state_repo_mod = _il.import_module("weebot.application.ports.state_repo_port")
+                        StateRepositoryPort = _state_repo_mod.StateRepositoryPort
+                        _c = _il.import_module("weebot.application.di").Container()
+                        _c.configure_defaults()
+                        state_repo = _c.get(StateRepositoryPort)
+                    except Exception:
+                        pass
+                    # ponytail: support state_repo injection cleanly
+                    tool = tool_cls(flow_factory=flow_factory, state_repo=state_repo)
                 elif name in _browser_adapter_tools:
                     if _shared_browser_adapter is None:
                         from weebot.infrastructure.browser.playwright_adapter import (

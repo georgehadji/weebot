@@ -36,6 +36,11 @@ class CascadeDecision:
     """A single cascade routing decision record.
 
     Immutable — once recorded, never mutated.  Thread-safe by construction.
+
+    .. versionadded:: 0.4.0
+       Fields *task_category*, *json_valid*, *tool_success*, *retries*,
+       and *critic_score* added for Adaptive Capability Router (ACR).
+       All are optional with safe defaults for backward compatibility.
     """
     model_name: str
     tier: CascadeTier
@@ -45,6 +50,12 @@ class CascadeDecision:
     cost_estimate: float = 0.0
     error_message: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # ── ACR enrichment (Phase P0) ───────────────────────────────────
+    task_category: str = "general"
+    json_valid: bool | None = None
+    tool_success: bool | None = None
+    retries: int = 0
+    critic_score: float | None = None
 
 
 class ModelCascadeTracker:
@@ -77,6 +88,9 @@ class ModelCascadeTracker:
         self._max = max_decisions
         self._buffer: Deque[CascadeDecision] = deque(maxlen=max_decisions)
         self._lock = threading.Lock()
+        # Ring-buffer per (category, model) for per-category stats
+        self._cat_buffer: Deque[CascadeDecision] = deque(maxlen=max_decisions)
+        self._cat_lock = threading.Lock()
 
     # ── Recording ─────────────────────────────────────────────────────
 
@@ -84,6 +98,8 @@ class ModelCascadeTracker:
         """Record a cascade decision (newest-first in queries)."""
         with self._lock:
             self._buffer.appendleft(decision)
+        with self._cat_lock:
+            self._cat_buffer.appendleft(decision)
 
     # ── Querying ──────────────────────────────────────────────────────
 
@@ -146,7 +162,69 @@ class ModelCascadeTracker:
             "cascade_hit_rate": round(cascade_hits / n, 3) if n > 0 else 1.0,
         }
 
+    def per_category_stats(self) -> dict[str, dict[str, dict]]:
+        """Return per-category, per-model aggregate statistics.
+
+        Returns::
+
+            {
+                "coding": {
+                    "deepseek/deepseek-v4-flash": {
+                        "attempts": 12,
+                        "successes": 10,
+                        "failures": 2,
+                        "success_rate": 0.833,
+                        "mean_latency_ms": 234.5,
+                        "mean_cost": 0.0012,
+                    },
+                    ...
+                },
+                ...
+            }
+
+        Thread-safe — operates on a snapshot copy of the ring buffer.
+        """
+        with self._cat_lock:
+            decisions = list(self._cat_buffer)
+
+        # Build nested dict: category → model → {counters}
+        stats: dict[str, dict[str, dict]] = {}
+        for d in decisions:
+            cat_stats = stats.setdefault(d.task_category, {})
+            model_stats = cat_stats.setdefault(d.model_name, {
+                "attempts": 0,
+                "successes": 0,
+                "failures": 0,
+                "latency_sum": 0.0,
+                "cost_sum": 0.0,
+            })
+            model_stats["attempts"] += 1
+            if d.outcome == CascadeOutcome.SUCCESS:
+                model_stats["successes"] += 1
+            else:
+                model_stats["failures"] += 1
+            model_stats["latency_sum"] += d.latency_ms
+            model_stats["cost_sum"] += d.cost_estimate
+
+        # Convert sums to means for the final output
+        result: dict[str, dict[str, dict]] = {}
+        for category, models in stats.items():
+            result[category] = {}
+            for model_name, m in models.items():
+                att = m["attempts"]
+                result[category][model_name] = {
+                    "attempts": att,
+                    "successes": m["successes"],
+                    "failures": m["failures"],
+                    "success_rate": round(m["successes"] / att, 4) if att else 0.0,
+                    "mean_latency_ms": round(m["latency_sum"] / att, 1) if att else 0.0,
+                    "mean_cost": round(m["cost_sum"] / att, 8) if att else 0.0,
+                }
+        return result
+
     def clear(self) -> None:
         """Remove all recorded decisions."""
         with self._lock:
             self._buffer.clear()
+        with self._cat_lock:
+            self._cat_buffer.clear()

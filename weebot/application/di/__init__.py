@@ -274,8 +274,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             try:
                 sandbox = self._maybe_get(SandboxPort)
                 registry = RoleBasedToolRegistry()
+                def _flow_factory(s):
+                    return self._build_plan_act_flow_for_session(s)
                 tools = registry.create_tool_collection(
                     role="admin", sandbox_port=sandbox, llm_port=llm,
+                    flow_factory=_flow_factory,
                 )
             except Exception:
                 tools = None
@@ -347,8 +350,14 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         sandbox = self._maybe_get(SandboxPort)
         registry = RoleBasedToolRegistry()
+        def _flow_factory(s):
+            return self._build_plan_act_flow_for_session(s)
+        from weebot.application.ports.llm_port import LLMPort
         tools = registry.create_tool_collection(
-            role="admin", sandbox_port=sandbox,
+            role="admin",
+            sandbox_port=sandbox,
+            llm_port=self._maybe_get(LLMPort),
+            flow_factory=_flow_factory,
         )
 
         from weebot.config.model_refs import (
