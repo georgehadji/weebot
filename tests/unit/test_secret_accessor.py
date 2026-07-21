@@ -87,7 +87,7 @@ class TestSecretAccessorRedaction:
 
     def test_api_key_is_redacted(self, caplog):
         import logging
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"OPENROUTER_API_KEY": "sk-or-v1-very-secret"})
         SecretAccessor.get("OPENROUTER_API_KEY")
         assert "<REDACTED>" in caplog.text
@@ -95,7 +95,7 @@ class TestSecretAccessorRedaction:
 
     def test_non_secret_is_logged_plainly(self, caplog):
         import logging
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"TIMEOUT": "30"})
         SecretAccessor.get("TIMEOUT")
         assert "30" in caplog.text
@@ -103,14 +103,14 @@ class TestSecretAccessorRedaction:
 
     def test_unset_key_logs_not_set(self, caplog):
         import logging
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({})
         SecretAccessor.get("MISSING")
         assert "<NOT SET>" in caplog.text
 
     def test_secret_suffix_token_is_redacted(self, caplog):
         import logging
-        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"GITHUB_TOKEN": "ghp_1234567890abcdef"})
         SecretAccessor.get("GITHUB_TOKEN")
         assert "<REDACTED>" in caplog.text

@@ -290,7 +290,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         rows = await self._session_queries.list(  # type: ignore[union-attr]
             user_id=user_id, status=status, limit=limit, offset=offset,
         )
-        return [self._row_to_session(r) for r in rows]
+        return [self._row_to_session(r, load_events=False) for r in rows]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
         await self._init_helpers()
@@ -332,6 +332,10 @@ class SQLiteStateRepository(StateRepositoryPort):
 
     def _row_to_session(self, row, load_events: bool = True) -> Session:
         from weebot.domain.models.event import MessageEvent, AgentEvent
+        # Normalize to a plain dict: rows arrive as sqlite3.Row, which supports
+        # bracket access but not the dict-style .get(default) used below for
+        # optional columns (title, context_json).
+        row = dict(row)
         events = []
         if load_events:
             events_raw = json.loads(row["events_json"] or "[]")

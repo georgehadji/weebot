@@ -1072,6 +1072,17 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
+    "meituan/longcat-2.0": ModelConfig(
+        name="Meituan: LongCat 2.0",
+        provider="meituan",
+        cost_per_1k_tokens=0.00075,
+        context_window=1000000,
+        strengths=[TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.CHAT, TaskType.ARCHITECTURE, TaskType.AGENTIC],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=5,
+    ),
+
     "meta-llama/llama-3.1-70b-instruct": ModelConfig(
         name="Meta: Llama 3.1 70B Instruct",
         provider="openrouter",
@@ -1189,6 +1200,17 @@ MODELS: dict[str, ModelConfig] = {
         context_window=163840,
         strengths=[TaskType.CHAT, TaskType.CREATIVE, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
         tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=5,
+    ),
+
+    "meta/muse-spark-1.1": ModelConfig(
+        name="Meta: Muse Spark 1.1",
+        provider="meta",
+        cost_per_1k_tokens=0.00275,
+        context_window=1000000,
+        strengths=[TaskType.REASONING, TaskType.ARCHITECTURE, TaskType.AGENTIC, TaskType.ANALYSIS, TaskType.CHAT],
+        tier=ModelTier.PREMIUM,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
     ),
@@ -1575,6 +1597,17 @@ MODELS: dict[str, ModelConfig] = {
         strengths=[TaskType.CHAT, TaskType.CREATIVE, TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
         tier=ModelTier.STANDARD,
         api_key_env="KIMI_API_KEY",
+        tool_use_score=5,
+    ),
+
+    "moonshotai/kimi-k3": ModelConfig(
+        name="MoonshotAI: Kimi K3",
+        provider="moonshot",
+        cost_per_1k_tokens=0.009,
+        context_window=1000000,
+        strengths=[TaskType.CODE_GENERATION, TaskType.DEBUGGING, TaskType.CODE_REVIEW, TaskType.ARCHITECTURE, TaskType.REASONING],
+        tier=ModelTier.PREMIUM,
+        api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
     ),
 
@@ -3432,6 +3465,17 @@ MODELS: dict[str, ModelConfig] = {
         cost_per_1k_tokens=0.00039999999999999996,
         context_window=32768,
         strengths=[TaskType.CHAT, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=5,
+    ),
+
+    "thinkingmachines/inkling": ModelConfig(
+        name="Thinking Machines: Inkling",
+        provider="thinkingmachines",
+        cost_per_1k_tokens=0.0025,
+        context_window=1000000,
+        strengths=[TaskType.CODE_REVIEW, TaskType.ANALYSIS, TaskType.REASONING, TaskType.ARCHITECTURE, TaskType.CHAT],
         tier=ModelTier.STANDARD,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
