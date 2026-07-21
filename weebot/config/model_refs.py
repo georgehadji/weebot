@@ -334,10 +334,6 @@ MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
 """DEPRECATED: Gemini 2.5 Flash Image — use gemini-3.5-flash-lite or gemini-3.6-flash for non-image tasks.
 Website image generation: diagrams, UI mockups, illustrations. Kept for backward compat."""
 
-MODEL_IMAGE_LITE: str = "google/gemini-3.1-flash-lite-image"
-"""DEPRECATED: Gemini 3.1 Flash Lite Image — use google/gemini-3.5-flash-lite or
-krea/krea-2-medium-turbo instead. Ultra-budget image gen, kept for backward compat."""
-
 # ── New image models — added 2026-07-21 ──────────────────────────
 MODEL_IMAGE_KREA_LARGE: str = "krea/krea-2-large"
 """Krea 2 Large — high-capability image gen, $0.06/img. 2x Krea 2 Medium.
@@ -362,7 +358,6 @@ def get_image_models() -> list[str]:
         "black-forest-labs/flux.2-klein-4b",
         "recraft/recraft-v4.1-pro-vector",
         "recraft/recraft-v4.1-pro",
-        # "google/gemini-3.1-flash-lite-image",  — DEPRECATED
         "google/gemini-2.5-flash-image",
         "x-ai/grok-imagine-image-quality",
         "bytedance-seed/seedream-4.5",
