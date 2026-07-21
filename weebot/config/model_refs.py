@@ -34,7 +34,8 @@ MODEL_VISION_PRIMARY: str = "openai/gpt-4o"
 """Primary VLM: GPT-4o — best multimodal, tool use, 128K context. $2.50/$10.00 per 1M."""
 
 MODEL_VISION_FAST: str = "google/gemini-2.5-flash"
-"""Fast VLM: Gemini 2.5 Flash — cheap, strong vision, 1M context. $0.15/$0.60 per 1M."""
+"""DEPRECATED: Gemini 2.5 Flash — use google/gemini-3.5-flash-lite or google/gemini-3.6-flash instead.
+Deprecated — fast VLM, strong vision, 1M context. Kept for backward compat."""
 
 MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct"
 """Budget VLM: Qwen2.5-VL 72B — open vision model, paid tier via OpenRouter. Use :free suffix only if credit-constrained."""
@@ -246,7 +247,7 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
-        "google/gemini-2.5-flash",                # fallback 1: cheap, strong vision
+        "google/gemini-3.6-flash",                # fallback 1: 1M ctx (gemini-2.5-flash deprecated)
         "thinkingmachines/inkling",               # fallback 2: Inkling — multimodal audio+image
         "qwen/qwen2.5-vl-72b-instruct",            # fallback 3: budget VLM
     ],
@@ -330,7 +331,8 @@ MODEL_IMAGE_PHOTOREALISTIC: str = "black-forest-labs/flux.2-pro"
 """Photorealistic image generation: Flux.2 Pro — highest quality photorealism."""
 
 MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
-"""Website image generation: Gemini 2.5 Flash Image — diagrams, UI mockups, illustrations."""
+"""DEPRECATED: Gemini 2.5 Flash Image — use gemini-3.5-flash-lite or gemini-3.6-flash for non-image tasks.
+Website image generation: diagrams, UI mockups, illustrations. Kept for backward compat."""
 
 MODEL_IMAGE_LITE: str = "google/gemini-3.1-flash-lite-image"
 """Ultra-budget image generation: Gemini 3.1 Flash Lite Image — cheapest image-capable model.
