@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from weebot.domain.models.session import Session
+from weebot.domain.models.session import Session, SessionStatus
 
 
 @dataclass
@@ -118,7 +118,7 @@ def build_default_state_graph() -> StateGraph:
                 s.get_last_plan() is not None
                 and not s.get_last_plan().is_complete()
             ),
-            state_factory=lambda s, p, e: ("ExecutingState", s),
+            state_factory=lambda s, p, e: ("ExecutingState", s.set_status(SessionStatus.RUNNING) if s.status == SessionStatus.WAITING else s),
             priority=2,
         )
     )
@@ -128,7 +128,7 @@ def build_default_state_graph() -> StateGraph:
         StateTransition(
             name="resume_waiting_session",
             condition=lambda s, p, e: (
-                s.status.name == "WAITING"
+                s.status == SessionStatus.WAITING
                 and s.get_last_plan() is not None
             ),
             state_factory=lambda s, p, e: ("ExecutingState", s),

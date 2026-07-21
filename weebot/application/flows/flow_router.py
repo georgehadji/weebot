@@ -16,6 +16,7 @@ from typing import Any, Optional, Tuple
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.executing import ExecutingState
 from weebot.application.flows.states.planning import PlanningState
+from weebot.application.flows.state_graph import build_default_state_graph
 from weebot.domain.models.session import Session, SessionStatus
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,25 @@ logger = logging.getLogger(__name__)
 
 class FlowRouter:
     """Resolves the initial flow state based on session context and plan status."""
+
+    # State name -> FlowState class mapping for StateGraph compatibility
+    _state_class_map = {}
+    _graph = None
+
+    @classmethod
+    def _get_graph(cls):
+        """Lazily build the state graph (singleton per class)."""
+        if cls._graph is None:
+            from weebot.application.flows.states.executing import ExecutingState
+            from weebot.application.flows.states.planning import PlanningState
+            from weebot.application.flows.states.product_gate import ProductGateState
+            cls._state_class_map = {
+                "ExecutingState": ExecutingState,
+                "PlanningState": PlanningState,
+                "ProductGateState": ProductGateState,
+            }
+            cls._graph = build_default_state_graph()
+        return cls._graph
 
     @staticmethod
     def _route_product_gate(
