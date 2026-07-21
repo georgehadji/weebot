@@ -814,9 +814,10 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
-    # GLM 5.2 :thinking (primary, reasoning xhigh) → DeepSeek Flash :thinking → Kimi K2.6 :thinking
+    # GLM 5.2 :thinking (primary, reasoning xhigh) -> DeepSeek Flash :thinking -> Kimi K2.6 :thinking
     "executor": [
         "z-ai/glm-5.2:thinking",
+        "google/gemini-3.6-flash",                # Gemini 3.6 Flash — $1.50/1M, 1M ctx, agentic
         "deepseek/deepseek-v4-flash:thinking",
         "moonshotai/kimi-k2.6:thinking",
     ],
@@ -835,6 +836,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
         "openai/gpt-4.1-nano",
+        "poolside/laguna-s-2.1",                  # Laguna S 2.1 — $0.10/1M coding agent
         "google/gemini-3.5-flash-lite",           # Gemini 3.5 Flash Lite — subagent
         "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air
         "meituan/longcat-2.0",                    # LongCat 2.0 — budget 1M ctx
