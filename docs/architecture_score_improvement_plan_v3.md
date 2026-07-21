@@ -2,8 +2,15 @@
 
 **Baseline:** `docs/arch_audit_v3.md` (2026-07-21) — score **6.5/10**  
 **Target:** **8.5+/10**  
-**Total effort:** ~3 engineer-weeks (1 engineer) or ~1.5 weeks (2 engineers)  
-**Risk-weighted approach:** Complete Phase B decomposition first, then structural fixes, then polish.
+**Last updated:** 2026-07-21 (post-Valkey migration)  
+**Status tracker:** 2 of 11 gaps partially addressed since baseline
+
+### Progress since baseline
+
+| Gap | Status | Commit |
+|-----|--------|--------|
+| Dead code (RedisEventBus → ValkeyEventBus) | ✅ Defect fixed, renamed, backward-compat alias | `7c180c4` |
+| In-memory event bus → Valkey | ⚠️ Class ready, not yet wired into DI | — |
 
 ---
 
@@ -106,15 +113,17 @@ Target the lowest-hanging single-implementation ports:
 
 **Outcome:** 4 ports removed → 59. Additional merge candidates in follow-up.
 
-### 2C: RedisEventBus Activation
+### 2C: ValkeyEventBus Activation (2/5 complete)
 
-| Step | Action | Risk |
-|------|--------|------|
-| 1 | Register `RedisEventBus` in DI container as primary (with `WEEBOT_REDIS_URL` gate) | LOW |
-| 2 | Keep `AsyncEventBus` as fallback when Redis unavailable | Already implemented |
-| 3 | Add integration test: publish → subscribe → verify delivery | Required |
+| Step | Action | Risk | Status |
+|------|--------|------|--------|
+| 1 | ~~Fix publish routing defect~~ — Done in `b746057` | — | ✅ Complete |
+| 2 | ~~Rename Redis→Valkey with backward compat~~ — Done in `7c180c4` | — | ✅ Complete |
+| 3 | Register `ValkeyEventBus` in DI container (`WEEBOT_VALKEY_URL` gate) | LOW | ⬜ TODO |
+| 4 | Keep `AsyncEventBus` fallback when Valkey unavailable | — | ✅ Built-in |
+| 5 | Add integration test: publish → subscribe → verify delivery | Required | ⬜ TODO |
 
-**Outcome:** Horizontal scaling path open. Dead code activated.
+**Outcome:** 2/5 steps done. Defect fixed, class renamed + alias. DI wiring + test remain.
 
 ### 2D: DatabaseRouter Activation
 
