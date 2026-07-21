@@ -33,7 +33,6 @@ from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
 from weebot.application.ports.memory_port import MemoryPort  # noqa: E402
-from weebot.application.ports.metrics_port import MetricsPort  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
 from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
@@ -44,7 +43,6 @@ from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # 
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort  # noqa: E402
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort  # noqa: E402
-from weebot.application.ports.tracing_port import TracingPort  # noqa: E402
 from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
 from weebot.application.services.task_runner import TaskRunner  # noqa: E402
 from weebot.config.harness.schema import HarnessConfig  # noqa: E402
@@ -116,7 +114,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(StateRepositoryPort, lambda: self._create_state_repo(db_path))
         self.register("session_persistence", lambda: self._create_session_persistence_adapter())
         self.register(EventBusPort, self._create_event_bus)
-        self.register(TracingPort, self._create_tracing)
+        from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+        self.register(TracingAdapter, self._create_tracing)
         self.register(EventPublisher, self._create_event_bridge)
         self.register(LLMPort, lambda: self._create_llm(default_model))
         self.register(SandboxPort, self._create_sandbox)
@@ -152,7 +151,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         self.register(BackendPort, self._create_backend)
-        self.register(MetricsPort, self._create_metrics_port)
+        from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
+        self.register(PrometheusMetricsAdapter, self._create_metrics_port)
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
         from weebot.scheduling.scheduler import SchedulingManager
         self.register("scheduler", lambda: SchedulingManager())
@@ -221,7 +221,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             mediator=self._maybe_get(Mediator),
             state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
-            tracing_port=self._maybe_get(TracingPort) if self._is_tracing_enabled() else None,
+            tracing_port=self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None,
         ))
 
         # ChatFlow — lightweight conversational flow

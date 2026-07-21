@@ -67,10 +67,10 @@ class Mediator:
         """Resolve tracing port lazily from DI container."""
         if self._tracer is None:
             from weebot.application.di import Container
-            from weebot.application.ports.tracing_port import TracingPort
+            from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
             c = Container()
             c.configure_defaults()
-            self._tracer = c.get(TracingPort)
+            self._tracer = c.get(TracingAdapter)
         return self._tracer
 
     def register_command_handler(
