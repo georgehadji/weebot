@@ -76,6 +76,22 @@ Complex coding, large-repo navigation, tool use, image/log debugging.
 Note: upstream capacity limited (429 errors possible)."""
 
 # ═══════════════════════════════════════════════════════════════════════
+# Additional model references — added 2026-07-21
+# ═══════════════════════════════════════════════════════════════════════
+
+MODEL_LAGUNA_S_21: str = "poolside/laguna-s-2.1"
+"""Laguna S 2.1 — Poolside coding agent, 118B/8B active, 1M ctx, $0.10/$0.20.
+70.2% Terminal-Bench, 40.4% DeepSWE. Extremely cheap agentic coding."""
+
+MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-3.5-flash-lite"
+"""Gemini 3.5 Flash-Lite — high-efficiency, 1M ctx, $0.30/$2.50.
+Upgraded agentic capabilities. Subagents, focused multi-agent tasks."""
+
+MODEL_GEMINI_36_FLASH: str = "google/gemini-3.6-flash"
+"""Gemini 3.6 Flash — 1M ctx, $1.50/$7.50. Coding, agentic workflows,
+web/app dev. Polished output, fewer edits, reduced token use."""
+
+# ═══════════════════════════════════════════════════════════════════════
 # Verbalized Sampling
 # ═══════════════════════════════════════════════════════════════════════
 MODEL_VS_CAPABLE: str = MODEL_CASCADE_TIER4
@@ -161,15 +177,17 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "coder": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
         "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air
-        "meituan/longcat-2.0",                    # fallback 3: LongCat 2.0 — budget 1M ctx
+        "poolside/laguna-s-2.1",                  # fallback 2: Laguna S 2.1 — $0.10/1M coding
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 3: KAT-Coder-Air
+        "meituan/longcat-2.0",                    # fallback 4: LongCat 2.0 — budget 1M ctx
         "deepseek/deepseek-v4-flash",             # fallback 4: DeepSeek V4 Flash
         "moonshotai/kimi-k2.6",                   # fallback 5: Kimi K2.6
         "moonshotai/kimi-k3",                     # fallback 6: Kimi K3 — premium complex coding
     ],
     "executor": [
-        "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking — 1M ctx, reasoning xhigh
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking
+        "google/gemini-3.6-flash",                # fallback 1: Gemini 3.6 Flash — 1M ctx
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
         "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
         "moonshotai/kimi-k2.6:thinking",          # fallback 4: Kimi K2.6 :thinking — structured + CoT
@@ -817,7 +835,8 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
         "openai/gpt-4.1-nano",
-        "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air — ultra-cheap coding
+        "google/gemini-3.5-flash-lite",           # Gemini 3.5 Flash Lite — subagent
+        "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air
         "meituan/longcat-2.0",                    # LongCat 2.0 — budget 1M ctx
         "deepseek/deepseek-v4-flash:thinking",
         "qwen/qwen3-coder-30b-a3b-instruct",
