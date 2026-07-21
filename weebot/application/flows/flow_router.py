@@ -25,6 +25,52 @@ class FlowRouter:
     """Resolves the initial flow state based on session context and plan status."""
 
     @staticmethod
+    def _route_product_gate(
+        session: Session, prompt: str, extra: dict | None = None
+    ) -> tuple[str, Session]:
+        """Route a session with a pending product-gate clarification.
+
+        Extracted for use by :class:`~weebot.application.flows.state_graph.StateGraph`.
+        Returns ``(state_name, updated_session)``.
+        """
+        extra_out = {**(extra or {}), "_product_gate_pending": False}
+        updated = session.model_copy(
+            update={"context": session.context.model_copy(update={"extra": extra_out})}
+        )
+        logger.info("Resuming product gate with user clarification")
+        return ("ProductGateState", updated)
+
+    @staticmethod
+    def _route_plan_approval(
+        session: Session, prompt: str, extra: dict | None = None
+    ) -> tuple[str, Session]:
+        """Route a session with a pending plan-approval decision.
+
+        Extracted for use by :class:`~weebot.application.flows.state_graph.StateGraph`.
+        Returns ``(state_name, updated_session)``.
+        """
+        from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
+
+        response = prompt.strip().lower()
+        extra_out = {**(extra or {}), "plan_pending_approval": False}
+        updated = session.model_copy(
+            update={"context": session.context.model_copy(update={"extra": extra_out})}
+        )
+
+        if response in _APPROVE_TOKENS or not response:
+            logger.info("Plan approved by user — proceeding to execution")
+            updated = updated.set_status(SessionStatus.RUNNING)
+            return ("ExecutingState", updated)
+
+        logger.info("User requested plan modification: %r", prompt[:80])
+        extra_out["_intent_reviewed"] = False
+        extra_out["_plan_modification_request"] = prompt
+        updated = session.model_copy(
+            update={"context": session.context.model_copy(update={"extra": extra_out})}
+        )
+        return ("PlanningState", updated)
+
+    @staticmethod
     def resolve_initial_state(
         session: Session,
         prompt: str,

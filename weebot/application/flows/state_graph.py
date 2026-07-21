@@ -65,11 +65,18 @@ class StateGraph:
         Raises:
             ValueError: If no transition matches.
         """
+        import logging
+        _log = logging.getLogger(__name__)
         for t in self._transitions:
             try:
                 if t.condition(session, prompt, extra):
                     return t.state_factory(session, prompt, extra)
-            except Exception:
+            except (AttributeError, KeyError) as exc:
+                # Expected: condition/state_factory references a missing attribute
+                # or a dict key. Log and try the next transition.
+                _log.debug(
+                    "StateGraph transition %r skipped: %s: %s", t.name, type(exc).__name__, exc
+                )
                 continue
         raise ValueError(
             f"No transition matched for session {session.id} "
