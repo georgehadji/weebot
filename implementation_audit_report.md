@@ -1,9 +1,10 @@
 # Implementation Audit Report — Architecture Score Improvement
 
-**Audited commit:** `e4fd527`  
+**Audited commits:** `e4fd527` → `1d88622` → `9dea3fe`  
 **Plan reference:** `docs/architecture_score_improvement_plan.md`  
 **Review date:** 2026-07-21  
 **Reviewer:** Automated V7 protocol + manual review  
+**Status:** ✅ All corrections applied — **APPROVED**  
 
 ---
 
@@ -17,7 +18,7 @@ The commit delivers **Phase A through D** of the architecture improvement plan. 
 - **Phase C**: Redis event bus, declarative state graph, database router port — infrastructure foundations laid.
 - **Phase D**: Checkpoint port merged into state repo; domain models enriched with validation/completion methods.
 
-**Verdict: APPROVED WITH CHANGES** — 2 minor corrections identified and applied during review. See Required Corrections.
+**Verdict: APPROVED** ✅ — 5 issues found during initial audit, all 5 corrected in follow-up commits. See Required Corrections.
 
 ---
 
@@ -166,30 +167,28 @@ The following new modules lack dedicated unit tests:
 
 | Severity | File | Issue | Recommendation | Status |
 |----------|------|-------|---------------|--------|
-| HIGH | `clawhub_importer.py:20` | Module-level infrastructure import violated architecture fitness test | Changed to TYPE_CHECKING + lazy import in constructor | **FIXED** |
-| LOW | `.importlinter` | Stale ignore for `knowledge_graph` (dynamic import undetectable) | Commented out | **FIXED** |
-| LOW | `.importlinter` | Stale ignore for `browser_tool→llm.langchain_adapter` | Commented out | **FIXED** |
-| MEDIUM | `state_graph.py:91` | `_route_product_gate` doesn't exist on FlowRouter | Implement method or remove dead code | Deferred |
-| MEDIUM | `state_graph.py:72` | Broad `except: continue` swallows all exceptions | Narrow the exception types | Deferred |
+| HIGH | `clawhub_importer.py:20` | Module-level infrastructure import violated architecture fitness test | Changed to TYPE_CHECKING + lazy import in constructor | ✅ Fixed in `1d88622` |
+| LOW | `.importlinter` | Stale ignore for `knowledge_graph` (dynamic import undetectable) | Commented out | ✅ Fixed in `1d88622` |
+| LOW | `.importlinter` | Stale ignore for `browser_tool→llm.langchain_adapter` | Commented out | ✅ Fixed in `1d88622` |
+| MEDIUM | `state_graph.py:91` | `_route_product_gate` doesn't exist on FlowRouter + `except: continue` swallows all exceptions | Implemented methods + narrowed exception types | ✅ Fixed in `9dea3fe` |
+| MEDIUM | `state_graph.py:72` | Broad `except: continue` swallows all exceptions | Narrowed to `(AttributeError, KeyError)` with debug logging | ✅ Fixed in `9dea3fe` |
+| — | Missing unit tests | 0 tests for new modules | 31 tests added (19 SecretAccessor + 12 SessionQueries) | ✅ Fixed in `9dea3fe` |
 
 ---
 
 ## Final Verdict
 
-### APPROVED WITH CHANGES ✅
+### APPROVED ✅
 
-The commit delivers the planned architecture improvements across all four phases. The implementation is faithful to the plan, follows Clean Architecture, and passes architecture fitness gates.
+Initial audit (`e4fd527`) identified 5 issues. All 5 were corrected in follow-up commits:
+- `1d88622`: Architecture fitness violation (clawhub_importer), stale import-linter entries
+- `9dea3fe`: StateGraph exception narrowing, FlowRouter missing methods, 31 unit tests
 
-**3 minor issues found and corrected during review:**
-1. Module-level infrastructure import in `clawhub_importer.py` → TYPE_CHECKING
-2. Stale import-linter ignore for dynamic `knowledge_graph` import
-3. Stale import-linter ignore for `browser_tool→llm.langchain_adapter`
-
-**2 medium issues deferred for a follow-up:**
-4. Dead code `build_default_state_graph()` with non-existent method references
-5. Over-broad exception swallowing in `StateGraph.resolve()`
-
-**Pre-existing transitive import-linter leaks** (not introduced by this PR) are documented but not blocking. The `metrics_bridge.py → infrastructure.observability.metrics` dependency was already present.
+**Verification evidence:**
+- Architecture fitness: 6/7 passed (1 pre-existing `Output/` dir failure)
+- New unit tests: **31/31 passed**
+- Import-linter (non-transitive): all contracts passing
+- Pre-existing transitive leaks via `metrics_bridge.py` remain — documented, not blocking
 
 ---
 
