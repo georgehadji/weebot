@@ -48,6 +48,17 @@ class Step(BaseModel):
             updates["result"] = result
         return self.model_copy(update=updates)
 
+    def is_blocked(self, predecessor_sibling: Optional["Step"] = None) -> bool:
+        """Return True if this step is blocked by an incomplete predecessor.
+
+        Args:
+            predecessor_sibling: The step that must complete before this
+                one runs.  ``None`` means no dependency (first step).
+        """
+        if predecessor_sibling is None:
+            return False
+        return not predecessor_sibling.is_done()
+
 
 class PlanCritique(BaseModel):
     """LLM-generated critique of a plan before execution.
@@ -161,10 +172,21 @@ class Plan(BaseModel):
         return (len(errors) == 0, errors)
 
     def remaining_budget(self, max_iterations: int) -> int:
-        """Return how many iterations remain before hitting *max_iterations*.
-
-        Counts completed steps as consumed budget.  Returns a non-negative
-        integer (0 means the budget is exhausted).
-        """
+        """Return how many iterations remain before hitting *max_iterations*."""
         consumed = len(self.get_completed_steps())
         return max(0, max_iterations - consumed)
+
+    def validate_step_descriptions(self) -> list[str]:
+        """Return warnings for anomalous step descriptions.
+        Checks for empty descriptions and near-duplicates (first 80 chars)."""
+        warnings: list[str] = []
+        seen_prefixes: set[str] = set()
+        for i, step in enumerate(self.steps):
+            if not step.description.strip():
+                warnings.append(f"Step {i+1} has empty description")
+                continue
+            prefix = step.description.strip().lower()[:80]
+            if prefix in seen_prefixes:
+                warnings.append(f"Step {i+1} is near-duplicate of a previous step")
+            seen_prefixes.add(prefix)
+        return warnings

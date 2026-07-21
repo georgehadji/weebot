@@ -249,6 +249,10 @@ class Session(BaseModel):
         total = len(plan.steps)
         return f"Session {self.id}: {done}/{total} steps completed (status={self.status.value})"
 
+    def has_pending_approval(self) -> bool:
+        """Return True if the session has a plan awaiting user approval."""
+        return bool(self.context.get("plan_pending_approval"))
+
     def add_meta_note(self, note: str) -> "Session":
         """Append a meta-analysis note for future planning cycles."""
         notes = list(self.context.meta_notes)
