@@ -9,8 +9,10 @@ import sys
 import asyncio
 from pathlib import Path
 
+from pydantic import PrivateAttr
+
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.settings import WeebotSettings
+from weebot.config.tool_config import ToolConfig, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,12 @@ class ScraperTool(BaseTool):
     Uses Spacescraper with local headless CLI execution as the default,
     falling back to headless Web API, and finally automated docker-compose cluster initiation.
     """
+
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+
+    def set_config(self, config: ToolConfig) -> None:
+        """Inject a ToolConfig (Spacescraper endpoint/creds) via the tool registry."""
+        self._tool_config = config
 
     name: str = "spacescraper"
     description: str = (
@@ -56,9 +64,13 @@ class ScraperTool(BaseTool):
         overlay: Optional[dict] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        settings = WeebotSettings()
-        api_url = settings.scraper_api_url.rstrip("/")
-        api_key = settings.scraper_api_key
+        api_url = resolve_setting(
+            self._tool_config, "scraper_api_url", "SCRAPER_API_URL", "http://localhost:8000"
+        ).rstrip("/")
+        api_key = resolve_setting(self._tool_config, "scraper_api_key", "SCRAPER_API_KEY")
+        scraper_dir = resolve_setting(
+            self._tool_config, "scraper_dir", "SCRAPER_DIR", "E:\\Documents\\Vibe-Coding\\Scraper"
+        )
 
         headers = {
             "Content-Type": "application/json",
@@ -81,12 +93,12 @@ class ScraperTool(BaseTool):
                 url,
                 "--site", site,
             ]
-            logger.info("Executing Method 1 (Default Headless CLI) in %s", settings.scraper_dir)
+            logger.info("Executing Method 1 (Default Headless CLI) in %s", scraper_dir)
             logger.info("CLI command: %s", " ".join(cli_args))
 
             process = await asyncio.create_subprocess_exec(
                 *cli_args,
-                cwd=settings.scraper_dir,
+                cwd=scraper_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -115,7 +127,7 @@ class ScraperTool(BaseTool):
             logger.info("Executing Method 3 (Docker Fallback) to spin up the containerized cluster...")
             process = await asyncio.create_subprocess_exec(
                 "docker-compose", "up", "-d",
-                cwd=settings.scraper_dir,
+                cwd=scraper_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

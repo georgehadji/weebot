@@ -9,8 +9,10 @@ import sys
 import asyncio
 from pathlib import Path
 
+from pydantic import PrivateAttr
+
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.settings import WeebotSettings
+from weebot.config.tool_config import ToolConfig, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,12 @@ class BerbTool(BaseTool):
     Uses Berb at http://localhost:8004 to run a 23-stage academic research pipeline
     from a single paper topic, or falls back to headless CLI execution.
     """
+
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+
+    def set_config(self, config: ToolConfig) -> None:
+        """Inject a ToolConfig (Berb endpoint/creds) via the tool registry."""
+        self._tool_config = config
 
     name: str = "berb"
     description: str = (
@@ -56,9 +64,13 @@ class BerbTool(BaseTool):
         from_stage: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        settings = WeebotSettings()
-        api_url = settings.berb_api_url.rstrip("/")
-        api_key = settings.berb_api_key
+        api_url = resolve_setting(
+            self._tool_config, "berb_api_url", "BERB_API_URL", "http://localhost:8004"
+        ).rstrip("/")
+        api_key = resolve_setting(self._tool_config, "berb_api_key", "BERB_API_KEY")
+        berb_dir = resolve_setting(
+            self._tool_config, "berb_dir", "BERB_DIR", "E:\\Documents\\Vibe-Coding\\Berb"
+        )
 
         headers = {
             "Content-Type": "application/json",
@@ -98,13 +110,13 @@ class BerbTool(BaseTool):
                 if from_stage:
                     cli_args.extend(["--from-stage", from_stage])
 
-                logger.info("Executing default headless CLI run of Berb in %s", settings.berb_dir)
+                logger.info("Executing default headless CLI run of Berb in %s", berb_dir)
                 logger.info("CLI command: %s", " ".join(cli_args))
 
                 # Execute subprocess asynchronously
                 process = await asyncio.create_subprocess_exec(
                     *cli_args,
-                    cwd=settings.berb_dir,
+                    cwd=berb_dir,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -121,7 +133,7 @@ class BerbTool(BaseTool):
                     "status": "success",
                     "message": f"Successfully completed academic research run for topic: '{topic}'",
                     "summary": logs_out[-2000:] if len(logs_out) > 2000 else logs_out,
-                    "artifacts_dir": str(Path(settings.berb_dir) / "artifacts"),
+                    "artifacts_dir": str(Path(berb_dir) / "artifacts"),
                 }
             except Exception as cli_exc:
                 logger.warning("Berb CLI execution failed: %s. Falling back to API...", cli_exc)
@@ -136,7 +148,7 @@ class BerbTool(BaseTool):
 
             # ── Handle response ──
             summary_text = result.get("summary") or result.get("message") or "Berb academic research run completed successfully."
-            artifacts_dir = result.get("artifacts_dir") or str(Path(settings.berb_dir) / "artifacts")
+            artifacts_dir = result.get("artifacts_dir") or str(Path(berb_dir) / "artifacts")
 
             summary = (
                 f"Berb Academic Research Output:\n\n"

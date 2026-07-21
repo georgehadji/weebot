@@ -92,6 +92,7 @@ SOUL.md
 
 # Generated outputs and runtime artifacts
 /Output/
+weebot/Output/
 /.weebot/
 /chrome_profile_copy/
 /playwright_profile/

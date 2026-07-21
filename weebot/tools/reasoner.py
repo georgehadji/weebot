@@ -6,8 +6,10 @@ import logging
 from typing import Any, Dict, List, Optional
 import httpx
 
+from pydantic import PrivateAttr
+
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.settings import WeebotSettings
+from weebot.config.tool_config import ToolConfig, resolve_setting
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,12 @@ class ReasonerTool(BaseTool):
     Uses Reasoner at http://localhost:8003 to execute complex reasoning pipelines
     with various models, multi-perspective debate, and synthesis.
     """
+
+    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+
+    def set_config(self, config: ToolConfig) -> None:
+        """Inject a ToolConfig (Reasoner endpoint/creds) via the tool registry."""
+        self._tool_config = config
 
     name: str = "reasoner"
     description: str = (
@@ -111,9 +119,13 @@ class ReasonerTool(BaseTool):
         domain: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
-        settings = WeebotSettings()
-        api_url = settings.reasoner_api_url.rstrip("/")
-        api_key = settings.reasoner_api_key
+        api_url = resolve_setting(
+            self._tool_config, "reasoner_api_url", "REASONER_API_URL", "http://localhost:8003"
+        ).rstrip("/")
+        api_key = resolve_setting(self._tool_config, "reasoner_api_key", "REASONER_API_KEY")
+        reasoner_dir = resolve_setting(
+            self._tool_config, "reasoner_dir", "REASONER_DIR", "E:\\Documents\\Vibe-Coding\\Reasoner"
+        )
 
         headers = {
             "Content-Type": "application/json",
@@ -205,13 +217,13 @@ class ReasonerTool(BaseTool):
                         temp_json_path = Path(tmpdir) / "reasoner_headless_output.json"
                         cli_args.extend(["--output", str(temp_json_path)])
                         
-                        logger.info("Falling back to headless CLI execution of Reasoner in %s", settings.reasoner_dir)
+                        logger.info("Falling back to headless CLI execution of Reasoner in %s", reasoner_dir)
                         logger.info("CLI command: %s", " ".join(cli_args))
                         
                         # Execute subprocess asynchronously
                         process = await asyncio.create_subprocess_exec(
                             *cli_args,
-                            cwd=settings.reasoner_dir,
+                            cwd=reasoner_dir,
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
                         )
