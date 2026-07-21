@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
+from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 from weebot.interfaces.web.schemas import (
     CreateSessionRequest,
     ResumeSessionRequest,
@@ -24,67 +25,6 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
     """Resolve StateRepositoryPort from the application DI container."""
     container = request.app.state.container
     return container.get(StateRepositoryPort)
-
-
-def _build_deletion_orchestrator(
-    request: Request,
-    state_repo: StateRepositoryPort,
-) -> Any:
-    """Build a SessionDeletionOrchestrator with all available stores."""
-    from weebot.application.services.session_deletion_orchestrator import (
-        SessionDeletionOrchestrator,
-    )
-
-    orch = SessionDeletionOrchestrator(state_repo=state_repo)
-
-    # Register known extra stores if available in the container
-    container = request.app.state.container
-
-    # Event store
-    try:
-        from weebot.application.ports.event_bus_port import EventStorePort
-        event_store = container.get(EventStorePort)
-        if hasattr(event_store, "delete_session"):
-            orch.add_store("event_store", event_store, "delete_session")
-    except (KeyError, Exception):
-        pass
-
-    # Checkpoint store
-    try:
-        from weebot.infrastructure.persistence.checkpoint_store import (
-            SQLiteCheckpointStore,
-        )
-        checkpoint_store = container.get(SQLiteCheckpointStore)
-        if hasattr(checkpoint_store, "delete"):
-            orch.add_store("checkpoint_store", checkpoint_store, "delete")
-    except (KeyError, Exception):
-        pass
-
-    # Gateway session store
-    try:
-        from weebot.infrastructure.persistence.gateway_session_store import (
-            SQLiteGatewaySessionStore,
-        )
-        gateway_store = container.get(SQLiteGatewaySessionStore)
-        orch.add_store("gateway_session_store", gateway_store, "delete_by_session_id")
-    except (KeyError, Exception):
-        pass
-
-    # Knowledge graph
-    try:
-        import importlib as _kg_il
-        _kg_mod = _kg_il.import_module(
-            "weebot.infrastructure.persistence.sqlite_knowledge_graph"
-        )
-        _kg_cls = getattr(_kg_mod, "SQLiteKnowledgeGraph", None)
-        if _kg_cls is not None:
-            kg = container.get(_kg_cls)
-            if hasattr(kg, "delete_by_session_id"):
-                orch.add_store("knowledge_graph", kg, "delete_by_session_id")
-    except (KeyError, Exception):
-        pass
-
-    return orch
 
 
 def _session_to_response(session: Session) -> SessionResponse:
@@ -200,7 +140,7 @@ async def delete_session(
     await verify_session_ownership(http_request, session.user_id)
 
     # Use orchestrator to cascade delete across all stores
-    orch = _build_deletion_orchestrator(http_request, state_repo)
+    orch = build_deletion_orchestrator(http_request, state_repo)
     results = await orch.delete_session(session_id)
 
     logger.info("Deleted session %s (results: %s)", session_id, results)

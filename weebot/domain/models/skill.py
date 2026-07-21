@@ -243,16 +243,32 @@ class Skill(BaseModel):
         lines.append(self.content)
         return "\n".join(lines)
 
-    def check_env(self) -> Dict[str, bool]:
-        """Check whether required environment variables are set."""
-        import os
-        return {name: os.getenv(name) is not None for name in self.metadata.env}
+    def check_env(self, env: Optional[dict[str, str | None]] = None) -> Dict[str, bool]:
+        """Check whether required environment variables are set.
 
-    def is_ready(self) -> bool:
-        """Return True if all required env vars are present."""
+        Args:
+            env: A dict of environment variables (e.g. ``os.environ`` or a
+                 test fixture).  Defaults to ``os.environ`` for backward
+                 compatibility but callers SHOULD inject their own dict.
+
+        Returns:
+            Dict mapping env var name → whether it is set (non-None, non-empty).
+        """
+        if env is None:
+            import os
+            env = dict(os.environ)
+        return {name: env.get(name) not in (None, "") for name in self.metadata.env}
+
+    def is_ready(self, env: Optional[dict[str, str | None]] = None) -> bool:
+        """Return True if all required env vars are present.
+
+        Args:
+            env: A dict of environment variables.  Defaults to ``os.environ``
+                 (see :meth:`check_env`).
+        """
         if not self.metadata.env:
             return True
-        return all(self.check_env().values())
+        return all(self.check_env(env=env).values())
 
     # --- Phase 0: trust gating + promotion ---
 

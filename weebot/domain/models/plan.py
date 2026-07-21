@@ -140,3 +140,31 @@ class Plan(BaseModel):
 
     def is_complete(self) -> bool:
         return len(self.steps) > 0 and all(s.is_done() for s in self.steps)
+
+    # ── Domain validation methods (migrated from application layer) ──
+
+    def is_valid(self) -> tuple[bool, list[str]]:
+        """Validate plan consistency and completeness.
+
+        Returns:
+            (is_valid, errors) where errors is a list of human-readable
+            validation messages.  An empty errors list means valid.
+        """
+        errors: list[str] = []
+        if not self.title.strip():
+            errors.append("Plan must have a non-empty title")
+        if not self.steps:
+            errors.append("Plan must have at least one step")
+        for i, step in enumerate(self.steps):
+            if not step.description.strip():
+                errors.append(f"Step {i+1} has no description")
+        return (len(errors) == 0, errors)
+
+    def remaining_budget(self, max_iterations: int) -> int:
+        """Return how many iterations remain before hitting *max_iterations*.
+
+        Counts completed steps as consumed budget.  Returns a non-negative
+        integer (0 means the budget is exhausted).
+        """
+        consumed = len(self.get_completed_steps())
+        return max(0, max_iterations - consumed)

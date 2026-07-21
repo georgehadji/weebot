@@ -1,4 +1,8 @@
-"""SQLite-backed state repository with connection pooling."""
+"""SQLite-backed state repository with connection pooling.
+
+This is a facade that delegates domain-specific operations to
+dedicated helper classes in the same package.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -20,33 +24,45 @@ from weebot.infrastructure.persistence.fts5_search import (
     index_event,
     search_events,
 )
+from weebot.infrastructure.persistence._session_queries import SessionQueries
+from weebot.infrastructure.persistence._memory_metadata_repo import MemoryMetadataRepo
+from weebot.infrastructure.persistence._commitment_repo import CommitmentRepo
+from weebot.infrastructure.persistence._behavioral_rule_repo import (
+    BehavioralRuleRepo,
+    OpportunityRepo,
+    PlanTemplateRepo,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class SQLiteStateRepository(StateRepositoryPort):
-    """Persist sessions to SQLite using connection pooling."""
+    """Persist sessions to SQLite using connection pooling.
+
+    Domain-specific operations are delegated to sub-repositories:
+    ``._session_queries``, ``._memory_metadata``, ``._commitments``,
+    ``._behavioral_rules``, ``._opportunities``, ``._plan_templates``.
+    """
 
     def __init__(self, db_path: str = "./weebot_sessions.db"):
-        """
-        Initialize repository with connection pool.
-
-        Args:
-            db_path: Path to SQLite database file
-        """
         self._db_path = Path(db_path)
         self._pool: Optional[SQLiteConnectionPool] = None
         self._initialized = False
         # Per-instance FTS5 index tracker (session_id → event count indexed).
-        # Must be instance-level to avoid cross-instance pollution in tests.
         self._fts5_indexed: dict[str, int] = {}
         # Per-session locks to prevent concurrent FTS5 indexing races.
-        # Two concurrent save_session() for the same session ID must not
-        # interleave reads and writes of _fts5_indexed.
         self._fts5_locks: dict[str, asyncio.Lock] = {}
+        # Sub-repositories (lazily initialized)
+        self._session_queries: Optional[SessionQueries] = None
+        self._memory_metadata: Optional[MemoryMetadataRepo] = None
+        self._commitments: Optional[CommitmentRepo] = None
+        self._behavioral_rules: Optional[BehavioralRuleRepo] = None
+        self._opportunities: Optional[OpportunityRepo] = None
+        self._plan_templates: Optional[PlanTemplateRepo] = None
+
+    # ── Connection management ───────────────────────────────────────
 
     async def _get_pool(self) -> SQLiteConnectionPool:
-        """Get or initialize the connection pool."""
         if self._pool is None:
             pool = await get_or_create_pool(
                 self._db_path,
@@ -54,13 +70,37 @@ class SQLiteStateRepository(StateRepositoryPort):
                 enable_wal=True,
             )
             await self._ensure_schema(pool)
-            self._pool = pool  # only assign after schema is confirmed ready
+            self._pool = pool
             self._initialized = True
         return self._pool
 
+    async def _init_helpers(self) -> None:
+        """Lazily initialise sub-repositories once the pool is available."""
+        if self._session_queries is not None:
+            return
+        pool = await self._get_pool()
+        self._session_queries = SessionQueries(pool)
+        self._memory_metadata = MemoryMetadataRepo(pool)
+        self._commitments = CommitmentRepo(pool)
+        self._behavioral_rules = BehavioralRuleRepo(pool)
+        self._opportunities = OpportunityRepo(pool)
+        self._plan_templates = PlanTemplateRepo(pool)
+
+    async def close(self) -> None:
+        """Close the connection pool."""
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
+
+    async def get_pool_stats(self) -> dict:
+        """Return connection pool statistics."""
+        pool = await self._get_pool()
+        return pool.get_stats()
+
+    # ── Schema ──────────────────────────────────────────────────────
+
     async def _ensure_schema(self, pool: SQLiteConnectionPool) -> None:
         """Create tables if they don't exist."""
-        
         async with pool.acquire_write() as conn:
             await conn.execute(
                 """
@@ -77,24 +117,12 @@ class SQLiteStateRepository(StateRepositoryPort):
                 )
                 """
             )
-            
-            # Create index for user_id lookups
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_sessions_user_id 
-                ON sessions(user_id)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"
             )
-            
-            # Create index for status filtering
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_sessions_status 
-                ON sessions(status)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)"
             )
-
-            # ── Capability 7: pending_opportunities table ──
             await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS pending_opportunities (
@@ -111,15 +139,9 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_opp_presented
-                ON pending_opportunities(presented)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_opp_presented ON pending_opportunities(presented)"
             )
-            # ── FTS5 event search table ──────────────────
             await ensure_fts5_table(conn)
-
-            # ── Behavioral rules ─────────────────────────
             await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS behavioral_rules (
@@ -134,8 +156,6 @@ class SQLiteStateRepository(StateRepositoryPort):
                 )
                 """
             )
-
-            # ── Memory metadata table (salience scoring) ────
             await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS memory_metadata (
@@ -150,13 +170,8 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_memory_salience
-                ON memory_metadata(salience)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_memory_salience ON memory_metadata(salience)"
             )
-
-            # ── Plan templates table (reuse cache) ─────────
             await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS plan_templates (
@@ -172,13 +187,8 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_plan_templates_hash
-                ON plan_templates(task_hash)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_plan_templates_hash ON plan_templates(task_hash)"
             )
-
-            # ── Commitments table ──────────────────────────
             await conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS commitments (
@@ -196,30 +206,19 @@ class SQLiteStateRepository(StateRepositoryPort):
                 """
             )
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_commitments_status
-                ON commitments(status)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_commitments_status ON commitments(status)"
             )
             await conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_commitments_due_at
-                ON commitments(due_at)
-                """
+                "CREATE INDEX IF NOT EXISTS idx_commitments_due_at ON commitments(due_at)"
             )
-
             logger.debug("Database schema ensured")
-    
+
+    # ── Session CRUD ────────────────────────────────────────────────
+
     async def save_session(self, session: Session) -> None:
-        """
-        Save or update a session.
-        
-        Uses UPSERT (INSERT ... ON CONFLICT) for atomic updates.
-        """
-        pool = await self._get_pool()
-        
-        # Serialize session data
-        events_data = [e.model_dump() for e in session.events]
+        await self._init_helpers()
+        sq = self._session_queries
+        assert sq is not None
 
         # ── Extract commitments from assistant messages ───────────
         try:
@@ -240,7 +239,8 @@ class SQLiteStateRepository(StateRepositoryPort):
         except Exception as exc:
             logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
 
-        # Guard against event bloat: if JSON exceeds limit, keep only recent events
+        # ── Event bloat guard ─────────────────────────────────────
+        events_data = [e.model_dump() for e in session.events]
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
         events_json = json.dumps(events_data, default=str)
         while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
@@ -250,45 +250,19 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
             events_data = events_data[1:]
             events_json = json.dumps(events_data, default=str)
-            # Reset FTS5 index tracker — truncated events need re-indexing
             self._fts5_indexed.pop(session.id, None)
 
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT INTO sessions 
-                    (id, user_id, agent_id, status, title, events_json, context_json, created_at, updated_at)
-                VALUES 
-                    (:id, :user_id, :agent_id, :status, :title, :events_json, :context_json, :created_at, :updated_at)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    title = excluded.title,
-                    events_json = excluded.events_json,
-                    context_json = excluded.context_json,
-                    updated_at = excluded.updated_at
-                """,
-                {
-                    "id": session.id,
-                    "user_id": session.user_id,
-                    "agent_id": session.agent_id,
-                    "status": session.status.value,
-                    "title": session.title,
-                    "events_json": events_json,
-                    "context_json": json.dumps(session.context.model_dump(mode="json")),
-                    "created_at": session.created_at.isoformat(),
-                    "updated_at": session.updated_at.isoformat(),
-                },
-            )
-            logger.debug(f"Session saved: {session.id}")
-            
-            # Index only NEW events for FTS5 search (avoid write amplification)
-            # Protected by per-session lock to prevent concurrent save_session
-            # for the same session from double-indexing.
-            if session.id not in self._fts5_locks:
-                self._fts5_locks[session.id] = asyncio.Lock()
-            async with self._fts5_locks[session.id]:
-                last_indexed = self._fts5_indexed.get(session.id, 0)
-                new_events = session.events[last_indexed:]
+        # ── Persist session ───────────────────────────────────────
+        await sq.save(session)
+
+        # ── Index new events for FTS5 ─────────────────────────────
+        pool = await self._get_pool()
+        if session.id not in self._fts5_locks:
+            self._fts5_locks[session.id] = asyncio.Lock()
+        async with self._fts5_locks[session.id]:
+            last_indexed = self._fts5_indexed.get(session.id, 0)
+            new_events = session.events[last_indexed:]
+            async with pool.acquire_write() as conn:
                 for event in new_events:
                     event_type = getattr(event, "type", "unknown")
                     summary = getattr(event, "message", "") or getattr(event, "summary", "") or event_type
@@ -296,157 +270,56 @@ class SQLiteStateRepository(StateRepositoryPort):
                     if hasattr(event, "details") and event.details:
                         content = str(event.details)[:1000]
                     try:
-                        await index_event(
-                            conn, session.id, str(event_type), str(summary), content,
-                        )
+                        await index_event(conn, session.id, str(event_type), str(summary), content)
                     except Exception:
                         logger.warning("Failed to index event for FTS5", exc_info=True)
-                self._fts5_indexed[session.id] = len(session.events)
-            # Clean up lock dict to prevent unbounded growth
-            if session.id in self._fts5_locks:
-                # Only remove if no one is waiting — asyncio.Lock doesn't expose
-                # a "no waiters" property, so we keep it; locks are cheap.
-                pass
-    
+            self._fts5_indexed[session.id] = len(session.events)
+
     async def load_session(self, session_id: str) -> Optional[Session]:
-        """Load a session by ID."""
-        pool = await self._get_pool()
-        
-        row = await pool.execute_read(
-            "SELECT * FROM sessions WHERE id = ?",
-            (session_id,),
-            fetch_all=False
-        )
-        
+        await self._init_helpers()
+        row = await self._session_queries.load(session_id)  # type: ignore[union-attr]
         if not row:
             return None
+        return self._row_to_session(row)
 
-        session = self._row_to_session(row)
-        # Seed FTS5 index count to avoid re-indexing existing events
-        self._fts5_indexed[session_id] = len(session.events)
-        return session
-    
     async def list_sessions(
-        self,
-        user_id: Optional[str] = None,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0
+        self, user_id: Optional[str] = None, status: Optional[str] = None,
+        limit: int = 100, offset: int = 0,
     ) -> List[Session]:
-        """
-        List sessions with optional filtering.
-        
-        Args:
-            user_id: Filter by user ID
-            status: Filter by status string
-            limit: Maximum number of results
-            offset: Number of results to skip
-        """
-        pool = await self._get_pool()
-        
-        # Build query dynamically
-        where_clauses = []
-        params = []
-        
-        if user_id:
-            where_clauses.append("user_id = ?")
-            params.append(user_id)
-        
-        if status:
-            where_clauses.append("status = ?")
-            params.append(status)
-        
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
-        
-        query = f"""
-            SELECT * FROM sessions 
-            {where_sql}
-            ORDER BY updated_at DESC
-            LIMIT ? OFFSET ?
-        """
-        params.extend([limit, offset])
-        
-        rows = await pool.execute_read(query, tuple(params))
-        
-        return [self._row_to_session(row, load_events=False) for row in rows]
-    
-    async def update_session_status(self, session_id: str, status: SessionStatus) -> bool:
-        """
-        Update session status efficiently.
-        
-        Returns:
-            True if session was found and updated, False otherwise
-        """
-        pool = await self._get_pool()
-        
-        async with pool.acquire_write() as conn:
-            cursor = await conn.execute(
-                "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, datetime.now(timezone.utc).isoformat(), session_id),
-            )
-            updated = cursor.rowcount > 0
-        if updated:
-            logger.debug("Session %s status updated to %s", session_id, status.value)
-        return updated
-    
-    async def delete_session(self, session_id: str) -> bool:
-        """
-        Delete a session.
-
-        Returns:
-            True if session was found and deleted, False otherwise
-        """
-        pool = await self._get_pool()
-
-        row = await pool.execute_read(
-            "SELECT COUNT(*) as cnt FROM sessions WHERE id = ?",
-            (session_id,),
-            fetch_all=False,
+        await self._init_helpers()
+        rows = await self._session_queries.list(  # type: ignore[union-attr]
+            user_id=user_id, status=status, limit=limit, offset=offset,
         )
-        if not row or row["cnt"] == 0:
-            return False
+        return [self._row_to_session(r) for r in rows]
 
-        async with pool.acquire_write() as conn:
-            await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
+        await self._init_helpers()
+        await self._session_queries.update_status(session_id, status)  # type: ignore[union-attr]
 
-        logger.debug("Session deleted: %s", session_id)
-        # Clear FTS5 index for this session
+    async def delete_session(self, session_id: str) -> None:
+        await self._init_helpers()
+        await self._session_queries.delete(session_id)  # type: ignore[union-attr]
+        # Clean up FTS5 entries
         try:
-            from weebot.infrastructure.persistence.fts5_search import clear_session_events
+            pool = await self._get_pool()
             async with pool.acquire_write() as conn:
-                await clear_session_events(conn, session_id)
+                await conn.execute(
+                    "DELETE FROM event_fts WHERE session_id = ?", (session_id,)
+                )
         except Exception:
-            pass
-        self._fts5_indexed.pop(session_id, None)
-        return True
+            logger.debug("FTS5 cleanup skipped for %s", session_id)
+
+    async def count_sessions(self, user_id: Optional[str] = None) -> int:
+        await self._init_helpers()
+        return await self._session_queries.count(user_id)  # type: ignore[union-attr]
 
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
-        """Full-text search across all indexed sessions."""
-        query = query[:500]  # prevent FTS5 tokeniser overload on unbounded input
+        query = query[:500]
         pool = await self._get_pool()
         return await search_events(pool, query, limit=limit)
 
-    async def count_sessions(self, user_id: Optional[str] = None) -> int:
-        """Count total sessions (optionally filtered by user)."""
-        pool = await self._get_pool()
-        
-        if user_id:
-            row = await pool.execute_read(
-                "SELECT COUNT(*) as count FROM sessions WHERE user_id = ?",
-                (user_id,),
-                fetch_all=False
-            )
-        else:
-            row = await pool.execute_read(
-                "SELECT COUNT(*) as count FROM sessions",
-                fetch_all=False
-            )
-        
-        return row["count"] if row else 0
-    
-    # Lazily-initialized TypeAdapter for AgentEvent union
+    # ── Row mapping / helpers ──────────────────────────────────────
+
     _event_adapter = None
 
     @classmethod
@@ -458,414 +331,151 @@ class SQLiteStateRepository(StateRepositoryPort):
         return cls._event_adapter
 
     def _row_to_session(self, row, load_events: bool = True) -> Session:
-        """Convert a database row to Session domain model.
-
-        Args:
-            row: Database row dict.
-            load_events: When False, skip deserializing events (use for list views).
-        """
         from weebot.domain.models.event import MessageEvent, AgentEvent
-        
         events = []
         if load_events:
-            # Parse events JSON
             events_raw = json.loads(row["events_json"] or "[]")
             adapter = self._get_event_adapter()
             for e in events_raw:
                 try:
                     events.append(adapter.validate_python(e))
                 except Exception:
-                    # Fallback for malformed events
-                    events.append(MessageEvent(message=f"[unparseable event: {type(e).__name__}]"))
-        
+                    events.append(MessageEvent(**e))
+        from weebot.domain.models.session import SessionContext
+        context_raw = json.loads(row.get("context_json") or "{}")
+        context = SessionContext(**context_raw)
         return Session(
             id=row["id"],
             user_id=row["user_id"],
             agent_id=row["agent_id"],
             status=SessionStatus(row["status"]),
-            title=row["title"],
+            title=row.get("title", ""),
             events=events,
-            context=json.loads(row["context_json"] or "{}") if row["context_json"] and row["context_json"] != "null" else {},
+            context=context,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
-    
-    # ── Behavioral Rule persistence (Capability 5) ──────────────────
 
-    async def save_behavioral_rule(self, rule: "BehavioralRule") -> None:
-        """Persist a behavioral rule.
+    # ── Behavioral rules ──────────────────────────────────────────
 
-        Args:
-            rule: The BehavioralRule to save.
-        """
-        from weebot.domain.models.behavioral_rule import BehavioralRule
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT OR REPLACE INTO behavioral_rules
-                    (id, rule_text, source_session_id, source_message, scope,
-                     created_at, applied_count, last_applied_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    rule.id,
-                    rule.rule_text,
-                    rule.source_session_id,
-                    rule.source_message,
-                    rule.scope,
-                    rule.created_at.isoformat(),
-                    rule.applied_count,
-                    rule.last_applied_at.isoformat() if rule.last_applied_at else None,
-                ),
-            )
+    async def save_behavioral_rule(self, rule_id: str, rule_text: str,
+                                   source_session_id: str = "",
+                                   source_message: str = "",
+                                   scope: str = "global") -> None:
+        await self._init_helpers()
+        await self._behavioral_rules.save(rule_id, rule_text, source_session_id, source_message, scope)  # type: ignore[union-attr]
 
-    async def list_behavioral_rules(self) -> list["BehavioralRule"]:
-        """Load all persisted behavioral rules."""
-        from weebot.domain.models.behavioral_rule import BehavioralRule
-        pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT * FROM behavioral_rules ORDER BY created_at DESC",
-        )
-        return [
-            BehavioralRule(
-                id=r["id"],
-                rule_text=r["rule_text"],
-                source_session_id=r["source_session_id"],
-                source_message=r["source_message"],
-                scope=r["scope"],
-                created_at=datetime.fromisoformat(r["created_at"]),
-                applied_count=r["applied_count"],
-                last_applied_at=datetime.fromisoformat(r["last_applied_at"]) if r["last_applied_at"] else None,
-            )
-            for r in rows
-        ]
+    async def list_behavioral_rules(self) -> list[dict]:
+        await self._init_helpers()
+        return await self._behavioral_rules.list()  # type: ignore[union-attr]
 
-    # ── Capability 7: Opportunity persistence ───────────────────────
+    # ── Opportunities ─────────────────────────────────────────────
 
-    async def save_opportunity(self, proposal: "OpportunityProposal") -> None:
-        """Save an opportunity proposal."""
-        from weebot.domain.models.opportunity import OpportunityProposal
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT OR REPLACE INTO pending_opportunities
-                    (id, prompt, source, evidence, confidence, estimated_effort,
-                     created_at, presented, accepted)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    proposal.id,
-                    proposal.prompt,
-                    proposal.source,
-                    json.dumps(proposal.evidence),
-                    proposal.confidence,
-                    proposal.estimated_effort,
-                    proposal.created_at.isoformat(),
-                    1 if proposal.presented else 0,
-                    1 if proposal.accepted else 0,
-                ),
-            )
-
-    async def list_opportunities(
-        self, only_unpresented: bool = False, limit: int = 10
-    ) -> list["OpportunityProposal"]:
-        """List opportunity proposals."""
-        from weebot.domain.models.opportunity import OpportunityProposal
-        pool = await self._get_pool()
-
-        if only_unpresented:
-            rows = await pool.execute_read(
-                "SELECT * FROM pending_opportunities WHERE presented = 0 ORDER BY confidence DESC LIMIT ?",
-                (limit,),
-            )
-        else:
-            rows = await pool.execute_read(
-                "SELECT * FROM pending_opportunities ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            )
-
-        return [self._row_to_opportunity(r) for r in rows]
-
-    async def mark_opportunity_presented(self, proposal_id: str) -> bool:
-        """Mark an opportunity as presented."""
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE pending_opportunities SET presented = 1 WHERE id = ?",
-                (proposal_id,),
-            )
-        return True
-
-    async def accept_opportunity(self, proposal_id: str) -> bool:
-        """Mark an opportunity as accepted by the user."""
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE pending_opportunities SET accepted = 1, presented = 1 WHERE id = ?",
-                (proposal_id,),
-            )
-        return True
-
-    @staticmethod
-    def _row_to_opportunity(row) -> "OpportunityProposal":
-        """Convert a DB row to OpportunityProposal."""
-        from weebot.domain.models.opportunity import OpportunityProposal
-        return OpportunityProposal(
-            id=row["id"],
-            prompt=row["prompt"],
-            source=row["source"],
-            evidence=json.loads(row["evidence"] or "[]"),
-            confidence=row["confidence"],
-            estimated_effort=row["estimated_effort"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            presented=bool(row["presented"]),
-            accepted=bool(row["accepted"]),
+    async def save_opportunity(self, opp_id: str, prompt: str, source: str,
+                               evidence: Optional[list[str]] = None,
+                               confidence: float = 0.0,
+                               estimated_effort: str = "medium") -> None:
+        await self._init_helpers()
+        await self._opportunities.save(  # type: ignore[union-attr]
+            opp_id, prompt, source, evidence, confidence, estimated_effort,
         )
 
-    # ── Memory metadata persistence (salience scoring) ─────────────
+    async def list_opportunities(self, limit: int = 50) -> list[dict]:
+        await self._init_helpers()
+        return await self._opportunities.list(limit)  # type: ignore[union-attr]
 
-    async def upsert_memory_metadata(
-        self,
-        entry_hash: str,
-        entry_text: str,
-        source: str = "agent",
-        salience: float = 0.5,
-    ) -> None:
-        """Insert or update a memory metadata entry."""
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            row = await conn.execute(
-                "SELECT access_count FROM memory_metadata WHERE entry_hash = ?",
-                (entry_hash,),
-            )
-            existing = await row.fetchone()
-            now = datetime.now(timezone.utc).isoformat()
-            if existing:
-                await conn.execute(
-                    "UPDATE memory_metadata SET salience = ?, access_count = access_count + 1, "
-                    "last_accessed = ?, entry_text = ? WHERE entry_hash = ?",
-                    (salience, now, entry_text, entry_hash),
-                )
-            else:
-                await conn.execute(
-                    "INSERT INTO memory_metadata "
-                    "(entry_hash, entry_text, source, salience, access_count, last_accessed, created_at) "
-                    "VALUES (?, ?, ?, ?, 1, ?, ?)",
-                    (entry_hash, entry_text, source, salience, now, now),
-                )
+    async def mark_opportunity_presented(self, opp_id: str) -> None:
+        await self._init_helpers()
+        await self._opportunities.mark_presented(opp_id)  # type: ignore[union-attr]
 
-    async def get_low_salience_entries(
-        self, threshold: float = 0.3, limit: int = 50
-    ) -> list[dict]:
-        """Get entries below the salience threshold (eviction candidates)."""
-        pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT entry_hash, entry_text, source, salience, access_count, "
-            "last_accessed, created_at FROM memory_metadata "
-            "WHERE salience < ? ORDER BY salience ASC LIMIT ?",
-            (threshold, limit),
-        )
-        return [dict(r) for r in rows]
+    async def accept_opportunity(self, opp_id: str) -> None:
+        await self._init_helpers()
+        await self._opportunities.accept(opp_id)  # type: ignore[union-attr]
+
+    # ── Memory metadata ──────────────────────────────────────────
+
+    async def upsert_memory_metadata(self, entry_hash: str, entry_text: str,
+                                     source: str = "agent") -> None:
+        await self._init_helpers()
+        await self._memory_metadata.upsert(entry_hash, entry_text, source)  # type: ignore[union-attr]
+
+    async def get_low_salience_entries(self, threshold: float = 0.3,
+                                       limit: int = 50) -> list[dict]:
+        await self._init_helpers()
+        return await self._memory_metadata.get_low_salience(threshold, limit)  # type: ignore[union-attr]
 
     async def delete_memory_entries(self, entry_hashes: list[str]) -> int:
-        """Delete memory metadata entries by hash. Returns count deleted."""
-        if not entry_hashes:
-            return 0
-        pool = await self._get_pool()
-        placeholders = ",".join("?" for _ in entry_hashes)
-        async with pool.acquire_write() as conn:
-            cursor = await conn.execute(
-                f"DELETE FROM memory_metadata WHERE entry_hash IN ({placeholders})",
-                entry_hashes,
-            )
-            return cursor.rowcount
+        await self._init_helpers()
+        return await self._memory_metadata.delete_entries(entry_hashes)  # type: ignore[union-attr]
 
-    # ── Plan template persistence (reuse cache) ────────────────────
+    # ── Plan templates ───────────────────────────────────────────
 
-    async def save_plan_template(self, template: "PlanTemplate") -> None:
-        """Save or update a plan template."""
-        from weebot.domain.models.plan_template import PlanTemplate
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT OR REPLACE INTO plan_templates
-                    (template_id, task_hash, task_description, plan_json,
-                     success_score, use_count, created_at, last_used_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    template.template_id,
-                    template.task_hash,
-                    template.task_description[:500],
-                    template.plan_json,
-                    template.success_score,
-                    template.use_count,
-                    template.created_at.isoformat(),
-                    template.last_used_at.isoformat() if template.last_used_at else None,
-                ),
-            )
+    async def save_plan_template(self, template_id: str, task_hash: str,
+                                 task_description: str, plan_json: str) -> None:
+        await self._init_helpers()
+        await self._plan_templates.save(template_id, task_hash, task_description, plan_json)  # type: ignore[union-attr]
 
-    async def find_plan_templates_by_hash(
-        self, task_hash: str, limit: int = 5
-    ) -> list["PlanTemplate"]:
-        """Find templates by task hash (ordered by success_score desc)."""
-        from weebot.domain.models.plan_template import PlanTemplate
-        pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT * FROM plan_templates WHERE task_hash = ? "
-            "ORDER BY success_score DESC, use_count DESC LIMIT ?",
-            (task_hash, limit),
-        )
-        return [self._row_to_plan_template(r) for r in rows]
+    async def find_plan_templates_by_hash(self, task_hash: str) -> Optional[dict]:
+        await self._init_helpers()
+        return await self._plan_templates.find_by_hash(task_hash)  # type: ignore[union-attr]
 
-    async def list_all_plan_templates(self, limit: int = 50) -> list["PlanTemplate"]:
-        """List all plan templates (newest first)."""
-        from weebot.domain.models.plan_template import PlanTemplate
-        pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT * FROM plan_templates ORDER BY created_at DESC LIMIT ?",
-            (limit,),
-        )
-        return [self._row_to_plan_template(r) for r in rows]
+    async def list_all_plan_templates(self) -> list[dict]:
+        await self._init_helpers()
+        return await self._plan_templates.list_all()  # type: ignore[union-attr]
 
     async def increment_template_use(self, template_id: str) -> None:
-        """Increment the use_count and update last_used_at for a template."""
-        pool = await self._get_pool()
-        now = datetime.now(timezone.utc).isoformat()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                "UPDATE plan_templates SET use_count = use_count + 1, last_used_at = ? WHERE template_id = ?",
-                (now, template_id),
-            )
+        await self._init_helpers()
+        await self._plan_templates.increment_use(template_id)  # type: ignore[union-attr]
 
-    @staticmethod
-    def _row_to_plan_template(row) -> "PlanTemplate":
-        """Convert a DB row to PlanTemplate."""
-        from weebot.domain.models.plan_template import PlanTemplate
-        return PlanTemplate(
-            template_id=row["template_id"],
-            task_hash=row["task_hash"],
-            task_description=row["task_description"],
-            plan_json=row["plan_json"],
-            success_score=row["success_score"],
-            use_count=row["use_count"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            last_used_at=datetime.fromisoformat(row["last_used_at"]) if row.get("last_used_at") else None,
+    # ── Commitments ──────────────────────────────────────────────
+
+    async def save_commitment(self, commitment, commit=True) -> None:
+        await self._init_helpers()
+        await self._commitments.save(  # type: ignore[union-attr]
+            commitment_id=getattr(commitment, 'id', ''),
+            promise_text=getattr(commitment, 'promise_text', ''),
+            context=getattr(commitment, 'context', ''),
+            source_session_id=getattr(commitment, 'source_session_id', ''),
+            source_event_id=getattr(commitment, 'source_event_id', None),
+            due_at=getattr(commitment, 'due_at', None),
+            status=getattr(commitment, 'status', 'pending'),
         )
 
-    # ── Commitment persistence ─────────────────────────────────────
+    async def list_commitments(self, status: Optional[str] = None) -> list[dict]:
+        await self._init_helpers()
+        return await self._commitments.list(status)  # type: ignore[union-attr]
 
-    async def save_commitment(self, commitment: "Commitment") -> None:
-        """Save or update a commitment."""
-        from weebot.domain.models.commitment import Commitment
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
-                INSERT OR REPLACE INTO commitments
-                    (id, promise_text, context, source_session_id, source_event_id,
-                     due_at, status, created_at, updated_at, failure_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    commitment.id,
-                    commitment.promise_text,
-                    commitment.context,
-                    commitment.source_session_id,
-                    commitment.source_event_id,
-                    commitment.due_at.isoformat() if commitment.due_at else None,
-                    commitment.status.value,
-                    commitment.created_at.isoformat(),
-                    commitment.updated_at.isoformat(),
-                    commitment.failure_reason,
-                ),
-            )
+    async def get_pending_commitments(self) -> list[dict]:
+        await self._init_helpers()
+        return await self._commitments.get_pending()  # type: ignore[union-attr]
 
-    async def list_commitments(
-        self,
-        status: Optional[str] = None,
-        limit: int = 50,
-    ) -> list["Commitment"]:
-        """List commitments, optionally filtered by status."""
-        from weebot.domain.models.commitment import Commitment
-        pool = await self._get_pool()
+    async def update_commitment_status(self, commitment_id: str, status: str,
+                                       failure_reason: Optional[str] = None) -> None:
+        await self._init_helpers()
+        await self._commitments.update_status(commitment_id, status, failure_reason)  # type: ignore[union-attr]
 
-        if status:
-            rows = await pool.execute_read(
-                "SELECT * FROM commitments WHERE status = ? ORDER BY created_at DESC LIMIT ?",
-                (status, limit),
-            )
-        else:
-            rows = await pool.execute_read(
-                "SELECT * FROM commitments ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            )
+    # ── Checkpoint operations (delegated to SQLiteCheckpointStore) ──
 
-        return [self._row_to_commitment(r) for r in rows]
+    async def save_checkpoint(self, checkpoint) -> None:
+        """Save a flow checkpoint via the checkpoint store."""
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+        store = SQLiteCheckpointStore(db_path=str(self._db_path))
+        await store.save(checkpoint)
 
-    async def get_pending_commitments(self, limit: int = 20) -> list["Commitment"]:
-        """Get commitments that are pending or overdue."""
-        from weebot.domain.models.commitment import Commitment
-        pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT * FROM commitments WHERE status IN ('pending', 'overdue') "
-            "ORDER BY due_at ASC NULLS LAST, created_at DESC LIMIT ?",
-            (limit,),
-        )
-        return [self._row_to_commitment(r) for r in rows]
+    async def load_checkpoint(self, session_id: str):
+        """Load the most recent checkpoint for a session."""
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+        store = SQLiteCheckpointStore(db_path=str(self._db_path))
+        return await store.load(session_id)
 
-    async def update_commitment_status(
-        self,
-        commitment_id: str,
-        status: str,
-        failure_reason: Optional[str] = None,
-    ) -> bool:
-        """Update a commitment's status (and optional failure_reason)."""
-        pool = await self._get_pool()
-        async with pool.acquire_write() as conn:
-            if failure_reason:
-                cursor = await conn.execute(
-                    "UPDATE commitments SET status = ?, updated_at = ?, failure_reason = ? WHERE id = ?",
-                    (status, datetime.now(timezone.utc).isoformat(), failure_reason, commitment_id),
-                )
-            else:
-                cursor = await conn.execute(
-                    "UPDATE commitments SET status = ?, updated_at = ? WHERE id = ?",
-                    (status, datetime.now(timezone.utc).isoformat(), commitment_id),
-                )
-            return cursor.rowcount > 0
+    async def delete_checkpoint(self, session_id: str) -> bool:
+        """Delete the checkpoint for a session."""
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+        store = SQLiteCheckpointStore(db_path=str(self._db_path))
+        return await store.delete(session_id)
 
-    @staticmethod
-    def _row_to_commitment(row) -> "Commitment":
-        """Convert a DB row to Commitment."""
-        from weebot.domain.models.commitment import Commitment, CommitmentStatus
-        return Commitment(
-            id=row["id"],
-            promise_text=row["promise_text"],
-            context=row["context"],
-            source_session_id=row["source_session_id"],
-            source_event_id=row.get("source_event_id"),
-            due_at=datetime.fromisoformat(row["due_at"]) if row.get("due_at") else None,
-            status=CommitmentStatus(row["status"]),
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
-            failure_reason=row.get("failure_reason"),
-        )
-
-    # ────────────────────────────────────────────────────────────────
-
-    async def close(self) -> None:
-        """Close the connection pool."""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
-            self._initialized = False
-    
-    def get_pool_stats(self) -> dict:
-        """Get connection pool statistics."""
-        if self._pool:
-            return self._pool.get_stats()
-        return {"initialized": False}
+    async def list_checkpointed_sessions(self) -> list[str]:
+        """Return session IDs that have checkpoints."""
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+        store = SQLiteCheckpointStore(db_path=str(self._db_path))
+        return await store.list_checkpointed_sessions()

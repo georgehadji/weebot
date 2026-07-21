@@ -233,6 +233,22 @@ class Session(BaseModel):
         from .event import MessageEvent
         return self.add_event(MessageEvent(role="user", message=text))
 
+    def is_completable(self) -> bool:
+        """Return True if this session has all data needed for completion."""
+        plan = self.get_last_plan()
+        if plan is None:
+            return False
+        return plan.is_complete()
+
+    def completion_summary(self) -> str:
+        """Return a one-line summary of session completion status."""
+        plan = self.get_last_plan()
+        if plan is None:
+            return f"Session {self.id}: no plan (status={self.status.value})"
+        done = len(plan.get_completed_steps())
+        total = len(plan.steps)
+        return f"Session {self.id}: {done}/{total} steps completed (status={self.status.value})"
+
     def add_meta_note(self, note: str) -> "Session":
         """Append a meta-analysis note for future planning cycles."""
         notes = list(self.context.meta_notes)

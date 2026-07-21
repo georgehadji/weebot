@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+
+from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,6 @@ class ImportResult:
 
 # ── Repo parser ──────────────────────────────────────────────────
 
-_REPO_URL = "https://github.com/VoltAgent/awesome-openclaw-skills.git"
 _LINK_RE = re.compile(
     r'-\s*\[([^\]]+)]\((https://[^)]+)\)\s*[-–—]\s*(.+?)(?:\n|$)'
 )
@@ -62,29 +61,16 @@ class ClawHubImporter:
                                           install_dir=Path.home() / ".weebot/skills")
     """
 
-    def __init__(self, repo_path: Optional[Path] = None):
-        self._repo_path = repo_path
+    def __init__(self, repo_path: Optional[Path] = None, git_adapter: Optional[ClawHubGitAdapter] = None):
+        self._git_adapter = git_adapter or ClawHubGitAdapter(repo_path=repo_path)
 
     @property
     def repo_path(self) -> Path:
-        if self._repo_path is None:
-            self._repo_path = Path(tempfile.gettempdir()) / "awesome-openclaw-skills"
-        return self._repo_path
+        return self._git_adapter.repo_path
 
     def clone_or_update_repo(self) -> None:
         """Clone the repo if not present, otherwise pull latest."""
-        if self.repo_path.exists():
-            logger.info("Updating repo at %s", self.repo_path)
-            subprocess.run(
-                ["git", "-C", str(self.repo_path), "pull", "--ff-only"],
-                capture_output=True, text=True,
-            )
-        else:
-            logger.info("Cloning repo to %s", self.repo_path)
-            subprocess.run(
-                ["git", "clone", "--depth", "1", _REPO_URL, str(self.repo_path)],
-                capture_output=True, text=True,
-            )
+        self._git_adapter.clone_or_update()
 
     def parse_all_categories(self) -> list[SkillEntry]:
         """Parse every categories/*.md file and return all skill entries."""

@@ -12,6 +12,8 @@ from typing import Optional
 
 from weebot.config.constants import MAX_TOKENS_PROBE, TEMPERATURE_DETERMINISTIC
 
+from weebot.config.secret_accessor import SecretAccessor
+
 logger = logging.getLogger(__name__)
 
 # ── Public API ──────────────────────────────────────────────────────
@@ -27,7 +29,7 @@ async def check_default_model(llm, model_id: str, timeout: float = 10.0) -> bool
     Returns:
         ``True`` if the model responded successfully, ``False`` otherwise.
     """
-    if os.environ.get("WEEBOT_SKIP_MODEL_CHECK") == "1":
+    if SecretAccessor.get("WEEBOT_SKIP_MODEL_CHECK") == "1":
         logger.info("Model health check skipped (WEEBOT_SKIP_MODEL_CHECK=1)")
         return True  # treat skip as pass
 

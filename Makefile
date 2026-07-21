@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test lint-imports check-arch check
+.PHONY: help install test lint-imports lint-env-access check-arch check
 
 help:
 	@echo "Available targets:"
@@ -40,6 +40,17 @@ lint-bare-except-pass:
 	    weebot/ cli/ \
 	    || (echo "ERROR: except Exception: pass found. Must use logger.debug()." && exit 1)
 
+lint-env-access:
+	@echo "=== Bare os.environ / os.getenv Access Check ==="
+	@! grep -Prn "os\.environ(?!(\.get|\[))|os\.getenv\(" \
+	    --include="*.py" \
+	    --exclude-dir=tests \
+	    --exclude-dir=.venv \
+	    --exclude-dir=Output \
+	    --exclude-dir=weebot/config \
+	    weebot/ cli/ \
+	    || (echo "ERROR: Bare os.environ/os.getenv found outside weebot/config/. Use SecretAccessor instead." && exit 1)
+
 check-arch:
 	@echo "=== Architecture Fitness Tests ==="
 	pytest tests/unit/test_architecture_fitness.py -v --tb=short
@@ -53,5 +64,5 @@ check-arch:
 	@echo "=== E2E Persistence Tests ==="
 	pytest tests/e2e/test_persistence.py -v --tb=short
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access
 	@echo "=== All checks passed ==="

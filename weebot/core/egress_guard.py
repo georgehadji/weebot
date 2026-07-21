@@ -28,6 +28,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+from weebot.config.secret_accessor import SecretAccessor
+
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -40,13 +42,13 @@ def is_enforcing() -> bool:
     Read at call time rather than import time so the toggle takes effect for
     already-imported callers (and so tests can flip it via monkeypatch).
     """
-    return os.environ.get("WEEBOT_EGRESS_ENFORCE", "true").lower() not in ("false", "0", "no")
+    return SecretAccessor.get("WEEBOT_EGRESS_ENFORCE", "true").lower() not in ("false", "0", "no")
 
 # Allowlist file location (reuses the existing persistence dir convention)
-_ALLOWLIST_PATH: Path = Path(os.environ.get(
+_ALLOWLIST_PATH: Path = Path(SecretAccessor.get(
     "WEEBOT_EGRESS_ALLOWLIST",
-    Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json",
-))
+    str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json"),
+) or str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json"))
 
 # ---------------------------------------------------------------------------
 # Sensitive-payload patterns (extends AgentMemorySanitizer credential patterns)

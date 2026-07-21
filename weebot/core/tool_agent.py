@@ -2,7 +2,6 @@
 from __future__ import annotations
 import asyncio
 import json
-import os
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -14,6 +13,8 @@ from weebot.config.model_refs import MODEL_DEPRECATED_TOOL_AGENT
 from weebot.utils.cost_ledger import CostLedger
 from weebot.utils.prompt_loader import load_prompt_with_fallback
 from typing import Optional
+
+from weebot.config.secret_accessor import SecretAccessor
 
 SYSTEM_PROMPT = load_prompt_with_fallback(
     "tool_agent_system.txt",
@@ -47,13 +48,13 @@ class ToolCallWeebotAgent:
             DeprecationWarning,
             stacklevel=2,
         )
-        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or "no-key"
+        api_key = SecretAccessor.get("OPENAI_API_KEY") or SecretAccessor.get("DEEPSEEK_API_KEY") or "no-key"
         base_url = None
-        if not os.getenv("OPENAI_API_KEY") and os.getenv("DEEPSEEK_API_KEY"):
+        if not SecretAccessor.get("OPENAI_API_KEY") and SecretAccessor.get("DEEPSEEK_API_KEY"):
             base_url = "https://api.deepseek.com"
 
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model or os.getenv("WEEBOT_MODEL", MODEL_DEPRECATED_TOOL_AGENT)
+        self.model = model or SecretAccessor.get("WEEBOT_MODEL", MODEL_DEPRECATED_TOOL_AGENT) or MODEL_DEPRECATED_TOOL_AGENT
         self.tools = tools
         self.max_steps = max_steps
         self.memory = Memory()

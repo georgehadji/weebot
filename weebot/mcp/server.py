@@ -6,7 +6,6 @@ Transport options:
 """
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 
 try:
@@ -18,6 +17,7 @@ except ImportError as _mcp_err:
         "Install it with:  pip install 'mcp>=1.5'"
     ) from _mcp_err
 
+from weebot.config.secret_accessor import SecretAccessor
 from weebot.application.services.composite_tool_builder import CompositeToolBuilder
 from weebot.core.activity_stream import ActivityStream
 from weebot.mcp.resources import (
@@ -115,7 +115,7 @@ class WeebotMCPServer:
         self._composite_tools_enabled = composite_tools_enabled
         # API key for SSE/HTTP transport auth.
         # Falls back to WEEBOT_MCP_API_KEY env var; None = no auth (backward compat).
-        self._api_key = api_key or os.environ.get("WEEBOT_MCP_API_KEY")
+        self._api_key = api_key or SecretAccessor.get("WEEBOT_MCP_API_KEY")
         # Build a FastMCP TokenVerifier if an API key is set.
         _token_verifier = None
         if self._api_key:

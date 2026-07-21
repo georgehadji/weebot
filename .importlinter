@@ -30,8 +30,7 @@ name = Tools must not bypass ports — no direct persistence or adapter imports
 type = forbidden
 source_modules = weebot.tools
 forbidden_modules =
-    weebot.infrastructure.persistence
-    weebot.infrastructure.adapters
+    weebot.infrastructure
 ignore_imports =
     # persistent_memory directly manages filesystem-based memory persistence
     # (non-DB, non-adapter). The filesystem store is an I/O detail that cannot
@@ -47,15 +46,34 @@ ignore_imports =
     weebot.tools.apify_presets -> weebot.infrastructure.adapters.apify.apify_service
     # persistent_memory lazily instantiates SQLiteStateRepository for
     # user-profile consolidation. Pre-audited — ADR-ARCH-AUDIT-V2 A2
-    # moved the _base.py bypass to the port; this tool-level usage
-    # remains for Phase C cleanup.
     weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
     # schedule_tool → scheduler → DI → adapters&persistence (transitive).
-    # Pre-audited — already in tools-no-db ignore_imports.
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
-    # bash_security → model_selection → model_registry → adapter_factory
-    # (transitive). Model selection is an application service, not a bypass.
+    # bash_security → model_selection → model_registry → adapter_factory (transitive)
     weebot.tools.bash_security -> weebot.application.services.model_selection
+    # advanced_browser delegates browser operations to the session manager.
+    weebot.tools.advanced_browser -> weebot.infrastructure.browser.session_manager
+    weebot.tools.advanced_browser -> weebot.infrastructure.browser.playwright_adapter
+    weebot.tools.advanced_browser -> weebot.infrastructure.browser.content_extractor
+    # browser_inspector delegates to Playwright for DOM inspection.
+    weebot.tools.browser_inspector -> weebot.infrastructure.browser.playwright_adapter
+    weebot.tools.browser_inspector -> weebot.infrastructure.browser.som_renderer
+    # browser_tool lazily instantiates the LLM adapter for vision.
+    weebot.tools.browser_tool -> weebot.infrastructure.llm.langchain_adapter
+    # file_editor uses security validators directly (pre-audited, Phase C candidate).
+    weebot.tools.file_editor -> weebot.infrastructure.security.security_validators
+    # bash/powershell/python tools create sandbox instances via the factory.
+    weebot.tools.bash_tool -> weebot.infrastructure.sandbox.factory
+    weebot.tools.bash_tool -> weebot.infrastructure.observability.metrics
+    weebot.tools.powershell_tool -> weebot.infrastructure.sandbox.factory
+    weebot.tools.python_tool -> weebot.infrastructure.sandbox.factory
+    weebot.tools.python_tool -> weebot.infrastructure.observability.metrics
+    # atomic_mail_tool uses Prometheus metrics for monitoring.
+    weebot.tools.atomic_mail_tool -> weebot.infrastructure.observability.metrics
+    # swarm tool lazily imports the Swarm event bus.
+    weebot.tools.swarm -> weebot.infrastructure.swarm_event_bus
+    # tool_registry lazily creates Playwright browser instances.
+    weebot.tools.tool_registry -> weebot.infrastructure.browser.playwright_adapter
 
 [importlinter:contract:infra-no-app-services]
 name = Infrastructure must depend on ports, not application services/flows/agents
@@ -123,6 +141,12 @@ ignore_imports =
     weebot.interfaces.web.main -> weebot.infrastructure.persistence.connection_pool
     # Web server wires the Telegram gateway's session store at startup.
     weebot.interfaces.web.main -> weebot.infrastructure.persistence.gateway_session_store
+    # Web dependencies (composition root) — builds session deletion orchestrator
+    # with all adapter stores; this file is the dedicated composition-root
+    # dependency helper for the web interface layer.
+    weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.checkpoint_store
+    weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.gateway_session_store
+    weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.sqlite_knowledge_graph
 
 
 [importlinter:contract:core-no-app]
