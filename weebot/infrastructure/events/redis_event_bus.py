@@ -99,26 +99,26 @@ class RedisEventBus(EventBusPort):
 
     async def publish(self, event: AgentEvent) -> None:
         """Publish an agent event."""
-        bus = await self._get_bus()
-        if hasattr(bus, "publish"):
-            await bus.publish(event)
+        r = await self._ensure_redis()
+        if r is _REDIS_UNAVAILABLE:
+            await self._in_memory.publish(event)
         else:
-            # Redis path: publish to channel
+            # Redis path: serialize to JSON and publish to channel
             try:
                 payload = json.dumps(event.model_dump(mode="json"), default=str)
-                await bus.publish("weebot:events", payload)
+                await r.publish("weebot:events", payload)
             except Exception as exc:
                 logger.error("RedisEventBus: publish failed: %s", exc)
 
     async def publish_domain_event(self, event: DomainEvent) -> None:
         """Publish a domain event."""
-        bus = await self._get_bus()
-        if hasattr(bus, "publish_domain_event"):
-            await bus.publish_domain_event(event)
+        r = await self._ensure_redis()
+        if r is _REDIS_UNAVAILABLE:
+            await self._in_memory.publish_domain_event(event)
         else:
             try:
                 payload = json.dumps(event.model_dump(mode="json"), default=str)
-                await bus.publish("weebot:domain_events", payload)
+                await r.publish("weebot:domain_events", payload)
             except Exception as exc:
                 logger.error("RedisEventBus: domain publish failed: %s", exc)
 
