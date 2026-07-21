@@ -1,5 +1,13 @@
 # CI Stabilization & Architecture-Debt Remediation Plan
 
+> **STATUS: IMPLEMENTED.** All groups below (A–E) have been fixed on
+> `claude/session-n4trou` and verified in a faithful Python-3.12 CI reproduction:
+> `make lint-imports` = 6 kept / 0 broken; `pytest tests/unit/` = 3032 passed,
+> coverage ≥ 48%; Persistence, CQRS, E2E, event-bridge, security-penetration,
+> and secret-scan all green. Docker-smoke (previously skipped behind the
+> architecture gate) will now run. This document is retained as the rationale
+> record; the checklist in §5 reflects completion.
+>
 > **Goal:** turn the repository's CI from fully red to green, fixing every
 > pre-existing failure **without weakening the Clean/Hexagonal architecture**
 > — respecting the dependency rule (`Interfaces → Infrastructure → Application →
