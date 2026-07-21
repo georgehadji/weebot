@@ -27,6 +27,8 @@ from weebot.infrastructure.persistence.fts5_search import (
 from weebot.infrastructure.persistence._session_queries import SessionQueries
 from weebot.infrastructure.persistence._memory_metadata_repo import MemoryMetadataRepo
 from weebot.infrastructure.persistence._commitment_repo import CommitmentRepo
+from weebot.application.ports.database_router_port import DatabaseRouterPort
+from weebot.infrastructure.persistence.default_database_router import DefaultDatabaseRouter
 from weebot.infrastructure.persistence._behavioral_rule_repo import (
     BehavioralRuleRepo,
     OpportunityRepo,
@@ -44,8 +46,9 @@ class SQLiteStateRepository(StateRepositoryPort):
     ``._behavioral_rules``, ``._opportunities``, ``._plan_templates``.
     """
 
-    def __init__(self, db_path: str = "./weebot_sessions.db"):
+    def __init__(self, db_path: str = "./weebot_sessions.db", database_router: DatabaseRouterPort | None = None):
         self._db_path = Path(db_path)
+        self._database_router = database_router or DefaultDatabaseRouter(db_path=db_path)
         self._pool: Optional[SQLiteConnectionPool] = None
         self._initialized = False
         # Per-instance FTS5 index tracker (session_id → event count indexed).
@@ -64,8 +67,9 @@ class SQLiteStateRepository(StateRepositoryPort):
 
     async def _get_pool(self) -> SQLiteConnectionPool:
         if self._pool is None:
+            db_path = self._database_router.get_db_path("sessions")
             pool = await get_or_create_pool(
-                self._db_path,
+                Path(db_path),
                 max_read_connections=5,
                 enable_wal=True,
             )
