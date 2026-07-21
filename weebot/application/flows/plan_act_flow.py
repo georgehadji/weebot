@@ -10,6 +10,8 @@ from collections.abc import AsyncGenerator
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
 from weebot.application.flows.base_flow import BaseFlow
+from weebot.application.flows._checkpoint_scheduler import CheckpointScheduler
+from weebot.application.flows._iteration_context import IterationContext
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.planning import PlanningState
 from weebot.application.flows.states.executing import ExecutingState
@@ -644,6 +646,15 @@ class PlanActFlow(BaseFlow):
                 prompt_consumed = False
                 self._last_state_type = current_state_type
 
+            # ── Build iteration context snapshot ──────────────────────
+            ctx = IterationContext(
+                session=self._session,
+                plan=self._plan,
+                current_state_name=current_state_type.__name__ if self._state else "unknown",
+                similar_plan_count=getattr(self, '_similar_plan_count', 0),
+                awm=self._awm,
+            )
+
             # ── Composable termination check ──────────────────────────
             if self._termination_conditions:
                 import time as _term_time
@@ -946,46 +957,17 @@ class PlanActFlow(BaseFlow):
 
     async def _maybe_save_checkpoint(self) -> None:
         """Save a flow checkpoint if a CheckpointPort is wired.
-
-        Called after each step event so that a crashed flow can resume
-        from the last completed step.
-        """
-        if self._checkpoint_port is None or self._plan is None:
-            return
-
-        try:
-            from weebot.domain.models.checkpoint import FlowCheckpoint, StepCheckpoint
-
-            # Build completed step snapshots from the plan
-            completed: list[StepCheckpoint] = []
-            for step in self._plan.steps:
-                if step.status.value in ("completed", "failed"):
-                    completed.append(
-                        StepCheckpoint(
-                            step_id=step.id,
-                            description=step.description,
-                            status=step.status.value,
-                            result=step.result,
-                        )
-                    )
-
-            checkpoint = FlowCheckpoint(
-                session_id=self._session.id,
-                flow_type="PlanActFlow",
-                current_state=type(self._state).__name__ if self._state else "planning",
-                plan_snapshot=self._plan,
-                completed_steps=completed,
-                conversation_summary="",
-                iteration_count=0,
+        Delegates to CheckpointScheduler."""
+        if not hasattr(self, '_checkpoint_scheduler'):
+            self._checkpoint_scheduler = CheckpointScheduler(
+                checkpoint_port=self._checkpoint_port
             )
-            await self._checkpoint_port.save(checkpoint)
-            self._log.debug("Checkpoint saved for session %s", self._session.id)
-        except Exception:
-            self._log.warning(
-                "Failed to save checkpoint for session %s",
-                self._session.id,
-                exc_info=True,
-            )
+        current_state_name = type(self._state).__name__ if self._state else "planning"
+        await self._checkpoint_scheduler.maybe_save(
+            session=self._session,
+            plan=self._plan,
+            current_state_name=current_state_name,
+        )
 
         # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
         if _run_span is not None:
