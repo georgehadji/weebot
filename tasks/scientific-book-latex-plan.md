@@ -1,6 +1,6 @@
 # Plan: Greek Scientific Book Generation via LaTeX
 
-**Status:** Draft
+**Status:** Draft — Phase 0/PoC verified (see §10)
 **Owner:** weebot core
 **Date:** 2026-07-21
 **Goal:** Enable weebot to produce a complete scientific book **in Greek** — with math
@@ -294,3 +294,47 @@ feed the self-heal loop as structured issues (not free text).
 
 The proof-of-concept (step 2) is the highest-value early milestone: it de-risks the entire
 Greek toolchain before the orchestration is built.
+
+---
+
+## 10. Proof of Concept — Verified
+
+The toolchain and print gates in this plan are **proven end-to-end**, not just proposed.
+
+**Shipped in this PR:**
+- **Locked Greek preamble** — `weebot/infrastructure/document/templates/greek_scientific_preamble.tex`
+  (XeLaTeX + polyglossia + GFS Didot/Neohellenic + minted + biblatex + cleveref).
+- **Compiler service** — `weebot/infrastructure/document/latex_compiler.py`
+  (`LatexCompilerService`: runs `latexmk -xelatex -shell-escape` via `BashGuard`, returns a
+  structured `CompileResult`; `prepare_project` materializes the locked preamble).
+- **Log parser** — `weebot/infrastructure/document/log_parser.py` (transcript → categorized
+  `CompileError`s; the deterministic backbone of the self-heal loop).
+- **Print-readiness preflight** — `weebot/infrastructure/document/preflight.py`
+  (font-embedding gate via `pdffonts`).
+- **Domain models** — `weebot/domain/models/book.py` (`Book`, `Chapter`, `Section`,
+  `BookAsset`, `CompileResult`, `CompileError` + error taxonomy; pure Pydantic).
+- **Skill** — `weebot/skills/builtin/scientific-book/SKILL.md`.
+- **Example** — `examples/scientific_book_greek/` (compiles to a **9-page** PDF).
+- **Tests** — `weebot/tests/unit/test_latex_document.py` (8 passing; the golden test really
+  runs XeLaTeX and asserts embedded fonts, resolved refs, zero missing glyphs).
+
+**Verified result:** the example compiles with **exit 0, 0 LaTeX errors, 0 missing-glyph
+warnings, all cross-references/citations resolved, and all 13 fonts embedded & subset**
+(GFS Didot, GFS Neohellenic, DejaVu Mono, CM math).
+
+**Non-trivial problems the self-heal ladder resolved during the PoC** (each now baked into
+the locked preamble):
+1. KOMA headings are sans-serif → Greek headings fell back to a Latin-only font (dozens of
+   missing-glyph errors). Fix: `\setsansfont{GFS Neohellenic}`.
+2. `hyperref`'s legacy begindocument bookmark hook throws an undefined-control-sequence
+   under polyglossia-Greek. Fix: load the modern `bookmark` package.
+3. `cleveref`'s polyglossia-Greek language hook throws the same at `\begin{document}`. Fix:
+   load hyperref/bookmark/cleveref **before** polyglossia and supply Greek `\cref` names
+   manually.
+4. Circular ordering constraint: `biblatex` requires polyglossia **before** it, cleveref
+   requires it **after** — resolved by loading biblatex last (after polyglossia).
+
+**Still outstanding from this plan** (not in the PoC): Opus 4.8 wiring (Phase 0), the
+TeX Live sandbox image, the outline/drafting/assembly flow (Phases 1–4), the full
+escalation ladder as code (Phase 5), CMYK/PDF-X/DPI preflight gates, and the CLI/Web
+interfaces.

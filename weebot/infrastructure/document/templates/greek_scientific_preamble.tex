@@ -1,0 +1,81 @@
+% =====================================================================
+% LOCKED Greek scientific-book preamble  (weebot)
+% Engine: XeLaTeX (or LuaLaTeX). Do NOT compile with pdfLaTeX.
+% Build:  latexmk -xelatex -shell-escape main.tex
+%
+% This preamble is a *tested, locked* asset. The LLM fills chapter CONTENT
+% only; it must never edit this file. See tasks/scientific-book-latex-plan.md.
+%
+% Load-order note (hard-won): hyperref + bookmark + cleveref are loaded
+% BEFORE polyglossia declares Greek. cleveref's polyglossia-Greek language
+% hook is broken and throws an "Undefined control sequence" at
+% \begin{document}; loading cleveref before the Greek language avoids that
+% path, and Greek cross-reference names are supplied manually below. The
+% `bookmark` package additionally replaces hyperref's fragile legacy
+% begindocument bookmark hook.
+% =====================================================================
+\documentclass[11pt,a4paper,twoside,openright]{scrbook}
+
+% --- Base font engine ------------------------------------------------
+\usepackage{fontspec}
+
+% --- Math ------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+
+% --- Tables ----------------------------------------------------------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+
+% --- Figures ---------------------------------------------------------
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{float}
+\usepackage[section]{placeins} % \FloatBarrier support for the fixer ladder
+
+% --- Code (minted: needs -shell-escape + Pygments; sandbox-only) -----
+\usepackage[newfloat]{minted}
+\setminted{fontsize=\small,breaklines=true,tabsize=2}
+\usepackage{caption}
+
+% --- Print typography / quality --------------------------------------
+\usepackage{microtype}
+
+% --- Cross-references: load BEFORE polyglossia (see load-order note) --
+\usepackage[unicode]{hyperref}
+\usepackage{bookmark}
+\usepackage{cleveref}
+
+% --- Language (Unicode Greek via polyglossia) ------------------------
+\usepackage{polyglossia}
+\setmainlanguage{greek}
+\setotherlanguage{english}
+
+% --- Fonts: GFS Didot (Greek serif) + GFS Neohellenic (Greek sans,
+%     used by KOMA headings) + DejaVu mono for code -------------------
+\setmainfont{GFS Didot}
+\setsansfont{GFS Neohellenic}
+\setmonofont{DejaVu Sans Mono}[Scale=0.85]
+\newfontfamily\greekfont{GFS Didot}
+\newfontfamily\latinfont{GFS Didot}
+
+% --- Bibliography (biblatex + biber): MUST load after polyglossia ----
+\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
+
+% --- Greek cross-reference names (cleveref) --------------------------
+\crefname{chapter}{κεφάλαιο}{κεφάλαια}
+\Crefname{chapter}{Κεφάλαιο}{Κεφάλαια}
+\crefname{section}{ενότητα}{ενότητες}
+\Crefname{section}{Ενότητα}{Ενότητες}
+\crefname{equation}{εξίσωση}{εξισώσεις}
+\Crefname{equation}{Εξίσωση}{Εξισώσεις}
+\crefname{table}{πίνακας}{πίνακες}
+\Crefname{table}{Πίνακας}{Πίνακες}
+\crefname{figure}{σχήμα}{σχήματα}
+\Crefname{figure}{Σχήμα}{Σχήματα}
+\crefname{listing}{κώδικας}{κώδικες}
+\Crefname{listing}{Κώδικας}{Κώδικες}
