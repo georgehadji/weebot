@@ -318,6 +318,15 @@ MODEL_IMAGE_LITE: str = "google/gemini-3.1-flash-lite-image"
 """Ultra-budget image generation: Gemini 3.1 Flash Lite Image — cheapest image-capable model.
 Best for: simple diagrams, low-fidelity mockups, icon drafts, social thumbnails where cost > quality."""
 
+# ── New image models — added 2026-07-21 ──────────────────────────
+MODEL_IMAGE_KREA_LARGE: str = "krea/krea-2-large"
+"""Krea 2 Large — high-capability image gen, $0.06/img. 2x Krea 2 Medium.
+Raw, textured, photorealistic, expressive artistic styles, motion blur, grain."""
+
+MODEL_IMAGE_KREA_MEDIUM_TURBO: str = "krea/krea-2-medium-turbo"
+"""Krea 2 Medium Turbo — speed-focused distilled image gen, $0.015/img.
+Rapid iteration, graphic design exploration, fast generation priority."""
+
 MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
 """Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
 
@@ -371,8 +380,9 @@ IMAGE_CASCADE: dict[str, list[str]] = {
     "photo": [
         "x-ai/grok-imagine-image-quality",       # 1st: cheap (~$0.05/img) — direct xAI
         "black-forest-labs/flux.2-pro",           # 2nd: paid — excellent quality
-        "black-forest-labs/flux.2-max",           # 3rd: paid — max quality
-        "recraft/recraft-v4.1-pro",               # 4th: paid — consistent output
+        "krea/krea-2-large",                      # 3rd: raw, textured photorealism — $0.06/img
+        "black-forest-labs/flux.2-max",           # 5th: paid — max quality
+        "recraft/recraft-v4.1-pro",               # 5th: paid — consistent output
     ],
 
     # ── Diagrams, charts, UI mockups, technical illustrations ───────
@@ -385,9 +395,10 @@ IMAGE_CASCADE: dict[str, list[str]] = {
     # ── Social media, thumbnails — fast, cheap, decent ──────────────
     "social": [
         "google/gemini-3.1-flash-lite-image",      # 1st: cheapest — ultra-budget image
-        "black-forest-labs/flux.2-klein-4b",        # 2nd: cheapest paid — fast
-        "black-forest-labs/flux.2-flex",             # 3rd: batch-optimized
-        "x-ai/grok-imagine-image-quality",          # 4th: cheap (~$0.05/img) — direct xAI
+        "krea/krea-2-medium-turbo",               # 2nd: speed-focused — $0.015/img
+        "black-forest-labs/flux.2-klein-4b",        # 5th: cheapest paid — fast
+        "black-forest-labs/flux.2-flex",             # 5th: batch-optimized
+        "x-ai/grok-imagine-image-quality",          # 5th: cheap (~$0.05/img) — direct xAI
     ],
 
     # ── Text-heavy images — signs, banners with text ────────────────
@@ -408,7 +419,8 @@ IMAGE_CASCADE: dict[str, list[str]] = {
     "general": [
         "x-ai/grok-imagine-image-quality",        # 1st: cheap (~$0.05/img) — direct xAI
         "black-forest-labs/flux.2-pro",            # 2nd: paid — photorealistic
-        "black-forest-labs/flux.2-flex",           # 3rd: paid — batch-optimized
+        "krea/krea-2-large",                      # 3rd: raw photorealism — $0.06/img
+        "black-forest-labs/flux.2-flex",           # 4th: paid — batch-optimized
     ],
 }
 
@@ -453,6 +465,11 @@ def describe_image_cascade(use_case: str) -> str:
 # ========================================================================
 
 MODEL_VIDEO_XAI: str = "x-ai/grok-imagine-video"
+"""xAI Grok Imagine Video v1 — image-to-video gen. Original version."""
+
+MODEL_VIDEO_XAI_15: str = "x-ai/grok-imagine-video-1.5"
+"""xAI Grok Imagine Video 1.5 — $0.08/sec. Image-to-video with sync
+sound effects, ambience, dialogue. Animates starting image with text prompt."""
 """xAI Grok Imagine Video — from $0.05/video. Direct xAI API path available."""
 
 MODEL_VIDEO_KLING_PRO: str = "kling/video-v3-pro"
@@ -541,16 +558,18 @@ VIDEO_CASCADE: dict[str, list[str]] = {
     ],
     # ── Brand / enterprise — safety, consistency ────────────────
     "brand": [
-        "x-ai/grok-imagine-video",                # 1st: direct xAI
-        "google/veo-3.1",                         # 2nd: professional
-        "kling/video-o1-pro",                     # 3rd: reasoning-enhanced
+        "x-ai/grok-imagine-video-1.5",            # 1st: direct xAI — v1.5 with audio
+        "x-ai/grok-imagine-video",                # 2nd: direct xAI — v1 fallback
+        "google/veo-3.1",                         # 3rd: professional
+        "kling/video-o1-pro",                     # 4th: reasoning-enhanced
     ],
     # ── General / catch-all — free → cheap → best ──────────────
     "general": [
-        "x-ai/grok-imagine-video",                # 1st: direct xAI
-        "kling/video-v3-standard",                # 2nd: standard
-        "alibaba/wan-2.6",                        # 3rd: budget
-        "google/veo-3.1-lite",                    # 4th: lite
+        "x-ai/grok-imagine-video-1.5",            # 1st: direct xAI — v1.5 with audio
+        "x-ai/grok-imagine-video",                # 2nd: direct xAI — v1 fallback
+        "kling/video-v3-standard",                # 3rd: standard
+        "alibaba/wan-2.6",                        # 4th: budget
+        "google/veo-3.1-lite",                    # 5th: lite
     ],
 }
 
