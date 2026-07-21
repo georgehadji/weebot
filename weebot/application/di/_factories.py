@@ -48,7 +48,13 @@ class FactoriesMixin:
     def _create_event_bus(self) -> EventBusPort:
         from weebot.infrastructure.event_bus import AsyncEventBus, DurableEventBus
         from weebot.application.ports.event_store_port import EventStorePort
-        inner = AsyncEventBus()
+        from weebot.config.secret_accessor import SecretAccessor
+        valkey_url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get("WEEBOT_REDIS_URL")
+        if valkey_url:
+            from weebot.infrastructure.events.redis_event_bus import ValkeyEventBus
+            inner = ValkeyEventBus(valkey_url=valkey_url)
+        else:
+            inner = AsyncEventBus()
         event_store = self.get(EventStorePort)
         return DurableEventBus(inner=inner, event_store=event_store)
 
