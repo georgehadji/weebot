@@ -17,16 +17,33 @@ produces:
 1. A **compiled PDF** of a multi-chapter scientific book in Greek.
 2. The **LaTeX source tree** (`main.tex`, per-chapter files, `figures/`, `refs.bib`).
 
-A run is considered **successful** only when all of the following hold:
+A run is considered **successful** only when it yields a **perfect, professional,
+print-ready PDF** — the pipeline must resolve *any* problem that arises during the LaTeX
+workflow, escalating strategies until every gate passes, rather than giving up. All of the
+following must hold:
 
+**Correctness gates**
 - **0 LaTeX errors** (compilation succeeds with `latexmk -xelatex`).
 - **All cross-references resolve** — no undefined `\ref`, `\cref`, or `\cite`.
 - **Zero missing-glyph warnings** — Greek text, math, and code all render (font coverage
   gate). This is the single most important correctness check for Greek.
 - **Structure is sane** — front matter (title, TOC), main matter chapters, bibliography.
 
-Non-goals (this plan): print-shop typesetting polish, EPUB export, collaborative editing.
-Those are follow-ups once the pipeline is solid.
+**Print-professional gates** (see §6.5 Print-Readiness Preflight)
+- **All fonts fully embedded** (subset OK) — no font references left unresolved. Hard
+  requirement for any print shop.
+- **No overfull/underfull boxes** above a small tolerance — no text running into margins.
+- **Widow/orphan control** and clean pagination — no stranded lines.
+- **Image resolution ≥ 300 DPI** at placed size; vector art preferred where possible.
+- **Color model correct for target** — CMYK (or spot) for offset print, no accidental
+  RGB-only assets; consistent color profile.
+- **PDF/X-compliant** output (e.g. PDF/X-4) for the print deliverable, with a matching
+  **PDF/A** archival variant optionally produced.
+- **Greek typographic quality** — correct guillemets («…»), proper hyphenation, no bad
+  breaks in Greek words, consistent punctuation.
+
+Non-goals (this plan): EPUB export, collaborative editing. Those are follow-ups once the
+print pipeline is solid.
 
 ---
 
@@ -71,6 +88,9 @@ This is the make-or-break foundation.
 - **Code:** **`minted`** (decision below), driver `Pygments`.
 - **Bibliography:** `biblatex` + `biber` (Greek-aware sorting/locale).
 - **References:** `hyperref` + `cleveref` (Greek-localized ref names).
+- **Print typography/standards:** `microtype` (justification quality), `pdfx` + `hyperxmp`
+  (PDF/X-4 output intent + XMP metadata), `widows-and-orphans`/`needspace` (pagination),
+  crop/bleed via the class or `crop` when a print spec requires marks.
 - **Class:** KOMA-Script `scrbook` (better i18n/typography than stock `book`).
 - **Build:** `latexmk -xelatex -shell-escape` (multi-pass, runs biber automatically).
 
@@ -126,7 +146,8 @@ The interesting design — a bounded, self-healing loop.
 
 **Phase 0 — Toolchain & model foundation**
 - Build a **TeX Live Docker image** (scheme-medium + Greek fonts GFS/Noto + Pygments +
-  biber) wired into `infrastructure/sandbox/`. Pin the image digest for reproducibility.
+  biber + Ghostscript + `pdffonts`/poppler-utils + a PDF/X preflight tool such as veraPDF)
+  wired into `infrastructure/sandbox/`. Pin the image digest for reproducibility.
 - Wire **`claude-opus-4-8`** as a first-class model via the Anthropic adapter. Add an
   `AUTHORING`/`LATEX` task profile in `model_refs.py` + `model_quality_profiles.yaml`
   routing to Opus 4.8, fallback → Qwen 3.7 Max / GLM 5.2. LaTeX correctness rewards the
@@ -154,17 +175,49 @@ The interesting design — a bounded, self-healing loop.
 - Build `main.tex`: `\frontmatter` (title page, TOC) → `\mainmatter` (`\include` chapters)
   → `\backmatter` (`\printbibliography`). Merge per-chapter `.bib` fragments into `refs.bib`.
 
-**Phase 5 — Compile & self-heal (the Plan-Act-Update loop)**
-- `LatexCompilerService` compiles in the sandbox (`latexmk -xelatex -shell-escape`).
-- `log_parser` turns the `.log` into a **structured error list**.
-- Structured errors are fed back to Opus 4.8 (or a deterministic fixer for known patterns)
-  → produce a minimal patch → recompile.
-- **Bounded to ~5 iterations**; on exhaustion, surface the residual errors to the user.
+**Phase 5 — Compile & self-heal (exhaustive escalation ladder)**
 
-**Phase 6 — QA gates & output**
-- Enforce the §1 success criteria (0 errors, refs resolved, **0 missing glyphs**, sane
-  structure).
-- Emit PDF + source tarball to `Output/<book-slug>/`.
+The requirement is that weebot **tackles any problem** in the LaTeX workflow until the PDF
+is print-perfect — so the loop is *exhaustive with escalating strategies*, not "try N times
+then give up". Each detected issue is classified and routed to the cheapest strategy that
+can resolve it; only if a strategy fails does it escalate to the next rung.
+
+1. Compile in sandbox (`latexmk -xelatex -shell-escape`).
+2. `log_parser` turns the `.log`/`.blg` into a **structured, categorized error list**
+   (see the taxonomy below).
+3. Route each issue up the **escalation ladder**:
+   - **Rung 0 — Deterministic fixers** (no LLM): known-pattern repairs — add a missing
+     `\usepackage`, insert `\FloatBarrier`, fix a stray brace, escape a special char,
+     add a `biber` pass, add `\hyphenation{}` for a bad Greek break, nudge float
+     placement.
+   - **Rung 1 — LLM patch (Opus 4.8):** feed the structured error + minimal surrounding
+     context; get a **minimal content patch**; recompile.
+   - **Rung 2 — Strategy switch:** if the same class recurs, change approach — swap a
+     package (e.g. table engine), change a font with better glyph coverage, convert a
+     fragile construct to a robust equivalent, rasterize a problematic vector at high DPI.
+   - **Rung 3 — Asset regeneration:** regenerate an offending figure (e.g. re-render a
+     TikZ/matplotlib asset at ≥300 DPI / as vector), re-fetch/re-encode an image to the
+     right color model.
+   - **Rung 4 — Isolate & bisect:** compile chapters individually to localize a
+     non-obvious failure, then fix in isolation and re-assemble.
+   - **Rung 5 — Surface to user:** only after the ladder is exhausted for a specific
+     issue, present that issue with full diagnosis and the strategies already tried.
+4. Repeat until **all correctness gates pass**. Convergence safeguards: per-issue attempt
+   budget, global wall-clock/iteration budget, and a **no-progress detector** (identical
+   error signature twice ⇒ force escalation to the next rung, never re-try the same fix).
+
+**Error taxonomy** (drives routing): missing package · undefined control sequence · syntax
+error (braces/math) · undefined reference/citation · missing glyph (font coverage) · biber/
+bibliography error · float/placement failure · overfull/underfull box · image not found /
+bad format / low DPI · shell-escape/minted (Pygments) error · encoding issue · timeout/
+resource limit.
+
+**Phase 6 — QA gates & print-readiness output**
+- Enforce **all** §1 gates (correctness **and** print-professional).
+- Run the **Print-Readiness Preflight** (§6.5) as a hard gate; any failure re-enters the
+  Phase 5 ladder rather than shipping.
+- Emit the **print-ready PDF/X**, an optional PDF/A archival copy, a **preflight report**,
+  and the full LaTeX source tarball to `Output/<book-slug>/`.
 
 ---
 
@@ -176,6 +229,32 @@ The interesting design — a bounded, self-healing loop.
   - `python -m cli.main book compile <path>` (recompile an existing source tree)
 - **Web UI** (`weebot/interfaces/web/`): a Book panel showing the outline tree, the live
   compile log, and an inline PDF preview.
+
+---
+
+## 6.5 Print-Readiness Preflight (hard gate)
+
+A deterministic validator (`infrastructure/document/preflight.py`) inspects the produced
+PDF and fails the run — routing back into the Phase 5 ladder — unless it is genuinely
+print-shop ready:
+
+- **Font embedding:** every font fully embedded/subset (verify via `pdffonts` — no
+  "not embedded" rows). Non-negotiable for professional printing.
+- **Color:** no unintended RGB in a CMYK target; consistent ICC/output intent; images in
+  the correct color space for the chosen print path.
+- **Resolution:** every raster image ≥ 300 DPI at placed size (flag anything lower);
+  vector art preserved as vector.
+- **Standards:** validate **PDF/X-4** (e.g. via a veraPDF/Ghostscript preflight) for print,
+  and optionally emit a **PDF/A** archival variant.
+- **Geometry:** correct trim/page size; bleed + crop marks when the print spec requires
+  them; nothing in the safety margin.
+- **Typography:** no overfull/underfull boxes beyond tolerance; widow/orphan control;
+  balanced pages; correct Greek hyphenation and guillemets.
+- **Integrity:** TOC, page numbers, running heads, cross-refs, and bibliography all
+  consistent end-to-end.
+
+Output of preflight is a machine-readable report bundled with the deliverable, so failures
+feed the self-heal loop as structured issues (not free text).
 
 ---
 
@@ -198,7 +277,8 @@ The interesting design — a bounded, self-healing loop.
 | **R1** | Greek glyphs in **math mode** (`\text{}` vs `textgreek`/`upgreek` vs math font) render wrong or missing. | Define an explicit math-font + Greek-variable policy in the skill; the golden test asserts glyph coverage in a math block. |
 | **R2** | `minted` `-shell-escape` is a security surface. | Runs **only** in the sandbox; shell-escape allowed on the sandbox path exclusively and blocked on host via `bash_guard`. |
 | **R3** | LLM emits a fragile/incorrect preamble. | Preamble is a **locked, tested template**; LLM fills content only. |
-| **R4** | Self-heal loop fails to converge / loops forever. | Hard iteration cap (~5); deterministic fixers for common patterns; surface residual errors to the user. |
+| **R4** | Self-heal loop fails to converge / loops forever while still needing to fix *every* issue. | Escalation ladder (Rung 0→5) with a **no-progress detector** — an identical error signature forces escalation to the next strategy instead of re-trying; per-issue and global budgets bound wall-clock while still exhausting strategies before surfacing to the user. |
+| **R7** | "Compiles cleanly" ≠ "print-ready" (un-embedded fonts, RGB images, low DPI slip through). | Deterministic **Print-Readiness Preflight** (§6.5) as a hard gate; its failures re-enter the Phase 5 ladder rather than shipping. |
 | **R5** | Opus 4.8 not truly wired (current Anthropic refs are aliased to other models). | Phase 0 makes `claude-opus-4-8` first-class via the Anthropic adapter before anything else depends on it. |
 | **R6** | TeX Live image bloat / slow builds. | scheme-medium + only required packages/fonts; pinned digest; cache the image. |
 
