@@ -131,6 +131,32 @@ MODEL_CASCADE = {
             description="Qwen3 Coder 30B — cheapest dedicated coding model at $0.07/1M.",
         ),
         ModelConfig(
+            id="kwaipilot/kat-coder-air-v2.5",
+            name="KAT-Coder-Air V2.5",
+            tier="budget",
+            prompt_price=0.15,
+            completion_price=0.60,
+            context_length=256000,
+            timeout_seconds=30,
+            max_retries=2,
+            use_for=["coding", "subagent"],
+            description="KAT-Coder-Air V2.5 — ultra-cheap agentic coding $0.15/1M, 256K ctx.",
+            recommended=False,
+        ),
+        ModelConfig(
+            id="meituan/longcat-2.0",
+            name="LongCat 2.0",
+            tier="budget",
+            prompt_price=0.30,
+            completion_price=1.20,
+            context_length=1000000,
+            timeout_seconds=45,
+            max_retries=2,
+            use_for=["coding", "refactoring", "debugging"],
+            description="LongCat 2.0 — 48B/1.6T MoE, 1M context, $0.30/1M.",
+            recommended=False,
+        ),
+        ModelConfig(
             id="x-ai/grok-build-0.1",
             name="Grok Build 0.1",
             tier="budget",
@@ -374,6 +400,19 @@ MODEL_CASCADE = {
     ],
 
     "long_context": [
+        ModelConfig(
+            id="meituan/longcat-2.0",
+            name="LongCat 2.0",
+            tier="budget",
+            prompt_price=0.30,
+            completion_price=1.20,
+            context_length=1000000,
+            timeout_seconds=60,
+            max_retries=2,
+            use_for=["long_context", "coding"],
+            description="LongCat 2.0 — 1M context, $0.30/1M for long-horizon coding.",
+            recommended=False,
+        ),
         # Models with >= 500K context for very large inputs
         ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",

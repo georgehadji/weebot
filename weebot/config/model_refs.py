@@ -55,6 +55,27 @@ MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 """Tier 4: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
 
 # ═══════════════════════════════════════════════════════════════════════
+# Additional model references — added 2026-07-21
+# ═══════════════════════════════════════════════════════════════════════
+
+MODEL_LONGCAT_2: str = "meituan/longcat-2.0"
+"""LongCat 2.0 — budget MoE (48B/1.6T params). 1M ctx, $0.30/$1.20.
+Coding, repository-level changes, long-horizon problem solving, agentic."""
+
+MODEL_INKLING: str = "thinkingmachines/inkling"
+"""Inkling — multimodal MoE (41B/975B params). 1M ctx, $1/$4.05.
+Image+audio understanding. General reasoning, coding, agentic, RAG."""
+
+MODEL_MUSE_SPARK: str = "meta/muse-spark-1.1"
+"""Muse Spark 1.1 — multimodal reasoning, 1M ctx, $1.25/$4.25.
+Multi-agent orchestration, MCP, zero-shot tool use, structured output. US-only."""
+
+MODEL_KIMI_K3: str = "moonshotai/kimi-k3"
+"""Kimi K3 — 2.8T multimodal reasoning, 1M ctx, $3/$15.
+Complex coding, large-repo navigation, tool use, image/log debugging.
+Note: upstream capacity limited (429 errors possible)."""
+
+# ═══════════════════════════════════════════════════════════════════════
 # Verbalized Sampling
 # ═══════════════════════════════════════════════════════════════════════
 MODEL_VS_CAPABLE: str = MODEL_CASCADE_TIER4
@@ -139,10 +160,12 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "coder": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
-        "deepseek/deepseek-v4-flash",             # fallback 3: DeepSeek V4 Flash — fast coding
-        "moonshotai/kimi-k2.6",                   # fallback 4: Kimi K2.6 — structured output
+        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro
+        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air
+        "meituan/longcat-2.0",                    # fallback 3: LongCat 2.0 — budget 1M ctx
+        "deepseek/deepseek-v4-flash",             # fallback 4: DeepSeek V4 Flash
+        "moonshotai/kimi-k2.6",                   # fallback 5: Kimi K2.6
+        "moonshotai/kimi-k3",                     # fallback 6: Kimi K3 — premium complex coding
     ],
     "executor": [
         "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking — 1M ctx, reasoning xhigh
@@ -152,14 +175,16 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "moonshotai/kimi-k2.6:thinking",          # fallback 4: Kimi K2.6 :thinking — structured + CoT
     ],
     "reviewer": [
-        "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking — factual accuracy + CoT
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — reasoning
-        "moonshotai/kimi-k2.6:thinking",          # fallback 2: Kimi K2.6 :thinking
+        "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking
+        "thinkingmachines/inkling",               # fallback 1: Inkling — multimodal review
+        "deepseek/deepseek-v4-flash:thinking",    # fallback 2: DeepSeek V4 Flash :thinking
+        "moonshotai/kimi-k2.6:thinking",          # fallback 3: Kimi K2.6 :thinking
     ],
     "admin": [
-        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "x-ai/grok-4.3",                          # fallback 1: Grok 4.3 — factual accuracy
-        "moonshotai/kimi-k2.6",                   # fallback 2: Kimi K2.6 — structured output
+        "meta/muse-spark-1.1",                   # primary: Muse Spark — agentic orchestration
+        "x-ai/grok-build-0.1",                    # fallback 1: Grok Build
+        "x-ai/grok-4.3",                          # fallback 2: Grok 4.3
+        "moonshotai/kimi-k2.6",                   # fallback 3: Kimi K2.6
     ],
     "automation": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
@@ -204,7 +229,8 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
         "google/gemini-2.5-flash",                # fallback 1: cheap, strong vision
-        "qwen/qwen2.5-vl-72b-instruct",            # fallback 2: budget VLM
+        "thinkingmachines/inkling",               # fallback 2: Inkling — multimodal audio+image
+        "qwen/qwen2.5-vl-72b-instruct",            # fallback 3: budget VLM
     ],
 }
 
@@ -740,6 +766,8 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # Cross-lab diversity: xAI Grok 4.3 :thinking (xAI lab ≠ Z.ai planner) → DeepSeek :thinking → Grok Build
     "critic": [
         "x-ai/grok-4.3:thinking",
+        "moonshotai/kimi-k3",                     # Kimi K3 — premium review
+        "thinkingmachines/inkling",               # Inkling — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
@@ -764,12 +792,16 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
         "openai/gpt-4.1-nano",
+        "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air — ultra-cheap coding
+        "meituan/longcat-2.0",                    # LongCat 2.0 — budget 1M ctx
         "deepseek/deepseek-v4-flash:thinking",
         "qwen/qwen3-coder-30b-a3b-instruct",
     ],
     # Independent code review: xAI Grok 4.3 :thinking (xAI ≠ Z.ai executor) → DeepSeek :thinking → Grok Build
     "reviewer": [
         "x-ai/grok-4.3:thinking",
+        "moonshotai/kimi-k3",                     # Kimi K3 — premium review
+        "thinkingmachines/inkling",               # Inkling — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
