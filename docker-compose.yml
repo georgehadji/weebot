@@ -13,16 +13,16 @@
 #   docker compose --env-file .env up -d
 
 services:
-  # ── Redis — event bus (opt-in; falls back to in-memory when absent) ──
-  weebot-redis:
-    image: redis:7-alpine
+  # ── Valkey — event bus (opt-in; falls back to in-memory when absent) ──
+  weebot-valkey:
+    image: valkey/valkey:8-alpine
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - valkey_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -49,7 +49,7 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
       - BROWSER_HEADLESS=true
     depends_on:
-      weebot-redis:
+      weebot-valkey:
         condition: service_healthy
     volumes:
       - weebot_data:/data
@@ -100,4 +100,4 @@ services:
 
 volumes:
   weebot_data:
-  redis_data:
+  valkey_data:
