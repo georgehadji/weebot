@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from weebot.application.ports.memory_port import MemoryPort
+from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 from weebot.infrastructure.persistence.filesystem_memory import (
     FileSystemMemoryAdapter,
     DELIMITER,
@@ -94,7 +94,7 @@ class PersistentMemoryTool(BaseTool):
             import importlib as _il
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
-            memory = _c.get(MemoryPort)
+            memory = _c.get(FileSystemMemoryAdapter)
         self._memory = memory
 
     async def execute(

@@ -28,11 +28,9 @@ from weebot.application.cqrs.behaviors.logging import LoggingBehavior  # noqa: E
 from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noqa: E402
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
 from weebot.application.ports.audit_port import AuditPort  # noqa: E402
-from weebot.application.ports.backend_port import BackendPort  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
-from weebot.application.ports.memory_port import MemoryPort  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
 from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
@@ -130,7 +128,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("personality", self._create_personality)
         self.register("structured_logger", lambda: self._create_structured_logger())
         self.register(AuditPort, lambda: self._create_audit_service())
-        self.register(MemoryPort, lambda: self._create_memory_adapter())
+        from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
+        self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
         from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
         self.register(ConfigAdapter, lambda: self._create_config_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
@@ -150,7 +149,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("idea_gate", self._create_idea_gate)
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
-        self.register(BackendPort, self._create_backend)
+        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
+        self.register(SandboxBackendAdapter, self._create_backend)
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
         self.register(PrometheusMetricsAdapter, self._create_metrics_port)
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
