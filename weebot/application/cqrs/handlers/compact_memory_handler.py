@@ -3,6 +3,11 @@
 Split from weebot/application/cqrs/handlers.py during architecture remediation.
 """
 from __future__ import annotations
+import warnings
+warnings.warn(
+    f"{__name__} is deprecated. Use direct service calls.",
+    DeprecationWarning, stacklevel=2,
+)
 
 from typing import TYPE_CHECKING, Any, Optional
 

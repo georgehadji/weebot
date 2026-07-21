@@ -1,8 +1,14 @@
 """ArchiveSessionHandler — handles ArchiveSession command.
 
-Split from weebot/application/cqrs/handlers.py during architecture remediation.
+DEPRECATED: Will be collapsed into direct StateRepositoryPort call.
+Use state_repo.update_session_status(session_id, SessionStatus.ARCHIVED) instead.
 """
 from __future__ import annotations
+import warnings
+warnings.warn(
+    "ArchiveSessionHandler is deprecated. Call state_repo directly.",
+    DeprecationWarning, stacklevel=2,
+)
 
 from typing import TYPE_CHECKING, Any, Optional
 
