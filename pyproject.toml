@@ -43,9 +43,5 @@ exclude_dirs = [".venv", "Output", "weebot/GitNexus-main"]
 # B110: try-except-pass  — require logging in all except blocks
 tests = ["B110"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
+# Pytest configuration lives in pytest.ini (which takes precedence over this
+# file). Kept there as the single source of truth to avoid split config.
