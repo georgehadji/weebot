@@ -16,8 +16,15 @@ from typing import AsyncGenerator
 #
 # override=True: .env values take priority over stale system environment
 # variables (e.g. an old OPENROUTER_API_KEY persisted in the OS profile).
-from dotenv import load_dotenv
-load_dotenv(override=True)
+#
+# Skipped under pytest (PYTEST_VERSION is set automatically by pytest >=7.2
+# before collection starts): this module is imported at collection time by
+# tests exercising create_app()/CORS/middleware, and override=True would
+# otherwise permanently clobber a test's clean os.environ with the repo's
+# .env for the rest of the session — see cli/main.py for the same guard.
+if "PYTEST_VERSION" not in os.environ:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware

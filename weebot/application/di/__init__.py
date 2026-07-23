@@ -198,6 +198,8 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("tool_registry", self._create_tool_registry)
         self.register("mcp_bridge", self._create_mcp_bridge)
         self.register("native_tool_selector", self._create_native_tool_selector)
+        # Knowledge graph — lazy bindings; nothing touches the DB until used.
+        self.configure_knowledge_graph(db_path=db_path)
         # Deployment-time learning (Memento-Skills; all flags default OFF)
         self.configure_learning(db_path=db_path)
 
@@ -222,6 +224,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             state_repo=self.get(StateRepositoryPort),
             skill_prompt=kw.get("skill_prompt"),
             tracing_port=self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None,
+            knowledge_graph=(
+                self._maybe_get_str("knowledge_graph")
+                if self._is_kg_extraction_enabled() else None
+            ),
         ))
 
         # ChatFlow — lightweight conversational flow
@@ -307,6 +313,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
     def _is_tracing_enabled() -> bool:
         from weebot.config.feature_flags import OTEL_TRACING_ENABLED
         return OTEL_TRACING_ENABLED
+
+    @staticmethod
+    def _is_kg_extraction_enabled() -> bool:
+        from weebot.config.feature_flags import KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
+        return KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
 
     def _maybe_get(self, port_type: type) -> Any | None:
         """Return registered instance or None if not bound."""

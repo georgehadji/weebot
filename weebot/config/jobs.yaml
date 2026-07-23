@@ -3,24 +3,6 @@
 # and supports catch-up on restart.
 
 jobs:
-  - job_id: knowledge_graph_consolidation
-    name: "Knowledge Graph Consolidation"
-    description: "Prune stale nodes, merge duplicate entities, recalculate confidence scores"
-    trigger_type: "interval"
-    trigger_config:
-      hours: 1
-    callable_name: "kg_consolidation"
-    enabled: true
-
-  - job_id: opportunity_scan
-    name: "Opportunity Scan"
-    description: "Query KG for gaps and FTS5 for recurring patterns, rank opportunities"
-    trigger_type: "interval"
-    trigger_config:
-      hours: 6
-    callable_name: "opportunity_scan"
-    enabled: true
-
   - job_id: skill_promotion_check
     name: "Skill Promotion Check"
     description: "Evaluate candidate skills against CoVe + harness thresholds, promote passing ones to trusted"
@@ -28,7 +10,10 @@ jobs:
     trigger_config:
       hours: 24
     callable_name: "skill_promotion_check"
-    enabled: false  # Enable after CoVe and harness scorer are initialized in container
+    # Disabled: SkillPromotionGate needs a real ChainOfVerificationService and
+    # HarnessMetricScorer.  Register a "skill_promotion_check" callable in
+    # scheduling/default_jobs.py that supplies both before enabling.
+    enabled: false
 
   - job_id: memory_salience_sweep
     name: "Memory Salience Sweep"
@@ -66,15 +51,6 @@ jobs:
     callable_name: "integrity_check"
     enabled: true
 
-  - job_id: memory_cleanup
-    name: "Memory Cleanup"
-    description: "FTS5 event cleanup, old session archival (>90 days)"
-    trigger_type: "interval"
-    trigger_config:
-      hours: 168  # weekly
-    callable_name: "memory_cleanup"
-    enabled: true
-
   # ── Self-Harness (Phase 7) ─────────────────────────────────────────────
   - job_id: self_harness_weekly
     name: "Self-Harness Weekly Evolution"
@@ -84,4 +60,7 @@ jobs:
       cron_expression: "0 3 * * 0"  # Sunday 3 AM
       timezone: "UTC"
     callable_name: "self_harness_evolve"
-    enabled: true
+    # Disabled: this runs a full evolution loop against four cascade models and
+    # is expensive. It also has no registered callable yet — register
+    # "self_harness_evolve" in scheduling/default_jobs.py before enabling.
+    enabled: false

@@ -177,7 +177,7 @@ class SearchSessionsHandler(QueryHandler):
     async def handle(self, query: SearchSessionsQuery) -> QueryResult:
         try:
             sessions = await self._state_repo.list_sessions(
-                user_id=query.user_id,
+                user_id=query.user_id, load_events=True,
             )
 
             query_lower = query.query.lower()
@@ -226,7 +226,7 @@ class GetSimilarSessionsHandler(QueryHandler):
             if target is None:
                 return QueryResult.not_found("Session")
 
-            all_sessions = await self._state_repo.list_sessions()
+            all_sessions = await self._state_repo.list_sessions(load_events=True)
 
             target_event_types = {type(e).__name__ for e in target.events}
             scored = []

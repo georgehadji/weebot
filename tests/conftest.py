@@ -9,7 +9,34 @@ import os
 # test module imports browser_use, so this runs at conftest import time.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
+import logging
+
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_weebot_logger_level():
+    """Un-pin the "weebot" logger's level before and after every test.
+
+    ``StructuredLogger("weebot")`` (weebot/core/structured_logger.py) calls
+    ``logging.getLogger("weebot").setLevel(logging.INFO)``. DI's
+    ``configure_defaults()`` builds one of these lazily the first time any
+    test resolves the ``"structured_logger"`` service. Loggers are global,
+    process-wide singletons with no per-test cleanup, so once any test does
+    that, "weebot" keeps an explicit INFO level for the rest of the session —
+    and since Python resolves a logger's *effective* level by walking up to
+    the nearest ancestor with an explicit level, every descendant logger
+    (e.g. ``weebot.config.secret_accessor``) is silently capped at INFO too.
+    A later test's own ``caplog.set_level(logging.DEBUG)`` only sets the
+    root logger's level, so it can't override this — DEBUG records under
+    ``weebot.*`` get dropped before they're even created, and caplog sees
+    nothing (reproduced in isolation: constructing one ``StructuredLogger
+    ("weebot")`` is enough to break every subsequent DEBUG-level
+    ``weebot.*`` caplog assertion for the rest of the run).
+    """
+    logging.getLogger("weebot").setLevel(logging.NOTSET)
+    yield
+    logging.getLogger("weebot").setLevel(logging.NOTSET)
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock

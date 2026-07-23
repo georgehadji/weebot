@@ -607,6 +607,8 @@ def test_no_blocking_calls_in_async():
         "rtk_provider.py",         # legacy adapter (ADR-004)
         "mcp_client.py",           # legacy module (ADR-004)
         "_capabilities.py",       # git integrity check (tracked: ARCHITECTURE_9_PLAN.md)
+        "default_jobs.py",       # git integrity check job, moved from _capabilities.py;
+                                  # subprocess.run is wrapped in asyncio.to_thread (non-blocking)
     }
     violations = [
         v for v in violations
