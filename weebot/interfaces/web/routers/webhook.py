@@ -126,7 +126,7 @@ async def webhook_run(
 
     # Determine tool role based on exec-tools setting
     _settings = WeebotSettings()
-    tool_role = "admin" if _settings.webhook_allow_exec_tools else "operator"
+    tool_role = "admin" if _settings.webhook_allow_exec_tools else "webhook"
     tools = await build_tools(role=tool_role)
     flow = create_flow(
         flow_type="plan_act",

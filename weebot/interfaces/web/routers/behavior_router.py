@@ -235,13 +235,36 @@ async def broadcast_event(event: BehaviorEvent):
 @router.websocket("/ws")
 async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
-    # WebSocket authentication check
+    # WebSocket authentication check — three-tier: subprotocol → header → query param
     from weebot.config.settings import WeebotSettings
     _ws_settings = WeebotSettings()
     if _ws_settings.weebot_api_key:
-        token = websocket.query_params.get("token")
-        import hmac as _hmac
-        if not _hmac.compare_digest(token or "", _ws_settings.weebot_api_key):
+        # 1. Subprotocol (preferred — works in browsers)
+        protocols = websocket.headers.get("sec-websocket-protocol", "")
+        matched = False
+        for proto in [p.strip() for p in protocols.split(",")]:
+            if proto.startswith("bearer."):
+                token = proto[len("bearer."):]
+                import hmac as _hmac
+                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
+                    matched = True
+                    break
+        # 2. Authorization header (for non-browser clients)
+        if not matched:
+            auth_header = websocket.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[len("Bearer "):]
+                import hmac as _hmac
+                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
+                    matched = True
+        # 3. Query parameter (deprecated — kept for compat)
+        if not matched:
+            token = websocket.query_params.get("token")
+            if token:
+                import hmac as _hmac
+                if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
+                    matched = True
+        if not matched:
             await websocket.close(code=4001, reason="Unauthorized")
             return
 
