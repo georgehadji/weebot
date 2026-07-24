@@ -51,15 +51,26 @@ class PathValidator:
         re.compile(r"[~`$|&;<>]"),  # Shell metacharacters
     ]
     
-    # Allowed file extensions for write operations
-    ALLOWED_EXTENSIONS: set[str] = {
-        # Source and config
+    # Denied basenames — checked for ALL operations (read and write),
+    # regardless of suffix rules.  Basename match beats extension allowlist.
+    DENIED_BASENAMES: set[str] = {
+        ".env", ".env.local", ".env.production", ".env.development",
+        ".env.staging", ".env.test",
+        "id_rsa", "id_ed25519", "id_dsa", "id_ecdsa",
+    }
+
+    # Executable extensions — blocked for file creation (must use bash tool instead)
+    EXECUTABLE_EXTENSIONS: set[str] = {
+        ".ps1", ".bat", ".cmd", ".sh", ".exe", ".dll", ".com",
+        ".msi", ".scr", ".vbs", ".js", ".wsf",
+    }
+
+    # Extensions allowed for file CREATION (read-operations still use ALLOWED_EXTENSIONS)
+    ALLOWED_CREATE_EXTENSIONS: set[str] = {
         ".txt", ".md", ".py", ".pyi", ".json", ".yaml", ".yml",
         ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".xml", ".csv",
-        ".log", ".ini", ".cfg", ".conf", ".sql", ".sh",
-        ".ps1", ".bat", ".cmd",
-        # Scaffolding and tooling files
-        ".toml", ".lock", ".env", ".example",
+        ".log", ".ini", ".cfg", ".conf", ".sql",
+        ".toml", ".lock", ".example",
         ".gitignore", ".gitkeep", ".gitattributes",
         ".dockerignore", ".editorconfig",
         ".prettierrc", ".eslintrc",
@@ -67,6 +78,11 @@ class PathValidator:
         ".nvmrc", ".node-version",
         ".rst", ".tex",       # documentation
         ".tf", ".tfvars",     # Terraform
+    }
+
+    # Allowed file extensions for ALL operations (read and write)
+    ALLOWED_EXTENSIONS: set[str] = ALLOWED_CREATE_EXTENSIONS | {
+        ".sh", ".ps1", ".bat", ".cmd",  # executable — read/edit allowed, no create
     }
     
     def __init__(self, workspace_root: Path | None = None) -> None:
@@ -165,14 +181,30 @@ class PathValidator:
                         matched_pattern=pattern.pattern
                     )
         
+        # Check for denied basenames (applies to ALL operations)
+        if input_path.name in self.DENIED_BASENAMES:
+            return ValidationReport(
+                result=ValidationResult.DANGEROUS_PATTERN,
+                message=f"Access denied: {input_path.name} is a protected file",
+                matched_pattern=input_path.name,
+            )
+
         # Check file extension if it's a file path
-        if input_path.suffix and not allow_create:
-            if input_path.suffix.lower() not in self.ALLOWED_EXTENSIONS:
-                return ValidationReport(
-                    result=ValidationResult.DANGEROUS_PATTERN,
-                    message=f"File extension not allowed: {input_path.suffix}",
-                    sanitized_value=str(input_path.with_suffix(".txt"))
-                )
+        if input_path.suffix:
+            if allow_create:
+                if input_path.suffix.lower() not in self.ALLOWED_CREATE_EXTENSIONS:
+                    return ValidationReport(
+                        result=ValidationResult.DANGEROUS_PATTERN,
+                        message=f"File extension not allowed for creation: {input_path.suffix}",
+                        sanitized_value=str(input_path.with_suffix(".txt")),
+                    )
+            else:
+                if input_path.suffix.lower() not in self.ALLOWED_EXTENSIONS:
+                    return ValidationReport(
+                        result=ValidationResult.DANGEROUS_PATTERN,
+                        message=f"File extension not allowed: {input_path.suffix}",
+                        sanitized_value=str(input_path.with_suffix(".txt")),
+                    )
         
         return ValidationReport(
             result=ValidationResult.VALID,

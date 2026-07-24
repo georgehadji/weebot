@@ -42,22 +42,60 @@ class ApprovalResult:
     reason: str = ""
 
 
+# Destructive PowerShell commands that always require confirmation
+_DESTRUCTIVE_KEYWORDS: set[str] = {
+    "remove-item", "del", "rm", "erase", "rd", "rmdir",
+    "stop-process", "kill", "shutdown", "restart-computer",
+    "format", "clear-content", "set-content",
+    "move-item", "rename-item", "copy-item",
+}
+
 # Built-in defaults: destructive → ask, format → deny, rest → auto
 _DEFAULT_RULES: tuple[CommandRule, ...] = (
     # Allow Remove-Item / python writes inside the Output\ working directory
     # (checked before the blanket remove-item rule because longest-match wins)
     CommandRule(
-        r"remove-item\s+['\"]?[A-Za-z]:[\\\/].*[Oo]utput[\\\/]",
+        # Anchored to the whole command so chained commands don't match
+        r"^remove-item\s+['\"]?[A-Za-z]:[\\\/][^;&|]*[Oo]utput[\\\/][^;&|]*$",
         ApprovalMode.AUTO_APPROVE, is_regex=True,
     ),
     CommandRule(
         r"open\s*\(\s*['\"].*[Oo]utput[\\\/].*['\"],\s*['\"]w",
         ApprovalMode.AUTO_APPROVE, is_regex=True,
     ),
+    # Disk formatting — always denied
     CommandRule(r"\bformat\s+[a-zA-Z]:", ApprovalMode.DENY, is_regex=True,
                 undo_hint="Formatting is irreversible. Use Diskpart carefully."),
     CommandRule(r"\bFormat-Volume\b", ApprovalMode.DENY, is_regex=True,
                 undo_hint="Formatting is irreversible. Use Diskpart carefully."),
+    # Registry editing — always ask
+    CommandRule(r"\breg\s+(delete|add)", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Registry changes are system-wide and may require a reboot."),
+    # User/group management — always ask
+    CommandRule(r"\bnet\s+(user|localgroup)", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="User/group changes affect system security."),
+    # ACL/permission changes — always ask
+    CommandRule(r"\bicacls\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="ACL changes may lock out users or expose sensitive files."),
+    CommandRule(r"\btakeown\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Taking ownership changes file access control."),
+    # Boot configuration — always ask
+    CommandRule(r"\bbcdedit\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Boot configuration changes can prevent the system from starting."),
+    # Disk partition management — always ask
+    CommandRule(r"\bdiskpart\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Disk partition changes may cause data loss."),
+    # Scheduled tasks — always ask
+    CommandRule(r"\bschtasks\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Scheduled tasks can run with system privileges."),
+    # Environment variable injection via Set-Content
+    CommandRule(r"\bSet-Content\b.*\$env:", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Modifying environment variables via Set-Content affects process behavior."),
+    # Out-file targeting absolute paths outside workspace
+    CommandRule(r"\bout-file\b.*[A-Za-z]:[\\\/](?!.*[Oo]utput[\\\/])",
+                ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Writing files outside the workspace may affect system state."),
+    # Existing rules
     CommandRule("remove-item", ApprovalMode.ALWAYS_ASK,
                 undo_hint="Move to Recycle Bin first: Remove-Item -Confirm"),
     CommandRule("del ", ApprovalMode.ALWAYS_ASK,
@@ -68,6 +106,13 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
                 undo_hint="Note the PID before stopping in case restart is needed."),
     CommandRule("kill", ApprovalMode.ALWAYS_ASK,
                 undo_hint="Save PID/name before killing."),
+    # Drive erase / wipe commands
+    CommandRule(r"\brd\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Removing a directory via rd is permanent. Use Remove-Item -Confirm."),
+    CommandRule(r"\berase\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="The erase command permanently deletes files."),
+    CommandRule(r"\brmdir\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
+                undo_hint="Removing a directory is permanent. Use Remove-Item -Confirm."),
 )
 
 
@@ -131,6 +176,24 @@ class ExecApprovalPolicy:
             else:
                 if rule.pattern.lower() in cmd_lower:
                     matches.append(rule)
+
+        # ── Defense-in-depth: chained destructive commands ──
+        # Any command containing a command separator (;, &&, |) AND a
+        # destructive keyword is bumped to ALWAYS_ASK regardless of the
+        # longest-match result.  This prevents Output-folder bypass attacks
+        # where a safe-looking rule matches a prefix before a chained
+        # destructive action.
+        _has_separator = bool(re.search(r'[;&|]', command))
+        if _has_separator:
+            for kw in _DESTRUCTIVE_KEYWORDS:
+                if kw in cmd_lower:
+                    return ApprovalResult(
+                        command=command,
+                        approved=True,
+                        requires_confirmation=True,
+                        undo_hint="Chained destructive command detected.",
+                        reason=f"Command contains separator with destructive keyword '{kw}'.",
+                    )
 
         if matches:
             # Most specific = longest pattern

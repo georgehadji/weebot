@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,78 @@ from weebot.application.ports.sandbox_port import (
     SandboxResult,
     SandboxType,
 )
+
+
+# ---------------------------------------------------------------------------
+# Child environment builder
+# ---------------------------------------------------------------------------
+
+# Allowlisted environment variables for child processes.
+# Agents running inside the sandbox should NOT inherit API keys or other
+# secrets from the parent process.  Legitimate values must be declared
+# via SandboxConfig.env_vars.
+_ALLOWLISTED_ENV_VARS: set[str] = {
+    "PATH",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "PROCESSOR_ARCHITECTURE",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "PATHEXT",
+    "PYTHONPATH",  # allow python path config
+}
+
+
+def _build_child_env(config: SandboxConfig, extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Build a child process environment from a minimal allowlist.
+
+    Starts from a deny-by-default allowlist (``_ALLOWLISTED_ENV_VARS``),
+    adds any ``config.env_vars``, then overlays *extra* on top.  This
+    prevents API keys and other secrets from leaking into sandboxed
+    child processes.
+
+    When ``config.allow_network`` is False, sets proxy environment
+    variables to a dead address as a best-effort network block
+    (raw sockets bypass this — full enforcement requires Docker sandbox).
+
+    Args:
+        config: Sandbox configuration.
+        extra: Optional caller-supplied env vars (e.g. from execute_python).
+
+    Returns:
+        A dict suitable for passing as ``env`` to ``asyncio.create_subprocess_exec``.
+    """
+    env: dict[str, str] = {}
+    for key in _ALLOWLISTED_ENV_VARS:
+        val = os.environ.get(key)
+        if val is not None:
+            env[key] = val
+
+    # Config-declared env_vars override allowlist defaults
+    env.update(config.env_vars)
+
+    # Caller-supplied vars overlay everything
+    if extra:
+        env.update(extra)
+
+    # Network gating: best-effort proxy blockade when network is disabled
+    if not config.allow_network:
+        env["HTTP_PROXY"] = "http://127.0.0.1:9"
+        env["HTTPS_PROXY"] = "http://127.0.0.1:9"
+        env["ALL_PROXY"] = "http://127.0.0.1:9"
+        env["NO_PROXY"] = ""
+        # Also set lowercase variants for tools that check those
+        env["http_proxy"] = "http://127.0.0.1:9"
+        env["https_proxy"] = "http://127.0.0.1:9"
+        env["all_proxy"] = "http://127.0.0.1:9"
+        env["no_proxy"] = ""
+
+    return env
 
 
 # ---------------------------------------------------------------------------
@@ -47,17 +120,12 @@ def _psutil_memory_monitor(
 
 class NativeWindowsSandbox(SandboxPort):
     """Sandbox implementation using native Windows process execution.
-    
-    This is the default sandbox on Windows systems. It provides:
-    - Timeout enforcement
-    - Memory limits (with psutil)
-    - Output truncation
-    - PowerShell and CMD support
-    
-    Example:
-        sandbox = NativeWindowsSandbox()
-        result = await sandbox.execute(["python", "-c", "print('hello')"])
-        print(result.stdout)
+
+    **SECURITY NOTE:** This is a resource-limit wrapper, not a security
+    boundary.  It enforces timeouts, memory limits, and output truncation,
+    but it does NOT provide full process isolation (the child shares the
+    parent's user account and can access the same filesystem).
+    For true isolation, use ``DockerLinuxSandbox``.
     """
     
     _TRUNCATION_SUFFIX = b"...[truncated]"
@@ -88,7 +156,12 @@ class NativeWindowsSandbox(SandboxPort):
         return sys.platform == "win32" or shutil.which("powershell") is not None
     
     def get_capabilities(self) -> set[SandboxCapability]:
-        """Return capabilities supported by native Windows execution."""
+        """Return capabilities supported by native Windows execution.
+
+        NOTE: ``NETWORK_ACCESS`` reflects the configured value, not actual
+        enforcement level.  Network blocking is best-effort (proxy vars only);
+        raw sockets may still work.  Full enforcement requires Docker sandbox.
+        """
         capabilities = {
             SandboxCapability.POWERSHELL,
             SandboxCapability.FILE_SYSTEM,
@@ -139,10 +212,8 @@ class NativeWindowsSandbox(SandboxPort):
                 sandbox_type=self.sandbox_type,
             )
         
-        # Merge environment variables
-        merged_env = dict(self._config.env_vars)
-        if env:
-            merged_env.update(env)
+        # Build child environment from minimal allowlist (never inherit secrets)
+        merged_env = _build_child_env(self._config, env)
         
         # Determine working directory
         working_dir = cwd or self._config.working_dir

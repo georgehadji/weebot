@@ -67,15 +67,24 @@ class WhatsAppAdapter(GatewayAdapter):
     def verify_signature(self, body: bytes, signature: str) -> bool:
         """Validate Meta's ``X-Hub-Signature-256`` header on incoming webhooks.
 
-        Returns ``True`` (unverified) if no app secret is configured, since
-        signature verification is optional for the WhatsApp Cloud API.
+        Returns ``True`` only when the signature matches the app secret HMAC.
+        When no app secret is configured, returns ``False`` (fail closed) unless
+        ``WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS`` is explicitly enabled for local dev.
         """
+        from weebot.config.settings import WeebotSettings
+        _settings = WeebotSettings()
         if not self._app_secret:
+            if _settings.whatsapp_allow_unsigned_webhooks:
+                logger.warning(
+                    "WHATSAPP_APP_SECRET not configured — accepting unsigned webhook "
+                    "(WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS is enabled, dev mode only)"
+                )
+                return True
             logger.warning(
-                "WHATSAPP_APP_SECRET not configured — accepting webhook without "
-                "signature verification"
+                "WHATSAPP_APP_SECRET not configured — rejecting webhook. "
+                "Set WHATSAPP_APP_SECRET or WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS=true (dev only)."
             )
-            return True
+            return False
         if not signature.startswith("sha256="):
             return False
         expected = "sha256=" + hmac.new(

@@ -15,6 +15,8 @@ from weebot.interfaces.web.error_codes import ErrorCode
 
 logger = logging.getLogger(__name__)
 
+_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
 
 def _enforce_ownership() -> bool:
     """Check the WEEBOT_ENFORCE_SESSION_OWNERSHIP feature flag."""
@@ -78,3 +80,20 @@ async def verify_session_ownership(
         detail="Session not found",
         headers={"X-Error-Code": ErrorCode.SESSION_NOT_FOUND},
     )
+
+
+async def require_mutation_identity(request: Request) -> None:
+    """Reject mutating requests (POST/DELETE/PUT) from anonymous non-loopback callers.
+
+    Intended for use as a FastAPI dependency on mutating endpoints. Loopback
+    (127.0.0.1, ::1) retains today's behaviour for the single-user desktop case.
+    """
+    current_user = get_current_user_id(request)
+    if current_user == "anonymous":
+        client_host = request.client.host if request.client else ""
+        if client_host not in _LOOPBACK:
+            raise HTTPException(
+                status_code=403,
+                detail="Mutating requests require authentication",
+                headers={"X-Error-Code": ErrorCode.AUTHENTICATION_REQUIRED},
+            )

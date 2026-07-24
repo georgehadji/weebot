@@ -7,10 +7,11 @@ synchronously.
 from __future__ import annotations
 
 import asyncio
+import hmac as _hmac
 import logging
 from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from weebot.application.di import Container
@@ -26,6 +27,49 @@ from weebot.interfaces.gateways.base import GatewayMessage, GatewayResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webhook", tags=["webhook"])
+
+_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+
+async def require_webhook_auth(request: Request) -> None:
+    """FastAPI dependency: authenticate webhook requests.
+
+    Priority:
+    1. ``webhook_api_key`` from settings → require ``X-Webhook-Key`` header.
+    2. Global ``weebot_api_key`` → require ``X-API-Key`` header (existing auth).
+    3. Neither → allow loopback only (local dev).
+    """
+    from weebot.config.settings import WeebotSettings
+    _settings = WeebotSettings()
+
+    if _settings.webhook_api_key:
+        header_key = request.headers.get("X-Webhook-Key", "")
+        if not _hmac.compare_digest(header_key, _settings.webhook_api_key):
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized — provide valid X-Webhook-Key header",
+                headers={"X-Error-Code": "UNAUTHORIZED"},
+            )
+        return
+
+    if _settings.weebot_api_key:
+        header_key = request.headers.get("X-API-Key", "")
+        if not _hmac.compare_digest(header_key, _settings.weebot_api_key):
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized — provide valid X-API-Key header",
+                headers={"X-Error-Code": "UNAUTHORIZED"},
+            )
+        return
+
+    # No key configured — only allow loopback
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOOPBACK:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized — no webhook API key configured",
+            headers={"X-Error-Code": "UNAUTHORIZED"},
+        )
 
 
 class WebhookRequest(BaseModel):
@@ -44,13 +88,19 @@ class WebhookResponse(BaseModel):
 
 
 @router.post("/run")
-async def webhook_run(body: WebhookRequest, request: Request) -> WebhookResponse:
+async def webhook_run(
+    body: WebhookRequest,
+    request: Request,
+    _auth: None = Depends(require_webhook_auth),
+) -> WebhookResponse:
     """Execute a one-shot prompt through PlanActFlow and return the result.
 
     This is the primary webhook endpoint — POST a message, get a response.
     Sessions are persisted so follow-up messages can reference the same
     session_id for continuation.
     """
+    from weebot.config.settings import WeebotSettings
+
     container: Optional[Container] = getattr(request.app.state, "container", None)
     if container is None:
         raise HTTPException(status_code=503, detail="DI container not initialized")
@@ -74,8 +124,10 @@ async def webhook_run(body: WebhookRequest, request: Request) -> WebhookResponse
             id=session_id, user_id="webhook", agent_id="webhook-agent",
         )
 
-    # Build tools and flow
-    tools = await build_tools(role="admin")
+    # Determine tool role based on exec-tools setting
+    _settings = WeebotSettings()
+    tool_role = "admin" if _settings.webhook_allow_exec_tools else "operator"
+    tools = await build_tools(role=tool_role)
     flow = create_flow(
         flow_type="plan_act",
         session=session,

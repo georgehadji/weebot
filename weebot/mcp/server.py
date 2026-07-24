@@ -53,8 +53,13 @@ class _APIKeyTokenVerifier:
         self._expected = api_key
 
     async def verify_token(self, token: str) -> bool:
-        """Return True if *token* matches the configured API key."""
-        return token == self._expected
+        """Return True if *token* matches the configured API key.
+
+        Uses hmac.compare_digest for constant-time comparison to prevent
+        timing side-channel attacks on token validation.
+        """
+        import hmac as _hmac
+        return _hmac.compare_digest(token, self._expected)
 
 
 _SERVER_INSTRUCTIONS = (

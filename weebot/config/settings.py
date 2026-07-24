@@ -89,6 +89,22 @@ class WeebotSettings(BaseSettings):
 
     # Web API Auth
     weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
+    web_require_auth: bool = Field(
+        default=True,
+        description="When True and no weebot_api_key is set, refuse non-loopback requests.",
+    )
+    web_host: str = Field(
+        default="127.0.0.1",
+        description="Web API bind address (default loopback for security).",
+    )
+    webhook_api_key: str | None = Field(
+        default=None,
+        description="Independent API key for the /api/webhook/run endpoint.",
+    )
+    webhook_allow_exec_tools: bool = Field(
+        default=False,
+        description="When True, webhook endpoint may use exec tools (bash, powershell, python_execute).",
+    )
 
     # Discord (optional)
     discord_public_key: str | None = None      # env: DISCORD_PUBLIC_KEY
@@ -110,6 +126,10 @@ class WeebotSettings(BaseSettings):
     whatsapp_business_phone_number_id: str | None = None   # env: WHATSAPP_BUSINESS_PHONE_NUMBER_ID
     whatsapp_webhook_verify_token: str | None = None       # env: WHATSAPP_WEBHOOK_VERIFY_TOKEN
     whatsapp_app_secret: str | None = None                 # env: WHATSAPP_APP_SECRET (optional, enables signature verification)
+    whatsapp_allow_unsigned_webhooks: bool = Field(
+        default=False,
+        description="Allow unsigned WhatsApp webhooks (dev only).",
+    )
 
     # Signal gateway (signal-cli REST API — requires a local signal-cli instance)
     signal_cli_rest_url: str = "http://localhost:8080"     # env: SIGNAL_CLI_REST_URL

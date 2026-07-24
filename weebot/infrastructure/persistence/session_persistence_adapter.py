@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -97,7 +98,9 @@ class SessionPersistenceAdapter:
         so an operator can diagnose and replay.
         """
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        filename = f"{session.id}_{timestamp}.json"
+        # Sanitize session.id for filesystem use (defense in depth)
+        safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", session.id)
+        filename = f"{safe_id}_{timestamp}.json"
         filepath = self._dead_letter_dir / filename
 
         payload = {

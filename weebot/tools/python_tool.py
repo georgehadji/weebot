@@ -138,6 +138,16 @@ class PythonExecuteTool(BaseTool):
             )
 
         effective_timeout = timeout if timeout is not None else self._default_timeout
+        # Clamp timeout: floor at 1.0, cap at max_tool_timeout or 300.0
+        try:
+            effective_timeout = float(effective_timeout)
+        except (TypeError, ValueError):
+            effective_timeout = self._default_timeout
+        effective_timeout = max(1.0, effective_timeout)
+        _max_timeout = 300.0
+        if self._tool_config and self._tool_config.max_tool_timeout:
+            _max_timeout = float(self._tool_config.max_tool_timeout)
+        effective_timeout = min(effective_timeout, _max_timeout)
 
         # --- Defense-in-depth: BashGuard catches shell injection ---
         from weebot.core.bash_guard import RiskLevel as BashRiskLevel

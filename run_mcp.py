@@ -91,6 +91,18 @@ def main() -> None:
         )
         sys.exit(2)
 
+    # When --allow-remote is used, an API key is mandatory
+    if args.allow_remote:
+        from weebot.config.secret_accessor import SecretAccessor
+        _mcp_key = SecretAccessor.get("WEEBOT_MCP_API_KEY")
+        if not _mcp_key:
+            print(
+                "ERROR: --allow-remote requires WEEBOT_MCP_API_KEY to be set. "
+                "Remote SSE binding without authentication is not allowed.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
     server = _build_server()
 
     if args.transport == "sse":

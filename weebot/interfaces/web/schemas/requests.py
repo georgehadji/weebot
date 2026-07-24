@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+_SESSION_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
 
 class CreateSessionRequest(BaseModel):
@@ -12,7 +15,11 @@ class CreateSessionRequest(BaseModel):
     user_id: str = Field(default="web-user", description="User identifier")
     agent_id: str = Field(default="weebot-web", description="Agent identifier")
     model: Optional[str] = Field(default=None, description="LLM model to use")
-    session_id: Optional[str] = Field(default=None, description="Optional custom session ID")
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Optional custom session ID",
+        pattern=_SESSION_ID_PATTERN,
+    )
     ponytail_mode: Optional[str] = Field(
         default=None,
         description="Optional Ponytail lazy-senior-dev mode: off | lite | full | ultra",

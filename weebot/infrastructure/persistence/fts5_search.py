@@ -8,9 +8,34 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_fts_query(q: str) -> str:
+    """Sanitize an FTS5 query to neutralize operators while preserving literal match.
+
+    Wraps each whitespace-separated token in double quotes (escaping any
+    embedded double quotes by doubling them), which neutralises FTS5 operators
+    (NEAR, AND/OR, column filters, ``*``) and returns a literal-token query.
+
+    Args:
+        q: Raw user-supplied query string.
+
+    Returns:
+        Sanitized query safe for FTS5 MATCH.
+    """
+    tokens = q.strip().split()
+    if not tokens:
+        return ""
+    quoted = []
+    for token in tokens:
+        # Escape embedded double quotes by doubling them (FTS5 convention)
+        safe = token.replace('"', '""')
+        quoted.append(f'"{safe}"')
+    return " AND ".join(quoted)
 
 _FTS5_CREATE = """
 CREATE VIRTUAL TABLE IF NOT EXISTS event_fts USING fts5(
@@ -78,7 +103,7 @@ async def search_events(
     Returns:
         List of {session_id, event_type, summary, content, score}.
     """
-    rows = await pool.execute_read(_FTS5_SEARCH, (query, limit))
+    rows = await pool.execute_read(_FTS5_SEARCH, (_sanitize_fts_query(query), limit))
     return [
         {
             "session_id": r["session_id"],

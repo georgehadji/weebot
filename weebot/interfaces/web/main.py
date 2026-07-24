@@ -362,9 +362,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # API Key authentication middleware (optional)
+    # API Key authentication middleware (optional) + fail-closed default
     from weebot.config.settings import WeebotSettings
     _ws = WeebotSettings()
+
     if _ws.weebot_api_key:
 
         class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -387,8 +388,44 @@ def create_app() -> FastAPI:
 
         app.add_middleware(APIKeyMiddleware)
         logger.info("API key authentication enabled")
-    else:
-        logger.info("API key authentication disabled (set WEEBOT_API_KEY to enable)")
+    elif _ws.web_require_auth:
+
+        class FailClosedMiddleware(BaseHTTPMiddleware):
+            """Refuse non-loopback requests when no API key is configured.
+
+            Loopback (127.0.0.1, ::1) is always allowed so local dev and the
+            Next.js dev proxy keep working without a key.  Remote requests
+            receive a 503 with a remediation hint.
+            """
+
+            _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+            async def dispatch(self, request: Request, call_next):
+                # Always allow health/liveness probes and WebSocket test UI
+                if request.url.path in ("/api/health", "/api/live", "/", "/api/prometheus"):
+                    return await call_next(request)
+
+                client_host = request.client.host if request.client else ""
+                if client_host not in self._LOOPBACK:
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "detail": (
+                                "Service unavailable for remote requests: no API key configured. "
+                                "Set WEEBOT_API_KEY to enable remote access, or "
+                                "set WEEBOT_WEB_REQUIRE_AUTH=false to disable this check "
+                                "(not recommended for production deployments)."
+                            ),
+                        },
+                        headers={"X-Error-Code": "AUTH_REQUIRED"},
+                    )
+                return await call_next(request)
+
+        app.add_middleware(FailClosedMiddleware)
+        logger.warning(
+            "No API key configured — remote requests will be refused. "
+            "Set WEEBOT_API_KEY to enable remote access."
+        )
 
     # ── Global exception handlers ─────────────────────────────────
     @app.exception_handler(StarletteHTTPException)
@@ -444,19 +481,16 @@ def create_app() -> FastAPI:
         """Serve WebSocket test UI."""
         return WEBSOCKET_TEST_HTML
     
-    # WebSocket endpoints - must be defined before CORS middleware to avoid conflicts
+    # WebSocket endpoints
     @app.websocket("/ws")
     async def websocket_global(websocket: WebSocket) -> None:
         """Global WebSocket connection (receives all events)."""
         client_host = websocket.client.host if websocket.client else "unknown"
 
         # WebSocket authentication check
-        if _ws.weebot_api_key:
-            token = websocket.query_params.get("token")
-            import hmac as _hmac
-            if not _hmac.compare_digest(token or "", _ws.weebot_api_key):
-                await websocket.close(code=4001, reason="Unauthorized")
-                return
+        if not _websocket_auth(websocket, _ws):
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
 
         logger.info("WebSocket /ws connection from %s", client_host)
         
@@ -478,12 +512,9 @@ def create_app() -> FastAPI:
         client_host = websocket.client.host if websocket.client else "unknown"
 
         # WebSocket authentication check
-        if _ws.weebot_api_key:
-            token = websocket.query_params.get("token")
-            import hmac as _hmac
-            if not _hmac.compare_digest(token or "", _ws.weebot_api_key):
-                await websocket.close(code=4001, reason="Unauthorized")
-                return
+        if not _websocket_auth(websocket, _ws):
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
 
         logger.info("WebSocket /ws/sessions/%s connection from %s", session_id, client_host)
         
@@ -507,15 +538,62 @@ def create_app() -> FastAPI:
     return app
 
 
+def _websocket_auth(websocket: WebSocket, settings) -> bool:
+    """Authenticate a WebSocket connection.
+
+    Token sources (priority order):
+    1. ``Sec-WebSocket-Protocol`` header: ``bearer.<token>``
+    2. ``Authorization: Bearer <token>`` header
+    3. ``?token=`` query parameter (deprecated — logged once)
+
+    Returns True if authenticated, False to close.
+    """
+    if not settings.weebot_api_key:
+        return True  # No auth configured
+
+    # 1. Subprotocol (preferred — works in browsers)
+    protocols = websocket.headers.get("sec-websocket-protocol", "")
+    for proto in [p.strip() for p in protocols.split(",")]:
+        if proto.startswith("bearer."):
+            token = proto[len("bearer."):]
+            import hmac as _hmac
+            if _hmac.compare_digest(token, settings.weebot_api_key):
+                return True
+
+    # 2. Authorization header (for non-browser clients)
+    auth_header = websocket.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+        import hmac as _hmac
+        if _hmac.compare_digest(token, settings.weebot_api_key):
+            return True
+
+    # 3. Query parameter (deprecated — kept for Next.js UI compat)
+    token = websocket.query_params.get("token")
+    if token:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "WebSocket authenticated via query parameter (deprecated). "
+            "Use Sec-WebSocket-Protocol: bearer.<token> instead."
+        )
+        import hmac as _hmac
+        if _hmac.compare_digest(token, settings.weebot_api_key):
+            return True
+
+    return False
+
+
 # Create the application instance
 app = create_app()
 
 
 if __name__ == "__main__":
     import uvicorn
+    from weebot.config.settings import WeebotSettings
+    _settings = WeebotSettings()
     
     port = int(os.getenv("WEEBOT_PORT", "8000"))
-    host = os.getenv("WEEBOT_HOST", "0.0.0.0")
+    host = _settings.web_host
     
     logging.basicConfig(
         level=logging.INFO,

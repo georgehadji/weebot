@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
-from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
+from weebot.interfaces.web.auth import get_current_user_id, require_mutation_identity, verify_session_ownership
 from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 from weebot.interfaces.web.schemas import (
     CreateSessionRequest,
@@ -68,6 +68,7 @@ async def create_session(
     http_request: Request,
     body: CreateSessionRequest,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> SessionResponse:
     """Create a new session."""
 
@@ -130,6 +131,7 @@ async def delete_session(
     session_id: str,
     http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> dict:
     """Delete a session and all associated data across stores."""
 
@@ -153,6 +155,7 @@ async def cancel_session(
     session_id: str,
     http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> SessionResponse:
     """Cancel a running session."""
 
@@ -194,6 +197,7 @@ async def resume_session(
     http_request: Request,
     request: ResumeSessionRequest,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> SessionResponse:
     """Resume a waiting session with user answer."""
 
@@ -224,6 +228,7 @@ async def run_session(
     session_id: str,
     http_request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> SessionResponse:
     """Start executing a session's task via the PlanActFlow TaskRunner.
 

@@ -25,6 +25,7 @@ class ErrorCode:
     # ── Auth ────────────────────────────────────────────────────────────
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
+    AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
 
     # ── General ─────────────────────────────────────────────────────────
     INTERNAL_ERROR = "INTERNAL_ERROR"

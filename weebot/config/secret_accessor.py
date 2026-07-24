@@ -22,12 +22,32 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ── Redaction patterns for known secrets ──────────────────────────────
-_SECRET_SUFFIXES = (
-    "API_KEY", "API_SECRET", "SECRET", "TOKEN", "PASSWORD",
-    "PRIVATE_KEY", "ACCESS_KEY", "SECRET_KEY",
+# ── Redaction helpders ───────────────────────────────────────────────
+
+# Keys whose values are logged in plaintext (non-secret config).
+_NON_SECRET_SUFFIXES = (
+    "DIR", "URL", "HOST", "PORT", "MODE", "TIMEOUT",
+    "_DIR", "_URL", "_HOST", "_PORT", "_MODE", "_TIMEOUT",
 )
+_NON_SECRET_KEYS: set[str] = {
+    "WEEBOT_WORKSPACE", "WEEBOT_LOGS_DIR", "WEEBOT_SESSIONS_DB",
+    "WEEBOT_HOST", "WEEBOT_PORT", "WEEBOT_CORS_ORIGIN",
+    "SANDBOX_MODE", "BASH_TIMEOUT", "PYTHON_TIMEOUT",
+    "SANDBOX_MAX_OUTPUT_BYTES", "SANDBOX_ALLOW_NETWORK",
+    "DAILY_AI_BUDGET", "WEEBOT_WEB_REQUIRE_AUTH",
+}
 _REDACTED = "<REDACTED>"
+
+
+def _is_non_secret(key: str) -> bool:
+    """Return True if *key* is considered non-secret for logging."""
+    if key in _NON_SECRET_KEYS:
+        return True
+    upper = key.upper()
+    for suffix in _NON_SECRET_SUFFIXES:
+        if upper.endswith(suffix):
+            return True
+    return False
 
 
 class SecretAccessor:
@@ -69,6 +89,20 @@ class SecretAccessor:
         """
         value = cls._get_source().get(key, default)
         cls._log_access(key, value)
+        return value
+
+    @classmethod
+    def get_unredacted(cls, key: str, default: Optional[str] = None) -> Optional[str]:
+        """Return the value for *key* without redaction in logs.
+
+        Use sparingly — only for non-sensitive config that needs to be
+        visible at debug level for troubleshooting.
+        """
+        value = cls._get_source().get(key, default)
+        if value is not None:
+            logger.debug("SecretAccessor (unredacted): %s = %r", key, value)
+        else:
+            logger.debug("SecretAccessor (unredacted): %s = <NOT SET>", key)
         return value
 
     @classmethod
@@ -123,10 +157,15 @@ class SecretAccessor:
 
     @classmethod
     def _log_access(cls, key: str, value: str | None) -> None:
-        """Log access to *key*, redacting its value if it looks like a secret."""
+        """Log access to *key*, redacting its value by default.
+
+        Values are redacted unless the key matches a small non-secret
+        allowlist (see ``_is_non_secret``). The length of the value is
+        always logged (non-sensitive metadata).
+        """
         if value is None:
             logger.debug("SecretAccessor: %s = <NOT SET>", key)
-        elif key.upper().endswith(_SECRET_SUFFIXES) or "SECRET" in key.upper():
-            logger.debug("SecretAccessor: %s = %s (len=%d)", key, _REDACTED, len(value))
-        else:
+        elif _is_non_secret(key):
             logger.debug("SecretAccessor: %s = %r", key, value)
+        else:
+            logger.debug("SecretAccessor: %s = %s (len=%d)", key, _REDACTED, len(value))

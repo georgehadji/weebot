@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
-from weebot.interfaces.web.auth import get_current_user_id, verify_session_ownership
+from weebot.interfaces.web.auth import get_current_user_id, require_mutation_identity, verify_session_ownership
 from weebot.interfaces.web.schemas.chat_schemas import (
     ChatRequest,
     ChatResponse,
@@ -41,6 +41,7 @@ async def send_message(
     body: ChatRequest,
     request: Request,
     state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
 ) -> ChatResponse:
     """Send a chat message and receive the LLM response."""
     container = request.app.state.container

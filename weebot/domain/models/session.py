@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+import re
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from .plan import Plan
 from .event import AgentEvent
@@ -139,6 +140,7 @@ class SessionContext(BaseModel):
 
 class Session(BaseModel):
     """A user session containing events, plan history, and metadata."""
+
     id: str = Field(default="")
     user_id: str = Field(default="")
     agent_id: str = Field(default="")
@@ -150,6 +152,20 @@ class Session(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     _memory_index: SessionMemory = PrivateAttr(default_factory=SessionMemory)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _validate_session_id(cls, v: str) -> str:
+        """Validate session ID format — reject path traversal characters."""
+        if not v:
+            return v
+        _pattern = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+        if not _pattern.match(v):
+            raise ValueError(
+                f"Session ID {v!r} contains invalid characters. "
+                f"Only alphanumeric, dot, underscore, and hyphen allowed."
+            )
+        return v
 
     @model_validator(mode="before")
     @classmethod
