@@ -24,6 +24,11 @@ ignore_imports =
     weebot.scheduling.scheduler -> sqlite3
     # schedule_tool invokes the scheduler, which lazily wires DI at runtime.
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
+    # persistent_memory lazily instantiates SQLiteStateRepository for salience
+    # tracking. Pre-audited — ADR-ARCH-AUDIT-V2 A2 (same edge as tools-no-infra).
+    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
+    # sqlite_state_repo delegates checkpoint ops to SQLiteCheckpointStore.
+    weebot.infrastructure.persistence.sqlite_state_repo -> weebot.infrastructure.persistence.checkpoint_store
 
 [importlinter:contract:tools-no-infra]
 name = Tools must not bypass ports — no direct persistence or adapter imports
@@ -75,6 +80,9 @@ ignore_imports =
     weebot.tools.swarm -> weebot.infrastructure.swarm_event_bus
     # tool_registry lazily creates Playwright browser instances.
     weebot.tools.tool_registry -> weebot.infrastructure.browser.playwright_adapter
+    # tool_collection increments tool-call metrics via the metrics_bridge
+    # (the designated bridge between application models and infrastructure).
+    weebot.application.models.tool_collection -> weebot.application.services.metrics_bridge
 
 [importlinter:contract:infra-no-app-services]
 name = Infrastructure must depend on ports, not application services/flows/agents
@@ -147,6 +155,13 @@ ignore_imports =
     # dependency helper for the web interface layer.
     weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.checkpoint_store
     weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.gateway_session_store
+    # Web server wires PrometheusMetricsAdapter as a DI lookup key for /metrics.
+    # (PrometheusMetricsAdapter is registered as the concrete key in DI.)
+    weebot.interfaces.web.main -> weebot.infrastructure.observability.prometheus_adapter
+    # Health router wires PrometheusMetricsAdapter as a DI lookup key for /metrics/prometheus.
+    weebot.interfaces.web.routers.health -> weebot.infrastructure.observability.prometheus_adapter
+    # Factories import PlanActFlowConfig for the sub-agent flow factory.
+    weebot.interfaces.factories -> weebot.application.models.plan_act_flow_config
     # via importlib.import_module (dynamic) — undetectable by lint-imports
 
 

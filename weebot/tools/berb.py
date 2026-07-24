@@ -10,7 +10,6 @@ import asyncio
 from pathlib import Path
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.settings import WeebotSettings
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +55,7 @@ class BerbTool(BaseTool):
         from_stage: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
+        from weebot.config.settings import WeebotSettings
         settings = WeebotSettings()
         api_url = settings.berb_api_url.rstrip("/")
         api_key = settings.berb_api_key

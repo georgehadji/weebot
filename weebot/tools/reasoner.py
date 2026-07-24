@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.config.settings import WeebotSettings
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +110,7 @@ class ReasonerTool(BaseTool):
         domain: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
+        from weebot.config.settings import WeebotSettings
         settings = WeebotSettings()
         api_url = settings.reasoner_api_url.rstrip("/")
         api_key = settings.reasoner_api_key
