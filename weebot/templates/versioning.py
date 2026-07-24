@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from packaging import version as pkg_version
 
 from weebot.templates.parser import WorkflowTemplate
+from weebot.templates.migration_eval import evaluate_migration_script
 
 _log = logging.getLogger(__name__)
 
@@ -316,18 +317,12 @@ class TemplateVersionManager:
                     to_version,
                 )
             else:
-                # Legacy compatibility mode: this is intentionally opt-in only.
                 try:
-                    transform_locals = {
-                        "parameters": dict(migrated),
-                        "result": dict(migrated),
-                    }
-                    exec(
+                    transformed = evaluate_migration_script(
                         migration.transformation_script,
-                        {"__builtins__": {}},
-                        transform_locals,
+                        dict(migrated),
+                        dict(migrated),
                     )
-                    transformed = transform_locals.get("result", migrated)
                     if isinstance(transformed, dict):
                         migrated = transformed
                     else:

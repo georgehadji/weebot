@@ -131,6 +131,13 @@ class WeebotSettings(BaseSettings):
         description="Allow unsigned WhatsApp webhooks (dev only).",
     )
 
+    # Stripe webhook
+    stripe_webhook_secret: str | None = None               # env: STRIPE_WEBHOOK_SECRET
+    stripe_allow_unsigned_webhooks: bool = Field(
+        default=False,
+        description="Allow unsigned Stripe webhooks (dev only).",
+    )
+
     # Signal gateway (signal-cli REST API — requires a local signal-cli instance)
     signal_cli_rest_url: str = "http://localhost:8080"     # env: SIGNAL_CLI_REST_URL
     signal_account_number: str | None = None               # env: SIGNAL_ACCOUNT_NUMBER

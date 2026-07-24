@@ -77,8 +77,19 @@ class StripeWebhookHandler:
             True if the signature is valid.
         """
         if not self._webhook_secret:
-            logger.warning("No webhook secret configured — skipping signature validation")
-            return True
+            from weebot.config.settings import WeebotSettings
+            _settings = WeebotSettings()
+            if _settings.stripe_allow_unsigned_webhooks:
+                logger.warning(
+                    "STRIPE_WEBHOOK_SECRET not configured — accepting unsigned webhook "
+                    "(STRIPE_ALLOW_UNSIGNED_WEBHOOKS is enabled, dev mode only)"
+                )
+                return True
+            logger.warning(
+                "STRIPE_WEBHOOK_SECRET not configured — rejecting webhook. "
+                "Set STRIPE_WEBHOOK_SECRET or STRIPE_ALLOW_UNSIGNED_WEBHOOKS=true (dev only)."
+            )
+            return False
 
         if not sig_header:
             logger.warning("Missing stripe-signature header")
@@ -94,6 +105,21 @@ class StripeWebhookHandler:
 
             timestamp = parts.get("t", "")
             expected_sig = parts.get("v1", "")
+
+            # Timestamp replay check (±5 minutes)
+            import time
+            now = int(time.time())
+            try:
+                t = int(timestamp)
+                if abs(now - t) > 300:
+                    logger.warning(
+                        "Stripe webhook timestamp replay detected: %s vs now %s",
+                        t, now,
+                    )
+                    return False
+            except ValueError:
+                logger.warning("Invalid Stripe webhook timestamp: %r", timestamp)
+                return False
 
             # Compute the expected signature
             signed_payload = f"{timestamp}.{payload.decode('utf-8')}".encode("utf-8")

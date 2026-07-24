@@ -286,8 +286,15 @@ When adding a new adapter, register it in `weebot.application.di` and ensure the
 - **Approval policy:** `ExecApprovalPolicy` can be `DENY`, `ALWAYS_ASK`, or `AUTO_APPROVE`.
 - **Secrets:** API keys live in `.env` only. `WeebotSettings` redacts credentials in exceptions. Never hardcode keys or log them.
 - **Web security:** The FastAPI CORS configuration should list explicit origins. If you change it, do not use `"*"` together with `allow_credentials=True`.
-- **MCP server:** SSE transport supports Bearer-token authentication via `WEEBOT_MCP_API_KEY`. Remote SSE binding requires `--allow-remote`.
+- **MCP server:** SSE transport supports Bearer-token authentication via `WEEBOT_MCP_API_KEY`. Remote SSE binding requires `--allow-remote` and an API key; loopback SSE without a key stays allowed for local dev.
 - **Egress:** `weebot/core/egress_guard.py` monitors outbound requests.
+- **Fail-closed defaults:** The web API binds to loopback (`127.0.0.1`) by default and refuses non-loopback requests when no `WEEBOT_API_KEY` is configured (`WEEBOT_WEB_REQUIRE_AUTH=true`). Set `WEEBOT_WEB_REQUIRE_AUTH=false` only for trusted LAN deployments.
+- **Webhook isolation:** The `/api/webhook/run` endpoint uses an independent key (`WEEBOT_WEBHOOK_API_KEY`) and a restricted `"webhook"` tool role that excludes `bash`, `powershell`, and `python_execute` by default. Set `WEEBOT_WEBHOOK_ALLOW_EXEC_TOOLS=true` to override (not recommended).
+- **Gateway allowlists:** Discord, Slack, and Telegram gateways enforce a chat-level allowlist when `WEEBOT_GATEWAY_AUTH_ENABLED=true` (default). Use `python -m cli.main gateway allowlist add` to authorize channels.
+- **WhatsApp/Stripe webhooks:** Both fail closed when their respective secrets are missing. Explicit dev opt-ins exist (`WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS`, `STRIPE_ALLOW_UNSIGNED_WEBHOOKS`) for local testing only.
+- **Sandbox env scrub:** `NativeWindowsSandbox` builds child environments from a minimal allowlist; API keys and other secrets are NOT inherited. Declare needed vars via `SandboxConfig.env_vars`.
+- **Secret redaction:** `SecretAccessor` redacts values by default in debug logs unless the key matches a non-secret allowlist (`_DIR`, `_URL`, `_HOST`, `_PORT`, `_MODE`, `_TIMEOUT`).
+- **Session ID hygiene:** Session IDs are validated against `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` to prevent path traversal in filesystem consumers.
 
 ---
 
@@ -317,7 +324,13 @@ Copy `.env.example` to `.env` and configure at minimum one AI provider key. Impo
 - `WEEBOT_WORKSPACE` — workspace root for file operations (default: current directory).
 - `WEEBOT_SESSIONS_DB` — SQLite session DB path (default: `./weebot_sessions.db`).
 - `WEEBOT_LOGS_DIR` — log output directory (default: `./logs`).
+- `WEEBOT_HOST` — web API bind address (default: `127.0.0.1`). Set to `0.0.0.0` explicitly to expose to the network.
+- `WEEBOT_WEB_REQUIRE_AUTH` — when `true` (default) and no `WEEBOT_API_KEY` is set, refuse non-loopback HTTP requests.
+- `WEEBOT_WEBHOOK_API_KEY` — independent API key for the `/api/webhook/run` endpoint.
+- `WEEBOT_WEBHOOK_ALLOW_EXEC_TOOLS` — when `true`, webhook endpoint may use exec tools (default: `false`).
 - `WEEBOT_MCP_API_KEY` — auth token for MCP SSE transport.
+- `WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS` — allow unsigned WhatsApp webhooks in dev mode (default: `false`).
+- `STRIPE_ALLOW_UNSIGNED_WEBHOOKS` — allow unsigned Stripe webhooks in dev mode (default: `false`).
 - `BASH_TIMEOUT`, `PYTHON_TIMEOUT`, `SANDBOX_MAX_OUTPUT_BYTES`, `SANDBOX_ALLOW_NETWORK` — sandbox limits.
 - `DAILY_AI_BUDGET` — max daily AI spend in USD (default: 10.0).
 - `WEEBOT_PONYTAIL_MODE` — Ponytail lazy-senior-dev intensity: `off`, `lite`, `full`, or `ultra` (default: `off`). When active, the `ponytail` built-in skill is injected into PlanActFlow's system prompt.

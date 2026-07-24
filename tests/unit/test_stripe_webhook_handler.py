@@ -10,12 +10,14 @@ import pytest
 from weebot.application.services.stripe_webhook_handler import StripeWebhookHandler
 
 
-def _sign_payload(payload: dict, secret: str, timestamp: str = "1700000000") -> str:
+def _sign_payload(payload: dict, secret: str, timestamp: str | None = None) -> str:
     """Create a Stripe-compatible signature header."""
+    import time as _time
+    ts = timestamp if timestamp is not None else str(int(_time.time()))
     payload_str = json.dumps(payload)
-    signed = f"{timestamp}.{payload_str}".encode("utf-8")
+    signed = f"{ts}.{payload_str}".encode("utf-8")
     sig = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
-    return f"t={timestamp},v1={sig}"
+    return f"t={ts},v1={sig}"
 
 
 class TestStripeSignatureValidation:
@@ -38,10 +40,40 @@ class TestStripeSignatureValidation:
         payload = json.dumps({"type": "payment_intent.succeeded"}).encode("utf-8")
         assert self.handler.validate_signature(payload, "") is False
 
-    def test_no_secret_configured_skips_validation(self):
+    def test_no_secret_configured_fails_closed(self):
+        handler = StripeWebhookHandler(webhook_secret=None)
+        payload = json.dumps({"type": "payment_intent.succeeded"}).encode("utf-8")
+        assert handler.validate_signature(payload, "invalid") is False
+
+    def test_no_secret_with_dev_opt_in_allowed(self, monkeypatch):
+        monkeypatch.setenv("STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "true")
+        # Reset settings singleton so the env var is picked up
+        import sys
+        for mod in list(sys.modules.keys()):
+            if "weebot.config.settings" in mod:
+                del sys.modules[mod]
         handler = StripeWebhookHandler(webhook_secret=None)
         payload = json.dumps({"type": "payment_intent.succeeded"}).encode("utf-8")
         assert handler.validate_signature(payload, "invalid") is True
+
+    def test_replay_old_timestamp_rejected(self):
+        payload = {"type": "payment_intent.succeeded"}
+        # Use a timestamp from 10 minutes ago
+        old_ts = "1700000000"
+        sig = _sign_payload(payload, "whsec_test123", timestamp=old_ts)
+        assert self.handler.validate_signature(
+            json.dumps(payload).encode("utf-8"), sig
+        ) is False
+
+    def test_replay_future_timestamp_rejected(self):
+        payload = {"type": "payment_intent.succeeded"}
+        # Use a timestamp from 10 minutes in the future
+        import time
+        future_ts = str(int(time.time()) + 600)
+        sig = _sign_payload(payload, "whsec_test123", timestamp=future_ts)
+        assert self.handler.validate_signature(
+            json.dumps(payload).encode("utf-8"), sig
+        ) is False
 
 
 class TestStripeEventProcessing:

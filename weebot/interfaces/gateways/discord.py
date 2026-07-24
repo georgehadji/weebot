@@ -176,6 +176,18 @@ class DiscordAdapter(GatewayAdapter):
                 },
             }
 
+        user_id = msg.metadata.get("user_id", "")
+        if not self.is_authorized("discord", msg.external_id, user_id):
+            return {
+                "type": 4,
+                "data": {
+                    "content": (
+                        "This channel isn't authorized to use this bot. "
+                        "Ask an admin to add it to the allowlist."
+                    ),
+                },
+            }
+
         text = await self.handle(msg)
         if text is None:
             return {

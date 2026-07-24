@@ -145,17 +145,18 @@ class TestDiscordAdapter:
     async def test_process_with_safety_block(self, adapter):
         """When handle() returns None, safety-block message is returned."""
         # SafetyChecker blocks the message
-        with patch.object(adapter, "handle", return_value=None):
-            payload = {
-                "type": 2,
-                "data": {"name": "ask", "options": []},
-                "channel_id": "1",
-                "member": {"user": {"id": "2"}},
-                "token": "tok",
-            }
-            result = await adapter.process_interaction(payload)
-            assert result["type"] == 4
-            assert "blocked by safety" in result["data"]["content"].lower()
+        with patch.object(adapter, "is_authorized", return_value=True):
+            with patch.object(adapter, "handle", return_value=None):
+                payload = {
+                    "type": 2,
+                    "data": {"name": "ask", "options": []},
+                    "channel_id": "1",
+                    "member": {"user": {"id": "2"}},
+                    "token": "tok",
+                }
+                result = await adapter.process_interaction(payload)
+                assert result["type"] == 4
+                assert "blocked by safety" in result["data"]["content"].lower()
 
     # ── response sending ────────────────────────────────────────────
 

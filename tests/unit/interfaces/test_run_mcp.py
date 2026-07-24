@@ -168,6 +168,7 @@ class TestMain:
                     "--allow-remote",
                 ],
             ),
+            patch.dict("os.environ", {"WEEBOT_MCP_API_KEY": "test-key"}, clear=False),
             patch("asyncio.run"),
         ):
             main()

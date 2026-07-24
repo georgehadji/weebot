@@ -46,7 +46,7 @@ class ApprovalResult:
 _DESTRUCTIVE_KEYWORDS: set[str] = {
     "remove-item", "del", "rm", "erase", "rd", "rmdir",
     "stop-process", "kill", "shutdown", "restart-computer",
-    "format", "clear-content", "set-content",
+    "clear-content", "set-content",
     "move-item", "rename-item", "copy-item",
 }
 
@@ -186,7 +186,7 @@ class ExecApprovalPolicy:
         _has_separator = bool(re.search(r'[;&|]', command))
         if _has_separator:
             for kw in _DESTRUCTIVE_KEYWORDS:
-                if kw in cmd_lower:
+                if re.search(rf'\b{re.escape(kw)}\b', cmd_lower):
                     return ApprovalResult(
                         command=command,
                         approved=True,
