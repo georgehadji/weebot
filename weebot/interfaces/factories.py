@@ -264,7 +264,8 @@ async def build_tools(
 
     ToolCollection = _get_tool_collection_cls()
     canonicalizer = _build_action_canonicalizer(combined)
-    return ToolCollection(*combined, canonicalizer=canonicalizer)
+    contract_loader = _cached("contract_loader")
+    return ToolCollection(*combined, canonicalizer=canonicalizer, contract_loader=contract_loader)
 
 
 def _build_action_canonicalizer(tools: list) -> Any:

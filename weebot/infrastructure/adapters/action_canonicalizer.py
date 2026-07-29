@@ -6,9 +6,13 @@ coerces primitive types the LLM commonly stringifies (numbers/booleans sent
 as strings), and blocks calls missing a required argument with no default
 when ``strict_mode`` is enabled.
 
-Environment Contract YAML files (``config/contracts/``, Tier 3.2) are not yet
-populated, so this canonicalizes purely from each tool's own ``parameters``
-JSON Schema rather than an external contract file.
+Deliberately independent of the Environment Contract YAML files
+(``config/contracts/``, Tier 3.2, loaded by ``ContractLoader``) — this
+canonicalizes purely from each tool's own ``parameters`` JSON Schema, which
+every tool has. Contract files only exist for a subset of tools and drive
+``ContractLoader.enhance_description()`` (prompt-level pitfall warnings),
+not argument coercion — merging the two would make canonicalization behave
+differently depending on whether a contract file happens to exist.
 """
 from __future__ import annotations
 

@@ -186,6 +186,17 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         self.register("build_action_canonicalizer", lambda: _build_action_canonicalizer)
 
+        # Environment Contract Layer (Tier 3.2) — loads config/contracts/*.yaml
+        # once and hands back a ready ContractLoader. No per-tool-list
+        # dependency (unlike the canonicalizer), so this is a plain singleton
+        # rather than a factory-returning-a-factory.
+        def _create_contract_loader():
+            from weebot.infrastructure.adapters.contract_loader import ContractLoader
+            contracts_dir = self.get(HarnessConfig).canonicalizer.contracts_dir
+            return ContractLoader(contracts_dir=contracts_dir)
+
+        self.register("contract_loader", _create_contract_loader)
+
         # Event pipeline middleware — composable _emit() processing
         pipeline = self.build_event_pipeline()
         self.register_instance("event_pipeline", pipeline)
