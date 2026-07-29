@@ -77,11 +77,11 @@ nul;
 ~$*.docx
 
 # Ignore docs by default, but keep hand-authored ADRs and the atomic-mail
-# docs (both linked from CLAUDE.md). Use /docs/* so git still descends and
-# the negations below take effect.
+# docs — tracked files must be explicitly negated to survive /docs/*
 /docs/*
 !/docs/adr/
 !/docs/atomic_mail.md
+!/docs/archive/
 /stripe-landing
 /Notion
 /logs
