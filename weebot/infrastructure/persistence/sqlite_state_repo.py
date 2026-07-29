@@ -339,9 +339,10 @@ class SQLiteStateRepository(StateRepositoryPort):
         
         Raises TypeError if row is not a mapping (defensive contract enforcement).
         """
-        assert isinstance(row, dict), (
-            f"_row_to_session requires a dict, got {type(row).__name__}"
-        )
+        if not isinstance(row, dict):
+            raise TypeError(
+                f"_row_to_session requires a dict, got {type(row).__name__}"
+            )
         from weebot.domain.models.event import MessageEvent, AgentEvent
         events = []
         if load_events:

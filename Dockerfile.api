@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt uvicorn gunicorn
 # Copy source
 COPY . .
 
+# Make entrypoint executable and set it
+RUN chmod +x /app/docker-entrypoint.sh
+
 # ── Non-root user ──────────────────────────────────────────────────────
 RUN groupadd -r weebot && useradd -r -g weebot -u 10001 weebot \
     && chown -R weebot:weebot /app
@@ -22,5 +25,6 @@ USER weebot
 # Expose API port
 EXPOSE 8000
 
-# Run with uvicorn
+# docker-entrypoint.sh runs alembic migrations before the CMD process
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "weebot.interfaces.web.main:app", "--host", "0.0.0.0", "--port", "8000"]

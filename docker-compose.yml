@@ -1,5 +1,5 @@
 # Weebot — Docker Compose
-# 4 services: Valkey (event bus), API (FastAPI), UI (Next.js), Scheduler (cron jobs)
+# 3 services: Valkey (event bus), API (FastAPI), UI (Next.js)
 # Run: docker compose up -d
 # Stop: docker compose down
 #
@@ -14,6 +14,7 @@
 
 services:
   # ── Valkey — event bus (opt-in; falls back to in-memory when absent) ──
+  # Set VALKEY_PASSWORD in .env for production; the fallback default is for local dev only.
   weebot-valkey:
     image: valkey/valkey:8-alpine
     ports: []
@@ -27,7 +28,7 @@ services:
       timeout: 3s
       retries: 3
 
-  # ── API — FastAPI HTTP + MCP server ───────────────────────────────
+  # ── API — FastAPI HTTP server (includes cron scheduler via lifespan) ──
   weebot-api:
     build:
       context: .
@@ -103,41 +104,6 @@ services:
         limits:
           cpus: "1.0"
           memory: 1G
-
-  # ── Scheduler — cron job runner ───────────────────────────────────
-  weebot-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    entrypoint: ["python", "-m", "weebot.scheduling.default_jobs"]
-    user: "10001:10001"
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /app/data
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      - WEEBOT_WORKSPACE=/data
-      - WEEBOT_LOGS_DIR=/data/logs
-      - WEEBOT_SESSIONS_DB=/data/weebot_sessions.db
-      - WEEBOT_MEMORY_DIR=/data/memory
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-    volumes:
-      - weebot_data:/data
-      - ./Output:/data/output
-    depends_on:
-      weebot-api:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 2G
 
 volumes:
   weebot_data:
