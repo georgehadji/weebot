@@ -132,9 +132,13 @@ class TemplateAgentManager:
         )
         
         # Create agent
-        agent: Any = None
+        # In simulation mode (HAS_AGENT_SYSTEM = False), agent construction is skipped.
+        # When HAS_AGENT_SYSTEM = True, replace with:
+        #   from weebot.core.tool_agent import ToolCallWeebotAgent
+        #   agent = ToolCallWeebotAgent(config=config)
+        agent = None  # No-op in simulation mode (ARCH-AUDIT-V2 A5)
         
-        _log.info(f"Created agent for role: {role}")
+        _log.debug("Agent construction deferred (simulation mode): role=%s config=%s", role, config.project_id)
         return agent
     
     def _get_system_prompt_for_role(self, role: str) -> str:

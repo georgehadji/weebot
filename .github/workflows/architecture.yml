@@ -34,7 +34,9 @@ jobs:
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F,E9
       - name: Python dependency audit
-        run: pip-audit --ignore-vuln PIP 2>&1 | head -20 || true
+        # Non-blocking — known CVEs exist in the dependency tree.
+        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
+        run: pip-audit --ignore-vuln PIP 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
       - name: Run import-linter
         run: make lint-imports
       - name: Secret scan
@@ -63,7 +65,9 @@ jobs:
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F,E9
       - name: Python dependency audit
-        run: pip-audit --ignore-vuln PIP 2>&1 | head -20 || true
+        # Non-blocking — known CVEs exist in the dependency tree.
+        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
+        run: pip-audit --ignore-vuln PIP 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
       - name: Run unit tests with coverage
         run: pytest tests/unit/ -v --tb=short -x --cov=weebot --cov-report=term --cov-fail-under=48
 
@@ -130,6 +134,8 @@ jobs:
       - name: Build weebot-ui image
         run: docker build -t weebot-ui -f weebot-ui/Dockerfile .
       - name: Frontend dependency audit
+        # Non-blocking — known advisories exist in weebot-ui deps.
+        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
         run: |
           cd weebot-ui
           npm audit --audit-level=high 2>&1 || echo "npm audit found advisories (non-blocking in CI)"

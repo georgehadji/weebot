@@ -307,12 +307,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down Weebot Web Server...")
 
 
+# ── Loopback addresses for fail-closed access control ─────────────────
+_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    import weebot
     app = FastAPI(
         title="Weebot API",
         description="Production-grade AI agent framework with real-time event streaming",
-        version="2.6.0",
+        version=weebot.__version__,
         lifespan=lifespan,
     )
 
@@ -415,15 +420,13 @@ def create_app() -> FastAPI:
             receive a 503 with a remediation hint.
             """
 
-            _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
-
             async def dispatch(self, request: Request, call_next):
                 # Always allow health/liveness probes and WebSocket test UI
                 if request.url.path in ("/api/health", "/api/live", "/", "/api/prometheus"):
                     return await call_next(request)
 
                 client_host = request.client.host if request.client else ""
-                if client_host not in self._LOOPBACK:
+                if client_host not in _LOOPBACK:
                     return JSONResponse(
                         status_code=503,
                         content={
@@ -553,10 +556,6 @@ def create_app() -> FastAPI:
         app.mount("/app", StaticFiles(directory=str(static_dir), html=True), name="app")
     
     return app
-
-
-_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
-
 
 def _websocket_auth(websocket: WebSocket, settings) -> bool:
     """Authenticate a WebSocket connection.
