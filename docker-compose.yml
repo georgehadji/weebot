@@ -58,6 +58,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - XAI_API_KEY=${XAI_API_KEY:-}
       - BROWSER_HEADLESS=true
+      - WEEBOT_BACKUP_DIR=${WEEBOT_BACKUP_DIR:-}
+      - WEEBOT_BACKUP_RETENTION_DAYS=${WEEBOT_BACKUP_RETENTION_DAYS:-30}
     depends_on:
       weebot-valkey:
         condition: service_healthy

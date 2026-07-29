@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 STALE_THRESHOLD_MINUTES = 60
 COMPACT_INTERVAL_HOURS = 4
 HEALTH_INTERVAL_HOURS = 12
+# Backup: once daily at 03:00 UTC.  Paths set via env vars.
+BACKUP_DB_PATH_ENV = "WEEBOT_SESSIONS_DB"
+BACKUP_DEST_DIR_ENV = "WEEBOT_BACKUP_DIR"
 
 
 # ── Job implementations ──────────────────────────────────────────────
@@ -95,6 +98,45 @@ async def _skill_curation_job(llm_port: Any) -> None:
     logger.info("Skill curation completed")
 
 
+async def _database_backup_job() -> None:
+    """Run daily online backup of the sessions database.
+
+    Reads database path from ``WEEBOT_SESSIONS_DB`` and backup destination
+    directory from ``WEEBOT_BACKUP_DIR``.  Skips silently if ``WEEBOT_BACKUP_DIR``
+    is not set (local dev mode).
+    """
+    import os
+    from pathlib import Path
+
+    import weebot.config.settings as _settings
+    settings = _settings.WeebotSettings()
+    db_path = settings.sessions_db_path or os.environ.get("WEEBOT_SESSIONS_DB")
+    backup_dir = os.environ.get("WEEBOT_BACKUP_DIR")
+
+    if not db_path or not backup_dir:
+        logger.info("Database backup skipped: set WEEBOT_BACKUP_DIR to enable")
+        return
+
+    db_file = Path(db_path)
+    dest_dir = Path(backup_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    import subprocess
+    import sys
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
+         "--db", str(db_file),
+         "--dest", str(dest_dir),
+         "--label", "weebot_sessions",
+         "--retention", "30"],
+        capture_output=True, text=True, timeout=300,
+    )
+    if result.returncode == 0:
+        logger.info("Database backup completed: %s", result.stdout.strip()[:200])
+    else:
+        logger.error("Database backup FAILED (exit %d): %s", result.returncode, result.stderr.strip()[:500])
+
+
 # ── ScheduledJobEvent wrapper ────────────────────────────────────────
 
 def _with_job_metrics(job_id: str, job_name: str, callable: Any):
@@ -159,6 +201,13 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
             lambda: _skill_curation_job(llm_port),
         ),
     )
+    scheduler.register_callable(
+        "weebot_database_backup",
+        _with_job_metrics(
+            "weebot_database_backup", "Database Backup",
+            lambda: _database_backup_job(),
+        ),
+    )
 
     # ── Create jobs (idempotent) ────────────────────
     _create_if_absent(scheduler, "weebot_session_health", name="Session Health Snapshot",
@@ -175,6 +224,11 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
                       trigger_type="cron", trigger_config={"hour": 2, "minute": 0},
                       callable_name="weebot_skill_curation",
                       description="Classify and review stale skills daily at 02:00")
+
+    _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
+                      trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
+                      callable_name="weebot_database_backup",
+                      description="Online backup of sessions database daily at 03:00")
 
 
 async def _create_if_absent(scheduler: Any, job_id: str, **kwargs: Any) -> None:
