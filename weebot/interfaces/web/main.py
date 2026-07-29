@@ -162,15 +162,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.configure_defaults()
     app.state.container = container
 
-    # ── Database migration (Alembic) ───────────────────────────
-    try:
-        from alembic.config import Config
-        from alembic import command
-        alembic_cfg = Config(str(Path(__file__).resolve().parent.parent.parent.parent / "alembic.ini"))
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Database migrations up to date")
-    except Exception as exc:
-        logger.warning("Database migration failed (non-fatal): %s", exc)
+    # ── Database migration (Alembic) — run by docker-entrypoint.sh ──
+    # In-app migration is intentionally removed: the entrypoint runs
+    # alembic upgrade head with set -e, making migration failure fatal
+    # and preventing a server boot on an unmigrated database.
 
     # ── Scheduler startup ──────────────────────────────────────
     scheduler = container.build_scheduler()
@@ -332,6 +327,15 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["X-Correlation-Id"] = correlation_id
         return response
+
+    # ── Rate limiting middleware ───────────────────────────────────
+    from weebot.interfaces.web.rate_limit import RateLimitMiddleware
+    _rate_limit_enabled = os.environ.get("WEEBOT_RATE_LIMIT_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+    app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
+    if _rate_limit_enabled:
+        logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
+    else:
+        logger.info("Rate limiting disabled (WEEBOT_RATE_LIMIT_ENABLED=false)")
 
     # ── Global exception handlers ──────────────────────────────────
     from weebot.domain.exceptions import WeebotError, ErrorCode
