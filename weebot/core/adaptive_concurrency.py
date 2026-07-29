@@ -88,12 +88,18 @@ class AdaptiveConcurrencyController:
         self.scale_down_factor = scale_down_factor
         self.scale_up_increment = scale_up_increment
         
-        self.current_workers = self.min_workers
-        # Semaphore is created once at max capacity and never replaced.
-        # Replacing it (as the old code did) orphans any coroutines
-        # blocked on acquire() — they wait forever on the discarded
-        # semaphore while release() operates on the new one.
-        self._semaphore = asyncio.Semaphore(self.max_workers)
+        # Semaphore is created once and never replaced.  Replacing it
+        # orphans any coroutines blocked on acquire() — they wait forever on
+        # the discarded semaphore while release() operates on the new one.
+        #
+        # It is sized to the *current* limit rather than max_workers: sizing
+        # it at max made current_workers purely advisory, so a scale-down
+        # never actually throttled anything.  _apply_limit() grows and
+        # shrinks live capacity by issuing and withholding permits.
+        self._current_workers = self.min_workers
+        self._issued = self.min_workers
+        self._withhold_tasks: set = set()
+        self._semaphore = asyncio.Semaphore(self._issued)
         self._lock = asyncio.Lock()
         
         self._running = False
@@ -187,22 +193,63 @@ class AdaptiveConcurrencyController:
                         f"scaling up: {old_workers} -> {new_workers}"
                     )
             
-            # Update if changed.  Scaling up: we already have max capacity
-            # (the semaphore was created at max_workers).  Scaling down:
-            # we record the advisory limit in current_workers but cannot
-            # shrink the semaphore without orphaning blocked waiters.
+            # Update if changed.  Assigning current_workers goes through the
+            # property setter, which reconciles live semaphore capacity in
+            # both directions without replacing the semaphore.
             if new_workers != old_workers:
                 self.current_workers = new_workers
                 self._stats["adjustments"] += 1
     
+    @property
+    def current_workers(self) -> int:
+        """Current (adjusted) worker limit — enforced, not advisory."""
+        return self._current_workers
+
+    @current_workers.setter
+    def current_workers(self, value: int) -> None:
+        self._current_workers = value
+        self._apply_limit(value)
+
+    def _apply_limit(self, target: int) -> None:
+        """Make live semaphore capacity match *target*.
+
+        Growing issues permits immediately.  Shrinking withholds them: each
+        surplus permit is acquired normally and never released, so the new
+        cap is honoured at every instant and in-flight work is never
+        pre-empted.  The semaphore object itself is never swapped.
+        """
+        target = max(self.min_workers, min(self.max_workers, target))
+
+        while self._issued < target:
+            self._semaphore.release()
+            self._issued += 1
+
+        if self._issued <= target:
+            return
+
+        surplus = self._issued - target
+        self._issued = target
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # No loop yet; capacity is reconciled on the next change.
+
+        async def _hold_one() -> None:
+            await self._semaphore.acquire()  # Deliberately never released.
+
+        for _ in range(surplus):
+            task = loop.create_task(_hold_one())
+            self._withhold_tasks.add(task)
+            task.add_done_callback(self._withhold_tasks.discard)
+
     async def acquire(self) -> None:
         """Acquire a concurrency slot."""
         await self._semaphore.acquire()
-    
+
     def release(self) -> None:
         """Release a concurrency slot."""
         self._semaphore.release()
-    
+
     @asynccontextmanager
     async def slot(self):
         """Context manager for acquiring a concurrency slot."""
@@ -267,7 +314,13 @@ class AdaptiveSemaphore:
         self._initial = initial
         self.adjustment_interval = adjustment_interval
         
-        self._semaphore = asyncio.Semaphore(max_value)
+        # Sized to *initial*, not max_value.  Sizing it at max_value meant a
+        # semaphore built as AdaptiveSemaphore(initial=1, max_value=5)
+        # admitted five concurrent holders immediately, so the initial limit
+        # documented in the constructor was never enforced.
+        self._semaphore = asyncio.Semaphore(initial)
+        self._issued = initial
+        self._withhold_tasks: set = set()
         self._controller: Optional[AdaptiveConcurrencyController] = None
     
     async def start(self) -> None:
@@ -289,14 +342,41 @@ class AdaptiveSemaphore:
             return self._controller.current_workers
         return self._initial
     
+    def _apply_limit(self, target: int) -> None:
+        """Reconcile live capacity toward *target* (see controller version)."""
+        target = max(self.min_value, min(self.max_value, target))
+
+        while self._issued < target:
+            self._semaphore.release()
+            self._issued += 1
+
+        if self._issued <= target:
+            return
+
+        surplus = self._issued - target
+        self._issued = target
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        async def _hold_one() -> None:
+            await self._semaphore.acquire()  # Deliberately never released.
+
+        for _ in range(surplus):
+            task = loop.create_task(_hold_one())
+            self._withhold_tasks.add(task)
+            task.add_done_callback(self._withhold_tasks.discard)
+
     async def acquire(self) -> None:
-        """Acquire the semaphore."""
+        """Acquire the semaphore, honouring the controller's current limit."""
+        self._apply_limit(self.current_value)
         await self._semaphore.acquire()
-    
+
     def release(self) -> None:
         """Release the semaphore."""
         self._semaphore.release()
-    
+
     def stop(self) -> None:
         """Stop adjustment."""
         if self._controller:

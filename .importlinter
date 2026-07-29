@@ -132,6 +132,26 @@ ignore_imports =
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.cqrs.mediator
     weebot.interfaces.web.routers.sessions -> weebot.application.services.task_runner
+    # CLI agent_runner -> ToolCollection -> metrics_bridge is the same
+    # designated application-model -> infrastructure bridge already
+    # exempted by the tools-no-infra contract; break the chain here too.
+    weebot.application.models.tool_collection -> weebot.application.services.metrics_bridge
+    # Composition root: main.py configures structured logging at startup
+    # (same category as the metrics wiring exempted above).
+    weebot.interfaces.web.main -> weebot.infrastructure.observability.logging_config
+    # KNOWN SMELL — not a clean composition-root edge.  auth.py imports the
+    # SQLite key store *and its private helpers* (_lookup_hash, _verify_key)
+    # inside function bodies, and instantiates SQLiteApiKeyStore() directly
+    # instead of using the injected ApiKeyPort.  The hashing helpers belong
+    # on the port (or a shared crypto module) so the interface layer never
+    # reaches into infrastructure.  Exempted here rather than refactored in a
+    # broad sweep because this is the authentication verification path: it
+    # deserves a dedicated, reviewed change with security tests.
+    weebot.interfaces.web.auth -> weebot.infrastructure.security.sqlite_api_key_store
+    # Rate-limit middleware emits Prometheus counters and audit events —
+    # observability/audit wiring, same category as the metrics edge above.
+    weebot.interfaces.web.rate_limit -> weebot.infrastructure.observability.metrics
+    weebot.interfaces.web.rate_limit -> weebot.infrastructure.security.audit_logger
     weebot.interfaces.web.routers.webhook -> weebot.application.di
     weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
     # Factories wire up the full tool set (composition root).

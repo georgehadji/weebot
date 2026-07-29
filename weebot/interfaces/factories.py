@@ -11,10 +11,7 @@ under ``~/.weebot/profiles/<name>/SOUL.md``.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    from weebot.tools.base import ToolCollection
+from typing import Any, Optional
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -217,7 +214,7 @@ async def build_tools(
     extra_tools: Optional[list] = None,
     llm_port: Optional[LLMPort] = None,
     mcp_adapter: Optional[object] = None,
-) -> ToolCollection:
+) -> Any:  # ToolCollection — resolved via _get_tool_collection_cls()
     """Factory for building a ToolCollection for a given role and optional MCP config."""
     import importlib as _il
     _tool_registry_mod = _il.import_module("weebot.tools.tool_registry")
