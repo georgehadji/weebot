@@ -365,8 +365,8 @@ class VideoIngestTool(BaseTool):
                     },
                     ensure_ascii=False,
                 )
-                fh.write(line + "\n")
-                fh.flush()  # flush every line → crash-safe
+                await fh.write(line + "\n")
+                await fh.flush()  # flush every line -> crash-safe
                 exported += 1
 
         return ToolResult(
