@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
@@ -250,7 +250,7 @@ def cron_run(job_id: str) -> None:
     console.print(Panel(result, title=f"Job Result: {job.name}", style="green"))
 
     # Update job record
-    jobs[job_id]["last_run_at"] = datetime.utcnow().isoformat()
+    jobs[job_id]["last_run_at"] = datetime.now(timezone.utc).isoformat()
     jobs[job_id]["last_result"] = result[:500]
     jobs[job_id]["run_count"] = data.get("run_count", 0) + 1
     _save_jobs(jobs)

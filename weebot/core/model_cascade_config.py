@@ -144,8 +144,8 @@ MODEL_CASCADE = {
             recommended=False,
         ),
         ModelConfig(
-            id="meituan/longcat-2.0",
-            name="LongCat 2.0",
+            id="minimax/minimax-m3",
+            name="MiniMax M3",
             tier="budget",
             prompt_price=0.30,
             completion_price=1.20,
@@ -153,7 +153,7 @@ MODEL_CASCADE = {
             timeout_seconds=45,
             max_retries=2,
             use_for=["coding", "refactoring", "debugging"],
-            description="LongCat 2.0 — 48B/1.6T MoE, 1M context, $0.30/1M.",
+            description="MiniMax M3 — 1M context, $0.30/1M.",
             recommended=False,
         ),
         ModelConfig(
@@ -401,8 +401,8 @@ MODEL_CASCADE = {
 
     "long_context": [
         ModelConfig(
-            id="meituan/longcat-2.0",
-            name="LongCat 2.0",
+            id="minimax/minimax-m3",
+            name="MiniMax M3",
             tier="budget",
             prompt_price=0.30,
             completion_price=1.20,
@@ -410,7 +410,7 @@ MODEL_CASCADE = {
             timeout_seconds=60,
             max_retries=2,
             use_for=["long_context", "coding"],
-            description="LongCat 2.0 — 1M context, $0.30/1M for long-horizon coding.",
+            description="MiniMax M3 — 1M context, $0.30/1M.",
             recommended=False,
         ),
         # Models with >= 500K context for very large inputs

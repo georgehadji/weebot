@@ -51,19 +51,22 @@ class CommitmentRepo:
     async def list(self, status: Optional[str] = None) -> list[dict]:
         """List commitments, optionally filtered by status."""
         if status:
-            return await self._pool.execute_read(
+            rows = await self._pool.execute_read(
                 "SELECT * FROM commitments WHERE status = ? ORDER BY created_at DESC",
                 (status,),
             )
-        return await self._pool.execute_read(
-            "SELECT * FROM commitments ORDER BY created_at DESC"
-        )
+        else:
+            rows = await self._pool.execute_read(
+                "SELECT * FROM commitments ORDER BY created_at DESC"
+            )
+        return [dict(r) for r in rows]
 
     async def get_pending(self) -> list[dict]:
         """Get all pending commitments."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             "SELECT * FROM commitments WHERE status = 'pending' ORDER BY created_at ASC"
         )
+        return [dict(r) for r in rows]
 
     async def update_status(self, commitment_id: str, status: str,
                             failure_reason: Optional[str] = None) -> None:

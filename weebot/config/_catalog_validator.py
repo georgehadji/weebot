@@ -229,6 +229,7 @@ class CatalogValidator:
             "kimi": "openrouter",   # Kimi models go through OpenRouter
             "kwaipilot": "openrouter",  # KwaiPilot models route through OpenRouter
             "nex-agi": "openrouter",
+            "poolside": "openrouter",
             "sourceful": "openrouter",
             "black-forest-labs": "openrouter",
             "ideogram": "openrouter",

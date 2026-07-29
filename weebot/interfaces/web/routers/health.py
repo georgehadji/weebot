@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from typing import Any
 
@@ -316,7 +316,7 @@ async def health_check(
 
         components=components,
 
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
 
     )
 
@@ -396,7 +396,7 @@ async def liveness_check() -> dict:
 
     """Kubernetes-style liveness check."""
 
-    return {"alive": True, "timestamp": datetime.utcnow().isoformat()}
+    return {"alive": True, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 
@@ -450,7 +450,7 @@ async def metrics_check(
 
     metrics = {
 
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
 
         "components": {}
 
@@ -654,7 +654,7 @@ async def detailed_status() -> dict[str, Any]:
 
         "version": "2.6.0",
 
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
 
         "features": {
 

@@ -294,7 +294,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         rows = await self._session_queries.list(  # type: ignore[union-attr]
             user_id=user_id, status=status, limit=limit, offset=offset,
         )
-        return [self._row_to_session(r) for r in rows]
+        return [self._row_to_session(r, load_events=False) for r in rows]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
         await self._init_helpers()
@@ -335,6 +335,13 @@ class SQLiteStateRepository(StateRepositoryPort):
         return cls._event_adapter
 
     def _row_to_session(self, row, load_events: bool = True) -> Session:
+        """Convert a dict row to a Session domain object.
+        
+        Raises TypeError if row is not a mapping (defensive contract enforcement).
+        """
+        assert isinstance(row, dict), (
+            f"_row_to_session requires a dict, got {type(row).__name__}"
+        )
         from weebot.domain.models.event import MessageEvent, AgentEvent
         events = []
         if load_events:

@@ -4,6 +4,21 @@
 import typing as _t
 import warnings
 
+# Single authoritative version source: VERSION file
+try:
+    from importlib.metadata import version as _version
+
+    __version__ = _version("weebot")
+except Exception:
+    # Fallback when not installed as a package (e.g., during development)
+    import pathlib
+
+    _version_file = pathlib.Path(__file__).resolve().parent.parent / "VERSION"
+    if _version_file.exists():
+        __version__ = _version_file.read_text().strip()
+    else:
+        __version__ = "0.0.0"
+
 
 # ARCH-AUDIT-V2 A5: agent_core_v2 fully sunset.
 # Root lazy imports removed — use Container.build_agent_runner() instead.

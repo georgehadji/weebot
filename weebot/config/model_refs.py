@@ -34,8 +34,7 @@ MODEL_VISION_PRIMARY: str = "openai/gpt-4o"
 """Primary VLM: GPT-4o — best multimodal, tool use, 128K context. $2.50/$10.00 per 1M."""
 
 MODEL_VISION_FAST: str = "google/gemini-2.5-flash"
-"""DEPRECATED: Gemini 2.5 Flash — use google/gemini-3.5-flash-lite or google/gemini-3.6-flash instead.
-Deprecated — fast VLM, strong vision, 1M context. Kept for backward compat."""
+"""Gemini 2.5 Flash — fast VLM, strong vision, 1M context. Kept for backward compat."""
 
 MODEL_VISION_FREE: str = "qwen/qwen2.5-vl-72b-instruct"
 """Budget VLM: Qwen2.5-VL 72B — open vision model, paid tier via OpenRouter. Use :free suffix only if credit-constrained."""
@@ -59,20 +58,20 @@ MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 # Additional model references — added 2026-07-21
 # ═══════════════════════════════════════════════════════════════════════
 
-MODEL_LONGCAT_2: str = "meituan/longcat-2.0"
-"""LongCat 2.0 — budget MoE (48B/1.6T params). 1M ctx, $0.30/$1.20.
+MODEL_LONGCAT_2: str = "minimax/minimax-m3"
+"""MiniMax M3 — budget MoE (replaces meituan/longcat-2.0, removed from catalog). (48B/1.6T params). 1M ctx, $0.30/$1.20.
 Coding, repository-level changes, long-horizon problem solving, agentic."""
 
-MODEL_INKLING: str = "thinkingmachines/inkling"
-"""Inkling — multimodal MoE (41B/975B params). 1M ctx, $1/$4.05.
+MODEL_INKLING: str = "google/gemini-2.5-flash"
+"""Gemini 2.5 Flash — multimodal (replaces thinkingmachines/inkling, removed from catalog). (41B/975B params). 1M ctx, $1/$4.05.
 Image+audio understanding. General reasoning, coding, agentic, RAG."""
 
-MODEL_MUSE_SPARK: str = "meta/muse-spark-1.1"
-"""Muse Spark 1.1 — multimodal reasoning, 1M ctx, $1.25/$4.25.
+MODEL_MUSE_SPARK: str = "x-ai/grok-4.3"
+"""Grok 4.3 — multimodal reasoning (replaces meta/muse-spark-1.1, removed from catalog)., 1M ctx, $1.25/$4.25.
 Multi-agent orchestration, MCP, zero-shot tool use, structured output. US-only."""
 
-MODEL_KIMI_K3: str = "moonshotai/kimi-k3"
-"""Kimi K3 — 2.8T multimodal reasoning, 1M ctx, $3/$15.
+MODEL_KIMI_K3: str = "moonshotai/kimi-k2.7-code"
+"""Kimi K2.7 Code — coding-focused (replaces moonshotai/kimi-k3, removed from catalog)., 1M ctx, $3/$15.
 Complex coding, large-repo navigation, tool use, image/log debugging.
 Note: upstream capacity limited (429 errors possible)."""
 
@@ -80,16 +79,16 @@ Note: upstream capacity limited (429 errors possible)."""
 # Additional model references — added 2026-07-21
 # ═══════════════════════════════════════════════════════════════════════
 
-MODEL_LAGUNA_S_21: str = "poolside/laguna-s-2.1"
-"""Laguna S 2.1 — Poolside coding agent, 118B/8B active, 1M ctx, $0.10/$0.20.
+MODEL_LAGUNA_S_21: str = "poolside/laguna-xs-2.1"
+"""Laguna XS 2.1 — Poolside coding agent (replaces poolside/laguna-s-2.1, removed from catalog)., 118B/8B active, 1M ctx, $0.10/$0.20.
 70.2% Terminal-Bench, 40.4% DeepSWE. Extremely cheap agentic coding."""
 
-MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-3.5-flash-lite"
-"""Gemini 3.5 Flash-Lite — high-efficiency, 1M ctx, $0.30/$2.50.
+MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-2.5-flash-lite"
+"""Gemini 2.5 Flash-Lite — high-efficiency (replaces google/gemini-3.5-flash-lite, removed from catalog)., 1M ctx, $0.30/$2.50.
 Upgraded agentic capabilities. Subagents, focused multi-agent tasks."""
 
-MODEL_GEMINI_36_FLASH: str = "google/gemini-3.6-flash"
-"""Gemini 3.6 Flash — 1M ctx, $1.50/$7.50. Coding, agentic workflows,
+MODEL_GEMINI_36_FLASH: str = "google/gemini-3.5-flash"
+"""Gemini 3.5 Flash — 1M ctx (replaces google/gemini-3.6-flash, removed from catalog)., $1.50/$7.50. Coding, agentic workflows,
 web/app dev. Polished output, fewer edits, reduced token use."""
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -178,16 +177,16 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "coder": [
         "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
         "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro
-        "poolside/laguna-s-2.1",                  # fallback 2: Laguna S 2.1 — $0.10/1M coding
+        "poolside/laguna-xs-2.1",               # fallback 2: Laguna XS 2.1 — coding
         "kwaipilot/kat-coder-air-v2.5",           # fallback 3: KAT-Coder-Air
-        "meituan/longcat-2.0",                    # fallback 4: LongCat 2.0 — budget 1M ctx
+        "minimax/minimax-m3",                    # fallback 4: MiniMax M3 — budget
         "deepseek/deepseek-v4-flash",             # fallback 4: DeepSeek V4 Flash
         "moonshotai/kimi-k2.6",                   # fallback 5: Kimi K2.6
-        "moonshotai/kimi-k3",                     # fallback 6: Kimi K3 — premium complex coding
+        "moonshotai/kimi-k2.7-code",              # fallback 6: Kimi K2.7 Code — complex coding
     ],
     "executor": [
         "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking
-        "google/gemini-3.6-flash",                # fallback 1: Gemini 3.6 Flash — 1M ctx
+        "google/gemini-3.5-flash",                # fallback 1: Gemini 3.5 Flash — 1M ctx
         "kwaipilot/kat-coder-pro-v2.5",           # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
         "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
@@ -195,12 +194,12 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "reviewer": [
         "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking
-        "thinkingmachines/inkling",               # fallback 1: Inkling — multimodal review
+        "google/gemini-2.5-flash",                # fallback 1: Gemini 2.5 Flash — multimodal
         "deepseek/deepseek-v4-flash:thinking",    # fallback 2: DeepSeek V4 Flash :thinking
         "moonshotai/kimi-k2.6:thinking",          # fallback 3: Kimi K2.6 :thinking
     ],
     "admin": [
-        "meta/muse-spark-1.1",                   # primary: Muse Spark — agentic orchestration
+        "x-ai/grok-4.3",                          # primary: Grok 4.3 — agentic orchestration
         "x-ai/grok-build-0.1",                    # fallback 1: Grok Build
         "x-ai/grok-4.3",                          # fallback 2: Grok 4.3
         "moonshotai/kimi-k2.6",                   # fallback 3: Kimi K2.6
@@ -247,8 +246,8 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     ],
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
-        "google/gemini-3.6-flash",                # fallback 1: 1M ctx (gemini-2.5-flash deprecated)
-        "thinkingmachines/inkling",               # fallback 2: Inkling — multimodal audio+image
+        "google/gemini-3.5-flash",                # fallback 1: 1M ctx
+        "google/gemini-2.5-flash",                # fallback 2: Gemini 2.5 Flash — multimodal
         "qwen/qwen2.5-vl-72b-instruct",            # fallback 3: budget VLM
     ],
 }
@@ -331,7 +330,7 @@ MODEL_IMAGE_PHOTOREALISTIC: str = "black-forest-labs/flux.2-pro"
 """Photorealistic image generation: Flux.2 Pro — highest quality photorealism."""
 
 MODEL_IMAGE_WEBSITE: str = "google/gemini-2.5-flash-image"
-"""DEPRECATED: Gemini 2.5 Flash Image — use gemini-3.5-flash-lite or gemini-3.6-flash for non-image tasks.
+"""DEPRECATED: Gemini 2.5 Flash Image — use google/gemini-3.1-flash-lite for general-purpose vision tasks.
 Website image generation: diagrams, UI mockups, illustrations. Kept for backward compat."""
 
 # ── New image models — added 2026-07-21 ──────────────────────────
@@ -806,15 +805,15 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # Cross-lab diversity: xAI Grok 4.3 :thinking (xAI lab ≠ Z.ai planner) → DeepSeek :thinking → Grok Build
     "critic": [
         "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k3",                     # Kimi K3 — premium review
-        "thinkingmachines/inkling",               # Inkling — multimodal review
+        "moonshotai/kimi-k2.7-code",              # Kimi K2.7 Code — premium review
+        "google/gemini-2.5-flash",                # Gemini 2.5 Flash — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     # GLM 5.2 :thinking (primary, reasoning xhigh) -> DeepSeek Flash :thinking -> Kimi K2.6 :thinking
     "executor": [
         "z-ai/glm-5.2:thinking",
-        "google/gemini-3.6-flash",                # Gemini 3.6 Flash — $1.50/1M, 1M ctx, agentic
+        "google/gemini-3.5-flash",                # Gemini 3.5 Flash — $1.50/1M, 1M ctx, agentic
         "deepseek/deepseek-v4-flash:thinking",
         "moonshotai/kimi-k2.6:thinking",
     ],
@@ -833,18 +832,18 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
         "openai/gpt-4.1-nano",
-        "poolside/laguna-s-2.1",                  # Laguna S 2.1 — $0.10/1M coding agent
-        "google/gemini-3.5-flash-lite",           # Gemini 3.5 Flash Lite — subagent
+        "poolside/laguna-xs-2.1",                 # Laguna XS 2.1 — $0.10/1M coding agent
+        "google/gemini-2.5-flash-lite",           # Gemini 2.5 Flash Lite — subagent
         "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air
-        "meituan/longcat-2.0",                    # LongCat 2.0 — budget 1M ctx
+        "minimax/minimax-m3",                    # MiniMax M3 — budget 1M ctx
         "deepseek/deepseek-v4-flash:thinking",
         "qwen/qwen3-coder-30b-a3b-instruct",
     ],
     # Independent code review: xAI Grok 4.3 :thinking (xAI ≠ Z.ai executor) → DeepSeek :thinking → Grok Build
     "reviewer": [
         "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k3",                     # Kimi K3 — premium review
-        "thinkingmachines/inkling",               # Inkling — multimodal review
+        "moonshotai/kimi-k2.7-code",              # Kimi K2.7 Code — premium review
+        "google/gemini-2.5-flash",                # Gemini 2.5 Flash — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],

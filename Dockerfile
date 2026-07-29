@@ -67,15 +67,18 @@ COPY .env.example .env.example
 # Database directory
 RUN mkdir -p /app/data
 
-# Expose MCP server port (default) and optional FastAPI port
-EXPOSE 8000
-EXPOSE 5050
+# ── Non-root user ──────────────────────────────────────────────────────
+RUN groupadd -r weebot && useradd -r -g weebot -u 10001 weebot \
+    && chown -R weebot:weebot /app
+USER weebot
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import weebot; print('ok')" || exit 1
+# Expose FastAPI port
+EXPOSE 8000
 
 # docker-entrypoint.sh runs alembic migrations before the CMD process
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["python", "run_mcp.py"]
-# Override CMD: docker run weebot python -m cli.main flow run "task"
+CMD ["uvicorn", "weebot.interfaces.web.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Health check: probes the live endpoint through the running app
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/live').read()" || exit 1

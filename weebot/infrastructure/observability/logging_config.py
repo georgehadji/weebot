@@ -37,9 +37,15 @@ def configure_logging() -> None:
     - ``json``  — JSON lines (production)
     - ``console`` — rich console output (default for TTY)
     - ``dev`` — verbose key=value (development)
+
+    The ``WEEBOT_LOG_LEVEL`` env var sets the log level (default: INFO).
     """
     format_env = os.environ.get("WEEBOT_LOG_FORMAT", "").lower()
     is_tty = sys.stderr.isatty() if hasattr(sys.stderr, "isatty") else False
+
+    # Parse log level from env, default to INFO
+    log_level_str = os.environ.get("WEEBOT_LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_str, logging.INFO)
 
     if format_env == "json" or (not is_tty and format_env != "console"):
         renderer = structlog.processors.JSONRenderer()
@@ -68,8 +74,8 @@ def configure_logging() -> None:
     )
 
     # Capture all stdlib logging into the structlog pipeline
-    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=logging.INFO)
-    structlog.stdlib.recreate_defaults(log_level=logging.INFO)
+    logging.basicConfig(format="%(message)s", stream=sys.stderr, level=log_level)
+    structlog.stdlib.recreate_defaults(log_level=log_level)
 
 
 def get_logger(name: str | None = None) -> Any:

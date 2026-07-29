@@ -16,14 +16,13 @@ services:
   # ── Valkey — event bus (opt-in; falls back to in-memory when absent) ──
   weebot-valkey:
     image: valkey/valkey:8-alpine
-    ports:
-      # Expose only to other containers; don't publish to host
-      # "6379:6379" removed — use internal docker network
+    ports: []
     volumes:
       - valkey_data:/data
     restart: unless-stopped
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:-weebot_default}"]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "valkey-cli", "-a", "${VALKEY_PASSWORD:-weebot_default}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -35,7 +34,15 @@ services:
       dockerfile: Dockerfile.api
     ports:
       - "8000:8000"   # FastAPI
-    # MCP port 5050 removed — MCP runs in-process via SSE or not at all
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - WEEBOT_WORKSPACE=/data
       - WEEBOT_LOGS_DIR=/data/logs
@@ -44,6 +51,7 @@ services:
       - WEEBOT_PROFILES_DIR=/data/profiles
       - BASH_TIMEOUT=${BASH_TIMEOUT:-30}
       - SANDBOX_MAX_OUTPUT_BYTES=${SANDBOX_MAX_OUTPUT_BYTES:-65536}
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD:-weebot_default}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -56,6 +64,11 @@ services:
       - weebot_data:/data
       - ./Output:/data/output
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read(); print('ok')"]
       interval: 30s
@@ -70,6 +83,14 @@ services:
       dockerfile: weebot-ui/Dockerfile
     ports:
       - "3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://weebot-api:8000
@@ -77,6 +98,11 @@ services:
       weebot-api:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
   # ── Scheduler — cron job runner ───────────────────────────────────
   weebot-scheduler:
@@ -84,6 +110,15 @@ services:
       context: .
       dockerfile: Dockerfile.api
     entrypoint: ["python", "-m", "weebot.scheduling.default_jobs"]
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - WEEBOT_WORKSPACE=/data
       - WEEBOT_LOGS_DIR=/data/logs
@@ -98,6 +133,11 @@ services:
       weebot-api:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
 
 volumes:
   weebot_data:

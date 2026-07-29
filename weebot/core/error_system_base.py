@@ -6,7 +6,7 @@ import traceback
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ErrorSeverity(Enum):
@@ -80,7 +80,7 @@ class ErrorContext:
         additional_data: Custom context data
     """
     error_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     correlation_id: Optional[str] = None
     user_id: Optional[str] = None
     session_id: Optional[str] = None

@@ -37,9 +37,10 @@ class BehavioralRuleRepo:
 
     async def list(self) -> list[dict]:
         """List all behavioral rules."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             "SELECT * FROM behavioral_rules ORDER BY created_at DESC"
         )
+        return [dict(r) for r in rows]
 
 
 class OpportunityRepo:
@@ -70,7 +71,7 @@ class OpportunityRepo:
 
     async def list(self, limit: int = 50) -> list[dict]:
         """List opportunities, un-presented first."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             """
             SELECT * FROM pending_opportunities
             ORDER BY presented ASC, confidence DESC
@@ -78,6 +79,7 @@ class OpportunityRepo:
             """,
             (limit,),
         )
+        return [dict(r) for r in rows]
 
     async def mark_presented(self, opp_id: str) -> None:
         """Mark an opportunity as presented."""
@@ -121,17 +123,19 @@ class PlanTemplateRepo:
 
     async def find_by_hash(self, task_hash: str) -> Optional[dict]:
         """Find a template by task hash."""
-        return await self._pool.execute_read(
+        row = await self._pool.execute_read(
             "SELECT * FROM plan_templates WHERE task_hash = ? ORDER BY use_count DESC LIMIT 1",
             (task_hash,),
             fetch_all=False,
         )
+        return dict(row) if row else None
 
     async def list_all(self) -> list[dict]:
         """List all plan templates."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             "SELECT * FROM plan_templates ORDER BY use_count DESC"
         )
+        return [dict(r) for r in rows]
 
     async def increment_use(self, template_id: str) -> None:
         """Increment use count for a template."""

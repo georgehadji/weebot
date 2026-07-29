@@ -14,6 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt uvicorn gunicorn
 # Copy source
 COPY . .
 
+# ── Non-root user ──────────────────────────────────────────────────────
+RUN groupadd -r weebot && useradd -r -g weebot -u 10001 weebot \
+    && chown -R weebot:weebot /app
+USER weebot
+
 # Expose API port
 EXPOSE 8000
 

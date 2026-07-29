@@ -63,12 +63,13 @@ class SessionQueries:
     async def load(self, session_id: str) -> Optional[dict[str, Any]]:
         """Load a session row by ID.
         
-        Returns a dict-like row (aiosqlite.Row supports dict access)."""
-        return await self._pool.execute_read(
+        Returns a dict (converted from aiosqlite.Row for type safety)."""
+        row = await self._pool.execute_read(
             "SELECT * FROM sessions WHERE id = ?",
             (session_id,),
             fetch_all=False,
         )
+        return dict(row) if row is not None else None
 
     async def list(
         self,
@@ -87,10 +88,11 @@ class SessionQueries:
             conditions.append("status = ?")
             params.append(status)
         where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             f"SELECT * FROM sessions{where_clause} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
             (*params, str(limit), str(offset)),
         )
+        return [dict(r) for r in rows]
 
     async def update_status(self, session_id: str, status: SessionStatus) -> None:
         """Update just the status of a session."""

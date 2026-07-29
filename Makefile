@@ -64,5 +64,17 @@ check-arch:
 	@echo "=== E2E Persistence Tests ==="
 	pytest tests/e2e/test_persistence.py -v --tb=short
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access
+lint-no-print:
+	@echo "=== print() statement check ==="
+	@! grep -Prn "^\s*print\(" \
+	    --include="*.py" \
+	    --exclude-dir=tests \
+	    --exclude-dir=.venv \
+	    --exclude-dir=Output \
+	    --exclude-dir=weebot/GitNexus-main \
+	    --exclude-dir=weebot/tools/subagent_rpc.py \
+	    weebot/ cli/ \
+	    || (echo "ERROR: print() found in production code. Use logger instead." && exit 1)
+
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print
 	@echo "=== All checks passed ==="

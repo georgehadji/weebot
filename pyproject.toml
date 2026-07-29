@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "weebot"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Production-grade autonomous AI agent framework with Clean Architecture, CQRS, and multi-model orchestration"
 requires-python = ">=3.12"
 license = {text = "MIT"}
@@ -12,10 +16,23 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = []
+dependencies = [
+    # Pinned dependencies are managed in requirements.txt (the deployment lockfile).
+    # pyproject.toml carries minimal metadata for PEP 517/518 build isolation.
+    # See WI-05 in implementation_plan.md for the design rationale.
+]
+
+[project.scripts]
+weebot = "cli.main:main"
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[tool.setuptools.packages.find]
+include = ["weebot*", "cli*"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 100
 exclude = [
     ".venv",
@@ -53,9 +70,25 @@ ignore = [
 # B011: bare except: pass without logging — requires logging in production code
 "tests/**/*.py" = ["B011", "SIM"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+timeout = 60
+addopts = "--tb=short --strict-markers -ra"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks end-to-end tests (CLI subprocess, slow)",
+    "external: marks tests that require live network/credentials (skip in CI unless ATOMICMAIL_TEST_LIVE=1)",
+]
+
 [tool.bandit]
 skips = []
 exclude_dirs = [".venv", "Output", "weebot/GitNexus-main"]
 # B110: try-except-pass  — require logging in all except blocks
 tests = ["B110"]
-

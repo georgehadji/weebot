@@ -38,7 +38,7 @@ class MemoryMetadataRepo:
         self, threshold: float = 0.3, limit: int = 50
     ) -> list[dict]:
         """Get memory entries below the salience threshold (eviction candidates)."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             """
             SELECT entry_hash, entry_text, source, salience, access_count,
                    last_accessed, created_at
@@ -49,6 +49,7 @@ class MemoryMetadataRepo:
             """,
             (threshold, limit),
         )
+        return [dict(r) for r in rows]
 
     async def delete_entries(self, entry_hashes: list[str]) -> int:
         """Delete specific memory entries by hash. Returns count deleted."""
@@ -64,7 +65,8 @@ class MemoryMetadataRepo:
 
     async def get_all(self, limit: int = 200) -> list[dict]:
         """Return all memory metadata entries (for bulk operations)."""
-        return await self._pool.execute_read(
+        rows = await self._pool.execute_read(
             "SELECT * FROM memory_metadata ORDER BY salience DESC LIMIT ?",
             (limit,),
         )
+        return [dict(r) for r in rows]

@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Weebot UI
+
+Web-based user interface for the Weebot AI Agent Framework.
+
+## Tech Stack
+
+- [Next.js 16](https://nextjs.org/) (App Router)
+- [React 19](https://react.dev/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [shadcn/ui](https://ui.shadcn.com/) components
+- [Recharts](https://recharts.org/) for dashboard visualizations
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) for code display
+- [Lucide](https://lucide.dev/) icons
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+cd weebot-ui
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server starts on [http://localhost:3000](http://localhost:3000). It connects to the Weebot API at `http://localhost:8000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Development server with hot reload |
+| `npm run build` | Production build |
+| `npm run start` | Serve production build |
+| `npm run lint` | Run ESLint |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+The UI communicates with the Weebot backend via:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **REST API** — session CRUD, model listing, dashboard data
+- **WebSocket** — real-time event streaming per session
+- **SSE** — server-sent events for live updates
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment Variables
 
-## Deploy on Vercel
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API base URL |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Connecting to Backend
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Start the Weebot API: `python -m weebot.interfaces.web.main`
+2. Start the UI: `npm run dev`
+3. Open [http://localhost:3000](http://localhost:3000)
+
+For WebSocket features, the UI connects directly to the backend's WebSocket endpoint.

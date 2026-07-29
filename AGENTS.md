@@ -89,7 +89,6 @@ The root `package.json` only contains optional `@openrouter/*` Node.js SDK depen
 ├── integrations/               # Obsidian and Zotero integrations
 ├── requirements.txt            # Python dependencies
 ├── pyproject.toml              # Ruff + Bandit + pytest options
-├── pytest.ini                  # pytest configuration (points to weebot/tests — see note below)
 ├── alembic.ini                 # Alembic / SQLite migration config
 ├── .importlinter               # Architecture boundary enforcement
 ├── .coveragerc                 # Coverage thresholds and omissions
@@ -101,10 +100,6 @@ The root `package.json` only contains optional `@openrouter/*` Node.js SDK depen
 ├── run_mcp.py                  # MCP server entry point
 └── .env.example                # Environment variable reference
 ```
-
-### Note on dual pytest configuration
-
-Both `pyproject.toml` and `pytest.ini` configure pytest. `pytest.ini` currently sets `testpaths = weebot/tests`, but the actual test tree is `tests/` at the repository root. Use explicit paths such as `pytest tests/ -v` to avoid path mismatches.
 
 ---
 
