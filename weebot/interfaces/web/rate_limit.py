@@ -12,6 +12,7 @@ In-memory token bucket implementation; Valkey backend optional.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import defaultdict, deque
@@ -113,6 +114,7 @@ class _TokenBucket:
 
 # Global bucket registry — keyed on (tier, principal)
 _buckets: dict[str, _TokenBucket] = {}
+_buckets_lock = asyncio.Lock()
 
 
 def _prune_buckets() -> None:
@@ -156,7 +158,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         principal = self._resolve_principal(request)
 
         # Check rate limit
-        bucket = self._get_bucket(tier, principal)
+        bucket = await self._get_bucket(tier, principal)
         if not bucket.allow(principal):
             retry_after = int(bucket.retry_after(principal))
             _metrics.mcp_rate_limits_hit_total.labels(tool=tier).inc()
@@ -202,16 +204,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"ip:{client_host}"
 
     @staticmethod
-    def _get_bucket(tier: str, key: str) -> _TokenBucket:
+    async def _get_bucket(tier: str, key: str) -> _TokenBucket:
         """Get or create a token bucket for the given tier and key.
 
-        Uses the tier's default limits.
+        Uses the tier's default limits.  Lock-guarded against concurrent
+        bucket creation under multi-worker deployment.
         """
         bucket_key = f"{tier}:{key}"
-        if bucket_key not in _buckets:
-            max_tokens, window_sec = RATE_LIMITS.get(tier, (60, 60))
-            _buckets[bucket_key] = _TokenBucket(max_tokens, window_sec)
-            # Prune every 1000th new bucket to prevent unbounded growth
-            if len(_buckets) % 1000 == 0:
-                _prune_buckets()
-        return _buckets[bucket_key]
+        async with _buckets_lock:
+            if bucket_key not in _buckets:
+                max_tokens, window_sec = RATE_LIMITS.get(tier, (60, 60))
+                _buckets[bucket_key] = _TokenBucket(max_tokens, window_sec)
+                # Prune every 1000th new bucket to prevent unbounded growth
+                if len(_buckets) % 1000 == 0:
+                    _prune_buckets()
+            return _buckets[bucket_key]

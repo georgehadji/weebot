@@ -129,8 +129,8 @@ def prune_old_backups(dest_dir: Path, label: str, retention_days: int) -> int:
     return pruned
 
 
-def report_metrics(label: str, backup_path: Path, ok: bool) -> None:
-    """Emit backup metrics if Prometheus is available."""
+def _log_metrics(label: str, backup_path: Path, ok: bool) -> None:
+    """Log a structured metrics line for log-shipper consumption."""
     status = "ok" if ok else "FAILED"
     size_kb = backup_path.stat().st_size / 1024
     print(
@@ -156,9 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     # 2. Verify
     ok = verify_backup(backup_path)
 
-    # 3. Metrics
+    # 3. Metrics (structured log line for log-shipper)
     if not args.no_metrics:
-        report_metrics(args.label, backup_path, ok)
+        _log_metrics(args.label, backup_path, ok)
 
     # 4. Prune
     prune_old_backups(dest_dir, args.label, args.retention)

@@ -93,7 +93,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: Backup file not found: {backup_path}", file=sys.stderr)
         return 1
 
-    dest_path = Path(args.dest).resolve()
+    try:
+        dest_path = Path(args.dest).resolve()
+    except OSError as exc:
+        print(f"ERROR: Invalid destination path: {args.dest} — {exc}", file=sys.stderr)
+        return 1
+
+    # Advisory
+    print("NOTE: Stop the Weebot server before restoring, then restart it after.")
+    print("      A running process holding the old inode won't see the new file.")
 
     # Verify backup integrity first
     if not verify_backup(backup_path):
