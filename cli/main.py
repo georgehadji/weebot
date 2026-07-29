@@ -688,6 +688,10 @@ cli.add_command(gateway_group)
 from cli.commands.cron_agent import cron_agent as cron_agent_group
 cli.add_command(cron_agent_group)
 
+# Auth (multi-principal key management)
+from cli.commands.auth import auth_group
+cli.add_command(auth_group)
+
 # Ponytail lazy-senior-dev commands
 cli.add_command(cmd_ponytail)
 cli.add_command(cmd_ponytail_review)
