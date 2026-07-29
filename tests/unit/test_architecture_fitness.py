@@ -603,9 +603,6 @@ def test_no_blocking_calls_in_async():
         "bash_tool.py",            # _wsl_available() sync-only helper
         "behavior_tracker.py",     # all calls in sync methods
         "design_system_tool.py",   # sync subprocess in tools
-        "gitnexus_provider.py",    # legacy adapter (ADDR-004)
-        "rtk_integration.py",      # legacy adapter (ADR-004)
-        "rtk_provider.py",         # legacy adapter (ADR-004)
         "mcp_client.py",           # legacy module (ADR-004)
         "_capabilities.py",       # git integrity check (tracked: ARCHITECTURE_9_PLAN.md)
     }
