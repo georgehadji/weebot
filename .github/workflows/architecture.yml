@@ -69,7 +69,7 @@ jobs:
         # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
         run: pip-audit 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
       - name: Run unit tests with coverage
-        run: pytest tests/unit/ -v --tb=short -x --cov=weebot --cov-report=term --cov-fail-under=52
+        run: pytest tests/unit/ -v --tb=short -x --cov=weebot --cov-report=term --cov-fail-under=55
 
   persistence:
     name: Persistence Tests
