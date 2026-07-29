@@ -140,6 +140,8 @@ jobs:
         run: npm run lint
       - name: Type check
         run: npx tsc --noEmit
+      - name: Unit tests
+        run: npm run test -- --run
       - name: Build
         run: npm run build
 
