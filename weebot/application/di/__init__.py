@@ -172,6 +172,20 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         self.register("create_flow", _create_flow_callable)
 
+        # Action Canonicalizer factory (Tier 1.1) — resolved here so the
+        # interfaces layer can build one per tool list without importing
+        # infrastructure adapters directly (composition root owns that import).
+        def _build_action_canonicalizer(tools):
+            from weebot.infrastructure.adapters.action_canonicalizer import ActionCanonicalizer
+            cfg = self.get(HarnessConfig).canonicalizer
+            return ActionCanonicalizer(
+                tools=tools,
+                strict_mode=cfg.strict_mode,
+                coerce_types=cfg.coerce_types,
+            )
+
+        self.register("build_action_canonicalizer", lambda: _build_action_canonicalizer)
+
         # Event pipeline middleware — composable _emit() processing
         pipeline = self.build_event_pipeline()
         self.register_instance("event_pipeline", pipeline)

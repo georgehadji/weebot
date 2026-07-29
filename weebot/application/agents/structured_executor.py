@@ -27,7 +27,27 @@ from weebot.models.structured_output import (
     TaskStatus,
 )
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_DEFAULT
+
+
+def _parse_tool_call_args(raw: str) -> dict:
+    """Best-effort parse of a tool call's raw arguments JSON for event display.
+
+    Falls back to the same repair strategies ``ToolExecutor.execute_tool()``
+    uses so malformed-but-repairable arguments don't crash step processing
+    before the actual (repair-aware) execution even runs.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        repaired = repair_json_string(raw)
+        if repaired is not None:
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
+        return {}
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +152,13 @@ if you performed any checks.
                 for tc in response.tool_calls:
                     from weebot.domain.models.event import ToolEvent, ToolStatus
 
+                    call_args = _parse_tool_call_args(tc["function"]["arguments"])
+
                     yield ToolEvent(
                         tool_call_id=tc["id"],
                         tool_name=tc["function"]["name"],
                         function_name=tc["function"]["name"],
-                        function_args=json.loads(
-                            tc["function"]["arguments"]
-                        ),
+                        function_args=call_args,
                         status=ToolStatus.CALLING,
                     )
 
@@ -148,9 +168,7 @@ if you performed any checks.
                         tool_call_id=tc["id"],
                         tool_name=tc["function"]["name"],
                         function_name=tc["function"]["name"],
-                        function_args=json.loads(
-                            tc["function"]["arguments"]
-                        ),
+                        function_args=call_args,
                         status=ToolStatus.CALLED,
                         result=str(result),
                     )

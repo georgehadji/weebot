@@ -925,7 +925,6 @@ def test_orphan_ports_flagged():
         "DreamerPort",          # → Dreamer in application/agents/
         "StepEvaluatorPort",    # → StepEvaluator in application/services/
         "TrustReportPort",
-        "CanonicalizerPort",
         "SkillRetrieverPort",
         "RetentionAgentPort",   # → RetentionAgent in application/agents/
         "PlanCriticPort",

@@ -263,4 +263,25 @@ async def build_tools(
             )
 
     ToolCollection = _get_tool_collection_cls()
-    return ToolCollection(*combined)
+    canonicalizer = _build_action_canonicalizer(combined)
+    return ToolCollection(*combined, canonicalizer=canonicalizer)
+
+
+def _build_action_canonicalizer(tools: list) -> Any:
+    """Build the Action Canonicalizer (Tier 1.1) for *tools*, or None on failure.
+
+    Resolved via the DI-registered ``build_action_canonicalizer`` factory so
+    this interfaces-layer module never imports the infrastructure adapter
+    directly (composition root owns that import). Never raises —
+    canonicalization is a safety net, not a hard dependency, so a resolution
+    failure falls back to no canonicalizer (ToolCollection.execute() already
+    tolerates canonicalizer=None).
+    """
+    try:
+        build = _cached("build_action_canonicalizer")
+        if build is None:
+            return None
+        return build(tools)
+    except Exception:
+        _log.warning("Action Canonicalizer unavailable — skipping", exc_info=True)
+        return None
