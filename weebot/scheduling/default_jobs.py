@@ -123,20 +123,29 @@ async def _database_backup_job() -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     import asyncio
-    proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
-        "--db", str(db_file),
-        "--dest", str(dest_dir),
-        "--label", "weebot_sessions",
-        "--retention", "30",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable,
+            str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
+            "--db", str(db_file),
+            "--dest", str(dest_dir),
+            "--label", "weebot_sessions",
+            "--retention", "30",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:
+        logger.error(
+            "Database backup failed to start: %s (executable=%s, db=%s)",
+            exc, sys.executable, db_file,
+        )
+        return
+
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
     except asyncio.TimeoutError:
         proc.kill()
+        await proc.wait()  # prevent zombie
         logger.error("Database backup timed out after 300s")
         return
 

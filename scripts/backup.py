@@ -65,17 +65,28 @@ def backup_database(src_path: Path, dest_dir: Path, label: str) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     dest_path = dest_dir / f"{label}_{timestamp}.sqlite"
 
-    src_conn = sqlite3.connect(str(src_path))
-    dest_conn = sqlite3.connect(str(dest_path))
-
+    src_conn = None
+    dest_conn = None
     try:
+        src_conn = sqlite3.connect(str(src_path))
+        dest_conn = sqlite3.connect(str(dest_path))
         with src_conn:
             src_conn.execute("PRAGMA journal_mode=WAL;")
         # backup() copies FROM this connection TO target
         src_conn.backup(dest_conn)
+    except Exception:
+        # Clean up partial file on failure (disk full, backup interrupted)
+        if dest_path.exists():
+            try:
+                dest_path.unlink()
+            except OSError:
+                pass
+        raise
     finally:
-        src_conn.close()
-        dest_conn.close()
+        if src_conn:
+            src_conn.close()
+        if dest_conn:
+            dest_conn.close()
 
     print(f"Backup created: {dest_path} ({dest_path.stat().st_size / 1024 / 1024:.1f} MiB)")
     return dest_path
@@ -91,6 +102,10 @@ def verify_backup(backup_path: Path) -> bool:
             print(f"Integrity check passed: {backup_path}")
             return True
         print(f"INTEGRITY CHECK FAILED: {backup_path} — {result}")
+        try:
+            backup_path.unlink()
+        except OSError:
+            pass
         return False
     finally:
         conn.close()

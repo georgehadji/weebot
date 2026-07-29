@@ -19,17 +19,6 @@ from weebot.domain.models.checkpoint import FlowCheckpoint
 
 _log = logging.getLogger(__name__)
 
-_DDL = """
-CREATE TABLE IF NOT EXISTS flow_checkpoints (
-    session_id   TEXT PRIMARY KEY,
-    flow_type    TEXT NOT NULL DEFAULT 'PlanActFlow',
-    current_state TEXT NOT NULL DEFAULT 'planning',
-    checkpoint_json TEXT NOT NULL,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
-);
-"""
-
 
 class SQLiteCheckpointStore(CheckpointPort):
     """SQLite-backed checkpoint store.
@@ -48,8 +37,15 @@ class SQLiteCheckpointStore(CheckpointPort):
         self._db_path = Path(db_path)
 
     def _ensure_schema(self) -> None:
-        """Schema managed by Alembic migration c0re_5ch3m4_v1. No-op for backward compatibility."""
-        pass
+        """Schema managed by Alembic. Verify table exists at first access."""
+        with sqlite3.connect(str(self._db_path)) as conn:
+            tables = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='flow_checkpoints'"
+            ).fetchall()
+            if not tables:
+                raise RuntimeError(
+                    "flow_checkpoints table not found. Run 'alembic upgrade head' first."
+                )
 
     # ── CheckpointPort implementation ─────────────────────────────────
 
