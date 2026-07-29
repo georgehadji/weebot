@@ -252,6 +252,11 @@ class PlanActFlow(BaseFlow):
             middleware_chain=cfg.middleware_chain,
             state_repo=cfg.state_repo,
             tracing_port=self._tracing_port,
+            trajectory_config=(
+                self._harness_config.trajectory
+                if self._harness_config is not None
+                else None
+            ),
         )
         if cfg.max_steps is not None:
             executor_kwargs["max_steps"] = cfg.max_steps
