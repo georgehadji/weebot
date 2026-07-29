@@ -163,6 +163,15 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Populate the registry with known flow types
         self.build_flow_registry()
 
+        # Flow factory callable — resolved here so application services can
+        # receive it by injection instead of importing the interfaces layer.
+        # The composition root owns cross-layer imports; services must not.
+        def _create_flow_callable():
+            from weebot.interfaces.factories import create_flow
+            return create_flow
+
+        self.register("create_flow", _create_flow_callable)
+
         # Event pipeline middleware — composable _emit() processing
         pipeline = self.build_event_pipeline()
         self.register_instance("event_pipeline", pipeline)

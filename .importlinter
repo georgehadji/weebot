@@ -204,3 +204,19 @@ ignore_imports =
     # safety.py uses LLMPort (port, not concrete adapter).  Acceptable per
     # ADR-009: "port interfaces in core are allowed; framework deps are not."
     weebot.core.safety -> weebot.application.ports.llm_port
+
+[importlinter:contract:app-no-interfaces]
+name = Application layer must not depend on interfaces
+type = forbidden
+source_modules = weebot.application
+forbidden_modules =
+    weebot.interfaces
+ignore_imports =
+    # weebot.application.di is the composition root. Wiring concrete
+    # implementations from every layer is precisely its job, so its imports
+    # into interfaces are by design rather than a leak. Everything else in
+    # application/ must receive collaborators by injection — see
+    # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory for the
+    # pattern.
+    weebot.application.di -> weebot.interfaces.**
+    weebot.application.di.** -> weebot.interfaces.**

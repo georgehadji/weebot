@@ -1366,12 +1366,27 @@ def test_ignore_imports_under_target():
     three call sites through DI would drop this budget back to 67.  They were
     left in place deliberately: auth is the credential-verification path and
     warrants a dedicated, security-reviewed change rather than a bulk sweep.
+
+    Raised 70 -> 72 for the new ``app-no-interfaces`` contract, which forbids
+    the application layer from importing interfaces.  That contract caught two
+    real violations (cron_agent_runner and a transitive chain through the
+    scheduler), both since fixed by injecting the flow factory instead of
+    importing it.
+
+    These two entries are a different kind from everything above and are NOT
+    tracked debt.  ``weebot.application.di`` is the composition root: wiring
+    concrete implementations from every layer is its entire purpose, so its
+    imports into interfaces are correct by design and are expected to stay.
+    Carving it out via ignore_imports keeps the contract covering all of
+    application/ — scoping source_modules instead would silently exempt any
+    future subpackage.  Two structural exemptions in exchange for a contract
+    that catches a whole class of leak is a net gain.
     """
     with open(".importlinter") as f:
         content = f.read()
     count = len([l for l in content.split('\n')
                  if '->' in l and not l.strip().startswith('#')])
-    assert count <= 70, f"{count} ignore_imports (target ≤ 70)"
+    assert count <= 72, f"{count} ignore_imports (target ≤ 72)"
 
 
 def test_no_direct_agent_calls_in_mutating_states():
