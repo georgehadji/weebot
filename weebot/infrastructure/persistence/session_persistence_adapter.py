@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import aiofiles
+
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
@@ -111,10 +113,8 @@ class SessionPersistenceAdapter:
         }
 
         try:
-            filepath.write_text(
-                json.dumps(payload, indent=2, default=str),
-                encoding="utf-8",
-            )
+            async with aiofiles.open(filepath, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(payload, indent=2, default=str))
             logger.info("Session %s dead-lettered to %s", session.id, filepath)
         except Exception as write_exc:
             logger.critical(
@@ -149,7 +149,9 @@ class SessionPersistenceAdapter:
 
         for filepath in sorted(self._dead_letter_dir.glob("*.json")):
             try:
-                payload = json.loads(filepath.read_text(encoding="utf-8"))
+                async with aiofiles.open(filepath, "r", encoding="utf-8") as f:
+                    content = await f.read()
+                payload = json.loads(content)
                 session_data = payload.get("session", {})
                 session = Session.model_validate(session_data)
                 await self._repo.save_session(session)

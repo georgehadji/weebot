@@ -5,6 +5,7 @@ part of architecture remediation (step-6).
 """
 from __future__ import annotations
 
+import aiofiles
 import json
 import logging
 from pathlib import Path
@@ -112,8 +113,8 @@ class FileUserProfileStorage(ProfileStoragePort):
             }
 
             file_path = self.storage_dir / f"{profile.user_id}.json"
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(profile_dict, f, indent=2, ensure_ascii=False)
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(profile_dict, indent=2, ensure_ascii=False))
 
             return True
         except Exception as e:
@@ -126,8 +127,9 @@ class FileUserProfileStorage(ProfileStoragePort):
             if not file_path.exists():
                 return None
 
-            with open(file_path, "r", encoding="utf-8") as f:
-                profile_dict = json.load(f)
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
+                profile_dict = json.loads(content)
 
             profile = UserProfile(
                 user_id=profile_dict["user_id"],

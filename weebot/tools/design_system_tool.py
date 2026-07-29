@@ -1,5 +1,6 @@
 """DesignSystemTool — extract design tokens via npx skillui (no API key needed)."""
 from __future__ import annotations
+import asyncio
 import json
 import os
 import subprocess
@@ -70,12 +71,14 @@ class DesignSystemTool(BaseTool):
         # Run in tempdir so output doesn't pollute workspace
         with tempfile.TemporaryDirectory(prefix="weebot_design_") as tmpdir:
             try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                    cwd=tmpdir,
+                result = await asyncio.to_thread(
+                    lambda: subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        cwd=tmpdir,
+                    )
                 )
             except subprocess.TimeoutExpired:
                 return ToolResult.error_result(
@@ -93,24 +96,28 @@ class DesignSystemTool(BaseTool):
                 # Try to auto-install on first failure
                 if "not found" in result.stderr.lower() or "enoent" in result.stderr.lower():
                     try:
-                        install = subprocess.run(
-                            ["npm", "install", "-g", "skillui"],
-                            capture_output=True,
-                            text=True,
-                            timeout=60,
-                            shell=False,
+                        install = await asyncio.to_thread(
+                            lambda: subprocess.run(
+                                ["npm", "install", "-g", "skillui"],
+                                capture_output=True,
+                                text=True,
+                                timeout=60,
+                                shell=False,
+                            )
                         )
                         if install.returncode != 0:
                             return ToolResult.error_result(
                                 error=f"Failed to install skillui: {install.stderr[:500]}"
                             )
                         # Retry after install
-                        result = subprocess.run(
-                            cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=120,
-                            cwd=tmpdir,
+                        result = await asyncio.to_thread(
+                            lambda: subprocess.run(
+                                cmd,
+                                capture_output=True,
+                                text=True,
+                                timeout=120,
+                                cwd=tmpdir,
+                            )
                         )
                         if result.returncode != 0:
                             return ToolResult.error_result(

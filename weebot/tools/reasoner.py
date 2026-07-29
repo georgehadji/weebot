@@ -227,9 +227,8 @@ class ReasonerTool(BaseTool):
                             logger.error("Reasoner CLI completed but output file was not created: %s", temp_json_path)
                             raise FileNotFoundError(f"Reasoner CLI output file was not created at {temp_json_path}")
                             
-                        import asyncio
                         with open(temp_json_path, encoding="utf-8") as f:
-                            result = json.load(f)
+                            result = await asyncio.to_thread(json.load, f)
                 except Exception as cli_exc:
                     logger.error("Reasoner CLI fallback also failed: %s", cli_exc)
                     return ToolResult.error_result(
