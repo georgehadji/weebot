@@ -82,6 +82,7 @@ nul;
 !/docs/adr/
 !/docs/atomic_mail.md
 !/docs/archive/
+!/docs/CONFIGURATION.md
 /stripe-landing
 /Notion
 /logs

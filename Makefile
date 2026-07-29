@@ -14,6 +14,10 @@ generate-capabilities:
 	@echo "=== Generating Capabilities Atlas Schema ==="
 	python scripts/generate_capabilities_schema.py
 
+generate-config:
+	@echo "=== Generating Configuration Reference ==="
+	python scripts/generate_config_reference.py
+
 install:
 	pip install -r requirements.txt
 	pip install import-linter
