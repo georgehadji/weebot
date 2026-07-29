@@ -1,11 +1,15 @@
 """Agent-to-Agent (A2A) Protocol — capability-based agent discovery and delegation.
 
 Part of Enhancement 3 from the Agentic AI plan.  Defines ``AgentCard``
-(agent metadata manifest) and ``AgentRegistry`` (local directory of
+(agent metadata manifest) and ``A2AAgentRegistry`` (local directory of
 available agents and their capabilities).
 
+Named distinctly from ``weebot.agents.registry.AgentRegistry`` (filesystem-backed
+persona CRUD) — the two share no code and previously shared a name, which
+was a real source of import confusion.
+
 Usage:
-    registry = AgentRegistry()
+    registry = A2AAgentRegistry()
     registry.register(AgentCard(
         name="code_agent",
         capabilities=["code_generation", "debugging", "code_review"],
@@ -45,13 +49,13 @@ class AgentCard:
     endpoint: str = ""
 
 
-class AgentRegistry:
+class A2AAgentRegistry:
     """Local directory of agent cards.
 
     Supports registration, lookup by name, and capability-based discovery.
 
     Usage:
-        registry = AgentRegistry()
+        registry = A2AAgentRegistry()
         registry.register(AgentCard(name="code", capabilities=["code"]))
         agent = registry.get("code")
         agents = registry.find_by_capability("code")

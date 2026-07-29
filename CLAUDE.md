@@ -50,7 +50,7 @@ The project follows **Clean Architecture** (Hexagonal) principles:
 1. **Dependency Inversion**: Dependencies point inward: `Interfaces -> Infrastructure -> Application -> Domain`. Domain must remain pure.
 2. **Structured Output Protocol**: Agents MUST return structured JSON validated via Pydantic models in `weebot/models/structured_output.py`.
 3. **Bash Safety Guardrails**: All shell commands must pass through `weebot/core/bash_guard.py` with 4-tier risk levels (SAFE, SUSPICIOUS, DANGEROUS, BLOCKED).
-4. **Model Cascading**: Use `ModelCascadeService` to optimize costs by trying FREE/BUDGET models before PREMIUM ones.
+4. **Model Cascading**: Use `CascadeExecutor.call_with_cascade()` (`weebot/application/agents/executor/_cascade.py`) to optimize costs by trying FREE/BUDGET models before PREMIUM ones, driven by tier constants in `weebot/core/model_cascade_config.py`.
 5. **Plan-Act-Update Loop**: Tasks are performed against a `Plan`. Failure triggers an automated plan update.
 
 ## Website Generation Standards (MANDATORY)

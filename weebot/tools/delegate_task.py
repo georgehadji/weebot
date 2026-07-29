@@ -13,15 +13,15 @@ import logging
 from typing import Any, Optional
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.core.agent_registry import AgentRegistry
+from weebot.core.agent_registry import A2AAgentRegistry
 
 logger = logging.getLogger(__name__)
 
 # Module-level singleton registry — populated at startup by DI container
-_registry: AgentRegistry = AgentRegistry()
+_registry: A2AAgentRegistry = A2AAgentRegistry()
 
 
-def get_a2a_registry() -> AgentRegistry:
+def get_a2a_registry() -> A2AAgentRegistry:
     """Return the shared A2A agent registry singleton."""
     return _registry
 
