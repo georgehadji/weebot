@@ -106,6 +106,7 @@ async def _database_backup_job() -> None:
     is not set (local dev mode).
     """
     import os
+    import sys
     from pathlib import Path
 
     import weebot.config.settings as _settings
@@ -121,20 +122,28 @@ async def _database_backup_job() -> None:
     dest_dir = Path(backup_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    import subprocess
-    import sys
-    result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
-         "--db", str(db_file),
-         "--dest", str(dest_dir),
-         "--label", "weebot_sessions",
-         "--retention", "30"],
-        capture_output=True, text=True, timeout=300,
+    import asyncio
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
+        "--db", str(db_file),
+        "--dest", str(dest_dir),
+        "--label", "weebot_sessions",
+        "--retention", "30",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    if result.returncode == 0:
-        logger.info("Database backup completed: %s", result.stdout.strip()[:200])
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+    except asyncio.TimeoutError:
+        proc.kill()
+        logger.error("Database backup timed out after 300s")
+        return
+
+    if proc.returncode == 0:
+        logger.info("Database backup completed: %s", stdout.decode()[:500].strip())
     else:
-        logger.error("Database backup FAILED (exit %d): %s", result.returncode, result.stderr.strip()[:500])
+        logger.error("Database backup FAILED (exit %d): %s", proc.returncode, stderr.decode()[:2000].strip())
 
 
 # ── ScheduledJobEvent wrapper ────────────────────────────────────────

@@ -53,7 +53,7 @@ def verify_backup(backup_path: Path) -> bool:
         conn.close()
 
 
-def restore(backup_path: Path, dest_path: Path) -> Path:
+def restore(backup_path: Path, dest_path: Path) -> Path | None:
     """Restore *backup_path* to *dest_path*, creating a .pre-restore-bak first.
 
     Returns the path to the backup of the old destination.
@@ -65,11 +65,10 @@ def restore(backup_path: Path, dest_path: Path) -> Path:
         dest_path.rename(pre_bak)
         print(f"Existing database backed up to: {pre_bak}")
 
-    # Copy the backup to the destination (sqlite3.backup won't work as easily
-    # file-to-file; a straight copy is correct since the backup is verified)
+    # Copy the backup to the destination
     import shutil
     shutil.copy2(str(backup_path), str(dest_path))
-    print(f"Restored: {backup_path} → {dest_path}")
+    print(f"Restored: {backup_path} -> {dest_path}")
 
     # Verify the restored copy
     conn = sqlite3.connect(str(dest_path))
@@ -79,7 +78,7 @@ def restore(backup_path: Path, dest_path: Path) -> Path:
         if result and result[0] == "ok":
             print("Restored database integrity check: PASSED")
         else:
-            print(f"Restored database integrity check: FAILED — {result}")
+            print(f"Restored database integrity check: FAILED -- {result}")
     finally:
         conn.close()
 

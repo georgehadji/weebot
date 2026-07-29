@@ -42,9 +42,9 @@ def upgrade() -> None:
     op.execute("""
         CREATE TABLE IF NOT EXISTS flow_checkpoints (
             session_id TEXT PRIMARY KEY,
-            flow_type TEXT NOT NULL,
-            state_name TEXT NOT NULL,
-            checkpoint_data TEXT NOT NULL,
+            flow_type TEXT NOT NULL DEFAULT 'PlanActFlow',
+            current_state TEXT NOT NULL DEFAULT 'planning',
+            checkpoint_json TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
