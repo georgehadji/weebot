@@ -27,6 +27,7 @@ from weebot.models.structured_output import (
     TaskStatus,
 )
 from weebot.application.models.tool_collection import ToolCollection
+from weebot.config.constants import TEMPERATURE_DEFAULT
 
 logger = logging.getLogger(__name__)
 

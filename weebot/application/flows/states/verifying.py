@@ -177,7 +177,7 @@ class VerifyingState(FlowState):
                 ctx.extra["verification_scores"] = scores
                 ctx.extra["gate_failures"] = gate_failures
             except Exception:
-                logger.debug("Failed to store verification scores in session context", exc_info=True)
+                _log.debug("Failed to store verification scores in session context", exc_info=True)
 
         # ── Hook: post_verification ─────────────────────────────────
         if getattr(flow, "_hooks", None) is not None:
@@ -453,7 +453,7 @@ class VerifyingState(FlowState):
                 if not Path(p).exists():
                     missing.append(p)
             except (OSError, ValueError):
-                logger.debug("Invalid path in verification check — skipping without blocking", exc_info=True)
+                _log.debug("Invalid path in verification check — skipping without blocking", exc_info=True)
 
         if missing:
             _log.warning(

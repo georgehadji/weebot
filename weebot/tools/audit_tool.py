@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from weebot.application.ports.audit_port import AuditPort
 from weebot.application.services.audit_service import AuditService
 from weebot.tools.base import BaseTool, ToolResult
 

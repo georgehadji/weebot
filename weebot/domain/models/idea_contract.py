@@ -22,7 +22,7 @@ class IdeaSource(str, Enum):
 
 class IdeaContract(BaseModel):
     """An idea surfaced by DreamerAgent, awaiting gate review before execution."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str = Field(default="")
     prompt: str = Field(default="", description="Full task prompt for PlannerAgent if accepted")
     source: IdeaSource = Field(default=IdeaSource.OPPORTUNITY_PROPOSAL)

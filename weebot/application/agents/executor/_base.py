@@ -874,7 +874,7 @@ class ExecutorAgent:
             abort_step=abort_step,
             loop_error=loop_error,
             step_result=step_result,
-            recent_tool_signatures=list(recent_tool_signatures),
+            recent_tool_signatures=list(guard.state.recent_tool_signatures),
             tool_calls_attempted=tool_calls_attempted,
             tool_calls_succeeded=tool_calls_succeeded,
             step=step,

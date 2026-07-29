@@ -19,6 +19,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 
+from weebot.application.services.proposal_tracker import ProposalTracker
 from weebot.config.constants import MAX_TOKENS_MODERATE, TEMPERATURE_BALANCED
 from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance
 

@@ -288,7 +288,7 @@ class ComputerUseTool(BaseTool):
 
             elif action == "focus_window":
                 """Bring a window to the foreground by title substring."""
-                window_title = kwargs.get("window_title") or kwargs.get("title", "")
+                window_title = window_title or ""
                 if not window_title:
                     return ToolResult(output="", error="window_title required for focus_window")
                 try:

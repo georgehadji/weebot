@@ -4,6 +4,8 @@ Tests Enhancement 6: StrategyTransferService injection and _infer_domain.
 """
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from weebot.application.flows.states.planning import _infer_domain

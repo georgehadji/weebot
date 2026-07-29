@@ -346,14 +346,17 @@ class SQLiteStateRepository(StateRepositoryPort):
                 except Exception:
                     events.append(MessageEvent(**e))
         from weebot.domain.models.session import SessionContext
-        context_raw = json.loads(row.get("context_json") or "{}")
+        try:
+            context_raw = json.loads(row["context_json"] or "{}")
+        except (KeyError, TypeError):
+            context_raw = {}
         context = SessionContext(**context_raw)
         return Session(
             id=row["id"],
             user_id=row["user_id"],
             agent_id=row["agent_id"],
             status=SessionStatus(row["status"]),
-            title=row.get("title", ""),
+            title=row["title"] if row["title"] is not None else "",
             events=events,
             context=context,
             created_at=datetime.fromisoformat(row["created_at"]),
@@ -457,29 +460,3 @@ class SQLiteStateRepository(StateRepositoryPort):
                                        failure_reason: Optional[str] = None) -> None:
         await self._init_helpers()
         await self._commitments.update_status(commitment_id, status, failure_reason)  # type: ignore[union-attr]
-
-    # ── Checkpoint operations (delegated to SQLiteCheckpointStore) ──
-
-    async def save_checkpoint(self, checkpoint) -> None:
-        """Save a flow checkpoint via the checkpoint store."""
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
-        store = SQLiteCheckpointStore(db_path=str(self._db_path))
-        await store.save(checkpoint)
-
-    async def load_checkpoint(self, session_id: str):
-        """Load the most recent checkpoint for a session."""
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
-        store = SQLiteCheckpointStore(db_path=str(self._db_path))
-        return await store.load(session_id)
-
-    async def delete_checkpoint(self, session_id: str) -> bool:
-        """Delete the checkpoint for a session."""
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
-        store = SQLiteCheckpointStore(db_path=str(self._db_path))
-        return await store.delete(session_id)
-
-    async def list_checkpointed_sessions(self) -> list[str]:
-        """Return session IDs that have checkpoints."""
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
-        store = SQLiteCheckpointStore(db_path=str(self._db_path))
-        return await store.list_checkpointed_sessions()

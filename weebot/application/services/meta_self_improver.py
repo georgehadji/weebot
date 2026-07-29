@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config import feature_flags
+from weebot.config.constants import MAX_TOKENS_COMPACT, TEMPERATURE_DEFAULT
 from weebot.config.model_refs import MODEL_BUDGET
 
 if TYPE_CHECKING:

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Optional
 
 import aiohttp
@@ -27,6 +28,7 @@ from weebot.application.services.gateway_command_dispatcher import (
 )
 from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
 from weebot.domain.models.gateway_session import GatewaySessionKey
+from weebot.domain.models.session import Session
 from weebot.interfaces.factories import build_tools, create_flow
 from weebot.interfaces.gateways.base import (
     GatewayAdapter,
@@ -239,13 +241,12 @@ class TelegramAdapter(GatewayAdapter):
 
     async def _get_or_create_flow_session(
         self, flow_session_id: str, user_id: str,
-    ) -> "Session":
+    ) -> Session:
         """Get or create a Weebot Session for the given flow session ID.
 
         Tries to load an existing session from the state repo first.
         If none exists, creates a fresh one.
         """
-        from weebot.domain.models.session import Session as WeebotSession
 
         try:
             existing = await self._state_repo.load_session(flow_session_id)
@@ -254,7 +255,7 @@ class TelegramAdapter(GatewayAdapter):
         except Exception:
             pass
 
-        session = WeebotSession(
+        session = Session(
             id=flow_session_id,
             user_id=user_id,
             agent_id="telegram-agent",

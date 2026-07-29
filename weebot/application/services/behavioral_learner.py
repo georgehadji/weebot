@@ -17,6 +17,7 @@ from typing import Any, Optional
 from uuid import uuid4
 
 from weebot.application.ports.behavioral_learner_port import BehavioralLearnerPort
+from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 from weebot.domain.models.behavioral_rule import BehavioralRule
 
 logger = logging.getLogger(__name__)

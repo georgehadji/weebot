@@ -22,7 +22,7 @@ class RiskBand(str, Enum):
 
 class MainReview(BaseModel):
     """Result of risk-scoring an idea contract that passed IntentReview."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     idea_contract_id: str = Field(default="")
     intent_review_id: str = Field(default="")
     verdict: MainVerdict = Field(default=MainVerdict.DEFERRED)

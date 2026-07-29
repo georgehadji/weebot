@@ -22,7 +22,7 @@ class RetentionVerdict(str, Enum):
 
 class RetentionReview(BaseModel):
     """Recommendation for what to do with a completed session."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = Field(default="")
     verdict: RetentionVerdict = Field(default=RetentionVerdict.PARK)
     reasoning: str = Field(default="")

@@ -14,6 +14,7 @@ import logging
 from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_DEFAULT
 from weebot.domain.models.swarm import SwarmSpec, SubGoal
 
 logger = logging.getLogger(__name__)

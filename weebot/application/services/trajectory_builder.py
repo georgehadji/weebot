@@ -10,6 +10,7 @@ import logging
 from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
 from weebot.domain.models.event import TrajectoryScored
 from weebot.domain.models.session import Session
 from weebot.domain.models.trajectory import TrajectorySummary

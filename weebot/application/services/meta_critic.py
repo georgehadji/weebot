@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_BUDGET
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_DEFAULT
 
 logger = logging.getLogger(__name__)
 

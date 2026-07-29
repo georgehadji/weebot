@@ -20,11 +20,18 @@ class InMemoryStateRepository(StateRepositoryPort):
         session = self._sessions.get(session_id)
         return session.model_copy() if session else None
 
-    async def list_sessions(self, user_id: Optional[str] = None) -> List[Session]:
+    async def list_sessions(
+        self, user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Session]:
         sessions = list(self._sessions.values())
         if user_id:
             sessions = [s for s in sessions if s.user_id == user_id]
-        return [s.model_copy() for s in sessions]
+        if status:
+            sessions = [s for s in sessions if s.status.value == status]
+        return [s.model_copy() for s in sessions[offset:offset + limit]]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
         session = self._sessions.get(session_id)

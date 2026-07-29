@@ -36,7 +36,7 @@ class TrustBand(str, Enum):
 
 class TrustReport(BaseModel):
     """Aggregate trust assessment combining code review and CoVe signals."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = Field(default="")
     trust_band: TrustBand = Field(default=TrustBand.CLEAN)
     deltas: list[VerificationDelta] = Field(default_factory=list)

@@ -16,7 +16,7 @@ class IntentVerdict(str, Enum):
 
 class IntentReview(BaseModel):
     """Result of reviewing an idea contract's intent."""
-    id: str = Field(default_factory=lambda: str(uuid4()))
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     idea_contract_id: str = Field(default="")
     verdict: IntentVerdict = Field(default=IntentVerdict.NOT_READY)
     reasoning: str = Field(default="")

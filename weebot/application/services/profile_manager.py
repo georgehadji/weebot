@@ -20,6 +20,7 @@ from weebot.domain.models.user_profile import (
     UserPreference,
     UserInteraction,
     UserGoal,
+    InteractionType,
 )
 
 logger = logging.getLogger(__name__)

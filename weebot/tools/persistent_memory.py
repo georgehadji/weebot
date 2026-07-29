@@ -22,6 +22,7 @@ from weebot.infrastructure.persistence.filesystem_memory import (
     FileSystemMemoryAdapter,
     DELIMITER,
 )
+from weebot.application.ports.memory_port import MemoryPort
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)

@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 
-from weebot.domain.models.checkpoint import FlowCheckpoint
 from weebot.domain.models.session import Session, SessionStatus
 
 
@@ -22,8 +21,13 @@ class StateRepositoryPort(ABC):
         ...
 
     @abstractmethod
-    async def list_sessions(self, user_id: Optional[str] = None) -> List[Session]:
-        """List all sessions, optionally filtered by user."""
+    async def list_sessions(
+        self, user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Session]:
+        """List all sessions, optionally filtered by user, status, and paginated."""
         ...
 
     @abstractmethod
@@ -65,26 +69,4 @@ class StateRepositoryPort(ABC):
             List of dicts with keys ``entry_hash``, ``entry_text``, ``source``,
             ``salience``, ``access_count``, ``last_accessed``, ``created_at``.
         """
-        ...
-
-    # ── Checkpoint operations (migrated from CheckpointPort) ────────
-
-    @abstractmethod
-    async def save_checkpoint(self, checkpoint: FlowCheckpoint) -> None:
-        """Persist a flow checkpoint, overwriting any existing one for the session."""
-        ...
-
-    @abstractmethod
-    async def load_checkpoint(self, session_id: str) -> FlowCheckpoint | None:
-        """Load the most recent checkpoint for a session, or None."""
-        ...
-
-    @abstractmethod
-    async def delete_checkpoint(self, session_id: str) -> bool:
-        """Delete the checkpoint for a session. Returns True if one existed."""
-        ...
-
-    @abstractmethod
-    async def list_checkpointed_sessions(self) -> list[str]:
-        """Return session IDs that have a saved checkpoint."""
         ...

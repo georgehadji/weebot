@@ -27,8 +27,6 @@ ignore_imports =
     # persistent_memory lazily instantiates SQLiteStateRepository for salience
     # tracking. Pre-audited — ADR-ARCH-AUDIT-V2 A2 (same edge as tools-no-infra).
     weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
-    # sqlite_state_repo delegates checkpoint ops to SQLiteCheckpointStore.
-    weebot.infrastructure.persistence.sqlite_state_repo -> weebot.infrastructure.persistence.checkpoint_store
 
 [importlinter:contract:tools-no-infra]
 name = Tools must not bypass ports — no direct persistence or adapter imports

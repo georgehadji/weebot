@@ -6,8 +6,9 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models import (
-    AgentState, Memory, Message, Role, ToolCallSpec,
+    AgentState, Memory, Message, Role, ToolCallSpec, ToolResult,
 )
 from weebot.config.model_refs import MODEL_DEPRECATED_TOOL_AGENT
 from weebot.utils.cost_ledger import CostLedger

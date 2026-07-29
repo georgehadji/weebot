@@ -135,6 +135,7 @@ class RTKProvider:
         
         main_cmd = parts[0]
         args = parts[1:]
+        command_lower = command.strip().lower()
         
         # Special handling for different command types
         if main_cmd in ["git", "hub", "gh"]:

@@ -12,7 +12,8 @@ from typing import Optional
 
 import click
 
-from weebot.core.behavior_tracker import WEEBOT_DIR
+from weebot.core.behavior_tracker import WEEBOT_DIR, create_tracker, stop_all_trackers, LEDGER_DIR
+from weebot.core.behavior_reporting import BehaviorReporter, SelfKnowledgeGenerator
 
 
 @click.group(name="behavior")

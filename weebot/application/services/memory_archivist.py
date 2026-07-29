@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from weebot.config.constants import TEMPERATURE_BALANCED
+
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.session import Session

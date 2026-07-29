@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -18,6 +19,10 @@ from typing import AsyncGenerator
 # variables (e.g. an old OPENROUTER_API_KEY persisted in the OS profile).
 from dotenv import load_dotenv
 load_dotenv(override=True)
+
+# Configure structured logging before any other weebot imports
+from weebot.infrastructure.observability.logging_config import configure_logging as _configure_weebot_logging
+_configure_weebot_logging()
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -311,6 +316,18 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # ── Correlation ID middleware ──────────────────────────────────
+    @app.middleware("http")
+    async def add_correlation_id(request: Request, call_next):
+        """Attach a correlation ID to every request and response."""
+        correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
+        from structlog.contextvars import bind_contextvars, clear_contextvars
+        clear_contextvars()
+        bind_contextvars(correlation_id=correlation_id)
+        response = await call_next(request)
+        response.headers["X-Correlation-Id"] = correlation_id
+        return response
+
     # ── Global exception handlers ──────────────────────────────────
     from weebot.domain.exceptions import WeebotError, ErrorCode
 
@@ -538,6 +555,9 @@ def create_app() -> FastAPI:
     return app
 
 
+_LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+
 def _websocket_auth(websocket: WebSocket, settings) -> bool:
     """Authenticate a WebSocket connection.
 
@@ -546,10 +566,14 @@ def _websocket_auth(websocket: WebSocket, settings) -> bool:
     2. ``Authorization: Bearer <token>`` header
     3. ``?token=`` query parameter (deprecated — logged once)
 
+    When no API key is configured, only loopback clients are accepted
+    (consistent with FailClosedMiddleware for HTTP).
+
     Returns True if authenticated, False to close.
     """
     if not settings.weebot_api_key:
-        return True  # No auth configured
+        client_host = websocket.client.host if websocket.client else ""
+        return client_host in _LOOPBACK
 
     # 1. Subprotocol (preferred — works in browsers)
     protocols = websocket.headers.get("sec-websocket-protocol", "")
@@ -594,11 +618,6 @@ if __name__ == "__main__":
     
     port = int(os.getenv("WEEBOT_PORT", "8000"))
     host = _settings.web_host
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
     
     uvicorn.run(
         "weebot.interfaces.web.main:app",

@@ -14,6 +14,7 @@ import logging
 import time
 from typing import Any
 
+from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.domain.models.debate import DebateResult, Viewpoint
 

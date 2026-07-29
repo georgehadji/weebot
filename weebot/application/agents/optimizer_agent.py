@@ -21,6 +21,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.domain.models.skill import Skill
 from weebot.domain.models.skill_edit import SkillEdit
+from weebot.domain.models.evaluator_state import EvaluatorState
 from weebot.domain.models.trajectory import OptimizationBatch, TrajectorySummary
 from weebot.application.skills.builtin.loader import load_optimizer_prompt
 from weebot.config.constants import TEMPERATURE_DEFAULT, TEMPERATURE_PRECISE, MAX_TOKENS_SHORT, MAX_TOKENS_STANDARD, MAX_TOKENS_DETAILED
@@ -144,7 +145,6 @@ class OptimizerAgent(OptimizerPort):
         Same frontier-model optimizer, different target — edits the evaluator's
         scoring prompt instead of the skill document.
         """
-        from weebot.domain.models.evaluator_state import EvaluatorState
         from weebot.domain.models.skill_edit import SkillEdit
 
         if not batch.trajectories:

@@ -539,15 +539,15 @@ class PlanActFlow(BaseFlow):
         # body makes context-manager teardown unreliable.  The span is
         # ended explicitly at the method's exit point below.
         # Gated on WEEBOT_OTEL_TRACING=true (default OFF).
-        _run_span = None
+        self._run_span = None
         if self._tracing_port is not None:
             from weebot.config.feature_flags import is_enabled
             if is_enabled("OTEL_TRACING_ENABLED"):
-                _run_span = self._tracing_port.start_span("plan_act_iteration")
-                _run_span.set_attribute("session.id", self._session.id)
+                self._run_span = self._tracing_port.start_span("plan_act_iteration")
+                self._run_span.set_attribute("session.id", self._session.id)
                 trace_id = getattr(self._session, "trace_id", None)
                 if trace_id:
-                    _run_span.set_attribute("trace_id", trace_id)
+                    self._run_span.set_attribute("trace_id", trace_id)
         # Store the first substantive prompt so short follow-ups ("proceed", "yes")
         # can be enriched with it when a brand-new plan is needed.
         original_task: str = self._session.context.get("_original_task", "")
@@ -668,8 +668,8 @@ class PlanActFlow(BaseFlow):
                     if _result.should_terminate:
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
-                        if _run_span is not None:
-                            _run_span.end()
+                        if self._run_span is not None:
+                            self._run_span.end()
                         self.set_state(CompletedState(termination_reason=_result.reason))
                         return
 
@@ -731,8 +731,8 @@ class PlanActFlow(BaseFlow):
                     ),
                     error_code="PLAN_STUCK",
                 )
-                if _run_span is not None:
-                    _run_span.end()
+                if self._run_span is not None:
+                    self._run_span.end()
                 return  # terminate the flow gracefully
             finally:
                 pass  # Inner generator cleaned up by Python GC on outer generator finalization
@@ -970,8 +970,8 @@ class PlanActFlow(BaseFlow):
         )
 
         # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)
-        if _run_span is not None:
-            _run_span.end()
+        if self._run_span is not None:
+            self._run_span.end()
 
     def _get_tracing_port(self):
         """Return the tracing port injected at construction time, or None."""

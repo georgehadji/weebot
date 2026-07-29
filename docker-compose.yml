@@ -1,5 +1,5 @@
 # Weebot — Docker Compose
-# 3 services: API (FastAPI + MCP), UI (Next.js), Scheduler (cron jobs)
+# 4 services: Valkey (event bus), API (FastAPI), UI (Next.js), Scheduler (cron jobs)
 # Run: docker compose up -d
 # Stop: docker compose down
 #
@@ -17,7 +17,8 @@ services:
   weebot-valkey:
     image: valkey/valkey:8-alpine
     ports:
-      - "6379:6379"
+      # Expose only to other containers; don't publish to host
+      # "6379:6379" removed — use internal docker network
     volumes:
       - valkey_data:/data
     restart: unless-stopped
@@ -31,10 +32,10 @@ services:
   weebot-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     ports:
       - "8000:8000"   # FastAPI
-      - "5050:5050"   # MCP server
+    # MCP port 5050 removed — MCP runs in-process via SSE or not at all
     environment:
       - WEEBOT_WORKSPACE=/data
       - WEEBOT_LOGS_DIR=/data/logs
@@ -56,11 +57,11 @@ services:
       - ./Output:/data/output
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import weebot; print('ok')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read(); print('ok')"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # ── UI — Next.js frontend ─────────────────────────────────────────
   weebot-ui:
@@ -81,7 +82,7 @@ services:
   weebot-scheduler:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     entrypoint: ["python", "-m", "weebot.scheduling.default_jobs"]
     environment:
       - WEEBOT_WORKSPACE=/data

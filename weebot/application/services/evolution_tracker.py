@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Optional
+
+from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_BALANCED
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.skills.builtin.loader import load_optimizer_prompt

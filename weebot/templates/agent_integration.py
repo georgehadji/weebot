@@ -14,6 +14,17 @@ from typing import Any, Dict, List, Optional
 
 from weebot.templates.engine import ExecutionContext
 
+# --- Real imports for template users ---
+# AgentContext: shared context with concurrency safety (weebot.core)
+# AgentConfig: legacy configuration dataclass (weebot.domain.legacy_models)
+from weebot.core import AgentContext
+from weebot.domain.legacy_models import AgentConfig
+
+# NOTE: WeebotAgent is a placeholder name used in this template for illustration.
+# In the real codebase, use ToolCallWeebotAgent (weebot.core.tool_agent) or
+# RecursiveWeebotAgent (weebot.core.agent) depending on your use case.
+# Replace `from weebot.agent_core_v2 import WeebotAgent` with the concrete class.
+
 # ARCH-AUDIT-V2 A5: agent_core_v2 fully sunset.
 # Agent system integration uses simulation mode (HAS_AGENT_SYSTEM = False).
 HAS_AGENT_SYSTEM = False
@@ -82,7 +93,7 @@ class TemplateAgentManager:
         self,
         role: str,
         task_description: Optional[str] = None,
-    ) -> WeebotAgent:
+    ) -> Any:  # WeebotAgent was removed in ARCH-AUDIT-V2 A5
         """
         Get cached agent or create new one for role.
         
@@ -107,7 +118,7 @@ class TemplateAgentManager:
         self,
         role: str,
         task_description: Optional[str] = None,
-    ) -> WeebotAgent:
+    ) -> Any:  # WeebotAgent was removed in ARCH-AUDIT-V2 A5
         """Create a new agent configured for the specified role."""
         profile = self.ROLE_PROFILES.get(role, self.ROLE_PROFILES["default"])
         
@@ -121,7 +132,7 @@ class TemplateAgentManager:
         )
         
         # Create agent
-        agent = WeebotAgent(config=config)
+        agent: Any = None
         
         _log.info(f"Created agent for role: {role}")
         return agent

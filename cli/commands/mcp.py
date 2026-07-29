@@ -21,6 +21,8 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 
+from weebot.domain.models.mcp import MCPServerConfig
+
 console = Console()
 logger = logging.getLogger(__name__)
 

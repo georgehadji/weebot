@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
@@ -60,8 +60,10 @@ class SessionQueries:
                 },
             )
 
-    async def load(self, session_id: str) -> Optional[dict]:
-        """Load a session row by ID."""
+    async def load(self, session_id: str) -> Optional[dict[str, Any]]:
+        """Load a session row by ID.
+        
+        Returns a dict-like row (aiosqlite.Row supports dict access)."""
         return await self._pool.execute_read(
             "SELECT * FROM sessions WHERE id = ?",
             (session_id,),
@@ -74,7 +76,7 @@ class SessionQueries:
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """List session rows with optional filters."""
         conditions: list[str] = []
         params: list[str] = []

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 from pathlib import Path, PurePath
 from typing import Any, Optional
@@ -14,6 +15,9 @@ from weebot.application.ports.sandbox_port import (
     SandboxResult,
     SandboxType,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class DockerLinuxSandbox(SandboxPort):

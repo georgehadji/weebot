@@ -15,6 +15,7 @@ import time
 from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
 from weebot.domain.models.swarm import SwarmResult
 
 logger = logging.getLogger(__name__)

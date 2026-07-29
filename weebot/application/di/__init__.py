@@ -208,6 +208,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         from weebot.application.abstractions import FlowRegistry  # noqa: F401
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.flows.chat_flow import ChatFlow
+        from weebot.infrastructure.observability.tracing_adapter import TracingAdapter  # noqa: F401
 
         registry = self.get("flow_registry")
 

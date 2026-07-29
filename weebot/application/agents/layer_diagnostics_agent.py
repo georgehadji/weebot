@@ -18,6 +18,7 @@ from enum import Enum
 from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 
 logger = logging.getLogger(__name__)
 

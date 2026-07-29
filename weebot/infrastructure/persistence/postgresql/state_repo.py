@@ -106,18 +106,28 @@ class PostgreSQLStateRepository(StateRepositoryPort):
                 data["context"] = json.loads(data["context"])
             return Session.model_validate(data)
 
-    async def list_sessions(self, user_id: Optional[str] = None) -> list:
+    async def list_sessions(
+        self, user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list:
         pool = await get_pool("sessions")
         async with pool.acquire() as conn:
+            conditions: list[str] = []
+            params: list[Any] = []
             if user_id:
-                rows = await conn.fetch(
-                    "SELECT * FROM sessions WHERE user_id = $1 ORDER BY updated_at DESC",
-                    user_id,
-                )
-            else:
-                rows = await conn.fetch(
-                    "SELECT * FROM sessions ORDER BY updated_at DESC"
-                )
+                conditions.append("user_id = $1")
+                params.append(user_id)
+            if status:
+                idx = len(params) + 1
+                conditions.append(f"status = ${idx}")
+                params.append(status)
+            where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+            rows = await conn.fetch(
+                f"SELECT * FROM sessions{where_clause} ORDER BY updated_at DESC LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}",
+                *params, limit, offset,
+            )
             return [Session.model_validate(dict(r)) for r in rows]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
@@ -156,3 +166,9 @@ class PostgreSQLStateRepository(StateRepositoryPort):
                 }
                 for r in rows
             ]
+
+    async def get_low_salience_entries(
+        self, threshold: float = 0.3, limit: int = 50
+    ) -> list[dict]:
+        """Stub — PostgreSQL low-salience eviction not yet implemented."""
+        return []

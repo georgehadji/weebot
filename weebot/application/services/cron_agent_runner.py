@@ -38,7 +38,7 @@ class CronAgentRunner:
         # Set recursion guard before spawning the flow
         # Set recursion guard — prevents infinite scheduling loops
         os.environ["WEEBOT_CRON_CONTEXT"] = "1"
-        _log.debug("Cron context guard set")
+        logger.debug("Cron context guard set")
         """Execute a cron job and return the result text.
 
         Args:

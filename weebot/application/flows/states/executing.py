@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolApprovalEvent, ToolEvent, WaitForUserEvent
-from weebot.domain.models.plan import StepStatus
+from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
 logger = logging.getLogger(__name__)

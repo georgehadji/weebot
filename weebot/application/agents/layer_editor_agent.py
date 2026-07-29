@@ -17,6 +17,7 @@ from typing import Optional
 
 from weebot.application.agents.layer_diagnostics_agent import FailureLayer
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_DEFAULT
 
 logger = logging.getLogger(__name__)
 

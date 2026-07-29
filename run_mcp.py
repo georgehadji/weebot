@@ -19,6 +19,10 @@ import sys
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
+# Configure structured logging
+from weebot.infrastructure.observability.logging_config import configure_logging as _configure_weebot_logging
+_configure_weebot_logging()
+
 logger = logging.getLogger(__name__)
 
 

@@ -17,6 +17,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from weebot.core.bash_guard import BashGuard, RiskLevel
+
 console = Console()
 
 RISK_COLORS = {

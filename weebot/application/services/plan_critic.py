@@ -10,6 +10,7 @@ import logging
 from typing import Any, Optional
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
 from weebot.application.ports.plan_critic_port import PlanCriticPort
 from weebot.domain.models.plan import Plan, PlanCritique
 

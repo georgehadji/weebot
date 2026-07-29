@@ -21,6 +21,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt
+from rich.panel import Panel
 
 from weebot.domain.models.cron_job import CronJobRecord, DeliveryTarget, DeliveryTargetType
 

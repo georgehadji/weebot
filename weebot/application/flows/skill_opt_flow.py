@@ -10,9 +10,10 @@ parallel rollout execution.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.states.base import FlowState

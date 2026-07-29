@@ -28,6 +28,8 @@ class SkillOptMixin:
         batch_size=40, use_planning=False,
         use_archive_search: bool = False,
         use_evaluator_slot: bool = False,
+        db_path: str = "./weebot_sessions.db",
+        harness: str = "direct_chat",
     ):
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
         mediator = self.build_mediator()
