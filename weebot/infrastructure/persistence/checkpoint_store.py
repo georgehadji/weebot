@@ -3,13 +3,14 @@
 Implements :class:`~weebot.application.ports.checkpoint_port.CheckpointPort`
 using SQLite with WAL mode for concurrent-safe writes.  Only the latest
 checkpoint per session is retained.
+
+Schema managed by Alembic (migration c0re_5ch3m4_v1).
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import sqlite3
 from pathlib import Path
 
 from weebot.application.ports.checkpoint_port import CheckpointPort
@@ -44,14 +45,10 @@ class SQLiteCheckpointStore(CheckpointPort):
 
     def __init__(self, db_path: str = "sessions.db") -> None:
         self._db_path = Path(db_path)
-        self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        """Create the checkpoints table if it doesn't exist."""
-        with sqlite3.connect(str(self._db_path)) as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.executescript(_DDL)
-            conn.commit()
+        """Schema managed by Alembic migration c0re_5ch3m4_v1. No-op for backward compatibility."""
+        pass
 
     # ── CheckpointPort implementation ─────────────────────────────────
 
