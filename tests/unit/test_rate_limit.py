@@ -4,10 +4,7 @@ Tests cover token bucket behavior, tier mapping, and health endpoint exemption.
 """
 from __future__ import annotations
 
-import time
-from unittest.mock import Mock, patch
-
-import pytest
+from collections import deque
 
 from weebot.interfaces.web.rate_limit import _TokenBucket, _get_tier, RATE_LIMITS
 
@@ -34,7 +31,7 @@ class TestTokenBucket:
         assert not b.allow("u")
         # Simulate window passing by manipulating internal timestamps
         import time as _time
-        b._buckets["u"] = [_time.monotonic() - 10]  # 10s ago (outside 5s window)
+        b._buckets["u"] = deque([_time.monotonic() - 10])  # 10s ago (outside 5s window)
         assert b.allow("u")  # old entry pruned, new one allowed
 
     def test_retry_after(self):

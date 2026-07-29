@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Callable
 
 from fastapi import Request, Response
-from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -84,7 +83,7 @@ class _TokenBucket:
     def __init__(self, max_tokens: int, window_sec: int) -> None:
         self.max_tokens = max_tokens
         self.window_sec = window_sec
-        self._buckets: dict[str, list[float]] = defaultdict(list)
+        self._buckets: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
         """Check if *key* is allowed. Returns True if under limit."""
@@ -93,7 +92,7 @@ class _TokenBucket:
         # Prune old entries outside the window
         cutoff = now - self.window_sec
         while timestamps and timestamps[0] < cutoff:
-            timestamps.pop(0)
+            timestamps.popleft()
 
         if self.max_tokens > 0 and len(timestamps) >= self.max_tokens:
             return False
@@ -114,9 +113,16 @@ class _TokenBucket:
 
 # Global bucket registry — keyed on (tier, principal)
 _buckets: dict[str, _TokenBucket] = {}
-# Global flow concurrency
-_flow_concurrency: int = 0
-_MAX_FLOW_CONCURRENCY = 5
+
+
+def _prune_buckets() -> None:
+    """Remove roughly half the buckets to prevent unbounded growth when over 10k."""
+    if len(_buckets) <= 10000:
+        return
+    import random
+    keys_to_drop = random.sample(list(_buckets.keys()), k=len(_buckets) // 2)
+    for k in keys_to_drop:
+        del _buckets[k]
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -131,7 +137,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.enabled = enabled
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        global _flow_concurrency
         if not self.enabled:
             return await call_next(request)
 
@@ -155,7 +160,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not bucket.allow(principal):
             retry_after = int(bucket.retry_after(principal))
             _metrics.mcp_rate_limits_hit_total.labels(tool=tier).inc()
-            from weebot.infrastructure.security.audit_logger import AuditEventType
+            from weebot.infrastructure.security.audit_logger import AuditEventType, AuditLogger
+            AuditLogger.log(
+                AuditEventType.RATE_LIMIT_EXCEEDED,
+                {"tier": tier, "principal": principal, "path": path, "retry_after": retry_after},
+            )
             logger.warning(
                 "Rate limit hit: tier=%s principal=%s path=%s",
                 tier, principal, path,
@@ -172,23 +181,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        # Global flow concurrency cap for expensive endpoints
-        if tier == "expensive":
-            if _flow_concurrency >= _MAX_FLOW_CONCURRENCY:
-                return Response(
-                    status_code=429,
-                    content='{"detail":"Too many concurrent flow executions."}',
-                    media_type="application/json",
-                    headers={"Retry-After": "30"},
-                )
-
+        # The expensive tier uses a stricter per-key rate (10/min) instead
+        # of a global concurrency counter, avoiding CF-1's cumulative
+        # counter problem. The sliding-window bucket handles it correctly.
         response = await call_next(request)
-
-        # Track concurrency for expensive endpoints
-        if tier == "expensive":
-            if response.status_code < 500:
-                _flow_concurrency += 1
-
         return response
 
     @staticmethod
@@ -215,4 +211,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if bucket_key not in _buckets:
             max_tokens, window_sec = RATE_LIMITS.get(tier, (60, 60))
             _buckets[bucket_key] = _TokenBucket(max_tokens, window_sec)
+            # Prune every 1000th new bucket to prevent unbounded growth
+            if len(_buckets) % 1000 == 0:
+                _prune_buckets()
         return _buckets[bucket_key]
