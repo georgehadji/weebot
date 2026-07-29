@@ -837,7 +837,8 @@ class ImageGenTool(BaseTool):
         """Generate a prompt-driven themed SVG placeholder as ultimate fallback."""
         svg_path = Path(output_path).with_suffix(".svg")
         svg = _render_themed_svg(params)
-        svg_path.write_text(svg, encoding="utf-8")
+        import asyncio
+        await asyncio.to_thread(lambda: svg_path.write_text(svg, encoding="utf-8"))
         return ToolResult(
             output=f"SVG fallback: {svg_path} (all API models unavailable: {reason[:80]})",
             data={
@@ -925,7 +926,8 @@ class ImageGenTool(BaseTool):
                     data={"url": svg, "downloaded": False},
                 )
         else:
-            path.write_text(svg, encoding="utf-8")
+            import asyncio
+            await asyncio.to_thread(lambda: path.write_text(svg, encoding="utf-8"))
 
         return ToolResult(
             output=f"Created {params.kind} image: {output_path} ({len(svg)} bytes)",

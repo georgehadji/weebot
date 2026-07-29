@@ -47,13 +47,16 @@ class OCRTool(BaseTool):
         """Extract text from image using OCR."""
         try:
             import pytesseract
+            import asyncio
 
-            # Decode image
+            # Decode image (fast — CPU-bound PIL open in thread)
             image_data = base64.b64decode(image_base64)
-            image = Image.open(BytesIO(image_data))
+            image = await asyncio.to_thread(lambda: Image.open(BytesIO(image_data)))
 
-            # Run OCR
-            text = pytesseract.image_to_string(image, lang=language, config=config)
+            # Run OCR (CPU-bound, run in thread)
+            text = await asyncio.to_thread(
+                pytesseract.image_to_string, image, lang=language, config=config
+            )
 
             if not text.strip():
                 return ToolResult(
@@ -105,13 +108,16 @@ class StructuredOCRTool(BaseTool):
         """Extract structured text with positions."""
         try:
             import pytesseract
+            import asyncio
 
-            # Decode image
+            # Decode image (CPU-bound PIL in thread)
             image_data = base64.b64decode(image_base64)
-            image = Image.open(BytesIO(image_data))
+            image = await asyncio.to_thread(lambda: Image.open(BytesIO(image_data)))
 
-            # Run OCR with data
-            details = pytesseract.image_to_data(image, lang=language, output_type="dict")
+            # Run OCR with data (CPU-bound, run in thread)
+            details = await asyncio.to_thread(
+                pytesseract.image_to_data, image, lang=language, output_type="dict"
+            )
 
             # Build structured output
             text_items = []

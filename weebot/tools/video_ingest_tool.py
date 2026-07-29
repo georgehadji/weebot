@@ -332,9 +332,12 @@ class VideoIngestTool(BaseTool):
 
         # Count already-written lines so we can resume after a crash.
         skipped = 0
+        import asyncio
         try:
-            with open(output_path, "r", encoding="utf-8") as fh:
-                skipped = sum(1 for line in fh if line.strip())
+            lines = await asyncio.to_thread(
+                lambda: [line for line in open(output_path, "r", encoding="utf-8") if line.strip()]
+            )
+            skipped = len(lines)
         except FileNotFoundError:
             skipped = 0
         except OSError:
@@ -350,7 +353,8 @@ class VideoIngestTool(BaseTool):
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
         exported = 0
-        with open(output_path, "a", encoding="utf-8") as fh:
+        import aiofiles
+        async with aiofiles.open(output_path, "a", encoding="utf-8") as fh:
             for row in to_write:
                 line = json.dumps(
                     {
