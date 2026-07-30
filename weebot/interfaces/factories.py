@@ -11,10 +11,7 @@ under ``~/.weebot/profiles/<name>/SOUL.md``.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    from weebot.tools.base import ToolCollection
+from typing import Any, Optional
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -217,7 +214,7 @@ async def build_tools(
     extra_tools: Optional[list] = None,
     llm_port: Optional[LLMPort] = None,
     mcp_adapter: Optional[object] = None,
-) -> ToolCollection:
+) -> Any:  # ToolCollection — resolved via _get_tool_collection_cls()
     """Factory for building a ToolCollection for a given role and optional MCP config."""
     import importlib as _il
     _tool_registry_mod = _il.import_module("weebot.tools.tool_registry")
@@ -266,4 +263,26 @@ async def build_tools(
             )
 
     ToolCollection = _get_tool_collection_cls()
-    return ToolCollection(*combined)
+    canonicalizer = _build_action_canonicalizer(combined)
+    contract_loader = _cached("contract_loader")
+    return ToolCollection(*combined, canonicalizer=canonicalizer, contract_loader=contract_loader)
+
+
+def _build_action_canonicalizer(tools: list) -> Any:
+    """Build the Action Canonicalizer (Tier 1.1) for *tools*, or None on failure.
+
+    Resolved via the DI-registered ``build_action_canonicalizer`` factory so
+    this interfaces-layer module never imports the infrastructure adapter
+    directly (composition root owns that import). Never raises —
+    canonicalization is a safety net, not a hard dependency, so a resolution
+    failure falls back to no canonicalizer (ToolCollection.execute() already
+    tolerates canonicalizer=None).
+    """
+    try:
+        build = _cached("build_action_canonicalizer")
+        if build is None:
+            return None
+        return build(tools)
+    except Exception:
+        _log.warning("Action Canonicalizer unavailable — skipping", exc_info=True)
+        return None

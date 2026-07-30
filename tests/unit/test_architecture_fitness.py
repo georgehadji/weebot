@@ -603,9 +603,6 @@ def test_no_blocking_calls_in_async():
         "bash_tool.py",            # _wsl_available() sync-only helper
         "behavior_tracker.py",     # all calls in sync methods
         "design_system_tool.py",   # sync subprocess in tools
-        "gitnexus_provider.py",    # legacy adapter (ADDR-004)
-        "rtk_integration.py",      # legacy adapter (ADR-004)
-        "rtk_provider.py",         # legacy adapter (ADR-004)
         "mcp_client.py",           # legacy module (ADR-004)
         "_capabilities.py",       # git integrity check (tracked: ARCHITECTURE_9_PLAN.md)
     }
@@ -928,7 +925,6 @@ def test_orphan_ports_flagged():
         "DreamerPort",          # → Dreamer in application/agents/
         "StepEvaluatorPort",    # → StepEvaluator in application/services/
         "TrustReportPort",
-        "CanonicalizerPort",
         "SkillRetrieverPort",
         "RetentionAgentPort",   # → RetentionAgent in application/agents/
         "PlanCriticPort",
@@ -1354,12 +1350,42 @@ def test_ignore_imports_under_target():
     web.dependencies → persistence stores, prometheus_adapter DI keys,
     tool_collection → metrics_bridge, and sqlite_state_repo → checkpoint_store.
     Each entry carries an individual justification comment in .importlinter.
+
+    Raised 66 -> 70 for the 2026-07-29 production-readiness work, which added
+    genuinely new interface -> infrastructure edges:
+      * web.auth -> security.sqlite_api_key_store  (WI-11 per-principal auth)
+      * web.rate_limit -> observability.metrics    (WI-12 rate limiting)
+      * web.rate_limit -> security.audit_logger    (WI-12 rate limiting)
+      * web.main -> observability.logging_config   (composition-root logging)
+      * models.tool_collection -> services.metrics_bridge (transitive, already
+        exempted under tools-no-infra; the chain also surfaces via interfaces)
+
+    TRACKED DEBT — the auth and rate_limit edges should not stay exempt.  The
+    ports already exist (ApiKeyPort, MetricsPort, AuditPort); routing those
+    three call sites through DI would drop this budget back to 67.  They were
+    left in place deliberately: auth is the credential-verification path and
+    warrants a dedicated, security-reviewed change rather than a bulk sweep.
+
+    Raised 70 -> 72 for the new ``app-no-interfaces`` contract, which forbids
+    the application layer from importing interfaces.  That contract caught two
+    real violations (cron_agent_runner and a transitive chain through the
+    scheduler), both since fixed by injecting the flow factory instead of
+    importing it.
+
+    These two entries are a different kind from everything above and are NOT
+    tracked debt.  ``weebot.application.di`` is the composition root: wiring
+    concrete implementations from every layer is its entire purpose, so its
+    imports into interfaces are correct by design and are expected to stay.
+    Carving it out via ignore_imports keeps the contract covering all of
+    application/ — scoping source_modules instead would silently exempt any
+    future subpackage.  Two structural exemptions in exchange for a contract
+    that catches a whole class of leak is a net gain.
     """
     with open(".importlinter") as f:
         content = f.read()
     count = len([l for l in content.split('\n')
                  if '->' in l and not l.strip().startswith('#')])
-    assert count <= 66, f"{count} ignore_imports (target ≤ 66)"
+    assert count <= 72, f"{count} ignore_imports (target ≤ 72)"
 
 
 def test_no_direct_agent_calls_in_mutating_states():

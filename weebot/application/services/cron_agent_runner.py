@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from weebot.domain.models.cron_job import CronJobRecord, DeliveryTarget
 from weebot.domain.models.session import Session as WeebotSession
@@ -21,6 +21,10 @@ class CronAgentRunner:
 
     The runner creates a temporary session, runs the flow with the
     configured prompt, and returns the result for delivery.
+
+    The flow factory is injected rather than imported so this service does
+    not depend on the interfaces layer — the same pattern ``BenchmarkRunner``
+    uses. The composition root supplies ``interfaces.factories.create_flow``.
     """
 
     def __init__(
@@ -28,10 +32,12 @@ class CronAgentRunner:
         llm: Any | None = None,
         state_repo: Any | None = None,
         tool_registry: Any | None = None,
+        flow_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._llm = llm
         self._state_repo = state_repo
         self._tool_registry = tool_registry
+        self._flow_factory = flow_factory
 
     async def run(self, job: CronJobRecord) -> str:
         import os
@@ -74,9 +80,14 @@ class CronAgentRunner:
                 pass
 
         # Create and run the flow
-        from weebot.interfaces.factories import create_flow
+        if self._flow_factory is None:
+            raise RuntimeError(
+                "CronAgentRunner requires a flow_factory. Construct it with "
+                "flow_factory=create_flow from weebot.interfaces.factories "
+                "(the composition root owns that import, not this service)."
+            )
 
-        flow = create_flow(
+        flow = self._flow_factory(
             flow_type="plan_act",
             session=session,
             llm=self._llm,

@@ -150,12 +150,19 @@ class BanditSelector:
 
     # ── Internal ────────────────────────────────────────────────────
 
-    @staticmethod
     def _sample_thompson(
+        self,
         model_id: str,
         posterior: tuple[float, float],
     ) -> float:
         """Draw a sample θ ∼ Beta(α, β) from the posterior.
+
+        Uses the selector's own seeded generator (``self._rng``).  This was
+        previously a staticmethod that built a fresh unseeded
+        ``random.Random()``, so ``BanditSelector(random_seed=...)`` had no
+        effect on Thompson sampling: results were irreproducible in
+        production and the unit tests were quietly flaky, failing whenever a
+        draw from a skewed posterior landed in the tail.
 
         Args:
             model_id: Model identifier (used for logging only).
@@ -166,8 +173,7 @@ class BanditSelector:
         """
         alpha, beta = posterior
         try:
-            import random as _random
-            rng = _random.Random()
+            rng = self._rng
             gamma_a = rng.gammavariate(alpha, 1.0)
             gamma_b = rng.gammavariate(beta, 1.0)
             if gamma_a + gamma_b <= 0:

@@ -20,9 +20,12 @@ from typing import AsyncGenerator
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-# Configure structured logging before any other weebot imports
+# Structured logging is configured inside create_app(), not at import time.
+# Calling it at module scope reconfigures the root logger for *any* process
+# that merely imports this module — including the test runner, where
+# structlog.stdlib.recreate_defaults() replaces pytest's caplog handler and
+# silently breaks every later caplog-based assertion.
 from weebot.infrastructure.observability.logging_config import configure_logging as _configure_weebot_logging
-_configure_weebot_logging()
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -308,6 +311,7 @@ _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    _configure_weebot_logging()
     import weebot
     app = FastAPI(
         title="Weebot API",

@@ -319,17 +319,8 @@ class AdapterFactory:
             # the OpenRouter key from create_llm_adapter.  xAI models must
             # authenticate with XAI_API_KEY against https://api.x.ai/v1.
             # Using an OpenRouter key on xAI's endpoint produces a 401.
-            _xai_key = None
-            try:
-                from weebot.config.settings import WeebotSettings
-                _xai_key = WeebotSettings().xai_api_key
-            except Exception:
-                _xai_key = os.getenv("XAI_API_KEY")
-            if not _xai_key:
-                _xai_key = os.getenv("XAI_API_KEY")
-            xai_key = _xai_key
             direct = OpenAIAdapter(
-                api_key=xai_key,
+                api_key=_resolve_direct_key("XAI_API_KEY"),
                 base_url=XAI_API_BASE,
                 default_model=clean_model,
             )
@@ -378,39 +369,42 @@ class AdapterFactory:
         return self.DEFAULT_CONFIGS.get(provider.lower(), {}).copy()
 
 
-def _has_direct_key(env_var: str) -> bool:
-    """Return True if the given API key env var is set to a non-empty value.
+# Env var name → WeebotSettings field name, for provider direct-API keys.
+# Single source of truth for both _resolve_direct_key() and _has_direct_key().
+_SETTINGS_FIELD_MAP: Dict[str, str] = {
+    "XAI_API_KEY": "xai_api_key",
+    "DEEPSEEK_API_KEY": "deepseek_api_key",
+    "KIMI_API_KEY": "kimi_api_key",
+    "MOONSHOT_API_KEY": "kimi_api_key",  # both map to kimi
+    "OPENROUTER_API_KEY": "openrouter_api_key",
+    "OPENAI_API_KEY": "openai_api_key",
+    "ANTHROPIC_API_KEY": "anthropic_api_key",
+}
 
-    Checks .env-backed settings first (which overrides stale system env vars),
-    then falls back to raw os.getenv.
+
+def _resolve_direct_key(env_var: str) -> Optional[str]:
+    """Resolve a provider's direct API key: .env-backed settings first
+    (overrides stale system env vars), falling back to raw os.getenv.
+
+    This is the one canonical resolution path for provider direct-API keys —
+    used both to fetch the key value (here) and to check its presence
+    (``_has_direct_key``), so the two can never disagree.
     """
-    import os as _os
-
-    # Try pydantic-settings first (prefers .env over system env per our config)
-    try:
-        from weebot.config.settings import WeebotSettings
-        settings = WeebotSettings()
-        # Map env var name → settings field name
-        _field_map: dict = {
-            "XAI_API_KEY": "xai_api_key",
-            "DEEPSEEK_API_KEY": "deepseek_api_key",
-            "KIMI_API_KEY": "kimi_api_key",
-            "MOONSHOT_API_KEY": "kimi_api_key",  # both map to kimi
-            "OPENROUTER_API_KEY": "openrouter_api_key",
-            "OPENAI_API_KEY": "openai_api_key",
-            "ANTHROPIC_API_KEY": "anthropic_api_key",
-        }
-        field = _field_map.get(env_var)
-        if field:
-            val = getattr(settings, field, None)
+    field = _SETTINGS_FIELD_MAP.get(env_var)
+    if field:
+        try:
+            from weebot.config.settings import WeebotSettings
+            val = getattr(WeebotSettings(), field, None)
             if val and val.strip():
-                return True
-    except Exception:
-        pass
+                return val
+        except Exception:
+            pass
+    return os.getenv(env_var) or None
 
-    # Fallback: raw environment variable
-    val = _os.getenv(env_var, "")
-    return bool(val and val.strip())
+
+def _has_direct_key(env_var: str) -> bool:
+    """Return True if the given API key env var is set to a non-empty value."""
+    return bool(_resolve_direct_key(env_var))
 
 
 # Global factory instance for convenience

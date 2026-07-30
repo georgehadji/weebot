@@ -22,7 +22,7 @@ from typing import List, Set, Tuple, Optional
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 
 
-class RiskLevel(Enum):
+class CommandRiskLevel(Enum):
     """Risk classification for commands."""
     SAFE = "safe"           # No issues detected
     SUSPICIOUS = "suspicious"  # Requires confirmation
@@ -32,7 +32,7 @@ class RiskLevel(Enum):
 @dataclass
 class SecurityAssessment:
     """Result of security analysis."""
-    risk_level: RiskLevel
+    risk_level: CommandRiskLevel
     layer_triggered: int
     reason: str
     details: Optional[dict] = None
@@ -147,17 +147,17 @@ class CommandSecurityAnalyzer:
         """
         # Layer 1: Pattern matching (Static - Fast)
         assessment = self._layer1_pattern_analysis(command)
-        if assessment.risk_level == RiskLevel.DANGEROUS:
+        if assessment.risk_level == CommandRiskLevel.DANGEROUS:
             return assessment
 
         # Layer 2: Behavioral analysis (Heuristic - Fast)
         assessment = self._layer2_behavioral_analysis(command)
-        if assessment.risk_level == RiskLevel.DANGEROUS:
+        if assessment.risk_level == CommandRiskLevel.DANGEROUS:
             return assessment
 
         # Layer 3: Entropy analysis (Statistical - Fast)
         assessment = self._layer3_entropy_analysis(command)
-        if assessment.risk_level == RiskLevel.DANGEROUS:
+        if assessment.risk_level == CommandRiskLevel.DANGEROUS:
             return assessment
 
         # Layer 4: Semantic validation (Structural - Fast, No LLM)
@@ -171,7 +171,7 @@ class CommandSecurityAnalyzer:
         """Analyze command intent using LLM to detect advanced bypasses."""
         # First, perform fast structural check
         structural = self._layer4_semantic_analysis(command)
-        if structural.risk_level != RiskLevel.SAFE:
+        if structural.risk_level != CommandRiskLevel.SAFE:
             return structural
 
         try:
@@ -214,11 +214,11 @@ class CommandSecurityAnalyzer:
                     risk_str = result.get("risk_level", "suspicious").lower()
                     reason = result.get("reason", "LLM-based detection")
 
-                    risk_level = RiskLevel.SAFE
+                    risk_level = CommandRiskLevel.SAFE
                     if risk_str == "dangerous":
-                        risk_level = RiskLevel.DANGEROUS
+                        risk_level = CommandRiskLevel.DANGEROUS
                     elif risk_str == "suspicious":
-                        risk_level = RiskLevel.SUSPICIOUS
+                        risk_level = CommandRiskLevel.SUSPICIOUS
 
                     return SecurityAssessment(
                         risk_level=risk_level,
@@ -241,12 +241,12 @@ class CommandSecurityAnalyzer:
         for pattern, description in self._DANGEROUS_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
                 return SecurityAssessment(
-                    risk_level=RiskLevel.DANGEROUS,
+                    risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=1,
                     reason=f"Dangerous pattern detected: {description}",
                     details={"pattern": pattern, "match": re.search(pattern, command, re.IGNORECASE).group(0)}
                 )
-        return SecurityAssessment(RiskLevel.SAFE, 1, "No dangerous patterns")
+        return SecurityAssessment(CommandRiskLevel.SAFE, 1, "No dangerous patterns")
     
     def _layer2_behavioral_analysis(self, command: str) -> SecurityAssessment:
         """Detect suspicious behavior combinations."""
@@ -266,7 +266,7 @@ class CommandSecurityAnalyzer:
         for pattern in download_execute_patterns:
             if re.search(pattern, cmd_lower, re.IGNORECASE):
                 return SecurityAssessment(
-                    risk_level=RiskLevel.DANGEROUS,
+                    risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=2,
                     reason="Suspicious download-execute pattern detected",
                     details={
@@ -285,7 +285,7 @@ class CommandSecurityAnalyzer:
 
             if has_indicator and has_target:
                 return SecurityAssessment(
-                    risk_level=RiskLevel.DANGEROUS,
+                    risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=2,
                     reason=f"Suspicious behavior: {description}",
                     details={
@@ -294,7 +294,7 @@ class CommandSecurityAnalyzer:
                     }
                 )
 
-        return SecurityAssessment(RiskLevel.SAFE, 2, "No suspicious behavior")
+        return SecurityAssessment(CommandRiskLevel.SAFE, 2, "No suspicious behavior")
     
     def _layer3_entropy_analysis(self, command: str) -> SecurityAssessment:
         """Detect high-entropy encoded payloads."""
@@ -313,7 +313,7 @@ class CommandSecurityAnalyzer:
                         shell_keywords = ['bash', 'sh', 'exec', 'eval', 'rm -rf', 'format', 'cmd', 'powershell']
                         if any(kw in decoded.lower() for kw in shell_keywords):
                             return SecurityAssessment(
-                                risk_level=RiskLevel.DANGEROUS,
+                                risk_level=CommandRiskLevel.DANGEROUS,
                                 layer_triggered=3,
                                 reason="High-entropy encoded shell command detected",
                                 details={
@@ -335,7 +335,7 @@ class CommandSecurityAnalyzer:
                 entropy = self._calculate_entropy(clean_token)
                 if entropy > self._HIGH_ENTROPY_THRESHOLD:
                     return SecurityAssessment(
-                        risk_level=RiskLevel.DANGEROUS,
+                        risk_level=CommandRiskLevel.DANGEROUS,
                         layer_triggered=3,
                         reason="High-entropy encoded payload detected",
                         details={
@@ -351,7 +351,7 @@ class CommandSecurityAnalyzer:
             entropy = self._calculate_entropy(possible_string)
             if entropy > self._HIGH_ENTROPY_THRESHOLD:
                 return SecurityAssessment(
-                    risk_level=RiskLevel.DANGEROUS,
+                    risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=3,
                     reason="High-entropy encoded payload detected",
                     details={
@@ -360,7 +360,7 @@ class CommandSecurityAnalyzer:
                     }
                 )
 
-        return SecurityAssessment(RiskLevel.SAFE, 3, "No encoded payloads")
+        return SecurityAssessment(CommandRiskLevel.SAFE, 3, "No encoded payloads")
     
     def _layer4_semantic_analysis(self, command: str) -> SecurityAssessment:
         """Validate command structure."""
@@ -377,12 +377,12 @@ class CommandSecurityAnalyzer:
         # Allowlist: known-safe PowerShell patterns skip chain-length check
         for pattern in self._SAFE_POWERSHELL_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
-                return SecurityAssessment(RiskLevel.SAFE, 4, "Known-safe PowerShell pattern")
+                return SecurityAssessment(CommandRiskLevel.SAFE, 4, "Known-safe PowerShell pattern")
         # Check command chain length (PowerShell-aware threshold)
         chain_count = len(re.findall(r'[;|&]', command))
         if chain_count > _powershell_threshold:
             return SecurityAssessment(
-                risk_level=RiskLevel.SUSPICIOUS,
+                risk_level=CommandRiskLevel.SUSPICIOUS,
                 layer_triggered=4,
                 reason=f"Complex command chain ({chain_count} operators)",
                 details={"chain_length": chain_count}
@@ -393,13 +393,13 @@ class CommandSecurityAnalyzer:
         urls = re.findall(url_pattern, command)
         if urls and any(op in command for op in ['|', '&&', '||']):
             return SecurityAssessment(
-                risk_level=RiskLevel.SUSPICIOUS,
+                risk_level=CommandRiskLevel.SUSPICIOUS,
                 layer_triggered=4,
                 reason="URL with command chaining detected",
                 details={"urls_found": urls}
             )
         
-        return SecurityAssessment(RiskLevel.SAFE, 4, "Structure valid")
+        return SecurityAssessment(CommandRiskLevel.SAFE, 4, "Structure valid")
     
     def _calculate_entropy(self, data: str) -> float:
         """Calculate Shannon entropy of string."""

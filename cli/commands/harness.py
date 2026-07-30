@@ -278,3 +278,156 @@ def harness_evolve(
     asyncio.run(_run())
 
 
+
+# ── Baseline: record and check eval performance over time ──────────
+
+DEFAULT_BASELINE_PATH = "weebot/config/harness/baseline.json"
+DEFAULT_EVAL_TASKS = "weebot/config/harness/eval_tasks.yaml"
+
+
+def _git_sha() -> str:
+    import subprocess
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=True,
+        ).stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+async def _run_eval_tasks(tasks, model, db, concurrency):
+    """Run (task_id, split, prompt) triples through PlanActFlow.
+
+    Returns a list of TaskOutcome. A task counts as passed when its flow
+    reaches a terminal state without raising — the eval prompts have no
+    expected answers, so this measures completion, not correctness.
+    """
+    import asyncio as _asyncio
+    import uuid
+
+    from weebot.application.di import Container
+    from weebot.application.harness.baseline import TaskOutcome, prompt_fingerprint
+    from weebot.domain.models.session import Session
+
+    container = Container()
+    container.configure_defaults(db_path=db, default_model=model)
+    flow_factory = container._create_target_flow_factory()
+
+    semaphore = _asyncio.Semaphore(concurrency)
+
+    async def _one(task_id, split, prompt):
+        async with semaphore:
+            session = Session(
+                id=f"baseline-{task_id}-{uuid.uuid4().hex[:8]}",
+                user_id="baseline",
+                agent_id="harness-baseline",
+            )
+            try:
+                flow = flow_factory(session)
+                async for _ in flow.run(prompt):
+                    pass
+            except Exception as exc:
+                return TaskOutcome(
+                    task_id=task_id, split=split,
+                    fingerprint=prompt_fingerprint(prompt),
+                    passed=False, score=0.0, error=str(exc)[:200],
+                )
+            completed = getattr(flow, "_session", session)
+            status = str(getattr(completed, "status", "")).lower()
+            passed = "fail" not in status and "error" not in status
+            return TaskOutcome(
+                task_id=task_id, split=split,
+                fingerprint=prompt_fingerprint(prompt),
+                passed=passed, score=1.0 if passed else 0.0,
+            )
+
+    return list(await _asyncio.gather(*[_one(*t) for t in tasks]))
+
+
+@harness.group("baseline")
+def harness_baseline() -> None:
+    """Record and check eval performance against a committed snapshot."""
+
+
+@harness_baseline.command("record")
+@click.option("--output", "-o", default=DEFAULT_BASELINE_PATH, show_default=True)
+@click.option("--tasks", default=DEFAULT_EVAL_TASKS, show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--db", default="./weebot_baseline.db", show_default=True)
+@click.option("--concurrency", default=2, type=int, show_default=True)
+@click.option("--notes", default="", help="Free-text note stored in the artifact")
+def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> None:
+    """Run the eval set and write a baseline snapshot.
+
+    Requires LLM credentials. Commit the resulting artifact — every later
+    `harness baseline check` is measured against it.
+    """
+    from datetime import datetime, timezone
+
+    from weebot.application.harness.baseline import Baseline, load_eval_tasks
+    from weebot.config.harness.schema import HarnessConfig
+
+    triples = load_eval_tasks(tasks)
+    console.print(f"Running {len(triples)} eval task(s)…")
+
+    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency))
+
+    try:
+        harness_version = HarnessConfig.default().version
+    except Exception:
+        harness_version = "unknown"
+
+    baseline = Baseline(
+        recorded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        git_sha=_git_sha(),
+        model=model or "default",
+        harness_version=harness_version,
+        outcomes=tuple(outcomes),
+        notes=notes,
+    )
+    path = baseline.save(output)
+
+    console.print(
+        f"\n[bold]Baseline recorded[/bold] → {path}\n"
+        f"  pass rate  {baseline.pass_rate:.1%} "
+        f"({sum(1 for o in outcomes if o.passed)}/{len(outcomes)})\n"
+        f"  held-in    {baseline.held_in_pass_rate:.1%}\n"
+        f"  held-out   {baseline.held_out_pass_rate:.1%}"
+    )
+    console.print("[yellow]Commit this file so future runs can be compared to it.[/yellow]")
+
+
+@harness_baseline.command("check")
+@click.option("--baseline", "baseline_path", default=DEFAULT_BASELINE_PATH, show_default=True)
+@click.option("--tasks", default=DEFAULT_EVAL_TASKS, show_default=True)
+@click.option("--model", default=None, help="Override LLM model")
+@click.option("--db", default="./weebot_baseline.db", show_default=True)
+@click.option("--concurrency", default=2, type=int, show_default=True)
+@click.option("--tolerance", default=0.0, type=float, show_default=True,
+              help="Allowed drop in pass rate (0.1 = 10 points)")
+def harness_baseline_check(baseline_path, tasks, model, db, concurrency, tolerance) -> None:
+    """Re-run the eval set and compare against the recorded baseline.
+
+    Exits non-zero on regression, so it can gate CI.
+    """
+    import sys
+
+    from weebot.application.harness.baseline import Baseline, compare, load_eval_tasks
+
+    base = Baseline.load(baseline_path)
+    triples = load_eval_tasks(tasks)
+    console.print(
+        f"Baseline {base.git_sha} ({base.recorded_at}) — "
+        f"re-running {len(triples)} eval task(s)…"
+    )
+
+    outcomes = asyncio.run(_run_eval_tasks(triples, model, db, concurrency))
+    result = compare(base, outcomes, tolerance=tolerance)
+
+    console.print("\n" + result.summary())
+    if result.ok:
+        console.print("\n[bold green]OK[/bold green] — no regression against baseline.")
+    else:
+        console.print("\n[bold red]REGRESSION[/bold red] — fresh run is worse than baseline.")
+        sys.exit(1)

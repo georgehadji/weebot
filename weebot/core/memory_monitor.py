@@ -339,7 +339,11 @@ class MemoryAwareMixin:
         self._max_workers = max_workers
         self._current_workers = max_workers
         self._semaphore = asyncio.Semaphore(max_workers)
-        
+        # Permits withheld from the shared semaphore to shrink effective
+        # capacity.  See _on_memory_event / _withhold_permits.
+        self._withheld = 0
+        self._withhold_tasks: set = set()
+
         # Setup memory monitor
         self._memory_monitor = MemoryMonitor(thresholds=memory_thresholds)
         self._memory_monitor.register_callback(self._on_memory_event)
@@ -354,14 +358,49 @@ class MemoryAwareMixin:
     
     def _on_memory_event(self, level: str, stats: MemoryStats):
         """Handle memory events by adjusting worker count."""
-        if level == "critical":
-            old_workers = self._current_workers
-            self._current_workers = max(1, self._current_workers // 2)
-            self._semaphore = asyncio.Semaphore(self._current_workers)
-            logger.warning(
-                f"Reduced workers: {old_workers} -> {self._current_workers} "
-                f"due to memory pressure"
-            )
+        if level != "critical":
+            return
+
+        old_workers = self._current_workers
+        new_workers = max(1, old_workers // 2)
+        if new_workers >= old_workers:
+            return  # Already at the floor — nothing to shrink.
+
+        self._current_workers = new_workers
+        self._withhold_permits(old_workers - new_workers)
+        logger.warning(
+            f"Reduced workers: {old_workers} -> {new_workers} "
+            f"due to memory pressure"
+        )
+
+    def _withhold_permits(self, count: int) -> None:
+        """Shrink effective capacity by holding *count* permits.
+
+        The semaphore object is never replaced.  Replacing it was the original
+        defect: in-flight tasks hold permits on the *old* object, so a fresh
+        semaphore hands out a full set of new permits and total concurrency
+        briefly becomes ``in_flight + new_capacity`` — an overflow, which is
+        the opposite of what memory pressure should cause.
+
+        Withholding instead means the reduction applies as running work
+        drains: each withheld permit is acquired normally and simply never
+        released, so the cap is honoured at every instant.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop (e.g. a synchronous monitor callback in tests).
+            # Capacity intent is recorded; permits are withheld on next event.
+            return
+
+        async def _hold_one() -> None:
+            await self._semaphore.acquire()
+            self._withheld += 1  # Deliberately never released.
+
+        for _ in range(count):
+            task = loop.create_task(_hold_one())
+            self._withhold_tasks.add(task)
+            task.add_done_callback(self._withhold_tasks.discard)
     
     @asynccontextmanager
     async def memory_slot(self):
