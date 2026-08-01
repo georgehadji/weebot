@@ -27,7 +27,7 @@ test:
 
 lint-imports:
 	@echo "=== Import-Linter Architecture Checks ==="
-	lint-imports --config .importlinter
+	lint-imports --config .importlinter --verbose
 	@echo "All architecture contracts satisfied."
 
 lint-async-io:

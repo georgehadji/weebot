@@ -1246,7 +1246,11 @@ def test_core_no_application_imports():
     import sys
 
     result = subprocess.run(
-        ["lint-imports", "--config", ".importlinter"],
+        # --verbose avoids import-linter 2.13's nested rich Live displays
+        # (console.status + Live), which crash with "Only one live display may
+        # be active at once" and made this gate report a false failure while
+        # checking nothing. Drop the flag once upstream fixes the nesting.
+        ["lint-imports", "--config", ".importlinter", "--verbose"],
         capture_output=True, text=True, cwd=ROOT.parent,
     )
     # The contract must pass — verify by name in output
