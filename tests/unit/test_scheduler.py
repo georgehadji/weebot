@@ -591,7 +591,11 @@ class TestRegisterDefaultJobs:
             await register_default_jobs(manager2, self.make_container())
             second = {j.job_id: j.created_at for j in manager2.list_jobs()}
 
-            assert set(first) == set(self.DEFAULT_JOB_IDS)
+            # Superset, not equality: register_default_jobs also calls
+            # scheduler.load_from_config(), which persists the extra jobs
+            # declared in config/jobs.yaml. What this test pins down is that
+            # every hardcoded default is created.
+            assert set(self.DEFAULT_JOB_IDS) <= set(first)
             assert first == second  # untouched — existing jobs were skipped
         finally:
             self.cleanup_temp_db(tmpdir)

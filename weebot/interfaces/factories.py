@@ -146,6 +146,12 @@ def create_flow(
         personality = _resolve_personality()
         # Resolve optional services from DI container (cached per-process)
         _code_reviewer = _cached("code_reviewer")
+        # Knowledge-graph extraction is opt-in: the hook in ExecutingState
+        # writes a node per "key: value" line of every step result.
+        from weebot.config.feature_flags import KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
+        _knowledge_graph = (
+            _cached("knowledge_graph") if KNOWLEDGE_GRAPH_EXTRACTION_ENABLED else None
+        )
         return PlanActFlow(
             llm=llm,
             tools=tools,
@@ -160,6 +166,7 @@ def create_flow(
             personality=personality,
             agent_role=profile_name,  # SOUL.md profile doubles as agent role
             code_reviewer=_code_reviewer,
+            knowledge_graph=_knowledge_graph,
         )
     if flow_type == "chat":
         import importlib as _il

@@ -188,6 +188,7 @@ class SchedulingManager:
         command: Optional[str] = None,
         callable_name: Optional[str] = None,
         description: Optional[str] = None,
+        enabled: bool = True,
     ) -> ScheduledJob:
         """Create a new scheduled job.
 
@@ -199,6 +200,7 @@ class SchedulingManager:
             command: Command to execute (for bash/python)
             callable_name: Name of registered callable to invoke
             description: Job description
+            enabled: When False the job is persisted but never scheduled.
 
         Returns:
             ScheduledJob instance
@@ -215,6 +217,7 @@ class SchedulingManager:
             command=command,
             callable_name=callable_name,
             status=JobStatus.PENDING.value,
+            enabled=enabled,
         )
 
         # Store in database
@@ -536,6 +539,7 @@ class SchedulingManager:
                         trigger_type=job_def["trigger_type"],
                         trigger_config=job_def.get("trigger_config", {}),
                         callable_name=job_def.get("callable_name"),
+                        enabled=bool(job_def.get("enabled", True)),
                     )
                     loaded += 1
             logger.info("Loaded %d jobs from %s", loaded, config_path)

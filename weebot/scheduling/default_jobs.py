@@ -68,20 +68,26 @@ async def _memory_compact_job(state_repo: StateRepositoryPort) -> None:
     """Compact RUNNING sessions that have accumulated many events."""
     from weebot.application.services.memory_compactor import MemoryCompactor
 
+    # list_sessions() is a lightweight listing (events not populated — see
+    # SQLiteStateRepository._row_to_session's load_events=False fast path),
+    # so re-load each RUNNING session in full before compacting it.
     sessions = await state_repo.list_sessions()
     compactor = MemoryCompactor()
     compacted_count = 0
 
-    for session in sessions:
-        if session.status != SessionStatus.RUNNING:
+    for session_summary in sessions:
+        if session_summary.status != SessionStatus.RUNNING:
             continue
         try:
+            session = await state_repo.load_session(session_summary.id)
+            if session is None:
+                continue
             compacted = compactor.compact_session(session)
             if compacted is not session:  # identity check — compactor returns new instance
                 await state_repo.save_session(compacted)
                 compacted_count += 1
         except Exception:
-            logger.exception("Compaction failed for session %s", session.id)
+            logger.exception("Compaction failed for session %s", session_summary.id)
 
     logger.info("Memory compaction: %d sessions compacted", compacted_count)
 
@@ -153,6 +159,65 @@ async def _database_backup_job() -> None:
         logger.info("Database backup completed: %s", stdout.decode()[:500].strip())
     else:
         logger.error("Database backup FAILED (exit %d): %s", proc.returncode, stderr.decode()[:2000].strip())
+
+
+async def _memory_salience_sweep_job(state_repo: StateRepositoryPort) -> None:
+    """Evict low-salience memory entries that are past their TTL."""
+    from weebot.application.services.memory_lifecycle_service import MemoryLifecycleService
+
+    stats = await MemoryLifecycleService().sweep(repo=state_repo)
+    logger.info(
+        "Memory salience sweep: checked=%d, evicted=%d",
+        stats["checked"], stats["evicted"],
+    )
+
+
+async def _commitment_heartbeat_job(state_repo: StateRepositoryPort) -> None:
+    """Scan for overdue commitments and refresh their statuses."""
+    from weebot.domain.services.commitment_engine import CommitmentEngine
+
+    stats = await CommitmentEngine(state_repo=state_repo).heartbeat()
+    logger.info(
+        "Commitment heartbeat: checked=%d, overdue=%d, pending=%d",
+        stats["checked"], stats["marked_overdue"], stats["active_pending"],
+    )
+
+
+async def _behavioral_consolidation_job(state_repo: StateRepositoryPort) -> None:
+    """Rebuild the consolidated user model from recorded behaviour."""
+    from weebot.application.services.user_model_consolidator import UserModelConsolidator
+
+    profile = await UserModelConsolidator(state_repo=state_repo).consolidate()
+    logger.info(
+        "User-model consolidation: profile (%d chars, %d words)",
+        len(profile), len(profile.split()),
+    )
+
+
+async def _integrity_check_job() -> None:
+    """Report uncommitted work and low disk space."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    issues: list[str] = []
+    try:
+        result = await asyncio.to_thread(
+            lambda: subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, timeout=10,
+            )
+        )
+        if result.stdout.strip():
+            issues.append(f"Uncommitted changes: {len(result.stdout.strip().splitlines())} files")
+    except Exception as exc:
+        issues.append(f"Git check failed: {exc}")
+
+    _total, _used, free = shutil.disk_usage(Path.cwd())
+    if free // (2**30) < 1:
+        issues.append("Low disk space")
+
+    logger.info("Integrity check: %s", issues or "all clear")
 
 
 # ── ScheduledJobEvent wrapper ────────────────────────────────────────
@@ -227,14 +292,31 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
         ),
     )
 
+    # ── Callables for the jobs declared in config/jobs.yaml ──────────
+    for _job_id, _job_name, _job_call in (
+        ("memory_salience_sweep", "Memory Salience Sweep",
+         lambda: _memory_salience_sweep_job(state_repo)),
+        ("commitment_heartbeat", "Commitment Heartbeat",
+         lambda: _commitment_heartbeat_job(state_repo)),
+        ("behavioral_consolidation", "Behavioural Rule Consolidation",
+         lambda: _behavioral_consolidation_job(state_repo)),
+        ("integrity_check", "Self Integrity Check",
+         _integrity_check_job),
+    ):
+        scheduler.register_callable(
+            _job_id, _with_job_metrics(_job_id, _job_name, _job_call),
+        )
+
     # ── Create jobs (idempotent) ────────────────────
     await _create_if_absent(scheduler, "weebot_session_health", name="Session Health Snapshot",
-                            trigger_type="interval", trigger_config={"hours": HEALTH_INTERVAL_HOURS},
+                            trigger_type="interval",
+                            trigger_config={"hours": HEALTH_INTERVAL_HOURS},
                             callable_name="weebot_session_health",
                             description="Scan sessions for staleness every 12 hours")
 
     await _create_if_absent(scheduler, "weebot_memory_compact", name="Memory Compaction",
-                            trigger_type="interval", trigger_config={"hours": COMPACT_INTERVAL_HOURS},
+                            trigger_type="interval",
+                            trigger_config={"hours": COMPACT_INTERVAL_HOURS},
                             callable_name="weebot_memory_compact",
                             description="Compact long-running session buffers every 4 hours")
 
@@ -244,9 +326,13 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
                             description="Classify and review stale skills daily at 02:00")
 
     await _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
-                      trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
-                      callable_name="weebot_database_backup",
-                      description="Online backup of sessions database daily at 03:00")
+                            trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
+                            callable_name="weebot_database_backup",
+                            description="Online backup of sessions database daily at 03:00")
+
+    # ── Jobs declared in config/jobs.yaml ────────────
+    # Disabled entries are persisted but never scheduled.
+    await scheduler.load_from_config()
 
 
 async def _create_if_absent(scheduler: Any, job_id: str, **kwargs: Any) -> None:

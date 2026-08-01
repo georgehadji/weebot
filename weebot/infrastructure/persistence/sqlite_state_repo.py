@@ -288,12 +288,23 @@ class SQLiteStateRepository(StateRepositoryPort):
 
     async def list_sessions(
         self, user_id: Optional[str] = None, status: Optional[str] = None,
-        limit: int = 100, offset: int = 0,
+        limit: int = 100, offset: int = 0, load_events: bool = False,
     ) -> List[Session]:
+        """List sessions, optionally filtered by user/status.
+
+        ``load_events`` defaults to False: most callers (list views, health
+        checks, staleness scans, job scans) only read id/status/user_id, and
+        deserializing every session's full event JSON here is O(sessions ×
+        events) wasted work. Callers that actually inspect ``.events`` on the
+        returned sessions (e.g. text/similarity search over event content)
+        must pass ``load_events=True`` explicitly.
+        """
         await self._init_helpers()
         rows = await self._session_queries.list(  # type: ignore[union-attr]
             user_id=user_id, status=status, limit=limit, offset=offset,
         )
+        if load_events:
+            return [self._row_to_session(r, load_events=True) for r in rows]
         return [self._row_to_session(r, load_events=False) for r in rows]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:

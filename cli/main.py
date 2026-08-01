@@ -44,8 +44,19 @@ from typing import Any
 #
 # override=True: .env values take priority over stale system environment
 # variables (e.g. an old OPENROUTER_API_KEY from a previous session).
-from dotenv import load_dotenv
-load_dotenv(override=True)
+#
+# Skipped under pytest (PYTEST_VERSION is set automatically by pytest >=7.2
+# before collection starts): this module is imported at collection time by
+# CLI-command tests (e.g. `from cli.main import cli`), and override=True
+# would otherwise clobber a test's real, deliberately-clean os.environ with
+# the repo's .env — permanently for the rest of the session, since Python
+# only imports this module once. That leaked values like
+# WEEBOT_ACR_BANDIT=true into every test that runs afterwards, including
+# ones that bake feature-flag constants from os.environ at import time.
+import os
+if "PYTEST_VERSION" not in os.environ:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
 
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort

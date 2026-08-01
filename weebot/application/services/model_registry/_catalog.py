@@ -808,6 +808,17 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
+    "google/gemini-3.6-flash": ModelConfig(
+        name="Google: Gemini 3.6 Flash",
+        provider="openrouter",
+        cost_per_1k_tokens=0.0045,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.AGENTIC, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=6,
+    ),
+
     "google/gemma-2-27b-it": ModelConfig(
         name="Google: Gemma 2 27B",
         provider="openrouter",
@@ -1072,6 +1083,17 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
+    "meituan/longcat-2.0": ModelConfig(
+        name="Meituan: LongCat 2.0",
+        provider="openrouter",
+        cost_per_1k_tokens=0.00075,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.AGENTIC, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=6,
+    ),
+
     "meta-llama/llama-3.1-70b-instruct": ModelConfig(
         name="Meta: Llama 3.1 70B Instruct",
         provider="openrouter",
@@ -1191,6 +1213,17 @@ MODELS: dict[str, ModelConfig] = {
         tier=ModelTier.STANDARD,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
+    ),
+
+    "meta/muse-spark-1.1": ModelConfig(
+        name="Meta: Muse Spark 1.1",
+        provider="openrouter",
+        cost_per_1k_tokens=0.00275,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.AGENTIC, TaskType.REASONING, TaskType.CODE_REVIEW, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=6,
     ),
 
     "microsoft/phi-4": ModelConfig(
@@ -1576,6 +1609,17 @@ MODELS: dict[str, ModelConfig] = {
         tier=ModelTier.STANDARD,
         api_key_env="KIMI_API_KEY",
         tool_use_score=5,
+    ),
+
+    "moonshotai/kimi-k3": ModelConfig(
+        name="MoonshotAI: Kimi K3",
+        provider="moonshot",
+        cost_per_1k_tokens=0.009,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.DEBUGGING, TaskType.REASONING, TaskType.AGENTIC, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.PREMIUM,
+        api_key_env="KIMI_API_KEY",
+        tool_use_score=7,
     ),
 
     "morph/morph-v3-fast": ModelConfig(
@@ -2678,6 +2722,17 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
+    "poolside/laguna-s-2.1": ModelConfig(
+        name="Poolside: Laguna S 2.1",
+        provider="openrouter",
+        cost_per_1k_tokens=0.00015,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.CODE_GENERATION, TaskType.CODE_REVIEW, TaskType.AGENTIC, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.FAST,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=6,
+    ),
+
     "poolside/laguna-xs-2.1": ModelConfig(
         name="Poolside: Laguna XS 2.1",
         provider="openrouter",
@@ -3447,6 +3502,17 @@ MODELS: dict[str, ModelConfig] = {
         tier=ModelTier.STANDARD,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
+    ),
+
+    "thinkingmachines/inkling": ModelConfig(
+        name="Thinking Machines: Inkling",
+        provider="openrouter",
+        cost_per_1k_tokens=0.002525,
+        context_window=1048576,
+        strengths=[TaskType.CHAT, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.AGENTIC, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=6,
     ),
 
     "undi95/remm-slerp-l2-13b": ModelConfig(

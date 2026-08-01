@@ -240,6 +240,10 @@ class CatalogValidator:
             "anthropic": "openrouter",
             "openai": "openrouter",
             "cohere": "openrouter",
+            "poolside": "openrouter",
+            "meituan": "openrouter",
+            "thinkingmachines": "openrouter",
+            "meta": "openrouter",
         }
 
         # Models whose prefix matches the provider name directly

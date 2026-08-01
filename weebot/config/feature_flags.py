@@ -100,6 +100,17 @@ VISION_REFLECTION_ENABLED: bool = _env_bool(
 )
 
 
+# ── Knowledge-graph extraction in the execution loop ────────────────────────
+# When True, PlanActFlow receives the KnowledgeGraphService and the hook in
+# ExecutingState upserts a node for every ``key: value`` line of every step
+# result.  Extraction is a pure heuristic (no LLM call), but it is chatty: one
+# SQLite write per matching line, on every step.  Default OFF — enable once you
+# actually want the graph populated.
+KNOWLEDGE_GRAPH_EXTRACTION_ENABLED: bool = _env_bool(
+    "WEEBOT_KNOWLEDGE_GRAPH_EXTRACTION", default=False
+)
+
+
 # ── B2. OpenTelemetry tracing (ARCH-AUDIT-V2) ───────────────────────────────
 # When True, PlanActFlow and ExecutorAgent create OTEL spans.  Default OFF
 # until an OTEL collector endpoint is configured.

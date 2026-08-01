@@ -605,6 +605,8 @@ def test_no_blocking_calls_in_async():
         "design_system_tool.py",   # sync subprocess in tools
         "mcp_client.py",           # legacy module (ADR-004)
         "_capabilities.py",       # git integrity check (tracked: ARCHITECTURE_9_PLAN.md)
+        "default_jobs.py",       # git integrity check job, moved from _capabilities.py;
+                                  # subprocess.run is wrapped in asyncio.to_thread (non-blocking)
     }
     violations = [
         v for v in violations
@@ -933,6 +935,11 @@ def test_orphan_ports_flagged():
         "IContextEnginePort",
         "EventPublisherPort",   # → WebSocketEventBroadcaster in interfaces/ (not infra/)
         "AuditPort",            # → AuditService in application/services/ (DI registers concrete class since b2b1d5b)
+        # → HarnessOptimizationTarget in application/services/, used directly by
+        # harness_opt_flow and harness_edit_handler. This scan only looks in di/
+        # and infrastructure/, so application-service implementations read as
+        # orphans — same exemption as AuditPort above.
+        "OptimizationTarget",
     }
 
     # Get all port class names

@@ -219,4 +219,3 @@ ignore_imports =
     # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory for the
     # pattern.
     weebot.application.di -> weebot.interfaces.**
-    weebot.application.di.** -> weebot.interfaces.**
