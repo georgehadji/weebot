@@ -585,6 +585,7 @@ class SchedulingManager:
                         runner = CronAgentRunner(
                             llm=container.get("llm_port"),
                             state_repo=container.get("state_repo_port"),
+                            flow_factory=container.get("create_flow"),
                         )
                         result = await runner.run(job)
 

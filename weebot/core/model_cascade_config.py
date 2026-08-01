@@ -8,10 +8,12 @@ Fetched from: https://openrouter.ai/api/v1/models
 Updated: 2026-06-09
 
 **This is the configuration source only.** The canonical cascade execution
-logic lives in ``ExecutorAgent._call_with_cascade()`` at
-``weebot/application/agents/executor.py``.  That method handles parallel
-Phase 1 dispatch, sequential Phase 2 fallback, per-model circuit breakers,
-and 2s timeouts — all driven by the tier constants defined here.
+logic lives in ``CascadeExecutor.call_with_cascade()`` at
+``weebot/application/agents/executor/_cascade.py`` (extracted from the
+former ``ExecutorAgent._call_with_cascade()`` during the executor god-class
+split). That method handles parallel Phase 1 dispatch, sequential Phase 2
+fallback, per-model circuit breakers, and 2s timeouts — all driven by the
+tier constants defined here.
 
 The former ``ModelCascadeService`` in ``model_cascade_integration.py`` was
 removed (2026-04) — it contained a hardcoded placeholder that never called

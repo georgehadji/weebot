@@ -6,7 +6,6 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models import (
     AgentState, Memory, Message, Role, ToolCallSpec, ToolResult,
 )
@@ -37,7 +36,11 @@ class ToolCallWeebotAgent:
 
     def __init__(
         self,
-        tools: ToolCollection,
+        # Annotated as Any rather than ToolCollection: `core` must not import
+        # `application` (import-linter contract "core-no-app"), and grimp
+        # records TYPE_CHECKING imports too, so a type-only import would still
+        # break the contract.  Duck-typed — any tool collection works.
+        tools: Any,
         system_prompt: str = SYSTEM_PROMPT,
         model: str | None = None,
         max_steps: int = MAX_STEPS,

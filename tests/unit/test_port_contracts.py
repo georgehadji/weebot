@@ -43,11 +43,6 @@ _ZERO_ADAPTER_PORTS = {
         "OptimizerAgent inherits OptimizerPort but is not found by "
         "conservative scan (deep import path)"
     ),
-    "CanonicalizerPort": (
-        "Docstring documents an ActionCanonicalizer implementation that was "
-        "never written — genuinely unimplemented, not a scan gap. "
-        "See docs/plans/ARCHITECTURE_9_PLAN.md."
-    ),
 }
 
 

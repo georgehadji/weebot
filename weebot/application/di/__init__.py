@@ -163,6 +163,40 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # Populate the registry with known flow types
         self.build_flow_registry()
 
+        # Flow factory callable — resolved here so application services can
+        # receive it by injection instead of importing the interfaces layer.
+        # The composition root owns cross-layer imports; services must not.
+        def _create_flow_callable():
+            from weebot.interfaces.factories import create_flow
+            return create_flow
+
+        self.register("create_flow", _create_flow_callable)
+
+        # Action Canonicalizer factory (Tier 1.1) — resolved here so the
+        # interfaces layer can build one per tool list without importing
+        # infrastructure adapters directly (composition root owns that import).
+        def _build_action_canonicalizer(tools):
+            from weebot.infrastructure.adapters.action_canonicalizer import ActionCanonicalizer
+            cfg = self.get(HarnessConfig).canonicalizer
+            return ActionCanonicalizer(
+                tools=tools,
+                strict_mode=cfg.strict_mode,
+                coerce_types=cfg.coerce_types,
+            )
+
+        self.register("build_action_canonicalizer", lambda: _build_action_canonicalizer)
+
+        # Environment Contract Layer (Tier 3.2) — loads config/contracts/*.yaml
+        # once and hands back a ready ContractLoader. No per-tool-list
+        # dependency (unlike the canonicalizer), so this is a plain singleton
+        # rather than a factory-returning-a-factory.
+        def _create_contract_loader():
+            from weebot.infrastructure.adapters.contract_loader import ContractLoader
+            contracts_dir = self.get(HarnessConfig).canonicalizer.contracts_dir
+            return ContractLoader(contracts_dir=contracts_dir)
+
+        self.register("contract_loader", _create_contract_loader)
+
         # Event pipeline middleware — composable _emit() processing
         pipeline = self.build_event_pipeline()
         self.register_instance("event_pipeline", pipeline)

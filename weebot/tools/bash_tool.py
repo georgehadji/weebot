@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Multi-layer security analyzer
 from weebot.tools.bash_security import (
     CommandSecurityAnalyzer,
-    RiskLevel,
+    CommandRiskLevel,
     get_security_analyzer
 )
 
@@ -239,7 +239,7 @@ class BashTool(BaseTool):
             try:
                 assessment = self._security_analyzer.analyze(command)
                 
-                if assessment.risk_level == RiskLevel.DANGEROUS:
+                if assessment.risk_level == CommandRiskLevel.DANGEROUS:
                     # Check for override token (admin only)
                     if security_override and self._verify_override_token(command, security_override):
                         import logging
@@ -255,7 +255,7 @@ class BashTool(BaseTool):
                         f"Details: {assessment.details}"
                     )
                 
-                elif assessment.risk_level == RiskLevel.SUSPICIOUS:
+                elif assessment.risk_level == CommandRiskLevel.SUSPICIOUS:
                     # Suspicious commands require explicit confirmation
                     # This is handled by the approval policy below
                     logger.info(

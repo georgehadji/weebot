@@ -143,3 +143,14 @@ skills-lock.json
 graphify-out/
 /implementation_audit_report.md
 /implementation_plan.md
+# ── Personal contact exports (PII) ───────────────────────────────────
+# Untracked deliberately: these are real address-book dumps containing
+# names and contact details. They remain in git history — purging them
+# requires a coordinated `git filter-repo` rewrite plus a force-push.
+# See PRODUCTION_READINESS_ASSESSMENT.md (P3-3) / implementation_plan.md (WI-18).
+abook-*_contacts.json
+thunderbird_addressbooks.json
+
+# Windows shell artifacts (captured error output, not real files)
+$null
+nul;

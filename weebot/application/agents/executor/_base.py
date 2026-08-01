@@ -165,6 +165,7 @@ class ExecutorAgent:
         middleware_chain: MiddlewareChain | None = None,  # MiddlewareChain — interceptor pipeline
         state_repo: StateRepositoryPort | None = None,  # State repository for user profile etc.
         tracing_port: Any | None = None,  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
+        trajectory_config: Any | None = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
     ):
         self._llm = llm
         self._tools = tools
@@ -185,7 +186,15 @@ class ExecutorAgent:
         self._tracing_port: Any | None = tracing_port
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
-        self._trajectory_monitor = TrajectoryMonitor()
+        if trajectory_config is not None:
+            self._trajectory_monitor = TrajectoryMonitor(
+                repetition_threshold=trajectory_config.repetition_threshold,
+                stagnation_window=trajectory_config.stagnation_window,
+                budget_hotspot_ratio=trajectory_config.budget_hotspot_ratio,
+                exhaustion_ratio=trajectory_config.exhaustion_ratio,
+            )
+        else:
+            self._trajectory_monitor = TrajectoryMonitor()
         # Phase 2: skill-gap signals collected during retrieval; processed at session end
         self._skill_gaps: list[dict] = []
         self._max_context_turns = max_context_turns

@@ -243,6 +243,7 @@ def cron_run(job_id: str) -> None:
         llm=container.get("llm_port"),
         state_repo=container.get("state_repo_port"),
         tool_registry=None,
+        flow_factory=container.get("create_flow"),
     )
 
     result = asyncio.run(runner.run(job))

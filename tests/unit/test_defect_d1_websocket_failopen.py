@@ -1,91 +1,72 @@
-"""Proof-of-defect for D1: WebSocket bypasses FailClosedMiddleware.
+"""Regression tests for D1: WebSocket must not bypass FailClosedMiddleware.
 
-When no WEEBOT_API_KEY is configured, HTTP requests from non-loopback are
-blocked by FailClosedMiddleware (503), but WebSocket connections are accepted
-because _websocket_auth returns True for missing API key.
+History
+-------
+This file began as a proof-of-defect: when no ``WEEBOT_API_KEY`` was
+configured, ``_websocket_auth`` returned ``True`` unconditionally, so remote
+WebSocket clients were accepted while the equivalent HTTP request was refused
+with 503 by ``FailClosedMiddleware``.
+
+The defect is fixed — ``_websocket_auth`` now applies the same loopback-only
+policy as the HTTP path.  The assertions below have been inverted accordingly:
+they now pin the *correct* behaviour so the fail-open cannot silently return.
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
+from weebot.interfaces.web.main import _LOOPBACK, _websocket_auth
 
-class TestWebSocketFailOpen:
-    """D1 — WebSocket endpoints bypass fail-closed HTTP middleware."""
 
-    def test_websocket_accepts_any_peer_when_no_api_key(self):
-        """_websocket_auth returns True for any peer when no API key is set,
-        bypassing the fail-closed design intent."""
-        from weebot.interfaces.web.main import _websocket_auth
-
-        ws = MagicMock()
-        ws.headers = {}
-        ws.query_params = {}
-
-        mock_settings = MagicMock()
-        mock_settings.weebot_api_key = None
-
-        result = _websocket_auth(ws, mock_settings)
-        assert result is True, (
-            "_websocket_auth returns True for any peer when no API key is set, "
-            "bypassing the fail-closed design intent"
-        )
-
-    def test_websocket_auth_vs_failclosed_mismatch(self):
-        """HTTP middleware and WebSocket auth have inconsistent policies."""
-        from weebot.interfaces.web.main import _websocket_auth
-
-        ws = MagicMock()
-        ws.headers = {}
-        ws.query_params = {}
-
-        mock_settings = MagicMock()
-        mock_settings.weebot_api_key = None
-
-        # WebSocket: returns True unconditionally when no key
-        assert _websocket_auth(ws, mock_settings) is True
-
-        # HTTP middleware would check client host and return 503 for remote.
-        # WebSocket auth doesn't check client host at all.
-        # This is the defect — inconsistent fail-closed enforcement.
-
-    def test_websocket_loopback_should_be_allowed_when_no_key(self):
-        """When no API key is set, loopback WebSocket should be allowed
-        (consistent with HTTP middleware)."""
-        from weebot.interfaces.web.main import _websocket_auth
-
-        ws = MagicMock()
-        ws.headers = {}
-        ws.query_params = {}
+def _make_ws(host: str | None):
+    """Build a mock WebSocket whose peer address is *host*."""
+    ws = MagicMock()
+    ws.headers = {}
+    ws.query_params = {}
+    if host is None:
+        ws.client = None
+    else:
         ws.client = MagicMock()
-        ws.client.host = "127.0.0.1"
+        ws.client.host = host
+    return ws
 
-        mock_settings = MagicMock()
-        mock_settings.weebot_api_key = None
 
-        # Current behavior: returns True for ANY host
-        # Expected behavior: should check client host like HTTP middleware
-        result = _websocket_auth(ws, mock_settings)
-        assert result is True  # This is correct for loopback
+def _no_key_settings():
+    settings = MagicMock()
+    settings.weebot_api_key = None
+    return settings
 
-    def test_websocket_remote_should_be_rejected_when_no_key(self):
-        """When no API key is set, remote WebSocket should be rejected
-        (consistent with HTTP middleware)."""
-        from weebot.interfaces.web.main import _websocket_auth
 
-        ws = MagicMock()
-        ws.headers = {}
-        ws.query_params = {}
-        ws.client = MagicMock()
-        ws.client.host = "10.0.0.5"
+class TestWebSocketFailClosed:
+    """D1 — WebSocket auth must match the HTTP fail-closed policy."""
 
-        mock_settings = MagicMock()
-        mock_settings.weebot_api_key = None
+    def test_remote_peer_is_rejected_when_no_api_key(self):
+        """A non-loopback peer must be refused when no API key is configured."""
+        assert _websocket_auth(_make_ws("10.0.0.5"), _no_key_settings()) is False
 
-        # Current behavior: returns True even for remote host
-        # Expected behavior: should return False for remote host when no key
-        result = _websocket_auth(ws, mock_settings)
-        assert result is True, (
-            "Defect: _websocket_auth accepts remote WebSocket connection "
-            "when no API key is configured"
+    def test_loopback_peer_is_allowed_when_no_api_key(self):
+        """Loopback keeps working without a key — the single-user desktop case."""
+        for host in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+            assert host in _LOOPBACK, f"{host} should be a recognised loopback address"
+            assert _websocket_auth(_make_ws(host), _no_key_settings()) is True, host
+
+    def test_unknown_peer_is_rejected_when_no_api_key(self):
+        """A connection with no resolvable client address is refused, not allowed."""
+        assert _websocket_auth(_make_ws(None), _no_key_settings()) is False
+
+    def test_policy_matches_http_failclosed_middleware(self):
+        """WebSocket and HTTP must agree: loopback allowed, remote refused.
+
+        The original defect was precisely this inconsistency — HTTP returned
+        503 for remote callers while WebSocket accepted them.
+        """
+        settings = _no_key_settings()
+        remote_allowed = _websocket_auth(_make_ws("203.0.113.9"), settings)
+        loopback_allowed = _websocket_auth(_make_ws("127.0.0.1"), settings)
+
+        assert loopback_allowed is True
+        assert remote_allowed is False
+        assert remote_allowed != loopback_allowed, (
+            "WebSocket auth must distinguish loopback from remote when no API "
+            "key is set, matching FailClosedMiddleware's HTTP behaviour"
         )

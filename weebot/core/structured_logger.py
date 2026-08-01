@@ -169,11 +169,22 @@ class StructuredLogger:
         self.name = name
         self.level = level
         self._logger = logging.getLogger(name)
-        self._logger.setLevel(level)
-        
-        # Add JSON handler if not already present
+
+        # Deliberately do NOT call ``self._logger.setLevel(level)``.
+        #
+        # This class is constructed with package-level names (DI builds
+        # ``StructuredLogger("weebot")``), and a level set on ``weebot``
+        # governs the effective level of every ``weebot.*`` child logger.
+        # Pinning it to INFO silently discarded every ``logger.debug(...)``
+        # call across the whole package — including SecretAccessor's
+        # redaction trail — and could not be re-widened by callers that
+        # only adjust the root logger.
+        #
+        # Levels belong to the application (``configure_logging()``);
+        # a component owns its handler.  Filter on the handler instead.
         if not self._logger.handlers:
             handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(level)
             handler.setFormatter(JSONLogFormatter())
             self._logger.addHandler(handler)
     
