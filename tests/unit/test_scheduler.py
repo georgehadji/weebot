@@ -498,3 +498,99 @@ class TestScheduleTool:
         result = await tool.execute(action="unknown_action")
         assert result.is_error
         assert "unknown" in result.error.lower()
+
+
+class TestRegisterDefaultJobs:
+    """Test the default-job bootstrap in weebot/scheduling/default_jobs.py.
+
+    FALSIFIER: ``_create_if_absent`` is an async function. If any of its three
+    call sites in ``register_default_jobs`` loses its ``await``, the call
+    produces a discarded coroutine, ``scheduler.create_job()`` never runs, and
+    the job is missing from the store even though ``register_callable``
+    succeeded. These tests fail in exactly that case.
+    """
+
+    DEFAULT_JOB_IDS = (
+        "weebot_session_health",
+        "weebot_memory_compact",
+        "weebot_skill_curation",
+    )
+
+    def make_temp_db(self):
+        """Create a temporary database path."""
+        tmpdir = tempfile.mkdtemp()
+        return Path(tmpdir) / "jobs.db", Path(tmpdir)
+
+    def cleanup_temp_db(self, tmpdir: Path):
+        """Clean up temporary directory."""
+        try:
+            shutil.rmtree(tmpdir)
+        except Exception:
+            pass  # Ignore cleanup errors
+
+    def make_container(self):
+        """Container stub resolving the ports register_default_jobs needs.
+
+        The job bodies are never executed here — only captured in closures —
+        so plain mocks are sufficient.
+        """
+        container = MagicMock()
+        container.get.return_value = MagicMock()
+        container._maybe_get.return_value = MagicMock()
+        return container
+
+    @pytest.mark.asyncio
+    async def test_creates_all_default_jobs_on_fresh_store(self):
+        """All three default jobs are persisted against an empty job store."""
+        from weebot.scheduling.default_jobs import register_default_jobs
+
+        db_path, tmpdir = self.make_temp_db()
+        try:
+            manager = SchedulingManager(db_path=db_path)
+            assert manager.list_jobs() == []  # fresh store
+
+            await register_default_jobs(manager, self.make_container())
+
+            for job_id in self.DEFAULT_JOB_IDS:
+                job = manager.get_job(job_id)
+                assert job is not None, f"default job {job_id} was never created"
+                assert job.callable_name == job_id
+                assert job.enabled
+        finally:
+            self.cleanup_temp_db(tmpdir)
+
+    @pytest.mark.asyncio
+    async def test_registers_callables_for_default_jobs(self):
+        """Each created job resolves to a registered callable."""
+        from weebot.scheduling.default_jobs import register_default_jobs
+
+        db_path, tmpdir = self.make_temp_db()
+        try:
+            manager = SchedulingManager(db_path=db_path)
+            await register_default_jobs(manager, self.make_container())
+
+            for job_id in self.DEFAULT_JOB_IDS:
+                assert job_id in manager._callables
+        finally:
+            self.cleanup_temp_db(tmpdir)
+
+    @pytest.mark.asyncio
+    async def test_registration_is_idempotent_across_restarts(self):
+        """A second bootstrap against the same store creates no duplicates."""
+        from weebot.scheduling.default_jobs import register_default_jobs
+
+        db_path, tmpdir = self.make_temp_db()
+        try:
+            manager = SchedulingManager(db_path=db_path)
+            await register_default_jobs(manager, self.make_container())
+            first = {j.job_id: j.created_at for j in manager.list_jobs()}
+
+            # Simulate a server restart against the persisted store.
+            manager2 = SchedulingManager(db_path=db_path)
+            await register_default_jobs(manager2, self.make_container())
+            second = {j.job_id: j.created_at for j in manager2.list_jobs()}
+
+            assert set(first) == set(self.DEFAULT_JOB_IDS)
+            assert first == second  # untouched — existing jobs were skipped
+        finally:
+            self.cleanup_temp_db(tmpdir)

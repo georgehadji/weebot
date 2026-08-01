@@ -228,20 +228,20 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
     )
 
     # ── Create jobs (idempotent) ────────────────────
-    _create_if_absent(scheduler, "weebot_session_health", name="Session Health Snapshot",
-                      trigger_type="interval", trigger_config={"hours": HEALTH_INTERVAL_HOURS},
-                      callable_name="weebot_session_health",
-                      description="Scan sessions for staleness every 12 hours")
+    await _create_if_absent(scheduler, "weebot_session_health", name="Session Health Snapshot",
+                            trigger_type="interval", trigger_config={"hours": HEALTH_INTERVAL_HOURS},
+                            callable_name="weebot_session_health",
+                            description="Scan sessions for staleness every 12 hours")
 
-    _create_if_absent(scheduler, "weebot_memory_compact", name="Memory Compaction",
-                      trigger_type="interval", trigger_config={"hours": COMPACT_INTERVAL_HOURS},
-                      callable_name="weebot_memory_compact",
-                      description="Compact long-running session buffers every 4 hours")
+    await _create_if_absent(scheduler, "weebot_memory_compact", name="Memory Compaction",
+                            trigger_type="interval", trigger_config={"hours": COMPACT_INTERVAL_HOURS},
+                            callable_name="weebot_memory_compact",
+                            description="Compact long-running session buffers every 4 hours")
 
-    _create_if_absent(scheduler, "weebot_skill_curation", name="Skill Curation",
-                      trigger_type="cron", trigger_config={"hour": 2, "minute": 0},
-                      callable_name="weebot_skill_curation",
-                      description="Classify and review stale skills daily at 02:00")
+    await _create_if_absent(scheduler, "weebot_skill_curation", name="Skill Curation",
+                            trigger_type="cron", trigger_config={"hour": 2, "minute": 0},
+                            callable_name="weebot_skill_curation",
+                            description="Classify and review stale skills daily at 02:00")
 
     _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
                       trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
