@@ -503,7 +503,7 @@ class TestScheduleTool:
 class TestRegisterDefaultJobs:
     """Test the default-job bootstrap in weebot/scheduling/default_jobs.py.
 
-    FALSIFIER: ``_create_if_absent`` is an async function. If any of its three
+    FALSIFIER: ``_create_if_absent`` is an async function. If any of its four
     call sites in ``register_default_jobs`` loses its ``await``, the call
     produces a discarded coroutine, ``scheduler.create_job()`` never runs, and
     the job is missing from the store even though ``register_callable``
@@ -514,6 +514,7 @@ class TestRegisterDefaultJobs:
         "weebot_session_health",
         "weebot_memory_compact",
         "weebot_skill_curation",
+        "weebot_database_backup",
     )
 
     def make_temp_db(self):

@@ -243,7 +243,7 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
                             callable_name="weebot_skill_curation",
                             description="Classify and review stale skills daily at 02:00")
 
-    _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
+    await _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
                       trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
                       callable_name="weebot_database_backup",
                       description="Online backup of sessions database daily at 03:00")
