@@ -90,22 +90,32 @@ class LocalEmbeddings:
         self._llama_available = self._check_llama_cpp()
         self._sentence_transformers_available = self._check_sentence_transformers()
 
+    @staticmethod
+    def _is_installed(module: str) -> bool:
+        """Return True if *module* is importable, without importing it.
+
+        ``find_spec`` only locates the module; it does not execute it.  A real
+        import of ``sentence_transformers`` pulls in transformers → accelerate
+        → torch, which costs minutes on a cold start — far too expensive for an
+        availability probe run from ``__init__``.  The heavy import still
+        happens lazily in ``_load_model``/the fallback path, where it is needed.
+        """
+        import importlib.util
+        try:
+            return importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            return False
+
     def _check_llama_cpp(self) -> bool:
         """Check if llama-cpp-python is available."""
-        try:
-            from llama_cpp import Llama
+        if self._is_installed("llama_cpp"):
             return True
-        except ImportError:
-            _log.warning("llama-cpp-python not available, will use fallback")
-            return False
+        _log.warning("llama-cpp-python not available, will use fallback")
+        return False
 
     def _check_sentence_transformers(self) -> bool:
         """Check if sentence-transformers is available."""
-        try:
-            from sentence_transformers import SentenceTransformer
-            return True
-        except ImportError:
-            return False
+        return self._is_installed("sentence_transformers")
 
     def _load_model(self) -> None:
         """Load the embedding model."""
@@ -297,12 +307,17 @@ class LocalEmbeddings:
         return 0
 
     def is_available(self) -> bool:
-        """Check if embedding generation is available."""
-        try:
-            self._ensure_model_loaded()
-            return self._model is not None or self._fallback_model is not None
-        except Exception:
-            return False
+        """Check whether embedding generation is possible — without loading.
+
+        This is a cheap capability probe (e.g. ``sqlite_knowledge_graph``
+        calls it before every dense-leg query).  It must NOT call
+        ``_ensure_model_loaded``: that downloads and initialises a
+        SentenceTransformer, costing minutes on first use and blocking the
+        caller.  The actual load still happens lazily in ``embed_*``.
+        """
+        if self._model is not None or self._fallback_model is not None:
+            return True
+        return bool(self._llama_available or self._sentence_transformers_available)
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""

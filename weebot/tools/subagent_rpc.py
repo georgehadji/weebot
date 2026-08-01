@@ -142,16 +142,23 @@ class SubagentRPCTool(BaseTool):
     def set_tool_registry(self, registry: Any) -> None:
         """Inject the tool registry for real RPC dispatch.
 
-        Without this, RPC calls return stub results.
+        Required: without it every ``rpc_call()`` fails with an explicit
+        error rather than executing anything.
         """
         self._tool_registry = registry
 
     async def _dispatch_single_tool(self, tool_name: str, args: dict) -> dict[str, Any]:
         """Execute a single tool call through the registry."""
         if self._tool_registry is None:
+            # Must NOT report success — no tool ran.  Reporting success here
+            # would hand the model fabricated output for work never performed
+            # (the same defect class as the removed delegate_task stub).
             return {
-                "success": True,
-                "output": f"[stub] tool '{tool_name}' would execute here (no registry)",
+                "success": False,
+                "error": (
+                    f"tool registry not wired — cannot execute '{tool_name}'. "
+                    "Call set_tool_registry() before using rpc_call()."
+                ),
             }
 
         try:

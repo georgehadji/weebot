@@ -30,6 +30,7 @@ class ModelProvider(Enum):
     MINIMAX = "minimax"
     MOONSHOT = "moonshot"
     XAI = "xai"
+    POOLSIDE = "poolside"
     RECRAFT = "recraft"
     SOURCEFUL = "sourceful"
     BLACK_FOREST_LABS = "black_forest_labs"
@@ -111,6 +112,8 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
         return ModelProvider.MICROSOFT
     if name.startswith("x-ai/"):
         return ModelProvider.XAI
+    if name.startswith("poolside/"):
+        return ModelProvider.POOLSIDE
     if name.startswith("claude/"):
         return ModelProvider.ANTHROPIC
     if name.startswith("gemini/") or name.startswith("google/"):
@@ -169,6 +172,19 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
                 "Docs: https://platform.minimax.io/docs/guides/text-m3-function-call"
             ),
         ),
+        "claude-opus-5": ModelInfo(
+            model_name="openrouter/anthropic/claude-opus-5",
+            provider=ModelProvider.ANTHROPIC,
+            input_cost_per_token=5e-06,  # $5.0 per 1M tokens (verified via OpenRouter)
+            output_cost_per_token=2.5e-05,  # $25.0 per 1M tokens
+            max_input_tokens=1000000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Anthropic's Claude Opus 5 — current-generation flagship, supersedes Opus 4.6/4.7/4.8 in this catalog. Verified present on OpenRouter."
+        ),
         "claude-4.6-opus": ModelInfo(
             model_name="claude-4.6-opus",
             provider=ModelProvider.ANTHROPIC,
@@ -181,6 +197,19 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             supports_response_schema=True,
             description="Anthropic's Claude Opus 4.6 - Frontier model for deep reasoning, agent teams, and long-horizon tasks. Native multi-agent collaboration with 14.5h autonomous task horizon."
+        ),
+        "openai/gpt-5.6-sol-pro": ModelInfo(
+            model_name="openai/gpt-5.6-sol-pro",
+            provider=ModelProvider.OPENAI,
+            input_cost_per_token=5e-06,  # $5.0 per 1M tokens (verified via OpenRouter)
+            output_cost_per_token=3e-05,  # $30.0 per 1M tokens
+            max_input_tokens=1050000,
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="OpenAI's GPT-5.6 Sol Pro — current-generation flagship, supersedes GPT-5.2 in this catalog. Verified present on OpenRouter (sibling variants: terra, luna, each with a -pro tier, not individually catalogued here)."
         ),
         "gpt-5.2": ModelInfo(
             model_name="gpt-5.2",
@@ -330,6 +359,33 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             description="DeepSeek's V3.2 - Ultra-budget model (~100x cheaper than GPT-5.2 output) with quality score 79/100. Best $/quality ratio."
         ),
         
+        # Poolside Laguna (coding agent) — laguna-xs-2.1 is already used in the
+        # "coder" role cascade (model_refs.py) but had no registry entry until now.
+        "poolside/laguna-xs-2.1": ModelInfo(
+            model_name="poolside/laguna-xs-2.1",
+            provider=ModelProvider.POOLSIDE,
+            input_cost_per_token=9e-08,  # $0.09 per 1M tokens (verified via OpenRouter)
+            output_cost_per_token=1.8e-07,  # $0.18 per 1M tokens
+            max_input_tokens=1000000,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Poolside Laguna XS 2.1 — extremely cheap agentic coding model. Used as a fallback in weebot's 'coder' role cascade."
+        ),
+        "poolside/laguna-s-2.1": ModelInfo(
+            model_name="poolside/laguna-s-2.1",
+            provider=ModelProvider.POOLSIDE,
+            input_cost_per_token=9e-08,  # $0.09 per 1M tokens (verified via OpenRouter)
+            output_cost_per_token=1.8e-07,  # $0.18 per 1M tokens
+            max_input_tokens=1000000,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_system_messages=True,
+            description="Poolside Laguna S 2.1 — larger sibling of Laguna XS 2.1. Verified present on OpenRouter; not yet wired into a role cascade."
+        ),
+
         # Open Source Models
         "k2": ModelInfo(
             model_name="k2",
@@ -551,6 +607,41 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
                 "Docs: https://api-docs.deepseek.com/"
             ),
         ),
+        "deepseek/deepseek-v4-flash-0731": ModelInfo(
+            model_name="deepseek/deepseek-v4-flash-0731",
+            provider=ModelProvider.DEEPSEEK,
+            input_cost_per_token=1.4e-07,  # $0.14/1M — verified via OpenRouter API 2026-08-01
+            output_cost_per_token=2.8e-07,  # $0.28/1M
+            max_input_tokens=1048576,  # 1M context
+            max_output_tokens=384000,
+            supports_function_calling=True,
+            supports_vision=False,  # text-only
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description=(
+                "DeepSeek V4 Flash 0731 — re-post-trained revision of V4 Flash. Sparse MoE, "
+                "13B active of 284B total. 1M context, 384K max output. Coding, reasoning, "
+                "agent workflows. Same price as base V4 Flash with far larger context/output."
+            ),
+        ),
+        "thinkingmachines/inkling-small": ModelInfo(
+            model_name="thinkingmachines/inkling-small",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=5e-07,  # $0.50/1M — verified via OpenRouter API 2026-08-01
+            output_cost_per_token=1.2e-06,  # $1.20/1M
+            max_input_tokens=524288,  # 512K context
+            max_output_tokens=8192,
+            supports_function_calling=True,
+            supports_vision=True,  # input modalities: text, image, audio
+            supports_audio_input=True,
+            supports_system_messages=True,
+            supports_response_schema=False,  # structured outputs NOT advertised
+            description=(
+                "Thinking Machines Inkling Small — open-weight multimodal MoE, 12B active of "
+                "276B total. 512K context. Efficient sibling of Inkling. Text+image+audio input, "
+                "tool use and reasoning supported; no structured-output support."
+            ),
+        ),
         "deepseek-v4-flash": ModelInfo(
             model_name="deepseek-v4-flash",
             provider=ModelProvider.DEEPSEEK,
@@ -636,6 +727,23 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_system_messages=True,
             supports_response_schema=True,
             description="Qwen 3.7 Plus — powerful reasoning model via OpenRouter (weebot default)"
+        ),
+        "qwen/qwen3.7-flash": ModelInfo(
+            model_name="qwen/qwen3.7-flash",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=3e-08,  # $0.03/1M — verified via OpenRouter API 2026-08-01
+            output_cost_per_token=1.3e-07,  # $0.13/1M
+            max_input_tokens=1000000,
+            max_output_tokens=65536,
+            supports_function_calling=True,
+            supports_vision=True,  # input modalities: text, image, video
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description=(
+                "Qwen 3.7 Flash — vision-language reasoning model, 1M context, 64K output. "
+                "Cheapest model in weebot's catalog ($0.03/$0.13 per 1M). Multimodal agents, "
+                "visual coding, computer interaction. Good for high-volume routing/inner-loop work."
+            ),
         ),
         "openrouter/google/gemini-2.5-flash": ModelInfo(
             model_name="openrouter/google/gemini-2.5-flash",

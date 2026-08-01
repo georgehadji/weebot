@@ -230,6 +230,7 @@ class CatalogValidator:
             "kwaipilot": "openrouter",  # KwaiPilot models route through OpenRouter
             "nex-agi": "openrouter",
             "poolside": "openrouter",
+            "thinkingmachines": "openrouter",
             "sourceful": "openrouter",
             "black-forest-labs": "openrouter",
             "ideogram": "openrouter",

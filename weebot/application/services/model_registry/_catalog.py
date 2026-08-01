@@ -3228,6 +3228,18 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
+    "qwen/qwen3.7-flash": ModelConfig(
+        name="Qwen: Qwen3.7 Flash",
+        provider="openrouter",
+        # $0.03/1M in + $0.13/1M out — verified via OpenRouter API 2026-08-01
+        cost_per_1k_tokens=0.00008,
+        context_window=1000000,
+        strengths=[TaskType.CHAT, TaskType.REASONING, TaskType.CODE_REVIEW, TaskType.DOCUMENTATION],
+        tier=ModelTier.FAST,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=5,
+    ),
+
     "qwen/qwen3.7-plus": ModelConfig(
         name="Qwen: Qwen3.7 Plus",
         provider="openrouter",
@@ -3652,6 +3664,18 @@ MODELS: dict[str, ModelConfig] = {
         cost_per_1k_tokens=0.0030359999999999996,
         context_window=202752,
         strengths=[TaskType.CHAT, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
+        tier=ModelTier.STANDARD,
+        api_key_env="OPENROUTER_API_KEY",
+        tool_use_score=5,
+    ),
+
+    "thinkingmachines/inkling-small": ModelConfig(
+        name="Thinking Machines: Inkling Small",
+        provider="openrouter",
+        # $0.50/1M in + $1.20/1M out — verified via OpenRouter API 2026-08-01
+        cost_per_1k_tokens=0.00085,
+        context_window=524288,
+        strengths=[TaskType.CHAT, TaskType.REASONING, TaskType.DOCUMENTATION],
         tier=ModelTier.STANDARD,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,

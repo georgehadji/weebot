@@ -85,21 +85,12 @@ try:
 except ImportError:
     pass
 
-try:
-    from weebot.templates.marketplace import (
-        TemplateMarketplace,
-        LocalTemplateRepository,
-        TemplateListing,
-        TemplateReview,
-    )
-    __all__.extend([
-        "TemplateMarketplace",
-        "LocalTemplateRepository",
-        "TemplateListing",
-        "TemplateReview",
-    ])
-except ImportError:
-    pass
+__all__.extend([
+    "TemplateMarketplace",
+    "LocalTemplateRepository",
+    "TemplateListing",
+    "TemplateReview",
+])
 
 try:
     from weebot.templates.hooks import (
@@ -120,42 +111,22 @@ except ImportError:
     pass
 
 # Phase 6: Production Features
-try:
-    from weebot.templates.production import (
-        ProductionTemplateEngine,
-        RateLimiter,
-        Authenticator,
-        User,
-        DatabaseManager,
-        RedisCache,
-        HealthChecker,
-    )
-    __all__.extend([
-        "ProductionTemplateEngine",
-        "RateLimiter",
-        "Authenticator",
-        "User",
-        "DatabaseManager",
-        "RedisCache",
-        "HealthChecker",
-    ])
-except ImportError:
-    pass
+__all__.extend([
+    "ProductionTemplateEngine",
+    "RateLimiter",
+    "Authenticator",
+    "User",
+    "DatabaseManager",
+    "RedisCache",
+    "HealthChecker",
+])
 
-# Phase 6b: Adaptive Suggestions (EXPAND mode)
-try:
-    from weebot.templates.adaptive import (
-        AdaptiveSuggestionEngine,
-        ParameterSuggestion,
-        SuggestionContext,
-    )
-    __all__.extend([
-        "AdaptiveSuggestionEngine",
-        "ParameterSuggestion",
-        "SuggestionContext",
-    ])
-except ImportError:
-    pass
+# Phase 6b: Adaptive Suggestions (EXPAND mode) — lazy, pulls sqlalchemy
+__all__.extend([
+    "AdaptiveSuggestionEngine",
+    "ParameterSuggestion",
+    "SuggestionContext",
+])
 
 try:
     from weebot.templates.feature_flags import (
@@ -173,14 +144,56 @@ try:
 except ImportError:
     pass
 
-try:
-    from weebot.templates.migrations import (
-        SchemaManager,
-        init_database,
-    )
-    __all__.extend([
-        "SchemaManager",
-        "init_database",
-    ])
-except ImportError:
-    pass
+# Schema migrations — lazy, pulls sqlalchemy
+__all__.extend([
+    "SchemaManager",
+    "init_database",
+])
+
+
+# ── Lazily-loaded heavy submodules (PEP 562) ──────────────────────────
+# `production` pulls in sqlalchemy and `marketplace` pulls in requests —
+# together ~8 s of import time that every `python -m cli.main ...` paid just
+# to import this package.  Neither is needed on a normal CLI path, so they
+# load on first attribute access instead.  `from weebot.templates import
+# ProductionTemplateEngine` still works; it just imports at that moment.
+_LAZY_SUBMODULES: dict[str, str] = {
+    "TemplateMarketplace": "marketplace",
+    "LocalTemplateRepository": "marketplace",
+    "TemplateListing": "marketplace",
+    "TemplateReview": "marketplace",
+    "ProductionTemplateEngine": "production",
+    "RateLimiter": "production",
+    "Authenticator": "production",
+    "User": "production",
+    "DatabaseManager": "production",
+    "RedisCache": "production",
+    "HealthChecker": "production",
+    "AdaptiveSuggestionEngine": "adaptive",
+    "ParameterSuggestion": "adaptive",
+    "SuggestionContext": "adaptive",
+    "SchemaManager": "migrations",
+    "init_database": "migrations",
+}
+
+
+def __getattr__(name: str):
+    """Resolve lazily-loaded names from heavy optional submodules."""
+    submodule = _LAZY_SUBMODULES.get(name)
+    if submodule is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+    try:
+        mod = importlib.import_module(f"weebot.templates.{submodule}")
+    except ImportError as exc:  # optional dependency missing
+        raise AttributeError(
+            f"{name!r} requires the optional 'weebot.templates.{submodule}' "
+            f"module, which failed to import: {exc}"
+        ) from exc
+    value = getattr(mod, name)
+    globals()[name] = value  # cache — subsequent lookups skip __getattr__
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(list(globals()) + __all__))

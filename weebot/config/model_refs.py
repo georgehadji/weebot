@@ -58,38 +58,55 @@ MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
 # Additional model references — added 2026-07-21
 # ═══════════════════════════════════════════════════════════════════════
 
-MODEL_LONGCAT_2: str = "minimax/minimax-m3"
-"""MiniMax M3 — budget MoE (replaces meituan/longcat-2.0, removed from catalog). (48B/1.6T params). 1M ctx, $0.30/$1.20.
+MODEL_LONGCAT_2: str = "meituan/longcat-2.0"
+"""LongCat 2.0 — back on OpenRouter catalog as of this check. 1M ctx, $0.30/$1.20.
 Coding, repository-level changes, long-horizon problem solving, agentic."""
 
-MODEL_INKLING: str = "google/gemini-2.5-flash"
-"""Gemini 2.5 Flash — multimodal (replaces thinkingmachines/inkling, removed from catalog). (41B/975B params). 1M ctx, $1/$4.05.
+MODEL_INKLING: str = "thinkingmachines/inkling"
+"""Inkling — verified present on OpenRouter API 2026-08-01. 1M ctx, $1/$4.05.
 Image+audio understanding. General reasoning, coding, agentic, RAG."""
 
-MODEL_MUSE_SPARK: str = "x-ai/grok-4.3"
-"""Grok 4.3 — multimodal reasoning (replaces meta/muse-spark-1.1, removed from catalog)., 1M ctx, $1.25/$4.25.
+MODEL_INKLING_SMALL: str = "thinkingmachines/inkling-small"
+"""Inkling Small — open-weight multimodal MoE, 12B active / 276B total.
+512K ctx, $0.50/$1.20 per 1M. Text+image+audio input, tools, reasoning.
+Cheaper, more efficient sibling of Inkling. No structured-output support."""
+
+MODEL_QWEN_37_FLASH: str = "qwen/qwen3.7-flash"
+"""Qwen 3.7 Flash — cheapest model in the catalog, $0.03/$0.13 per 1M.
+1M ctx, 64K output, vision-language (text/image/video), tools + structured output.
+Ideal for high-volume routing, classification, and inner-loop decisions."""
+
+MODEL_DEEPSEEK_V4_FLASH_0731: str = "deepseek/deepseek-v4-flash-0731"
+"""DeepSeek V4 Flash 0731 — re-post-trained V4 Flash revision, $0.14/$0.28 per 1M.
+1M ctx, 384K max output (vs 160K on base V4 Flash), same price. Coding, reasoning, agents."""
+
+MODEL_MUSE_SPARK: str = "meta/muse-spark-1.1"
+"""Muse Spark 1.1 — back on OpenRouter catalog as of this check. 1M ctx, $1.25/$4.25.
 Multi-agent orchestration, MCP, zero-shot tool use, structured output. US-only."""
 
-MODEL_KIMI_K3: str = "moonshotai/kimi-k2.7-code"
-"""Kimi K2.7 Code — coding-focused (replaces moonshotai/kimi-k3, removed from catalog)., 1M ctx, $3/$15.
-Complex coding, large-repo navigation, tool use, image/log debugging.
-Note: upstream capacity limited (429 errors possible)."""
+MODEL_KIMI_K3: str = "moonshotai/kimi-k3"
+"""Kimi K3 — back on OpenRouter catalog as of this check. 1M ctx, $3/$15.
+Complex coding, large-repo navigation, tool use, image/log debugging."""
 
 # ═══════════════════════════════════════════════════════════════════════
 # Additional model references — added 2026-07-21
 # ═══════════════════════════════════════════════════════════════════════
 
-MODEL_LAGUNA_S_21: str = "poolside/laguna-xs-2.1"
-"""Laguna XS 2.1 — Poolside coding agent (replaces poolside/laguna-s-2.1, removed from catalog)., 118B/8B active, 1M ctx, $0.10/$0.20.
-70.2% Terminal-Bench, 40.4% DeepSWE. Extremely cheap agentic coding."""
+MODEL_LAGUNA_XS_21: str = "poolside/laguna-xs-2.1"
+"""Laguna XS 2.1 — Poolside coding agent, 1M ctx, $0.09/$0.18 (OpenRouter, verified).
+Extremely cheap agentic coding."""
 
-MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-2.5-flash-lite"
-"""Gemini 2.5 Flash-Lite — high-efficiency (replaces google/gemini-3.5-flash-lite, removed from catalog)., 1M ctx, $0.30/$2.50.
+MODEL_LAGUNA_S_21: str = "poolside/laguna-s-2.1"
+"""Laguna S 2.1 — back on OpenRouter catalog as of this check, 1M ctx, $0.09/$0.18.
+Larger sibling of Laguna XS 2.1. Agentic coding."""
+
+MODEL_GEMINI_35_FLASH_LITE: str = "google/gemini-3.5-flash-lite"
+"""Gemini 3.5 Flash-Lite — back on OpenRouter catalog as of this check, 1M ctx, $0.30/$2.50.
 Upgraded agentic capabilities. Subagents, focused multi-agent tasks."""
 
-MODEL_GEMINI_36_FLASH: str = "google/gemini-3.5-flash"
-"""Gemini 3.5 Flash — 1M ctx (replaces google/gemini-3.6-flash, removed from catalog)., $1.50/$7.50. Coding, agentic workflows,
-web/app dev. Polished output, fewer edits, reduced token use."""
+MODEL_GEMINI_36_FLASH: str = "google/gemini-3.6-flash"
+"""Gemini 3.6 Flash — back on OpenRouter catalog as of this check, 1M ctx, $1.50/$7.50.
+Coding, agentic workflows, web/app dev. Polished output, fewer edits, reduced token use."""
 
 # ═══════════════════════════════════════════════════════════════════════
 # Verbalized Sampling
@@ -247,8 +264,10 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "vision": [
         "openai/gpt-4o",                          # primary: best vision + tool use
         "google/gemini-3.5-flash",                # fallback 1: 1M ctx
-        "google/gemini-2.5-flash",                # fallback 2: Gemini 2.5 Flash — multimodal
-        "qwen/qwen2.5-vl-72b-instruct",            # fallback 3: budget VLM
+        "qwen/qwen3.7-flash",                     # fallback 2: text/image/video, 1M ctx, $0.03/1M
+        "thinkingmachines/inkling-small",         # fallback 3: text/image/audio MoE, 512K ctx
+        "google/gemini-2.5-flash",                # fallback 4: Gemini 2.5 Flash — multimodal
+        "qwen/qwen2.5-vl-72b-instruct",            # fallback 5: budget VLM
     ],
 }
 
@@ -301,6 +320,8 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "kwaipilot/kat-coder-pro-v2.5",
     "kwaipilot/kat-coder-air-v2.5",
     "minimax/minimax-m3",
+    "deepseek/deepseek-v4-flash-0731",  # 1M ctx / 384K out, same price as base V4 Flash
+    "qwen/qwen3.7-flash",               # cheapest fallback of last resort
 ]
 MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"
 
@@ -831,6 +852,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     ],
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
+        "qwen/qwen3.7-flash",                     # cheapest in catalog — $0.03/$0.13, 1M ctx
         "openai/gpt-4.1-nano",
         "poolside/laguna-xs-2.1",                 # Laguna XS 2.1 — $0.10/1M coding agent
         "google/gemini-2.5-flash-lite",           # Gemini 2.5 Flash Lite — subagent

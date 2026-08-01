@@ -221,7 +221,14 @@ class VerifyingState(FlowState):
                 for axis in VERIFICATION_AXES
             }
         except Exception:
-            _log.debug("Self-critique scoring failed — assuming passing scores", exc_info=True)
+            # Deliberate fail-open — a broken scorer must not block live
+            # execution.  But log at warning, not debug: the quality gate
+            # silently not running is exactly what an operator needs to see,
+            # and these fallback scores are indistinguishable from a real pass.
+            _log.warning(
+                "Self-critique scoring failed — assuming passing scores "
+                "(verification did NOT actually run)", exc_info=True,
+            )
             return {axis: VERIFICATION_SCORE_MIN for axis in VERIFICATION_AXES}
 
     async def _score_and_revise(self, flow, summary: str) -> tuple[str, dict[str, int]]:

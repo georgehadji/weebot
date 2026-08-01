@@ -44,6 +44,12 @@ class TrajectorySummary(BaseModel):
     expected_answer: Optional[str] = Field(
         default=None, description="Expected/gold answer for scoring"
     )
+    actions: list[str] = Field(
+        default_factory=list,
+        description="Ordered tool_name sequence, for path-fidelity comparison "
+                    "against a reference trajectory (see trajectory_comparator.py). "
+                    "Empty for pre-existing rows — no backfill.",
+    )
 
 
 class OptimizationBatch(BaseModel):

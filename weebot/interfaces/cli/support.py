@@ -13,7 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from weebot.config.settings import WeebotSettings, WORKSPACE_ROOT, LOGS_DIR
 from weebot.templates.parser import TemplateParser
-from weebot.templates.marketplace import TemplateMarketplace
+# TemplateMarketplace is imported lazily inside the two functions that use it —
+# it pulls in `requests`, which every other CLI command would otherwise pay for.
 
 
 # ---------------------------------------------------------------------------
@@ -326,35 +327,26 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
             )
         )
 
-    # Tool availability
+    # Tool availability.
+    # Probe with find_spec, not __import__: executing browser_use/playwright/mcp
+    # just to see whether they exist cost ~13 s of doctor's runtime.  find_spec
+    # locates the module without running it.
     def _has_module(name: str) -> bool:
+        import importlib.util
         try:
-            __import__(name)
-            return True
-        except Exception:
+            return importlib.util.find_spec(name) is not None
+        except (ImportError, ValueError):
             return False
 
-    checks.append(
-        DoctorCheck(
-            name="browser_use",
-            status="ok" if _has_module("browser_use") else "warn",
-            details="browser_use available" if _has_module("browser_use") else "browser_use not installed",
+    for _mod in ("browser_use", "playwright", "mcp"):
+        _present = _has_module(_mod)
+        checks.append(
+            DoctorCheck(
+                name=_mod,
+                status="ok" if _present else "warn",
+                details=f"{_mod} available" if _present else f"{_mod} not installed",
+            )
         )
-    )
-    checks.append(
-        DoctorCheck(
-            name="playwright",
-            status="ok" if _has_module("playwright") else "warn",
-            details="playwright available" if _has_module("playwright") else "playwright not installed",
-        )
-    )
-    checks.append(
-        DoctorCheck(
-            name="mcp",
-            status="ok" if _has_module("mcp") else "warn",
-            details="mcp available" if _has_module("mcp") else "mcp not installed",
-        )
-    )
 
     repairs: list[RepairResult] = []
 
@@ -545,6 +537,7 @@ def check_template_updates(
     template_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Check marketplace for newer template versions."""
+    from weebot.templates.marketplace import TemplateMarketplace
     market = TemplateMarketplace(marketplace_url=marketplace_url)
     builtin_dir = root / "weebot" / "templates" / "builtin"
     local = _local_templates(builtin_dir)
@@ -583,6 +576,7 @@ def upgrade_templates(
     dry_run: bool = False,
 ) -> Dict[str, Any]:
     """Upgrade templates to latest from marketplace."""
+    from weebot.templates.marketplace import TemplateMarketplace
     market = TemplateMarketplace(marketplace_url=marketplace_url)
     result = check_template_updates(root, marketplace_url, template_filter)
 

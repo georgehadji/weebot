@@ -281,7 +281,14 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
                     role="admin", sandbox_port=sandbox, llm_port=llm,
                     flow_factory=_flow_factory,
                 )
-            except Exception:
+            except Exception as exc:
+                # Do not fail silently: "no tools configured" and "tool
+                # construction blew up" are indistinguishable downstream, and
+                # the latter silently disables all agent tool use.
+                logger.warning(
+                    "Tool collection construction failed — agent will run "
+                    "tool-less: %s", exc, exc_info=True,
+                )
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
         trajectory_builder = self._maybe_get_str("trajectory_builder")

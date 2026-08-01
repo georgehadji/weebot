@@ -91,9 +91,11 @@ class TrajectoryBuilder:
         tool_call_count = 0
         total_tokens = 0
         total_cost = 0.0
+        actions: list[str] = []
         for e in session.events:
             if e.type == "tool":
                 tool_call_count += 1
+                actions.append(getattr(e, "tool_name", "") or "")
 
         return TrajectorySummary(
             task_id=scored_event.task_id,
@@ -111,6 +113,7 @@ class TrajectoryBuilder:
             trajectory_text=analysis.get("trajectory_text", scored_event.trajectory_summary),
             answer=None,
             expected_answer=None,
+            actions=actions,
         )
 
     @staticmethod
@@ -148,6 +151,7 @@ class TrajectoryBuilder:
         known-answer scoring run).
         """
         tool_call_count = sum(1 for e in session.events if e.type == "tool")
+        actions = [getattr(e, "tool_name", "") or "" for e in session.events if e.type == "tool"]
         skill_name = session.context.get("skill_name", "")
         skill_version = session.context.get("skill_version", 0)
 
@@ -167,4 +171,5 @@ class TrajectoryBuilder:
             trajectory_text=analysis.get("trajectory_text", scored_event.trajectory_summary),
             answer=None,
             expected_answer=None,
+            actions=actions,
         )
