@@ -304,6 +304,13 @@ symbol anywhere; `git grep -n meta_self_improver -- '*.py'` empty.
 
 ### Phase 2 — Tabu memory over rejected edits (~2 days) ← highest value-per-line
 
+> **STATUS: shipped in reduced form.** 2.1–2.4 below (Value Object + Specification + `EditMemoryPort`
+> + SQLite adapter + Decorator) were **not** built. What shipped is a `set[(op, target, content)]`
+> on `SkillOptFlow` plus `_drop_tabu` / `_mark_tabu` — same anti-repetition behaviour, in-process
+> only, ~14 lines instead of five new modules. The full design is kept below because it is the right
+> shape *if and when* a run has to survive a restart; until then it is five files of indirection for
+> a set lookup. Tests: `tests/unit/test_skillopt_tabu.py`.
+
 **Problem:** II.4. **This is the paper's actual 5× mechanism, minus the machinery.**
 
 **Paradigm:** *Value Object* + *Specification* in the domain (pure, total, trivially testable);

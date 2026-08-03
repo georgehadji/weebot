@@ -93,6 +93,26 @@ class SkillOptFlow(BaseFlow):
             initial=8, floor=2, schedule="cosine"
         )
         self._done = False
+        # Edits the validation gate already rejected this run.  Without this the
+        # optimizer sees no record of rejections and is free to re-propose the
+        # same edit every step.
+        # ponytail: in-process only — persist behind a port if a run ever has to
+        # survive a restart.
+        self._tabu: set[tuple[str, Optional[str], str]] = set()
+
+    def _drop_tabu(self, edits: list) -> list:
+        """Drop edits already rejected this run.
+
+        Keyed on exact content, so the *reverse* of a rejected edit stays legal.
+        A target-level tabu would freeze whole sections of the skill.
+        """
+        kept = [e for e in edits if (e.op, e.target, e.content) not in self._tabu]
+        if len(kept) < len(edits):
+            logger.info("Tabu: dropped %d repeat edit(s)", len(edits) - len(kept))
+        return kept
+
+    def _mark_tabu(self, edits: list) -> None:
+        self._tabu.update((e.op, e.target, e.content) for e in edits)
 
     async def _ensure_archive_seeded(self, skill: Any, epoch: int) -> None:
         """Ensure the archive has a root node before archive search begins."""
@@ -162,21 +182,22 @@ class SkillOptFlow(BaseFlow):
                             merged = await self._optimizer.merge_edits(
                                 failure_edits, success_edits,
                             )
-                            ranked = await self._optimizer.rank_edits(
+                            ranked = self._drop_tabu(await self._optimizer.rank_edits(
                                 merged, budget, skill,
-                            )
+                            ))
                             if ranked:
                                 # Apply the best edit to create a new skill variant
                                 cmd = ApplySkillEditsCommand(
                                     skill_name=self._skill_name,
-                                    edits=[e.to_dict() for e in ranked],
-                                    source="archive_search",
+                                    edits=[e.model_dump() for e in ranked],
                                 )
                                 result = await self._mediator.send(cmd)
-                                if result.success:
-                                    skill = result.skill
+                                candidate = (result.data or {}).get("skill")
+                                if result.success and candidate:
+                                    skill = candidate
                                     epoch_accepted += 1
                                 else:
+                                    self._mark_tabu(ranked)
                                     epoch_rejected += 1
 
                         # Continue to next step — archive handles evaluation separately
@@ -238,7 +259,9 @@ class SkillOptFlow(BaseFlow):
                 merged = await self._optimizer.merge_edits(failure_edits, success_edits)
 
                 # 4. RANK + CLIP — rank by utility, clip to budget
-                ranked = await self._optimizer.rank_edits(merged, budget, skill)
+                ranked = self._drop_tabu(
+                    await self._optimizer.rank_edits(merged, budget, skill)
+                )
 
                 if not ranked:
                     logger.info("No edits survived ranking at step %d", step)
@@ -275,12 +298,13 @@ class SkillOptFlow(BaseFlow):
                         )
                 else:
                     # Validation gate rejected
+                    self._mark_tabu(ranked)
                     epoch_rejected += 1
                     yield SkillEditRejected(
                         skill_name=self._skill_name,
                         skill_version=skill.current_version,
                         score_drop=0.0,
-                        edit=None,
+                        edit=[e.model_dump() for e in ranked],
                         failure_analysis=result.error or "Validation gate rejected",
                     )
 
