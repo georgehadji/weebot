@@ -3,7 +3,7 @@
 **Source paper:** Qu & Lu, *Bilevel Autoresearch: Meta-Autoresearching Itself*, arXiv:2603.23420v2
 **Companion analysis:** [bilevel_autoresearch_weebot_analysis.md](bilevel_autoresearch_weebot_analysis.md)
 **Baseline:** weebot @ `c6046fc` · drafted 2026-08-03
-**Status:** plan only — no code changed by this document
+**Status:** Phase 0 and Phase 1 implemented in `74449bc`. Phases 2–4 not started.
 
 ---
 
@@ -244,7 +244,7 @@ Phases are strictly ordered. Phase 0 gates every later phase.
 
 ---
 
-### Phase 0 — Restore reachability (blocking, ~1 day)
+### Phase 0 — Restore reachability (blocking, ~1 day) — **DONE (`74449bc`)**
 
 **Problem:** II.2. `SkillOptFlow` and its DI call site drifted apart; a 24-parameter keyword
 constructor made the drift invisible until runtime, and no test constructs the flow.
@@ -256,7 +256,7 @@ Phase 0 makes `SkillOptFlow` consistent with the codebase's own established patt
 
 | Step | Change | Layer |
 |---|---|---|
-| 0.1 | New `SkillOptFlowConfig` — frozen Pydantic model, one field per current constructor parameter, validators for the co-required pairs (`use_archive_search` ⇒ `thompson_sampler`; `evaluator_slot` ⇒ `evaluator_selector`) | `application/models/` |
+| 0.1 | *Deferred.* The bug was fixed by correcting the call site (smaller, and it is the drift-detecting test that actually prevents recurrence). The Parameter Object remains the right refactor and is still open. New `SkillOptFlowConfig` — frozen Pydantic model, one field per current constructor parameter, validators for the co-required pairs (`use_archive_search` ⇒ `thompson_sampler`; `evaluator_slot` ⇒ `evaluator_selector`) | `application/models/` |
 | 0.2 | `SkillOptFlow.__init__(self, cfg: SkillOptFlowConfig)`; body reads `cfg.*`. No behavioural change | `application/flows/` |
 | 0.3 | `build_skill_opt_flow` constructs the config, then the flow. Rename drift dies here: `optimizer_llm` → the flow needs `optimizer` (the `OptimizerPort`, already available as `self.get(OptimizerPort)`), `target_factory` → `target_flow_factory`, `scorer` → dropped or added to the config as an explicit field, `event_bus` → `self._maybe_get(EventBusPort)` | `application/di/` |
 | 0.4 | Regression test: build the flow through the real container with an in-memory DB and assert an instance comes back. This is the test whose absence allowed the drift | `tests/unit/` |
@@ -274,7 +274,7 @@ behavioural diff in the flow body (verify by diffing `cfg.x` substitutions only)
 
 ---
 
-### Phase 1 — Delete the silent no-op (~0.5 day)
+### Phase 1 — Delete the silent no-op (~0.5 day) — **DONE (`74449bc`)**
 
 **Problem:** II.3. Three stacked defects, all reporting health while doing nothing.
 
