@@ -80,6 +80,8 @@ class SkillOptMixin:
                 trajectory_repo=self.get("trajectory_repo"),
             )
 
+        from weebot.application.ports.event_bus_port import EventBusPort
+
         flow = SkillOptFlow(
             skill_name=skill_name, train_tasks=train_tasks,
             validation_tasks=validation_tasks, output_path=output_path,
@@ -87,9 +89,9 @@ class SkillOptMixin:
             batch_size=batch_size, use_planning=use_planning,
             mediator=mediator,
             skill_store=self.get("skill_store"),
-            optimizer_llm=self.get("optimizer_llm"),
-            target_factory=self._create_target_flow_factory(db_path),
-            scorer=self._create_scorer(harness),
+            optimizer=scoring_port,
+            target_flow_factory=self._create_target_flow_factory(db_path),
+            event_bus=self._maybe_get(EventBusPort),
             trajectory_repo=self.get("trajectory_repo"),
             evolution_tracker=self._maybe_get_str("evolution_tracker"),
             **evaluator_kwargs,
@@ -172,20 +174,3 @@ class SkillOptMixin:
             )
             return PlanActFlow(cfg)
         return factory
-
-    def _create_scorer(self, harness: str):
-        """Build a scoring function for SkillOpt validation."""
-        from weebot.application.ports.scoring_port import ScoringPort
-
-        def fallback_scorer(target, actual, options=None):
-            if target == actual:
-                return 1.0
-            if isinstance(target, str) and isinstance(actual, str):
-                target_words = set(target.lower().split())
-                actual_words = set(actual.lower().split())
-                if not target_words:
-                    return 0.0
-                return len(target_words & actual_words) / len(target_words)
-            return 0.0
-
-        return fallback_scorer

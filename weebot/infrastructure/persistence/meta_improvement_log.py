@@ -6,6 +6,12 @@ every edit is logged to an append-only SQLite log.  This provides
 traceability and rollback capability.
 
 The log is append-only by design — no UPDATE or DELETE operations exist.
+
+NOTE: its only consumer, MetaSelfImprover, was deleted — it had zero
+construction sites and only ever reviewed a strategy string.  This log is kept
+deliberately as the audit substrate for mechanism-selection decisions (Phase 3
+of tasks/specs/bilevel_autoresearch_implementation_plan.md).  It currently has
+no writer.
 """
 from __future__ import annotations
 

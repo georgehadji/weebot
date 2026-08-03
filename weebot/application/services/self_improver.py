@@ -35,7 +35,6 @@ _ALLOWED_TARGET_DIRS = [
 # These directories contain the self-improvement machinery itself.
 _META_ALLOWED_TARGET_DIRS = [
     "weebot/application/services/self_improver.py",
-    "weebot/application/services/meta_self_improver.py",
 ]
 
 

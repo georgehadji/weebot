@@ -125,7 +125,6 @@ def test_application_no_module_level_infra_imports():
     # (tracked for future migration in ARCHITECTURE_9_PLAN.md).
     allowed_exceptions = {
         "di.py", "__init__.py",
-        "meta_self_improver.py",   # imports meta_improvement_log (tracked)
         "strategy_transfer.py",    # imports strategy_store (tracked)
     }
 
@@ -765,7 +764,6 @@ def test_application_services_no_infra_imports():
             "_service.py",              # imports adapter_factory — lazy method import
         "task_runner.py",               # imports metrics — lazy function import
         "autonomous_learning.py",        # TYPE_CHECKING only — SkillStore annotation
-        "meta_self_improver.py",         # TYPE_CHECKING only — MetaImprovementLog annotation (lazy fallback removed)
         "multi_source_research.py",      # TYPE_CHECKING only — ServiceRegistry annotation
         "strategy_transfer.py",          # TYPE_CHECKING only — StrategyStore annotation (lazy fallback removed)
         "metrics_bridge.py",            # designated bridge to infrastructure Prometheus adapter
