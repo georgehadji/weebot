@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
@@ -89,6 +90,11 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  // Provides animate-in / fade-in / slide-in-from-* / zoom-* used by the
+  // dialog, dropdown, select, tooltip and toast components. Previously this
+  // was attempted via a `tw-animate-css` CSS import, but that package targets
+  // Tailwind v4 (this project is on v3) and shipped no stylesheet, so the
+  // utilities silently never existed and the production build failed.
+  plugins: [tailwindcssAnimate],
 };
 export default config;

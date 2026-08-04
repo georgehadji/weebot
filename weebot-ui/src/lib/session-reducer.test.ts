@@ -5,7 +5,7 @@ import {
   getDisplayItems,
   initialSessionViewState,
 } from "./session-reducer";
-import { AgentEvent, MessageEvent, ToolEvent, NotificationEvent } from "@/types/events";
+import { MessageEvent, ToolEvent, NotificationEvent } from "@/types/events";
 
 function message(id: string, text: string): MessageEvent {
   return {

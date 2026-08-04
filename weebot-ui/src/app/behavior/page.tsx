@@ -8,7 +8,7 @@
  * and forced a navigation between them to go from watching to configuring.
  */
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -214,10 +214,30 @@ export WEEBOT_EXTRA_IGNORE="*.log,dist/"`}
   );
 }
 
-export default function BehaviorPage() {
+/** Reads ?tab=, so it must sit under a Suspense boundary — useSearchParams()
+ *  opts the subtree into client-side rendering and Next fails the production
+ *  build when it is not wrapped. */
+function BehaviorTabs() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "settings" ? "settings" : "monitor";
 
+  return (
+    <Tabs defaultValue={initialTab}>
+      <TabsList className="mb-6">
+        <TabsTrigger value="monitor">Monitor</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
+      </TabsList>
+      <TabsContent value="monitor">
+        <MonitorTab />
+      </TabsContent>
+      <TabsContent value="settings">
+        <SettingsTab />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+export default function BehaviorPage() {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-bold">
@@ -225,18 +245,9 @@ export default function BehaviorPage() {
         Behavior Tracking
       </h1>
 
-      <Tabs defaultValue={initialTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="monitor">Monitor</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-        <TabsContent value="monitor">
-          <MonitorTab />
-        </TabsContent>
-        <TabsContent value="settings">
-          <SettingsTab />
-        </TabsContent>
-      </Tabs>
+      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading…</div>}>
+        <BehaviorTabs />
+      </Suspense>
     </div>
   );
 }

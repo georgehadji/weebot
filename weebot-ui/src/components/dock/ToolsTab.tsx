@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
-import { AgentEvent, ToolEvent } from "@/types/events";
+import { ToolEvent } from "@/types/events";
 
 interface ToolsTabProps {
   sessionId: string;

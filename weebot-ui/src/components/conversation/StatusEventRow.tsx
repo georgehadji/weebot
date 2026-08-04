@@ -20,7 +20,7 @@ export function WaitForUserRow({ event }: { event: WaitForUserEvent }) {
   );
 }
 
-export function DoneRow({ event: _event }: { event: DoneEvent }) {
+export function DoneRow({}: { event: DoneEvent }) {
   return (
     <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground">
       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />

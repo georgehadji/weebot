@@ -153,6 +153,21 @@ the right fix: finish what the deprecation notices already say.
   runs, file them as a follow-up (out of scope to fix here — this phase is about
   making the gate live, not about whatever it then finds).
 
+### Phase 3b — Bandit B110 backlog (RC-5, found 2026-08-04 via CI)
+
+`bandit -c pyproject.toml -r weebot/ cli/` reports **71 findings, all LOW
+severity, all B110** (try/except/pass without logging). The bandit config in
+`pyproject.toml` deliberately scopes the scan to `tests = ["B110"]` with the
+stated policy *"require logging in all except blocks"* — so the gate encodes a
+real intent that has simply never been satisfied. It has been failing on `main`
+since introduction and therefore never gated a merge.
+
+The CI step is now explicitly non-blocking (matching the neighbouring
+`pip-audit` and `npm audit` steps) rather than left silently red. Restoring it
+to blocking requires adding at least a `logger.debug(...)` to each of the 71
+except blocks — mechanical, but spread across ~40 files, so it belongs in its
+own PR rather than riding along with unrelated work.
+
 ### Phase 4 — Deferred / low priority (RC-4)
 
 - `weebot/templates/agent_integration.py`'s use of `legacy_models` is the last
