@@ -5,6 +5,7 @@ from .requests import (
     CreateSessionRequest,
     SendMessageRequest,
     ResumeSessionRequest,
+    SessionInputRequest,
     UpdateSessionRequest,
 )
 from .responses import (
@@ -21,6 +22,7 @@ __all__ = [
     "CreateSessionRequest",
     "SendMessageRequest",
     "ResumeSessionRequest",
+    "SessionInputRequest",
     "UpdateSessionRequest",
     "SessionResponse",
     "SessionListResponse",

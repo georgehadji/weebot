@@ -42,6 +42,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from weebot.application.di import Container
+from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -54,6 +55,7 @@ from weebot.interfaces.web.routers.discord_webhook import router as discord_rout
 from weebot.interfaces.web.routers.slack_webhook import router as slack_router
 from weebot.interfaces.web.routers.whatsapp_webhook import router as whatsapp_router
 from weebot.interfaces.web.routers.ponytail import router as ponytail_router
+from weebot.interfaces.web.event_broadcaster import WebSocketEventBroadcaster
 from weebot.interfaces.web.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -172,6 +174,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     container.configure_defaults()
     app.state.container = container
 
+    # ── Live event fan-out (WebSocket) ─────────────────────────
+    # Wired once, here, at the composition root — nothing in application/
+    # or the flows knows a WebSocket exists. Without this subscription
+    # AgentEvents are published to the bus but never reach a browser;
+    # /ws and /ws/sessions/{id} only ever accept()/close() connections.
+    event_bus = container.get(EventBusPort)
+    broadcaster = WebSocketEventBroadcaster(manager)
+    event_bus.subscribe(broadcaster.publish)
+    app.state.event_broadcaster = broadcaster
+
     # ── Database migration (Alembic) — run by docker-entrypoint.sh ──
     # In-app migration is intentionally removed: the entrypoint runs
     # alembic upgrade head with set -e, making migration failure fatal
@@ -272,6 +284,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────
+    event_bus.unsubscribe(broadcaster.publish)
     if telegram_adapter is not None:
         await telegram_adapter.stop()
     if signal_adapter is not None:

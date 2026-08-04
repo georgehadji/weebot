@@ -18,4 +18,22 @@ class LLMResponse:
     usage: Dict[str, int] = field(default_factory=dict)
 
 
-__all__ = ["LLMResponse"]
+@dataclass
+class LLMChunk:
+    """One increment of a streamed LLM response.
+
+    Mirrors ``LLMResponse`` but for a single delta rather than the full
+    completion. ``tool_call_deltas`` carries partial tool-call JSON
+    fragments in the OpenAI streaming shape (index/id/function.arguments
+    pieces) — callers accumulate these across chunks the same way the
+    OpenAI SDK's own streaming helper does; weebot does not re-parse them
+    here so adapters stay a thin passthrough.
+    """
+    delta: str = ""
+    tool_call_deltas: Optional[List[Dict[str, Any]]] = None
+    finish_reason: Optional[str] = None
+    model: str = "unknown"
+    usage: Optional[Dict[str, int]] = None
+
+
+__all__ = ["LLMResponse", "LLMChunk"]

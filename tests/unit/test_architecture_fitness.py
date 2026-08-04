@@ -276,7 +276,7 @@ def test_ports_have_adapters():
     # Known port → adapter mapping (add new ports here).
     # Adapters may live in infrastructure/ OR application/services/.
     port_adapter_map: dict[str, list[str]] = {
-        "EventBusPort": ["AsyncEventBus", "DurableEventBus"],
+        "EventBusPort": ["AsyncEventBus", "DurableEventBus", "SessionScopedEventBus"],
         "EventPublisherPort": ["WebSocketEventBroadcaster"],  # in interfaces/ not infra/
         "LLMPort": ["OpenRouterAdapter", "AnthropicAdapter", "DeepSeekAdapter",
                      "OpenAIAdapter", "ResilientAdapter"],

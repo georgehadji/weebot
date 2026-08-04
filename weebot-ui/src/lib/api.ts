@@ -107,6 +107,21 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ answer }),
       }),
+
+    /**
+     * Single entry point for the composer — the backend resolves
+     * start/resume/steer/chat from the session's current status
+     * (see application/use_cases/dispatch_session_input.py).
+     */
+    input: (id: string, text: string, opts?: { clientMsgId?: string; model?: string }) =>
+      fetchApi<{ verb: string; session: Session }>(`/sessions/${id}/input`, {
+        method: "POST",
+        body: JSON.stringify({
+          text,
+          client_msg_id: opts?.clientMsgId,
+          model: opts?.model,
+        }),
+      }),
   },
 
   models: {

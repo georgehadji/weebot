@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, List, Optional
 
 from weebot.application.abstractions import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -14,6 +14,9 @@ from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSessio
 from weebot.application.services.memory_archivist import MemoryArchivist
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
+
+if TYPE_CHECKING:
+    from weebot.application.ports.steering_port import SteeringPort
 
 from weebot.application.services.metrics_bridge import get_metrics as _get_tr_metrics
 from weebot.application.models.tool_collection import ToolCollection
@@ -82,6 +85,29 @@ class TaskRunner:
                 await self._start_direct(prioritized.session, prioritized.flow_factory)
                 self._priority_queue.task_done()
 
+    async def _publish_presence(self, session: Session) -> None:
+        """Emit a SessionPresenceEvent on the global channel for the session rail.
+
+        No-op when no event bus is configured (CLI/tests). See
+        ``SessionPresenceEvent``'s docstring for why this doesn't go
+        through ``session_id`` — it must reach every connected rail, not
+        just the one session's own socket.
+        """
+        if self._event_bus is None:
+            return
+        from weebot.domain.models.event import SessionPresenceEvent
+
+        try:
+            await self._event_bus.publish(
+                SessionPresenceEvent(
+                    about_session_id=session.id,
+                    status=session.status.value,
+                    title=session.title or "",
+                )
+            )
+        except Exception:
+            logger.debug("Failed to publish session presence for %s", session.id, exc_info=True)
+
     async def _start_direct(
         self,
         session: Session,
@@ -90,6 +116,7 @@ class TaskRunner:
         """Internal direct task creation (bypasses queue)."""
         session = session.set_status(SessionStatus.RUNNING)
         await self._state_repo.save_session(session)
+        await self._publish_presence(session)
         session_id = session.id
 
         # Record the factory so _run_flow can retry on failure
@@ -194,6 +221,7 @@ class TaskRunner:
             try:
                 session = session.set_status(SessionStatus.FAILED)
                 await self._state_repo.save_session(session)
+                await self._publish_presence(session)
             except Exception as persist_exc:
                 logger.error(
                     "Double failure: state repo write failed after flow crash "
@@ -217,6 +245,7 @@ class TaskRunner:
             else:
                 session = session.set_status(SessionStatus.WAITING)
             await self._state_repo.save_session(session)
+            await self._publish_presence(session)
         finally:
             try:
                 await flow.teardown()
@@ -343,8 +372,15 @@ class TaskRunner:
         event_bus: Optional[EventBusPort] = None,
         model: Optional[str] = None,
         ponytail_mode: str | None = None,
+        steering: Optional["SteeringPort"] = None,
     ) -> FlowFactory:
-        """Factory helper to create PlanActFlow instances."""
+        """Factory helper to create PlanActFlow instances.
+
+        *steering*, when provided, lets a running flow observe non-blocking
+        mid-execution feedback sent via ``SteeringPort.send()`` — see
+        ``PlanActFlow``'s per-step ``steering.poll()`` call. Without it,
+        the web ``/sessions/{id}/steer`` endpoint has nothing to deliver to.
+        """
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.services.ponytail_skill_prompt import (
             build_ponytail_skill_prompt,
@@ -354,13 +390,21 @@ class TaskRunner:
         skill_prompt = build_ponytail_skill_prompt(existing=None, mode=ponytail_mode)
 
         def _factory(session: Session) -> BaseFlow:
+            from weebot.application.services.session_scoped_event_bus import (
+                SessionScopedEventBus,
+            )
+
+            scoped_bus = (
+                SessionScopedEventBus(event_bus, session.id) if event_bus else None
+            )
             return PlanActFlow(
                 llm=llm,
                 tools=tools,
                 session=session,
-                event_bus=event_bus,
+                event_bus=scoped_bus,
                 model=model,
                 skill_prompt=skill_prompt,
                 state_repo=state_repo,
+                steering=steering,
             )
         return _factory

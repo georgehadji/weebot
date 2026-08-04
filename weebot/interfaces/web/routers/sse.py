@@ -17,10 +17,15 @@ from sse_starlette.sse import EventSourceResponse
 
 from weebot.application.ports.event_bus_port import EventBusPort, EventHandler
 from weebot.domain.models.event import AgentEvent
+from weebot.interfaces.web.bounded_drop_oldest_queue import BoundedDropOldestQueue
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+# Per-subscriber bound. A slow client must not grow this process's memory
+# without limit — see mission_center_ui_implementation_plan.md T0.5.
+_SUBSCRIBER_QUEUE_MAXSIZE = 500
 
 
 @router.get("/stream")
@@ -49,14 +54,13 @@ async def stream_events(request: Request):
 
     async def event_generator():
         """Yield SSE messages for each AgentEvent published on the bus."""
-        queue: asyncio.Queue[Optional[AgentEvent]] = asyncio.Queue(maxsize=500)
+        queue: BoundedDropOldestQueue[Optional[AgentEvent]] = BoundedDropOldestQueue(
+            maxsize=_SUBSCRIBER_QUEUE_MAXSIZE
+        )
 
         async def handler(event: AgentEvent) -> None:
-            """Push event to the SSE queue (non-blocking, drop on full)."""
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                pass  # Drop events if client is too slow
+            """Push event to the SSE queue; never blocks, never raises."""
+            queue.try_put(event)
 
         # Subscribe to ALL agent events
         event_bus.subscribe(handler)
@@ -66,6 +70,14 @@ async def stream_events(request: Request):
                 event = await queue.get()
                 if event is None:
                     break  # Sentinel — shutdown
+
+                dropped = queue.take_dropped_count()
+                if dropped > 0:
+                    gap_data = {
+                        "type": "notification",
+                        "text": f"{dropped} event(s) dropped — client fell behind",
+                    }
+                    yield {"event": "notification", "data": json.dumps(gap_data)}
 
                 event_type = getattr(event, "type", "unknown")
                 try:

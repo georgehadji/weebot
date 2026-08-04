@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
+from weebot.domain.models.llm_response import LLMChunk
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class OpenAIAdapter(LLMPort):
         self._client = AsyncOpenAI(api_key=key, base_url=url)
         self._default_model = default_model
 
-    async def chat(
+    def _build_kwargs(
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
@@ -61,7 +62,14 @@ class OpenAIAdapter(LLMPort):
         max_tokens: Optional[int] = None,
         extra_body: Optional[Dict[str, Any]] = None,
         reasoning_effort: Optional[str] = None,
-    ) -> LLMResponse:
+    ) -> Dict[str, Any]:
+        """Build the ``chat.completions.create`` kwargs.
+
+        Shared by ``chat()`` and ``stream()`` so the considerable
+        per-provider parameter munging below (thinking-mode suffixes,
+        GPT/Grok/GLM quirks) exists in exactly one place and cannot
+        silently drift out of sync between the two call paths.
+        """
         kwargs: Dict[str, Any] = {
             "model": model or self._default_model,
             "messages": convert_messages(messages, "openai"),
@@ -134,6 +142,25 @@ class OpenAIAdapter(LLMPort):
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
         if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
+
+        return kwargs
+
+    async def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = "auto",
+        response_format: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        reasoning_effort: Optional[str] = None,
+    ) -> LLMResponse:
+        kwargs = self._build_kwargs(
+            messages, tools, tool_choice, response_format, model,
+            temperature, max_tokens, extra_body, reasoning_effort,
+        )
 
         response = None
         try:
@@ -212,3 +239,109 @@ class OpenAIAdapter(LLMPort):
             model=response.model or (model or self._default_model),
             usage=usage,
         )
+
+    async def stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = "auto",
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> AsyncIterator[LLMChunk]:
+        """Stream a chat completion as ``LLMChunk`` deltas.
+
+        Shares ``_build_kwargs`` with ``chat()`` so provider-specific
+        parameter handling never drifts between the two paths. Unlike
+        ``chat()``, a rate limit mid-stream is not retried — a partial
+        stream has already reached the caller, so silently swapping
+        models under it would produce a corrupted transcript. The
+        pre-stream rate limit (bad model / no first chunk yet) still
+        falls back, matching ``chat()``'s behavior.
+        """
+        kwargs = self._build_kwargs(
+            messages, tools, tool_choice, None, model, temperature, max_tokens,
+        )
+        kwargs["stream"] = True
+        kwargs["stream_options"] = {"include_usage": True}
+
+        try:
+            response_stream = await self._client.chat.completions.create(**kwargs)
+        except AuthenticationError:
+            key_prefix = (self._client.api_key or "")[:12]
+            logger.error(
+                "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
+                "by the provider (base_url=%s) on stream open.",
+                key_prefix, self._client.base_url,
+            )
+            raise
+        except RateLimitError:
+            model_name = str(kwargs.get("model", ""))
+            is_openrouter = model_name.startswith("openrouter/") or "/" in model_name
+            if is_openrouter:
+                from weebot.config.model_refs import MODEL_FALLBACK_OPENROUTER_CHAIN
+                fallback_models = MODEL_FALLBACK_OPENROUTER_CHAIN
+            else:
+                from weebot.config.model_refs import MODEL_FALLBACK_NON_OPENROUTER
+                fallback_models = [MODEL_FALLBACK_NON_OPENROUTER]
+
+            response_stream = None
+            for fallback_model in fallback_models:
+                if fallback_model == model_name:
+                    continue
+                try:
+                    kwargs["model"] = fallback_model
+                    response_stream = await self._client.chat.completions.create(**kwargs)
+                    break
+                except RateLimitError:
+                    continue
+            if response_stream is None:
+                raise
+
+        effective_model = kwargs.get("model", model or self._default_model)
+        async for chunk in response_stream:
+            if not chunk.choices:
+                # Some providers emit a usage-only trailing chunk with no choices.
+                if getattr(chunk, "usage", None):
+                    yield LLMChunk(
+                        delta="",
+                        model=getattr(chunk, "model", None) or effective_model,
+                        usage={
+                            "prompt_tokens": chunk.usage.prompt_tokens,
+                            "completion_tokens": chunk.usage.completion_tokens,
+                            "total_tokens": chunk.usage.total_tokens,
+                        },
+                    )
+                continue
+
+            choice = chunk.choices[0]
+            delta = choice.delta
+            tool_call_deltas = None
+            if getattr(delta, "tool_calls", None):
+                tool_call_deltas = [
+                    {
+                        "index": tc.index,
+                        "id": tc.id,
+                        "function": {
+                            "name": getattr(tc.function, "name", None),
+                            "arguments": getattr(tc.function, "arguments", None),
+                        },
+                    }
+                    for tc in delta.tool_calls
+                ]
+
+            usage = None
+            if getattr(chunk, "usage", None):
+                usage = {
+                    "prompt_tokens": chunk.usage.prompt_tokens,
+                    "completion_tokens": chunk.usage.completion_tokens,
+                    "total_tokens": chunk.usage.total_tokens,
+                }
+
+            yield LLMChunk(
+                delta=delta.content or "",
+                tool_call_deltas=tool_call_deltas,
+                finish_reason=choice.finish_reason,
+                model=getattr(chunk, "model", None) or effective_model,
+                usage=usage,
+            )

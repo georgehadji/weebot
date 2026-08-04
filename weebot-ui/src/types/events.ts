@@ -10,6 +10,8 @@ export interface BaseEvent {
   type: string;
   id: string;
   timestamp: string;
+  /** Transport correlation id — empty means "global" (see SessionScopedEventBus). */
+  session_id: string;
 }
 
 export interface ErrorEvent extends BaseEvent {
@@ -67,6 +69,16 @@ export interface NotificationEvent extends BaseEvent {
   text: string;
 }
 
+/** Session status transition — feeds the WS-driven session rail (never session-scoped). */
+export interface SessionPresenceEvent extends BaseEvent {
+  type: 'session_presence';
+  about_session_id: string;
+  status: 'pending' | 'running' | 'waiting' | 'completed' | 'failed' | string;
+  title: string;
+  step_count: number;
+  steps_completed: number;
+}
+
 export interface PlanStep {
   id: string;
   description: string;
@@ -92,13 +104,17 @@ export type AgentEvent =
   | DoneEvent
   | WaitForUserEvent
   | NotificationEvent
-  | PlanReviewEvent;
+  | PlanReviewEvent
+  | SessionPresenceEvent;
+
+export type SessionStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'failed';
 
 export interface Session {
   id: string;
   user_id: string;
   agent_id: string;
-  status: 'active' | 'waiting' | 'completed' | 'cancelled' | 'error';
+  /** Matches weebot.domain.models.session.SessionStatus.value exactly — see _session_to_response. */
+  status: SessionStatus;
   title?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: Record<string, any>;

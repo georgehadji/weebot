@@ -7,11 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { CostChart } from "@/components/dashboard/CostChart";
 import { MetricsPanel } from "@/components/dashboard/MetricsPanel";
 import { PlanVisualizer } from "@/components/plan/PlanVisualizer";
-import { CodeEditor } from "@/components/code/CodeEditor";
 import { api, ActiveSession } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface DashboardData {
+interface OpsMetrics {
   total_sessions: number;
   active_sessions: number;
   completed_sessions: number;
@@ -34,9 +33,18 @@ interface LogEntry {
 
 const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
-export default function DashboardPage() {
+const HEALTH_DOT: Record<string, string> = {
+  healthy: "bg-status-live",
+  degraded: "bg-status-waiting",
+};
+const HEALTH_TEXT: Record<string, string> = {
+  healthy: "text-status-live",
+  degraded: "text-status-waiting",
+};
+
+export default function OpsPage() {
   const [health, setHealth] = useState<{ status: string; components: { name: string; status: string }[]; timestamp: string } | null>(null);
-  const [metrics, setMetrics] = useState<DashboardData | null>(null);
+  const [metrics, setMetrics] = useState<OpsMetrics | null>(null);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -131,7 +139,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+      <h1 className="text-3xl font-bold mb-6">Ops Console</h1>
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
@@ -146,7 +154,6 @@ export default function DashboardPage() {
           </TabsTrigger>
           <TabsTrigger value="costs">Cost Tracking</TabsTrigger>
           <TabsTrigger value="plan">Plan Visualization</TabsTrigger>
-          <TabsTrigger value="code">Code Editor</TabsTrigger>
           <TabsTrigger value="logs">Live Events</TabsTrigger>
         </TabsList>
 
@@ -174,11 +181,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-3 h-3 rounded-full ${
-                          health.status === "healthy"
-                            ? "bg-green-500"
-                            : health.status === "degraded"
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
+                          HEALTH_DOT[health.status] ?? "bg-status-error"
                         }`}
                       />
                       <span className="font-medium capitalize">{health.status}</span>
@@ -190,15 +193,7 @@ export default function DashboardPage() {
                           className="flex items-center justify-between text-sm p-2 rounded bg-muted"
                         >
                           <span>{c.name}</span>
-                          <span
-                            className={
-                              c.status === "healthy"
-                                ? "text-green-600"
-                                : c.status === "degraded"
-                                ? "text-yellow-600"
-                                : "text-red-600"
-                            }
-                          >
+                          <span className={HEALTH_TEXT[c.status] ?? "text-status-error"}>
                             {c.status}
                           </span>
                         </div>
@@ -206,7 +201,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-red-500">Failed to load health status</p>
+                  <p className="text-status-error">Failed to load health status</p>
                 )}
               </CardContent>
             </Card>
@@ -307,28 +302,6 @@ export default function DashboardPage() {
           <PlanVizTab />
         </TabsContent>
 
-        {/* Code Editor Tab */}
-        <TabsContent value="code">
-          <Card>
-            <CardHeader>
-              <CardTitle>Code Editor</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CodeEditor
-                initialValue={`# Welcome to Weebot Code Editor\n# Write and execute code here\n\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n - 1) + fibonacci(n - 2)\n\nfor i in range(10):\n    print(f"F({i}) = {fibonacci(i)}")`}
-                language="python"
-                height="500px"
-                onExecute={async (code) => {
-                  alert("Code execution:\n\n" + code.slice(0, 200) + (code.length > 200 ? "..." : ""));
-                }}
-                onSave={async () => {
-                  alert("Code saved!");
-                }}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Live Events Tab */}
         <TabsContent value="logs">
           <Card>
@@ -336,7 +309,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <CardTitle>Live Event Stream</CardTitle>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <div className="w-2 h-2 rounded-full bg-status-live animate-pulse" />
                   <span className="text-xs text-muted-foreground">WebSocket connected</span>
                   {logs.length > 0 && (
                     <button
@@ -436,7 +409,7 @@ function PlanVizTab() {
           </button>
         </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-status-error">{error}</p>}
 
         {planData ? (
           <PlanVisualizer steps={planData.nodes} title={`Plan for ${sessionId}`} />

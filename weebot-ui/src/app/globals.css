@@ -1,57 +1,133 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "tw-animate-css";
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  .font-mono-console {
+    font-family: var(--font-mono);
+  }
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * Layer 1 — primitives. Raw palette, no semantic meaning yet.
+ * ──────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
+    --p-slate-950: 222 47% 7%;   /* #0B1120 */
+    --p-slate-900: 222 47% 11%;  /* #0F172A */
+    --p-slate-850: 222 33% 16%;  /* #1B2336 */
+    --p-slate-800: 222 30% 20%;  /* #272F42 */
+    --p-slate-700: 217 24% 22%;  /* #2A3347 */
+    --p-slate-600: 215 19% 35%;  /* #475569 */
+    --p-slate-400: 215 20% 65%;  /* #94A3B8 */
+    --p-slate-50:  210 40% 98%;  /* #F8FAFC */
+
+    --p-violet-600: 262 83% 58%; /* #7C3AED */
+    --p-green-500:  142 71% 45%; /* #22C55E */
+    --p-amber-500:  38 92% 50%;  /* #F59E0B */
+    --p-red-500:    0 84% 60%;   /* #EF4444 */
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+ * Layer 2 — semantic tokens. What shadcn/ui components consume.
+ * Dark is primary (mission-center default); light is a real,
+ * reachable second theme — not dead CSS.
+ * ──────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* light theme */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: var(--p-violet-600);
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: var(--p-red-500);
+    --destructive-foreground: 0 0% 100%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: var(--p-violet-600);
     --radius: 0.5rem;
+
+    /* surfaces — light theme has one elevation step (card above bg) */
+    --surface-1: 0 0% 100%;
+    --surface-2: 210 20% 98%;
+    --surface-3: 210 20% 95%;
+    --border-strong: 214.3 20% 80%;
+
+    /* agent identity + status — same hues in both themes */
+    --agent: var(--p-violet-600);
+    --agent-foreground: 0 0% 100%;
+    --user-bubble: 215 25% 27%;
+    --user-bubble-foreground: 0 0% 100%;
+    --status-live: var(--p-green-500);
+    --status-waiting: var(--p-amber-500);
+    --status-error: var(--p-red-500);
+    --status-idle: 215 16% 55%;
+
+    /* layout chrome */
+    --topbar-h: 48px;
+    --rail-w: 240px;
+    --dock-w: 340px;
+
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+    --dur-fast: 150ms;
+    --dur-base: 220ms;
+    --ease-console: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: var(--p-slate-950);
+    --foreground: var(--p-slate-50);
+
+    /* --card intentionally != --background: fixes the invisible-card bug
+       (previously both were 222.2 84% 4.9%, so every Card vanished). */
+    --card: var(--p-slate-900);
+    --card-foreground: var(--p-slate-50);
+    --popover: var(--p-slate-850);
+    --popover-foreground: var(--p-slate-50);
+
+    --primary: var(--p-violet-600);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--p-slate-800);
+    --secondary-foreground: var(--p-slate-50);
+    --muted: var(--p-slate-850);
+    --muted-foreground: var(--p-slate-400);
+    --accent: var(--p-slate-800);
+    --accent-foreground: var(--p-slate-50);
+    --destructive: 0 63% 31%;
+    --destructive-foreground: var(--p-slate-50);
+    --border: var(--p-slate-700);
+    --input: var(--p-slate-700);
+    --ring: var(--p-slate-400);
+
+    --surface-1: var(--p-slate-900);
+    --surface-2: var(--p-slate-850);
+    --surface-3: var(--p-slate-800);
+    --border-strong: var(--p-slate-600);
+
+    --agent: var(--p-violet-600);
+    --agent-foreground: 0 0% 100%;
+    --user-bubble: var(--p-slate-700);
+    --user-bubble-foreground: var(--p-slate-50);
+    --status-live: var(--p-green-500);
+    --status-waiting: var(--p-amber-500);
+    --status-error: var(--p-red-500);
+    --status-idle: var(--p-slate-400);
   }
 }
 
@@ -61,5 +137,34 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  /* semantic error surface — replaces bg-red-50, which was unreadable
+     against the forced-dark background it always rendered on. */
+  .surface-error {
+    background-color: hsl(var(--status-error) / 0.12);
+    border-color: hsl(var(--status-error) / 0.35);
+    color: hsl(var(--status-error));
+  }
+  .dark .surface-error {
+    background-color: hsl(var(--status-error) / 0.15);
+    color: hsl(0 0% 92%);
+  }
+
+  .surface-waiting {
+    background-color: hsl(var(--status-waiting) / 0.12);
+    border-color: hsl(var(--status-waiting) / 0.35);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

@@ -46,15 +46,20 @@ class WebSocketEventBroadcaster(EventPublisherPort):
             logger.error(f"Failed to broadcast event: {e}")
 
     def _event_to_dict(self, event: AgentEvent) -> dict[str, Any]:
-        """Convert AgentEvent to dictionary for JSON serialization."""
-        # Handle Pydantic models
+        """Convert AgentEvent to a JSON-safe dictionary.
+
+        ``mode="json"`` is required — the default ``model_dump()`` leaves
+        ``datetime``/``Enum`` fields as native Python objects, which
+        ``ConnectionManager.broadcast_to_session``'s plain ``json.dumps``
+        cannot serialize (raises ``TypeError`` and silently drops the event).
+        """
         if hasattr(event, 'model_dump'):
-            return event.model_dump()
+            return event.model_dump(mode="json")
         # Handle dataclasses or regular objects
         return {
             'type': getattr(event, 'type', 'unknown'),
             **{
-                k: v for k, v in event.__dict__.items() 
+                k: v for k, v in event.__dict__.items()
                 if not k.startswith('_')
             }
         }

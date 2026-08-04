@@ -1,101 +1,67 @@
 "use client";
 
 /**
- * Trust score display component
+ * Trust score display component.
  */
 
+import { cn } from "@/lib/utils";
 import { TrustScore } from "@/hooks/useBehavior";
 
 interface TrustBarProps {
   trust: TrustScore | null;
 }
 
+function trustClass(percentage: number): { border: string; text: string; bar: string } {
+  if (percentage >= 90) return { border: "border-status-live", text: "text-status-live", bar: "bg-status-live" };
+  if (percentage >= 70) return { border: "border-status-waiting", text: "text-status-waiting", bar: "bg-status-waiting" };
+  return { border: "border-status-error", text: "text-status-error", bar: "bg-status-error" };
+}
+
+const STATUS_TEXT: Record<string, string> = {
+  trusted: "Trusted",
+  review: "Review Needed",
+  supervision: "Requires Supervision",
+};
+
 export function TrustBar({ trust }: TrustBarProps) {
   if (!trust) {
     return (
-      <div style={{ 
-        padding: "12px 16px", 
-        background: "#1a1a2e",
-        borderRadius: "8px",
-        marginBottom: "16px",
-        color: "#888"
-      }}>
+      <div className="mb-4 rounded-lg bg-surface-2 px-4 py-3 text-sm text-muted-foreground">
         Loading trust score...
       </div>
     );
   }
 
-  const getColor = () => {
-    if (trust.score_percentage >= 90) return "#22c55e"; // green
-    if (trust.score_percentage >= 70) return "#f59e0b"; // yellow
-    return "#ef4444"; // red
-  };
-
-  const getStatusText = () => {
-    switch (trust.status) {
-      case "trusted": return "Trusted";
-      case "review": return "Review Needed";
-      case "supervision": return "Requires Supervision";
-      default: return "Unknown";
-    }
-  };
+  const colors = trustClass(trust.score_percentage);
 
   return (
-    <div style={{ 
-      padding: "12px 16px", 
-      background: "#1a1a2e",
-      borderRadius: "8px",
-      marginBottom: "16px"
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        {/* Score Circle */}
-        <div style={{
-          width: "60px",
-          height: "60px",
-          borderRadius: "50%",
-          border: `3px solid ${getColor()}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "20px",
-          fontWeight: "bold",
-          color: getColor()
-        }}>
+    <div className="mb-4 rounded-lg bg-surface-2 px-4 py-3">
+      <div className="flex items-center gap-4">
+        <div
+          className={cn(
+            "flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-full border-[3px] text-xl font-bold",
+            colors.border,
+            colors.text
+          )}
+        >
           {trust.score_percentage}%
         </div>
 
-        {/* Details */}
-        <div style={{ flex: 1 }}>
-          <div style={{ 
-            fontSize: "16px", 
-            fontWeight: "600",
-            color: getColor()
-          }}>
-            {getStatusText()}
+        <div className="flex-1">
+          <div className={cn("text-base font-semibold", colors.text)}>
+            {STATUS_TEXT[trust.status] ?? "Unknown"}
           </div>
-          <div style={{ 
-            fontSize: "12px", 
-            color: "#888",
-            marginTop: "4px"
-          }}>
+          <div className="mt-1 text-xs text-muted-foreground">
             {trust.total_actions.toLocaleString()} actions · {trust.overrides} overrides
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div style={{ width: "120px" }}>
-          <div style={{
-            height: "8px",
-            background: "#333",
-            borderRadius: "4px",
-            overflow: "hidden"
-          }}>
-            <div style={{
-              width: `${trust.score_percentage}%`,
-              height: "100%",
-              background: getColor(),
-              transition: "width 0.3s ease"
-            }} />
+        <div className="w-[120px] shrink-0">
+          <div className="h-2 overflow-hidden rounded-full bg-surface-3">
+            <div
+              className={cn("h-full transition-[width] duration-base ease-console", colors.bar)}
+              style={{ width: `${trust.score_percentage}%` }}
+            />
           </div>
         </div>
       </div>

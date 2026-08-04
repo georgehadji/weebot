@@ -2,8 +2,14 @@
 
 import { useWebSocketDebug } from "@/hooks/useWebSocketDebug";
 import { useState } from "react";
+import { notFound } from "next/navigation";
 
 export default function DebugPage() {
+  // Raw wire-protocol debugging tool — not meant for production operators.
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
+
   const [sessionId, setSessionId] = useState("test-session-" + Date.now());
   const { isConnected, error, logs, connect, disconnect, send, clearLogs } = useWebSocketDebug(sessionId);
 
