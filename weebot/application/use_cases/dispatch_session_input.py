@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
     from weebot.application.ports.steering_port import SteeringPort
-    from weebot.application.services.task_runner import TaskRunner
+    from weebot.application.ports.task_runner_port import TaskRunnerPort
 
 
 @dataclass
@@ -39,7 +39,7 @@ class SessionInputContext:
     session: Session
     text: str
     state_repo: "StateRepositoryPort"
-    task_runner: "TaskRunner"
+    task_runner: "TaskRunnerPort"
     llm: "LLMPort"
     event_bus: "EventBusPort"
     steering: "SteeringPort"

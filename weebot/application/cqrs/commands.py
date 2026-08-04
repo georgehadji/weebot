@@ -47,32 +47,6 @@ class UpdatePlanCommand(Command):
             raise ValueError("updates is required")
 
 
-class CompactMemoryCommand(Command):
-    """Command to compact session memory."""
-    session_id: str = Field(min_length=1)
-    target_tokens: int = 4000
-
-    def validate(self) -> None:
-        if self.target_tokens < 1000:
-            raise ValueError("target_tokens must be at least 1000")
-
-
-class CancelSessionCommand(Command):
-    """Command to cancel an active session."""
-    session_id: str = Field(min_length=1)
-    reason: str = ""
-
-
-class ArchiveSessionCommand(Command):
-    """Command to archive a completed session."""
-    session_id: str = Field(min_length=1)
-    ttl_days: int = 30
-
-    def validate(self) -> None:
-        if self.ttl_days < 1:
-            raise ValueError("ttl_days must be at least 1")
-
-
 class SummarizeCommand(Command):
     """Command to generate a final summary for a completed session."""
     session_id: str = Field(min_length=1)
@@ -102,7 +76,4 @@ CreatePlanCommand.model_rebuild()
 ExecuteStepCommand.model_rebuild()
 UpdatePlanCommand.model_rebuild()
 SummarizeCommand.model_rebuild()
-CompactMemoryCommand.model_rebuild()
-CancelSessionCommand.model_rebuild()
-ArchiveSessionCommand.model_rebuild()
 ProcessMessageCommand.model_rebuild()

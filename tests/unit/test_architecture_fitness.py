@@ -1091,17 +1091,21 @@ def test_container_get_static_not_called_outside_di():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_cqrs_handlers_directory_split():
-    """Verify the CQRS handlers/ directory contains individual handler files."""
+    """Verify the CQRS handlers/ directory contains individual handler files.
+
+    cancel_session_handler.py, compact_memory_handler.py,
+    archive_session_handler.py and session_queries.py were removed in the
+    2026-08-04 pre-existing-architecture-debt pass (RC-1): each was
+    registered on the mediator but had no dispatch site anywhere in the
+    codebase.
+    """
     handlers_dir = ROOT / "application" / "cqrs" / "handlers"
     expected_files = {
         "create_plan_handler.py",
         "execute_step_handler.py",
         "update_plan_handler.py",
-        "cancel_session_handler.py",
-        "compact_memory_handler.py",
         "process_message_handler.py",
         "summarize_handler.py",
-        "archive_session_handler.py",
     }
     existing = {p.name for p in handlers_dir.glob("*.py")}
     missing = expected_files - existing

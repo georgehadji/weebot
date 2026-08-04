@@ -171,8 +171,8 @@ async def cancel_session(
     # or it will overwrite the FAILED status when it finishes.
     container = http_request.app.state.container
     try:
-        from weebot.application.services.task_runner import TaskRunner
-        task_runner = container.get(TaskRunner)
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
+        task_runner = container.get(TaskRunnerPort)
         cancelled = await task_runner.cancel_session(session_id)
         if not cancelled:
             # TaskRunner didn't have an active task — mark manually
@@ -255,12 +255,12 @@ async def run_session(
 
     container = http_request.app.state.container
     try:
-        from weebot.application.services.task_runner import TaskRunner
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.application.ports.steering_port import SteeringPort
 
-        task_runner: TaskRunner = container.get(TaskRunner)
+        task_runner: TaskRunnerPort = container.get(TaskRunnerPort)
         llm = container.get(LLMPort)
         event_bus = container.get(EventBusPort)
         steering = container.get(SteeringPort)
@@ -347,7 +347,7 @@ async def send_session_input(
     from weebot.application.ports.event_bus_port import EventBusPort
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.steering_port import SteeringPort
-    from weebot.application.services.task_runner import TaskRunner
+    from weebot.application.ports.task_runner_port import TaskRunnerPort
     from weebot.application.use_cases.dispatch_session_input import (
         SessionInputContext,
         dispatch_session_input,
@@ -367,7 +367,7 @@ async def send_session_input(
         client_msg_id=request.client_msg_id,
         model=request.model,
         state_repo=state_repo,
-        task_runner=container.get(TaskRunner),
+        task_runner=container.get(TaskRunnerPort),
         llm=container.get(LLMPort),
         event_bus=container.get(EventBusPort),
         steering=container.get(SteeringPort),

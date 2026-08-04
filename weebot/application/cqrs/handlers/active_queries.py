@@ -1,60 +1,37 @@
-"""Query handlers for session, plan, and meta queries.
+"""Query handlers for the Operations Console.
 
-Split from query_handlers.py during architecture remediation.
+Scope note (2026-08-04 pre-existing-architecture-debt audit, RC-1):
+``GetActiveTasksHandler`` previously lived here but had no dispatch site
+anywhere in the codebase; it was removed along with GetActiveTasksQuery.
+Both handlers below are live — dispatched by
+``interfaces/web/routers/ops_router.py``.
 """
 from __future__ import annotations
-import warnings
-warnings.warn(
-    f"{__name__} is deprecated. Use direct service calls.",
-    DeprecationWarning, stacklevel=2,
-)
 
 from weebot.application.cqrs.base import QueryHandler, QueryResult
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.services.task_runner import TaskRunner
-from weebot.application.models.tool_collection import ToolCollection
 
 from weebot.application.cqrs.queries import (
-    GetActiveTasksQuery,
     GetActiveSessionsQuery,
     GetCostSummaryQuery,
 )
 
-class GetActiveTasksHandler(QueryHandler):
-    """Get currently active/running tasks."""
-
-    def __init__(self, task_runner: TaskRunner):
-        self._task_runner = task_runner
-
-    async def handle(self, query: GetActiveTasksQuery) -> QueryResult:
-        try:
-            active_ids = await self._task_runner.list_active_sessions() if self._task_runner else []
-
-            limited = active_ids[: query.limit]
-            return QueryResult.ok({
-                "active_tasks": [
-                    {"session_id": sid, "status": "running"}
-                    for sid in limited
-                ],
-                "total": len(active_ids),
-                "limit": query.limit,
-            })
-        except Exception as exc:
-            return QueryResult.fail(str(exc))
-
-
-# ── Operations Console handlers (Enhancement 4) ───────────────────────
-
 
 class GetActiveSessionsHandler(QueryHandler):
-    """List all running sessions with flow state, step count, and tool call count."""
+    """List running sessions with flow state, step count, and tool call count."""
 
     def __init__(self, state_repo: StateRepositoryPort):
         self._state_repo = state_repo
 
     async def handle(self, query: GetActiveSessionsQuery) -> QueryResult:
         try:
-            sessions = await self._state_repo.list_sessions(status="running")
+            # user_id is scoped deliberately: /api/sessions/active is
+            # documented as returning only the caller's sessions, and
+            # without this filter it returned every user's running
+            # sessions.
+            sessions = await self._state_repo.list_sessions(
+                user_id=query.user_id, status="running",
+            )
             limited = sessions[: query.limit]
 
             active = []

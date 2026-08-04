@@ -36,6 +36,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa
 from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
 from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
 from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
+from weebot.application.ports.task_runner_port import TaskRunnerPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort  # noqa: E402
@@ -121,6 +122,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register(Mediator, self._create_mediator)
         self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
+        # TaskRunnerPort resolves to the same TaskRunner singleton — it exists
+        # so interfaces/ can depend on the narrow structural type instead of
+        # the concrete class (see task_runner_port.py docstring for why).
+        self.register(TaskRunnerPort, lambda: self.get(TaskRunner))
         # Registered under the port, not the concrete adapter class, so
         # callers depend on the abstraction (DIP) — matches every other
         # port binding in this method.

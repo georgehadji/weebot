@@ -46,7 +46,7 @@ def _build_app(monkeypatch, session_status: SessionStatus, has_prompt: bool = Tr
 
     def _get(port_type):
         name = getattr(port_type, "__name__", "")
-        if name == "TaskRunner":
+        if name in ("TaskRunner", "TaskRunnerPort"):
             return task_runner
         if name == "StateRepositoryPort":
             return state_repo

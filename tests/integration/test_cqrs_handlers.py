@@ -4,9 +4,13 @@ Exercises the full pipeline:  Command → Handler → StateRepo (with real
 InMemoryStateRepository).  LLM-dependent handlers use mocks for the
 LLMPort since these are integration tests, not live-API acceptance tests.
 
-ARCH-AUDIT-V2 B3 — coverage for 5 handlers:
-  CreatePlanHandler, UpdatePlanHandler, ArchiveSessionHandler,
-  CancelSessionHandler, ApplyHarnessEditsHandler.
+ARCH-AUDIT-V2 B3 — coverage for CreatePlanHandler, UpdatePlanHandler,
+and ApplyHarnessEditsHandler.
+
+ArchiveSessionHandler and CancelSessionHandler were removed in the
+2026-08-04 pre-existing-architecture-debt pass (RC-1): both were
+registered on the mediator but had no dispatch site anywhere in the
+codebase, so these tests were their only consumer.
 """
 from __future__ import annotations
 
@@ -15,19 +19,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from weebot.application.cqrs.commands import (
-    ArchiveSessionCommand,
     CreatePlanCommand,
     UpdatePlanCommand,
-    CancelSessionCommand,
 )
 from weebot.application.cqrs.commands.harness_edit_commands import (
     ApplyHarnessEditsCommand,
-)
-from weebot.application.cqrs.handlers.archive_session_handler import (
-    ArchiveSessionHandler,
-)
-from weebot.application.cqrs.handlers.cancel_session_handler import (
-    CancelSessionHandler,
 )
 from weebot.application.cqrs.handlers.create_plan_handler import (
     CreatePlanHandler,
@@ -157,81 +153,6 @@ class TestUpdatePlanHandler:
         result = await handler.handle(cmd)
         assert not result.success
         assert result.error_code == "SESSION_NOT_FOUND"
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# ArchiveSessionHandler
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestArchiveSessionHandler:
-
-    @pytest.mark.asyncio
-    async def test_full_pipeline_archives_session(
-        self, state_repo: InMemoryStateRepository, saved_session: Session
-    ):
-        """End-to-end: save session → archive via handler → verify context flags."""
-        handler = ArchiveSessionHandler(state_repo=state_repo)
-        cmd = ArchiveSessionCommand(
-            session_id=saved_session.id,
-            ttl_days=60,
-        )
-        result = await handler.handle(cmd)
-        assert result.success
-        assert result.data["status"] == "archived"
-        assert result.data["ttl_days"] == 60
-
-        # Verify persisted state
-        reloaded = await state_repo.load_session(saved_session.id)
-        assert reloaded is not None
-        assert reloaded.context.get("archived") is True
-        assert reloaded.context.get("archive_ttl_days") == 60
-        assert reloaded.context.get("archived_at") is not None
-
-    @pytest.mark.asyncio
-    async def test_session_not_found_returns_error(
-        self, state_repo: InMemoryStateRepository
-    ):
-        handler = ArchiveSessionHandler(state_repo=state_repo)
-        cmd = ArchiveSessionCommand(session_id="nonexistent")
-        result = await handler.handle(cmd)
-        assert not result.success
-        assert result.error_code == "SESSION_NOT_FOUND"
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# CancelSessionHandler
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestCancelSessionHandler:
-
-    @pytest.mark.asyncio
-    async def test_full_pipeline_cancels_session(
-        self, mock_task_runner: AsyncMock
-    ):
-        """End-to-end: TaskRunner.cancel_session returns True → handler succeeds."""
-        handler = CancelSessionHandler(task_runner=mock_task_runner)
-        cmd = CancelSessionCommand(
-            session_id="running-session",
-            reason="user request",
-        )
-        result = await handler.handle(cmd)
-        assert result.success
-        assert result.data["cancelled"] is True
-        assert result.data["session_id"] == "running-session"
-        assert result.data["reason"] == "user request"
-        mock_task_runner.cancel_session.assert_awaited_once_with("running-session")
-
-    @pytest.mark.asyncio
-    async def test_task_runner_returns_false(
-        self, mock_task_runner: AsyncMock
-    ):
-        """When TaskRunner.cancel_session returns False, handler returns an error."""
-        mock_task_runner.cancel_session = AsyncMock(return_value=False)
-        handler = CancelSessionHandler(task_runner=mock_task_runner)
-        cmd = CancelSessionCommand(session_id="finished-session")
-        result = await handler.handle(cmd)
-        assert not result.success
-        assert result.error_code == "SESSION_NOT_ACTIVE"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

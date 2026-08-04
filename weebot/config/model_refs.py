@@ -7,7 +7,7 @@ Cascade (2-tier direct API + 2-tier OpenRouter):
   Tier 1: Kimi K2.6 — via KIMI_API_KEY (direct), OpenRouter fallback
   Tier 2: DeepSeek V4 Flash — via DEEPSEEK_API_KEY (direct), OpenRouter fallback
   Tier 3: Grok Build 0.1 — fast coding, agentic SWE (OpenRouter)
-  Tier 4: Qwen 3.7 Max — flagship coding, 1M ctx (OpenRouter)
+  Tier 4: Qwen 3.8 Max — flagship coding, 1M ctx (OpenRouter)
 
 Task-specific:
   CODING:        DeepSeek V4 Flash + Grok Build 0.1
@@ -51,8 +51,8 @@ Native model ID: ``deepseek-v4-flash`` (stripped by DeepSeekAdapter)."""
 MODEL_CASCADE_TIER3: str = "moonshotai/kimi-k2.6"
 """Tier 3: Kimi K2.6 — structured output, broad knowledge, 256K context."""
 
-MODEL_CASCADE_TIER4: str = "qwen/qwen3.7-max"
-"""Tier 4: Qwen 3.7 Max — flagship agent-centric, coding strength, 1M context."""
+MODEL_CASCADE_TIER4: str = "qwen/qwen3.8-max"
+"""Tier 4: Qwen 3.8 Max — flagship agent-centric, coding strength, 1M context."""
 
 # ═══════════════════════════════════════════════════════════════════════
 # Additional model references — added 2026-07-21
@@ -112,7 +112,7 @@ Coding, agentic workflows, web/app dev. Polished output, fewer edits, reduced to
 # Verbalized Sampling
 # ═══════════════════════════════════════════════════════════════════════
 MODEL_VS_CAPABLE: str = MODEL_CASCADE_TIER4
-"""VS-capable model: same as Tier 4 (Qwen 3.7 Max). Paper: larger models benefit more."""
+"""VS-capable model: same as Tier 4 (Qwen 3.8 Max). Paper: larger models benefit more."""
 
 MODEL_VS_FALLBACK: str = "x-ai/grok-build-0.1"
 """VS fallback when Tier 4 unavailable."""
@@ -184,7 +184,7 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
         "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
         "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
-        "qwen/qwen3.7-max",                       # fallback 2: Qwen Max — strong comprehension
+        "qwen/qwen3.8-max",                       # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
         "deepseek/deepseek-v4-flash:thinking",    # primary: DeepSeek V4 Flash :thinking — math/reasoning
@@ -298,12 +298,12 @@ MODEL_DI_DEFAULT: str = "x-ai/grok-build-0.1"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
 MODEL_FACTORY_OPENAI: str = "moonshotai/kimi-k2.6"
-MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.7-max"
+MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.8-max"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
 MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6"
-MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.7-max"
+MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.8-max"
 MODEL_DEFAULT_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
@@ -315,7 +315,7 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "moonshotai/kimi-k2.6",
     "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
-    "qwen/qwen3.7-max",
+    "qwen/qwen3.8-max",
     "x-ai/grok-4.3",
     "kwaipilot/kat-coder-pro-v2.5",
     "kwaipilot/kat-coder-air-v2.5",
@@ -333,7 +333,7 @@ MODEL_DEPRECATED_AGENT: str = "minimax/minimax-m3"
 MODEL_DEPRECATED_TOOL_AGENT: str = "minimax/minimax-m3"
 MODEL_RTK_CHEAP: str = "minimax/minimax-m3"
 MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
-MODEL_RTK_STANDARD: str = "qwen/qwen3.7-max"
+MODEL_RTK_STANDARD: str = "qwen/qwen3.8-max"
 
 # ========================================================================
 # Image Generation Models (text → image via OpenRouter)
@@ -641,16 +641,16 @@ MODEL_MOA_REFERENCE: list[str] = [
     "moonshotai/kimi-k2.6",
     "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
-    "qwen/qwen3.7-max",
+    "qwen/qwen3.8-max",
 ]
 
 # ========================================================================
 # Pricing table
 # ========================================================================
-MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.7-max"
+MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.8-max"
 MODEL_PRICE_CLAUDE_OPUS: str = "x-ai/grok-4.3"
 MODEL_PRICE_CLAUDE_HAIKU: str = "minimax/minimax-m3"
-MODEL_PRICE_GPT4O: str = "qwen/qwen3.7-max"
+MODEL_PRICE_GPT4O: str = "qwen/qwen3.8-max"
 MODEL_PRICE_GPT4O_MINI: str = "minimax/minimax-m3"
 MODEL_PRICE_KIMI: str = "minimax/minimax-m3"
 MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
@@ -842,7 +842,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "verifier": [
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-4.3:thinking",
-        "qwen/qwen3.7-max",
+        "qwen/qwen3.8-max",
     ],
     # DeepSeek Flash (fast, cheap — no thinking needed for summarization)
     "summarizer": [

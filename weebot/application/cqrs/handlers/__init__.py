@@ -12,11 +12,8 @@ from weebot.application.cqrs.base import CommandHandler, CommandResult, QueryHan
 from weebot.application.cqrs.handlers.create_plan_handler import CreatePlanHandler
 from weebot.application.cqrs.handlers.execute_step_handler import ExecuteStepHandler
 from weebot.application.cqrs.handlers.update_plan_handler import UpdatePlanHandler
-from weebot.application.cqrs.handlers.cancel_session_handler import CancelSessionHandler
-from weebot.application.cqrs.handlers.compact_memory_handler import CompactMemoryHandler
 from weebot.application.cqrs.handlers.process_message_handler import ProcessMessageHandler
 from weebot.application.cqrs.handlers.summarize_handler import SummarizeHandler
-from weebot.application.cqrs.handlers.archive_session_handler import ArchiveSessionHandler
 
 # ---- Specialized handlers ----
 from weebot.application.cqrs.handlers.skill_edit_handler import ApplySkillEditsHandler
@@ -33,28 +30,15 @@ from weebot.application.cqrs.handlers.failure_signature_handlers import (
 )
 
 # ---- Query handlers ----
-from weebot.application.cqrs.handlers.session_queries import (
-    GetSessionHandler,
-    GetSessionStatusHandler,
-    ListSessionsHandler,
-    GetSessionHistoryHandler,
-    SearchSessionsHandler,
-    GetSimilarSessionsHandler,
-)
 from weebot.application.cqrs.handlers.plan_queries import (
-    GetPlanHandler,
     GetPlanVisualizationHandler,
 )
 from weebot.application.cqrs.handlers.active_queries import (
-    GetActiveTasksHandler,
     GetActiveSessionsHandler,
     GetCostSummaryHandler,
 )
 
 from weebot.application.cqrs.commands import (
-    ArchiveSessionCommand,
-    CancelSessionCommand,
-    CompactMemoryCommand,
     CreatePlanCommand,
     ExecuteStepCommand,
     ProcessMessageCommand,
@@ -75,14 +59,6 @@ from weebot.application.cqrs.commands.failure_signature_commands import (
     ExtractFailureSignatureCommand,
 )
 from weebot.application.cqrs.queries import (
-    GetSessionQuery,
-    GetSessionStatusQuery,
-    ListSessionsQuery,
-    GetSessionHistoryQuery,
-    GetPlanQuery,
-    SearchSessionsQuery,
-    GetSimilarSessionsQuery,
-    GetActiveTasksQuery,
     GetActiveSessionsQuery,
     GetPlanVisualizationQuery,
     GetCostSummaryQuery,
@@ -159,20 +135,9 @@ def register_default_handlers(
         mediator.register_command_handler(
             UpdatePlanCommand, UpdatePlanHandler(state_repo)
         )
-    mediator.register_command_handler(
-        CompactMemoryCommand, CompactMemoryHandler(state_repo)
-    )
-    mediator.register_command_handler(
-        ArchiveSessionCommand, ArchiveSessionHandler(state_repo)
-    )
     if llm is not None:
         mediator.register_command_handler(
             SummarizeCommand, SummarizeHandler(llm, state_repo)
-        )
-
-    if task_runner:
-        mediator.register_command_handler(
-            CancelSessionCommand, CancelSessionHandler(task_runner)
         )
 
     # --- Optional: trajectory scoring (SkillOpt-aware) ---
@@ -181,39 +146,6 @@ def register_default_handlers(
             ScoreTrajectoryCommand,
             ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder),
         )
-
-    # --- Query handlers ---
-    mediator.register_query_handler(
-        GetSessionQuery, GetSessionHandler(state_repo)
-    )
-    mediator.register_query_handler(
-        ListSessionsQuery, ListSessionsHandler(state_repo)
-    )
-    mediator.register_query_handler(
-        GetSessionStatusQuery,
-        GetSessionStatusHandler(state_repo, task_runner),
-    )
-    mediator.register_query_handler(
-        GetSessionHistoryQuery, GetSessionHistoryHandler(state_repo)
-    )
-    mediator.register_query_handler(
-        GetPlanQuery, GetPlanHandler(state_repo)
-    )
-    mediator.register_query_handler(
-        SearchSessionsQuery, SearchSessionsHandler(state_repo)
-    )
-    mediator.register_query_handler(
-        GetSimilarSessionsQuery, GetSimilarSessionsHandler(state_repo)
-    )
-    if task_runner is None:
-        # Runtime import — TaskRunner is only imported under TYPE_CHECKING above,
-        # so referencing it here without this import raises NameError.
-        from weebot.application.services.task_runner import TaskRunner as _TaskRunner
-        task_runner = _TaskRunner(state_repo=state_repo)
-    mediator.register_query_handler(
-        GetActiveTasksQuery,
-        GetActiveTasksHandler(task_runner),
-    )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────
     mediator.register_query_handler(
