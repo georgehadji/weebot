@@ -168,9 +168,11 @@ to blocking requires adding at least a `logger.debug(...)` to each of the 71
 except blocks — mechanical, but spread across ~40 files, so it belongs in its
 own PR rather than riding along with unrelated work.
 
-### Phase 3c — Migration `e1a2b3c4d5f6` cannot run on a fresh DB (RC-6, OPEN)
+### Phase 3c — Migration `e1a2b3c4d5f6` cannot run on a fresh DB (RC-6, FIXED)
 
-**This still fails CI (`Docker Build Smoke Test`) and is not fixed.**
+**Fixed in PR #50** — the positional `SELECT *` copy was replaced with a
+name-matching copy (`_copy_rows`). `Docker Build Smoke Test` is green.
+Original diagnosis retained below.
 
 `alembic upgrade head` against an empty database fails at
 `e1a2b3c4d5f6_add_fk_constraints`:
@@ -204,6 +206,36 @@ Deliberately left unfixed — it needs two decisions a maintainer should make:
    `last_applied_at` would break exactly those databases. A correct fix
    likely has to introspect the existing columns at runtime and build the
    copy accordingly.
+
+### Phase 3d — Migration schema contradicted the application (RC-7, FIXED)
+
+Found while reviewing whether `applied_count` should map to `access_count`.
+`e1a2b3c4d5f6` is documented as only adding `ON DELETE CASCADE`, but it
+rebuilt both tables with unrelated column sets:
+
+| table | application (`sqlite_state_repo`, `_behavioral_rule_repo`) | migration produced |
+|---|---|---|
+| `behavioral_rules` | `id, rule_text, source_session_id, source_message, scope, created_at, applied_count, last_applied_at` | `…rule_type, trigger_condition, action_text, priority, updated_at, salience_score, access_count, version, feedback_score` |
+| `commitments` | `id, promise_text, context, source_session_id, source_event_id, due_at, status, created_at, updated_at, failure_reason` | `id, commitment_type, source_session_id, statement, actor, status, created_at, expires_at, completed_at, metadata_json` |
+
+`_behavioral_rule_repo.save()` inserts `source_message` and `scope`, so it
+would have failed against the migrated table. `commitments` was worse: both
+shapes have 10 columns, so the original positional `SELECT *` would have
+copied `promise_text` into `commitment_type`, `context` into
+`source_session_id`, and so on — silent data corruption rather than an error.
+
+Dormant only because the migration always crashed first; fixing RC-6 made it
+reachable. Both tables now keep their application columns and gain only the
+foreign key, covered by
+`tests/integration/test_migration_schema_matches_app.py`.
+
+**Related, still open:** the cascade this migration exists to provide never
+fires. The sessions-database connection pool never issues
+`PRAGMA foreign_keys = ON` (only `sqlite_knowledge_graph`, a different
+database, does), and SQLite defaults it off. Enabling it is not a drop-in
+change: `behavioral_rules.source_session_id` is `NOT NULL DEFAULT ''`, and
+`''` matches no session row, so enforcement would reject rules saved without
+a session.
 
 ### Phase 4 — Deferred / low priority (RC-4)
 

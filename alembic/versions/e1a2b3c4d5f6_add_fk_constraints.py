@@ -80,9 +80,21 @@ def upgrade() -> None:
     Uses ALTER TABLE … RENAME → CREATE → INSERT → DROP to work around
     SQLite's limited ALTER TABLE support.
 
+    The rebuilt tables keep exactly the columns the application reads and
+    writes — see ``sqlite_state_repo._ensure_schema`` and
+    ``_behavioral_rule_repo``. Only the FOREIGN KEY is added. An earlier
+    version of this migration replaced both tables with unrelated column
+    sets (rule_type/trigger_condition/salience_score…, and
+    commitment_type/statement/actor…), which left the application writing
+    to columns that no longer existed.
+
     Tables affected:
         - behavioral_rules.source_session_id → sessions.id ON DELETE CASCADE
         - commitments.source_session_id → sessions.id ON DELETE CASCADE
+
+    Note: the cascade is declarative only for now — the sessions-database
+    connection pool never issues ``PRAGMA foreign_keys = ON``, so SQLite
+    does not enforce it at runtime.
     """
     bind = op.get_bind()
 
@@ -97,31 +109,18 @@ def upgrade() -> None:
         """
         CREATE TABLE behavioral_rules_new (
             id TEXT PRIMARY KEY,
-            rule_type TEXT NOT NULL DEFAULT 'behavioral_rule',
-            rule_text TEXT NOT NULL DEFAULT '',
-            trigger_condition TEXT NOT NULL DEFAULT '',
-            action_text TEXT NOT NULL DEFAULT '',
-            priority TEXT NOT NULL DEFAULT 'medium',
+            rule_text TEXT NOT NULL,
+            source_session_id TEXT NOT NULL DEFAULT '',
+            source_message TEXT NOT NULL DEFAULT '',
+            scope TEXT NOT NULL DEFAULT 'global',
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            source_session_id TEXT NOT NULL,
-            salience_score REAL NOT NULL DEFAULT 0.0,
-            access_count INTEGER NOT NULL DEFAULT 0,
-            last_accessed TEXT,
-            version INTEGER NOT NULL DEFAULT 1,
-            feedback_score INTEGER NOT NULL DEFAULT 0,
+            applied_count INTEGER NOT NULL DEFAULT 0,
+            last_applied_at TEXT,
             FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
         )
         """
     )
-    # updated_at is NOT NULL with no DEFAULT and does not exist in the
-    # 548511c41c39 shape; seed it from created_at for pre-existing rows.
-    _copy_rows(
-        bind,
-        "behavioral_rules",
-        "behavioral_rules_new",
-        fallbacks={"updated_at": "created_at"},
-    )
+    _copy_rows(bind, "behavioral_rules", "behavioral_rules_new")
     op.execute("DROP TABLE behavioral_rules")
     op.execute("ALTER TABLE behavioral_rules_new RENAME TO behavioral_rules")
     op.execute(
@@ -139,15 +138,15 @@ def upgrade() -> None:
             """
             CREATE TABLE commitments_new (
                 id TEXT PRIMARY KEY,
-                commitment_type TEXT NOT NULL DEFAULT 'commitment',
+                promise_text TEXT NOT NULL,
+                context TEXT NOT NULL DEFAULT '',
                 source_session_id TEXT NOT NULL,
-                statement TEXT NOT NULL DEFAULT '',
-                actor TEXT NOT NULL DEFAULT 'weebot',
-                status TEXT NOT NULL DEFAULT 'active',
+                source_event_id TEXT,
+                due_at TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
-                expires_at TEXT,
-                completed_at TEXT,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL,
+                failure_reason TEXT,
                 FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
             """
@@ -176,28 +175,17 @@ def downgrade() -> None:
         """
         CREATE TABLE behavioral_rules_old (
             id TEXT PRIMARY KEY,
-            rule_type TEXT NOT NULL DEFAULT 'behavioral_rule',
-            rule_text TEXT NOT NULL DEFAULT '',
-            trigger_condition TEXT NOT NULL DEFAULT '',
-            action_text TEXT NOT NULL DEFAULT '',
-            priority TEXT NOT NULL DEFAULT 'medium',
+            rule_text TEXT NOT NULL,
+            source_session_id TEXT NOT NULL DEFAULT '',
+            source_message TEXT NOT NULL DEFAULT '',
+            scope TEXT NOT NULL DEFAULT 'global',
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            source_session_id TEXT NOT NULL,
-            salience_score REAL NOT NULL DEFAULT 0.0,
-            access_count INTEGER NOT NULL DEFAULT 0,
-            last_accessed TEXT,
-            version INTEGER NOT NULL DEFAULT 1,
-            feedback_score INTEGER NOT NULL DEFAULT 0
+            applied_count INTEGER NOT NULL DEFAULT 0,
+            last_applied_at TEXT
         )
         """
     )
-    _copy_rows(
-        bind,
-        "behavioral_rules",
-        "behavioral_rules_old",
-        fallbacks={"updated_at": "created_at"},
-    )
+    _copy_rows(bind, "behavioral_rules", "behavioral_rules_old")
     op.execute("DROP TABLE behavioral_rules")
     op.execute("ALTER TABLE behavioral_rules_old RENAME TO behavioral_rules")
     op.execute(
@@ -213,15 +201,15 @@ def downgrade() -> None:
             """
             CREATE TABLE commitments_old (
                 id TEXT PRIMARY KEY,
-                commitment_type TEXT NOT NULL DEFAULT 'commitment',
+                promise_text TEXT NOT NULL,
+                context TEXT NOT NULL DEFAULT '',
                 source_session_id TEXT NOT NULL,
-                statement TEXT NOT NULL DEFAULT '',
-                actor TEXT NOT NULL DEFAULT 'weebot',
-                status TEXT NOT NULL DEFAULT 'active',
+                source_event_id TEXT,
+                due_at TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
-                expires_at TEXT,
-                completed_at TEXT,
-                metadata_json TEXT NOT NULL DEFAULT '{}'
+                updated_at TEXT NOT NULL,
+                failure_reason TEXT
             )
             """
         )
