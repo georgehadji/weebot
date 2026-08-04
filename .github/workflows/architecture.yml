@@ -186,7 +186,10 @@ jobs:
     name: Docker Build Smoke Test
     runs-on: ubuntu-latest
     needs: [lint-and-arch]
-    timeout-minutes: 10
+    # 10 minutes was only ever enough because the weebot-ui build failed fast
+    # on a CSS parse error. With both images building for real, the api image
+    # (full Python dependency tree) plus the ui image exceed that budget.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Docker Buildx
