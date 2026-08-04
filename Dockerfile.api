@@ -18,8 +18,15 @@ COPY . .
 RUN chmod +x /app/docker-entrypoint.sh
 
 # ── Non-root user ──────────────────────────────────────────────────────
+# /data must exist and be owned by weebot *in the image*: docker-compose
+# mounts the weebot_data named volume there, and Docker seeds a fresh
+# volume's ownership from the image's mountpoint. Without this the volume
+# is created root-owned, and the container (UID 10001) cannot create
+# /data/weebot_sessions.db — alembic then fails startup with
+# "sqlite3.OperationalError: unable to open database file".
 RUN groupadd -r weebot && useradd -r -g weebot -u 10001 weebot \
-    && chown -R weebot:weebot /app
+    && mkdir -p /data \
+    && chown -R weebot:weebot /app /data
 USER weebot
 
 # Expose API port

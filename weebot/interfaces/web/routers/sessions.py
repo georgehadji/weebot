@@ -13,6 +13,7 @@ from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 from weebot.interfaces.web.schemas import (
     CreateSessionRequest,
     ResumeSessionRequest,
+    SessionInputRequest,
     SessionResponse,
     SessionListResponse,
 )
@@ -170,8 +171,8 @@ async def cancel_session(
     # or it will overwrite the FAILED status when it finishes.
     container = http_request.app.state.container
     try:
-        from weebot.application.services.task_runner import TaskRunner
-        task_runner = container.get(TaskRunner)
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
+        task_runner = container.get(TaskRunnerPort)
         cancelled = await task_runner.cancel_session(session_id)
         if not cancelled:
             # TaskRunner didn't have an active task — mark manually
@@ -242,7 +243,7 @@ async def run_session(
 
     await verify_session_ownership(http_request, session.user_id)
 
-    if session.status not in (SessionStatus.IDLE, SessionStatus.FAILED):
+    if session.status not in (SessionStatus.PENDING, SessionStatus.FAILED):
         raise HTTPException(
             status_code=409,
             detail=f"Session {session_id} is already {session.status.value}",
@@ -254,13 +255,15 @@ async def run_session(
 
     container = http_request.app.state.container
     try:
-        from weebot.application.services.task_runner import TaskRunner
+        from weebot.application.ports.task_runner_port import TaskRunnerPort
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.application.ports.steering_port import SteeringPort
 
-        task_runner: TaskRunner = container.get(TaskRunner)
+        task_runner: TaskRunnerPort = container.get(TaskRunnerPort)
         llm = container.get(LLMPort)
         event_bus = container.get(EventBusPort)
+        steering = container.get(SteeringPort)
         model = session.context.get("model") or None
         ponytail_mode = session.context.get("ponytail_mode") or None
 
@@ -273,6 +276,7 @@ async def run_session(
                 event_bus=event_bus,
                 model=model,
                 ponytail_mode=ponytail_mode,
+                steering=steering,
             )
             session = await task_runner.start_session(session, factory)
         except Exception:
@@ -284,3 +288,100 @@ async def run_session(
 
     logger.info("Started background task for session %s", session_id)
     return _session_to_response(session)
+
+
+@router.post("/{session_id}/steer")
+async def steer_session(
+    session_id: str,
+    http_request: Request,
+    request: ResumeSessionRequest,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> dict:
+    """Inject non-blocking mid-execution feedback into a running session.
+
+    Unlike ``/resume`` (which only applies while the flow is WAITING for
+    an explicit question), steering is delivered while the flow is
+    RUNNING and observed at the next step boundary — see
+    ``SteeringPort.poll()`` in ``PlanActFlow``. Reuses ``ResumeSessionRequest``'s
+    ``{"answer": str}`` shape since the payload is the same: free text.
+    """
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
+
+    if session.status != SessionStatus.RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Session {session_id} is not running (status: {session.status.value}); "
+            "steering only applies to an in-flight session — use /resume or /input instead",
+        )
+
+    from weebot.application.ports.steering_port import SteeringPort
+
+    container = http_request.app.state.container
+    steering = container.get(SteeringPort)
+    await steering.send(session_id, request.answer)
+
+    logger.info("Steered session %s", session_id)
+    return {"message": f"Steering message delivered to session {session_id}"}
+
+
+@router.post("/{session_id}/input")
+async def send_session_input(
+    session_id: str,
+    http_request: Request,
+    request: SessionInputRequest,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> dict:
+    """Single entry point for the composer — start / resume / steer / chat.
+
+    Resolves which verb applies from the session's current status (see
+    ``application/use_cases/dispatch_session_input.py``) so the frontend
+    never has to branch on session state before deciding which of four
+    endpoints to call.
+    """
+    from weebot.application.ports.event_bus_port import EventBusPort
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.application.ports.steering_port import SteeringPort
+    from weebot.application.ports.task_runner_port import TaskRunnerPort
+    from weebot.application.use_cases.dispatch_session_input import (
+        SessionInputContext,
+        dispatch_session_input,
+    )
+    from weebot.interfaces.factories import build_tools
+
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
+
+    container = http_request.app.state.container
+    ctx = SessionInputContext(
+        session=session,
+        text=request.text,
+        client_msg_id=request.client_msg_id,
+        model=request.model,
+        state_repo=state_repo,
+        task_runner=container.get(TaskRunnerPort),
+        llm=container.get(LLMPort),
+        event_bus=container.get(EventBusPort),
+        steering=container.get(SteeringPort),
+        build_tools=lambda: build_tools(role="admin"),
+        build_chat_flow=container.build_chat_flow,
+    )
+
+    try:
+        result = await dispatch_session_input(ctx)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Failed to dispatch input for session %s", session_id)
+        raise HTTPException(status_code=500, detail="Failed to process input") from None
+
+    logger.info("Dispatched %s input for session %s", result.verb, session_id)
+    return {"verb": result.verb, "session": _session_to_response(result.session)}

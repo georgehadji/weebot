@@ -3272,8 +3272,8 @@ MODELS: dict[str, ModelConfig] = {
         tool_use_score=5,
     ),
 
-    "qwen/qwen3.7-max": ModelConfig(
-        name="Qwen: Qwen3.7 Max",
+    "qwen/qwen3.8-max": ModelConfig(
+        name="Qwen: Qwen3.8 Max",
         provider="openrouter",
         cost_per_1k_tokens=0.0037500000000000003,
         context_window=1000000,

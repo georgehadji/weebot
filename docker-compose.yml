@@ -45,6 +45,12 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      # The image's home dir (/home/weebot) sits on the read-only root
+      # filesystem. A number of modules resolve state via Path.home()
+      # (profile_manager, behavior_tracker, skill_registry, gateway_auth, …),
+      # so startup died with "Read-only file system: '/home/weebot'". Point
+      # HOME at the writable, persistent /data volume instead.
+      - HOME=/data
       - WEEBOT_WORKSPACE=/data
       - WEEBOT_LOGS_DIR=/data/logs
       - WEEBOT_SESSIONS_DB=/data/weebot_sessions.db

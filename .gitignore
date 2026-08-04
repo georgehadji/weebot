@@ -154,3 +154,6 @@ thunderbird_addressbooks.json
 # Windows shell artifacts (captured error output, not real files)
 $null
 nul;
+
+# Vendored reference material (not part of the project)
+Agentic-Design-Patterns-main/

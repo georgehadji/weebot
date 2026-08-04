@@ -1,67 +1,17 @@
-"""Query handlers for session, plan, and meta queries.
+"""Query handler for plan visualization.
 
-Split from query_handlers.py during architecture remediation.
+Scope note (2026-08-04 pre-existing-architecture-debt audit, RC-1):
+``GetPlanHandler`` previously lived here but had no dispatch site
+anywhere in the codebase; it was removed along with GetPlanQuery.
+``GetPlanVisualizationHandler`` is live — dispatched by
+``interfaces/web/routers/ops_router.py``'s plan-viz endpoint.
 """
 from __future__ import annotations
-import warnings
-warnings.warn(
-    f"{__name__} is deprecated. Use direct service calls.",
-    DeprecationWarning, stacklevel=2,
-)
 
 from weebot.application.cqrs.base import QueryHandler, QueryResult
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.services.task_runner import TaskRunner
-from weebot.application.models.tool_collection import ToolCollection
 
-from weebot.application.cqrs.queries import (
-    GetPlanQuery,
-    GetPlanVisualizationQuery,
-)
-
-class GetPlanHandler(QueryHandler):
-    """Get the current plan for a session."""
-
-    def __init__(self, state_repo: StateRepositoryPort):
-        self._state_repo = state_repo
-
-    async def handle(self, query: GetPlanQuery) -> QueryResult:
-        try:
-            session = await self._state_repo.load_session(query.session_id)
-            if session is None:
-                return QueryResult.not_found("Session")
-
-            plan = session.get_last_plan()
-            if plan is None:
-                return QueryResult.ok({
-                    "session_id": query.session_id,
-                    "plan": None,
-                    "has_plan": False,
-                })
-
-            steps_data = []
-            for step in plan.steps:
-                if query.include_completed_steps or not step.is_done():
-                    steps_data.append({
-                        "id": step.id,
-                        "description": step.description,
-                        "status": step.status.value
-                        if hasattr(step.status, "value")
-                        else str(step.status),
-                    })
-
-            return QueryResult.ok({
-                "session_id": query.session_id,
-                "plan": {
-                    "id": plan.id,
-                    "prompt": plan.prompt,
-                    "steps": steps_data,
-                    "total_steps": len(plan.steps),
-                },
-                "has_plan": True,
-            })
-        except Exception as exc:
-            return QueryResult.fail(str(exc))
+from weebot.application.cqrs.queries import GetPlanVisualizationQuery
 
 
 class GetPlanVisualizationHandler(QueryHandler):
@@ -104,4 +54,3 @@ class GetPlanVisualizationHandler(QueryHandler):
             })
         except Exception as exc:
             return QueryResult.fail(str(exc))
-

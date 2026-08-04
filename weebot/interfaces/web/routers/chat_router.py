@@ -1,15 +1,19 @@
 """Chat REST API router — conversational chat endpoints.
 
 Provides:
-  POST /api/chat       — send a message, get LLM response
+  POST /api/chat        — send a message, block until the full LLM response
+  POST /api/chat/stream — send a message, stream the response as SSE
   GET /api/chat/history — list chat sessions
-  GET /api/chat/{id}   — retrieve session details
+  GET /api/chat/{id}    — retrieve session details
 """
 from __future__ import annotations
 
+import json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sse_starlette.sse import EventSourceResponse
 
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -36,6 +40,31 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
     return container.get(StateRepositoryPort)
 
 
+async def _resolve_session(
+    body: ChatRequest, request: Request, state_repo: StateRepositoryPort
+) -> Session:
+    """Load the session named in ``body.session_id``, or start a new one.
+
+    Shared by both the blocking and streaming endpoints so ownership
+    verification and session creation cannot drift between the two.
+    """
+    current_user = get_current_user_id(request)
+    if body.session_id:
+        session = await state_repo.load_session(body.session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        await verify_session_ownership(request, session.user_id)
+        return session
+
+    session = Session(
+        id=f"chat-{uuid.uuid4().hex[:8]}",
+        user_id=current_user,
+        agent_id="chat-agent",
+    )
+    await state_repo.save_session(session)
+    return session
+
+
 @router.post("", response_model=ChatResponse)
 async def send_message(
     body: ChatRequest,
@@ -45,22 +74,7 @@ async def send_message(
 ) -> ChatResponse:
     """Send a chat message and receive the LLM response."""
     container = request.app.state.container
-
-    # Load or create session
-    current_user = get_current_user_id(request)
-    if body.session_id:
-        session = await state_repo.load_session(body.session_id)
-        if session is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        await verify_session_ownership(request, session.user_id)
-    else:
-        import uuid
-        session = Session(
-            id=f"chat-{uuid.uuid4().hex[:8]}",
-            user_id=current_user,
-            agent_id="chat-agent",
-        )
-        await state_repo.save_session(session)
+    session = await _resolve_session(body, request, state_repo)
 
     # Build and run the chat flow
     flow = container.build_chat_flow(
@@ -94,6 +108,45 @@ async def send_message(
         cost=cost,
         exchange_count=len([e for e in events if e.type == "message"]),
     )
+
+
+@router.post("/stream")
+async def stream_message(
+    body: ChatRequest,
+    request: Request,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    _mutation: None = Depends(require_mutation_identity),
+) -> EventSourceResponse:
+    """Send a chat message and stream the response as it is produced.
+
+    ``ChatFlow.run()`` is already an ``AsyncGenerator[AgentEvent]`` — this
+    endpoint streams it directly instead of draining it into a list first
+    (which is what ``POST /api/chat`` above does). The first SSE message
+    is always a synthetic ``session`` event carrying ``session_id``, so a
+    caller starting a brand-new chat (no ``session_id`` in the request)
+    learns the id before the first token arrives.
+
+    Native browser ``EventSource`` cannot send a POST body or custom auth
+    headers — clients consume this with ``fetch()`` and a manual SSE
+    line reader (the "fetch-event-source" pattern), not ``new EventSource()``.
+    """
+    container = request.app.state.container
+    session = await _resolve_session(body, request, state_repo)
+    flow = container.build_chat_flow(session=session, model=body.model or None)
+
+    async def event_generator():
+        yield {
+            "event": "session",
+            "data": json.dumps({"session_id": session.id}),
+        }
+        async for event in flow.run(body.message):
+            try:
+                data = event.model_dump(mode="json")
+            except Exception:
+                data = {"type": getattr(event, "type", "unknown"), "error": "serialization_failed"}
+            yield {"event": event.type, "data": json.dumps(data, default=str)}
+
+    return EventSourceResponse(event_generator())
 
 
 @router.get("/history", response_model=ChatSessionList)

@@ -9,14 +9,16 @@ This module provides:
 Example:
     # Create mediator
     mediator = Mediator()
-    
+
     # Register handlers
     mediator.register_command_handler(CreatePlanCommand, CreatePlanHandler())
-    mediator.register_query_handler(GetSessionQuery, GetSessionHandler(repo))
-    
+    mediator.register_query_handler(
+        GetPlanVisualizationQuery, GetPlanVisualizationHandler(repo),
+    )
+
     # Execute
     result = await mediator.send(CreatePlanCommand(session_id="s1", prompt="Do something"))
-    session = await mediator.query(GetSessionQuery(session_id="s1"))
+    plan = await mediator.query(GetPlanVisualizationQuery(session_id="s1"))
 """
 from weebot.application.cqrs.base import (
     Command,
@@ -28,9 +30,6 @@ from weebot.application.cqrs.base import (
     QueryResult,
 )
 from weebot.application.cqrs.commands import (
-    ArchiveSessionCommand,
-    CancelSessionCommand,
-    CompactMemoryCommand,
     CreatePlanCommand,
     ExecuteStepCommand,
     ProcessMessageCommand,
@@ -38,16 +37,13 @@ from weebot.application.cqrs.commands import (
     UpdatePlanCommand,
 )
 from weebot.application.cqrs.handlers import (
-    ArchiveSessionHandler,
-    CancelSessionHandler,
-    CompactMemoryHandler,
     CreatePlanHandler,
     ProcessMessageHandler,
     SummarizeHandler,
     ExecuteStepHandler,
-    GetSessionHandler,
-    GetSessionStatusHandler,
-    ListSessionsHandler,
+    GetActiveSessionsHandler,
+    GetCostSummaryHandler,
+    GetPlanVisualizationHandler,
     UpdatePlanHandler,
     register_default_handlers,
 )
@@ -60,14 +56,9 @@ from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.validation import ValidationBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
 from weebot.application.cqrs.queries import (
-    GetActiveTasksQuery,
-    GetPlanQuery,
-    GetSessionHistoryQuery,
-    GetSessionQuery,
-    GetSessionStatusQuery,
-    GetSimilarSessionsQuery,
-    ListSessionsQuery,
-    SearchSessionsQuery,
+    GetActiveSessionsQuery,
+    GetCostSummaryQuery,
+    GetPlanVisualizationQuery,
 )
 
 __all__ = [
@@ -89,28 +80,21 @@ __all__ = [
     # Commands
     "CreatePlanCommand",
     "ExecuteStepCommand",
+    "ProcessMessageCommand",
+    "SummarizeCommand",
     "UpdatePlanCommand",
-    "CompactMemoryCommand",
-    "CancelSessionCommand",
-    "ArchiveSessionCommand",
     # Queries
-    "GetSessionQuery",
-    "ListSessionsQuery",
-    "GetSessionHistoryQuery",
-    "GetActiveTasksQuery",
-    "GetSessionStatusQuery",
-    "GetPlanQuery",
-    "SearchSessionsQuery",
-    "GetSimilarSessionsQuery",
+    "GetActiveSessionsQuery",
+    "GetCostSummaryQuery",
+    "GetPlanVisualizationQuery",
     # Handlers
     "CreatePlanHandler",
     "ExecuteStepHandler",
+    "ProcessMessageHandler",
+    "SummarizeHandler",
     "UpdatePlanHandler",
-    "CancelSessionHandler",
-    "CompactMemoryHandler",
-    "ArchiveSessionHandler",
-    "GetSessionHandler",
-    "ListSessionsHandler",
-    "GetSessionStatusHandler",
+    "GetActiveSessionsHandler",
+    "GetCostSummaryHandler",
+    "GetPlanVisualizationHandler",
     "register_default_handlers",
 ]

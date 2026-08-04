@@ -131,7 +131,6 @@ ignore_imports =
     weebot.interfaces.web.routers.health -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.di
     weebot.interfaces.web.routers.ops_router -> weebot.application.cqrs.mediator
-    weebot.interfaces.web.routers.sessions -> weebot.application.services.task_runner
     # CLI agent_runner -> ToolCollection -> metrics_bridge is the same
     # designated application-model -> infrastructure bridge already
     # exempted by the tools-no-infra contract; break the chain here too.

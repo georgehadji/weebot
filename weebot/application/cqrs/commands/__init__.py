@@ -30,9 +30,6 @@ _spec = _il.util.spec_from_file_location(
 _cmds = _il.util.module_from_spec(_spec)
 _spec.loader.exec_module(_cmds)
 
-ArchiveSessionCommand = _cmds.ArchiveSessionCommand
-CancelSessionCommand = _cmds.CancelSessionCommand
-CompactMemoryCommand = _cmds.CompactMemoryCommand
 CreatePlanCommand = _cmds.CreatePlanCommand
 ExecuteStepCommand = _cmds.ExecuteStepCommand
 ProcessMessageCommand = _cmds.ProcessMessageCommand
@@ -45,9 +42,6 @@ __all__ = [
     "ApplySkillEditsCommand",
     "ValidateSkillCommand",
     "ValidateTransferCommand",
-    "ArchiveSessionCommand",
-    "CancelSessionCommand",
-    "CompactMemoryCommand",
     "CreatePlanCommand",
     "ExecuteStepCommand",
     "ProcessMessageCommand",

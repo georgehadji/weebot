@@ -40,3 +40,18 @@ class UpdateSessionRequest(BaseModel):
     """Request to update session settings."""
     title: Optional[str] = Field(default=None, description="Session title")
     context: Optional[Dict[str, Any]] = Field(default=None, description="Session context")
+
+
+class SessionInputRequest(BaseModel):
+    """Request to the unified /sessions/{id}/input endpoint.
+
+    One shape for all four verbs (start/resume/steer/chat) — the backend
+    resolves which applies from the session's current status. See
+    ``application/use_cases/dispatch_session_input.py``.
+    """
+    text: str = Field(..., min_length=1, description="User text — prompt, answer, steer message, or chat turn")
+    client_msg_id: Optional[str] = Field(
+        default=None,
+        description="Client-generated id for optimistic-UI reconciliation",
+    )
+    model: Optional[str] = Field(default=None, description="LLM model override (chat/start only)")

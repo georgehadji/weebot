@@ -13,7 +13,7 @@ MODELS = {
     "Tier 1 (GLM 5.2)": "z-ai/glm-5.2",
     "Tier 2 (DeepSeek V4 Flash)": "deepseek/deepseek-v4-flash",
     "Tier 3 (Kimi K2.6)": "moonshotai/kimi-k2.6",
-    "Tier 4 (Qwen 3.7 Max)": "qwen/qwen3.7-max",
+    "Tier 4 (Qwen 3.8 Max)": "qwen/qwen3.8-max",
 }
 
 async def main():

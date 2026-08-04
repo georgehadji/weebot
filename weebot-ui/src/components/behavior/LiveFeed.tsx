@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * Live event feed component
+ * Live event feed component.
  */
 
+import { FilePlus, FileEdit, FileX, FileSymlink, Circle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { BehaviorEvent } from "@/hooks/useBehavior";
 
 interface LiveFeedProps {
@@ -11,107 +13,65 @@ interface LiveFeedProps {
   maxItems?: number;
 }
 
+const EVENT_ICON: Record<string, typeof Circle> = {
+  "file.created": FilePlus,
+  "file.modified": FileEdit,
+  "file.deleted": FileX,
+  "file.moved": FileSymlink,
+};
+
+const EVENT_COLOR: Record<string, string> = {
+  "file.created": "text-status-live",
+  "file.modified": "text-status-waiting",
+  "file.deleted": "text-status-error",
+  "file.moved": "text-cyan-500",
+};
+
+function formatTime(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleTimeString();
+  } catch {
+    return timestamp;
+  }
+}
+
+function formatPath(path: string): string {
+  const parts = path.split("/");
+  if (parts.length > 3) {
+    return ".../" + parts.slice(-2).join("/");
+  }
+  return path;
+}
+
 export function LiveFeed({ events, maxItems = 50 }: LiveFeedProps) {
   const displayEvents = events.slice(0, maxItems);
 
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case "file.created": return "✚";
-      case "file.modified": return "✎";
-      case "file.deleted": return "✖";
-      case "file.moved": return "➜";
-      default: return "•";
-    }
-  };
-
-  const getEventColor = (type: string) => {
-    switch (type) {
-      case "file.created": return "#22c55e"; // green
-      case "file.modified": return "#f59e0b"; // yellow
-      case "file.deleted": return "#ef4444"; // red
-      case "file.moved": return "#06b6d4"; // cyan
-      default: return "#888";
-    }
-  };
-
-  const formatTime = (timestamp: string) => {
-    try {
-      return new Date(timestamp).toLocaleTimeString();
-    } catch {
-      return timestamp;
-    }
-  };
-
-  const formatPath = (path: string) => {
-    const parts = path.split("/");
-    if (parts.length > 3) {
-      return ".../" + parts.slice(-2).join("/");
-    }
-    return path;
-  };
-
   return (
-    <div style={{
-      background: "#0f0f1a",
-      borderRadius: "8px",
-      padding: "12px",
-      maxHeight: "300px",
-      overflowY: "auto"
-    }}>
-      <div style={{
-        fontSize: "12px",
-        fontWeight: "600",
-        color: "#888",
-        textTransform: "uppercase",
-        marginBottom: "8px",
-        letterSpacing: "0.5px"
-      }}>
+    <div className="max-h-[300px] overflow-y-auto rounded-lg bg-surface-1 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Live Feed ({events.length})
       </div>
 
       {displayEvents.length === 0 ? (
-        <div style={{ color: "#555", fontSize: "12px", padding: "20px", textAlign: "center" }}>
-          No events yet...
-        </div>
+        <div className="py-5 text-center text-xs text-muted-foreground">No events yet...</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-          {displayEvents.map((event, index) => (
-            <div
-              key={`${event.timestamp}-${index}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "4px 8px",
-                borderRadius: "4px",
-                fontSize: "12px",
-                fontFamily: "monospace",
-                background: index === 0 ? "rgba(255,255,255,0.05)" : "transparent"
-              }}
-            >
-              <span style={{ 
-                color: getEventColor(event.type),
-                width: "16px",
-                textAlign: "center"
-              }}>
-                {getEventIcon(event.type)}
-              </span>
-              
-              <span style={{ color: "#666", minWidth: "60px" }}>
-                {formatTime(event.timestamp)}
-              </span>
-              
-              <span style={{ 
-                color: "#ccc",
-                flex: 1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}>
-                {formatPath(event.path)}
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-1">
+          {displayEvents.map((event, index) => {
+            const Icon = EVENT_ICON[event.type] ?? Circle;
+            return (
+              <div
+                key={`${event.timestamp}-${index}`}
+                className={cn(
+                  "flex items-center gap-2 rounded px-2 py-1 font-mono text-xs",
+                  index === 0 && "bg-white/5"
+                )}
+              >
+                <Icon className={cn("h-3.5 w-3.5 w-4 shrink-0", EVENT_COLOR[event.type] ?? "text-muted-foreground")} />
+                <span className="min-w-[60px] text-muted-foreground">{formatTime(event.timestamp)}</span>
+                <span className="flex-1 truncate text-foreground/80">{formatPath(event.path)}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

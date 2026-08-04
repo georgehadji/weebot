@@ -379,4 +379,4 @@ class TestVSConstants:
         from weebot.config.model_refs import get_vs_model, MODEL_VS_CAPABLE
         model = get_vs_model()
         assert model == MODEL_VS_CAPABLE
-        assert model == "qwen/qwen3.7-max"
+        assert model == "qwen/qwen3.8-max"

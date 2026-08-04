@@ -1,13 +1,13 @@
 """SummarizeHandler — handles Summarize command.
 
-Split from weebot/application/cqrs/handlers.py during architecture remediation.
+LIVE — dispatched from ``application/flows/states/summarizing.py`` on
+every Plan-Act flow completion. Not actually deprecated: it's an
+agent-calling handler (invokes ExecutorAgent) that genuinely benefits
+from mediator infra (event fan-out, pipeline behaviors). The prior
+``DeprecationWarning`` here was inaccurate — see
+tasks/specs/pre_existing_architecture_debt_plan.md, RC-1.
 """
 from __future__ import annotations
-import warnings
-warnings.warn(
-    f"{__name__} is deprecated. Use direct service calls.",
-    DeprecationWarning, stacklevel=2,
-)
 
 from typing import TYPE_CHECKING, Any, Optional
 

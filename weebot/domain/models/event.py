@@ -32,6 +32,14 @@ class BaseEvent(BaseModel):
     type: Literal[""] = ""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    session_id: str = Field(
+        default="",
+        description=(
+            "Correlation id for transport fan-out (WebSocket/SSE routing). "
+            "Stamped by SessionScopedEventBus at publish time when empty — "
+            "flows do not need to set this themselves."
+        ),
+    )
 
 
 class ErrorEvent(BaseEvent):
@@ -135,7 +143,6 @@ class SteeringEvent(BaseEvent):
     on the message.  Sent via SteeringPort from CLI stdin or WebSocket.
     """
     type: Literal["steering"] = "steering"
-    session_id: str = Field(default="")
     message: str = Field(default="")
 
 
@@ -154,7 +161,6 @@ class CanonicalizationEvent(BaseEvent):
 class TodoEvent(BaseEvent):
     """Self-reported progress checklist item (Enhancement 4)."""
     type: Literal["todo"] = "todo"
-    session_id: str = Field(default="")
     step_id: str = Field(default="")
     action: str = Field(default="")         # "add" | "update" | "complete"
     description: str = Field(default="")
@@ -250,7 +256,6 @@ class ProductDecisionEvent(BaseEvent):
         default="",
         description="The one number or observable we expect to move.",
     )
-    session_id: str = Field(default="")
 
 
 # ── Phase 2+6: Cron & Heartbeat domain events ────────────────────
@@ -258,7 +263,6 @@ class ProductDecisionEvent(BaseEvent):
 class SessionStalenessEvent(BaseEvent):
     """Emitted when a RUNNING session has had no update for > threshold minutes."""
     type: Literal["session_staleness"] = "session_staleness"
-    session_id: str = ""
     staleness_minutes: float = 0.0
     status: str = ""  # SessionStatus value as string
 
@@ -285,6 +289,25 @@ class LLMHealthEvent(BaseEvent):
     affected_providers: list[str] = []
     message: str = ""
 
+
+class SessionPresenceEvent(BaseEvent):
+    """Emitted on a session status transition — feeds the WS-driven session rail.
+
+    Deliberately does NOT use ``BaseEvent.session_id`` to name the session
+    that changed: that field is the transport correlation id
+    (``SessionScopedEventBus`` stamps it, the broadcaster routes on it —
+    empty means "global", non-empty means "this session's socket only").
+    A rail watching *every* session needs this on the global channel, so
+    the subject session lives in ``about_session_id`` instead and
+    ``session_id`` is left empty.
+    """
+    type: Literal["session_presence"] = "session_presence"
+    about_session_id: str = Field(default="")
+    status: str = Field(default="")
+    title: str = Field(default="")
+    step_count: int = Field(default=0)
+    steps_completed: int = Field(default=0)
+
 # ── AgentEvent union ───────────────────────────────────────────────
 
 AgentEvent = Union[
@@ -307,6 +330,7 @@ AgentEvent = Union[
     ToolApprovalEvent,
     ProductGateReviewEvent,
     ProductDecisionEvent,
+    SessionPresenceEvent,
 ]
 
 

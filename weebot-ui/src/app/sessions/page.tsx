@@ -10,21 +10,24 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
 import { Session } from "@/types/events";
+import { useToast } from "@/providers/ToastProvider";
 
+// Matches weebot.domain.models.session.SessionStatus.value exactly —
+// the previous 'active'/'cancelled'/'error' cases never matched a real
+// backend value (the API returns pending/running/waiting/completed/failed),
+// so every session silently fell through to the gray default.
 function getStatusColor(status: string) {
   switch (status) {
-    case "active":
-      return "bg-green-500";
+    case "running":
+      return "bg-status-live";
     case "waiting":
-      return "bg-yellow-500";
+      return "bg-status-waiting";
     case "completed":
-      return "bg-blue-500";
-    case "cancelled":
-      return "bg-gray-500";
-    case "error":
-      return "bg-red-500";
+      return "bg-status-idle";
+    case "failed":
+      return "bg-status-error";
     default:
-      return "bg-gray-500";
+      return "bg-status-idle";
   }
 }
 
@@ -32,6 +35,7 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const loadSessions = async () => {
     try {
@@ -59,7 +63,7 @@ export default function SessionsPage() {
       await api.sessions.delete(id);
       loadSessions();
     } catch {
-      alert("Failed to delete session");
+      toast({ title: "Failed to delete session", variant: "error" });
     }
   };
 
@@ -78,10 +82,10 @@ export default function SessionsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Sessions</h1>
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={loadSessions}>
+          <Button variant="outline" size="icon" onClick={loadSessions} aria-label="Refresh sessions">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Link href="/sessions/new">
+          <Link href="/">
             <Button>
               <Plus className="h-4 w-4 mr-1" />
               New Session
@@ -91,7 +95,7 @@ export default function SessionsPage() {
       </div>
 
       {error && (
-        <div className="flex flex-col gap-2 text-red-500 mb-4 p-4 bg-red-50 rounded-lg">
+        <div className="surface-error flex flex-col gap-2 mb-4 p-4 rounded-lg border">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5" />
             <span className="font-medium">Connection Error</span>
@@ -109,7 +113,7 @@ export default function SessionsPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                 <p className="mb-4">No sessions yet</p>
-                <Link href="/sessions/new">
+                <Link href="/">
                   <Button>Create your first session</Button>
                 </Link>
               </CardContent>
@@ -140,13 +144,14 @@ export default function SessionsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={session.status === "active" ? "default" : "secondary"}>
+                      <Badge variant={session.status === "running" ? "default" : "secondary"}>
                         {session.status}
                       </Badge>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-red-500 hover:text-red-600"
+                        aria-label={`Delete session ${session.title || session.id}`}
+                        className="text-status-error hover:text-status-error/80"
                         onClick={() => handleDelete(session.id)}
                       >
                         <Trash2 className="h-4 w-4" />

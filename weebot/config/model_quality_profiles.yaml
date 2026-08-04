@@ -101,7 +101,7 @@ deepseek/deepseek-v4-pro:
     math: 8.5
   source: seed
 
-qwen/qwen3.7-max:
+qwen/qwen3.8-max:
   axes:
     coding: 8.5
     reasoning: 8.0

@@ -1,15 +1,44 @@
 "use client";
 
 /**
- * Recent actions list with override capability
+ * Recent actions list with override capability.
  */
 
 import { useState } from "react";
+import { FilePlus, FileEdit, FileX, FileSymlink, Circle, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { RecentAction } from "@/hooks/useBehavior";
 
 interface RecentActionsProps {
   actions: RecentAction[];
   onRefresh?: () => void;
+}
+
+const ACTION_ICON: Record<string, typeof Circle> = {
+  created: FilePlus,
+  modified: FileEdit,
+  deleted: FileX,
+  moved: FileSymlink,
+};
+
+const ACTION_COLOR: Record<string, string> = {
+  created: "text-status-live",
+  modified: "text-status-waiting",
+  deleted: "text-status-error",
+  moved: "text-cyan-500",
+};
+
+function formatTime(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "--:--";
+  }
+}
+
+function formatPath(path: string): string {
+  return path.split("/").slice(-2).join("/");
 }
 
 export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
@@ -19,55 +48,18 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case "created": return "✚";
-      case "modified": return "✎";
-      case "deleted": return "✖";
-      case "moved": return "➜";
-      default: return "•";
-    }
-  };
-
-  const getActionColor = (action: string) => {
-    switch (action) {
-      case "created": return "#22c55e";
-      case "modified": return "#f59e0b";
-      case "deleted": return "#ef4444";
-      case "moved": return "#06b6d4";
-      default: return "#888";
-    }
-  };
-
-  const formatTime = (timestamp: string) => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } catch {
-      return "--:--";
-    }
-  };
-
-  const formatPath = (path: string) => {
-    const parts = path.split("/");
-    return parts.slice(-2).join("/");
-  };
-
   const handleOverride = async () => {
     if (!selectedAction || !overrideReason.trim()) return;
-
     setIsSubmitting(true);
-    
     try {
       const res = await fetch(`${API_URL}/behavior/override`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           timestamp: selectedAction.timestamp,
-          reason: overrideReason
-        })
+          reason: overrideReason,
+        }),
       });
-
       if (res.ok) {
         setSelectedAction(null);
         setOverrideReason("");
@@ -81,202 +73,85 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
   };
 
   return (
-    <div style={{
-      background: "#0f0f1a",
-      borderRadius: "8px",
-      padding: "12px"
-    }}>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "8px"
-      }}>
-        <div style={{
-          fontSize: "12px",
-          fontWeight: "600",
-          color: "#888",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px"
-        }}>
+    <div className="rounded-lg bg-surface-1 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Recent Actions
         </div>
-        
         <button
           onClick={onRefresh}
-          style={{
-            fontSize: "11px",
-            padding: "4px 8px",
-            background: "#222",
-            border: "none",
-            borderRadius: "4px",
-            color: "#888",
-            cursor: "pointer"
-          }}
+          className="rounded bg-surface-3 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
         >
           Refresh
         </button>
       </div>
 
-      <div style={{ 
-        maxHeight: "260px", 
-        overflowY: "auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: "2px"
-      }}>
+      <div className="flex max-h-[260px] flex-col gap-0.5 overflow-y-auto">
         {actions.length === 0 ? (
-          <div style={{ 
-            color: "#555", 
-            fontSize: "12px", 
-            padding: "20px", 
-            textAlign: "center" 
-          }}>
-            No actions recorded
-          </div>
+          <div className="py-5 text-center text-xs text-muted-foreground">No actions recorded</div>
         ) : (
-          actions.map((action, index) => (
-            <button
-              key={`${action.timestamp}-${index}`}
-              onClick={() => setSelectedAction(action)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "6px 8px",
-                borderRadius: "4px",
-                fontSize: "11px",
-                fontFamily: "monospace",
-                background: selectedAction?.timestamp === action.timestamp ? "rgba(255,255,255,0.1)" : "transparent",
-                border: "none",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%"
-              }}
-            >
-              <span style={{ 
-                color: getActionColor(action.action),
-                width: "16px",
-                textAlign: "center"
-              }}>
-                {action.is_override ? "⚠" : getActionIcon(action.action)}
-              </span>
-              
-              <span style={{ color: "#666", minWidth: "40px" }}>
-                {formatTime(action.timestamp)}
-              </span>
-              
-              <span style={{ 
-                color: action.is_override ? "#f59e0b" : "#ccc",
-                flex: 1,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap"
-              }}>
-                {formatPath(action.path)}
-              </span>
-            </button>
-          ))
+          actions.map((action, index) => {
+            const Icon = action.is_override ? AlertTriangle : ACTION_ICON[action.action] ?? Circle;
+            const isSelected = selectedAction?.timestamp === action.timestamp;
+            return (
+              <button
+                key={`${action.timestamp}-${index}`}
+                onClick={() => setSelectedAction(action)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left font-mono text-[11px] transition-colors",
+                  isSelected ? "bg-white/10" : "hover:bg-white/5"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0",
+                    action.is_override ? "text-status-waiting" : ACTION_COLOR[action.action] ?? "text-muted-foreground"
+                  )}
+                />
+                <span className="min-w-[40px] text-muted-foreground">{formatTime(action.timestamp)}</span>
+                <span className={cn("flex-1 truncate", action.is_override ? "text-status-waiting" : "text-foreground/80")}>
+                  {formatPath(action.path)}
+                </span>
+              </button>
+            );
+          })
         )}
       </div>
 
-      {/* Override Modal */}
       {selectedAction && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.7)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: "#1a1a2e",
-            padding: "24px",
-            borderRadius: "12px",
-            width: "90%",
-            maxWidth: "400px"
-          }}>
-            <h4 style={{ margin: "0 0 16px 0", color: "#fff" }}>
-              Mark as Override
-            </h4>
-            
-            <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>
-                Action:
-              </div>
-              <div style={{ 
-                padding: "8px 12px", 
-                background: "#0f0f1a",
-                borderRadius: "4px",
-                fontSize: "12px",
-                fontFamily: "monospace",
-                color: "#ccc"
-              }}>
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-surface-2 p-6">
+            <h4 className="mb-4 text-base font-semibold">Mark as Override</h4>
+
+            <div className="mb-4">
+              <div className="mb-2 text-xs text-muted-foreground">Action:</div>
+              <div className="rounded bg-surface-1 px-3 py-2 font-mono text-xs text-foreground/80">
                 {selectedAction.action} {selectedAction.path.slice(-40)}
               </div>
             </div>
 
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ 
-                display: "block", 
-                fontSize: "12px", 
-                color: "#888", 
-                marginBottom: "8px" 
-              }}>
-                Reason for override:
-              </label>
+            <div className="mb-4">
+              <label className="mb-2 block text-xs text-muted-foreground">Reason for override:</label>
               <textarea
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder="Why was this action incorrect?"
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  background: "#0f0f1a",
-                  border: "1px solid #333",
-                  borderRadius: "4px",
-                  color: "#fff",
-                  fontSize: "12px",
-                  minHeight: "80px",
-                  resize: "vertical"
-                }}
+                className="min-h-[80px] w-full resize-y rounded border border-border bg-surface-1 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
 
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setSelectedAction(null)}
-                style={{
-                  padding: "8px 16px",
-                  background: "transparent",
-                  border: "1px solid #444",
-                  borderRadius: "4px",
-                  color: "#888",
-                  cursor: "pointer"
-                }}
-              >
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setSelectedAction(null)}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
                 onClick={handleOverride}
                 disabled={!overrideReason.trim() || isSubmitting}
-                style={{
-                  padding: "8px 16px",
-                  background: "#ef4444",
-                  border: "none",
-                  borderRadius: "4px",
-                  color: "#fff",
-                  cursor: overrideReason.trim() && !isSubmitting ? "pointer" : "not-allowed",
-                  opacity: overrideReason.trim() && !isSubmitting ? 1 : 0.5
-                }}
               >
                 {isSubmitting ? "Submitting..." : "Mark Override"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

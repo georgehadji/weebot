@@ -42,7 +42,9 @@ class Mediator:
 
         # Register handlers
         mediator.register_command_handler(CreatePlanCommand, CreatePlanHandler())
-        mediator.register_query_handler(GetSessionQuery, GetSessionHandler(repo))
+        mediator.register_query_handler(
+            GetPlanVisualizationQuery, GetPlanVisualizationHandler(repo),
+        )
 
         # Add pipeline behavior
         mediator.add_pipeline_behavior(LoggingBehavior())
@@ -51,9 +53,9 @@ class Mediator:
         result = await mediator.send(CreatePlanCommand(session_id="s1", prompt="Do something"))
 
         # Execute queries
-        session_result = await mediator.query(GetSessionQuery(session_id="s1"))
-        if session_result.success:
-            print(session_result.data)
+        plan_result = await mediator.query(GetPlanVisualizationQuery(session_id="s1"))
+        if plan_result.success:
+            print(plan_result.data)
     """
 
     def __init__(self):

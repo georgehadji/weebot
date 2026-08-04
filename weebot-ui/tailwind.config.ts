@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
@@ -43,14 +44,57 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        surface: {
+          1: "hsl(var(--surface-1))",
+          2: "hsl(var(--surface-2))",
+          3: "hsl(var(--surface-3))",
+        },
+        agent: {
+          DEFAULT: "hsl(var(--agent))",
+          foreground: "hsl(var(--agent-foreground))",
+        },
+        user: {
+          DEFAULT: "hsl(var(--user-bubble))",
+          foreground: "hsl(var(--user-bubble-foreground))",
+        },
+        status: {
+          live: "hsl(var(--status-live))",
+          waiting: "hsl(var(--status-waiting))",
+          error: "hsl(var(--status-error))",
+          idle: "hsl(var(--status-idle))",
+        },
+      },
+      borderColor: {
+        strong: "hsl(var(--border-strong))",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      fontFamily: {
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
+      },
+      spacing: {
+        topbar: "var(--topbar-h)",
+        rail: "var(--rail-w)",
+        dock: "var(--dock-w)",
+      },
+      transitionDuration: {
+        fast: "150ms",
+        base: "220ms",
+      },
+      transitionTimingFunction: {
+        console: "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
     },
   },
-  plugins: [],
+  // Provides animate-in / fade-in / slide-in-from-* / zoom-* used by the
+  // dialog, dropdown, select, tooltip and toast components. Previously this
+  // was attempted via a `tw-animate-css` CSS import, but that package targets
+  // Tailwind v4 (this project is on v3) and shipped no stylesheet, so the
+  // utilities silently never existed and the production build failed.
+  plugins: [tailwindcssAnimate],
 };
 export default config;
