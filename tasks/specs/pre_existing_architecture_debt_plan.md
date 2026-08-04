@@ -168,6 +168,43 @@ to blocking requires adding at least a `logger.debug(...)` to each of the 71
 except blocks — mechanical, but spread across ~40 files, so it belongs in its
 own PR rather than riding along with unrelated work.
 
+### Phase 3c — Migration `e1a2b3c4d5f6` cannot run on a fresh DB (RC-6, OPEN)
+
+**This still fails CI (`Docker Build Smoke Test`) and is not fixed.**
+
+`alembic upgrade head` against an empty database fails at
+`e1a2b3c4d5f6_add_fk_constraints`:
+
+```
+sqlite3.OperationalError: table behavioral_rules_new has 14 columns but 8 values were supplied
+[SQL: INSERT INTO behavioral_rules_new SELECT * FROM behavioral_rules]
+```
+
+`548511c41c39_initial_schema` creates `behavioral_rules` with 8 columns
+(`id, rule_text, source_session_id, source_message, scope, created_at,
+applied_count, last_applied_at`), but `e1a2b3c4d5f6` builds
+`behavioral_rules_new` with 14 (`id, rule_type, rule_text,
+trigger_condition, action_text, priority, created_at, updated_at,
+source_session_id, salience_score, access_count, last_accessed, version,
+feedback_score`) and copies with a bare `SELECT *`, which requires
+identical column count and order.
+
+Deliberately left unfixed — it needs two decisions a maintainer should make:
+
+1. **Column semantics.** Four old columns have no obvious target:
+   `source_message` and `scope` appear dropped outright; `applied_count`
+   and `last_applied_at` *might* be intended as `access_count` and
+   `last_accessed`, but that is a guess about intent, not something the
+   schema states.
+2. **Back-compat of an already-shipped migration.** The bug only bites on
+   a *fresh* database. Deployments where `behavioral_rules` already has
+   the 14-column shape (created by application code rather than this
+   migration) pass the bare `SELECT *` today. Naively rewriting the
+   `INSERT` with an explicit column list that names `applied_count` /
+   `last_applied_at` would break exactly those databases. A correct fix
+   likely has to introspect the existing columns at runtime and build the
+   copy accordingly.
+
 ### Phase 4 — Deferred / low priority (RC-4)
 
 - `weebot/templates/agent_integration.py`'s use of `legacy_models` is the last
