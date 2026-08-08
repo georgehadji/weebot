@@ -21,6 +21,13 @@ class SkillOptMixin:
         self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
         self.register("validation_gate", lambda: self._create_validation_gate(harness))
         self.register("evolution_tracker", self._create_evolution_tracker)
+        self.register("validation_runner", lambda: self._create_validation_runner(db_path))
+        self.register(
+            "transfer_flow_factory", lambda: self._create_transfer_flow_factory(db_path)
+        )
+        self.register(
+            "harness_optimization_target", self._create_harness_optimization_target
+        )
 
     def build_skill_opt_flow(
         self, skill_name, train_tasks, validation_tasks=None,
@@ -39,16 +46,26 @@ class SkillOptMixin:
         from weebot.application.cqrs.handlers import register_skillopt_handlers
         from weebot.application.services.trajectory_builder import TrajectoryBuilder
         from weebot.application.ports.llm_port import LLMPort
-        from weebot.application.ports.optimizer_port import OptimizerPort
-        scoring_port = self.get(OptimizerPort)
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
+        # "optimizer_port" is registered under a string key (line ~19 above),
+        # not the OptimizerPort type — self.get(OptimizerPort) raised KeyError
+        # unconditionally, since Container.get() does not cross-resolve
+        # between type and string keys.
+        scoring_port = self.get("optimizer_port")
         llm = self._maybe_get(LLMPort)
         trajectory_builder = TrajectoryBuilder(llm=llm)
-        self.register("trajectory_builder", trajectory_builder)
+        self.register_instance("trajectory_builder", trajectory_builder)
         register_skillopt_handlers(
-            mediator, self.get("skill_store"), scoring_port,
+            mediator,
+            scoring_port=scoring_port,
+            state_repo=self._maybe_get(StateRepositoryPort),
             trajectory_builder=trajectory_builder,
-            evolution_tracker=self._maybe_get_str("evolution_tracker"),
+            skill_store=self.get("skill_store"),
+            trajectory_repo=self.get("trajectory_repo"),
+            validation_runner=self.get("validation_runner"),
+            flow_factory=self.get("transfer_flow_factory"),
             llm_port=llm,
+            harness_target=self._maybe_get_str("harness_optimization_target"),
         )
         # ── Optional evaluator co-evolution (R3) ─────────────────
         evaluator_kwargs = {}
@@ -72,10 +89,9 @@ class SkillOptMixin:
         archive_kwargs = {}
         if use_archive_search:
             from weebot.application.services.thompson_sampler import ThompsonSampler
-            from weebot.application.ports.optimizer_port import OptimizerPort
             archive_kwargs["use_archive_search"] = True
             archive_kwargs["thompson_sampler"] = ThompsonSampler(
-                optimizer=self.get(OptimizerPort),
+                optimizer=self.get("optimizer_port"),
                 skill_store=self.get("skill_store"),
                 trajectory_repo=self.get("trajectory_repo"),
             )
@@ -107,8 +123,7 @@ class SkillOptMixin:
 
     def _create_optimizer_agent(self):
         from weebot.application.agents.optimizer_agent import OptimizerAgent
-        from weebot.application.ports.llm_port import LLMPort
-        return OptimizerAgent(llm=self.get("optimizer_llm"))
+        return OptimizerAgent(optimizer_llm=self.get("optimizer_llm"))
 
     @staticmethod
     def _create_skill_store(db_path: str):
@@ -122,22 +137,51 @@ class SkillOptMixin:
         )
         return TrajectoryRepository(db_path=db_path)
 
-    @staticmethod
-    def _create_evolution_tracker():
+    def _create_evolution_tracker(self):
+        """EvolutionTracker narrates epoch-boundary skill evolution — the same
+        optimizer-tier reasoning role as OptimizerAgent, so it shares the
+        optimizer_llm binding rather than the target model."""
         from weebot.application.services.evolution_tracker import EvolutionTracker
-        return EvolutionTracker()
+        return EvolutionTracker(llm=self.get("optimizer_llm"))
+
+    @staticmethod
+    def _create_harness_optimization_target():
+        """Build the HarnessOptimizationTarget for ApplyHarnessEditsHandler.
+
+        Resolves the active harness YAML the same way FactoriesMixin's
+        ``_create_harness_config`` does (WEEBOT_HARNESS_VERSION, default
+        v0.2.0), so edits are applied against whatever harness is actually
+        live rather than a hardcoded path. Construction only — the handler
+        calls ``target.load()`` itself on first use.
+        """
+        import os
+        from pathlib import Path
+        from weebot.application.services.harness_optimization_target import (
+            HarnessOptimizationTarget,
+        )
+
+        version = os.getenv("WEEBOT_HARNESS_VERSION", "v0.2.0")
+        harness_path = Path("weebot") / "config" / "harness" / f"{version}.yaml"
+        return HarnessOptimizationTarget(harness_path=harness_path)
 
     def _create_validation_gate(self, harness: str):
+        """Build the pipeline behavior that gates ApplySkillEditsCommand.
+
+        ValidationGateBehavior.__init__ only accepts validation_runner —
+        it calls runner.validate(candidate_content=..., validation_task_ids=...,
+        baseline_score=None) internally and reads .passed/.score_delta off the
+        ValidationResult. baseline_score/score_delta_threshold/scorer/harness
+        are not fields on that class; this previously raised TypeError on
+        every resolution, so the gate never engaged for a single command.
+        `harness` is accepted for interface-stability with configure_skillopt's
+        call site but is not consumed here — weebot has one execution harness
+        (see _create_transfer_flow_factory).
+        """
         from weebot.application.cqrs.behaviors.validation_gate import (
             ValidationGateBehavior,
         )
-        scoring_port = self._maybe_get_str("scoring_port")
-        scorer = scoring_port or self._maybe_get_str("optimizer_port")
         return ValidationGateBehavior(
-            baseline_score=0.0,
-            score_delta_threshold=0.01,
-            scorer=scorer,
-            harness=harness,
+            validation_runner=self._maybe_get_str("validation_runner"),
         )
 
     def _create_target_flow_factory(self, db_path: str):
@@ -146,6 +190,7 @@ class SkillOptMixin:
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.application.cqrs.mediator import Mediator
         from weebot.config.harness.schema import HarnessConfig
 
         class _LazyLLM:
@@ -165,10 +210,81 @@ class SkillOptMixin:
                 session=session,
                 state_repo=self._maybe_get(StateRepositoryPort),
                 event_bus=self._maybe_get(EventBusPort),
+                mediator=self._maybe_get(Mediator),
                 max_steps=5,
                 logger=self._maybe_get_str("structured_logger"),
                 skill_retriever=self._maybe_get_str("skill_retriever"),
                 skill_distiller=self._maybe_get_str("skill_distiller"),
+                skill_review_gate=self._maybe_get_str("skill_review_gate"),
+                code_reviewer=self._maybe_get_str("code_reviewer"),
+                harness_config=self._maybe_get(HarnessConfig),
+            )
+            return PlanActFlow(cfg)
+        return factory
+
+    def _create_validation_runner(self, db_path: str):
+        """Build the ValidationRunner used by ValidateSkillHandler.
+
+        Reuses TaskRunner (already bound by configure_defaults) and the same
+        rollout factory SkillOptFlow itself uses. Scoring reuses TaskScorer's
+        existing no-expected-answer fallback (session-status heuristic) by
+        passing it a WeebotTask with an empty sample tuple — validation task
+        ids here are raw prompts, not WeebotTask objects with known answers.
+        """
+        from weebot.application.services.validation_runner import ValidationRunner
+        from weebot.application.services.task_runner import TaskRunner
+
+        async def scoring_fn(session):
+            from weebot.application.harness.scorer import TaskScorer
+            from weebot.domain.models.benchmark_task import WeebotTask
+
+            task = WeebotTask(task_id=session.id, description="", samples=())
+            return await TaskScorer.score(session, task)
+
+        return ValidationRunner(
+            task_runner=self.get(TaskRunner),
+            flow_factory=self._create_target_flow_factory(db_path),
+            scoring_fn=scoring_fn,
+        )
+
+    def _create_transfer_flow_factory(self, db_path: str):
+        """Return a callable for ValidateTransferHandler's cross-model rollouts.
+
+        Signature matches the handler's call site exactly:
+        ``factory(session=..., model=..., harness=..., skill_content=...)``.
+        weebot has one execution harness (PlanActFlow / "direct_chat"); other
+        harness identifiers are rejected explicitly rather than silently
+        running as direct_chat, so an unsupported harness fails the command
+        instead of producing a misleading transfer score.
+        """
+        from weebot.application.ports.llm_port import LLMPort
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
+        from weebot.application.ports.event_bus_port import EventBusPort
+        from weebot.application.cqrs.mediator import Mediator
+        from weebot.config.harness.schema import HarnessConfig
+
+        def factory(session, model=None, harness="direct_chat", skill_content=None):
+            if harness not in (None, "direct_chat"):
+                raise ValueError(
+                    f"transfer validation harness '{harness}' is not supported — "
+                    "weebot only executes rollouts through PlanActFlow (direct_chat)"
+                )
+            from weebot.application.flows.plan_act_flow import PlanActFlow
+            from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+
+            llm = self._create_llm_by_id(model) if model else self._maybe_get(LLMPort)
+            cfg = PlanActFlowConfig(
+                llm=llm,
+                tools=None,
+                session=session,
+                state_repo=self._maybe_get(StateRepositoryPort),
+                event_bus=self._maybe_get(EventBusPort),
+                mediator=self._maybe_get(Mediator),
+                max_steps=5,
+                logger=self._maybe_get_str("structured_logger"),
+                skill_retriever=None,  # transfer eval controls skill content directly
+                skill_distiller=self._maybe_get_str("skill_distiller"),
+                skill_review_gate=self._maybe_get_str("skill_review_gate"),
                 code_reviewer=self._maybe_get_str("code_reviewer"),
                 harness_config=self._maybe_get(HarnessConfig),
             )

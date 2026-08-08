@@ -16,6 +16,7 @@ Usage::
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,6 +24,8 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import DEFAULT_MAX_FLOW_ITERATIONS, DEFAULT_MAX_STEP_REPETITIONS
+
+logger = logging.getLogger(__name__)
 from weebot.core.structured_logger import StructuredLogger
 from weebot.domain.models.session import Session
 
@@ -74,6 +77,7 @@ class PlanActFlowConfig:
     skill_prompt: str | None = None
     skill_retriever: Any | None = None  # SkillRetrieverPort — Tier 1.2
     skill_distiller: Any | None = None  # AutonomousSkillCreator — Phase 1 distillation
+    skill_review_gate: Any | None = None  # SkillReviewGate — promotes quarantined -> candidate
 
     # ── Identity ────────────────────────────────────────────────────
     model: str | None = None
@@ -145,6 +149,10 @@ class PlanActFlowConfig:
                 # we'd load the default harness — that's fine, it's just redundant)
                 if "/models/" in harness_path:  # Per-model variant exists
                     from weebot.config.harness.schema import HarnessConfig
-                    self.harness_config = HarnessConfig.from_yaml(harness_path)
-            except Exception:
-                pass  # Graceful fallback — use default harness
+                    self.harness_config = HarnessConfig.load(harness_path)
+            except Exception as exc:
+                # Graceful fallback — use default harness, but don't hide why.
+                logger.warning(
+                    "Per-model harness load failed for model=%r — falling back "
+                    "to default harness: %s", self.model, exc,
+                )

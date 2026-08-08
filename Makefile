@@ -76,7 +76,6 @@ lint-no-print:
 	    --exclude-dir=.venv \
 	    --exclude-dir=Output \
 	    --exclude-dir=weebot/GitNexus-main \
-	    --exclude-dir=weebot/tools/subagent_rpc.py \
 	    weebot/ cli/ \
 	    || (echo "ERROR: print() found in production code. Use logger instead." && exit 1)
 

@@ -58,7 +58,6 @@ def _import_tool_modules() -> None:
         "weebot.tools.mixture_of_agents",
         "weebot.tools.dispatch_agents",
         "weebot.tools.workflow_orchestrator",
-        "weebot.tools.subagent_rpc",
         "weebot.tools.design_system_tool",
         "weebot.tools.audit_tool",
         "weebot.tools.heuristic_router",

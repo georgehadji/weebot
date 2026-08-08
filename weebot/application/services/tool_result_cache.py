@@ -25,7 +25,7 @@ NON_CACHEABLE_TOOLS: frozenset[str] = frozenset({
     "advanced_browser", "browser_navigator", "browser_inspector",
     "computer_use", "screen_capture", "screenshot_ocr", "detect_elements",
     "terminate", "ask_human",
-    "dispatch_agents", "subagent_rpc",
+    "dispatch_agents",
     "voice_input", "voice_output",
     "image_gen",
 })

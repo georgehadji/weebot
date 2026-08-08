@@ -17,6 +17,7 @@ from weebot.application.cqrs.handlers.summarize_handler import SummarizeHandler
 
 # ---- Specialized handlers ----
 from weebot.application.cqrs.handlers.skill_edit_handler import ApplySkillEditsHandler
+from weebot.application.cqrs.handlers.harness_edit_handler import ApplyHarnessEditsHandler
 from weebot.application.cqrs.handlers.validation_handler import ValidateSkillHandler
 from weebot.application.cqrs.handlers.transfer_handler import ValidateTransferHandler
 from weebot.application.cqrs.handlers.trajectory_handler import (
@@ -47,6 +48,7 @@ from weebot.application.cqrs.commands import (
 )
 
 from weebot.application.cqrs.commands.skill_edit_commands import ApplySkillEditsCommand
+from weebot.application.cqrs.commands.harness_edit_commands import ApplyHarnessEditsCommand
 from weebot.application.cqrs.commands.trajectory_commands import (
     BuildOptimizationBatchCommand,
     ScoreTrajectoryCommand,
@@ -173,6 +175,7 @@ def register_skillopt_handlers(
     validation_runner,
     flow_factory,
     llm_port=None,
+    harness_target=None,
 ) -> None:
     """Register SkillOpt-specific command handlers with a mediator.
 
@@ -189,6 +192,8 @@ def register_skillopt_handlers(
         trajectory_repo: TrajectoryRepository for trajectory storage.
         validation_runner: ValidationRunner for skill validation.
         flow_factory: Flow factory callable for transfer validation.
+        harness_target: Optional HarnessOptimizationTarget. When provided,
+            ApplyHarnessEditsCommand is also registered.
     """
     from weebot.application.cqrs.mediator import Mediator
 
@@ -218,10 +223,12 @@ def register_skillopt_handlers(
         BuildOptimizationBatchHandler(trajectory_repo),
     )
 
-    # Validate candidate skills on held-out tasks
+    # Validate candidate skills on held-out tasks. skill_store lets a pass
+    # record a positive use (candidate -> trusted promotion trigger) —
+    # see ValidateSkillHandler's docstring.
     mediator.register_command_handler(
         ValidateSkillCommand,
-        ValidateSkillHandler(validation_runner),
+        ValidateSkillHandler(validation_runner, skill_store=skill_store),
     )
 
     # Cross-model transfer validation
@@ -255,3 +262,12 @@ def register_skillopt_handlers(
         ClusterFailurePatternsQuery,
         ClusterFailurePatternsHandler(trajectory_repo),
     )
+
+    # ── Self-Harness: apply proposed edits to a harness candidate ────────
+    # Optional: harness_target requires a loaded HarnessOptimizationTarget,
+    # which not every SkillOpt caller needs.
+    if harness_target is not None:
+        mediator.register_command_handler(
+            ApplyHarnessEditsCommand,
+            ApplyHarnessEditsHandler(harness_target),
+        )
