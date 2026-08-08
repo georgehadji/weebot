@@ -1207,6 +1207,26 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             description="Seedream 4.5 — ByteDance's text-to-image model. Strong in Asian aesthetics, text rendering, and character consistency."
         ),
 
+        # ── Qwen Image 3 ─────────────────────────────────────────────
+        "qwen/qwen-image-3": ModelInfo(
+            model_name="qwen/qwen-image-3",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.03, output_cost_per_token=0.0,  # $0.03/img
+            max_input_tokens=65536, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Qwen Image 3 — unified image generation and editing. Precise text rendering down to 10px, enhanced world knowledge. Added 2026-08-05."
+        ),
+        "qwen/qwen-image-3-pro": ModelInfo(
+            model_name="qwen/qwen-image-3-pro",
+            provider=ModelProvider.OPENROUTER,
+            input_cost_per_token=0.04, output_cost_per_token=0.0,  # $0.04/img
+            max_input_tokens=65536, max_output_tokens=1,
+            supports_function_calling=False, supports_vision=False,
+            supports_system_messages=True,
+            description="Qwen Image 3 Pro — premium tier of Qwen Image 3. Precise text/detail rendering down to 10px, richer world knowledge. Added 2026-08-05."
+        ),
+
         # ── Microsoft MAI Image ──────────────────────────────────────
         "microsoft/mai-image-2.5": ModelInfo(
             model_name="microsoft/mai-image-2.5",

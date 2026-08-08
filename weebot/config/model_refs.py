@@ -370,6 +370,14 @@ Illustration, anime, painting, expressive artistic styles. Stable, consistent.""
 MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
 """Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
 
+MODEL_IMAGE_QWEN: str = "qwen/qwen-image-3"
+"""Qwen Image 3 — unified image generation and editing, $0.03/img (added 2026-08-05).
+66K context. Precise text rendering down to 10px, enhanced world knowledge."""
+
+MODEL_IMAGE_QWEN_PRO: str = "qwen/qwen-image-3-pro"
+"""Qwen Image 3 Pro — premium tier of Qwen Image 3, $0.04/img (added 2026-08-05).
+66K context. Precise text/detail rendering down to 10px, richer world knowledge."""
+
 def get_image_models() -> list[str]:
     """Return the canonical list of image generation model IDs."""
     return [
@@ -385,6 +393,8 @@ def get_image_models() -> list[str]:
         "ideogram/ideogram-v3-turbo",
         "ideogram/ideogram-v3-default",
         "ideogram/ideogram-v4-turbo",
+        "qwen/qwen-image-3",
+        "qwen/qwen-image-3-pro",
     ]
 
 
@@ -446,6 +456,7 @@ IMAGE_CASCADE: dict[str, list[str]] = {
         "ideogram/ideogram-v3-turbo",             # 1st: paid — industry-leading text rendering
         "recraft/recraft-v4.1-pro-vector",        # 2nd: paid — vector text
         "bytedance-seed/seedream-4.5",             # 3rd: paid — best text rendering
+        "qwen/qwen-image-3",                      # 4th: paid — precise text rendering down to 10px
     ],
 
     # ── Branded / enterprise — safety, consistency ──────────────────
@@ -462,6 +473,7 @@ IMAGE_CASCADE: dict[str, list[str]] = {
         "krea/krea-2-large",                      # 3rd: raw photorealism — $0.06/img
         "krea/krea-2-medium",                      # 4th: balanced artistic — $0.03/img
         "black-forest-labs/flux.2-flex",           # 5th: paid — batch-optimized
+        "qwen/qwen-image-3-pro",                  # 6th: paid — unified gen+edit, 66K ctx, $0.04/img
     ],
 }
 
