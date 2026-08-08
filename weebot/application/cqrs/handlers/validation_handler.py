@@ -35,9 +35,15 @@ class ValidateSkillHandler(CommandHandler):
         self,
         validation_runner: ValidationRunner,
         skill_store: Optional["SkillStorePort"] = None,
+        max_promotions_per_run: Optional[int] = None,
     ):
         self._runner = validation_runner
         self._skill_store = skill_store
+        if max_promotions_per_run is None:
+            from weebot.config.learning import MAX_SKILL_PROMOTIONS_PER_RUN
+            max_promotions_per_run = MAX_SKILL_PROMOTIONS_PER_RUN
+        self._max_promotions_per_run = max_promotions_per_run
+        self._promotions_this_run = 0
 
     async def handle(self, command: ValidateSkillCommand) -> CommandResult:
         try:
@@ -76,6 +82,19 @@ class ValidateSkillHandler(CommandHandler):
             updated = skill.record_positive_use(
                 promotion_threshold=CANDIDATE_PROMOTION_USES,
             )
+            if updated.metadata.trust != prev_trust:
+                if self._promotions_this_run >= self._max_promotions_per_run:
+                    logger.warning(
+                        "Skill promotion cap (%d/run) reached — '%s' earned "
+                        "promotion %s -> %s but it is being withheld (positive "
+                        "use is still recorded)",
+                        self._max_promotions_per_run, skill_name,
+                        prev_trust, updated.metadata.trust,
+                    )
+                    withheld_meta = updated.metadata.model_copy(update={"trust": prev_trust})
+                    updated = updated.model_copy(update={"metadata": withheld_meta})
+                else:
+                    self._promotions_this_run += 1
             await self._skill_store.save(updated)
             if updated.metadata.trust != prev_trust:
                 logger.info(

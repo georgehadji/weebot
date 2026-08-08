@@ -30,11 +30,20 @@ TAU_DEDUP: float = 0.80
 # Validated positive uses required to promote a skill candidate -> trusted.
 CANDIDATE_PROMOTION_USES: int = 3
 
+# Guardrail against silent drift from fully-automatic promotion (both
+# quarantined->candidate via SkillReviewGate and candidate->trusted via
+# ValidateSkillHandler.record_positive_use): once this many promotions have
+# happened through a given process's lifetime, further promotions that would
+# otherwise pass are logged and withheld rather than applied. Not a hard cap
+# on skill creation or validation — only on trust-tier promotion.
+MAX_SKILL_PROMOTIONS_PER_RUN: int = 20
+
 __all__ = [
     "TAU_INJECT",
     "TAU_CREATE",
     "TAU_DEDUP",
     "CANDIDATE_PROMOTION_USES",
+    "MAX_SKILL_PROMOTIONS_PER_RUN",
     "LIVE_SKILL_DISTILLATION_ENABLED",
     "SKILL_GAP_TRIGGER_ENABLED",
     "SEMANTIC_SKILL_RETRIEVAL_ENABLED",

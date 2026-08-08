@@ -72,6 +72,7 @@ class SkillReviewGate:
         value_threshold: float = 0.5,
         safety_threshold: float = 0.8,
         similarity_threshold: float = 0.7,
+        max_promotions_per_run: Optional[int] = None,
     ) -> None:
         self._llm = llm
         self._skill_store = skill_store
@@ -83,6 +84,11 @@ class SkillReviewGate:
         self._value_threshold = value_threshold
         self._safety_threshold = safety_threshold
         self._similarity_threshold = similarity_threshold
+        if max_promotions_per_run is None:
+            from weebot.config.learning import MAX_SKILL_PROMOTIONS_PER_RUN
+            max_promotions_per_run = MAX_SKILL_PROMOTIONS_PER_RUN
+        self._max_promotions_per_run = max_promotions_per_run
+        self._promotions_this_run = 0
 
     async def review(self, skill: Skill) -> SkillReview:
         """Review *skill* and return a SkillReview with the promotion verdict.
@@ -130,6 +136,15 @@ class SkillReviewGate:
         review = await self.review(skill)
         if not review.promoted:
             return skill, review
+
+        if self._promotions_this_run >= self._max_promotions_per_run:
+            logger.warning(
+                "Skill promotion cap (%d/run) reached — '%s' passed review "
+                "but promotion to candidate is being withheld",
+                self._max_promotions_per_run, skill.name,
+            )
+            return skill, review
+        self._promotions_this_run += 1
 
         promoted_skill = skill.with_trust("candidate")
         if self._skill_store is not None:
