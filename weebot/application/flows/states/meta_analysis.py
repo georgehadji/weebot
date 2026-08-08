@@ -145,5 +145,50 @@ async def _maybe_distil_skill(
                 "Phase 1: distilled quarantined skill '%s' from session %s",
                 skill.name, session.id[:8],
             )
+            await _maybe_review_skill(context, skill)
     except Exception as exc:
         context._log.warning("Phase 1 skill distillation failed (non-blocking): %s", exc)
+
+
+async def _maybe_review_skill(context: "PlanActFlow", skill) -> None:
+    """Review a freshly-distilled (quarantined) skill and promote it to
+    candidate on pass, closing the loop AutonomousSkillCreator starts.
+
+    Without this, is_injectable requires 'trusted' and nothing else in
+    production ever promotes off 'quarantined' — every distilled skill
+    would sit unreachable forever. Best-effort, same as distillation
+    itself: review_gate is flag-gated (SKILL_REVIEW_GATE_ENABLED); when
+    off, DI returns a _NoOpReviewGate and this is a no-op.
+    """
+    review_gate = getattr(context, "_skill_review_gate", None)
+    if review_gate is None:
+        return
+
+    try:
+        promoted_skill, review = await review_gate.apply(skill)
+        if not review.promoted:
+            context._log.debug(
+                "Skill '%s' review rejected: %s", skill.name, review.summary,
+            )
+            return
+
+        context._log.info(
+            "Skill '%s' promoted quarantined -> candidate "
+            "(coherence=%.2f value=%.2f safety=%.2f similarity=%.2f)",
+            skill.name, review.coherence, review.value,
+            review.safety, review.similarity,
+        )
+        try:
+            from weebot.domain.models.event import SkillPromoted
+            ev = SkillPromoted(
+                skill_name=skill.name,
+                from_tier="quarantined",
+                to_tier=promoted_skill.metadata.trust,
+                positive_uses=0,
+            )
+            if context._event_bus is not None:
+                await context._event_bus.publish(ev)
+        except Exception:
+            pass  # observability failure must never block flow
+    except Exception as exc:
+        context._log.warning("Skill review failed (non-blocking): %s", exc)

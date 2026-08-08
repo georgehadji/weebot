@@ -184,6 +184,7 @@ class PlanActFlow(BaseFlow):
 
         self._skill_prompt = cfg.skill_prompt
         self._skill_distiller = cfg.skill_distiller  # Phase 1 — None when flag is off
+        self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
         self._tracing_port = cfg.tracing_port
         self._persistence_adapter = None
         # ── Event pipeline middleware (WP-4) ──────────────────────

@@ -9,6 +9,7 @@ this wrapper improves the ordering without changing the interface.
 """
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Optional
 
@@ -42,6 +43,12 @@ class RerankingSkillRetriever(SkillRetrieverPort):
         self._base = base_retriever
         self._rerank = rerank
         self._model = model
+
+    @property
+    def registry(self):
+        """Delegates to the base retriever — this decorator has no corpus
+        or registry of its own, it only reorders the base's results."""
+        return getattr(self._base, "registry", None)
 
     # ── SkillRetrieverPort implementation ───────────────────────────
 
@@ -87,5 +94,14 @@ class RerankingSkillRetriever(SkillRetrieverPort):
         return result
 
     async def refresh(self) -> None:
-        """Delegate index rebuild to the base retriever."""
-        await self._base.refresh()
+        """Delegate index rebuild to the base retriever.
+
+        BM25SkillRetriever.refresh() is sync; SemanticSkillRetriever's is
+        async. Unconditionally awaiting the call result broke the sync case
+        (await on the None a sync method returns) — the base's refresh work
+        still ran as a side effect of the call itself, but the exception
+        this raised was masking that success as a failure one level up.
+        """
+        result = self._base.refresh()
+        if inspect.isawaitable(result):
+            await result

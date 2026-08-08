@@ -31,6 +31,19 @@ class SkillRegistry:
         self._search_paths = search_paths or self._default_paths()
         self._skills: Dict[str, Skill] = {}
 
+    def add_search_path(self, path: Path) -> None:
+        """Add *path* to the search paths if not already present.
+
+        ``_default_paths()`` only includes ``.weebot/skills`` when that
+        directory already exists at registry-construction time — a registry
+        built before the directory was first created will never pick up
+        skills written there later via a plain ``load_all()``. Callers that
+        materialize skills onto disk after registry construction (see
+        ``SkillMaterializer``) must register the new path explicitly.
+        """
+        if path not in self._search_paths:
+            self._search_paths.append(path)
+
     @staticmethod
     def _default_paths() -> List[Path]:
         paths = []

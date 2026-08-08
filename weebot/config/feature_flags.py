@@ -62,6 +62,20 @@ CURATION_ACTIONS_ENABLED: bool = _env_bool(
 ONLINE_SKILLOPT_ENABLED: bool = _env_bool(
     "WEEBOT_ONLINE_SKILLOPT", default=False
 )
+# Phase 1b — LLM-judged review that promotes a freshly-distilled skill from
+# quarantined -> candidate (SkillReviewGate). Without this, every skill
+# LIVE_SKILL_DISTILLATION_ENABLED distils sits quarantined forever, since
+# nothing else in production ever moves a skill off that tier.
+SKILL_REVIEW_GATE_ENABLED: bool = _env_bool(
+    "WEEBOT_SKILL_REVIEW_GATE", default=False
+)
+# Phase 1c — materialize a 'trusted' skill to disk as SKILL.md and refresh
+# the live retriever's index (MaterializingSkillStore), so a skill promoted
+# all the way to trusted becomes retrievable in the same process instead of
+# only on the next restart.
+SKILL_MATERIALIZE_ENABLED: bool = _env_bool(
+    "WEEBOT_SKILL_MATERIALIZE", default=False
+)
 
 
 # ── Product-Mode (product-led thinking pipeline) ──────────────────────────

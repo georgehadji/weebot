@@ -67,6 +67,13 @@ class SemanticSkillRetriever(SkillRetrieverPort):
             type(self._store).__name__,
         )
 
+    @property
+    def registry(self) -> SkillRegistry:
+        """The SkillRegistry this retriever indexes — shared, not copied, so
+        callers (e.g. SkillMaterializer) can mutate/reload the same instance
+        the live retriever reads from."""
+        return self._registry
+
     # ── Port implementation ─────────────────────────────────────────
 
     async def retrieve(self, task: str, top_k: int = 3) -> list[SkillMatch]:
@@ -125,6 +132,11 @@ class SemanticSkillRetriever(SkillRetrieverPort):
         texts: list[str] = []
 
         for skill_name, skill in skills.items():
+            # Trust gate: only 'trusted' skills may be injected — see the
+            # identical guard in BM25SkillRetriever.refresh(). Duck-typed
+            # inputs without this property default to permissive.
+            if not getattr(skill, "is_injectable", True):
+                continue
             desc = getattr(skill, "description", "") or ""
             content = getattr(skill, "content", "") or ""
             text = f"{skill_name}: {desc} {content[:500]}"

@@ -46,6 +46,13 @@ class BM25SkillRetriever(SkillRetrieverPort):
             )
         self.refresh()
 
+    @property
+    def registry(self) -> SkillRegistry:
+        """The SkillRegistry this retriever indexes — shared, not copied, so
+        callers (e.g. SkillMaterializer) can mutate/reload the same instance
+        the live retriever reads from."""
+        return self._registry
+
     def refresh(self) -> None:
         """Rebuild the BM25 index from the current skill registry."""
         registry = self._registry
@@ -55,6 +62,12 @@ class BM25SkillRetriever(SkillRetrieverPort):
         self._skill_names = []
 
         for skill_name, skill in skills.items() if isinstance(skills, dict) else skills:
+            # Trust gate: only 'trusted' skills may be injected. Non-Skill
+            # duck-typed inputs (e.g. test doubles) without this property
+            # default to permissive, matching this loop's existing
+            # getattr-based tolerance for loose skill-like objects.
+            if not getattr(skill, "is_injectable", True):
+                continue
             desc = getattr(skill, "description", "") or ""
             content = getattr(skill, "content", "") or ""
             text = f"{desc} {content[:500]}"

@@ -59,6 +59,7 @@ class AgentToolsMixin:
             logger=self._maybe_get_str("structured_logger"),
             skill_retriever=self._maybe_get_str("skill_retriever"),
             skill_distiller=self._maybe_get_str("skill_distiller"),
+            skill_review_gate=self._maybe_get_str("skill_review_gate"),
             harness_config=self._maybe_get(HarnessConfig),
             tool_registry=registry,
             mcp_bridge=self._maybe_get_str("mcp_bridge"),
