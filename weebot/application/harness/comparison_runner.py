@@ -164,7 +164,7 @@ class ComparisonRunner:
             session=session,
             skill_names=[skill_name],
         )
-        return await self._collect_output(flow, prompt)
+        return await self._collect_output(flow, session, prompt)
 
     async def _run_without_skill(self, prompt: str) -> str:
         """Run the prompt without any skill loaded."""
@@ -178,15 +178,20 @@ class ComparisonRunner:
             session=session,
             skill_names=[],
         )
-        return await self._collect_output(flow, prompt)
+        return await self._collect_output(flow, session, prompt)
 
-    async def _collect_output(self, flow: Any, prompt: str) -> str:
-        """Run *flow* with *prompt* and return the response text."""
-        response_text = ""
-        async for event in flow.run(prompt):
-            if getattr(event, "type", "") == "message":
-                response_text = getattr(event, "message", "") or response_text
-        return response_text
+    async def _collect_output(self, flow: Any, session: Session, prompt: str) -> str:
+        """Run *flow* with *prompt* and return the final assistant message.
+
+        PlanActFlow.run()'s yielded events carry step/error progress, not a
+        response payload — sniffing event.type=='message' here always
+        returned "". Match BenchmarkRunner's proven extraction instead:
+        drain the run, then read the flow's own (immutably-updated) session.
+        """
+        async for _ in flow.run(prompt):
+            pass
+        completed_session = getattr(flow, "_session", session)
+        return TaskScorer._extract_answer(completed_session) or ""
 
     async def _score_output(self, output: str, expected: Optional[str]) -> float:
         """Score *output* against *expected* using TaskScorer."""
