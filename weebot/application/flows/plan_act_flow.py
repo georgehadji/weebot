@@ -101,6 +101,7 @@ class PlanActFlow(BaseFlow):
         step_audit_service: Any | None = None,  # StepAuditPort
         task_preset: TaskPreset | None = None,
         verifier_llm: LLMPort | None = None,
+        workspace_snapshots: Any | None = None,  # WorkspaceSnapshotPort
         knowledge_graph: Any | None = None,
         behavioral_learner: Any | None = None,
         logger: StructuredLogger | None = None,
@@ -135,6 +136,7 @@ class PlanActFlow(BaseFlow):
                 step_audit_service=step_audit_service,
                 task_preset=task_preset,
                 verifier_llm=verifier_llm,
+                workspace_snapshots=workspace_snapshots,
                 knowledge_graph=knowledge_graph,
                 behavioral_learner=behavioral_learner,
                 logger=logger,
@@ -159,6 +161,7 @@ class PlanActFlow(BaseFlow):
         self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
         self._step_audit_service = cfg.step_audit_service  # StepAuditPort — per-step evidence gate
         self._verifier_llm = cfg.verifier_llm  # Optional cheap-tier LLM for VerifyingState (E6)
+        self._workspace_snapshots = cfg.workspace_snapshots  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5

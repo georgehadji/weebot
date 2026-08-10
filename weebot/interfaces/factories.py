@@ -149,6 +149,15 @@ def create_flow(
         _code_reviewer = _cached("code_reviewer")
         _step_audit_service = _cached("step_audit_service")
         _verifier_llm = _cached("verifier_llm")
+        # LongHorizon-Harness E7b. Gated on cost, not principle: two workspace
+        # scans add ~3s per verification episode, and the verifier provably
+        # cannot write today (test_verifier_readonly_tripwire.py). Leaving the
+        # port unresolved keeps that cost off the default path entirely — the
+        # guard then records NOT_RUN, which is not a pass.
+        from weebot.config.feature_flags import WORKSPACE_INTEGRITY_GUARD_ENABLED
+        _workspace_snapshots = (
+            _cached("workspace_snapshots") if WORKSPACE_INTEGRITY_GUARD_ENABLED else None
+        )
         # LongHorizon-Harness E5: map the router's decision to a cost/quality
         # tier. None when no route was computed (direct create_flow callers) —
         # PlanActFlow falls back to its hardcoded defaults.
@@ -179,6 +188,7 @@ def create_flow(
             step_audit_service=_step_audit_service,
             task_preset=_task_preset,
             verifier_llm=_verifier_llm,
+            workspace_snapshots=_workspace_snapshots,
             knowledge_graph=_knowledge_graph,
         )
     if flow_type == "chat":

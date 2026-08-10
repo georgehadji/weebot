@@ -100,6 +100,12 @@ class PlanActFlowConfig:
     "verifier" tier. If None, VerifyingState falls back to ``llm``
     (backward-compatible)."""
 
+    # ── LongHorizon-Harness E7b: workspace integrity axis ────────────
+    workspace_snapshots: Any | None = None  # WorkspaceSnapshotPort
+    """Optional workspace drift detector wrapped around the verification
+    episode. Catches verification writing to the workspace it audits. If
+    None, the guard records NOT_RUN — never a pass (backward-compatible)."""
+
     # ── Enhancement 4: Trust report ─────────────────────────────────
     trust_report_service: Any | None = None  # TrustReportPort
 

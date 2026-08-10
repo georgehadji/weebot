@@ -227,9 +227,30 @@ class TaskPreset:
 
 ## E7 — Workspace snapshot guard
 
-**Only if E1 grows into a tool-using verifier.** weebot's verifier has no tools today, so it cannot mutate anything — the guard is inert. The moment E1's checks move from reading events to running inspection commands, add snapshot-and-diff: mutation ⇒ integrity violation ⇒ audit cannot support completion.
+> **Status: implemented.** The premise below ("the verifier has no tools, so it cannot mutate anything") was half wrong, and the wrong half hid a live bug. Split into E7a and E7b, both done.
 
-**Architecture when that day comes:** snapshot/diff is filesystem work ⇒ Infrastructure adapter behind a port (C1), invoked as a context manager around the verification episode so restore-on-exit is structural rather than a `finally` someone forgets. Note that [`AuditDimension`](weebot/domain/models/audit.py:16) has no `INTEGRITY` member — the paper's second axis. Add it then, not now.
+**Original framing — kept because its error is the lesson:** *Only if E1 grows into a tool-using verifier. weebot's verifier has no tools today, so it cannot mutate anything — the guard is inert.*
+
+The premise ("no tools") was true. The inference ("cannot mutate anything") was false. `VerifyingState` mutated the live `Plan` directly in Python — `setattr(last, "result", revised[:500])` — no tools required. Because [`PlanHistory.snapshot()`](weebot/application/services/plan_history.py) stores a *reference* rather than a copy, that write also reached back into snapshots already taken, so `undo()` returned the rewritten value. `model_copy()`, the codebase-wide immutability idiom, is shallow and gave no protection.
+
+**E7a — domain-state integrity (done).** Removed the write-back; the revised summary now stays local to the verification pass. Added `AuditDimension.INTEGRITY`. Regression test: `test_revision_does_not_mutate_step_result`.
+
+**E7b — workspace integrity (done).**
+
+- [`WorkspaceSnapshotPort`](weebot/application/ports/workspace_snapshot_port.py) — `snapshot()` / `diff()`, snapshots opaque to the Application layer (C1).
+- [`LocalWorkspaceSnapshotAdapter`](weebot/infrastructure/adapters/workspace_snapshot_adapter.py) — enumerate with `git ls-files`, compare by `(size, mtime_ns)`.
+- [`WorkspaceIntegrityGuard`](weebot/application/services/workspace_integrity_guard.py) — async context manager around the verification episode; reports via `AuditDimension.INTEGRITY`.
+- [`test_verifier_readonly_tripwire.py`](tests/unit/test_verifier_readonly_tripwire.py) — makes the "verifier cannot act" premise executable instead of asserted, so the next version of this mistake fails a test.
+
+**Three deviations from the architecture note above, and why:**
+
+1. **Detect and report, not restore-on-exit.** `WORKSPACE_ROOT` defaults to the process cwd, which in practice is the user's whole repository. Auto-reverting it would destroy concurrent edits by the user or another process. Reporting gives the same invariant without the blast radius.
+2. **Not `git status --porcelain`.** It reports dirtiness relative to HEAD, so a file already modified before the episode shows an identical line after being modified again — it is blind to exactly the write this guard exists to catch. git is used only to *enumerate* files (cheap, respects `.gitignore`); comparison is `(size, mtime_ns)`.
+3. **`AuditDimension.INTEGRITY` was added in E7a, not E7b.** The plan said "add it then, not now" — but E7a needed the vocabulary first.
+
+**Default OFF (`WEEBOT_WORKSPACE_INTEGRITY_GUARD`), on measured cost.** A scan of this repo is 2022 files and takes ~1.5s; the guard runs two, so it adds **~3s per verification episode**. (The estimate before measuring was 100–300ms — an order of magnitude wrong.) The tripwire test proves the verifier cannot currently write, so that 3s buys nothing today. `interfaces/factories.py` leaves the port unresolved when the flag is off, so the cost is absent rather than merely unreported; the guard then records `NOT_RUN`, which is not a pass. **Turn it on when `test_verifier_readonly_tripwire.py` starts failing** — that is exactly the moment the guard has something to catch.
+
+**Known limits, recorded rather than hidden:** a write that restores both size and mtime_ns is invisible (requires deliberate forgery, not the failure mode in scope). A manifest capped at `max_files` is flagged `truncated` — a sampled scan can report spurious adds/removes depending on where the cap falls. `git ls-files --others` is pathologically slow when the workspace sits inside a huge untracked tree, which is why the git call has a 10s timeout and a walk fallback.
 
 ---
 

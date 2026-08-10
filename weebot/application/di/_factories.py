@@ -276,6 +276,18 @@ class FactoriesMixin:
         return StepEvidenceAuditor(file_storage=self.get(FileStoragePort))
 
     @staticmethod
+    def _create_workspace_snapshots():
+        """LongHorizon-Harness E7b — workspace drift detection for the integrity axis.
+
+        Rooted at WORKSPACE_ROOT (the adapter's default) rather than "." so
+        the guard watches the same tree file_editor is confined to.
+        """
+        from weebot.infrastructure.adapters.workspace_snapshot_adapter import (
+            LocalWorkspaceSnapshotAdapter,
+        )
+        return LocalWorkspaceSnapshotAdapter()
+
+    @staticmethod
     def _create_retention_agent() -> RetentionAgent:
         from weebot.application.agents.retention_agent import RetentionAgent
         llm = FactoriesMixin._create_llm_for_role("subagent")

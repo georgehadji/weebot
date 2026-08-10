@@ -95,108 +95,118 @@ class VerifyingState(FlowState):
         # open + dead fallback), skip verification instead of retrying 7+ times.
         _auth_error_count = 0
 
-        # ── Step 1: Generate verification questions ─────────────────
-        try:
-            questions = await self._generate_questions(flow, summary, num_questions)
-        except AuthenticationError:
-            _log.warning(
-                "Verification skipped: authentication error on question generation. "
-                "Check OPENROUTER_API_KEY and XAI_API_KEY."
-            )
-            self._stamp_not_run(flow, reason="auth_error:question_generation")
-            from weebot.application.flows.states.completed import CompletedState
-            flow.set_state(CompletedState())
-            return
-        if not questions:
-            _log.debug("No verification questions generated — skipping")
-            from weebot.application.flows.states.completed import CompletedState
-            flow.set_state(CompletedState())
-            return
+        # ── Workspace integrity guard (LongHorizon-Harness E7b) ─────
+        # Wraps the whole episode as a context manager, not a trailing
+        # check: the body below has three early returns, and any check
+        # placed after them would silently not run on those paths.
+        from weebot.application.services.workspace_integrity_guard import (
+            WorkspaceIntegrityGuard,
+        )
+        _guard = WorkspaceIntegrityGuard(getattr(flow, "_workspace_snapshots", None))
 
-        # ── Step 2: Answer each independently (factored) ────────────
-        inconsistencies: list[tuple[str, str, str]] = []  # (question, answer, original_claim)
-        for question in questions:
+        async with _guard.watch(on_complete=lambda w: self._stamp_integrity(flow, w)):
+            # ── Step 1: Generate verification questions ─────────────────
             try:
-                answer = await self._answer_independently(flow, question)
-                consistent = await self._check_consistency(flow, question, answer, summary)
+                questions = await self._generate_questions(flow, summary, num_questions)
             except AuthenticationError:
-                _auth_error_count += 1
-                if _auth_error_count >= _MAX_AUTH_RETRIES:
-                    _log.warning(
-                        "Verification skipped: %d consecutive auth errors. "
-                        "Circuit breaker may be open or API keys are invalid.",
-                        _auth_error_count,
-                    )
-                    self._stamp_not_run(flow, reason="auth_error:answer_loop")
-                    from weebot.application.flows.states.completed import CompletedState
-                    flow.set_state(CompletedState())
-                    return
-                # Skip this question, continue with others
-                continue
-            _auth_error_count = 0  # reset on success
+                _log.warning(
+                    "Verification skipped: authentication error on question generation. "
+                    "Check OPENROUTER_API_KEY and XAI_API_KEY."
+                )
+                self._stamp_not_run(flow, reason="auth_error:question_generation")
+                from weebot.application.flows.states.completed import CompletedState
+                flow.set_state(CompletedState())
+                return
+            if not questions:
+                _log.debug("No verification questions generated — skipping")
+                from weebot.application.flows.states.completed import CompletedState
+                flow.set_state(CompletedState())
+                return
 
-            yield VerificationEvent(
-                step_id="verify",
-                question=question,
-                answer=answer,
-                consistent=consistent,
-            )
+            # ── Step 2: Answer each independently (factored) ────────────
+            inconsistencies: list[tuple[str, str, str]] = []  # (question, answer, original_claim)
+            for question in questions:
+                try:
+                    answer = await self._answer_independently(flow, question)
+                    consistent = await self._check_consistency(flow, question, answer, summary)
+                except AuthenticationError:
+                    _auth_error_count += 1
+                    if _auth_error_count >= _MAX_AUTH_RETRIES:
+                        _log.warning(
+                            "Verification skipped: %d consecutive auth errors. "
+                            "Circuit breaker may be open or API keys are invalid.",
+                            _auth_error_count,
+                        )
+                        self._stamp_not_run(flow, reason="auth_error:answer_loop")
+                        from weebot.application.flows.states.completed import CompletedState
+                        flow.set_state(CompletedState())
+                        return
+                    # Skip this question, continue with others
+                    continue
+                _auth_error_count = 0  # reset on success
 
-            if not consistent:
-                # Find which claim this question was about
-                inconsistencies.append((question, answer, summary[:200]))
+                yield VerificationEvent(
+                    step_id="verify",
+                    question=question,
+                    answer=answer,
+                    consistent=consistent,
+                )
 
-        # ── Step 3: Revise if needed ────────────────────────────────
-        if inconsistencies:
-            _log.info(
-                "CoVe found %d inconsistencies — revising summary",
-                len(inconsistencies),
-            )
-            revised = await self._revise_summary(flow, summary, inconsistencies)
-            if revised:
-                # Do NOT write back into Step.result: `last` is the same
-                # object living in flow._plan.steps (and in every
-                # PlanHistory snapshot already taken — snapshot() stores a
-                # reference, not a copy), so an in-place setattr silently
-                # corrupts the executor's own record, retroactively, in
-                # snapshots that already happened (E7a — integrity axis).
-                # `summary` alone carries the revision forward for scoring
-                # and the gate sweep below.
-                summary = revised
-        else:
-            _log.info("CoVe verification passed — no inconsistencies")
+                if not consistent:
+                    # Find which claim this question was about
+                    inconsistencies.append((question, answer, summary[:200]))
 
-        # ── Step 4: Self-critique scoring ───────────────────────────
-        final_summary, scores, verification_status = await self._score_and_revise(flow, summary)
+            # ── Step 3: Revise if needed ────────────────────────────────
+            if inconsistencies:
+                _log.info(
+                    "CoVe found %d inconsistencies — revising summary",
+                    len(inconsistencies),
+                )
+                revised = await self._revise_summary(flow, summary, inconsistencies)
+                if revised:
+                    # Do NOT write back into Step.result: `last` is the same
+                    # object living in flow._plan.steps (and in every
+                    # PlanHistory snapshot already taken — snapshot() stores a
+                    # reference, not a copy), so an in-place setattr silently
+                    # corrupts the executor's own record, retroactively, in
+                    # snapshots that already happened (E7a — integrity axis).
+                    # `summary` alone carries the revision forward for scoring
+                    # and the gate sweep below.
+                    summary = revised
+            else:
+                _log.info("CoVe verification passed — no inconsistencies")
 
-        # ── Step 5: Gate sweep ──────────────────────────────────────
-        gate_failures = await self._gate_sweep(flow, final_summary)
-        for gate in gate_failures:
-            yield VerificationEvent(
-                step_id="gate_sweep",
-                question=f"Gate: {gate}",
-                answer="FAILED",
-                consistent=False,
-            )
+            # ── Step 4: Self-critique scoring ───────────────────────────
+            final_summary, scores, verification_status = await self._score_and_revise(flow, summary)
 
-        # Store scores + gate results on session for stamp
-        if hasattr(flow._session, "context"):
-            ctx = flow._session.context
-            try:
-                ctx.extra["verification_scores"] = scores
-                ctx.extra["gate_failures"] = gate_failures
-                ctx.extra["verification_status"] = verification_status.value
-            except Exception:
-                _log.debug("Failed to store verification scores in session context", exc_info=True)
+            # ── Step 5: Gate sweep ──────────────────────────────────────
+            gate_failures = await self._gate_sweep(flow, final_summary)
+            for gate in gate_failures:
+                yield VerificationEvent(
+                    step_id="gate_sweep",
+                    question=f"Gate: {gate}",
+                    answer="FAILED",
+                    consistent=False,
+                )
 
-        # ── Hook: post_verification ─────────────────────────────────
-        if getattr(flow, "_hooks", None) is not None:
-            await flow._hooks.execute_hooks("post_verification", {
-                "session_id": flow._session.id,
-                "scores": scores,
-                "gate_failures": gate_failures,
-                "inconsistency_count": len(inconsistencies) if 'inconsistencies' in dir() else 0,
-            })
+            # Store scores + gate results on session for stamp
+            if hasattr(flow._session, "context"):
+                ctx = flow._session.context
+                try:
+                    ctx.extra["verification_scores"] = scores
+                    ctx.extra["gate_failures"] = gate_failures
+                    ctx.extra["verification_status"] = verification_status.value
+                except Exception:
+                    _log.debug("Failed to store verification scores in session context", exc_info=True)
+
+            # ── Hook: post_verification ─────────────────────────────────
+            if getattr(flow, "_hooks", None) is not None:
+                await flow._hooks.execute_hooks("post_verification", {
+                    "session_id": flow._session.id,
+                    "scores": scores,
+                    "gate_failures": gate_failures,
+                    "inconsistency_count": len(inconsistencies) if 'inconsistencies' in dir() else 0,
+                })
 
         # ── Transition to Completed ─────────────────────────────────
         from weebot.application.flows.states.completed import CompletedState
@@ -231,6 +241,29 @@ class VerifyingState(FlowState):
             ctx.extra["verification_skip_reason"] = reason
         except Exception:
             _log.debug("Failed to stamp verification NOT_RUN in session context", exc_info=True)
+
+    @staticmethod
+    def _stamp_integrity(flow, watch) -> None:
+        """Record the workspace-integrity outcome (LongHorizon-Harness E7b).
+
+        Kept on its own key rather than folded into ``gate_failures``: this
+        axis asks whether the audit corrupted what it audited, which stays
+        meaningful even when every other gate passed. The guard invokes
+        this on block exit, so it lands on the early-return paths too.
+        """
+        if not hasattr(flow._session, "context"):
+            return
+        try:
+            ctx = flow._session.context
+            ctx.extra["workspace_integrity_status"] = watch.status.value
+            if watch.reason:
+                ctx.extra["workspace_integrity_reason"] = watch.reason
+            if watch.violations:
+                ctx.extra["workspace_integrity_violations"] = [
+                    v.description for v in watch.violations
+                ]
+        except Exception:
+            _log.debug("Failed to stamp workspace integrity in session context", exc_info=True)
 
     # ── Self-critique scoring ───────────────────────────────────────
 

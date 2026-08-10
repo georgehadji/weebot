@@ -125,6 +125,25 @@ KNOWLEDGE_GRAPH_EXTRACTION_ENABLED: bool = _env_bool(
 )
 
 
+# ── LongHorizon-Harness E7b: workspace integrity guard ──────────────────────
+# When True, VerifyingState snapshots the workspace before the verification
+# episode and diffs it after, reporting any change as an
+# AuditDimension.INTEGRITY violation ("the audit modified what it audited").
+#
+# Default OFF, on measured cost rather than principle: a scan of this repo is
+# ~2000 files and takes ~1.5s, and the guard runs two of them, so it adds ~3s
+# to every verification episode. Today the verifier passes no tools and the
+# auditor only reads through FileStoragePort — both pinned by
+# tests/unit/test_verifier_readonly_tripwire.py — so the guard has nothing to
+# catch and that 3s buys nothing.
+#
+# Turn this ON the moment that tripwire test fails: at that point the verifier
+# CAN write, and the guard stops being decorative.
+WORKSPACE_INTEGRITY_GUARD_ENABLED: bool = _env_bool(
+    "WEEBOT_WORKSPACE_INTEGRITY_GUARD", default=False
+)
+
+
 # ── B2. OpenTelemetry tracing (ARCH-AUDIT-V2) ───────────────────────────────
 # When True, PlanActFlow and ExecutorAgent create OTEL spans.  Default OFF
 # until an OTEL collector endpoint is configured.

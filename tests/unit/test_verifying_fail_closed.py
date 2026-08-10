@@ -37,6 +37,7 @@ def _flow_with_completed_step() -> MagicMock:
     flow = MagicMock()
     flow._verifier_llm = None
     flow._step_audit_service = None
+    flow._workspace_snapshots = None  # E7b guard off unless a test wires it
     flow._hooks = None  # MagicMock's auto-attr would be truthy + non-awaitable
     flow._session = Session()
     step = Step(description="do thing", status=StepStatus.COMPLETED, result="did thing")
@@ -175,6 +176,78 @@ async def test_revision_does_not_mutate_step_result(monkeypatch):
     assert flow._plan.steps[0].result == original_result
     assert flow._plan.steps[0].result != "LLM-REWRITTEN TEXT"
     state._revise_summary.assert_awaited_once()  # confirm the revision path actually ran
+
+
+class _DirtySnapshots:
+    """Snapshot port reporting that the workspace changed during the episode."""
+
+    async def snapshot(self):
+        from weebot.application.ports.workspace_snapshot_port import WorkspaceSnapshot
+        return WorkspaceSnapshot(backend="stub")
+
+    async def diff(self, before):
+        from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift
+        return WorkspaceDrift(modified=("weebot/domain/models/plan.py",))
+
+
+@pytest.mark.asyncio
+async def test_integrity_is_stamped_not_run_when_no_snapshot_port_is_wired():
+    """E7b: an absent guard is NOT_RUN, never an implied pass."""
+    flow = _flow_with_completed_step()
+    flow._llm = MagicMock()
+    flow._llm.chat = AsyncMock(side_effect=_auth_error())
+
+    await _run(flow)
+
+    assert _verification_extra(flow).get("workspace_integrity_status") == "not_run"
+
+
+@pytest.mark.asyncio
+async def test_integrity_is_stamped_on_an_early_return_path():
+    """E7b's whole reason for being a context manager.
+
+    The auth-error path returns from deep inside execute(); any check
+    written after the episode would simply not run here. If this ever
+    regresses to a trailing check, this test is what catches it.
+    """
+    flow = _flow_with_completed_step()
+    flow._workspace_snapshots = _DirtySnapshots()
+    flow._llm = MagicMock()
+    flow._llm.chat = AsyncMock(side_effect=_auth_error())
+
+    await _run(flow)
+
+    extra = _verification_extra(flow)
+    assert extra.get("verification_status") == "not_run"          # the LLM never ran
+    assert extra.get("workspace_integrity_status") == "failed"    # but the workspace still moved
+    assert any("plan.py" in v for v in extra.get("workspace_integrity_violations", []))
+
+
+@pytest.mark.asyncio
+async def test_integrity_passes_on_a_clean_full_episode(monkeypatch):
+    flow = _flow_with_completed_step()
+    flow._llm = MagicMock()
+
+    class _CleanSnapshots(_DirtySnapshots):
+        async def diff(self, before):
+            from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift
+            return WorkspaceDrift()
+
+    flow._workspace_snapshots = _CleanSnapshots()
+
+    state = VerifyingState()
+    monkeypatch.setattr(state, "_generate_questions", AsyncMock(return_value=["Q?"]))
+    monkeypatch.setattr(state, "_answer_independently", AsyncMock(return_value="A"))
+    monkeypatch.setattr(state, "_check_consistency", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        state, "_score_and_revise",
+        AsyncMock(return_value=("summary", {"correctness": 5}, VerificationStatus.PASSED)),
+    )
+    monkeypatch.setattr(state, "_gate_sweep", AsyncMock(return_value=[]))
+
+    await _run_state(state, flow)
+
+    assert _verification_extra(flow).get("workspace_integrity_status") == "passed"
 
 
 def test_audit_dimension_has_integrity():

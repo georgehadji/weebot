@@ -164,6 +164,9 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # tier instead of the flow's (usually pricier) default model. Falls
         # back to that default automatically if role config is absent.
         self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
+        # LongHorizon-Harness E7b: integrity axis — detect the verifier
+        # writing to the workspace it is supposed to only observe.
+        self.register("workspace_snapshots", self._create_workspace_snapshots)
         from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
         self.register(SandboxBackendAdapter, self._create_backend)
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
