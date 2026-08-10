@@ -98,6 +98,7 @@ async def route_and_create_flow(
         mediator=mediator,
         state_repo=state_repo,
         steering=steering,
+        task_route=task_route,
         profile_name=profile_name,
     )
     return flow, task_route
@@ -146,6 +147,15 @@ def create_flow(
         personality = _resolve_personality()
         # Resolve optional services from DI container (cached per-process)
         _code_reviewer = _cached("code_reviewer")
+        _step_audit_service = _cached("step_audit_service")
+        _verifier_llm = _cached("verifier_llm")
+        # LongHorizon-Harness E5: map the router's decision to a cost/quality
+        # tier. None when no route was computed (direct create_flow callers) —
+        # PlanActFlow falls back to its hardcoded defaults.
+        _task_preset = None
+        if task_route is not None:
+            from weebot.config.task_preset_registry import select_preset
+            _task_preset = select_preset(task_route)
         # Knowledge-graph extraction is opt-in: the hook in ExecutingState
         # writes a node per "key: value" line of every step result.
         from weebot.config.feature_flags import KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
@@ -166,6 +176,9 @@ def create_flow(
             personality=personality,
             agent_role=profile_name,  # SOUL.md profile doubles as agent role
             code_reviewer=_code_reviewer,
+            step_audit_service=_step_audit_service,
+            task_preset=_task_preset,
+            verifier_llm=_verifier_llm,
             knowledge_graph=_knowledge_graph,
         )
     if flow_type == "chat":

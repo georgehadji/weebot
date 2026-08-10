@@ -51,6 +51,7 @@ from weebot.domain.models.event import (  # noqa: E402
 )
 from weebot.domain.models.plan import Plan  # noqa: E402
 from weebot.domain.models.session import Session, SessionStatus  # noqa: E402
+from weebot.domain.models.task_preset import TaskPreset  # noqa: E402
 from weebot.application.models.plan_act_flow_config import PlanActFlowConfig  # noqa: E402
 from weebot.application.models.tool_collection import ToolCollection  # noqa: E402
 from weebot.config.constants import (  # noqa: E402
@@ -97,6 +98,9 @@ class PlanActFlow(BaseFlow):
         truth_binder: TruthBinder | None = None,
         plan_critic: PlanCriticService | None = None,
         code_reviewer: Any | None = None,  # CodeReviewerPort
+        step_audit_service: Any | None = None,  # StepAuditPort
+        task_preset: TaskPreset | None = None,
+        verifier_llm: LLMPort | None = None,
         knowledge_graph: Any | None = None,
         behavioral_learner: Any | None = None,
         logger: StructuredLogger | None = None,
@@ -128,6 +132,9 @@ class PlanActFlow(BaseFlow):
                 truth_binder=truth_binder,
                 plan_critic=plan_critic,
                 code_reviewer=code_reviewer,
+                step_audit_service=step_audit_service,
+                task_preset=task_preset,
+                verifier_llm=verifier_llm,
                 knowledge_graph=knowledge_graph,
                 behavioral_learner=behavioral_learner,
                 logger=logger,
@@ -150,6 +157,8 @@ class PlanActFlow(BaseFlow):
         self._plan_critic = cfg.plan_critic
         self._plan_critique = None  # Set by CritiquingState
         self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
+        self._step_audit_service = cfg.step_audit_service  # StepAuditPort — per-step evidence gate
+        self._verifier_llm = cfg.verifier_llm  # Optional cheap-tier LLM for VerifyingState (E6)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5

@@ -157,6 +157,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("idea_gate", self._create_idea_gate)
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
+        from weebot.application.ports.file_storage_port import FileStoragePort
+        self.register(FileStoragePort, lambda: self._create_file_storage())
+        self.register("step_audit_service", self._create_step_evidence_auditor)
+        # LongHorizon-Harness E6: verifier calls on the cheap ROLE_MODEL_CONFIG
+        # tier instead of the flow's (usually pricier) default model. Falls
+        # back to that default automatically if role config is absent.
+        self.register("verifier_llm", lambda: self._create_llm_for_role("verifier"))
         from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
         self.register(SandboxBackendAdapter, self._create_backend)
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter

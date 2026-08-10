@@ -13,6 +13,7 @@ class StepStatus(str, Enum):
     STARTED = "started"
     COMPLETED = "completed"
     FAILED = "failed"
+    UNVERIFIED = "unverified"  # executed, but evidence did not support completion
 
 
 class PlanStatus(str, Enum):
@@ -29,6 +30,16 @@ class Step(BaseModel):
     status: StepStatus = Field(default=StepStatus.PENDING)
     result: Optional[str] = Field(default=None, description="Summary of execution result")
     retry_count: int = 0  # Phase 3: tracks retries for step validation (cap at 1)
+    acceptance_criteria: List[str] = Field(
+        default_factory=list,
+        description="Planner-authored conditions the executed step must satisfy "
+                    "before it can be marked COMPLETED (LH-Harness subtask contract cᵢ).",
+    )
+    evidence_refs: List[str] = Field(
+        default_factory=list,
+        description="References (file paths, tool-event ids) to the evidence "
+                    "that supported this step's status.",
+    )
 
     def is_done(self) -> bool:
         return self.status in (StepStatus.COMPLETED, StepStatus.FAILED)
@@ -36,16 +47,31 @@ class Step(BaseModel):
     def mark_running(self) -> "Step":
         return self.model_copy(update={"status": StepStatus.RUNNING})
 
-    def mark_completed(self, result: Optional[str] = None) -> "Step":
+    def mark_completed(self, result: Optional[str] = None, evidence_refs: Optional[List[str]] = None) -> "Step":
         updates: dict = {"status": StepStatus.COMPLETED}
         if result is not None:
             updates["result"] = result
+        if evidence_refs is not None:
+            updates["evidence_refs"] = evidence_refs
         return self.model_copy(update=updates)
 
     def mark_failed(self, result: Optional[str] = None) -> "Step":
         updates: dict = {"status": StepStatus.FAILED}
         if result is not None:
             updates["result"] = result
+        return self.model_copy(update=updates)
+
+    def mark_unverified(self, reason: str, evidence_refs: Optional[List[str]] = None) -> "Step":
+        """Step executed, but evidence did not support completion.
+
+        Distinct from FAILED: the executor did not error, but the
+        environment-grounded check found no supporting evidence
+        (or contradicting evidence). Not done — eligible for retry,
+        bounded by retry_count.
+        """
+        updates: dict = {"status": StepStatus.UNVERIFIED, "result": reason}
+        if evidence_refs is not None:
+            updates["evidence_refs"] = evidence_refs
         return self.model_copy(update=updates)
 
     def is_blocked(self, predecessor_sibling: Optional["Step"] = None) -> bool:
@@ -133,21 +159,26 @@ class Plan(BaseModel):
     def merge(self, updated: "Plan") -> "Plan":
         """Merge an updated plan with this one.
 
-        Keeps completed steps from the original and appends new pending steps
-        from the updated plan. Deduplicates by both step ID and description
-        prefix (first 80 chars) to prevent the LLM from re-adding already-done
-        work under fresh IDs.
+        Keeps completed (and unverified — awaiting retry, not yet resolved)
+        steps from the original and appends new pending steps from the
+        updated plan. Deduplicates by both step ID and description prefix
+        (first 80 chars) to prevent the LLM from re-adding already-done or
+        already-attempted work under fresh IDs.
         """
-        completed = [s for s in self.steps if s.is_done()]
-        completed_ids = {s.id for s in completed}
-        completed_descs = {s.description.strip().lower()[:80] for s in completed}
+        retained = [
+            s for s in self.steps
+            if s.is_done() or s.status is StepStatus.UNVERIFIED
+        ]
+        retained_ids = {s.id for s in retained}
+        retained_descs = {s.description.strip().lower()[:80] for s in retained}
         fresh = [
             s for s in updated.steps
             if not s.is_done()
-            and s.id not in completed_ids
-            and s.description.strip().lower()[:80] not in completed_descs
+            and s.status is not StepStatus.UNVERIFIED
+            and s.id not in retained_ids
+            and s.description.strip().lower()[:80] not in retained_descs
         ]
-        return self.model_copy(update={"steps": completed + fresh, "status": PlanStatus.UPDATED})
+        return self.model_copy(update={"steps": retained + fresh, "status": PlanStatus.UPDATED})
 
     def is_complete(self) -> bool:
         return len(self.steps) > 0 and all(s.is_done() for s in self.steps)

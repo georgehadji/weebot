@@ -266,6 +266,16 @@ class FactoriesMixin:
         return CodeReviewerService(llm=llm, timeout_seconds=8.0)
 
     @staticmethod
+    def _create_file_storage():
+        from weebot.infrastructure.adapters.file_storage_adapter import LocalFileStorageAdapter
+        return LocalFileStorageAdapter(root_dir=".")
+
+    def _create_step_evidence_auditor(self):
+        from weebot.application.services.step_evidence_auditor import StepEvidenceAuditor
+        from weebot.application.ports.file_storage_port import FileStoragePort
+        return StepEvidenceAuditor(file_storage=self.get(FileStoragePort))
+
+    @staticmethod
     def _create_retention_agent() -> RetentionAgent:
         from weebot.application.agents.retention_agent import RetentionAgent
         llm = FactoriesMixin._create_llm_for_role("subagent")

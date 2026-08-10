@@ -7,6 +7,20 @@ injected into PlanActFlowConfig at flow construction time.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import IntEnum
+
+
+class AuditDepth(IntEnum):
+    """How much verification a step's evidence gets — LongHorizon-Harness E5.
+
+    Ordered so a preset can compare depth with < / >=. Tier 0 (EVIDENCE_ONLY)
+    is the mechanical, zero-model-call check (E1) and runs unconditionally;
+    ACCEPTANCE and FULL_AUDIT are progressively more expensive and are what
+    the preset actually gates.
+    """
+    EVIDENCE_ONLY = 0
+    ACCEPTANCE = 1
+    FULL_AUDIT = 2
 
 
 @dataclass(frozen=True)
@@ -21,6 +35,7 @@ class TaskPreset:
         critique_revise_threshold: Override for CritiquingState.REVISE_THRESHOLD (default 0.5).
         max_steps:          Step budget override (None = use flow default).
         role_model_overrides: dict[role -> model_id] — overrides ROLE_MODEL_CONFIG entries.
+        audit_depth:        How deep step verification goes (LongHorizon-Harness E5).
         notes:              Human-readable rationale (not used at runtime).
     """
     name: str
@@ -30,4 +45,5 @@ class TaskPreset:
     critique_revise_threshold: float = 0.5
     max_steps: int | None = None
     role_model_overrides: dict[str, str] = field(default_factory=dict)
+    audit_depth: AuditDepth = AuditDepth.ACCEPTANCE
     notes: str = ""

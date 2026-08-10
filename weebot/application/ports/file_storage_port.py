@@ -42,5 +42,9 @@ class FileStoragePort(ABC):
         """Return True if the path exists on disk."""
 
     @abstractmethod
+    async def size(self, path: str) -> Optional[int]:
+        """Return the file size in bytes, or None if it does not exist."""
+
+    @abstractmethod
     async def delete(self, path: str) -> bool:
         """Delete a file.  Returns True if it existed."""

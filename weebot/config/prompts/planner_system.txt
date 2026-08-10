@@ -12,8 +12,8 @@ Required JSON structure:
   "title": "Short title",
   "message": "Brief plan summary",
   "steps": [
-    {"id": "step-1", "description": "First action", "status": "pending"},
-    {"id": "step-2", "description": "Second action", "status": "pending"}
+    {"id": "step-1", "description": "First action", "status": "pending", "acceptance_criteria": ["Observable condition that proves this step succeeded"]},
+    {"id": "step-2", "description": "Second action", "status": "pending", "acceptance_criteria": ["..."]}
   ]
 }
 
@@ -53,6 +53,12 @@ Rules:
 - Do NOT create human-only or physical-world steps (e.g., phone calls, visiting properties, signing legal documents)
 - If a human-only action is required, end with one concise informational step telling the user what they must do next
 - Each step must have: unique "id", "description", and "status" set to "pending"
+- Each step must have "acceptance_criteria": 1-3 short, checkable conditions that
+  prove the step actually succeeded — derived from the request and real environment
+  facts, not a guess or an easier substitute. Prefer conditions checkable by reading
+  the environment: "file X exists at path Y", "command Z exits 0", "test suite reports
+  0 failures" — not "looks correct" or other conditions only a model can judge by re-reading
+  its own output.
 - Output RAW JSON only, no ```json markers
 - Keep descriptions actionable and specific
 

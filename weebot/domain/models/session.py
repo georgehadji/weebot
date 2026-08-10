@@ -21,6 +21,31 @@ class SessionStatus(str, Enum):
     FAILED = "failed"
 
 
+class FactSource(str, Enum):
+    """Where a session fact's value came from — LongHorizon-Harness E3.
+
+    EXECUTOR facts are unverified claims made during a step; AUDIT facts
+    have passed StepEvidenceAuditor; USER facts came from the human.
+    """
+    EXECUTOR = "executor"
+    AUDIT = "audit"
+    USER = "user"
+
+
+class Fact(BaseModel):
+    """A session fact value plus its provenance.
+
+    Lives as the *value* in ``SessionContext.facts`` (not a parallel dict) —
+    consumers that only care about the value keep using ``get_fact``/
+    ``get_facts``, which unwrap this transparently.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    value: Any
+    source: FactSource = FactSource.EXECUTOR
+    verified_by: Optional[str] = None
+
+
 class SessionContext(BaseModel):
     """Typed session context.
 
@@ -37,7 +62,7 @@ class SessionContext(BaseModel):
     skill_version: int = 0
     original_task: str = Field(default="", alias="_original_task")
     last_prompt: str = ""
-    facts: Dict[str, Any] = Field(default_factory=dict)
+    facts: Dict[str, Fact] = Field(default_factory=dict)
     archived: bool = False
     archived_at: Optional[str] = None
     archive_ttl_days: int = 30
@@ -67,6 +92,26 @@ class SessionContext(BaseModel):
             for k in keys[:overflow]:
                 del facts[k]
         return facts
+
+    @field_validator("facts", mode="before")
+    @classmethod
+    def _wrap_legacy_facts(cls, v: Any) -> Any:
+        """Wrap bare values from pre-E3 sessions as EXECUTOR-sourced Facts.
+
+        Sessions persisted before provenance tracking store raw values
+        (str/int/bool/...) directly; a dict shaped like ``{"value": ...}``
+        is a Fact already round-tripping through JSON and is left for
+        Pydantic to validate normally.
+        """
+        if not isinstance(v, dict):
+            return v
+        wrapped: dict[str, Any] = {}
+        for k, raw in v.items():
+            if isinstance(raw, (Fact, dict)):
+                wrapped[k] = raw
+            else:
+                wrapped[k] = {"value": raw, "source": FactSource.EXECUTOR}
+        return wrapped
 
     @model_validator(mode="before")
     @classmethod
@@ -279,23 +324,41 @@ class Session(BaseModel):
         new_ctx = self.context.model_copy(update={"meta_notes": notes})
         return self.model_copy(update={"context": new_ctx})
 
-    def set_fact(self, key: str, value: Any) -> "Session":
+    def set_fact(
+        self,
+        key: str,
+        value: Any,
+        *,
+        source: FactSource = FactSource.EXECUTOR,
+        verified_by: Optional[str] = None,
+    ) -> "Session":
         facts = dict(self.context.facts)
-        facts[key] = value
+        facts[key] = Fact(value=value, source=source, verified_by=verified_by)
         SessionContext._cap_facts_dict(facts)
         new_ctx = self.context.model_copy(update={"facts": facts})
         return self.model_copy(update={"context": new_ctx})
 
+    @staticmethod
+    def _unwrap_fact(raw: Any) -> Any:
+        """Legacy-stored values (pre-E3) are bare, not wrapped in Fact."""
+        return raw.value if isinstance(raw, Fact) else raw
+
     def get_fact(self, key: str, default: Any = None) -> Any:
-        return self.context.facts.get(key, default)
+        if key not in self.context.facts:
+            return default
+        return self._unwrap_fact(self.context.facts[key])
+
+    def get_fact_source(self, key: str) -> Optional[FactSource]:
+        raw = self.context.facts.get(key)
+        return raw.source if isinstance(raw, Fact) else None
 
     def get_facts(self) -> dict[str, Any]:
         try:
-            return dict(self.context.facts)
+            return {k: self._unwrap_fact(v) for k, v in self.context.facts.items()}
         except AttributeError:
             # Old sessions may have context stored as plain dict from
             # the broken json.dumps(..., default=str) serialization.
             ctx = self.context
             if isinstance(ctx, dict):
-                return dict(ctx.get("facts", {}))
+                return {k: self._unwrap_fact(v) for k, v in ctx.get("facts", {}).items()}
             return {}

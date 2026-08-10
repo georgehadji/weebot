@@ -20,6 +20,7 @@ class AuditDimension(str, Enum):
     COMPLIANCE = "compliance"       # Follows instructions?
     CONSISTENCY = "consistency"     # Self-consistent?
     COMPLETENESS = "completeness"   # Covers all requirements?
+    INTEGRITY = "integrity"         # Did the audit itself corrupt the artifact it audited?
 
 
 class ViolationSeverity(str, Enum):
@@ -34,6 +35,19 @@ class AuditVerdict(str, Enum):
     PASS = "pass"           # No violations
     CONDITIONAL = "conditional"  # Minor violations
     FAIL = "fail"           # Critical violations found
+
+
+class VerificationStatus(str, Enum):
+    """Whether a verification gate actually ran, and what it found.
+
+    Distinct from AuditVerdict: this describes gate *execution*, not the
+    audit *result*. NOT_RUN must never be conflated with PASSED — a gate
+    that raised must not read downstream as a gate that passed
+    (LongHorizon-Harness E4 — fail closed, not fail open).
+    """
+    PASSED = "passed"
+    FAILED = "failed"
+    NOT_RUN = "not_run"
 
 
 class Violation(BaseModel):

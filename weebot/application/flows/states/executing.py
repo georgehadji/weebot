@@ -7,6 +7,7 @@ from typing import Any, AsyncGenerator, TYPE_CHECKING
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.domain.models.audit import AuditVerdict
 from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolApprovalEvent, ToolEvent, WaitForUserEvent
 from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
@@ -409,11 +410,15 @@ class ExecutingState(FlowState):
             )
             if _all_tripped:
                 logger.warning(
-                    "Step %s: all models tripped — skipping replan, forcing completion (%.1fs)",
+                    "Step %s: all models tripped — skipping replan, marking UNVERIFIED (%.1fs)",
                     step.id, _step_elapsed,
                 )
+                # Not COMPLETED: no model was able to run, so there is no
+                # evidence a real audit could check. Forcing completion here
+                # would be exactly the silent bypass E1 exists to close.
                 context._plan = context._plan.update_step_status(
-                    step.id, StepStatus.COMPLETED
+                    step.id, StepStatus.UNVERIFIED,
+                    result="all models circuit-broken — step did not execute",
                 )
                 context.set_state(VerifyingState())
                 return
@@ -505,6 +510,38 @@ class ExecutingState(FlowState):
                     "Step '%s' failed progress eval (score=%.2f, regression=%s): %s",
                     step.id, _eval.score, _eval.regression_detected, _eval.reasoning,
                 )
+                context.set_state(UpdatingState())
+                return
+
+        # ── LongHorizon-Harness E1: per-step evidence gate ──────────
+        # Environment-grounded check (files exist, tests passed, images
+        # aren't placeholders) — runs BEFORE completion is committed, not
+        # after, and is scoped to this step's own events, not the whole
+        # session. See tasks/specs/longhorizon_harness_implementation_plan.md.
+        _step_audit_service = getattr(context, "_step_audit_service", None)
+        if _step_audit_service is not None:
+            _step_tool_events = [e for e in _current_step_events if isinstance(e, ToolEvent)]
+            _audit_report = await _step_audit_service.audit_step(
+                step=step, events=_step_tool_events, session_id=context._session.id,
+            )
+            if _audit_report.verdict != AuditVerdict.PASS:
+                logger.warning(
+                    "Step '%s' failed evidence audit (%s): %s",
+                    step.id, _audit_report.verdict.value, _audit_report.summary,
+                )
+                if step.retry_count < 1:
+                    updated_step = step.model_copy(update={
+                        "description": f"{step.description}\n[Evidence gap: {_audit_report.summary}]",
+                        "retry_count": 1,
+                        "status": StepStatus.PENDING,
+                    })
+                    context._plan = context._plan.replace_step(step.id, updated_step)
+                    context.set_state(ExecutingState())
+                    return
+                context._plan = context._plan.update_step_status(
+                    step.id, StepStatus.UNVERIFIED, result=_audit_report.summary,
+                )
+                logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, _step_elapsed)
                 context.set_state(UpdatingState())
                 return
 

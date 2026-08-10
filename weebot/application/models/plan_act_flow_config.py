@@ -28,6 +28,7 @@ from weebot.config.constants import DEFAULT_MAX_FLOW_ITERATIONS, DEFAULT_MAX_STE
 logger = logging.getLogger(__name__)
 from weebot.core.structured_logger import StructuredLogger
 from weebot.domain.models.session import Session
+from weebot.domain.models.task_preset import TaskPreset
 
 
 @dataclass
@@ -86,6 +87,19 @@ class PlanActFlowConfig:
     personality: Any | None = None  # PersonalityManager
     context_aware_model_selection: bool = True
 
+    # ── LongHorizon-Harness E1: per-step evidence audit ──────────────
+    step_audit_service: Any | None = None  # StepAuditPort
+    """Optional environment-grounded evidence check run before a step is
+    marked COMPLETED. If None, ExecutingState skips the gate (backward-
+    compatible)."""
+
+    # ── LongHorizon-Harness E6: verifier cascade tier ────────────────
+    verifier_llm: LLMPort | None = None
+    """Optional LLM used by VerifyingState instead of the flow's default
+    model — routes CoVe/self-critique calls onto ROLE_MODEL_CONFIG's cheap
+    "verifier" tier. If None, VerifyingState falls back to ``llm``
+    (backward-compatible)."""
+
     # ── Enhancement 4: Trust report ─────────────────────────────────
     trust_report_service: Any | None = None  # TrustReportPort
 
@@ -97,7 +111,7 @@ class PlanActFlowConfig:
     """Service computing TrustReport from code review + CoVe evidence."""
 
     # ── Phase 5: Task preset (cost/quality tier) ────────────────────
-    task_preset: Any | None = None  # TaskPreset — avoids domain model import
+    task_preset: TaskPreset | None = None
     """Optional task preset controlling quality gates and model selection.
     If None, flow uses its hardcoded defaults (backward-compatible)."""
 

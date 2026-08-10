@@ -341,6 +341,9 @@ class PlannerAgent:
         for idx, s in enumerate(steps_data):
             step_id = s.get("id") or f"step-{idx + 1}"
             desc = s.get("description", "")
+            acceptance_criteria = [
+                str(c).strip() for c in s.get("acceptance_criteria", []) if str(c).strip()
+            ]
             # Filter: drop spec-writing steps that cause executor loops.
             # Allow at most 1 spec step per plan (some tasks genuinely need one).
             is_spec_step = any(
@@ -365,12 +368,16 @@ class PlannerAgent:
                     batch_items = unique_items[i:i + batch_size]
                     batch_desc = desc + f" (batch {batch_num + 1}: {', '.join(batch_items)})"
                     batch_id = f"{step_id}-b{batch_num + 1}" if batch_num > 0 else step_id
-                    steps.append(Step(id=batch_id, description=batch_desc, status="pending"))
+                    steps.append(Step(
+                        id=batch_id, description=batch_desc, status="pending",
+                        acceptance_criteria=acceptance_criteria,
+                    ))
             else:
                 steps.append(Step(
                     id=step_id,
                     description=desc,
                     status="pending",
+                    acceptance_criteria=acceptance_criteria,
                 ))
         plan = Plan(
             title=data.get("title", "Untitled Plan"),

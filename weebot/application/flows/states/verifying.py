@@ -30,6 +30,7 @@ from weebot.config.constants import (
     VERIFICATION_MAX_REVISION_PASSES,
     VERIFICATION_SCORE_MIN,
 )
+from weebot.domain.models.audit import VerificationStatus
 from weebot.domain.models.event import VerificationEvent
 
 _log = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ class VerifyingState(FlowState):
                 "Verification skipped: authentication error on question generation. "
                 "Check OPENROUTER_API_KEY and XAI_API_KEY."
             )
+            self._stamp_not_run(flow, reason="auth_error:question_generation")
             from weebot.application.flows.states.completed import CompletedState
             flow.set_state(CompletedState())
             return
@@ -125,6 +127,7 @@ class VerifyingState(FlowState):
                         "Circuit breaker may be open or API keys are invalid.",
                         _auth_error_count,
                     )
+                    self._stamp_not_run(flow, reason="auth_error:answer_loop")
                     from weebot.application.flows.states.completed import CompletedState
                     flow.set_state(CompletedState())
                     return
@@ -151,14 +154,20 @@ class VerifyingState(FlowState):
             )
             revised = await self._revise_summary(flow, summary, inconsistencies)
             if revised:
-                last = completed[-1]
-                setattr(last, "result", revised[:500])
+                # Do NOT write back into Step.result: `last` is the same
+                # object living in flow._plan.steps (and in every
+                # PlanHistory snapshot already taken — snapshot() stores a
+                # reference, not a copy), so an in-place setattr silently
+                # corrupts the executor's own record, retroactively, in
+                # snapshots that already happened (E7a — integrity axis).
+                # `summary` alone carries the revision forward for scoring
+                # and the gate sweep below.
                 summary = revised
         else:
             _log.info("CoVe verification passed — no inconsistencies")
 
         # ── Step 4: Self-critique scoring ───────────────────────────
-        final_summary, scores = await self._score_and_revise(flow, summary)
+        final_summary, scores, verification_status = await self._score_and_revise(flow, summary)
 
         # ── Step 5: Gate sweep ──────────────────────────────────────
         gate_failures = await self._gate_sweep(flow, final_summary)
@@ -176,6 +185,7 @@ class VerifyingState(FlowState):
             try:
                 ctx.extra["verification_scores"] = scores
                 ctx.extra["gate_failures"] = gate_failures
+                ctx.extra["verification_status"] = verification_status.value
             except Exception:
                 _log.debug("Failed to store verification scores in session context", exc_info=True)
 
@@ -192,12 +202,45 @@ class VerifyingState(FlowState):
         from weebot.application.flows.states.completed import CompletedState
         flow.set_state(CompletedState())
 
+    @staticmethod
+    def _llm(flow):
+        """Resolve the LLM used for verification calls (LongHorizon-Harness E6).
+
+        ``flow._verifier_llm`` is an optional cheap-tier model wired via DI
+        (ROLE_MODEL_CONFIG["verifier"]) — see PlanActFlowConfig.verifier_llm.
+        Falls back to the flow's default model when unset, so unconfigured
+        flows behave exactly as before this change.
+        """
+        return getattr(flow, "_verifier_llm", None) or flow._llm
+
+    @staticmethod
+    def _stamp_not_run(flow, *, reason: str) -> None:
+        """Record that verification could not run — never leave this silent.
+
+        An infra failure (auth error, dead circuit breaker) must not read
+        the same as "nothing to verify" or, worse, as a pass. Without this
+        stamp the step still completes (infra failure shouldn't block
+        finished work) but nothing downstream can tell verification never
+        happened (E4/E6 — fail closed, not fail silent).
+        """
+        if not hasattr(flow._session, "context"):
+            return
+        try:
+            ctx = flow._session.context
+            ctx.extra["verification_status"] = VerificationStatus.NOT_RUN.value
+            ctx.extra["verification_skip_reason"] = reason
+        except Exception:
+            _log.debug("Failed to stamp verification NOT_RUN in session context", exc_info=True)
+
     # ── Self-critique scoring ───────────────────────────────────────
 
-    async def _score_output(self, flow, summary: str) -> dict[str, int]:
+    async def _score_output(self, flow, summary: str) -> tuple[dict[str, int], bool]:
         """Score the summary on VERIFICATION_AXES (1-5 each).
 
-        Returns a dict like {"correctness": 4, "completeness": 5, ...}.
+        Returns (scores, ran) — a dict like {"correctness": 4, ...} and
+        whether scoring actually executed. ``ran=False`` must be surfaced
+        as VerificationStatus.NOT_RUN by the caller, never silently
+        treated as a pass (E4 — fail closed).
         """
         axes_list = ", ".join(VERIFICATION_AXES)
         prompt = (
@@ -210,7 +253,7 @@ class VerifyingState(FlowState):
             f'Return ONLY valid JSON: {{"correctness": N, "completeness": N, "specificity": N, "restraint": N}}'
         )
         try:
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_BRIEF,
@@ -219,31 +262,36 @@ class VerifyingState(FlowState):
             return {
                 axis: max(1, min(5, int(scores.get(axis, VERIFICATION_SCORE_MIN))))
                 for axis in VERIFICATION_AXES
-            }
+            }, True
         except Exception:
-            # Deliberate fail-open — a broken scorer must not block live
-            # execution.  But log at warning, not debug: the quality gate
-            # silently not running is exactly what an operator needs to see,
-            # and these fallback scores are indistinguishable from a real pass.
+            # A broken scorer must not block live execution — but it also
+            # must not read as a pass. Returning the passing threshold used
+            # to make a NOT-run gate indistinguishable from a real one
+            # (E4 — fail closed). ran=False lets the caller record the
+            # distinct NOT_RUN status instead.
             _log.warning(
-                "Self-critique scoring failed — assuming passing scores "
-                "(verification did NOT actually run)", exc_info=True,
+                "Self-critique scoring failed — verification did NOT "
+                "actually run (not counted as a pass)", exc_info=True,
             )
-            return {axis: VERIFICATION_SCORE_MIN for axis in VERIFICATION_AXES}
+            return {axis: VERIFICATION_SCORE_MIN for axis in VERIFICATION_AXES}, False
 
-    async def _score_and_revise(self, flow, summary: str) -> tuple[str, dict[str, int]]:
+    async def _score_and_revise(self, flow, summary: str) -> tuple[str, dict[str, int], "VerificationStatus"]:
         """Score the summary; revise if any axis < VERIFICATION_SCORE_MIN.
 
-        Returns (final_summary, final_scores). Limits revision to
-        VERIFICATION_MAX_REVISION_PASSES attempts.
+        Returns (final_summary, final_scores, status). Limits revision to
+        VERIFICATION_MAX_REVISION_PASSES attempts. status is NOT_RUN if
+        scoring never actually executed (E4 — must not be conflated with
+        a genuine pass or fail).
         """
         for attempt in range(1, VERIFICATION_MAX_REVISION_PASSES + 1):
-            scores = await self._score_output(flow, summary)
+            scores, ran = await self._score_output(flow, summary)
+            if not ran:
+                return summary, scores, VerificationStatus.NOT_RUN
             weak_axes = [a for a, s in scores.items() if s < VERIFICATION_SCORE_MIN]
 
             if not weak_axes:
                 _log.info("Self-critique passed: %s", scores)
-                return summary, scores
+                return summary, scores, VerificationStatus.PASSED
 
             _log.info(
                 "Self-critique attempt %d/%d — weak axes: %s (scores: %s)",
@@ -258,7 +306,7 @@ class VerifyingState(FlowState):
                 f"Revise the output to improve ONLY the weak axes. Keep everything else."
             )
             try:
-                response = await flow._llm.chat(
+                response = await self._llm(flow).chat(
                     messages=[{"role": "user", "content": prompt}],
                     temperature=TEMPERATURE_DETERMINISTIC,
                     max_tokens=MAX_TOKENS_SHORT,
@@ -269,8 +317,9 @@ class VerifyingState(FlowState):
                 break
 
         # Final attempt — accept whatever we have
-        final_scores = await self._score_output(flow, summary)
-        return summary, final_scores
+        final_scores, ran = await self._score_output(flow, summary)
+        status = VerificationStatus.NOT_RUN if not ran else VerificationStatus.FAILED
+        return summary, final_scores, status
 
     # ── Gate sweep ──────────────────────────────────────────────────
 
@@ -400,7 +449,7 @@ class VerifyingState(FlowState):
                 TEMPERATURE_DETERMINISTIC,
             )
 
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_VERDICT,
@@ -432,112 +481,32 @@ class VerifyingState(FlowState):
     async def _gate_artifact_verification(self, flow) -> list[str]:
         """Verify execution artifacts exist and tests passed.
 
-        Reads ToolEvent results directly — NOT the LLM summary.
-        Addresses S7 (Inaccurate Self-Reporting): agent claims completion
-        but execution artifacts contradict it.
+        Delegates to StepEvidenceAuditor (LongHorizon-Harness E1) — the
+        same environment-grounded checks ExecutingState now runs per-step,
+        applied here session-wide as a terminal backstop. Reads ToolEvent
+        results directly, never the LLM's own summary (S7 fix).
+
+        If no step_audit_service is wired (legacy flows constructed without
+        DI), this gate is skipped rather than falling back to inline
+        filesystem access — Application-layer code must not touch the
+        filesystem directly (see FileStoragePort docstring).
         """
-        from pathlib import Path
         from weebot.domain.models.event import ToolEvent as _ToolEvent
 
-        failures: list[str] = []
+        _step_audit_service = getattr(flow, "_step_audit_service", None)
+        if _step_audit_service is None:
+            return []
+
         session = flow._session
-
-        # Gate A: Files written by file_editor must still exist on disk.
-        written_paths: list[str] = []
-        for event in session.events:
-            if not isinstance(event, _ToolEvent):
-                continue
-            if event.tool_name not in ("file_editor", "edit_file", "write_file", "create_file"):
-                continue
-            args = event.function_args or {}
-            path = args.get("path") or args.get("file_path") or args.get("target_file", "")
-            if path:
-                written_paths.append(str(path))
-
-        missing = []
-        for p in written_paths:
-            try:
-                if not Path(p).exists():
-                    missing.append(p)
-            except (OSError, ValueError):
-                _log.debug("Invalid path in verification check — skipping without blocking", exc_info=True)
-
-        if missing:
-            _log.warning(
-                "Artifact gate A: %d written file(s) not found on disk: %s",
-                len(missing), missing[:3],
-            )
-            failures.append(f"written_files_missing:{','.join(missing[:2])}")
-
-        # Gate B: Test commands with failure markers in their output.
-        _test_keywords = (
-            "pytest", "npm test", "jest", "cargo test", "go test", "python -m pytest",
+        events = [e for e in session.events if isinstance(e, _ToolEvent)]
+        report = await _step_audit_service.audit_step(
+            step=None, events=events, session_id=session.id,
         )
-        for event in session.events:
-            if not isinstance(event, _ToolEvent):
-                continue
-            if event.tool_name not in ("bash", "shell_exec", "powershell"):
-                continue
-            cmd = str((event.function_args or {}).get("command", "")).lower()
-            if not any(kw in cmd for kw in _test_keywords):
-                continue
-            result = (event.result or "").lower()
-            if any(m in result for m in ("failed", "error", "assertion error", "test failed")):
-                if "passed" not in result:
-                    _log.warning("Artifact gate B: test failure detected in bash output")
-                    failures.append("test_run_failed")
-                    break
 
-        # Gate C: Image quality — detect placeholder SVGs disguised as
-        # real images, or image_gen results that signal degradation.
-        # Checks files written by image_gen tools for size < 10 KB
-        # (real photos are typically 50 KB+) and for SVG markup in
-        # files with image extensions.
-        _IMAGE_QUALITY_MIN_BYTES = 10_000  # 10 KB — real photos >50 KB
-
-        for event in session.events:
-            if not isinstance(event, _ToolEvent):
-                continue
-            if event.tool_name not in ("image_gen", "image_generator", "generate_image"):
-                continue
-
-            # Check 1: Result text suggests SVG fallback
-            result_text = (event.result or "").lower()
-            if "svg fallback" in result_text or "placeholder" in result_text:
-                _log.warning(
-                    "Artifact gate C: image_gen returned SVG fallback — "
-                    "not a real photo. Use search_images for stock photos.",
-                )
-                failures.append("image_placeholder")
-                continue
-
-            # Check 2: Inspect the output file on disk.
-            # If the tool wrote a path, check file size and content.
-            out_path = (event.function_args or {}).get("output_path", "")
-            if not out_path:
-                continue
-
-            try:
-                fsize = Path(out_path).stat().st_size
-            except (OSError, ValueError):
-                fsize = 0
-
-            if 0 < fsize < _IMAGE_QUALITY_MIN_BYTES:
-                try:
-                    with open(out_path, "r", encoding="utf-8", errors="ignore") as f:
-                        head = f.read(200)
-                    is_svg = "<?xml" in head or "<svg" in head[:100]
-                except Exception:
-                    is_svg = False
-
-                if is_svg:
-                    _log.warning(
-                        "Artifact gate C: %s is %d bytes with SVG markup — "
-                        "likely a placeholder disguise.",
-                        out_path, fsize,
-                    )
-                    failures.append(f"image_svg_disguised:{out_path}")
-
+        failures: list[str] = []
+        for v in report.violations:
+            _log.warning("Artifact gate (%s): %s", v.dimension.value, v.description)
+            failures.append(f"{v.dimension.value}:{v.description}")
         return failures
 
     # ── Internal ─────────────────────────────────────────────────────
@@ -554,7 +523,7 @@ class VerifyingState(FlowState):
             f"Verification questions (one per line, no numbering):"
         )
         try:
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_COMPACT,
@@ -566,6 +535,11 @@ class VerifyingState(FlowState):
                 if line.strip() and "?" in line
             ]
             return questions[:n]
+        except AuthenticationError:
+            # Must reach execute()'s AuthenticationError handler, not be
+            # swallowed here as an empty result — an infra failure must
+            # stamp NOT_RUN, not read as "the LLM found nothing to ask".
+            raise
         except Exception:
             _log.debug("Failed to generate verification questions", exc_info=True)
             return []
@@ -607,12 +581,16 @@ class VerifyingState(FlowState):
             f"{evidence_block}"
         )
         try:
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_CRISP,
             )
             return (response.content or "").strip()
+        except AuthenticationError:
+            # Propagate — execute()'s auth-retry counter must see this,
+            # not treat it as an ordinary answer failure (E6).
+            raise
         except Exception:
             _log.debug("Failed to answer verification question", exc_info=True)
             return "(verification failed)"
@@ -629,14 +607,26 @@ class VerifyingState(FlowState):
             f"Answer only YES or NO."
         )
         try:
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_VERDICT,
             )
             return "yes" in (response.content or "").lower()
+        except AuthenticationError:
+            # Propagate (E6): an unreachable LLM is an infra problem for
+            # execute()'s auth-retry counter to handle (→ NOT_RUN after
+            # _MAX_AUTH_RETRIES), not an ordinary "check ran and disagreed".
+            raise
         except Exception:
-            return True  # Assume consistent on failure — don't block completion
+            # Fail closed (E4): a consistency check that didn't run must not
+            # read as a check that passed. Treating it as inconsistent routes
+            # into the existing revision path rather than silently completing.
+            _log.warning(
+                "Consistency check failed to run — treating as inconsistent, "
+                "not as a pass", exc_info=True,
+            )
+            return False
 
     async def _revise_summary(
         self, flow, summary: str, inconsistencies: list[tuple[str, str, str]]
@@ -652,7 +642,7 @@ class VerifyingState(FlowState):
             f"Keep everything else unchanged."
         )
         try:
-            response = await flow._llm.chat(
+            response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_SHORT,

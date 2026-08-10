@@ -63,6 +63,13 @@ class LocalFileStorageAdapter(FileStoragePort):
     async def exists(self, path: str) -> bool:
         return self._resolve(path).exists()
 
+    async def size(self, path: str) -> Optional[int]:
+        full = self._resolve(path)
+        try:
+            return full.stat().st_size
+        except OSError:
+            return None
+
     async def delete(self, path: str) -> bool:
         full = self._resolve(path)
         if full.exists():
