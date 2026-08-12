@@ -924,6 +924,7 @@ def test_orphan_ports_flagged():
         "HookRegistryPort",
         "DreamerPort",          # → Dreamer in application/agents/
         "StepEvaluatorPort",    # → StepEvaluator in application/services/
+        "StepAuditPort",        # → StepEvidenceAuditor in application/services/ (8cc7611)
         "TrustReportPort",
         "SkillRetrieverPort",
         "RetentionAgentPort",   # → RetentionAgent in application/agents/

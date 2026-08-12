@@ -103,12 +103,10 @@ async def build_executor_prompt(
         try:
             import hashlib
             key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-            for row in await state_repo.get_low_salience_entries(threshold=1.01, limit=5):
-                if row.get("entry_hash") == key:
-                    txt = row.get("entry_text", "")
-                    if txt and txt != "No user data collected yet.":
-                        parts.append(f"\n\n## User Profile\n{txt[:500]}")
-                    break
+            row = await state_repo.get_memory_entry(key)
+            txt = row.get("entry_text", "") if row else ""
+            if txt and txt != "No user data collected yet.":
+                parts.append(f"\n\n## User Profile\n{txt[:500]}")
         except Exception:
             pass
 

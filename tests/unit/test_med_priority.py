@@ -150,11 +150,11 @@ class TestOpportunityEngineEmpty:
 
 class TestPersistentMemoryTool:
     @pytest.mark.asyncio
-    async def test_add_and_read(self):
+    async def test_add_and_read(self, tmp_path):
         from weebot.tools.persistent_memory import PersistentMemoryTool
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 
-        tool = PersistentMemoryTool(memory=FileSystemMemoryAdapter())
+        tool = PersistentMemoryTool(memory=FileSystemMemoryAdapter(memory_dir=tmp_path))
         result = await tool.execute(action="add", file="agent", entry="test entry")
         assert not result.is_error
         result = await tool.execute(action="read", file="agent")

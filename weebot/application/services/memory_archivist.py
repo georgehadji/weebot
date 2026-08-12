@@ -81,4 +81,4 @@ class MemoryArchivist:
 
         summary_event = MessageEvent(role="assistant", message=summary_text)
         new_events = [summary_event, *recent_events]
-        return session.model_copy(update={"events": new_events})
+        return session.replace_events(new_events)

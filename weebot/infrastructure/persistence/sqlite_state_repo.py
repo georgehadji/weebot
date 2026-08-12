@@ -265,6 +265,14 @@ class SQLiteStateRepository(StateRepositoryPort):
             self._fts5_locks[session.id] = asyncio.Lock()
         async with self._fts5_locks[session.id]:
             last_indexed = self._fts5_indexed.get(session.id, 0)
+            if len(session.events) < last_indexed:
+                # Event list shrank (compaction) — the old watermark no longer
+                # lines up with these positions. Same reset as the bloat-guard
+                # branch above: re-index from scratch rather than silently
+                # adopting a lower watermark and leaving the new event content
+                # permanently unindexed.
+                last_indexed = 0
+                self._fts5_indexed.pop(session.id, None)
             new_events = session.events[last_indexed:]
             async with pool.acquire_write() as conn:
                 for event in new_events:
@@ -421,14 +429,19 @@ class SQLiteStateRepository(StateRepositoryPort):
     # ── Memory metadata ──────────────────────────────────────────
 
     async def upsert_memory_metadata(self, entry_hash: str, entry_text: str,
-                                     source: str = "agent") -> None:
+                                     source: str = "agent",
+                                     salience: Optional[float] = None) -> None:
         await self._init_helpers()
-        await self._memory_metadata.upsert(entry_hash, entry_text, source)  # type: ignore[union-attr]
+        await self._memory_metadata.upsert(entry_hash, entry_text, source, salience)  # type: ignore[union-attr]
 
     async def get_low_salience_entries(self, threshold: float = 0.3,
                                        limit: int = 50) -> list[dict]:
         await self._init_helpers()
         return await self._memory_metadata.get_low_salience(threshold, limit)  # type: ignore[union-attr]
+
+    async def get_memory_entry(self, entry_hash: str) -> Optional[dict]:
+        await self._init_helpers()
+        return await self._memory_metadata.get_by_hash(entry_hash)  # type: ignore[union-attr]
 
     async def delete_memory_entries(self, entry_hashes: list[str]) -> int:
         await self._init_helpers()

@@ -37,7 +37,7 @@ _AMBIENT_SETTINGS_VARS = (
 
 
 @pytest.fixture(autouse=True)
-def _isolate_weebot_settings(monkeypatch):
+def _isolate_weebot_settings(monkeypatch, tmp_path):
     """Stop the real .env and ambient env vars from polluting settings tests."""
     try:
         from weebot.config import settings as settings_module
@@ -55,6 +55,19 @@ def _isolate_weebot_settings(monkeypatch):
     # monkeypatch.setenv or explicit constructor kwargs.
     for var in _AMBIENT_SETTINGS_VARS:
         monkeypatch.delenv(var, raising=False)
+
+    # DEFAULT_MEMORY_DIR is frozen at module-import time, so setenv() alone
+    # does nothing — a bare FileSystemMemoryAdapter() would otherwise read
+    # and write the developer's real ~/.weebot/memory/AGENT.md. Redirect the
+    # module attribute itself; tests that need a specific dir still pass
+    # memory_dir= explicitly.
+    try:
+        from weebot.infrastructure.persistence import filesystem_memory
+        monkeypatch.setattr(
+            filesystem_memory, "DEFAULT_MEMORY_DIR", tmp_path / ".weebot_memory"
+        )
+    except Exception:
+        pass
 
     yield
 

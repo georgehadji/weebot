@@ -242,6 +242,25 @@ class Session(BaseModel):
         new_session._memory_index.index_event(len(events) - 1, event)
         return new_session
 
+    def replace_events(self, events: List[AgentEvent]) -> "Session":
+        """Return a new session with *events* wholesale-replaced (e.g. compaction).
+
+        Unlike ``add_event``, the new event list is not a suffix of the old one —
+        list positions indexed by ``_memory_index`` are no longer valid, so the
+        index is rebuilt fresh rather than carried forward by identity (which is
+        what plain ``model_copy(update={"events": ...})`` does, and which leaves
+        ``get_last_plan()`` / ``has_unresolved_wait_event()`` reading stale
+        positions into the new, shorter list).
+        """
+        new_session = self.model_copy(update={
+            "events": events,
+            "updated_at": datetime.now(timezone.utc),
+        })
+        new_session._memory_index = SessionMemory()
+        for i, event in enumerate(events):
+            new_session._memory_index.index_event(i, event)
+        return new_session
+
     def set_status(self, status: SessionStatus) -> "Session":
         return self.model_copy(update={
             "status": status,

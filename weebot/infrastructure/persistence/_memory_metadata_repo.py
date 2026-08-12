@@ -16,23 +16,62 @@ class MemoryMetadataRepo:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def upsert(self, entry_hash: str, entry_text: str, source: str = "agent") -> None:
-        """Insert or update a memory metadata entry with salience scoring."""
+    async def upsert(
+        self,
+        entry_hash: str,
+        entry_text: str,
+        source: str = "agent",
+        salience: Optional[float] = None,
+    ) -> None:
+        """Insert or update a memory metadata entry with salience scoring.
+
+        With ``salience=None`` (the default), an access-count bump path is used:
+        insert at 0.5, or +0.05 per subsequent access capped at 1.0. Passing an
+        explicit ``salience`` pins the row at that value — it can only raise the
+        existing score on conflict, never lower it (a pinned high-value entry,
+        e.g. the consolidated user profile, must not decay from routine reads).
+        """
         now = datetime.now(timezone.utc).isoformat()
+        insert_salience = 0.5 if salience is None else salience
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 """
                 INSERT INTO memory_metadata
                     (entry_hash, entry_text, source, salience, access_count, last_accessed, created_at)
                 VALUES
-                    (:hash, :text, :source, 0.5, 1, :now, :now)
+                    (:hash, :text, :source, :insert_salience, 1, :now, :now)
                 ON CONFLICT(entry_hash) DO UPDATE SET
+                    entry_text = :text,
+                    source = :source,
                     access_count = access_count + 1,
-                    salience = MIN(1.0, salience + 0.05),
+                    salience = CASE
+                        WHEN :salience IS NOT NULL THEN MAX(salience, :salience)
+                        ELSE MIN(1.0, salience + 0.05)
+                    END,
                     last_accessed = :now
                 """,
-                {"hash": entry_hash, "text": entry_text, "source": source, "now": now},
+                {
+                    "hash": entry_hash,
+                    "text": entry_text,
+                    "source": source,
+                    "insert_salience": insert_salience,
+                    "salience": salience,
+                    "now": now,
+                },
             )
+
+    async def get_by_hash(self, entry_hash: str) -> Optional[dict]:
+        """Return a single memory metadata entry by hash, or None if absent."""
+        rows = await self._pool.execute_read(
+            """
+            SELECT entry_hash, entry_text, source, salience, access_count,
+                   last_accessed, created_at
+            FROM memory_metadata
+            WHERE entry_hash = ?
+            """,
+            (entry_hash,),
+        )
+        return dict(rows[0]) if rows else None
 
     async def get_low_salience(
         self, threshold: float = 0.3, limit: int = 50

@@ -420,13 +420,9 @@ class ExecutorAgent:
                 repo = self._state_repo
                 if repo is not None:
                     key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
-                    for row in await repo.get_low_salience_entries(threshold=1.01, limit=5):
-                        if row.get("entry_hash") == key:
-                            txt = row.get("entry_text", "")
-                            self._user_profile_cache = txt[:500] if txt and txt != "No user data collected yet." else ""
-                            break
-                    else:
-                        self._user_profile_cache = ""
+                    row = await repo.get_memory_entry(key)
+                    txt = row.get("entry_text", "") if row else ""
+                    self._user_profile_cache = txt[:500] if txt and txt != "No user data collected yet." else ""
                 else:
                     self._user_profile_cache = ""
             except Exception:

@@ -164,6 +164,19 @@ WEEBOT_ACR_BANDIT: bool = _env_bool("WEEBOT_ACR_BANDIT", default=False)
 # still controls execution.  Useful for offline comparison during rollout.
 WEEBOT_ACR_SHADOW: bool = _env_bool("WEEBOT_ACR_SHADOW", default=False)
 
+# ── Memory snapshot cap (AgeMem fix plan, Phase 4 / A1a) ────────────────────
+# When True, PersistentMemoryTool.load_snapshot() caps AGENT.md to the newest
+# N entries plus a character budget instead of concatenating the whole file
+# into every system prompt uncapped. Ranked by recency (file order), not
+# salience — memory_metadata is frequently empty (a fresh install, or right
+# after the F1 fix ships) and salience-ranking an empty-scored corpus
+# degenerates into arbitrary truncation. Default OFF: only worth it once
+# real memory content, not test litter, has grown past the cap.
+MEMORY_SNAPSHOT_CAP_ENABLED: bool = _env_bool(
+    "WEEBOT_MEMORY_SNAPSHOT_CAP", default=False
+)
+
+
 # ── C2. Durable task queue backend (ARCH-AUDIT-V2) ──────────────────────────
 # Controls which queue backend the TaskRunner uses.
 #   "memory" (default) — asyncio.PriorityQueue, non-durable, no external deps.

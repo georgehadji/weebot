@@ -49,8 +49,11 @@ class MemoryCompactor:
             compacted.append(self._compact_event(event))
         compacted = self._deduplicate_repeated_tool_results(compacted)
         
-        # Create compacted session
-        compacted_session = session.model_copy(update={"events": compacted})
+        # Create compacted session — replace_events() rebuilds _memory_index for
+        # the new (possibly shrunk/reordered) event list; a plain model_copy()
+        # carries the old index by identity and get_last_plan() reads stale
+        # positions into it, raising IndexError.
+        compacted_session = session.replace_events(compacted)
         
         # Re-inject constraints if any were found
         if extracted_constraints:
@@ -153,8 +156,8 @@ class MemoryCompactor:
                 # Refresh existing constraint message
                 new_events = list(session.events)
                 new_events[i] = event.model_copy(update={"message": f"{constraint_marker}\n{constraint_text}"})
-                return session.model_copy(update={"events": new_events})
+                return session.replace_events(new_events)
 
         # No existing constraint message found - inject at the beginning
         new_events = [MessageEvent(role="assistant", message=f"{constraint_marker}\n{constraint_text}")] + list(session.events)
-        return session.model_copy(update={"events": new_events})
+        return session.replace_events(new_events)

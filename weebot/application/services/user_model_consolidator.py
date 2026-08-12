@@ -39,7 +39,7 @@ class UserModelConsolidator:
         rules: list[str] = []
         try:
             raw_rules = await self._repo.list_behavioral_rules()
-            rules = [r.rule_text for r in raw_rules if r.rule_text]
+            rules = [r["rule_text"] for r in raw_rules if r.get("rule_text")]
         except Exception as exc:
             logger.debug("UserModelConsolidator: failed to load rules: %s", exc)
 
