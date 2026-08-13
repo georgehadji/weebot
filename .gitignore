@@ -157,3 +157,6 @@ nul;
 
 # Vendored reference material (not part of the project)
 Agentic-Design-Patterns-main/
+# Downloaded third-party repo archives kept for reference reading only.
+# The root-level /*.zip rule does not cover this subdirectory.
+Github projects/

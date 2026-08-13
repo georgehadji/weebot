@@ -72,13 +72,15 @@ must be:
 - Accompanied by a `because` rationale that cites the evidence from the source
 - Self-contained — understandable without watching the video
 
-Call `persistent_memory` with `action=add_memory` for each rule:
+Call `persistent_memory` with `action=add` for each rule (file defaults to
+`agent`), passing the full RULE/BECAUSE/SOURCE block below as `entry`:
 ```
-persistent_memory action=add_memory content="RULE: <imperative sentence> | BECAUSE: <rationale>" group=reify_skill
+persistent_memory action=add entry="<the RULE/BECAUSE/SOURCE block>"
 ```
 
-Rules are tagged with `source=<video_title>` so they can be traced back. Use
-this exact content format so rules are parseable later:
+Include `SOURCE: <video_title>` in the entry text itself so rules can be
+traced back — the tool has no separate tagging mechanism. Use this exact
+content format so rules are parseable later:
 
 ```
 RULE: Always validate user input at the system boundary
@@ -108,8 +110,12 @@ system prompts.
 - **Very long video**: If the transcript exceeds 20,000 characters, summarize
   it in two passes: first summarize each half, then summarize the two half-summaries.
 - **Duplicate video**: If the user re-reifies a video already processed,
-  overwrite the old rules by searching persistent_memory for `source=<title>`,
-  deleting those entries, and writing fresh ones.
+  overwrite the old rules: call `persistent_memory action=read file=agent`,
+  find every existing entry whose `SOURCE:` line matches `<video_title>`, and
+  remove each one individually with `action=remove match=<a substring unique
+  to that entry>` (the tool refuses to remove more than one entry per call —
+  removing by the bare video title will error if it matches several rules;
+  match on the full RULE line instead). Then add the fresh rules.
 - **Non-English content**: Pass `language="auto"` to video_ingest. The
   tool will auto-detect and fetch the first available language.
 
