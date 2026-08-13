@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
+from weebot.domain.models.correction import CorrectionRecord
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.connection_pool import (
@@ -34,6 +35,7 @@ from weebot.infrastructure.persistence._behavioral_rule_repo import (
     OpportunityRepo,
     PlanTemplateRepo,
 )
+from weebot.infrastructure.persistence._correction_repo import CorrectionRecordRepo
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         self._behavioral_rules: Optional[BehavioralRuleRepo] = None
         self._opportunities: Optional[OpportunityRepo] = None
         self._plan_templates: Optional[PlanTemplateRepo] = None
+        self._corrections: Optional[CorrectionRecordRepo] = None
 
     # ── Connection management ───────────────────────────────────────
 
@@ -89,6 +92,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         self._behavioral_rules = BehavioralRuleRepo(pool)
         self._opportunities = OpportunityRepo(pool)
         self._plan_templates = PlanTemplateRepo(pool)
+        self._corrections = CorrectionRecordRepo(pool)
 
     async def close(self) -> None:
         """Close the connection pool."""
@@ -214,6 +218,23 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_commitments_due_at ON commitments(due_at)"
+            )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS correction_records (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    step_id TEXT NOT NULL,
+                    step_description TEXT NOT NULL DEFAULT '',
+                    original_output TEXT NOT NULL DEFAULT '',
+                    corrected_output TEXT NOT NULL DEFAULT '',
+                    correction_category TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            await conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_correction_category ON correction_records(correction_category)"
             )
             logger.debug("Database schema ensured")
 
@@ -402,6 +423,20 @@ class SQLiteStateRepository(StateRepositoryPort):
     async def list_behavioral_rules(self) -> list[dict]:
         await self._init_helpers()
         return await self._behavioral_rules.list()  # type: ignore[union-attr]
+
+    # ── Corrections (ICM edit-source tracking) ──────────────────────
+
+    async def save_correction_record(self, record: CorrectionRecord) -> None:
+        await self._init_helpers()
+        await self._corrections.save(record)  # type: ignore[union-attr]
+
+    async def count_corrections_by_category(self, category: str) -> int:
+        await self._init_helpers()
+        return await self._corrections.count_by_category(category)  # type: ignore[union-attr]
+
+    async def get_correction_patterns(self, min_count: int = 3) -> list[dict]:
+        await self._init_helpers()
+        return await self._corrections.get_patterns(min_count)  # type: ignore[union-attr]
 
     # ── Opportunities ─────────────────────────────────────────────
 

@@ -28,6 +28,7 @@ def mock_context():
         ],
     )
     ctx._code_reviewer = None
+    ctx._correction_tracker = None
     return ctx
 
 

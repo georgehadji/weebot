@@ -116,6 +116,10 @@ class PlanActFlowConfig:
     misalignment_journal: Any | None = None  # MisalignmentJournalPort
     """Service computing TrustReport from code review + CoVe evidence."""
 
+    # ── ICM edit-source tracking ─────────────────────────────────────
+    correction_tracker: Any | None = None  # CorrectionTracker
+    """Tracks recurring step-output corrections; surfaces patterns to BehavioralLearner."""
+
     # ── Phase 5: Task preset (cost/quality tier) ────────────────────
     task_preset: TaskPreset | None = None
     """Optional task preset controlling quality gates and model selection.

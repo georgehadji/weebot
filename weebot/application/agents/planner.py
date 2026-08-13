@@ -17,7 +17,7 @@ from weebot.domain.models.event import (
     PlanStatus,
     TitleEvent,
 )
-from weebot.domain.models.plan import Plan, Step
+from weebot.domain.models.plan import ContextScope, Plan, Step
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +344,10 @@ class PlannerAgent:
             acceptance_criteria = [
                 str(c).strip() for c in s.get("acceptance_criteria", []) if str(c).strip()
             ]
+            try:
+                context_scope = ContextScope(s.get("context_scope", "full"))
+            except ValueError:
+                context_scope = ContextScope.FULL
             # Filter: drop spec-writing steps that cause executor loops.
             # Allow at most 1 spec step per plan (some tasks genuinely need one).
             is_spec_step = any(
@@ -371,6 +375,7 @@ class PlannerAgent:
                     steps.append(Step(
                         id=batch_id, description=batch_desc, status="pending",
                         acceptance_criteria=acceptance_criteria,
+                        context_scope=context_scope,
                     ))
             else:
                 steps.append(Step(
@@ -378,6 +383,7 @@ class PlannerAgent:
                     description=desc,
                     status="pending",
                     acceptance_criteria=acceptance_criteria,
+                    context_scope=context_scope,
                 ))
         plan = Plan(
             title=data.get("title", "Untitled Plan"),

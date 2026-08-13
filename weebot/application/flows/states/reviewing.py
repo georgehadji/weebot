@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.application.ports.code_reviewer_port import CodeReviewerPort
 from weebot.domain.models.code_review import CodeReviewResult
-from weebot.domain.models.event import AgentEvent, ThoughtEvent
+from weebot.domain.models.event import AgentEvent, CorrectionPatternDetected, ThoughtEvent
 from weebot.domain.models.plan import Step, StepStatus
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,8 @@ class ReviewingState(FlowState):
         # ── Route based on verdict ───────────────────────────────────
         if result.verdict == "approved":
             logger.info("Review APPROVED step %s", self._step.id)
+            async for evt in self._maybe_record_correction(context):
+                yield evt
             context.set_state(ExecutingState())
 
         elif result.verdict == "revise":
@@ -123,6 +125,13 @@ class ReviewingState(FlowState):
                 "Review REVISE step %s — hint: %s",
                 self._step.id, hint[:120],
             )
+            # Stash the pre-revision output once (first revise only) so that
+            # if/when this step is later approved, CorrectionTracker can diff
+            # the original against the corrected result. ICM edit-source
+            # principle — see weebot.application.services.correction_tracker.
+            _fact_key = f"correction_original:{self._step.id}"
+            if context._correction_tracker is not None and not context._session.get_fact(_fact_key):
+                context._session = context._session.set_fact(_fact_key, self._step.result or "")
             revised_step = self._step.model_copy(update={
                 "status": StepStatus.PENDING,
                 "retry_count": self._step.retry_count + 1,
@@ -147,6 +156,51 @@ class ReviewingState(FlowState):
                 result=f"[Code review rejected] {result.summary}",
             )
             context.set_state(UpdatingState())
+
+    async def _maybe_record_correction(
+        self, context: "PlanActFlow"
+    ) -> AsyncGenerator[AgentEvent, None]:
+        """If this step was previously revised, record the correction delta.
+
+        Fires only on approval of a step that carries a stashed pre-revision
+        output (set in the "revise" branch above). Clears the stash either
+        way so a later, unrelated revise cycle on the same step id starts
+        fresh. When CorrectionTracker reports a recurring pattern, feeds it
+        straight to BehavioralLearner — closing the loop from repeated
+        output edits to an injected prompt rule (ICM §6.3).
+        """
+        if context._correction_tracker is None:
+            return
+        _fact_key = f"correction_original:{self._step.id}"
+        original = context._session.get_fact(_fact_key)
+        if not original:
+            return
+        context._session = context._session.set_fact(_fact_key, None)
+        pattern = await context._correction_tracker.record_correction(
+            session_id=context._session.id,
+            step=self._step,
+            original_output=str(original),
+            corrected_output=self._step.result or "",
+        )
+        if pattern is None:
+            return
+        yield CorrectionPatternDetected(
+            session_id=context._session.id,
+            category=pattern.correction_category,
+            count=context._correction_tracker.PATTERN_THRESHOLD,
+            sample_step_description=pattern.step_description,
+        )
+        if context._behavioral_learner is not None:
+            try:
+                await context._behavioral_learner.learn_from_correction(
+                    user_message=(
+                        f"Recurring '{pattern.correction_category}' corrections "
+                        f"detected across steps like: {pattern.step_description}"
+                    ),
+                    context={"step_description": pattern.step_description, "tool_name": ""},
+                )
+            except Exception as exc:
+                logger.warning("Failed to feed correction pattern to BehavioralLearner: %s", exc)
 
     @staticmethod
     def _format_thought(result: CodeReviewResult) -> str:

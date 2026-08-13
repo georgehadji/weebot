@@ -463,3 +463,20 @@ class SkillPromoted(DomainEvent):
     from_tier: str                     # "quarantined" | "candidate"
     to_tier: str                       # "candidate" | "trusted"
     positive_uses: int = 0             # uses accumulated at promotion time
+
+
+class CorrectionPatternDetected(DomainEvent):
+    """Emitted when CorrectionTracker sees a recurring same-category correction.
+
+    ICM edit-source principle: a recurring output edit points to a fixable
+    source-level problem rather than a one-off. PlanActFlow subscribes to
+    this and feeds it to BehavioralLearner so the pattern becomes a rule
+    injected into future executor prompts — closing the loop that would
+    otherwise require a human to notice the repetition manually.
+    """
+    type: str = "correction_pattern_detected"
+    session_id: str
+    category: str
+    count: int
+    sample_step_description: str
+    suggested_fix: str = ""

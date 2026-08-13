@@ -29,6 +29,7 @@
 | `SkillGapDetected` | `"skill_gap_detected"` | `session_id`, `step_description`, `best_score` | AutonomousLearning (MetaAnalysisState) | SkillRegistry gap log |
 | `SkillDistilled` | `"skill_distilled"` | `session_id`, `skill_name`, `origin`, `content_preview` | AutonomousLearning (CompletedState) | SkillRegistry |
 | `SkillPromoted` | `"skill_promoted"` | `skill_name`, `from_tier`, `to_tier` | SkillRegistry | EventStore |
+| `CorrectionPatternDetected` | `"correction_pattern_detected"` | `session_id`, `category`, `count`, `sample_step_description` | ReviewingState (via CorrectionTracker) | BehavioralLearner |
 
 ### Event Flow Diagram
 

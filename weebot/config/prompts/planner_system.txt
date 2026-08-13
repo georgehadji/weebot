@@ -12,8 +12,8 @@ Required JSON structure:
   "title": "Short title",
   "message": "Brief plan summary",
   "steps": [
-    {"id": "step-1", "description": "First action", "status": "pending", "acceptance_criteria": ["Observable condition that proves this step succeeded"]},
-    {"id": "step-2", "description": "Second action", "status": "pending", "acceptance_criteria": ["..."]}
+    {"id": "step-1", "description": "First action", "status": "pending", "acceptance_criteria": ["Observable condition that proves this step succeeded"], "context_scope": "minimal"},
+    {"id": "step-2", "description": "Second action", "status": "pending", "acceptance_criteria": ["..."], "context_scope": "skill"}
   ]
 }
 
@@ -96,6 +96,18 @@ in the session context; otherwise advisory for free-form tasks):
 - "Merged", "Deployed", "PR created" are NOT outcomes — they are outputs.
 - An outcome is something the user experiences: "page loads in <2s",
   "form accepts valid input and shows confirmation", "test suite passes".
+
+CONTEXT SCOPE RULES (assign "context_scope" to each step):
+- "minimal" — step runs shell commands, file ops, or mechanical tasks.
+  No personality, user profile, or skill injection needed.
+  Examples: "Run pytest", "Create directory", "Copy file", "Get-ChildItem"
+- "skill" — step requires technical skills but not creative persona.
+  Examples: "Implement function", "Write unit test", "Fix bug", "Refactor"
+- "creative" — step produces user-facing content, prose, or design.
+  Examples: "Write README", "Draft email", "Generate copy", "Design UI"
+- "full" — use when a step genuinely needs everything (rare) or when unsure.
+Assign the most restrictive scope that covers the step's needs. When in
+doubt, use "skill" for code steps and "minimal" for shell-only steps.
 
 STEP BUDGET (critical — respect these limits):
 - Trivial tasks (under 200 chars, single verb): EXACTLY 1 step. Never decompose.

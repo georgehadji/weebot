@@ -429,9 +429,12 @@ class ExecutorAgent:
                 self._user_profile_cache = ""
 
         # ── Build system prompt via extracted builder ─────────────
+        _step_scope = getattr(step, "context_scope", None)
+        _scope_value = _step_scope.value if _step_scope is not None else "full"
         system_prompt = await build_executor_prompt(
             step_description=step.description,
             base_prompt=base_prompt,
+            context_scope=_scope_value,
             harness_block=self._harness_instruction_block,
             skill_prompt=self._skill_prompt,
             skill_retriever=self._skill_retriever,
@@ -442,7 +445,9 @@ class ExecutorAgent:
         )
 
         # ── Append extra components not handled by builder ────────
-        if getattr(self, '_user_profile_cache', ''):
+        # Gated by scope: minimal/skill steps don't need the cached user
+        # profile blob (ICM per-step context scoping — see _prompt_builder).
+        if _scope_value in ("full", "creative") and getattr(self, '_user_profile_cache', ''):
             system_prompt += f"\n\n## User Profile\n{self._user_profile_cache}"
 
         self._system_prompt = system_prompt

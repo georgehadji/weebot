@@ -23,6 +23,20 @@ class PlanStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class ContextScope(str, Enum):
+    """What context sources a step needs in its executor prompt.
+
+    Set by the planner at plan-creation time. The prompt builder uses this
+    to select which sources to assemble, following the ICM principle of
+    stage-scoped context loading — a step that runs a shell command doesn't
+    need the same context as one drafting user-facing copy.
+    """
+    FULL = "full"          # all sources (default — backward compatible)
+    MINIMAL = "minimal"    # base prompt + harness only (shell/file/mechanical steps)
+    SKILL = "skill"        # + matched skills (technical/code steps)
+    CREATIVE = "creative"  # + user profile + personality (user-facing content)
+
+
 class Step(BaseModel):
     """A single step in a plan."""
     id: str = Field(default="", description="Step identifier")
@@ -39,6 +53,11 @@ class Step(BaseModel):
         default_factory=list,
         description="References (file paths, tool-event ids) to the evidence "
                     "that supported this step's status.",
+    )
+    context_scope: ContextScope = Field(
+        default=ContextScope.FULL,
+        description="Which context sources the executor prompt builder loads "
+                    "for this step. Planner-assigned; FULL preserves prior behavior.",
     )
 
     def is_done(self) -> bool:

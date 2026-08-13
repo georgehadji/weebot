@@ -171,6 +171,7 @@ class PlanActFlow(BaseFlow):
         self._checkpoint_port = cfg.checkpoint_port
         self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
         self._misalignment_journal = cfg.misalignment_journal  # Optional[MisalignmentJournalPort]
+        self._correction_tracker = cfg.correction_tracker  # Optional[CorrectionTracker]
         self._profile_name = cfg.profile_name
         self._agent_role = cfg.agent_role
         self._personality = cfg.personality
