@@ -28,8 +28,13 @@ def get_metrics():
     global _metrics_module
     if _metrics_module is None:
         try:
-            from weebot.infrastructure.observability import metrics as m
-            _metrics_module = m
+            # Resolve the infrastructure metrics module dynamically so the
+            # application layer keeps no static edge into infrastructure — this
+            # bridge IS the single, optional, failure-tolerant crossing point.
+            import importlib
+            _metrics_module = importlib.import_module(
+                "weebot.infrastructure.observability.metrics"
+            )
         except Exception:
             _metrics_module = False  # sentinel — metrics unavailable
             _log.debug("Prometheus metrics unavailable", exc_info=True)

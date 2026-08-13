@@ -39,6 +39,15 @@ ignore_imports =
     # (non-DB, non-adapter). The filesystem store is an I/O detail that cannot
     # go through ports without adding indirection that gains nothing.
     weebot.tools.persistent_memory -> weebot.infrastructure.persistence.filesystem_memory
+    # persistent_memory lazily instantiates SQLiteStateRepository for salience
+    # tracking (same edge already exempted under tools-no-db above).
+    # PR #46 had removed this entry after rewriting the import to go through
+    # importlib; that rewrite was not kept on merge, because the lazy
+    # construction keys off `self._salience_repo is None` and the dynamic
+    # version's `hasattr` guard can never be False — __init__ always sets the
+    # attribute, so the repo would stay None and every salience write would
+    # fail. Static import retained, so the exemption is retained with it.
+    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
     # search_history queries the FTS5 index for session search — the FTS5
     # adapter is a capability query, not a DB bypass for writes.
     weebot.tools.search_history -> weebot.infrastructure.persistence.fts5_search
@@ -47,9 +56,6 @@ ignore_imports =
     weebot.tools.atomic_mail_tool -> weebot.infrastructure.adapters.atomicmail.mcp_server
     # apify_presets uses the Apify service adapter for actor execution.
     weebot.tools.apify_presets -> weebot.infrastructure.adapters.apify.apify_service
-    # persistent_memory lazily instantiates SQLiteStateRepository for
-    # user-profile consolidation. Pre-audited — ADR-ARCH-AUDIT-V2 A2
-    weebot.tools.persistent_memory -> weebot.infrastructure.persistence.sqlite_state_repo
     # schedule_tool → scheduler → DI → adapters&persistence (transitive).
     weebot.tools.schedule_tool -> weebot.scheduling.scheduler
     # bash_security → model_selection → model_registry → adapter_factory (transitive)
@@ -68,12 +74,8 @@ ignore_imports =
     weebot.tools.file_editor -> weebot.infrastructure.security.security_validators
     # bash/powershell/python tools create sandbox instances via the factory.
     weebot.tools.bash_tool -> weebot.infrastructure.sandbox.factory
-    weebot.tools.bash_tool -> weebot.infrastructure.observability.metrics
     weebot.tools.powershell_tool -> weebot.infrastructure.sandbox.factory
     weebot.tools.python_tool -> weebot.infrastructure.sandbox.factory
-    weebot.tools.python_tool -> weebot.infrastructure.observability.metrics
-    # atomic_mail_tool uses Prometheus metrics for monitoring.
-    weebot.tools.atomic_mail_tool -> weebot.infrastructure.observability.metrics
     # swarm tool lazily imports the Swarm event bus.
     weebot.tools.swarm -> weebot.infrastructure.swarm_event_bus
     # tool_registry lazily creates Playwright browser instances.

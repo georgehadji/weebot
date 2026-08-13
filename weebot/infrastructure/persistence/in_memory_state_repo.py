@@ -53,13 +53,14 @@ class InMemoryStateRepository(StateRepositoryPort):
     ) -> list[dict]:
         return []
 
-    # ── Checkpoint operations ──────────────────────────────────────
+    # ── Checkpoint operations (last-write-wins per session) ────────
 
     async def save_checkpoint(self, checkpoint: FlowCheckpoint) -> None:
-        self._checkpoints[checkpoint.session_id] = checkpoint
+        self._checkpoints[checkpoint.session_id] = checkpoint.model_copy(deep=True)
 
     async def load_checkpoint(self, session_id: str) -> Optional[FlowCheckpoint]:
-        return self._checkpoints.get(session_id)
+        checkpoint = self._checkpoints.get(session_id)
+        return checkpoint.model_copy(deep=True) if checkpoint else None
 
     async def delete_checkpoint(self, session_id: str) -> bool:
         return self._checkpoints.pop(session_id, None) is not None

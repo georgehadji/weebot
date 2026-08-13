@@ -384,6 +384,10 @@ class SQLiteStateRepository(StateRepositoryPort):
                 f"_row_to_session requires a dict, got {type(row).__name__}"
             )
         from weebot.domain.models.event import MessageEvent, AgentEvent
+        # Normalize to a plain dict: rows arrive as sqlite3.Row, which supports
+        # bracket access but not the dict-style .get(default) used below for
+        # optional columns (title, context_json).
+        row = dict(row)
         events = []
         if load_events:
             events_raw = json.loads(row["events_json"] or "[]")

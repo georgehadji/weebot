@@ -22,11 +22,16 @@ from weebot.tools.base import BaseTool, ToolResult
 from weebot.core.circuit_breaker import CircuitBreaker
 
 try:
-    from weebot.infrastructure.observability.metrics import (
-        tool_calls_total as _tool_calls_total,
-        tool_call_duration_seconds as _tool_call_duration_seconds,
-    )
-    _METRICS_AVAILABLE = True
+    # Reach Prometheus metrics through the application bridge so the tools
+    # layer keeps no static edge into infrastructure.observability.
+    from weebot.application.services.metrics_bridge import get_metrics
+    _m = get_metrics()
+    if _m is not None:
+        _tool_calls_total = _m.tool_calls_total
+        _tool_call_duration_seconds = _m.tool_call_duration_seconds
+        _METRICS_AVAILABLE = True
+    else:
+        _METRICS_AVAILABLE = False
 except Exception:  # prometheus_client not installed or registry conflict
     _METRICS_AVAILABLE = False
 

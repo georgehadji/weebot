@@ -866,7 +866,7 @@ def test_god_modules_under_800_lines():
     # Tracked — will shrink via WP-2 decomposition
     line_allowlist: dict[str, int] = {
         "model_selection.py": 100,        # re-export shim (was 3265)
-        "_catalog.py": 3900,              # data catalog (343 model configs — pure data, regenerated 2026-07-21)
+        "_catalog.py": 3900,              # data catalog (351 model configs — pure data, grows with the model list)
         "_base.py": 1450,  # was 1400 (WP-8 pool wiring)                 # target: <800 (extract strategies)
         "plan_act_flow.py": 1000,         # 961 lines; target: <800 (decompose further)
         "information_synthesis.py": 900,  # WP-2: 850 lines, target: <800 (extract summarizer)
@@ -1394,6 +1394,20 @@ def test_ignore_imports_under_target():
     application/ — scoping source_modules instead would silently exempt any
     future subpackage.  Two structural exemptions in exchange for a contract
     that catches a whole class of leak is a net gain.
+
+    Merging PR #46 (claude/session-n4trou) brought the actual count DOWN from
+    70 to 66: that branch removed the tools layer's direct edges into
+    infrastructure.observability.metrics by routing bash/python/atomic-mail
+    metrics through the application metrics_bridge.  The ceiling stays at 72
+    rather than being ratcheted to 66 — this merge reconciled two branches
+    that had each moved the number independently, so the headroom absorbs the
+    reconciliation.  Ratchet it down once the count is stable.
+
+    That branch also resolved persistent_memory's edge into the SQLite repo
+    via importlib.  This merge kept the static import instead: the lazy repo
+    construction now depends on ``self._salience_repo is None``, which the
+    dynamic version's ``hasattr`` check would defeat (the attribute is always
+    set in __init__).  Its ignore_imports entry is therefore retained.
     """
     with open(".importlinter") as f:
         content = f.read()

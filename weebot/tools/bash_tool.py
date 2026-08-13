@@ -105,7 +105,10 @@ class BashTool(BaseTool):
     def _make_prometheus_counter():
         """Build the on_security_event callback that increments Prometheus counter."""
         try:
-            from weebot.infrastructure.observability import metrics as _m
+            from weebot.application.services.metrics_bridge import get_metrics
+            _m = get_metrics()
+            if _m is None:
+                return None
             def _counter(risk_level):
                 _m.bash_guard_events_total.labels(risk_level=risk_level.value).inc()
             return _counter
