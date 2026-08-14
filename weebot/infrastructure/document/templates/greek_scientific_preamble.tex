@@ -1,7 +1,10 @@
 % =====================================================================
 % LOCKED Greek scientific-book preamble  (weebot)
-% Engine: XeLaTeX (or LuaLaTeX). Do NOT compile with pdfLaTeX.
-% Build:  latexmk -xelatex -shell-escape main.tex
+% Engine: XeLaTeX or LuaLaTeX (both verified). Do NOT compile with pdfLaTeX.
+% Build:  latexmk -xelatex  -shell-escape main.tex
+%    or:  latexmk -lualatex -shell-escape main.tex
+% LuaLaTeX needs the texlive-luatex runtime (luatexbase + luaotfload); the
+% fontspec/polyglossia setup below is otherwise engine-agnostic.
 %
 % This preamble is a *tested, locked* asset. The LLM fills chapter CONTENT
 % only; it must never edit this file. See tasks/scientific-book-latex-plan.md.

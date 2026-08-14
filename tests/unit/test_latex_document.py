@@ -16,10 +16,15 @@ from weebot.application.document.stub_content_provider import StubContentProvide
 from weebot.domain.models.book import (
     Book,
     Chapter,
+    CompileError,
     CompileErrorCategory,
+    CompileResult,
     Section,
 )
-from weebot.infrastructure.document.latex_compiler import LatexCompilerService
+from weebot.infrastructure.document.latex_compiler import (
+    SUPPORTED_ENGINES,
+    LatexCompilerService,
+)
 from weebot.infrastructure.document.log_parser import has_blocking_errors, parse_log
 from weebot.infrastructure.document.preflight import _parse_pdffonts, preflight_pdf
 
@@ -191,6 +196,121 @@ def test_compile_greek_example_end_to_end(tmp_path):
     assert result.ok, f"compile failed: {[e.message for e in result.errors]}"
     assert result.pdf_path and Path(result.pdf_path).exists()
     assert result.page_count and result.page_count >= 1
+    assert not has_blocking_errors(result.errors)
+
+    report = preflight_pdf(result.pdf_path)
+    assert report.ok, f"preflight issues: {[i.message for i in report.issues]}"
+    assert report.fonts_not_embedded == 0
+
+
+# ── engine selection (pure) ─────────────────────────────────────────────────
+
+def test_supported_engines_are_xelatex_and_lualatex():
+    assert SUPPORTED_ENGINES == ("xelatex", "lualatex")
+
+
+def test_compiler_rejects_unsupported_engine():
+    with pytest.raises(ValueError):
+        LatexCompilerService("pdflatex")
+
+
+def test_with_engine_switches_and_preserves_config():
+    base = LatexCompilerService("xelatex", timeout_seconds=123)
+    swapped = base.with_engine("lualatex")
+    assert base.engine == "xelatex"
+    assert swapped.engine == "lualatex"
+    assert swapped._timeout == 123  # config preserved across the switch
+
+
+class _FakeCompiler:
+    """A CompilerPort double: succeeds except for the named failing engines."""
+
+    def __init__(self, engine: str = "xelatex", fail_engines=()):
+        self._engine = engine
+        self._fail = set(fail_engines)
+        self.calls: list[str] = []
+
+    @property
+    def engine(self) -> str:
+        return self._engine
+
+    def with_engine(self, engine: str) -> "_FakeCompiler":
+        sibling = _FakeCompiler(engine, self._fail)
+        sibling.calls = self.calls  # share the call log across siblings
+        return sibling
+
+    def prepare_project(self, project_dir):
+        Path(project_dir).mkdir(parents=True, exist_ok=True)
+        return Path(project_dir) / "preamble.tex"
+
+    def compile(self, project_dir, main_tex="main.tex", *, shell_escape=False):
+        self.calls.append(self._engine)
+        if self._engine in self._fail:
+            return CompileResult(
+                ok=False,
+                engine=self._engine,
+                errors=[CompileError(fatal=True, message=f"{self._engine} boom")],
+            )
+        return CompileResult(
+            ok=True,
+            engine=self._engine,
+            pdf_path=str(Path(project_dir) / "main.pdf"),
+            page_count=3,
+        )
+
+
+def _ok_preflight(_pdf_path):
+    from weebot.infrastructure.document.preflight import PreflightReport
+    return PreflightReport(ok=True)
+
+
+def test_flow_falls_back_to_lualatex_when_xelatex_fails(tmp_path):
+    fake = _FakeCompiler(fail_engines={"xelatex"})
+    flow = BookGenerationFlow(
+        compiler=fake,
+        content_provider=StubContentProvider(),
+        preflight=_ok_preflight,
+    )
+    result = flow.generate(_sample_book(), tmp_path / "book")
+
+    assert result.ok
+    assert result.engine == "lualatex"           # switched after XeLaTeX failed
+    assert fake.calls == ["xelatex", "lualatex"]  # tried in order
+    assert result.engines_tried == ["xelatex", "lualatex"]
+
+
+def test_flow_stops_at_first_engine_that_succeeds(tmp_path):
+    fake = _FakeCompiler(fail_engines=set())  # xelatex succeeds
+    flow = BookGenerationFlow(
+        compiler=fake,
+        content_provider=StubContentProvider(),
+        preflight=_ok_preflight,
+    )
+    result = flow.generate(_sample_book(), tmp_path / "book")
+
+    assert result.ok and result.engine == "xelatex"
+    assert fake.calls == ["xelatex"]  # LuaLaTeX never invoked
+
+
+# ── LuaLaTeX end-to-end (needs the lualatex toolchain) ──────────────────────
+
+@pytest.mark.slow
+@pytest.mark.timeout(360)
+@pytest.mark.skipif(
+    not LatexCompilerService.toolchain_available("lualatex"),
+    reason="LuaLaTeX/latexmk toolchain not installed",
+)
+def test_compile_greek_example_with_lualatex(tmp_path):
+    work = tmp_path / "book"
+    LatexCompilerService.prepare_project(work)
+    (work / "refs.bib").write_text('@book{e,author={Euler},title={Introductio},year={1748}}\n')
+    (work / "main.tex").write_text(_MINIMAL_BODY, encoding="utf-8")
+
+    result = LatexCompilerService("lualatex").compile(work, "main.tex", shell_escape=True)
+
+    assert result.ok, f"lualatex compile failed: {[e.message for e in result.errors]}"
+    assert result.engine == "lualatex"
+    assert result.pdf_path and Path(result.pdf_path).exists()
     assert not has_blocking_errors(result.errors)
 
     report = preflight_pdf(result.pdf_path)

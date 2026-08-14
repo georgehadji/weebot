@@ -23,9 +23,13 @@ toolchain and self-heal loop guarantee it compiles.
    **body-only LaTeX** (content between `\begin{document}` and `\end{document}`), never
    package loads or fonts. The preamble's load order is fragile and hard-won — see its
    header comment.
-2. **Engine is XeLaTeX.** Build with `latexmk -xelatex -shell-escape main.tex`. Never
-   pdfLaTeX (Unicode Greek needs `fontspec` + `polyglossia`). `-shell-escape` is for
-   `minted` and runs **only inside the sandbox**.
+2. **Engine is XeLaTeX or LuaLaTeX.** Build with `latexmk -xelatex -shell-escape main.tex`
+   or `latexmk -lualatex -shell-escape main.tex`. Never pdfLaTeX (Unicode Greek needs
+   `fontspec` + `polyglossia`). The same locked preamble compiles under both engines;
+   `BookGenerationFlow` tries XeLaTeX first and automatically falls back to LuaLaTeX if a
+   clean PDF isn't reached (engine strategy-switch). LuaLaTeX additionally needs the
+   `texlive-luatex` runtime installed. `-shell-escape` is for `minted` and runs **only
+   inside the sandbox**.
 3. **Every element is labelled and cross-referenced** with `\cref{}` using the shared
    convention: `chap:`, `sec:`, `eq:`, `tab:`, `fig:`, `lst:`. The preamble already
    defines the Greek `\cref` names (κεφάλαιο, ενότητα, εξίσωση, πίνακας, σχήμα, κώδικας).

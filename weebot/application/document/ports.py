@@ -28,6 +28,14 @@ class CompilerPort(Protocol):
         shell_escape: bool = False,
     ) -> CompileResult: ...
 
+    def with_engine(self, engine: str) -> "CompilerPort":
+        """Return a compiler that builds with a different TeX engine.
+
+        Enables the flow's engine strategy-switch (XeLaTeX ↔ LuaLaTeX) without
+        the application layer knowing the concrete compiler type.
+        """
+        ...
+
 
 @runtime_checkable
 class PreflightReportLike(Protocol):
