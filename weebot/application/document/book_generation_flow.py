@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -44,6 +44,10 @@ class GenerationResult(BaseModel):
     pdf_path: Optional[str] = Field(default=None)
     page_count: Optional[int] = Field(default=None)
     iterations: int = Field(default=0)
+    engine: Optional[str] = Field(
+        default=None, description="TeX engine that produced the final PDF"
+    )
+    engines_tried: list[str] = Field(default_factory=list)
     preflight_ok: bool = Field(default=False)
     preflight_issues: list[str] = Field(default_factory=list)
     remaining_errors: list[CompileError] = Field(default_factory=list)
@@ -65,6 +69,7 @@ class BookGenerationFlow:
         fixer: Fixer = _null_fixer,
         max_iterations: int = 5,
         shell_escape: bool = True,
+        engines: Sequence[str] | None = ("xelatex", "lualatex"),
     ) -> None:
         self._compiler = compiler
         self._content = content_provider
@@ -72,6 +77,9 @@ class BookGenerationFlow:
         self._fixer = fixer
         self._max_iterations = max_iterations
         self._shell_escape = shell_escape
+        # Engines to try in order (escalation-ladder strategy-switch). When None,
+        # the injected compiler's own engine is used as-is (single engine).
+        self._engines: tuple[str, ...] | None = tuple(engines) if engines else None
 
     @staticmethod
     def _signatures(errors: list[CompileError]) -> frozenset[str]:
@@ -80,18 +88,67 @@ class BookGenerationFlow:
     def generate(self, book: Book, output_dir: str | Path) -> GenerationResult:
         project = Path(output_dir)
 
-        # Phase 1–2: author section bodies, then assemble the project.
+        # Phase 1–2: author section bodies, then assemble the project. Content and
+        # the assembled tree are engine-independent, so this happens once.
         authored = self._content.author(book)
         self._compiler.prepare_project(project)
         write_project(authored, project)
 
-        # Phase 5: compile + self-heal loop with no-progress detection.
+        # Phase 5: compile + self-heal loop, escalating across TeX engines. Each
+        # engine gets its own self-heal loop; the first to yield a clean PDF wins
+        # (XeLaTeX ↔ LuaLaTeX strategy-switch). When no engine list is configured
+        # the injected compiler is used as-is (single engine).
+        compilers = (
+            [self._compiler.with_engine(e) for e in self._engines]
+            if self._engines is not None
+            else [self._compiler]
+        )
+
+        result: CompileResult = CompileResult()
+        total_iterations = 0
+        engines_tried: list[str] = []
+
+        for compiler in compilers:
+            result, iterations = self._compile_loop(compiler, project)
+            total_iterations += iterations
+            engines_tried.append(result.engine or getattr(compiler, "engine", "") or "")
+            if result.ok:
+                break  # this engine produced a clean PDF — stop switching
+            logger.info(
+                "book-gen: engine %r did not reach a clean PDF", engines_tried[-1]
+            )
+
+        # Phase 6: print-readiness preflight (only meaningful if a PDF exists).
+        preflight_ok = False
+        issues: list[str] = []
+        if result.pdf_path:
+            report = self._preflight(result.pdf_path)
+            preflight_ok = bool(report.ok)
+            issues = [getattr(i, "message", str(i)) for i in getattr(report, "issues", [])]
+
+        remaining = [e for e in result.errors if e.fatal or _is_blocking(e)]
+        return GenerationResult(
+            ok=result.ok,
+            pdf_path=result.pdf_path,
+            page_count=result.page_count,
+            iterations=total_iterations,
+            engine=result.engine,
+            engines_tried=[e for e in engines_tried if e],
+            preflight_ok=preflight_ok,
+            preflight_issues=issues,
+            remaining_errors=remaining,
+        )
+
+    def _compile_loop(
+        self, compiler: CompilerPort, project: Path
+    ) -> tuple[CompileResult, int]:
+        """Run the self-heal compile loop for one engine; return (result, iters)."""
         result: CompileResult = CompileResult()
         last_sig: frozenset[str] | None = None
         iterations = 0
 
         for iterations in range(1, self._max_iterations + 1):
-            result = self._compiler.compile(
+            result = compiler.compile(
                 project, "main.tex", shell_escape=self._shell_escape
             )
             blocking = [e for e in result.errors if e.fatal or _is_blocking(e)]
@@ -112,24 +169,7 @@ class BookGenerationFlow:
                 logger.info("book-gen: fixer made no changes — stopping loop")
                 break
 
-        # Phase 6: print-readiness preflight (only meaningful if a PDF exists).
-        preflight_ok = False
-        issues: list[str] = []
-        if result.pdf_path:
-            report = self._preflight(result.pdf_path)
-            preflight_ok = bool(report.ok)
-            issues = [getattr(i, "message", str(i)) for i in getattr(report, "issues", [])]
-
-        remaining = [e for e in result.errors if e.fatal or _is_blocking(e)]
-        return GenerationResult(
-            ok=result.ok,
-            pdf_path=result.pdf_path,
-            page_count=result.page_count,
-            iterations=iterations,
-            preflight_ok=preflight_ok,
-            preflight_issues=issues,
-            remaining_errors=remaining,
-        )
+        return result, iterations
 
 
 def _is_blocking(error: CompileError) -> bool:

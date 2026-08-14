@@ -20,6 +20,10 @@ from weebot.core.bash_guard import BashGuard, RiskLevel
 from weebot.domain.models.book import CompileError, CompileErrorCategory, CompileResult
 from weebot.infrastructure.document.log_parser import parse_log
 
+# Engines that produce Unicode-Greek output via fontspec + polyglossia. Both use
+# the same locked preamble; pdfLaTeX is intentionally unsupported (no fontspec).
+SUPPORTED_ENGINES: tuple[str, ...] = ("xelatex", "lualatex")
+
 
 class LatexCompilerService:
     """Compile a ``.tex`` entry point to PDF, returning structured results."""
@@ -31,14 +35,41 @@ class LatexCompilerService:
         guard: BashGuard | None = None,
         timeout_seconds: int = 300,
     ) -> None:
+        if engine not in SUPPORTED_ENGINES:
+            raise ValueError(
+                f"Unsupported engine {engine!r}; expected one of {SUPPORTED_ENGINES} "
+                "(pdfLaTeX cannot render Unicode Greek via fontspec)."
+            )
         self._engine = engine
         self._guard = guard or BashGuard()
         self._timeout = timeout_seconds
+
+    @property
+    def engine(self) -> str:
+        """The TeX engine this service compiles with (xelatex/lualatex)."""
+        return self._engine
+
+    def with_engine(self, engine: str) -> "LatexCompilerService":
+        """Return a sibling service that compiles with a different engine.
+
+        Preserves the guard and timeout, so the escalation ladder's engine
+        strategy-switch (XeLaTeX ↔ LuaLaTeX) reuses the same safety config.
+        """
+        return LatexCompilerService(
+            engine, guard=self._guard, timeout_seconds=self._timeout
+        )
 
     @staticmethod
     def toolchain_available(engine: str = "xelatex") -> bool:
         """True if latexmk and the requested engine are on PATH."""
         return bool(shutil.which("latexmk")) and bool(shutil.which(engine))
+
+    @staticmethod
+    def available_engines() -> list[str]:
+        """Supported engines actually present on PATH (with latexmk), in order."""
+        if not shutil.which("latexmk"):
+            return []
+        return [e for e in SUPPORTED_ENGINES if shutil.which(e)]
 
     @staticmethod
     def locked_preamble_path() -> Path:
@@ -85,6 +116,7 @@ class LatexCompilerService:
         if risk == RiskLevel.BLOCKED:
             return CompileResult(
                 ok=False,
+                engine=self._engine,
                 errors=[
                     CompileError(
                         category=CompileErrorCategory.UNKNOWN,
@@ -144,6 +176,7 @@ class LatexCompilerService:
             page_count=page_count,
             errors=errors,
             log_tail="\n".join(log_text.splitlines()[-25:]),
+            engine=self._engine,
         )
 
 

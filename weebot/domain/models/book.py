@@ -102,6 +102,9 @@ class CompileResult(BaseModel):
     page_count: int | None = Field(default=None)
     errors: list[CompileError] = Field(default_factory=list)
     log_tail: str = Field(default="", description="Last lines of the build log")
+    engine: str | None = Field(
+        default=None, description="TeX engine used, e.g. 'xelatex' or 'lualatex'"
+    )
 
     @property
     def fatal_errors(self) -> list[CompileError]:
