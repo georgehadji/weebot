@@ -180,6 +180,12 @@ class MemoryCompactor:
                 new_events[i] = event.model_copy(update={"message": f"{constraint_marker}\n{constraint_text}"})
                 return session.replace_events(new_events)
 
-        # No existing constraint message found - inject at the beginning
-        new_events = [MessageEvent(role="assistant", message=f"{constraint_marker}\n{constraint_text}")] + list(session.events)
+        # Inject at the tail, not the head. Position matters: the paper's
+        # K_ub condition (constraint immediately before the model's next
+        # turn) gets >98% compliance vs top-of-context placement, which is
+        # measured as the WORST position across every compactor tested.
+        # See tasks/specs/side_constraint_integrity_plan.md Phase 4.3.
+        new_events = list(session.events) + [
+            MessageEvent(role="assistant", message=f"{constraint_marker}\n{constraint_text}")
+        ]
         return session.replace_events(new_events)

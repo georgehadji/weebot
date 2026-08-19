@@ -27,11 +27,15 @@ def _session_with_step(step_id: str = "s1") -> Session:
 
 
 class _FakeStateRepo:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, active_constraints: list | None = None):
         self._session = session
+        self._active_constraints = active_constraints or []
 
     async def load_session(self, session_id: str):
         return self._session
+
+    async def list_active_session_constraints(self, session_id: str):
+        return self._active_constraints
 
 
 @pytest.mark.asyncio
@@ -91,6 +95,82 @@ async def test_falls_back_to_bare_executor_without_factory():
     # (error_code set) -- both prove the legacy path is still reachable and
     # didn't crash on handler construction/dispatch itself.
     assert result.success or result.error_code == "STEP_EXECUTION_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_session_constraints_delivered_to_executor():
+    """Phase 4: hydrated constraints reach the executor via set_session_constraints."""
+    session = _session_with_step()
+    state_repo = _FakeStateRepo(session, active_constraints=[
+        {"text": "never delete files", "evidence_span": "never delete files",
+         "kind": "action", "direction": "tighten", "turn_index": 0},
+    ])
+
+    async def _fake_execute_step(plan, step, user_input="", session_id=""):
+        yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
+
+    fake_executor = AsyncMock()
+    fake_executor.execute_step = _fake_execute_step
+
+    handler = ExecuteStepHandler(
+        state_repo=state_repo, llm=None, tools=None, event_bus=None,
+        executor_factory=lambda *, model, session: fake_executor,
+    )
+    result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
+
+    assert result.success, result.error
+    fake_executor.set_session_constraints.assert_called_once()
+    rendered = fake_executor.set_session_constraints.call_args.args[0]
+    assert "never delete files" in rendered
+
+
+@pytest.mark.asyncio
+async def test_no_constraints_does_not_call_setter():
+    session = _session_with_step()
+    state_repo = _FakeStateRepo(session, active_constraints=[])
+
+    async def _fake_execute_step(plan, step, user_input="", session_id=""):
+        yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
+
+    fake_executor = AsyncMock()
+    fake_executor.execute_step = _fake_execute_step
+
+    handler = ExecuteStepHandler(
+        state_repo=state_repo, llm=None, tools=None, event_bus=None,
+        executor_factory=lambda *, model, session: fake_executor,
+    )
+    result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
+
+    assert result.success, result.error
+    fake_executor.set_session_constraints.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_constraint_hydration_failure_does_not_block_execution():
+    """A broken state_repo must degrade gracefully, not fail the step (plan D9)."""
+    session = _session_with_step()
+
+    class _BrokenStateRepo:
+        async def load_session(self, session_id):
+            return session
+
+        async def list_active_session_constraints(self, session_id):
+            raise RuntimeError("db exploded")
+
+    async def _fake_execute_step(plan, step, user_input="", session_id=""):
+        yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
+
+    fake_executor = AsyncMock()
+    fake_executor.execute_step = _fake_execute_step
+
+    handler = ExecuteStepHandler(
+        state_repo=_BrokenStateRepo(), llm=None, tools=None, event_bus=None,
+        executor_factory=lambda *, model, session: fake_executor,
+    )
+    result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
+
+    assert result.success, result.error
+    fake_executor.set_session_constraints.assert_not_called()
 
 
 def test_llm_absent_registration_does_not_crash():

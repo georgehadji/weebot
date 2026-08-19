@@ -132,8 +132,9 @@ class TestF9SynchronousConsolidation:
         compactor = MemoryCompactor(preserve_constraints=True)
         result = compactor.compact_session(session)
 
-        # The constraints marker should appear at the beginning
-        first_event = result.events[0]
-        assert isinstance(first_event, MessageEvent)
-        assert first_event.role == "assistant"
-        assert "[CONSTRAINTS]" in first_event.message
+        # The constraints marker should appear at the tail (K_ub position —
+        # see side_constraint_integrity_plan.md Phase 4.3), not the head.
+        last_event = result.events[-1]
+        assert isinstance(last_event, MessageEvent)
+        assert last_event.role == "assistant"
+        assert "[CONSTRAINTS]" in last_event.message

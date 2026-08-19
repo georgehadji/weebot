@@ -166,6 +166,7 @@ class ExecutorAgent:
         state_repo: StateRepositoryPort | None = None,  # State repository for user profile etc.
         tracing_port: Any | None = None,  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
         trajectory_config: Any | None = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
+        session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
     ):
         self._llm = llm
         self._tools = tools
@@ -184,6 +185,7 @@ class ExecutorAgent:
         self._middleware_chain: MiddlewareChain | None = middleware_chain
         self._state_repo: StateRepositoryPort | None = state_repo
         self._tracing_port: Any | None = tracing_port
+        self._session_constraints_block: str | None = session_constraints or None
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
         if trajectory_config is not None:
@@ -247,6 +249,17 @@ class ExecutorAgent:
         re-creating the executor.
         """
         self._harness_instruction_block = block or None
+
+    def set_session_constraints(self, rendered: str | None) -> None:
+        """Set the pre-rendered session-constraint block for the next step.
+
+        See weebot.domain.models.session_constraint.SessionConstraintRegistry.render()
+        and tasks/specs/side_constraint_integrity_plan.md Phase 4. Delivered
+        as messages[-1] — the last message before the model's turn — never
+        into _conversation_buffer, which is evictable (deque(maxlen=...))
+        and rewritten wholesale on compaction.
+        """
+        self._session_constraints_block = rendered or None
 
     def _maybe_truncate_ponytail(self, text: str) -> str:
         """Truncate trailing prose after code fences when Ponytail is active.
@@ -568,6 +581,12 @@ class ExecutorAgent:
             messages = [
                 {"role": "system", "content": self._system_prompt}
             ] + list(self._conversation_buffer)
+
+            # ── Lost-in-Compaction: session constraints as messages[-1] ──────
+            # Paper's K_ub position (>98% compliance) — appended to the local
+            # list, never the buffer, so it can't be evicted or compacted away.
+            if self._session_constraints_block:
+                messages.append({"role": "user", "content": self._session_constraints_block})
 
             # ── Middleware: before_request ──────────────────────────────────
             if self._middleware_chain is not None and not self._middleware_chain.is_empty():

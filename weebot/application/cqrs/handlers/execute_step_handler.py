@@ -95,6 +95,30 @@ class ExecuteStepHandler(CommandHandler):
                     model=command.model,
                 )
 
+            # ── Lost-in-Compaction: deliver session constraints ──────────
+            # Delivered here (not via the factory) because it's a per-session
+            # value read from state_repo, which the factory closure — built
+            # once at container-construction time — has no access to. Never
+            # blocks execution: a hydration/render failure just means no
+            # block this step (plan D9).
+            if self._state_repo is not None:
+                try:
+                    from weebot.application.flows.collaborators.session_constraint_accumulator import (
+                        SessionConstraintAccumulator,
+                    )
+                    registry = await SessionConstraintAccumulator(
+                        extractor=None, state_repo=self._state_repo,
+                    ).hydrate(command.session_id)
+                    rendered = registry.render()
+                    if rendered:
+                        executor.set_session_constraints(rendered)
+                except Exception as exc:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "Session constraint delivery failed: %s", exc,
+                    )
+            # ──────────────────────────────────────────────────────────────
+
             events: list[dict] = []
             async for event in executor.execute_step(
                 plan, step,
