@@ -109,6 +109,7 @@ class PlanActFlow(BaseFlow):
         profile_name: str | None = None,
         personality = None,
         agent_role: str | None = None,
+        session_constraint_extractor: Any | None = None,
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -144,6 +145,7 @@ class PlanActFlow(BaseFlow):
                 profile_name=profile_name,
                 personality=personality,
                 agent_role=agent_role,
+                session_constraint_extractor=session_constraint_extractor,
             )
 
         self._llm = cfg.llm
@@ -172,6 +174,8 @@ class PlanActFlow(BaseFlow):
         self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
         self._misalignment_journal = cfg.misalignment_journal  # Optional[MisalignmentJournalPort]
         self._correction_tracker = cfg.correction_tracker  # Optional[CorrectionTracker]
+        self._sc_extractor = cfg.session_constraint_extractor  # Optional[SessionConstraintExtractor]
+        self._session_constraints = None  # SessionConstraintRegistry — hydrated lazily in run()
         self._profile_name = cfg.profile_name
         self._agent_role = cfg.agent_role
         self._personality = cfg.personality
@@ -500,6 +504,28 @@ class PlanActFlow(BaseFlow):
                 )
                 await self._event_bus.publish_domain_event(domain_event)
 
+    async def _extract_session_constraints(self, prompt: str) -> None:
+        """Extract, persist, and publish any side constraints in *prompt*.
+
+        Delegates to SessionConstraintAccumulator (see collaborators/) —
+        never raises, extraction is a Lost-in-Compaction mitigation, not a
+        task requirement, and must not block the agentic loop (plan D9).
+        """
+        from weebot.application.flows.collaborators.session_constraint_accumulator import (
+            SessionConstraintAccumulator,
+        )
+
+        if not hasattr(self, "_sc_accumulator"):
+            self._sc_accumulator = SessionConstraintAccumulator(
+                self._sc_extractor, state_repo=self._state_repo, event_bus=self._event_bus,
+            )
+        if self._session_constraints is None:
+            self._session_constraints = await self._sc_accumulator.hydrate(self._session.id)
+        self._session_constraints = await self._sc_accumulator.extract_and_apply(
+            self._session.id, prompt, self._session_constraints,
+            turn_index=len(self._session.events),
+        )
+
     def is_done(self) -> bool:
         return self._session.status == SessionStatus.COMPLETED
 
@@ -577,6 +603,14 @@ class PlanActFlow(BaseFlow):
                     update={"original_task": original_task}
                 )}
             )
+
+        # ── Lost-in-Compaction: extract session-scoped side constraints ──
+        # Flow-entry seam — covers every real user turn (initial task,
+        # resume, chat) since run() is invoked once per turn. Steering and
+        # product-gate resume text are separate seams (Phase 3 follow-up).
+        if self._sc_extractor is not None and prompt.strip():
+            await self._extract_session_constraints(prompt)
+        # ──────────────────────────────────────────────────────────────
 
         # Resolve effective prompt — enrich vague continuations via service
         effective_prompt = ContinuationDetector.resolve_prompt(

@@ -120,6 +120,13 @@ class PlanActFlowConfig:
     correction_tracker: Any | None = None  # CorrectionTracker
     """Tracks recurring step-output corrections; surfaces patterns to BehavioralLearner."""
 
+    # ── Lost-in-Compaction: session-scoped side-constraint registry ──
+    session_constraint_extractor: Any | None = None  # SessionConstraintExtractor
+    """Extracts user-issued side constraints from each turn's prompt so they
+    survive compaction. See weebot.domain.models.session_constraint and
+    tasks/specs/side_constraint_integrity_plan.md. None disables extraction
+    (backward-compatible)."""
+
     # ── Phase 5: Task preset (cost/quality tier) ────────────────────
     task_preset: TaskPreset | None = None
     """Optional task preset controlling quality gates and model selection.
