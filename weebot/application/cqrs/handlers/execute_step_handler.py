@@ -4,14 +4,16 @@ Split from weebot/application/cqrs/handlers.py during architecture remediation.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
 
 if TYPE_CHECKING:
+    from weebot.application.agents.executor import ExecutorAgent
     from weebot.application.ports.event_bus_port import EventBusPort
     from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
+    from weebot.domain.models.session import Session as _Session
 
 from weebot.application.cqrs.commands import ExecuteStepCommand
 
@@ -24,6 +26,12 @@ def _empty_tools():
     """Return an empty ToolCollection for handlers that don't need tools."""
     return ToolCollection()
 
+# (model, session) -> ExecutorAgent. Lets the composition root build a fully
+# configured executor (skill retrieval, behavioral learner, harness block,
+# middleware, state_repo, ...) without widening ExecuteStepCommand into a
+# service locator. See tasks/specs/side_constraint_integrity_plan.md Phase 0.
+ExecutorFactory = Callable[..., "ExecutorAgent"]
+
 class ExecuteStepHandler(CommandHandler):
     """Executes a plan step through ExecutorAgent and returns events.
 
@@ -34,14 +42,16 @@ class ExecuteStepHandler(CommandHandler):
     def __init__(
         self,
         state_repo: StateRepositoryPort,
-        llm: LLMPort,
-        tools: ToolCollection,
+        llm: LLMPort | None = None,
+        tools: ToolCollection | None = None,
         event_bus: EventBusPort | None = None,
+        executor_factory: ExecutorFactory | None = None,
     ):
         self._state_repo = state_repo
         self._llm = llm
-        self._tools = tools
+        self._tools = tools if tools is not None else ToolCollection()
         self._event_bus = event_bus
+        self._executor_factory = executor_factory
 
     async def handle(self, command: ExecuteStepCommand) -> CommandResult:
         from weebot.application.agents.executor import ExecutorAgent
@@ -75,15 +85,22 @@ class ExecuteStepHandler(CommandHandler):
                     error_code="STEP_ALREADY_DONE",
                 )
 
-            executor = ExecutorAgent(
-                llm=self._llm,
-                tools=self._tools,
-                event_bus=self._event_bus,
-                model=command.model,
-            )
+            if self._executor_factory is not None:
+                executor = self._executor_factory(model=command.model, session=session)
+            else:
+                executor = ExecutorAgent(
+                    llm=self._llm,
+                    tools=self._tools,
+                    event_bus=self._event_bus,
+                    model=command.model,
+                )
 
             events: list[dict] = []
-            async for event in executor.execute_step(plan, step):
+            async for event in executor.execute_step(
+                plan, step,
+                user_input=command.user_input,
+                session_id=command.session_id,
+            ):
                 events.append(event.model_dump())
 
             return CommandResult.ok(

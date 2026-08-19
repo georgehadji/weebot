@@ -89,6 +89,7 @@ def register_default_handlers(
     event_bus=None,
     scoring_port=None,
     trajectory_builder=None,
+    executor_factory=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -101,6 +102,10 @@ def register_default_handlers(
         event_bus: Optional EventBusPort for agent event publishing.
         scoring_port: Optional ScoringPort for trajectory scoring (SkillOpt).
         trajectory_builder: Optional TrajectoryBuilder for trajectory creation.
+        executor_factory: Optional (model, session) -> ExecutorAgent factory.
+            When provided, ExecuteStepHandler uses it instead of building a
+            bare 4-kwarg ExecutorAgent — see execute_step_handler.py and
+            tasks/specs/side_constraint_integrity_plan.md Phase 0.
     """
     from weebot.application.cqrs.mediator import Mediator
 
@@ -121,7 +126,10 @@ def register_default_handlers(
         )
         mediator.register_command_handler(
             ExecuteStepCommand,
-            ExecuteStepHandler(state_repo, llm, tools or ToolCollection(), event_bus),
+            ExecuteStepHandler(
+                state_repo, llm, tools or ToolCollection(), event_bus,
+                executor_factory=executor_factory,
+            ),
         )
         mediator.register_command_handler(
             UpdatePlanCommand,

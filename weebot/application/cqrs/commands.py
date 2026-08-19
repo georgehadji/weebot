@@ -33,6 +33,12 @@ class ExecuteStepCommand(Command):
     step_id: str = Field(min_length=1)
     model: str = ""
     tools: list[str] = []
+    user_input: str = Field(
+        default="",
+        description="Resume/steering text for this step, if any. Threaded "
+                    "through to ExecutorAgent.execute_step(user_input=...), "
+                    "which previously never received it.",
+    )
 
 
 class UpdatePlanCommand(Command):

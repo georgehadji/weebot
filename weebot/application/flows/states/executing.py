@@ -322,6 +322,7 @@ class ExecutingState(FlowState):
                 step_id=step.id,
                 model=context._model or MODEL_BUDGET,
                 tools=[t.name for t in context._tools],
+                user_input=prompt,
             )
         )
         _step_elapsed = _time.monotonic() - _step_t0

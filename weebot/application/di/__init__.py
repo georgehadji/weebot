@@ -350,10 +350,39 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
         trajectory_builder = self._maybe_get_str("trajectory_builder")
+
+        # ExecuteStepCommand's executor was previously built with only
+        # llm/tools/event_bus/model (4 of ExecutorAgent's 22 params) — see
+        # tasks/specs/side_constraint_integrity_plan.md Phase 0. This factory
+        # wires the container-level singletons that request has no way to
+        # supply on its own. Per-flow/per-session values (skill_prompt,
+        # agent_role, harness block, behavioral_learner, middleware_chain,
+        # trajectory_config) are NOT available here — the Mediator is a
+        # shared singleton built once at container-construction time, before
+        # any session exists — and remain a follow-up (Phase 7 wires
+        # behavioral_learner specifically).
+        def _executor_factory(*, model: str, session):
+            from weebot.application.agents.executor import ExecutorAgent
+            from weebot.application.models.tool_collection import ToolCollection
+            from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+            return ExecutorAgent(
+                llm=llm,
+                tools=tools if tools is not None else ToolCollection(),
+                event_bus=event_bus,
+                model=model,
+                skill_retriever=self._maybe_get_str("skill_retriever"),
+                personality=self._maybe_get_str("personality"),
+                state_repo=state_repo,
+                tracing_port=(
+                    self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None
+                ),
+            )
+
         register_default_handlers(
             mediator, state_repo, task_runner,
             llm=llm, tools=tools, event_bus=event_bus,
             scoring_port=scoring_port, trajectory_builder=trajectory_builder,
+            executor_factory=_executor_factory,
         )
         return mediator
 
