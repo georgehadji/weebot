@@ -36,6 +36,7 @@ from weebot.infrastructure.persistence._behavioral_rule_repo import (
     PlanTemplateRepo,
 )
 from weebot.infrastructure.persistence._correction_repo import CorrectionRecordRepo
+from weebot.infrastructure.persistence._session_constraint_repo import SessionConstraintRepo
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,8 @@ class SQLiteStateRepository(StateRepositoryPort):
 
     Domain-specific operations are delegated to sub-repositories:
     ``._session_queries``, ``._memory_metadata``, ``._commitments``,
-    ``._behavioral_rules``, ``._opportunities``, ``._plan_templates``.
+    ``._behavioral_rules``, ``._opportunities``, ``._plan_templates``,
+    ``._corrections``, ``._session_constraints``.
     """
 
     def __init__(self, db_path: str = "./weebot_sessions.db", database_router: DatabaseRouterPort | None = None):
@@ -65,6 +67,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         self._opportunities: Optional[OpportunityRepo] = None
         self._plan_templates: Optional[PlanTemplateRepo] = None
         self._corrections: Optional[CorrectionRecordRepo] = None
+        self._session_constraints: Optional[SessionConstraintRepo] = None
 
     # ── Connection management ───────────────────────────────────────
 
@@ -93,6 +96,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         self._opportunities = OpportunityRepo(pool)
         self._plan_templates = PlanTemplateRepo(pool)
         self._corrections = CorrectionRecordRepo(pool)
+        self._session_constraints = SessionConstraintRepo(pool)
 
     async def close(self) -> None:
         """Close the connection pool."""
@@ -235,6 +239,25 @@ class SQLiteStateRepository(StateRepositoryPort):
             )
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_correction_category ON correction_records(correction_category)"
+            )
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS session_constraints (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    text TEXT NOT NULL DEFAULT '',
+                    evidence_span TEXT NOT NULL DEFAULT '',
+                    kind TEXT NOT NULL DEFAULT 'action',
+                    direction TEXT NOT NULL DEFAULT 'tighten',
+                    turn_index INTEGER NOT NULL DEFAULT 0,
+                    revoked_at TEXT,
+                    superseded_by TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            await conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sc_session ON session_constraints(session_id)"
             )
             logger.debug("Database schema ensured")
 
@@ -441,6 +464,20 @@ class SQLiteStateRepository(StateRepositoryPort):
     async def get_correction_patterns(self, min_count: int = 3) -> list[dict]:
         await self._init_helpers()
         return await self._corrections.get_patterns(min_count)  # type: ignore[union-attr]
+
+    # ── Session constraints (Lost-in-Compaction SCs) ─────────────────
+
+    async def save_session_constraint(self, session_id: str, constraint) -> None:
+        await self._init_helpers()
+        await self._session_constraints.save(session_id, constraint)  # type: ignore[union-attr]
+
+    async def revoke_session_constraint(self, session_id: str, text: str, revoked_at) -> None:
+        await self._init_helpers()
+        await self._session_constraints.revoke(session_id, text, revoked_at)  # type: ignore[union-attr]
+
+    async def list_active_session_constraints(self, session_id: str) -> list[dict]:
+        await self._init_helpers()
+        return await self._session_constraints.list_active(session_id)  # type: ignore[union-attr]
 
     # ── Opportunities ─────────────────────────────────────────────
 

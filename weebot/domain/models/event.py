@@ -480,3 +480,23 @@ class CorrectionPatternDetected(DomainEvent):
     count: int
     sample_step_description: str
     suggested_fix: str = ""
+
+
+class SessionConstraintRecorded(DomainEvent):
+    """Emitted when a SessionConstraint is added to a session's registry.
+
+    See weebot.domain.models.session_constraint and
+    tasks/specs/side_constraint_integrity_plan.md.
+    """
+    type: str = "session_constraint_recorded"
+    session_id: str
+    text: str
+    kind: str
+    direction: str
+
+
+class SessionConstraintRevoked(DomainEvent):
+    """Emitted when a SessionConstraint is revoked or superseded."""
+    type: str = "session_constraint_revoked"
+    session_id: str
+    text: str
