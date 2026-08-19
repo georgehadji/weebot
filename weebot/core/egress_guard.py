@@ -124,6 +124,13 @@ _NOTIFICATION_TOOLS: frozenset[str] = frozenset({
     "schedule_tool",   # can dispatch external webhooks
 })
 
+# atomic_mail JMAP presets that only read. Deliberately an allowlist of reads
+# rather than a denylist of sends: ops_file resolves absolute and
+# credential-dir-relative paths before falling back to bundled presets
+# (adapters/atomicmail/vendor/.../jmap_request.py), so a denylist on the
+# send_mail/reply names would be bypassed by writing the same JSON elsewhere.
+_JMAP_READ_PRESETS: frozenset[str] = frozenset({"list_inbox"})
+
 
 # ---------------------------------------------------------------------------
 # Decision types
@@ -296,6 +303,25 @@ class EgressGuard:
                 url = str(args.get("url", ""))
                 return self._normalize_host(url), True
             return None, False
+
+        # Atomic Mail — outbound send is the JMAP submission path only.
+        # EmailSubmission/set is JMAP's only transmit verb; Email/set alone just
+        # creates a draft, so gating on it would over-block. register/help,
+        # dry runs and read presets are not egress.
+        if tool_lower == "atomic_mail":
+            if args.get("action") != "jmap_request" or args.get("dry_run"):
+                return None, False
+            ops_file = str(args.get("ops_file", "")).strip()
+            if ops_file:
+                if ops_file.removesuffix(".json") in _JMAP_READ_PRESETS:
+                    return None, False
+            elif "EmailSubmission" not in str(args.get("ops", "")):
+                return None, False
+            # $TO is the send_mail preset's recipient var. reply.json has no
+            # extractable recipient -> None -> classify() treats an unknown
+            # destination as first-time and requires approval (fails closed).
+            recipient = str((args.get("vars") or {}).get("TO", "")).strip().lower()
+            return recipient or None, True
 
         # Notification / messaging tools always send outbound
         if tool_name in _NOTIFICATION_TOOLS:

@@ -31,7 +31,12 @@ KEEP_TAIL: int = 6
 _COMPRESS_SYSTEM = (
     "You are a concise summarizer. Given a conversation excerpt between an AI agent "
     "and its tools, produce a factual 3-7 sentence summary of: what was attempted, "
-    "what was found, and any key facts discovered. No commentary, just facts."
+    "what was found, and any key facts discovered. No commentary, just facts.\n"
+    "In addition, reproduce VERBATIM every user-stated instruction that constrains "
+    "how the agent should behave for the rest of the session (approval requirements, "
+    "prohibitions, output-format rules, stated preferences). These are not task "
+    "progress and must not be paraphrased away — a task-only summary silently drops "
+    "them and the agent then violates them."
 )
 
 

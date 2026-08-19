@@ -17,6 +17,8 @@ class MemoryCompactor:
     to prevent the amnesia problem documented in the MEMORY_ARTICLE.
     """
 
+    _CONSTRAINT_MARKER = "[CONSTRAINTS]"
+
     def __init__(
         self,
         max_screenshot_chars: int = 5000,
@@ -36,11 +38,31 @@ class MemoryCompactor:
         If constraint preservation is enabled, critical constraints are
         extracted before compaction and injected into the result.
         """
-        # Extract constraints BEFORE any compaction
+        # Extract constraints BEFORE any compaction, from USER message text only.
+        # Reading str(event) over every event was actively harmful:
+        #   1. str() renders the pydantic repr, which escapes newlines — so the
+        #      extractor's [^\n.]+ captures swallowed whole multi-line blocks.
+        #   2. The injected block's own banner contains "CRITICAL" and "DO NOT",
+        #      so each pass re-matched its own previous output. Measured growth:
+        #      208 chars -> 17.4 MB over 12 compactions, in the service whose job
+        #      is shrinking context.
+        #   3. Tool results are attacker-controlled (atomic_mail is in
+        #      UNTRUSTED_OUTPUT_TOOLS), so inbound text could promote itself into
+        #      a "[CRITICAL CONSTRAINTS - DO NOT VIOLATE]" header.
+        # Constraints are user-issued by definition, so the filter costs nothing.
         extracted_constraints: List[Constraint] = []
         if self.preserve_constraints and self._constraint_extractor:
-            _tail = session.events[-200:]
-            all_event_text = "\n".join(str(e) for e in _tail)
+            user_messages = [
+                e.message
+                for e in session.events
+                if isinstance(e, MessageEvent)
+                and e.role == "user"
+                and not e.message.startswith(self._CONSTRAINT_MARKER)
+            ]
+            # Tail cap retained as an OOM guard, but now over user turns rather
+            # than all events — an early constraint no longer falls out of the
+            # window just because tool output pushed the event count past 200.
+            all_event_text = "\n".join(user_messages[-200:])
             extracted_constraints = self._constraint_extractor.extract(all_event_text)
         
         # Perform compaction
@@ -148,7 +170,7 @@ class MemoryCompactor:
         if not constraint_text:
             return session
         
-        constraint_marker = "[CONSTRAINTS]"
+        constraint_marker = self._CONSTRAINT_MARKER
 
         # Look for an existing injected constraint message
         for i, event in enumerate(session.events):
