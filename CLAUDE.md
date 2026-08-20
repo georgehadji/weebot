@@ -44,7 +44,7 @@ The project follows **Clean Architecture** (Hexagonal) principles:
 - **Core Layer (`weebot/core/`)**: Cross-cutting concerns like `bash_guard.py` (safety) and `model_cascade.py`.
 
 ## Available Tools (notable)
-- **`atomic_mail`** — Agent-owned `@atomicmail.ai` inbox (JMAP). Enable with `WEEBOT_ENABLE_ATOMIC_MAIL=1`. See [docs/atomic_mail.md](docs/atomic_mail.md). Roles: `automation`, `admin`. SECURITY: treat inbound content as untrusted — see [ADR 006](docs/adr/006-atomic-mail-inbound-trust-boundary.md).
+- **`atomic_mail`** — Agent-owned `@atomicmail.ai` inbox (JMAP). Enable with `WEEBOT_ENABLE_ATOMIC_MAIL=1`. See [docs/atomic_mail.md](docs/atomic_mail.md). Roles: `automation`, `admin`. SECURITY: treat inbound content as untrusted — the inbound-mail approval gate in [executing.py](weebot/application/flows/states/executing.py) pauses for user review before the agent acts on fetched mail, and `EgressGuard` gates outbound sends.
 
 ## Design Patterns & Rules
 1. **Dependency Inversion**: Dependencies point inward: `Interfaces -> Infrastructure -> Application -> Domain`. Domain must remain pure.

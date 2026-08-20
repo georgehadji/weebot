@@ -103,12 +103,18 @@ class ContextCompressor:
             if not middle:
                 return
 
-            summary = await self._compressor.compress(middle)
-            if summary:
+            # compress() returns a full message list (head + summary + tail),
+            # not a summary string. Wrapping it in {"content": summary} put
+            # the repr of a list of dicts into the buffer and shipped it to
+            # the provider as context -- larger than what it replaced, and
+            # unreadable. See side_constraint_integrity_plan.md 8.2.
+            compressed_middle = await self._compressor.compress(middle)
+            if compressed_middle:
                 self._conversation_buffer.clear()
                 for msg in conversation[:keep_first]:
                     self._conversation_buffer.append(msg)
-                self._conversation_buffer.append({"role": "system", "content": summary})
+                for msg in compressed_middle:
+                    self._conversation_buffer.append(msg)
                 for msg in conversation[-keep_last:]:
                     self._conversation_buffer.append(msg)
                 logger.info(
