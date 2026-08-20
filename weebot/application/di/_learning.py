@@ -25,8 +25,68 @@ class LearningMixin:
         self.register("skill_publisher", self._create_skill_publisher)
         self.register("skill_materializer", self._create_skill_materializer)
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
+        self.register("behavioral_learner", self._create_behavioral_learner)
+        self.register("correction_tracker", self._create_correction_tracker)
+        self.register(
+            "session_constraint_extractor", self._create_session_constraint_extractor,
+        )
 
     # ── factories ─────────────────────────────────────────────────────────────
+
+    def _create_behavioral_learner(self):
+        """Session-scoped behavioral rule learner (plan Phase 7.1).
+
+        Had zero constructors anywhere in weebot/ before this binding, so its
+        three consumers -- ExecutingState's correction hook, ReviewingState's
+        pattern loop, and the prompt builder's "# Behavioral Rules" block --
+        were all unreachable.
+
+        Uses the subagent-tier LLM: rule extraction is a short classification
+        call, not reasoning work, and it runs on ordinary user turns.
+        """
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
+        from weebot.application.services.behavioral_learner import BehavioralLearner
+
+        return BehavioralLearner(
+            llm=self._create_llm_for_role("subagent"),
+            state_repo=self._maybe_get(StateRepositoryPort),
+        )
+
+    def _create_session_constraint_extractor(self):
+        """Side-constraint extractor (Lost-in-Compaction Phases 2-4).
+
+        Registered here rather than left to call sites because the extractor
+        shipped with a config field and a legacy kwarg but no binding and no
+        caller -- reproducing, in the constraint feature itself, the exact
+        unwired-code failure the plan was written to fix.
+
+        Subagent tier per plan D13: extraction is a per-user-turn
+        classification call, and the tier's cheapest model is documented for
+        inner-loop decisions.
+        """
+        from weebot.application.services.session_constraint_extractor import (
+            SessionConstraintExtractor,
+        )
+
+        return SessionConstraintExtractor(llm=self._create_llm_for_role("subagent"))
+
+    def _create_correction_tracker(self):
+        """Tracks recurring step-output corrections (plan Phase 7.2).
+
+        state_repo is required here, unlike BehavioralLearner -- the tracker
+        counts corrections by category across sessions and has nowhere to put
+        them without one.
+        """
+        from weebot.application.ports.state_repo_port import StateRepositoryPort
+        from weebot.application.services.correction_tracker import CorrectionTracker
+
+        state_repo = self._maybe_get(StateRepositoryPort)
+        if state_repo is None:
+            return None
+        return CorrectionTracker(
+            state_repo=state_repo,
+            llm=self._create_llm_for_role("subagent"),
+        )
 
     def _get_learning_skill_store(self, db_path: str):
         """SkillStore for the live-learning subsystem, materializing-wrapped

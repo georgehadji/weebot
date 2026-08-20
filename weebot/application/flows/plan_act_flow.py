@@ -110,6 +110,7 @@ class PlanActFlow(BaseFlow):
         personality = None,
         agent_role: str | None = None,
         session_constraint_extractor: Any | None = None,
+        correction_tracker: Any | None = None,
     ):
         # Normalize: if config is given use it; otherwise build from legacy kwargs.
         if config is not None:
@@ -146,6 +147,11 @@ class PlanActFlow(BaseFlow):
                 personality=personality,
                 agent_role=agent_role,
                 session_constraint_extractor=session_constraint_extractor,
+                # Absent from the legacy kwarg list until Phase 7, so the
+                # four legacy call sites -- including the user-facing
+                # create_flow -- could not supply a tracker at all and
+                # ReviewingState's correction loop was unreachable.
+                correction_tracker=correction_tracker,
             )
 
         self._llm = cfg.llm
@@ -264,6 +270,10 @@ class PlanActFlow(BaseFlow):
             profile_name=cfg.profile_name,
             personality=cfg.personality,
             agent_role=cfg.agent_role,
+            # Without this the executor's behavioral_learner param was never
+            # fed by the flow, so _prompt_builder's "# Behavioral Rules"
+            # block stayed empty even when a learner was configured.
+            behavioral_learner=cfg.behavioral_learner,
             harness_instruction_block=self._harness_instruction_block
             if self._harness_instruction_block
             else None,
@@ -611,6 +621,15 @@ class PlanActFlow(BaseFlow):
         if self._sc_extractor is not None and prompt.strip():
             await self._extract_session_constraints(prompt)
         # ──────────────────────────────────────────────────────────────
+
+        # Load durable behavioral rules once per flow. hydrate() is
+        # idempotent and self-guarding; this is the only async seam that
+        # runs before the executor builds its system prompt.
+        if self._behavioral_learner is not None:
+            try:
+                await self._behavioral_learner.hydrate()
+            except Exception as exc:
+                logger.warning("Behavioral rule hydration failed: %s", exc)
 
         # Resolve effective prompt — enrich vague continuations via service
         effective_prompt = ContinuationDetector.resolve_prompt(

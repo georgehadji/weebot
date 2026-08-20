@@ -190,6 +190,12 @@ def create_flow(
             verifier_llm=_verifier_llm,
             workspace_snapshots=_workspace_snapshots,
             knowledge_graph=_knowledge_graph,
+            # Phase 7: these three had DI bindings but no caller on the
+            # user-facing path, so the behavioral-rule loop, the correction
+            # tracker, and side-constraint extraction were all inert here.
+            behavioral_learner=_cached("behavioral_learner"),
+            correction_tracker=_cached("correction_tracker"),
+            session_constraint_extractor=_cached("session_constraint_extractor"),
         )
     if flow_type == "chat":
         import importlib as _il

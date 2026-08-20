@@ -64,8 +64,52 @@ class BehavioralLearner(BehavioralLearnerPort):
         self._store = store or []
         self._state_repo = state_repo
         self._recent_corrections: dict[str, int] = {}  # topic -> count
+        self._hydrated = False
 
     # ── Public API ──────────────────────────────────────────────────
+
+    async def hydrate(self) -> None:
+        """Load durable rules from the repo into the in-memory store.
+
+        Idempotent, and a no-op without a state_repo.
+
+        Without this, ``_store`` started empty in every process and
+        ``get_rules_for_prompt()`` returned "" no matter how many rules had
+        been persisted — the durable half of the learner existed only as a
+        write path into a table nothing read back.
+
+        Only ``scope='global'`` rules load. A ``'session'`` rule belongs to
+        the session that produced it; replaying it into an unrelated session
+        is the leak ``_determine_scope`` was changed to prevent. ``'per_tool'``
+        rules are also held back — they need the tool context to be applied
+        correctly and there is no consumer for that yet.
+
+        Never raises: a learner that cannot read its own history is degraded,
+        not broken, and must not take the flow down with it.
+        """
+        if self._hydrated or self._state_repo is None:
+            return
+        self._hydrated = True
+        try:
+            rows = await self._state_repo.list_behavioral_rules()
+        except Exception as exc:
+            logger.warning("Failed to load behavioral rules: %s", exc)
+            return
+
+        known = {r.id for r in self._store}
+        for row in rows:
+            if row.get("scope") != "global" or row.get("id") in known:
+                continue
+            try:
+                self._store.append(BehavioralRule(
+                    id=row["id"],
+                    rule_text=row.get("rule_text", ""),
+                    source_session_id=row.get("source_session_id", ""),
+                    source_message=row.get("source_message", ""),
+                    scope=row.get("scope", "global"),
+                ))
+            except Exception as exc:  # malformed row must not poison the rest
+                logger.warning("Skipping malformed behavioral rule row: %s", exc)
 
     async def learn_from_correction(
         self, user_message: str, context: dict[str, Any]
@@ -108,10 +152,19 @@ class BehavioralLearner(BehavioralLearnerPort):
         )
 
         self._store.append(rule)
-        # Persist to SQLite if available
+        # Persist to SQLite if available. The repo takes the rule's fields,
+        # not the rule: passing the model raised TypeError on every call,
+        # swallowed by the except below and logged as a warning, so
+        # persistence was a silent no-op for as long as this code existed.
         if self._state_repo is not None:
             try:
-                await self._state_repo.save_behavioral_rule(rule)
+                await self._state_repo.save_behavioral_rule(
+                    rule.id,
+                    rule.rule_text,
+                    rule.source_session_id,
+                    rule.source_message,
+                    rule.scope,
+                )
             except Exception as save_exc:
                 logger.warning("Failed to persist behavioral rule: %s", save_exc)
         logger.info("Learned behavioral rule: %s", rule_text[:80])
@@ -270,9 +323,21 @@ class BehavioralLearner(BehavioralLearnerPort):
             context: Execution context.
 
         Returns:
-            'global', 'per_skill', or 'per_tool'.
+            'session' or 'per_tool'.
+
+        This used to default to ``'global'``, which meant one offhand
+        correction in one session became a durable cross-session rule with no
+        expiry, injected into every future system prompt. That is the
+        session-vs-durable boundary collapsing in the unsafe direction: a
+        rule the user meant for one task silently governs unrelated work
+        forever.
+
+        ``'global'`` is still a valid stored scope and is what ``hydrate()``
+        loads, but nothing promotes into it automatically. Promotion (a
+        session rule that recurs across N sessions becoming durable) is the
+        speculative end of the plan and is deliberately not implemented.
         """
         tool_name = context.get("tool_name", "")
         if tool_name and tool_name in rule_text:
             return "per_tool"
-        return "global"
+        return "session"
