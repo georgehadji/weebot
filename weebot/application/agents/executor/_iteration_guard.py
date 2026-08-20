@@ -13,6 +13,19 @@ _MAX_TOOL_CALLS_PER_STEP = 12
 _MAX_REPEATED_ASSISTANT_TURNS = 2
 _REPEATED_TOOL_SIGNATURE_LIMIT = 4
 
+# Conversation-buffer size needed for one step to run its full tool budget.
+# The buffer is cleared per step, then holds: the anchoring context message
+# (goal, plan summary, step description), plus an assistant message AND a
+# tool-result message per tool call. At the previous hard-coded 15 the anchor
+# fell out of the window after ~7 tool calls -- the model lost the step
+# description while still executing that step -- and eviction from the left
+# split assistant/tool pairs, which providers reject outright.
+#
+# The slack covers [RECOVERY] and budget-cap system messages, which are
+# appended outside the per-tool-call pairing.
+_CONTEXT_TURN_SLACK = 6
+DEFAULT_MAX_CONTEXT_TURNS = 1 + (2 * _MAX_TOOL_CALLS_PER_STEP) + _CONTEXT_TURN_SLACK
+
 
 @dataclass
 class IterationGuardState:

@@ -12,8 +12,13 @@ if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
     from weebot.models.structured_output import VisionReflection
 
-from weebot.application.agents.executor._iteration_guard import IterationGuard, IterationGuardState
+from weebot.application.agents.executor._iteration_guard import (
+    DEFAULT_MAX_CONTEXT_TURNS,
+    IterationGuard,
+    IterationGuardState,
+)
 from weebot.application.agents.executor._prompt_builder import build_executor_prompt
+
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.hook_registry_port import HookRegistryPort
 from weebot.application.ports.llm_port import LLMPort
@@ -55,6 +60,56 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+def sanitize_tool_call_pairing(messages: list[dict]) -> list[dict]:
+    """Drop tool/assistant messages whose counterpart is missing.
+
+    The provider contract is symmetric: every ``role="tool"`` message must
+    follow an assistant message whose ``tool_calls`` contains its
+    ``tool_call_id``, and every advertised ``tool_call`` must be answered.
+    Violating either is a 400, not a degraded response.
+
+    Both halves can break here without anyone doing anything wrong. The
+    conversation buffer is a bounded deque that evicts from the left, so once
+    a step exceeds the window it splits assistant/tool pairs exactly at the
+    boundary; ``_maybe_compress`` independently rewrites the middle of the
+    buffer wholesale. Sizing the buffer to the tool budget makes eviction
+    unlikely, not impossible — a long tool result can still trip compression
+    mid-step — so the assembled message list is sanitized before dispatch
+    rather than trusting the buffer to stay well-formed.
+
+    Returns a new list; the input is not modified.
+    """
+    answered: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "tool" and msg.get("tool_call_id"):
+            answered.add(msg["tool_call_id"])
+
+    offered: set[str] = set()
+    result: list[dict] = []
+    for msg in messages:
+        role = msg.get("role")
+        if role == "assistant" and msg.get("tool_calls"):
+            kept = [
+                tc for tc in msg["tool_calls"]
+                if isinstance(tc, dict) and tc.get("id") in answered
+            ]
+            if len(kept) != len(msg["tool_calls"]):
+                msg = {**msg, "tool_calls": kept}
+                if not kept:
+                    # An assistant turn with an empty tool_calls list is
+                    # itself invalid; drop the key and keep the prose.
+                    msg.pop("tool_calls")
+            offered.update(tc["id"] for tc in kept)
+            result.append(msg)
+            continue
+        if role == "tool":
+            if msg.get("tool_call_id") not in offered:
+                continue  # orphan: its parent assistant turn is gone
+            result.append(msg)
+            continue
+        result.append(msg)
+    return result
 
 # EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
 # An inline fallback is kept for environments where the file is not available.
@@ -151,7 +206,7 @@ class ExecutorAgent:
         model: str | None = None,
         max_steps: int = MAX_EXECUTOR_STEPS,
         skill_prompt: str | None = None,
-        max_context_turns: int = 15,
+        max_context_turns: int = DEFAULT_MAX_CONTEXT_TURNS,
         auto_compress: bool = True,
         context_window: int = 128_000,
         skill_retriever=None,  # SkillRetrieverPort (Tier 1.2)
@@ -558,9 +613,9 @@ class ExecutorAgent:
                         "any more tools."
                     ),
                 })
-                messages = [
+                messages = sanitize_tool_call_pairing([
                     {"role": "system", "content": self._system_prompt}
-                ] + list(self._conversation_buffer)
+                ] + list(self._conversation_buffer))
                 try:
                     response = await self._cascade.call_with_cascade(
                         messages=messages,
@@ -578,9 +633,9 @@ class ExecutorAgent:
             # ── Pre-call compaction: ensure the LLM sees compacted context ──
             await self._context_compressor._maybe_compress()
 
-            messages = [
+            messages = sanitize_tool_call_pairing([
                 {"role": "system", "content": self._system_prompt}
-            ] + list(self._conversation_buffer)
+            ] + list(self._conversation_buffer))
 
             # ── Lost-in-Compaction: session constraints as messages[-1] ──────
             # Paper's K_ub position (>98% compliance) — appended to the local
