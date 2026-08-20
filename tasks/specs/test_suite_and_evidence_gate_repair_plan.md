@@ -20,6 +20,7 @@ The nine failing tests were the symptom. The investigation found:
 | **D** | Unit tests load `torch`/`sentence_transformers` and can fetch ~90 MB | Medium | Blows the 60 s timeout. One assertion is provably incapable of failing. |
 | **E** | LaTeX font dependency is declared nowhere and validated nowhere | Medium | Missing font ⇒ XeLaTeX substitutes `nullfont` ⇒ silently broken PDF. |
 | **F** | Marker taxonomy defined but largely unapplied | Low | Two markers mean the same thing; CI filters on only one. Root cause of B's CI hole. |
+| **G** | `LatexCompilerService`'s compile timeout can hang forever | **High** | A timeout that, when it fires, blocks indefinitely. Production hang in the book pipeline. |
 
 **A, B, and C share one failure mode**: a mechanism was wired up, looks present, reports success —
 and does nothing. This is the same "registered ≠ wired" class the side-constraint work (ADR-012)
@@ -453,6 +454,81 @@ filter that silently selects nothing, which is how §B's CI hole stayed invisibl
 
 ---
 
+## G — The compile timeout can hang forever  🟠 High
+
+### The defect
+
+`LatexCompilerService.compile()` (`latex_compiler.py:86-96`) is written to survive a slow compile:
+
+```python
+try:
+    proc = subprocess.run(
+        cmd, cwd=str(project), capture_output=True, text=True, timeout=self._timeout
+    )
+    timed_out = False
+except subprocess.TimeoutExpired as exc:
+    ...
+```
+
+The handling is correct. The problem is that **control never reaches it.** On CPython/Windows,
+`subprocess.run` implements its timeout as:
+
+```python
+except TimeoutExpired as exc:
+    process.kill()
+    if _mswindows:
+        exc.stdout, exc.stderr = process.communicate()   # subprocess.py:559 — no timeout
+```
+
+Two facts combine badly:
+
+1. `process.kill()` terminates only the direct child, `latexmk`. Its grandchildren — `xelatex`,
+   `biber`, `pygmentize` (minted) — survive and inherit the stdout/stderr pipe handles.
+2. That second `communicate()` is called **without a timeout**, so `_remaining_time(None)` returns
+   `None` and `_communicate` blocks on `self.stdout_thread.join(None)` — waiting for EOF on a pipe
+   an orphaned grandchild still holds open.
+
+Result: `timeout_seconds=300` (`latex_compiler.py:29`) is unenforceable. When it fires, the process
+hangs **indefinitely** rather than returning the `CompileErrorCategory.TIMEOUT` result the code so
+carefully constructs at `:102-109`. A guard that converts "too slow" into "hangs forever" is worse
+than no guard.
+
+Observed directly: `pytest tests/unit/test_latex_document.py` stalls with the main thread parked in
+`subprocess.py:1628 _communicate → stdout_thread.join`, killed only by the outer
+`@pytest.mark.timeout(360)`. The identical project compiled by hand via `latexmk` — no pipes, no
+timeout — completes and produces a valid 5-page PDF with zero font errors. So this is not the font
+issue (§E, resolved) and not MiKTeX slowness; it is the timeout path itself.
+
+### Fix
+
+**G1. Kill the process tree, not the process.** Replace `subprocess.run(..., timeout=)` with an
+explicit `Popen` + `communicate(timeout=…)`, and on `TimeoutExpired` terminate the whole tree
+before draining. On Windows that means `taskkill /PID <pid> /T /F` or a Job Object; on POSIX,
+`start_new_session=True` plus `os.killpg`. Then call `communicate(timeout=<small>)` and tolerate a
+second `TimeoutExpired` rather than blocking.
+
+**G2. Never drain without a bound.** Every post-kill `communicate()` needs its own timeout. If the
+pipe still will not close, abandon the output and return the `TIMEOUT` `CompileResult` — the log
+file on disk (`latex_compiler.py:98-99`) is already the primary source for `parse_log`, and it is
+read independently of the captured stdout, so discarding stdout loses little.
+
+**G3. Regression test.** Drive `compile()` against a deliberately long-running command with a
+1-second `timeout_seconds` and assert it returns a `CompileResult` carrying
+`CompileErrorCategory.TIMEOUT` within a few seconds. This test hangs on the current implementation
+— confirm that before fixing.
+
+**G4. Then re-evaluate §E's tests.** Only once G is fixed can the two `test_latex_document.py`
+end-to-end tests be judged on their merits; today a slow compile is indistinguishable from a hung
+one.
+
+### Note
+
+`BashGuard` already gates the command (`latex_compiler.py:73-84`), so this is not a security hole —
+it is an availability one. But it sits on the same path as the sandbox-executed book pipeline, where
+an unkillable subprocess is a real operational problem.
+
+---
+
 ## Sequencing
 
 Phases are ordered by dependency, then severity.
@@ -463,8 +539,9 @@ Phases are ordered by dependency, then severity.
 | **2** | §A1-A4 — fix the evidence gate | — | Highest severity. §C is written against its corrected behaviour. |
 | **3** | §C1-C3 — rewrite the artifact-gate tests | §A | Needs A's corrected path semantics. |
 | **4** | §D1-D3 — neutralise the embeddings singleton | §B1 | Shares the `tests/conftest.py` surface. |
-| **5** | §E1-E5 — font validation | — | Independent; fonts already installed, so tests are green meanwhile. |
-| **6** | §F — marker cleanup | §B3 | Bookkeeping after B lands. |
+| **5** | §G1-G4 — make the compile timeout enforceable | — | Blocks §E's verification: a slow compile is currently indistinguishable from a hung one. |
+| **6** | §E1-E5 — font validation | §G | Fonts are installed, so nothing is failing on fonts meanwhile. |
+| **7** | §F — marker cleanup | §B3 | Bookkeeping after B lands. |
 
 Each phase: implement → `pytest tests/unit -q` → `lint-imports --config .importlinter` (7/7 KEPT) →
 commit. Do not batch phases into one commit; A and C in particular need to be independently
@@ -508,8 +585,15 @@ latency; real network calls make such an assertion flaky, so the fake is strictl
 | Test | Count | Cause | Addressed by |
 |---|---|---|---|
 | `test_artifact_gates.py::TestArtifactVerificationGate::*` | 7 | Tests a layer that no longer holds the logic | §C |
-| `test_latex_document.py::test_generation_flow_produces_print_ready_pdf` | 1 | Missing fonts (now installed) | §E |
-| `test_latex_document.py::test_compile_greek_example_end_to_end` | 1 | Missing fonts (now installed) | §E |
+| `test_latex_document.py::test_generation_flow_produces_print_ready_pdf` | 1 | Missing fonts — **and** §G's unkillable timeout behind it | §E, §G |
+| `test_latex_document.py::test_compile_greek_example_end_to_end` | 1 | Same | §E, §G |
 
 All nine were verified pre-existing — reproduced against the pre-reformat code by stashing the
 reformatted files. None was caused by the `black`/`ruff` pass.
+
+The two LaTeX entries had **two** causes stacked. Installing the three missing font families
+(§E) eliminated the font errors — verified by compiling the identical project by hand: zero
+`not loadable`/`nullfont` occurrences, valid 5-page PDF. The tests still do not pass, because
+underneath the font problem sits §G: the compile timeout fires and then blocks forever. Fixing
+fonts made the second defect visible rather than resolving the tests, which is why §G is
+sequenced before §E's verification step.
