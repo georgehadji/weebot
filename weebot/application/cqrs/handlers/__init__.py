@@ -2,6 +2,7 @@
 
 Consolidated registration functions and handler exports.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
@@ -31,9 +32,7 @@ from weebot.application.cqrs.handlers.failure_signature_handlers import (
 )
 
 # ---- Query handlers ----
-from weebot.application.cqrs.handlers.plan_queries import (
-    GetPlanVisualizationHandler,
-)
+from weebot.application.cqrs.handlers.plan_queries import GetPlanVisualizationHandler
 from weebot.application.cqrs.handlers.active_queries import (
     GetActiveSessionsHandler,
     GetCostSummaryHandler,
@@ -67,7 +66,6 @@ from weebot.application.cqrs.queries import (
 )
 
 from weebot.application.models.tool_collection import ToolCollection
-
 
 if TYPE_CHECKING:
     from weebot.application.ports.event_bus_port import EventBusPort
@@ -117,38 +115,30 @@ def register_default_handlers(
     # if these aren't provided (legacy compatibility).
     if llm is not None:
         mediator.register_command_handler(
-            CreatePlanCommand,
-            CreatePlanHandler(state_repo, llm, event_bus),
+            CreatePlanCommand, CreatePlanHandler(state_repo, llm, event_bus)
         )
         mediator.register_command_handler(
-            ProcessMessageCommand,
-            ProcessMessageHandler(state_repo, llm),
+            ProcessMessageCommand, ProcessMessageHandler(state_repo, llm)
         )
         mediator.register_command_handler(
             ExecuteStepCommand,
             ExecuteStepHandler(
-                state_repo, llm, tools or ToolCollection(), event_bus,
+                state_repo,
+                llm,
+                tools or ToolCollection(),
+                event_bus,
                 executor_factory=executor_factory,
             ),
         )
         mediator.register_command_handler(
-            UpdatePlanCommand,
-            UpdatePlanHandler(state_repo, llm, event_bus),
+            UpdatePlanCommand, UpdatePlanHandler(state_repo, llm, event_bus)
         )
     else:
-        mediator.register_command_handler(
-            CreatePlanCommand, CreatePlanHandler(state_repo)
-        )
-        mediator.register_command_handler(
-            ExecuteStepCommand, ExecuteStepHandler(state_repo)
-        )
-        mediator.register_command_handler(
-            UpdatePlanCommand, UpdatePlanHandler(state_repo)
-        )
+        mediator.register_command_handler(CreatePlanCommand, CreatePlanHandler(state_repo))
+        mediator.register_command_handler(ExecuteStepCommand, ExecuteStepHandler(state_repo))
+        mediator.register_command_handler(UpdatePlanCommand, UpdatePlanHandler(state_repo))
     if llm is not None:
-        mediator.register_command_handler(
-            SummarizeCommand, SummarizeHandler(llm, state_repo)
-        )
+        mediator.register_command_handler(SummarizeCommand, SummarizeHandler(llm, state_repo))
 
     # --- Optional: trajectory scoring (SkillOpt-aware) ---
     if scoring_port is not None and trajectory_builder is not None:
@@ -158,18 +148,11 @@ def register_default_handlers(
         )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────
+    mediator.register_query_handler(GetActiveSessionsQuery, GetActiveSessionsHandler(state_repo))
     mediator.register_query_handler(
-        GetActiveSessionsQuery,
-        GetActiveSessionsHandler(state_repo),
+        GetPlanVisualizationQuery, GetPlanVisualizationHandler(state_repo)
     )
-    mediator.register_query_handler(
-        GetPlanVisualizationQuery,
-        GetPlanVisualizationHandler(state_repo),
-    )
-    mediator.register_query_handler(
-        GetCostSummaryQuery,
-        GetCostSummaryHandler(state_repo),
-    )
+    mediator.register_query_handler(GetCostSummaryQuery, GetCostSummaryHandler(state_repo))
 
 
 def register_skillopt_handlers(
@@ -214,61 +197,44 @@ def register_skillopt_handlers(
     # can emit ExtractFailureSignatureCommand on failed trajectories.
     mediator.register_command_handler(
         ScoreTrajectoryCommand,
-        ScoreTrajectoryHandler(
-            scoring_port, state_repo, trajectory_builder, mediator=mediator,
-        ),
+        ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder, mediator=mediator),
     )
 
     # Skill edits (from optimizer reflection → merge → rank pipeline)
-    mediator.register_command_handler(
-        ApplySkillEditsCommand,
-        ApplySkillEditsHandler(skill_store),
-    )
+    mediator.register_command_handler(ApplySkillEditsCommand, ApplySkillEditsHandler(skill_store))
 
     # Build optimization batches from collected trajectories
     mediator.register_command_handler(
-        BuildOptimizationBatchCommand,
-        BuildOptimizationBatchHandler(trajectory_repo),
+        BuildOptimizationBatchCommand, BuildOptimizationBatchHandler(trajectory_repo)
     )
 
     # Validate candidate skills on held-out tasks. skill_store lets a pass
     # record a positive use (candidate -> trusted promotion trigger) —
     # see ValidateSkillHandler's docstring.
     mediator.register_command_handler(
-        ValidateSkillCommand,
-        ValidateSkillHandler(validation_runner, skill_store=skill_store),
+        ValidateSkillCommand, ValidateSkillHandler(validation_runner, skill_store=skill_store)
     )
 
     # Cross-model transfer validation
     mediator.register_command_handler(
-        ValidateTransferCommand,
-        ValidateTransferHandler(state_repo, skill_store, flow_factory),
+        ValidateTransferCommand, ValidateTransferHandler(state_repo, skill_store, flow_factory)
     )
 
     # ── Self-Harness: failure signature extraction on failed trajectories ──
     _fs_handler = ExtractFailureSignatureHandler(
-        llm=llm_port,
-        trajectory_repo=trajectory_repo,
-        budget_model=None,  # Use default budget model
+        llm=llm_port, trajectory_repo=trajectory_repo, budget_model=None  # Use default budget model
     )
-    mediator.register_command_handler(
-        ExtractFailureSignatureCommand,
-        _fs_handler,
-    )
+    mediator.register_command_handler(ExtractFailureSignatureCommand, _fs_handler)
 
     # ── Self-Harness: batch re-extraction for bootstrapping ───────────────
     mediator.register_command_handler(
         BatchExtractSignaturesCommand,
-        BatchExtractSignaturesHandler(
-            handler=_fs_handler,
-            trajectory_repo=trajectory_repo,
-        ),
+        BatchExtractSignaturesHandler(handler=_fs_handler, trajectory_repo=trajectory_repo),
     )
 
     # ── Self-Harness: cluster failure patterns for harness proposal ──────
     mediator.register_query_handler(
-        ClusterFailurePatternsQuery,
-        ClusterFailurePatternsHandler(trajectory_repo),
+        ClusterFailurePatternsQuery, ClusterFailurePatternsHandler(trajectory_repo)
     )
 
     # ── Self-Harness: apply proposed edits to a harness candidate ────────
@@ -276,6 +242,5 @@ def register_skillopt_handlers(
     # which not every SkillOpt caller needs.
     if harness_target is not None:
         mediator.register_command_handler(
-            ApplyHarnessEditsCommand,
-            ApplyHarnessEditsHandler(harness_target),
+            ApplyHarnessEditsCommand, ApplyHarnessEditsHandler(harness_target)
         )

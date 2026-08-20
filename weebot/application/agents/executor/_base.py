@@ -1,4 +1,5 @@
 """Execution agent — executes a single step using available tools."""
+
 from __future__ import annotations
 
 import contextlib
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
 from weebot.application.agents.executor._iteration_guard import (
     DEFAULT_MAX_CONTEXT_TURNS,
     IterationGuard,
-    IterationGuardState,
 )
 from weebot.application.agents.executor._prompt_builder import build_executor_prompt
 
@@ -25,13 +25,8 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.ponytail_post_processor import PonytailPostProcessor
 from weebot.application.services.step_budget import StepBudget
-from weebot.config.settings import WORKSPACE_ROOT
-from weebot.config.constants import (
-    MAX_EXECUTOR_STEPS,
-)
-from weebot.config.model_refs import (
-    MODEL_CASCADE_TIER1,
-)
+from weebot.config.constants import MAX_EXECUTOR_STEPS
+from weebot.config.model_refs import MODEL_CASCADE_TIER1
 from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
 from weebot.application.agents.executor._error_handler import (
     build_stuck_error,
@@ -60,6 +55,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.domain.models.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
+
 
 def sanitize_tool_call_pairing(messages: list[dict]) -> list[dict]:
     """Drop tool/assistant messages whose counterpart is missing.
@@ -91,8 +87,7 @@ def sanitize_tool_call_pairing(messages: list[dict]) -> list[dict]:
         role = msg.get("role")
         if role == "assistant" and msg.get("tool_calls"):
             kept = [
-                tc for tc in msg["tool_calls"]
-                if isinstance(tc, dict) and tc.get("id") in answered
+                tc for tc in msg["tool_calls"] if isinstance(tc, dict) and tc.get("id") in answered
             ]
             if len(kept) != len(msg["tool_calls"]):
                 msg = {**msg, "tool_calls": kept}
@@ -111,13 +106,11 @@ def sanitize_tool_call_pairing(messages: list[dict]) -> list[dict]:
         result.append(msg)
     return result
 
+
 # EXECUTOR_SYSTEM_PROMPT is loaded from weebot/config/prompts/executor_system.txt.
 # An inline fallback is kept for environments where the file is not available.
 _EXECUTOR_SYSTEM_PROMPT_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "config"
-    / "prompts"
-    / "executor_system.txt"
+    Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "executor_system.txt"
 )
 
 _EXECUTOR_SYSTEM_PROMPT_FALLBACK = (
@@ -179,9 +172,12 @@ def _load_executor_system_prompt() -> str:
     # 1. Try importlib.resources (works when weebot is installed as a package)
     with contextlib.suppress(Exception):
         from importlib.resources import files as _resource_files
-        return _resource_files("weebot.config.prompts").joinpath(
-            "executor_system.txt"
-        ).read_text(encoding="utf-8")
+
+        return (
+            _resource_files("weebot.config.prompts")
+            .joinpath("executor_system.txt")
+            .read_text(encoding="utf-8")
+        )
 
     # 2. Try filesystem path (works in development / source checkout)
     with contextlib.suppress(Exception):
@@ -190,6 +186,7 @@ def _load_executor_system_prompt() -> str:
 
     # 3. Inline fallback — kept in sync with executor_system.txt
     return _EXECUTOR_SYSTEM_PROMPT_FALLBACK
+
 
 # ── Policy-error-loop detection constants (Fix 5) ──
 _MAX_SAME_ERROR_CLASS = 3
@@ -210,7 +207,7 @@ class ExecutorAgent:
         auto_compress: bool = True,
         context_window: int = 128_000,
         skill_retriever=None,  # SkillRetrieverPort (Tier 1.2)
-        personality=None,      # PersonalityManager (Phase 1.1)
+        personality=None,  # PersonalityManager (Phase 1.1)
         behavioral_learner=None,  # BehavioralLearner (Capability 5)
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         profile_name: str | None = None,  # SOUL.md profile (e.g. "coder", "researcher")
@@ -219,8 +216,12 @@ class ExecutorAgent:
         harness_instruction_block: str | None = None,  # Self-Harness behavioural instructions
         middleware_chain: MiddlewareChain | None = None,  # MiddlewareChain — interceptor pipeline
         state_repo: StateRepositoryPort | None = None,  # State repository for user profile etc.
-        tracing_port: Any | None = None,  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
-        trajectory_config: Any | None = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
+        tracing_port: (
+            Any | None
+        ) = None,  # TracingPort — OTEL distributed tracing (ARCH-AUDIT-V2 B2)
+        trajectory_config: (
+            Any | None
+        ) = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
         session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
     ):
         self._llm = llm
@@ -243,6 +244,7 @@ class ExecutorAgent:
         self._session_constraints_block: str | None = session_constraints or None
         # Phase 6: Cross-step trajectory monitor — created once, persists across steps
         from weebot.application.services.trajectory_monitor import TrajectoryMonitor
+
         if trajectory_config is not None:
             self._trajectory_monitor = TrajectoryMonitor(
                 repetition_threshold=trajectory_config.repetition_threshold,
@@ -266,6 +268,7 @@ class ExecutorAgent:
         self._step_budget = StepBudget(max_steps=max_steps)
         # Context compressor -- conversation buffer, token tracking, vision reflection
         from weebot.application.agents.executor._context_compressor import ContextCompressor
+
         self._context_compressor: ContextCompressor = ContextCompressor(
             conversation_buffer=self._conversation_buffer,
             auto_compress=auto_compress,
@@ -276,6 +279,7 @@ class ExecutorAgent:
         # Cascade executor -- manages per-role model cascade + circuit breakers
         from weebot.application.agents.executor._cascade import CascadeExecutor
         from weebot.core.model_cascade_tracker import ModelCascadeTracker
+
         self._cascade: CascadeExecutor = CascadeExecutor(
             llm=llm,
             tools=tools,
@@ -287,6 +291,7 @@ class ExecutorAgent:
         self._needs_vision: bool = False  # Set True when screenshots are in buffer
         # Tool executor -- isolated tool dispatch with hooks, timeouts, batching
         from weebot.application.agents.executor._tool_executor import ToolExecutor
+
         self._tool_executor: ToolExecutor = ToolExecutor(
             tools=tools,
             hooks=hooks,
@@ -336,6 +341,7 @@ class ExecutorAgent:
         if self._prompt_variant_id:
             try:
                 from weebot.application.services.prompt_registry import PromptRegistry
+
                 registry = PromptRegistry()
                 content = registry.get_variant(self._prompt_variant_id)
                 if content and content.prompt_content:
@@ -368,6 +374,7 @@ class ExecutorAgent:
         if self._needs_vision:
             self._needs_vision = False  # Consume the flag for this call
             from weebot.config.model_refs import MODEL_VISION_PRIMARY
+
             return [MODEL_VISION_PRIMARY]
         return self._model_for_step(description)
 
@@ -384,17 +391,19 @@ class ExecutorAgent:
         """
         try:
             from weebot.config.feature_flags import WEEBOT_ENABLE_ACR
+
             if WEEBOT_ENABLE_ACR:
                 from weebot.application.services.routing.adaptive_capability_router import (
                     AdaptiveCapabilityRouter,
                 )
+
                 router = AdaptiveCapabilityRouter()
                 return router.route(description)
             from weebot.application.services.task_model_router import model_for_step
+
             return [model_for_step(description)]
         except Exception:
             return [MODEL_CASCADE_TIER1]
-
 
     @property
     def _last_expected_outcome(self) -> str | None:
@@ -418,10 +427,10 @@ class ExecutorAgent:
     def __getattr__(self, name: str):
         """Delegate vision reflection helpers to the context compressor."""
         _ctx_map = {
-            '_reflect_on_screenshot': 'reflect_on_screenshot',
-            '_track_usage_and_maybe_compress': 'track_usage_and_maybe_compress',
+            "_reflect_on_screenshot": "reflect_on_screenshot",
+            "_track_usage_and_maybe_compress": "track_usage_and_maybe_compress",
         }
-        if name in _ctx_map and '_context_compressor' in self.__dict__:
+        if name in _ctx_map and "_context_compressor" in self.__dict__:
             return getattr(self._context_compressor, _ctx_map[name])
         raise AttributeError(f"'{type(self).__name__}' has no attribute {name!r}")
 
@@ -448,11 +457,11 @@ class ExecutorAgent:
         separately via _needs_vision + _resolve_model_for_step.
         """
         from weebot.config.feature_flags import VISION_IN_LOOP_ENABLED, VISION_REFLECTION_ENABLED
+
         return VISION_IN_LOOP_ENABLED and VISION_REFLECTION_ENABLED
 
     async def execute_step(
-        self, plan: Plan, step: Step, user_input: str | None = None,
-        session_id: str = "",
+        self, plan: Plan, step: Step, user_input: str | None = None, session_id: str = ""
     ) -> AsyncGenerator[AgentEvent, None]:
         self._facts.clear()
         self._should_terminate = False
@@ -467,12 +476,13 @@ class ExecutorAgent:
         _step_span = None
         if self._tracing_port is not None:
             from weebot.config.feature_flags import is_enabled
+
             if is_enabled("OTEL_TRACING_ENABLED"):
                 _step_span = self._tracing_port.start_span("executor_step")
                 _step_span.set_attribute("step.id", step.id)
                 _step_span.set_attribute("step.description", step.description[:200])
         self._current_step_id = step.id
-        self._current_session_id = session_id or getattr(self, '_current_session_id', 'unknown')
+        self._current_session_id = session_id or getattr(self, "_current_session_id", "unknown")
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
 
         # ═══ Policy-error-loop tracking (Fix 5) ═══
@@ -482,15 +492,18 @@ class ExecutorAgent:
         base_prompt = self._load_prompt()
 
         # ── User profile from dialectic consolidation (lazy-init) ──
-        if not hasattr(self, '_user_profile_cache'):
+        if not hasattr(self, "_user_profile_cache"):
             try:
                 import hashlib
+
                 repo = self._state_repo
                 if repo is not None:
                     key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
                     row = await repo.get_memory_entry(key)
                     txt = row.get("entry_text", "") if row else ""
-                    self._user_profile_cache = txt[:500] if txt and txt != "No user data collected yet." else ""
+                    self._user_profile_cache = (
+                        txt[:500] if txt and txt != "No user data collected yet." else ""
+                    )
                 else:
                     self._user_profile_cache = ""
             except Exception:
@@ -515,12 +528,13 @@ class ExecutorAgent:
         # ── Append extra components not handled by builder ────────
         # Gated by scope: minimal/skill steps don't need the cached user
         # profile blob (ICM per-step context scoping — see _prompt_builder).
-        if _scope_value in ("full", "creative") and getattr(self, '_user_profile_cache', ''):
+        if _scope_value in ("full", "creative") and getattr(self, "_user_profile_cache", ""):
             system_prompt += f"\n\n## User Profile\n{self._user_profile_cache}"
 
         self._system_prompt = system_prompt
         # Inject OUTPUT_ROOT so tools resolve paths consistently
         from weebot.core.output_path import output_path as _op
+
         self._system_prompt = self._system_prompt + (
             f"\n\nOUTPUT_ROOT = {_op('Output')}"
             "\nALL file writes MUST use this absolute path prefix. "
@@ -529,6 +543,7 @@ class ExecutorAgent:
         # Inject persistent memory snapshot
         try:
             from weebot.tools.persistent_memory import PersistentMemoryTool
+
             snapshot = await PersistentMemoryTool.load_snapshot()
             if snapshot:
                 self._system_prompt = self._system_prompt + "\n\n" + snapshot
@@ -559,22 +574,15 @@ class ExecutorAgent:
                 "",
                 "Use available tools to execute this specific step.",
             ]
-            self._conversation_buffer.append({
-                "role": "user",
-                "content": "\n".join(context_lines),
-            })
+            self._conversation_buffer.append({"role": "user", "content": "\n".join(context_lines)})
             # If this is a resume (user provided input), inject it so the LLM
             # sees the answer instead of calling ask_human again.
             if user_input:
-                self._conversation_buffer.append({
-                    "role": "user",
-                    "content": user_input,
-                })
+                self._conversation_buffer.append({"role": "user", "content": user_input})
         else:
-            self._conversation_buffer.append({
-                "role": "user",
-                "content": f"Next step: {step.description}",
-            })
+            self._conversation_buffer.append(
+                {"role": "user", "content": f"Next step: {step.description}"}
+            )
 
         guard = IterationGuard(
             step_id=step.id,
@@ -603,29 +611,30 @@ class ExecutorAgent:
                 logger.warning(
                     "Step %s: tool-call budget exhausted (%d calls). "
                     "Completing step with current findings.",
-                    step.id, guard._max_tool_calls,
+                    step.id,
+                    guard._max_tool_calls,
                 )
-                self._conversation_buffer.append({
-                    "role": "user",
-                    "content": (
-                        "You have reached the maximum number of tool calls for this step. "
-                        "Summarize what you found and complete the step. Do NOT call "
-                        "any more tools."
-                    ),
-                })
-                messages = sanitize_tool_call_pairing([
-                    {"role": "system", "content": self._system_prompt}
-                ] + list(self._conversation_buffer))
+                self._conversation_buffer.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You have reached the maximum number of tool calls for this step. "
+                            "Summarize what you found and complete the step. Do NOT call "
+                            "any more tools."
+                        ),
+                    }
+                )
+                messages = sanitize_tool_call_pairing(
+                    [{"role": "system", "content": self._system_prompt}]
+                    + list(self._conversation_buffer)
+                )
                 try:
                     response = await self._cascade.call_with_cascade(
-                        messages=messages,
-                        description=step.description,
+                        messages=messages, description=step.description
                     )
                     step_result = response.content or "Step completed (budget cap)."
                 except Exception as exc:
-                    logger.warning(
-                        "Budget-cap summary call failed: %s — using fallback", exc
-                    )
+                    logger.warning("Budget-cap summary call failed: %s — using fallback", exc)
                     step_result = "Step completed (budget cap)."
                 yield MessageEvent(role="assistant", message=step_result)
                 abort_step = True
@@ -633,9 +642,10 @@ class ExecutorAgent:
             # ── Pre-call compaction: ensure the LLM sees compacted context ──
             await self._context_compressor._maybe_compress()
 
-            messages = sanitize_tool_call_pairing([
-                {"role": "system", "content": self._system_prompt}
-            ] + list(self._conversation_buffer))
+            messages = sanitize_tool_call_pairing(
+                [{"role": "system", "content": self._system_prompt}]
+                + list(self._conversation_buffer)
+            )
 
             # ── Lost-in-Compaction: session constraints as messages[-1] ──────
             # Paper's K_ub position (>98% compliance) — appended to the local
@@ -694,9 +704,7 @@ class ExecutorAgent:
             if assistant_content.strip():
                 thought_iteration += 1
                 yield ThoughtEvent(
-                    step_id=step.id,
-                    thought=assistant_content.strip(),
-                    iteration=thought_iteration,
+                    step_id=step.id, thought=assistant_content.strip(), iteration=thought_iteration
                 )
 
             if not response.tool_calls:
@@ -777,22 +785,28 @@ class ExecutorAgent:
                         step_result=step_result if step_result else None,
                         total_budget=self._max_steps,
                         used_budget=tool_calls_attempted,
-                        available_tools=list(self._tools._tools.keys()) if self._tools else None,
+                        available_tools=(list(self._tools._tools.keys()) if self._tools else None),
                     )
                     if diagnosis.recovery_message:
-                        self._conversation_buffer.append({
-                            "role": "system",
-                            "content": f"[RECOVERY] {diagnosis.recovery_message}",
-                        })
+                        self._conversation_buffer.append(
+                            {
+                                "role": "system",
+                                "content": f"[RECOVERY] {diagnosis.recovery_message}",
+                            }
+                        )
                     if diagnosis.health == TrajectoryHealth.HEALTHY:
                         logger.debug(
                             "Trajectory %s for step %s: %s",
-                            diagnosis.health.value, step.id, diagnosis.detail,
+                            diagnosis.health.value,
+                            step.id,
+                            diagnosis.detail,
                         )
                     else:
                         logger.warning(
                             "Trajectory %s for step %s: %s",
-                            diagnosis.health.value, step.id, diagnosis.detail,
+                            diagnosis.health.value,
+                            step.id,
+                            diagnosis.detail,
                         )
                     # Give SEMANTIC_LOOP up to 2 recovery attempts before aborting.
                     # The monitor already injected a recovery_message above.
@@ -848,8 +862,9 @@ class ExecutorAgent:
                         err_class = classify_tool_error(result.error or result.output or "")
                     if err_class:
                         if err_class == last_error_class:
-                            consecutive_error_class_counts[err_class] = \
+                            consecutive_error_class_counts[err_class] = (
                                 consecutive_error_class_counts.get(err_class, 0) + 1
+                            )
                         else:
                             consecutive_error_class_counts = {err_class: 1}
                             last_error_class = err_class
@@ -920,9 +935,7 @@ class ExecutorAgent:
                 if tool_name == "terminate":
                     logger.info("Terminate tool called, task completed")
                     self._should_terminate = True
-                    step_result = self._maybe_truncate_ponytail(
-                        result.output or "Task completed"
-                    )
+                    step_result = self._maybe_truncate_ponytail(result.output or "Task completed")
                     yield MessageEvent(role="assistant", message=step_result)
                     self._step_budget.refund(self._step_budget.remaining)
                     abort_step = True
@@ -931,11 +944,9 @@ class ExecutorAgent:
                 _tool_content = str(result)
                 if not result.is_error and is_untrusted_tool(tool_name):
                     _tool_content = wrap_untrusted(source=tool_name, content=_tool_content)
-                self._conversation_buffer.append({
-                    "role": "tool",
-                    "content": _tool_content,
-                    "tool_call_id": tc["id"],
-                })
+                self._conversation_buffer.append(
+                    {"role": "tool", "content": _tool_content, "tool_call_id": tc["id"]}
+                )
 
                 # Vision-in-the-loop: let a vision-capable model SEE the screen
                 # state a tool produced, instead of driving blind off DOM/OCR text.
@@ -1016,22 +1027,17 @@ class ExecutorAgent:
             yield ErrorEvent(error=loop_error)
 
         if loop_error:
-            yield StepEvent(
-                step_id=step.id,
-                description=step.description,
-                status=StepStatus.FAILED,
-            )
+            yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.FAILED)
             return
 
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.COMPLETED)
+
 
 # ── Phase 2 helpers ────────────────────────────────────────────────────────────
 
 
 def _maybe_record_skill_gap(
-    executor: ExecutorAgent,
-    step_description: str,
-    best_score: float,
+    executor: ExecutorAgent, step_description: str, best_score: float
 ) -> None:
     """Record a skill-gap signal when retrieval misses the creation threshold.
 
@@ -1051,12 +1057,12 @@ def _maybe_record_skill_gap(
     if best_score >= TAU_CREATE:
         return  # retrieval hit — no gap
 
-    executor._skill_gaps.append(
-        {"step": step_description[:200], "score": best_score}
-    )
+    executor._skill_gaps.append({"step": step_description[:200], "score": best_score})
     logger.debug(
         "Phase 2: skill gap recorded (score=%.3f < %.3f) for step: %s",
-        best_score, TAU_CREATE, step_description[:80],
+        best_score,
+        TAU_CREATE,
+        step_description[:80],
     )
 
     # Enhancement 5: emit SkillGapDetected domain event for lightweight subscribers
@@ -1071,9 +1077,7 @@ def _maybe_record_skill_gap(
         if executor._event_bus is not None:
             import asyncio
 
-            asyncio.ensure_future(
-                executor._event_bus.publish_domain_event(event)
-            )
+            asyncio.ensure_future(executor._event_bus.publish_domain_event(event))
     except Exception:
         logger.debug("SkillGapDetected event emission failed (non-blocking)")
         pass  # event emission must never block the execution loop

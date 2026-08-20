@@ -4,20 +4,17 @@ Exercises _extract_session_constraints / _hydrate_constraint_registry
 directly rather than driving the full run() generator -- these are the
 flow-entry seam per tasks/specs/side_constraint_integrity_plan.md Phase 3.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-import pytest
 
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.models.tool_collection import ToolCollection
-from weebot.application.services.session_constraint_extractor import (
-    SessionConstraintExtractor,
-)
+from weebot.application.services.session_constraint_extractor import SessionConstraintExtractor
 from weebot.domain.models.event import SessionConstraintRecorded, SessionConstraintRevoked
 from weebot.domain.models.session import Session
-from weebot.domain.models.session_constraint import SessionConstraintRegistry
 
 
 def _flow(*, sc_extractor=None, state_repo=None, event_bus=None) -> PlanActFlow:
@@ -51,18 +48,17 @@ class TestExtractionWiring:
         state_repo.list_active_session_constraints.return_value = []
         event_bus = AsyncMock()
         flow = _flow(
-            sc_extractor=SessionConstraintExtractor(),
-            state_repo=state_repo, event_bus=event_bus,
+            sc_extractor=SessionConstraintExtractor(), state_repo=state_repo, event_bus=event_bus
         )
 
-        await flow._extract_session_constraints(
-            "Never delete files without asking me first."
-        )
+        await flow._extract_session_constraints("Never delete files without asking me first.")
 
         assert state_repo.save_session_constraint.await_count == 1
         published = event_bus.publish_domain_event.await_args.args[0]
         assert isinstance(published, SessionConstraintRecorded)
-        assert flow._session_constraints.active(), "in-memory registry should hold the new constraint"
+        assert (
+            flow._session_constraints.active()
+        ), "in-memory registry should hold the new constraint"
 
     async def test_no_op_when_no_constraint_in_text(self):
         state_repo = AsyncMock()
@@ -95,8 +91,13 @@ class TestExtractionWiring:
     async def test_revocation_persisted_and_published(self):
         state_repo = AsyncMock()
         state_repo.list_active_session_constraints.return_value = [
-            {"text": "never delete files", "evidence_span": "never delete files",
-             "kind": "action", "direction": "tighten", "turn_index": 0},
+            {
+                "text": "never delete files",
+                "evidence_span": "never delete files",
+                "kind": "action",
+                "direction": "tighten",
+                "turn_index": 0,
+            }
         ]
         event_bus = AsyncMock()
 
@@ -105,6 +106,7 @@ class TestExtractionWiring:
                 from weebot.application.services.session_constraint_extractor import (
                     ExtractionResult,
                 )
+
                 return ExtractionResult(added=[], revoked_texts=["never delete files"])
 
         flow = _flow(sc_extractor=_RevokingExtractor(), state_repo=state_repo, event_bus=event_bus)

@@ -7,13 +7,13 @@ and stores them for injection into future executor prompts.
 Correction keywords: "don't", "never", "instead", "stop", "wrong",
 "shouldn't", "incorrect", "next time"
 """
+
 from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 from uuid import uuid4
 
 from weebot.application.ports.behavioral_learner_port import BehavioralLearnerPort
@@ -46,8 +46,8 @@ class BehavioralLearner(BehavioralLearnerPort):
         self,
         llm: Any = None,  # Optional LLMPort for rule extraction
         min_corrections_for_rule: int = 1,
-        store: Optional[list[BehavioralRule]] = None,
-        state_repo: Optional[Any] = None,
+        store: list[BehavioralRule] | None = None,
+        state_repo: Any | None = None,
     ) -> None:
         """Initialize the learner.
 
@@ -101,19 +101,21 @@ class BehavioralLearner(BehavioralLearnerPort):
             if row.get("scope") != "global" or row.get("id") in known:
                 continue
             try:
-                self._store.append(BehavioralRule(
-                    id=row["id"],
-                    rule_text=row.get("rule_text", ""),
-                    source_session_id=row.get("source_session_id", ""),
-                    source_message=row.get("source_message", ""),
-                    scope=row.get("scope", "global"),
-                ))
+                self._store.append(
+                    BehavioralRule(
+                        id=row["id"],
+                        rule_text=row.get("rule_text", ""),
+                        source_session_id=row.get("source_session_id", ""),
+                        source_message=row.get("source_message", ""),
+                        scope=row.get("scope", "global"),
+                    )
+                )
             except Exception as exc:  # malformed row must not poison the rest
                 logger.warning("Skipping malformed behavioral rule row: %s", exc)
 
     async def learn_from_correction(
         self, user_message: str, context: dict[str, Any]
-    ) -> Optional[BehavioralRule]:
+    ) -> BehavioralRule | None:
         """Extract a behavioral rule from a user correction.
 
         Args:
@@ -134,7 +136,9 @@ class BehavioralLearner(BehavioralLearnerPort):
         if current_count < self._min_corrections:
             logger.info(
                 "Correction detected on topic '%s' (%d/%d needed for rule)",
-                topic, current_count, self._min_corrections,
+                topic,
+                current_count,
+                self._min_corrections,
             )
             return None
 
@@ -159,11 +163,7 @@ class BehavioralLearner(BehavioralLearnerPort):
         if self._state_repo is not None:
             try:
                 await self._state_repo.save_behavioral_rule(
-                    rule.id,
-                    rule.rule_text,
-                    rule.source_session_id,
-                    rule.source_message,
-                    rule.scope,
+                    rule.id, rule.rule_text, rule.source_session_id, rule.source_message, rule.scope
                 )
             except Exception as save_exc:
                 logger.warning("Failed to persist behavioral rule: %s", save_exc)
@@ -176,10 +176,9 @@ class BehavioralLearner(BehavioralLearnerPort):
 
     async def record_application(self, rule: BehavioralRule) -> None:
         """Record that a rule was injected into a system prompt."""
-        updated = rule.model_copy(update={
-            "applied_count": rule.applied_count + 1,
-            "last_applied_at": datetime.now(timezone.utc),
-        })
+        updated = rule.model_copy(
+            update={"applied_count": rule.applied_count + 1, "last_applied_at": datetime.now(UTC)}
+        )
         # Update in store
         for i, r in enumerate(self._store):
             if r.id == rule.id:
@@ -223,9 +222,7 @@ class BehavioralLearner(BehavioralLearnerPort):
         tool_name = context.get("tool_name", "")
         return tool_name or step_desc or message[:40]
 
-    async def _extract_rule(
-        self, user_message: str, context: dict[str, Any]
-    ) -> Optional[str]:
+    async def _extract_rule(self, user_message: str, context: dict[str, Any]) -> str | None:
         """Extract a one-sentence rule from a correction.
 
         Uses LLM if available, otherwise falls back to simple extraction.
@@ -243,15 +240,15 @@ class BehavioralLearner(BehavioralLearnerPort):
 
     async def _extract_rule_with_llm(
         self, user_message: str, context: dict[str, Any]
-    ) -> Optional[str]:
+    ) -> str | None:
         """Extract rule using an LLM call."""
         step_desc = context.get("step_description", "")
         tool_name = context.get("tool_name", "")
 
         prompt = (
-            f"User said: \"{user_message}\"\n"
-            f"Context: agent was executing step \"{step_desc}\" "
-            f"and had just called \"{tool_name}\"\n\n"
+            f'User said: "{user_message}"\n'
+            f'Context: agent was executing step "{step_desc}" '
+            f'and had just called "{tool_name}"\n\n'
             "Extract a behavioral rule from this correction. "
             "The rule should be a one-sentence imperative.\n"
             "If the correction is not rule-like (just a normal answer), "
@@ -262,7 +259,10 @@ class BehavioralLearner(BehavioralLearnerPort):
         try:
             response = await self._llm.chat(
                 messages=[
-                    {"role": "system", "content": "You extract concise behavioral rules from user corrections."},
+                    {
+                        "role": "system",
+                        "content": "You extract concise behavioral rules from user corrections.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 max_tokens=MAX_TOKENS_TINY,
@@ -275,9 +275,7 @@ class BehavioralLearner(BehavioralLearnerPort):
             return self._extract_rule_heuristic(user_message, context)
 
     @staticmethod
-    def _extract_rule_heuristic(
-        user_message: str, context: dict[str, Any]
-    ) -> Optional[str]:
+    def _extract_rule_heuristic(user_message: str, context: dict[str, Any]) -> str | None:
         """Fallback heuristic rule extraction without LLM.
 
         Simple keyword-based extraction for when no LLM is available.
@@ -286,8 +284,7 @@ class BehavioralLearner(BehavioralLearnerPort):
 
         # Check for "don't use X" patterns
         dont_pattern = re.search(
-            r"(?:don'?t|never|stop)\s+(?:using\s+|use\s+)?(\w+)",
-            user_message, re.IGNORECASE,
+            r"(?:don'?t|never|stop)\s+(?:using\s+|use\s+)?(\w+)", user_message, re.IGNORECASE
         )
         if dont_pattern:
             target = dont_pattern.group(1)
@@ -296,18 +293,14 @@ class BehavioralLearner(BehavioralLearnerPort):
             return f"Never use {target} for this task"
 
         # Check for "use X instead" patterns
-        instead_pattern = re.search(
-            r"use\s+(.+?)\s+instead",
-            user_message, re.IGNORECASE,
-        )
+        instead_pattern = re.search(r"use\s+(.+?)\s+instead", user_message, re.IGNORECASE)
         if instead_pattern:
             alternative = instead_pattern.group(1).strip()
             return f"Use {alternative} instead of {tool_name or 'the current tool'}"
 
         # Check for "next time" patterns
         next_time_pattern = re.search(
-            r"next time[,.].*?(don'?t|do|use|try)\s+(.+?)(?:[.!,]|$)",
-            user_message, re.IGNORECASE,
+            r"next time[,.].*?(don'?t|do|use|try)\s+(.+?)(?:[.!,]|$)", user_message, re.IGNORECASE
         )
         if next_time_pattern:
             return next_time_pattern.group(0).strip()

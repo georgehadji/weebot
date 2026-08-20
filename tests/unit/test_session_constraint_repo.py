@@ -5,9 +5,10 @@ test_memory_metadata_repo.py's pattern: exercise a real SQLiteStateRepository
 against a tmp_path DB rather than a mock, so the DDL/forwarder wiring is
 actually proven.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from weebot.domain.models.session_constraint import (
     ConstraintDirection,
@@ -64,7 +65,7 @@ class TestRevoke:
     async def test_revoked_constraint_drops_out_of_active_list(self, tmp_path):
         repo = _repo(tmp_path)
         await repo.save_session_constraint("sess-1", _c("gone"))
-        await repo.revoke_session_constraint("sess-1", "gone", datetime.now(timezone.utc))
+        await repo.revoke_session_constraint("sess-1", "gone", datetime.now(UTC))
         rows = await repo.list_active_session_constraints("sess-1")
         assert rows == []
 
@@ -72,7 +73,7 @@ class TestRevoke:
         repo = _repo(tmp_path)
         await repo.save_session_constraint("sess-1", _c("a"))
         await repo.save_session_constraint("sess-1", _c("b"))
-        await repo.revoke_session_constraint("sess-1", "a", datetime.now(timezone.utc))
+        await repo.revoke_session_constraint("sess-1", "a", datetime.now(UTC))
         rows = await repo.list_active_session_constraints("sess-1")
         assert [r["text"] for r in rows] == ["b"]
 
@@ -80,7 +81,7 @@ class TestRevoke:
         repo = _repo(tmp_path)
         await repo.save_session_constraint("sess-1", _c("shared-text"))
         await repo.save_session_constraint("sess-2", _c("shared-text"))
-        await repo.revoke_session_constraint("sess-1", "shared-text", datetime.now(timezone.utc))
+        await repo.revoke_session_constraint("sess-1", "shared-text", datetime.now(UTC))
         assert await repo.list_active_session_constraints("sess-1") == []
         assert len(await repo.list_active_session_constraints("sess-2")) == 1
 

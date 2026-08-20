@@ -7,14 +7,11 @@ no background flush, no buffered merge window.
 This is a conservative guarantee required by the paper's F9 finding:
 delayed consolidation can lose temporal context.
 """
+
 from __future__ import annotations
 
 from weebot.application.services.memory_compactor import MemoryCompactor
-from weebot.domain.models.event import (
-    DoneEvent,
-    MessageEvent,
-    ToolEvent,
-)
+from weebot.domain.models.event import DoneEvent, MessageEvent, ToolEvent
 from weebot.domain.models.session import Session
 
 
@@ -100,7 +97,8 @@ class TestF9SynchronousConsolidation:
                     result="same_output",
                 )
                 for i in range(5)
-            ] + [DoneEvent()],
+            ]
+            + [DoneEvent()],
         )
         compactor = MemoryCompactor()
         result = compactor.compact_session(session)

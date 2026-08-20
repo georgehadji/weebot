@@ -1,17 +1,18 @@
 """Background task runner for agent sessions."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 from weebot.application.abstractions import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSession
-from weebot.domain.models.event import AgentEvent
+from weebot.application.ports.task_queue_port import TaskQueuePort
 from weebot.domain.models.session import Session, SessionStatus
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class TaskRunner:
     def __init__(
         self,
         state_repo: StateRepositoryPort,
-        event_bus: Optional[EventBusPort] = None,
+        event_bus: EventBusPort | None = None,
         max_pending: int = 100,
         max_session_retries: int = 3,
         task_queue: TaskQueuePort | None = None,
@@ -46,14 +47,16 @@ class TaskRunner:
         self._state_repo = state_repo
         self._event_bus = event_bus
         self._max_session_retries = max_session_retries
-        self._tasks: Dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
         self._task_queue: TaskQueuePort | None = task_queue
         # Fallback to asyncio.PriorityQueue when no external queue is provided
         self._priority_queue: asyncio.PriorityQueue[PrioritizedSession] = asyncio.PriorityQueue(maxsize=max_pending) if task_queue is None else None  # type: ignore[assignment]
-        self._worker_task: Optional[asyncio.Task] = None
-        self._retry_counts: Dict[str, int] = {}  # session_id -> attempts remaining
-        self._flow_factories: Dict[str, FlowFactory] = {}  # session_id -> factory for retries
-        self._failed_sessions: Dict[str, int] = {}  # session_id -> retry count exhausted (dead-letter queue)
+        self._worker_task: asyncio.Task | None = None
+        self._retry_counts: dict[str, int] = {}  # session_id -> attempts remaining
+        self._flow_factories: dict[str, FlowFactory] = {}  # session_id -> factory for retries
+        self._failed_sessions: dict[str, int] = (
+            {}
+        )  # session_id -> retry count exhausted (dead-letter queue)
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
@@ -105,11 +108,7 @@ class TaskRunner:
         except Exception:
             logger.debug("Failed to publish session presence for %s", session.id, exc_info=True)
 
-    async def _start_direct(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-    ) -> Session:
+    async def _start_direct(self, session: Session, flow_factory: FlowFactory) -> Session:
         """Internal direct task creation (bypasses queue)."""
         session = session.set_status(SessionStatus.RUNNING)
         await self._state_repo.save_session(session)
@@ -122,8 +121,7 @@ class TaskRunner:
             self._retry_counts[session_id] = self._max_session_retries
 
         task = asyncio.create_task(
-            self._run_flow(session_id, flow_factory(session)),
-            name=f"weebot-session-{session_id}",
+            self._run_flow(session_id, flow_factory(session)), name=f"weebot-session-{session_id}"
         )
         self._tasks[session_id] = task
 
@@ -147,19 +145,12 @@ class TaskRunner:
         task.add_done_callback(_cleanup)
         return session
 
-    async def start_session(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-    ) -> Session:
+    async def start_session(self, session: Session, flow_factory: FlowFactory) -> Session:
         """Start a session immediately as a background task."""
         return await self._start_direct(session, flow_factory)
 
     async def enqueue_session(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-        priority: int = 5,
+        self, session: Session, flow_factory: FlowFactory, priority: int = 5
     ) -> Session:
         """Enqueue a session with priority for later execution."""
         self._ensure_worker()
@@ -195,7 +186,7 @@ class TaskRunner:
                 flow_has_bus = getattr(flow, "_event_bus", None) is not None
                 if self._event_bus and not flow_has_bus:
                     await self._event_bus.publish(event)
-        except Exception as exc:
+        except Exception:
             logger.exception("Flow failed for session %s", session_id)
             # Session-level retry: requeue with exponential backoff
             remaining = self._retry_counts.get(session_id, 0)
@@ -204,7 +195,9 @@ class TaskRunner:
                 backoff = 5.0 * (2 ** (self._max_session_retries - remaining))
                 logger.info(
                     "Retrying session %s in %.0fs (%d retries remaining)",
-                    session_id, backoff, remaining - 1,
+                    session_id,
+                    backoff,
+                    remaining - 1,
                 )
                 await asyncio.sleep(backoff)
                 factory = self._flow_factories.get(session_id)
@@ -221,7 +214,9 @@ class TaskRunner:
                 logger.error(
                     "Double failure: state repo write failed after flow crash "
                     "for session %s — session may be orphaned in RUNNING state. "
-                    "Error: %s", session_id, persist_exc,
+                    "Error: %s",
+                    session_id,
+                    persist_exc,
                 )
             finally:
                 # Dead-letter queue: track sessions that exhausted all retries
@@ -232,9 +227,7 @@ class TaskRunner:
             # flow._session independently of this runner's copy.
             flow_session = getattr(flow, "_session", None)
             if flow_session is not None:
-                session = session.model_copy(update={
-                    "context": flow_session.context,
-                })
+                session = session.model_copy(update={"context": flow_session.context})
             if flow.is_done():
                 session = session.set_status(SessionStatus.COMPLETED)
             else:
@@ -252,10 +245,7 @@ class TaskRunner:
                 logger.debug("Failed to decrement session active metric", exc_info=True)
 
     async def resume_session(
-        self,
-        session_id: str,
-        answer: str,
-        flow_factory: FlowFactory,
+        self, session_id: str, answer: str, flow_factory: FlowFactory
     ) -> Session:
         """Resume a waiting session by injecting a user answer."""
         session = await self._state_repo.load_session(session_id)
@@ -304,7 +294,8 @@ class TaskRunner:
         if session.status != SessionStatus.FAILED:
             logger.warning(
                 "rerun_failed_session: session %s status is %s, not FAILED",
-                session_id, session.status.value,
+                session_id,
+                session.status.value,
             )
             return False
 
@@ -327,7 +318,7 @@ class TaskRunner:
         logger.info("Rerun initiated for failed session %s", session_id)
         return True
 
-    async def list_failed_sessions(self) -> Dict[str, int]:
+    async def list_failed_sessions(self) -> dict[str, int]:
         """Return sessions in the dead-letter queue with retry counts.
 
         Returns:
@@ -346,14 +337,11 @@ class TaskRunner:
             except asyncio.CancelledError:
                 pass
 
-    async def list_active_sessions(self) -> List[str]:
+    async def list_active_sessions(self) -> list[str]:
         """List IDs of currently running sessions."""
         return [sid for sid, t in self._tasks.items() if not t.done()]
 
-    async def list_all_sessions(
-        self,
-        status_filter: Optional[SessionStatus] = None,
-    ) -> List[Session]:
+    async def list_all_sessions(self, status_filter: SessionStatus | None = None) -> list[Session]:
         """List all persisted sessions with optional status filtering."""
         sessions = await self._state_repo.list_sessions()
         if status_filter is not None:
@@ -364,10 +352,10 @@ class TaskRunner:
         self,
         llm: LLMPort,
         tools: ToolCollection,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
         ponytail_mode: str | None = None,
-        steering: Optional["SteeringPort"] = None,
+        steering: SteeringPort | None = None,
     ) -> FlowFactory:
         """Factory helper to create PlanActFlow instances.
 
@@ -377,21 +365,15 @@ class TaskRunner:
         the web ``/sessions/{id}/steer`` endpoint has nothing to deliver to.
         """
         from weebot.application.flows.plan_act_flow import PlanActFlow
-        from weebot.application.services.ponytail_skill_prompt import (
-            build_ponytail_skill_prompt,
-        )
+        from weebot.application.services.ponytail_skill_prompt import build_ponytail_skill_prompt
 
         state_repo = self._state_repo
         skill_prompt = build_ponytail_skill_prompt(existing=None, mode=ponytail_mode)
 
         def _factory(session: Session) -> BaseFlow:
-            from weebot.application.services.session_scoped_event_bus import (
-                SessionScopedEventBus,
-            )
+            from weebot.application.services.session_scoped_event_bus import SessionScopedEventBus
 
-            scoped_bus = (
-                SessionScopedEventBus(event_bus, session.id) if event_bus else None
-            )
+            scoped_bus = SessionScopedEventBus(event_bus, session.id) if event_bus else None
             return PlanActFlow(
                 llm=llm,
                 tools=tools,
@@ -402,4 +384,5 @@ class TaskRunner:
                 state_repo=state_repo,
                 steering=steering,
             )
+
         return _factory

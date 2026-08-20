@@ -9,6 +9,7 @@ These tests cover the three things that make it real: patterns that work on
 both platforms, normalization a caller cannot trivially evade, and an actual
 call site that refuses the operation.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -16,10 +17,7 @@ import pytest
 from weebot.application.services.fs_permission_checker import FSPermissionChecker
 from weebot.config.fs_permissions import load_rules, parse_rules
 from weebot.infrastructure.security.security_validators import PathValidator
-from weebot.domain.models.fs_permission import (
-    FilesystemPermission,
-    is_absolute_pattern,
-)
+from weebot.domain.models.fs_permission import FilesystemPermission, is_absolute_pattern
 
 WS = "/ws"
 
@@ -48,13 +46,16 @@ class TestPatternValidation:
         with pytest.raises(ValueError, match="empty"):
             FilesystemPermission(operations=["read"], paths=["   "])
 
-    @pytest.mark.parametrize("pattern,expected", [
-        ("/etc/**", True),
-        ("C:/keys", True),
-        ("C:\\keys", True),
-        ("confidential/**", False),
-        ("*.pem", False),
-    ])
+    @pytest.mark.parametrize(
+        "pattern,expected",
+        [
+            ("/etc/**", True),
+            ("C:/keys", True),
+            ("C:\\keys", True),
+            ("confidential/**", False),
+            ("*.pem", False),
+        ],
+    )
     def test_rootedness_detection(self, pattern, expected):
         assert is_absolute_pattern(pattern) is expected
 
@@ -73,11 +74,10 @@ class TestMatching:
         c = _checker(_deny_read("confidential/**"))
         assert c.check("read", f"{WS}/confidentialish/a.txt") == "allow"
 
-    @pytest.mark.parametrize("evasion", [
-        "/ws/./confidential/a.txt",
-        "/ws/confidential//a.txt",
-        "/ws/sub/../confidential/a.txt",
-    ])
+    @pytest.mark.parametrize(
+        "evasion",
+        ["/ws/./confidential/a.txt", "/ws/confidential//a.txt", "/ws/sub/../confidential/a.txt"],
+    )
     def test_normalization_defeats_evasion(self, evasion):
         """Raw string globbing would let every one of these through."""
         c = _checker(_deny_read("confidential/**"))
@@ -118,9 +118,9 @@ class TestFilterPaths:
 
     def test_interrupt_paths_are_removed_too(self):
         """filter_paths cannot ask anyone for approval, so it fails closed."""
-        c = _checker(FilesystemPermission(
-            operations=["read"], paths=["gated/**"], mode="interrupt",
-        ))
+        c = _checker(
+            FilesystemPermission(operations=["read"], paths=["gated/**"], mode="interrupt")
+        )
         assert c.filter_paths("read", [f"{WS}/gated/a"]) == []
 
 
@@ -129,29 +129,34 @@ class TestRulesLoader:
         assert load_rules(tmp_path / "nope.yaml") == []
 
     def test_valid_rule_parses(self):
-        rules = parse_rules([
-            {"operations": ["read"], "paths": ["confidential/**"], "mode": "deny"},
-        ])
+        rules = parse_rules(
+            [{"operations": ["read"], "paths": ["confidential/**"], "mode": "deny"}]
+        )
         assert len(rules) == 1
         assert rules[0].mode == "deny"
 
-    @pytest.mark.parametrize("bad", [
-        {"operations": ["bogus"], "paths": ["x"], "mode": "deny"},
-        {"operations": ["read"], "paths": ["../escape"], "mode": "deny"},
-        {"operations": [], "paths": ["x"], "mode": "deny"},
-        {"operations": ["read"], "paths": [], "mode": "deny"},
-        {"operations": ["read"], "paths": ["x"], "mode": "nonsense"},
-        "not a mapping",
-    ])
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            {"operations": ["bogus"], "paths": ["x"], "mode": "deny"},
+            {"operations": ["read"], "paths": ["../escape"], "mode": "deny"},
+            {"operations": [], "paths": ["x"], "mode": "deny"},
+            {"operations": ["read"], "paths": [], "mode": "deny"},
+            {"operations": ["read"], "paths": ["x"], "mode": "nonsense"},
+            "not a mapping",
+        ],
+    )
     def test_malformed_rules_are_skipped_not_raised(self, bad):
         """A typo in an optional policy file must not be an outage."""
         assert parse_rules([bad]) == []
 
     def test_good_rules_survive_a_bad_neighbour(self):
-        rules = parse_rules([
-            {"operations": ["bogus"], "paths": ["x"], "mode": "deny"},
-            {"operations": ["read"], "paths": ["ok/**"], "mode": "deny"},
-        ])
+        rules = parse_rules(
+            [
+                {"operations": ["bogus"], "paths": ["x"], "mode": "deny"},
+                {"operations": ["read"], "paths": ["ok/**"], "mode": "deny"},
+            ]
+        )
         assert len(rules) == 1
 
     def test_non_list_input_is_safe(self):
@@ -182,9 +187,11 @@ class TestEnforcementInFileEditor:
 
     def _install(self, tool, monkeypatch, mode="deny"):
         checker = FSPermissionChecker(
-            rules=[FilesystemPermission(
-                operations=["read", "write"], paths=["confidential/**"], mode=mode,
-            )],
+            rules=[
+                FilesystemPermission(
+                    operations=["read", "write"], paths=["confidential/**"], mode=mode
+                )
+            ],
             workspace_root=str(tool._workspace),
         )
         monkeypatch.setattr(type(tool), "_fs_permissions", staticmethod(lambda: checker))
@@ -192,7 +199,7 @@ class TestEnforcementInFileEditor:
     async def test_denied_read_is_refused(self, tool, monkeypatch):
         self._install(tool, monkeypatch)
         result = await tool.execute(
-            command="view", path=str(tool._workspace / "confidential" / "secret.txt"),
+            command="view", path=str(tool._workspace / "confidential" / "secret.txt")
         )
         assert result.error
         assert "filesystem policy" in result.error.lower()
@@ -201,9 +208,7 @@ class TestEnforcementInFileEditor:
     async def test_denied_write_is_refused(self, tool, monkeypatch):
         self._install(tool, monkeypatch)
         result = await tool.execute(
-            command="create",
-            path=str(tool._workspace / "confidential" / "new.txt"),
-            file_text="x",
+            command="create", path=str(tool._workspace / "confidential" / "new.txt"), file_text="x"
         )
         assert "filesystem policy" in result.error.lower()
         assert not (tool._workspace / "confidential" / "new.txt").exists()
@@ -212,7 +217,7 @@ class TestEnforcementInFileEditor:
         """No approval channel here, so a gate must not read as permission."""
         self._install(tool, monkeypatch, mode="interrupt")
         result = await tool.execute(
-            command="view", path=str(tool._workspace / "confidential" / "secret.txt"),
+            command="view", path=str(tool._workspace / "confidential" / "secret.txt")
         )
         assert result.error
         assert "approval" in result.error.lower()
@@ -225,10 +230,10 @@ class TestEnforcementInFileEditor:
 
     async def test_no_rules_means_no_behaviour_change(self, tool, monkeypatch):
         monkeypatch.setattr(
-            type(tool), "_fs_permissions", staticmethod(lambda: FSPermissionChecker()),
+            type(tool), "_fs_permissions", staticmethod(lambda: FSPermissionChecker())
         )
         result = await tool.execute(
-            command="view", path=str(tool._workspace / "confidential" / "secret.txt"),
+            command="view", path=str(tool._workspace / "confidential" / "secret.txt")
         )
         assert not result.error
         assert "classified" in result.output

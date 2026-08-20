@@ -4,12 +4,12 @@ Extracted from the original ExecutorAgent god class.  Owns all context-windowing
 logic: token tracking, auto-compression, screenshot ingestion, and structured
 vision reflection.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 from collections import deque
-
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class ContextCompressor:
         self._compressor = compressor
         self._total_prompt_tokens: int = 0
         self._total_completion_tokens: int = 0
-        self._last_expected_outcome: Optional[str] = None
+        self._last_expected_outcome: str | None = None
 
     # ── Token tracking & compression ───────────────────────────────
 
@@ -72,7 +72,8 @@ class ContextCompressor:
             except Exception as exc:
                 logger.warning(
                     "Compressor quarantine: _maybe_compress failed — %s: %s",
-                    type(exc).__name__, exc,
+                    type(exc).__name__,
+                    exc,
                 )
 
     async def _maybe_compress(self) -> None:
@@ -92,14 +93,14 @@ class ContextCompressor:
                 from weebot.application.services.conversation_compressor import (
                     ConversationCompressor,
                 )
-                self._compressor = ConversationCompressor(
-                    llm=self._llm,
-                    cheap_model=self._model,
-                )
+
+                self._compressor = ConversationCompressor(llm=self._llm, cheap_model=self._model)
 
             keep_first = max(1, len(conversation) // 4)
             keep_last = max(1, len(conversation) // 4)
-            middle = conversation[keep_first:-keep_last] if keep_last > 0 else conversation[keep_first:]
+            middle = (
+                conversation[keep_first:-keep_last] if keep_last > 0 else conversation[keep_first:]
+            )
             if not middle:
                 return
 
@@ -119,13 +120,13 @@ class ContextCompressor:
                     self._conversation_buffer.append(msg)
                 logger.info(
                     "Compressed conversation: %d -> %d messages, %d tokens cleared",
-                    len(conversation), len(self._conversation_buffer),
+                    len(conversation),
+                    len(self._conversation_buffer),
                     estimated_tokens,
                 )
         except Exception as exc:
             logger.warning(
-                "Compressor quarantine: compression failed — %s: %s",
-                type(exc).__name__, exc,
+                "Compressor quarantine: compression failed — %s: %s", type(exc).__name__, exc
             )
 
     # ── Vision helpers ─────────────────────────────────────────────
@@ -138,12 +139,14 @@ class ContextCompressor:
         by the executor when screenshots are injected into the buffer.
         """
         from weebot.config.feature_flags import is_enabled
+
         return is_enabled("VISION_IN_LOOP_ENABLED")
 
     @property
     def reflection_enabled(self) -> bool:
         """True when Phase 2 structured reflection is on (requires vision + reflection flags)."""
         from weebot.config.feature_flags import is_enabled
+
         return self.vision_enabled and is_enabled("VISION_REFLECTION_ENABLED")
 
     async def inject_screenshot(self, tool_name: str, image_b64: str) -> None:
@@ -157,9 +160,11 @@ class ContextCompressor:
             content = msg.get("content")
             if isinstance(content, list):
                 new_content = [
-                    {"type": "text", "text": "[earlier screenshot omitted]"}
-                    if isinstance(b, dict) and b.get("type") == "image"
-                    else b
+                    (
+                        {"type": "text", "text": "[earlier screenshot omitted]"}
+                        if isinstance(b, dict) and b.get("type") == "image"
+                        else b
+                    )
                     for b in content
                 ]
                 updated.append({**msg, "content": new_content})
@@ -169,15 +174,13 @@ class ContextCompressor:
         for m in updated:
             self._conversation_buffer.append(m)
         multimodal_msg = await self._llm.build_multimodal_message(
-            role="user",
-            text=f"Current screen after {tool_name}:",
-            image_base64=image_b64,
+            role="user", text=f"Current screen after {tool_name}:", image_base64=image_b64
         )
         self._conversation_buffer.append(multimodal_msg)
 
     async def reflect_on_screenshot(
-        self, tool_name: str, image_b64: str, task_context: str = "",
-    ) -> Optional[dict]:
+        self, tool_name: str, image_b64: str, task_context: str = ""
+    ) -> dict | None:
         """Ask the LLM to produce a structured PageObservation + NextActionPlan.
 
         Grounds the reflection in the current task goal and, when available, the
@@ -255,11 +258,15 @@ class ContextCompressor:
         except Exception as exc:
             logger.warning(
                 "Compressor quarantine: track_usage_and_maybe_compress in reflection failed "
-                "for %s — %s: %s", tool_name, type(exc).__name__, exc,
+                "for %s — %s: %s",
+                tool_name,
+                type(exc).__name__,
+                exc,
             )
 
         try:
             import json
+
             raw = (response.content or "").strip()
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

@@ -5,11 +5,12 @@ tasks/specs/side_constraint_integrity_plan.md) to keep plan_act_flow.py
 under its allowlisted line budget, mirroring the FactResolver/ToolAssembler
 collaborator pattern already used there.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from weebot.domain.models.event import SessionConstraintRecorded, SessionConstraintRevoked
 from weebot.domain.models.session_constraint import (
@@ -39,8 +40,7 @@ class SessionConstraintAccumulator:
     """
 
     def __init__(
-        self, extractor: Any, state_repo: Optional[Any] = None,
-        event_bus: Optional[Any] = None,
+        self, extractor: Any, state_repo: Any | None = None, event_bus: Any | None = None
     ) -> None:
         self._extractor = extractor
         self._state_repo = state_repo
@@ -72,15 +72,12 @@ class SessionConstraintAccumulator:
         return SessionConstraintRegistry(constraints=constraints)
 
     async def extract_and_apply(
-        self, session_id: str, prompt: str, registry: SessionConstraintRegistry,
-        turn_index: int,
+        self, session_id: str, prompt: str, registry: SessionConstraintRegistry, turn_index: int
     ) -> SessionConstraintRegistry:
         """Extract constraints from *prompt*, persist/publish them, and
         return the updated registry. Never raises (plan D9)."""
         try:
-            result = await self._extractor.extract(
-                prompt, registry=registry, turn_index=turn_index,
-            )
+            result = await self._extractor.extract(prompt, registry=registry, turn_index=turn_index)
         except Exception as exc:
             logger.warning("Session constraint extraction failed: %s", exc)
             return registry
@@ -88,10 +85,14 @@ class SessionConstraintAccumulator:
         for c in result.added:
             registry = registry.add(c)
             await self._persist_add(session_id, c)
-            await self._publish(SessionConstraintRecorded(
-                session_id=session_id, text=c.text,
-                kind=c.kind.value, direction=c.direction.value,
-            ))
+            await self._publish(
+                SessionConstraintRecorded(
+                    session_id=session_id,
+                    text=c.text,
+                    kind=c.kind.value,
+                    direction=c.direction.value,
+                )
+            )
 
         for text in result.revoked_texts:
             registry = registry.revoke(text)
@@ -112,9 +113,7 @@ class SessionConstraintAccumulator:
         if self._state_repo is None:
             return
         try:
-            await self._state_repo.revoke_session_constraint(
-                session_id, text, datetime.now(timezone.utc),
-            )
+            await self._state_repo.revoke_session_constraint(session_id, text, datetime.now(UTC))
         except Exception as exc:
             logger.warning("Failed to persist constraint revocation: %s", exc)
 

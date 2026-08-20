@@ -8,6 +8,7 @@ SkillPublisher that wraps the EventPublisher.  All live-learning paths are
 behind feature flags that default to OFF so this mixin is inert until a
 phase is explicitly enabled.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -27,9 +28,7 @@ class LearningMixin:
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
         self.register("behavioral_learner", self._create_behavioral_learner)
         self.register("correction_tracker", self._create_correction_tracker)
-        self.register(
-            "session_constraint_extractor", self._create_session_constraint_extractor,
-        )
+        self.register("session_constraint_extractor", self._create_session_constraint_extractor)
 
     # ── factories ─────────────────────────────────────────────────────────────
 
@@ -83,10 +82,7 @@ class LearningMixin:
         state_repo = self._maybe_get(StateRepositoryPort)
         if state_repo is None:
             return None
-        return CorrectionTracker(
-            state_repo=state_repo,
-            llm=self._create_llm_for_role("subagent"),
-        )
+        return CorrectionTracker(state_repo=state_repo, llm=self._create_llm_for_role("subagent"))
 
     def _get_learning_skill_store(self, db_path: str):
         """SkillStore for the live-learning subsystem, materializing-wrapped
@@ -106,18 +102,15 @@ class LearningMixin:
         if not SKILL_MATERIALIZE_ENABLED:
             return store
 
-        from weebot.application.services.materializing_skill_store import (
-            MaterializingSkillStore,
-        )
+        from weebot.application.services.materializing_skill_store import MaterializingSkillStore
+
         materializer = self.get("skill_materializer")  # type: ignore[attr-defined]
         return MaterializingSkillStore(store=store, materializer=materializer)
 
     def _create_skill_distiller(self, db_path: str):
         """Build the AutonomousSkillDistiller (flag-guarded; returns NoOp if off)."""
         from weebot.config.feature_flags import LIVE_SKILL_DISTILLATION_ENABLED
-        from weebot.application.services.autonomous_learning import (
-            AutonomousSkillCreator,
-        )
+        from weebot.application.services.autonomous_learning import AutonomousSkillCreator
         from weebot.application.ports.llm_port import LLMPort
 
         if not LIVE_SKILL_DISTILLATION_ENABLED:
@@ -159,6 +152,7 @@ class LearningMixin:
             # fall back to a standalone registry so materialize() still
             # writes a valid SKILL.md; it just won't refresh a live index.
             from weebot.application.skills.skill_registry import SkillRegistry
+
             registry = SkillRegistry()
         return SkillMaterializer(registry=registry, retriever=retriever)
 
@@ -217,21 +211,13 @@ class _SkillPublisher:
         await self._publisher.publish(event)
 
     async def publish_promoted(
-        self,
-        *,
-        skill_name: str,
-        from_tier: str,
-        to_tier: str,
-        positive_uses: int = 0,
+        self, *, skill_name: str, from_tier: str, to_tier: str, positive_uses: int = 0
     ) -> None:
         if self._publisher is None:
             return
         from weebot.domain.models.event import SkillPromoted
 
         event = SkillPromoted(
-            skill_name=skill_name,
-            from_tier=from_tier,
-            to_tier=to_tier,
-            positive_uses=positive_uses,
+            skill_name=skill_name, from_tier=from_tier, to_tier=to_tier, positive_uses=positive_uses
         )
         await self._publisher.publish(event)

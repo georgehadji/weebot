@@ -14,6 +14,7 @@ binding failed (wrong import path for StateRepositoryPort).
 
 See tasks/specs/side_constraint_integrity_plan.md Phase 7.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -74,6 +75,6 @@ def test_flow_factory_passes_all_three(container):
 
     source = inspect.getsource(factories.create_flow)
     for key, _ in _KEYS:
-        assert f'_cached("{key}")' in source, (
-            f"create_flow never resolves {key} -- the DI binding is unused"
-        )
+        assert (
+            f'_cached("{key}")' in source
+        ), f"create_flow never resolves {key} -- the DI binding is unused"

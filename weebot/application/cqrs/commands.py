@@ -5,11 +5,12 @@ Migration note:  Commands now use Pydantic BaseModel instead of
 model via Field(min_length=...) etc., and the hand-written validate()
 methods are preserved for custom business-rule logic.
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from weebot.application.cqrs.base import Command
 from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
@@ -17,18 +18,19 @@ from weebot.config.model_refs import MODEL_COMMAND_DEFAULT
 
 class CreatePlanCommand(Command):
     """Command to create a new plan."""
+
     session_id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     model: str = MODEL_COMMAND_DEFAULT
     context: dict[str, Any] = Field(default_factory=dict)
     meta_notes: list[str] = Field(
-        default_factory=list,
-        description="Cross-session avoidance hints from MisalignmentJournal",
+        default_factory=list, description="Cross-session avoidance hints from MisalignmentJournal"
     )
 
 
 class ExecuteStepCommand(Command):
     """Command to execute a plan step."""
+
     session_id: str = Field(min_length=1)
     step_id: str = Field(min_length=1)
     model: str = ""
@@ -36,13 +38,14 @@ class ExecuteStepCommand(Command):
     user_input: str = Field(
         default="",
         description="Resume/steering text for this step, if any. Threaded "
-                    "through to ExecutorAgent.execute_step(user_input=...), "
-                    "which previously never received it.",
+        "through to ExecutorAgent.execute_step(user_input=...), "
+        "which previously never received it.",
     )
 
 
 class UpdatePlanCommand(Command):
     """Command to update an existing plan."""
+
     session_id: str = Field(min_length=1)
     updates: dict[str, Any]
     reason: str = ""
@@ -55,6 +58,7 @@ class UpdatePlanCommand(Command):
 
 class SummarizeCommand(Command):
     """Command to generate a final summary for a completed session."""
+
     session_id: str = Field(min_length=1)
 
 
@@ -68,6 +72,7 @@ class ProcessMessageCommand(Command):
         history: Previous conversation messages serialised as dicts.
         exchange_count: How many exchanges have occurred so far.
     """
+
     session_id: str = Field(min_length=1)
     message: str = Field(min_length=1)
     model: str = ""

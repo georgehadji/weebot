@@ -11,13 +11,15 @@ LLM call when available (accurate, understands generic-vs-episodic intent),
 a regex lexicon otherwise (free, coarse, recall-oriented). Never raises —
 extraction failure must never block the agentic loop.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional, Pattern
+from typing import Any
+from re import Pattern
 
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 from weebot.domain.models.session_constraint import (
@@ -56,25 +58,69 @@ _LOOSEN_MARKERS = re.compile(
 # sentence wins so more specific patterns should precede general ones.
 _HEURISTIC_PATTERNS: list[tuple[Pattern, ConstraintKind, ConstraintDirection]] = [
     # Output — verifiable surface properties of the response.
-    (re.compile(r"(?i)(?:reply|respond)\s+in\s+([^\n.]+)"), ConstraintKind.OUTPUT, ConstraintDirection.TIGHTEN),
-    (re.compile(r"(?i)end\s+every\s+repl(?:y|ies)\s+with\s+([^\n.]+)"), ConstraintKind.OUTPUT, ConstraintDirection.TIGHTEN),
-    (re.compile(r"(?i)write\s+(?:every\s+)?[\w\s]+\s+as\s+([^\n.]+)"), ConstraintKind.OUTPUT, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)(?:reply|respond)\s+in\s+([^\n.]+)"),
+        ConstraintKind.OUTPUT,
+        ConstraintDirection.TIGHTEN,
+    ),
+    (
+        re.compile(r"(?i)end\s+every\s+repl(?:y|ies)\s+with\s+([^\n.]+)"),
+        ConstraintKind.OUTPUT,
+        ConstraintDirection.TIGHTEN,
+    ),
+    (
+        re.compile(r"(?i)write\s+(?:every\s+)?[\w\s]+\s+as\s+([^\n.]+)"),
+        ConstraintKind.OUTPUT,
+        ConstraintDirection.TIGHTEN,
+    ),
     # Preference — which of several task-equivalent answers to pick.
-    (re.compile(r"(?i)prefer\s+([^\n.]+?)\s+over\s+([^\n.]+)"), ConstraintKind.PREFERENCE, ConstraintDirection.TIGHTEN),
-    (re.compile(r"(?i)use\s+([^\n.]+?)\s+(?:rather\s+than|not|instead\s+of)\s+([^\n.]+)"), ConstraintKind.PREFERENCE, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)prefer\s+([^\n.]+?)\s+over\s+([^\n.]+)"),
+        ConstraintKind.PREFERENCE,
+        ConstraintDirection.TIGHTEN,
+    ),
+    (
+        re.compile(r"(?i)use\s+([^\n.]+?)\s+(?:rather\s+than|not|instead\s+of)\s+([^\n.]+)"),
+        ConstraintKind.PREFERENCE,
+        ConstraintDirection.TIGHTEN,
+    ),
     # Process — how the agent must reach an answer.
-    (re.compile(r"(?i)always\s+([^\n.]+?)\s+before\s+([^\n.]+)"), ConstraintKind.PROCESS, ConstraintDirection.TIGHTEN),
-    (re.compile(r"(?i)before\s+you\s+answer,?\s+([^\n.]+)"), ConstraintKind.PROCESS, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)always\s+([^\n.]+?)\s+before\s+([^\n.]+)"),
+        ConstraintKind.PROCESS,
+        ConstraintDirection.TIGHTEN,
+    ),
+    (
+        re.compile(r"(?i)before\s+you\s+answer,?\s+([^\n.]+)"),
+        ConstraintKind.PROCESS,
+        ConstraintDirection.TIGHTEN,
+    ),
     # Action — positively-framed ("show me before you send").
-    (re.compile(r"(?i)before\s+you\s+(?:run|send|make|do)\s+([^\n.]+)"), ConstraintKind.ACTION, ConstraintDirection.TIGHTEN),
-    (re.compile(r"(?i)wait\s+for\s+my\s+([^\n.]+)"), ConstraintKind.ACTION, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)before\s+you\s+(?:run|send|make|do)\s+([^\n.]+)"),
+        ConstraintKind.ACTION,
+        ConstraintDirection.TIGHTEN,
+    ),
+    (
+        re.compile(r"(?i)wait\s+for\s+my\s+([^\n.]+)"),
+        ConstraintKind.ACTION,
+        ConstraintDirection.TIGHTEN,
+    ),
     # Information — what may be emitted or passed to tools. Checked before
     # the generic Action-negative catch-all below: both would match e.g.
     # "never include my name...", and the first match in this list wins the
     # dedup race, so the more specific kind must come first.
-    (re.compile(r"(?i)(?:never|don'?t)\s+(?:include|share|expose|write|put)\s+([^\n.]+)"), ConstraintKind.INFORMATION, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)(?:never|don'?t)\s+(?:include|share|expose|write|put)\s+([^\n.]+)"),
+        ConstraintKind.INFORMATION,
+        ConstraintDirection.TIGHTEN,
+    ),
     # Action — negative ("don't/never/forbid ...").
-    (re.compile(r"(?i)(?:do\s+not|don'?t|never|forbid|prohibit|avoid)\s+([^\n.]+)"), ConstraintKind.ACTION, ConstraintDirection.TIGHTEN),
+    (
+        re.compile(r"(?i)(?:do\s+not|don'?t|never|forbid|prohibit|avoid)\s+([^\n.]+)"),
+        ConstraintKind.ACTION,
+        ConstraintDirection.TIGHTEN,
+    ),
 ]
 
 _VALID_KINDS = frozenset(k.value for k in ConstraintKind)
@@ -95,7 +141,7 @@ class SessionConstraintExtractor:
             regex lexicon when omitted or when the call fails.
     """
 
-    def __init__(self, llm: Optional[Any] = None) -> None:
+    def __init__(self, llm: Any | None = None) -> None:
         self._llm = llm
 
     async def extract(
@@ -118,8 +164,10 @@ class SessionConstraintExtractor:
         if self._llm is not None:
             try:
                 return await self._extract_with_llm(
-                    user_text, registry=registry,
-                    prior_assistant_text=prior_assistant_text, turn_index=turn_index,
+                    user_text,
+                    registry=registry,
+                    prior_assistant_text=prior_assistant_text,
+                    turn_index=turn_index,
                 )
             except Exception as exc:
                 logger.warning("LLM constraint extraction failed: %s", exc)
@@ -131,7 +179,8 @@ class SessionConstraintExtractor:
         added: list[SessionConstraint] = []
         seen: set[str] = set()
         direction = (
-            ConstraintDirection.LOOSEN if _LOOSEN_MARKERS.search(user_text)
+            ConstraintDirection.LOOSEN
+            if _LOOSEN_MARKERS.search(user_text)
             else ConstraintDirection.TIGHTEN
         )
         for pattern, kind, default_direction in _HEURISTIC_PATTERNS:
@@ -141,20 +190,30 @@ class SessionConstraintExtractor:
                 if normalized in seen:
                     continue
                 seen.add(normalized)
-                added.append(SessionConstraint(
-                    text=text,
-                    evidence_span=text,
-                    kind=kind,
-                    direction=direction if direction == ConstraintDirection.LOOSEN else default_direction,
-                    turn_index=turn_index,
-                ))
+                added.append(
+                    SessionConstraint(
+                        text=text,
+                        evidence_span=text,
+                        kind=kind,
+                        direction=(
+                            direction
+                            if direction == ConstraintDirection.LOOSEN
+                            else default_direction
+                        ),
+                        turn_index=turn_index,
+                    )
+                )
         return ExtractionResult(added=added, revoked_texts=[])
 
     # ── LLM tier ─────────────────────────────────────────────────────
 
     async def _extract_with_llm(
-        self, user_text: str, *, registry: SessionConstraintRegistry,
-        prior_assistant_text: str, turn_index: int,
+        self,
+        user_text: str,
+        *,
+        registry: SessionConstraintRegistry,
+        prior_assistant_text: str,
+        turn_index: int,
     ) -> ExtractionResult:
         active_texts = [c.text for c in registry.active()]
         prompt = (
@@ -177,10 +236,13 @@ class SessionConstraintExtractor:
         )
         response = await self._llm.chat(
             messages=[
-                {"role": "system", "content": (
-                    "You extract generic, session-scoped side constraints "
-                    "from a user's message. Most messages contain none."
-                )},
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract generic, session-scoped side constraints "
+                        "from a user's message. Most messages contain none."
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
             max_tokens=MAX_TOKENS_TINY,
@@ -205,12 +267,14 @@ class SessionConstraintExtractor:
             direction = item.get("direction", "").lower()
             if kind not in _VALID_KINDS or direction not in _VALID_DIRECTIONS:
                 continue
-            added.append(SessionConstraint(
-                text=str(item["text"]).strip(),
-                evidence_span=str(item.get("evidence_span", item["text"])).strip(),
-                kind=ConstraintKind(kind),
-                direction=ConstraintDirection(direction),
-                turn_index=turn_index,
-            ))
+            added.append(
+                SessionConstraint(
+                    text=str(item["text"]).strip(),
+                    evidence_span=str(item.get("evidence_span", item["text"])).strip(),
+                    kind=ConstraintKind(kind),
+                    direction=ConstraintDirection(direction),
+                    turn_index=turn_index,
+                )
+            )
         revoked = [str(t).strip() for t in data.get("revoke", []) if t]
         return ExtractionResult(added=added, revoked_texts=revoked)

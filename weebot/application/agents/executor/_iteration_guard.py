@@ -1,10 +1,10 @@
 """Iteration guard — loop bounds, tool-call cap, and stuck detection for ExecutorAgent."""
+
 from __future__ import annotations
 
 import logging
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,12 @@ class IterationGuardState:
 
     Reset at the start of each ``execute_step()`` call.
     """
+
     tool_call_count: int = 0
     repeated_assistant_turns: int = 0
     last_assistant_text: str = ""
     repeated_tool_calls: int = 0
-    last_tool_signature: Optional[str] = None
+    last_tool_signature: str | None = None
     recent_tool_signatures: deque = field(default_factory=lambda: deque(maxlen=6))
     tool_calls_attempted: int = 0
     tool_calls_succeeded: int = 0

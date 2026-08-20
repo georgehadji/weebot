@@ -3,6 +3,7 @@
 Phase 1 of tasks/specs/side_constraint_integrity_plan.md — pure domain
 logic, no I/O.
 """
+
 from __future__ import annotations
 
 from weebot.domain.models.session_constraint import (
@@ -15,8 +16,11 @@ from weebot.domain.models.session_constraint import (
 
 def _c(text: str, *, direction=ConstraintDirection.TIGHTEN, turn_index=0) -> SessionConstraint:
     return SessionConstraint(
-        text=text, evidence_span=text, kind=ConstraintKind.ACTION,
-        direction=direction, turn_index=turn_index,
+        text=text,
+        evidence_span=text,
+        kind=ConstraintKind.ACTION,
+        direction=direction,
+        turn_index=turn_index,
     )
 
 

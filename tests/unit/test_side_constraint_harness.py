@@ -24,6 +24,7 @@ extractor's 93.7% recall on a planted string but no precision and no
 false-positive rate. On a long session even a 1% FP rate injects spurious
 PERMANENT constraints, each rendered last and framed as strict.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -37,20 +38,14 @@ from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.constraint_compilers import compile_enforceable
 from weebot.application.services.memory_compactor import MemoryCompactor
-from weebot.application.services.session_constraint_extractor import (
-    SessionConstraintExtractor,
-)
+from weebot.application.services.session_constraint_extractor import SessionConstraintExtractor
 from weebot.domain.models.event import MessageEvent
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session
-from weebot.domain.models.session_constraint import (
-    ConstraintKind,
-    SessionConstraintRegistry,
-)
+from weebot.domain.models.session_constraint import ConstraintKind, SessionConstraintRegistry
 
 _GOLDEN = (
-    Path(__file__).resolve().parents[2]
-    / "weebot" / "config" / "harness" / "side_constraints.yaml"
+    Path(__file__).resolve().parents[2] / "weebot" / "config" / "harness" / "side_constraints.yaml"
 )
 
 
@@ -66,9 +61,7 @@ NEGATIVE_CASES = [c for c in CASES if not c["expect_extracted"]]
 
 async def _extract(turn: str) -> SessionConstraintRegistry:
     """Run the free (heuristic) tier and return a registry of what it found."""
-    result = await SessionConstraintExtractor().extract(
-        turn, registry=SessionConstraintRegistry(),
-    )
+    result = await SessionConstraintExtractor().extract(turn, registry=SessionConstraintRegistry())
     return SessionConstraintRegistry(constraints=result.added)
 
 
@@ -122,9 +115,9 @@ class TestExtractionCoverage:
     async def test_direction_is_correct(self, case):
         registry = await _extract(case["turn"])
         directions = {c.direction.value for c in registry.active()}
-        assert case["direction"] in directions, (
-            f"{case['id']}: got {directions}, want {case['direction']}"
-        )
+        assert (
+            case["direction"] in directions
+        ), f"{case['id']}: got {directions}, want {case['direction']}"
 
     async def test_per_kind_floor(self):
         """Every category must extract, not just the easy ones.
@@ -159,9 +152,9 @@ class TestCompilation:
     async def test_enforceability_matches_expectation(self, case):
         registry = await _extract(case["turn"])
         compiled = compile_enforceable(registry)
-        assert bool(compiled) is case["expect_enforceable"], (
-            f"{case['id']}: compiled={[c.text for c in compiled]}"
-        )
+        assert (
+            bool(compiled) is case["expect_enforceable"]
+        ), f"{case['id']}: compiled={[c.text for c in compiled]}"
 
     async def test_loosen_constraint_never_compiles(self):
         """Paper SC#1. A gate enforcing it would pause to ask for confirmation."""
@@ -208,9 +201,7 @@ class TestDeliveryUnderCompaction:
     """
 
     async def _last_message_for(self, block: str) -> dict:
-        executor = ExecutorAgent(
-            llm=MagicMock(), tools=ToolCollection(), session_constraints=block,
-        )
+        executor = ExecutorAgent(llm=MagicMock(), tools=ToolCollection(), session_constraints=block)
         captured: dict = {}
 
         async def _fake_call_with_cascade(messages, description):
@@ -243,10 +234,13 @@ class TestDeliveryUnderCompaction:
         registry = await _extract(case["turn"])
         block = registry.render()
 
-        session = Session(id="h1", events=[
-            MessageEvent(role="user", message=case["turn"]),
-            *[MessageEvent(role="assistant", message=f"filler {i}") for i in range(50)],
-        ])
+        session = Session(
+            id="h1",
+            events=[
+                MessageEvent(role="user", message=case["turn"]),
+                *[MessageEvent(role="assistant", message=f"filler {i}") for i in range(50)],
+            ],
+        )
         compacted = MemoryCompactor().compact_session(session)
 
         # Whatever compaction did to the transcript, delivery is unaffected.

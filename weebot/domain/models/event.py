@@ -1,9 +1,10 @@
 """Structured event model for agent observability."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal, Union
 import uuid
 
 from pydantic import BaseModel, Field
@@ -15,10 +16,12 @@ class FailureSeverity(str, Enum):
     Based on the paper "Fundamentals of Building Autonomous LLM Agents"
     (arXiv:2510.09244v1), §4.4: feedback is classified into three tiers.
     """
-    SUCCESS = "success"            # Action produced expected result → continue
-    MINOR_FIX = "minor_fix"         # Close but not exact → adjust and re-attempt
-    SUBPLAN_FAIL = "subplan_fail"   # Step cannot proceed → regenerate subplan
-    FULL_REPLAN = "full_replan"     # Plan is invalid → restart from planning
+
+    SUCCESS = "success"  # Action produced expected result → continue
+    MINOR_FIX = "minor_fix"  # Close but not exact → adjust and re-attempt
+    SUBPLAN_FAIL = "subplan_fail"  # Step cannot proceed → regenerate subplan
+    FULL_REPLAN = "full_replan"  # Plan is invalid → restart from planning
+
 
 from .plan import PlanStatus, StepStatus
 
@@ -31,7 +34,7 @@ class ToolStatus(str, Enum):
 class BaseEvent(BaseModel):
     type: Literal[""] = ""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     session_id: str = Field(
         default="",
         description=(
@@ -51,8 +54,8 @@ class ErrorEvent(BaseEvent):
 class PlanEvent(BaseEvent):
     type: Literal["plan"] = "plan"
     status: PlanStatus = Field(default=PlanStatus.CREATED)
-    plan: Optional[Any] = Field(default=None)
-    step: Optional[Any] = Field(default=None)
+    plan: Any | None = Field(default=None)
+    step: Any | None = Field(default=None)
 
 
 class StepEvent(BaseEvent):
@@ -67,10 +70,10 @@ class ToolEvent(BaseEvent):
     tool_call_id: str = Field(default="")
     tool_name: str = Field(default="")
     function_name: str = Field(default="")
-    function_args: Dict[str, Any] = Field(default_factory=dict)
+    function_args: dict[str, Any] = Field(default_factory=dict)
     status: ToolStatus = Field(default=ToolStatus.CALLING)
-    result: Optional[str] = Field(default=None)
-    artifact: Optional[Any] = Field(default=None)
+    result: str | None = Field(default=None)
+    artifact: Any | None = Field(default=None)
 
 
 class MessageEvent(BaseEvent):
@@ -99,8 +102,9 @@ class PlanReviewEvent(BaseEvent):
     The UI renders this as a structured step list with an approve/modify input.
     plan_data mirrors PlanEvent.plan — a dict representation of the Plan model.
     """
+
     type: Literal["plan_review"] = "plan_review"
-    plan_data: Dict[str, Any] = Field(default_factory=dict)
+    plan_data: dict[str, Any] = Field(default_factory=dict)
     step_count: int = Field(default=0)
 
 
@@ -110,9 +114,10 @@ class ToolApprovalEvent(BaseEvent):
     The UI renders this as an approval prompt. The flow pauses until the
     user responds (similar to WaitForUserEvent).
     """
+
     type: Literal["tool_approval"] = "tool_approval"
     tool_name: str = Field(default="")
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    arguments: dict[str, Any] = Field(default_factory=dict)
     risk_level: str = Field(default="")
     reason: str = Field(default="")
     prompt: str = Field(default="Allow this command? (yes/no)")
@@ -125,11 +130,12 @@ class NotificationEvent(BaseEvent):
 
 class ThoughtEvent(BaseEvent):
     """Emitted when the agent explains its reasoning before acting."""
+
     type: Literal["thought"] = "thought"
     step_id: str = Field(default="")
     thought: str = Field(default="")
     iteration: int = Field(default=0)
-    code_review_result: Optional[dict] = Field(
+    code_review_result: dict | None = Field(
         default=None,
         description="Structured CodeReviewResult dict, set by ReviewingState when verdict is present",
     )
@@ -142,6 +148,7 @@ class SteeringEvent(BaseEvent):
     non-blocking — the flow continues but adapts its next step based
     on the message.  Sent via SteeringPort from CLI stdin or WebSocket.
     """
+
     type: Literal["steering"] = "steering"
     message: str = Field(default="")
 
@@ -151,6 +158,7 @@ class CanonicalizationEvent(BaseEvent):
 
     Records what was corrected or blocked for audit and harness evolution.
     """
+
     type: Literal["canonicalization"] = "canonicalization"
     tool_name: str = Field(default="")
     verdict: str = Field(default="")
@@ -160,9 +168,10 @@ class CanonicalizationEvent(BaseEvent):
 
 class TodoEvent(BaseEvent):
     """Self-reported progress checklist item (Enhancement 4)."""
+
     type: Literal["todo"] = "todo"
     step_id: str = Field(default="")
-    action: str = Field(default="")         # "add" | "update" | "complete"
+    action: str = Field(default="")  # "add" | "update" | "complete"
     description: str = Field(default="")
     status: str = Field(default="pending")  # "pending" | "in_progress" | "completed" | "failed"
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -175,6 +184,7 @@ class VerificationEvent(BaseEvent):
     ``consistent`` is True when the answer matches the original claim,
     False when it contradicts.
     """
+
     type: Literal["verification"] = "verification"
     step_id: str = Field(default="")
     question: str = Field(default="")
@@ -184,6 +194,7 @@ class VerificationEvent(BaseEvent):
 
 class TrajectoryDiagnosisEvent(BaseEvent):
     """Emitted when TrajectoryMonitor detects a degenerate pattern (Tier 1.3)."""
+
     type: Literal["trajectory_diagnosis"] = "trajectory_diagnosis"
     step_id: str = Field(default="")
     health: str = Field(default="")
@@ -193,6 +204,7 @@ class TrajectoryDiagnosisEvent(BaseEvent):
 
 # ── Product-mode events ──────────────────────────────────────────────
 
+
 class ProductGateReviewEvent(BaseEvent):
     """Emitted when ProductGateState needs user clarification on problem framing.
 
@@ -200,18 +212,16 @@ class ProductGateReviewEvent(BaseEvent):
     then responds with clarifications. The flow resumes and re-runs the
     product gate with the enriched context.
     """
+
     type: Literal["product_gate_review"] = "product_gate_review"
     product_context: dict = Field(
-        default_factory=dict,
-        description="Partial ProductContext dict with fields filled so far.",
+        default_factory=dict, description="Partial ProductContext dict with fields filled so far."
     )
     low_confidence_fields: list[str] = Field(
-        default_factory=list,
-        description="Field names that scored below the confidence threshold.",
+        default_factory=list, description="Field names that scored below the confidence threshold."
     )
     clarification_questions: list[str] = Field(
-        default_factory=list,
-        description="Up to 3 questions to help the user clarify the problem.",
+        default_factory=list, description="Up to 3 questions to help the user clarify the problem."
     )
 
 
@@ -225,56 +235,53 @@ class ProductDecisionEvent(BaseEvent):
         - Reversibility: one-way or two-way door
         - Revisit trigger: metric/date/condition that reopens the decision
     """
+
     type: Literal["product_decision"] = "product_decision"
     title: str = Field(
-        default="",
-        description="Short decision title (e.g. 'Session abc123: user login flow').",
+        default="", description="Short decision title (e.g. 'Session abc123: user login flow')."
     )
     problem: str = Field(default="")
     why_now: str = Field(default="")
     options_considered: list[str] = Field(
-        default_factory=list,
-        description="[A, B, C] — filled by background LLM if non-trivial.",
+        default_factory=list, description="[A, B, C] — filled by background LLM if non-trivial."
     )
-    choice: str = Field(
-        default="",
-        description="What was done (plan title + summary).",
-    )
-    rationale: str = Field(
-        default="",
-        description="Why this choice was made.",
-    )
+    choice: str = Field(default="", description="What was done (plan title + summary).")
+    rationale: str = Field(default="", description="Why this choice was made.")
     reversibility: Literal["one-way", "two-way"] = Field(
         default="two-way",
         description="'one-way' (costly to undo) or 'two-way' (easily reversible).",
     )
     revisit_trigger: str = Field(
-        default="",
-        description="Metric threshold / date / condition that reopens this decision.",
+        default="", description="Metric threshold / date / condition that reopens this decision."
     )
     success_metric: str = Field(
-        default="",
-        description="The one number or observable we expect to move.",
+        default="", description="The one number or observable we expect to move."
     )
 
 
 # ── Phase 2+6: Cron & Heartbeat domain events ────────────────────
 
+
 class SessionStalenessEvent(BaseEvent):
     """Emitted when a RUNNING session has had no update for > threshold minutes."""
+
     type: Literal["session_staleness"] = "session_staleness"
     staleness_minutes: float = 0.0
     status: str = ""  # SessionStatus value as string
 
+
 class MemoryPressureEvent(BaseEvent):
     """Emitted when process memory crosses warning or critical threshold."""
+
     type: Literal["memory_pressure"] = "memory_pressure"
     level: str = ""  # "warning" | "critical"
     rss_mb: float = 0.0
     percent: float = 0.0
 
+
 class ScheduledJobEvent(BaseEvent):
     """Emitted on scheduled job completion (success or failure)."""
+
     type: Literal["scheduled_job"] = "scheduled_job"
     job_id: str = ""
     job_name: str = ""
@@ -282,8 +289,10 @@ class ScheduledJobEvent(BaseEvent):
     duration_seconds: float = 0.0
     error: str | None = None
 
+
 class LLMHealthEvent(BaseEvent):
     """Emitted when LLM provider health transitions between states."""
+
     type: Literal["llm_health"] = "llm_health"
     state: str = ""  # "healthy" | "degraded" | "critical"
     affected_providers: list[str] = []
@@ -301,12 +310,14 @@ class SessionPresenceEvent(BaseEvent):
     the subject session lives in ``about_session_id`` instead and
     ``session_id`` is left empty.
     """
+
     type: Literal["session_presence"] = "session_presence"
     about_session_id: str = Field(default="")
     status: str = Field(default="")
     title: str = Field(default="")
     step_count: int = Field(default=0)
     steps_completed: int = Field(default=0)
+
 
 # ── AgentEvent union ───────────────────────────────────────────────
 
@@ -336,13 +347,15 @@ AgentEvent = Union[
 
 class DomainEvent(BaseModel):
     """Base class for all internal domain events."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     type: str = ""
 
 
 class FactDiscovered(DomainEvent):
     """Event emitted when a new fact is learned."""
+
     type: str = "fact_discovered"
     session_id: str
     key: str
@@ -351,6 +364,7 @@ class FactDiscovered(DomainEvent):
 
 class MemoryCompacted(DomainEvent):
     """Event emitted when session memory is compacted."""
+
     type: str = "memory_compacted"
     session_id: str
     events_removed: int
@@ -358,6 +372,7 @@ class MemoryCompacted(DomainEvent):
 
 class PlanStepCompleted(DomainEvent):
     """Event emitted when a plan step reaches completion."""
+
     type: str = "plan_step_completed"
     session_id: str
     step_id: str
@@ -370,6 +385,7 @@ class PlanStepCompleted(DomainEvent):
 
 class TrajectoryScored(DomainEvent):
     """Emitted when a task execution completes with a benchmark score."""
+
     type: str = "trajectory_scored"
     session_id: str
     task_id: str
@@ -382,6 +398,7 @@ class TrajectoryScored(DomainEvent):
 
 class SkillEditProposed(DomainEvent):
     """Emitted when the optimizer proposes an edit to a skill."""
+
     type: str = "skill_edit_proposed"
     skill_name: str
     skill_version: int
@@ -392,6 +409,7 @@ class SkillEditProposed(DomainEvent):
 
 class SkillEditAccepted(DomainEvent):
     """Emitted when a proposed edit passes the validation gate."""
+
     type: str = "skill_edit_accepted"
     skill_name: str
     old_version: int
@@ -402,6 +420,7 @@ class SkillEditAccepted(DomainEvent):
 
 class SkillEditRejected(DomainEvent):
     """Emitted when a proposed edit fails the validation gate."""
+
     type: str = "skill_edit_rejected"
     skill_name: str
     skill_version: int
@@ -412,6 +431,7 @@ class SkillEditRejected(DomainEvent):
 
 class EpochCompleted(DomainEvent):
     """Emitted at the end of an optimization epoch."""
+
     type: str = "epoch_completed"
     skill_name: str
     epoch: int
@@ -433,10 +453,11 @@ class SkillGapDetected(DomainEvent):
     exists yet.  These signals are batched at session completion and submitted
     as IdeaContracts for gate-reviewed skill creation (Phase 2).
     """
+
     type: str = "skill_gap_detected"
     session_id: str
     step_description: str
-    best_score: float = 0.0          # highest match score returned by retriever
+    best_score: float = 0.0  # highest match score returned by retriever
 
 
 class SkillDistilled(DomainEvent):
@@ -445,11 +466,12 @@ class SkillDistilled(DomainEvent):
     The skill is created at trust=quarantined and must pass validation
     before being promoted.  Subscribers may index it for dedup checks.
     """
+
     type: str = "skill_distilled"
     session_id: str
     skill_name: str
-    origin: str = "distilled"          # "distilled" | "imported"
-    content_preview: str = ""          # first 200 chars of content, for logging
+    origin: str = "distilled"  # "distilled" | "imported"
+    content_preview: str = ""  # first 200 chars of content, for logging
 
 
 class SkillPromoted(DomainEvent):
@@ -458,11 +480,12 @@ class SkillPromoted(DomainEvent):
     Covers both quarantined→candidate (after first validation) and
     candidate→trusted (after CANDIDATE_PROMOTION_USES positive uses).
     """
+
     type: str = "skill_promoted"
     skill_name: str
-    from_tier: str                     # "quarantined" | "candidate"
-    to_tier: str                       # "candidate" | "trusted"
-    positive_uses: int = 0             # uses accumulated at promotion time
+    from_tier: str  # "quarantined" | "candidate"
+    to_tier: str  # "candidate" | "trusted"
+    positive_uses: int = 0  # uses accumulated at promotion time
 
 
 class CorrectionPatternDetected(DomainEvent):
@@ -474,6 +497,7 @@ class CorrectionPatternDetected(DomainEvent):
     injected into future executor prompts — closing the loop that would
     otherwise require a human to notice the repetition manually.
     """
+
     type: str = "correction_pattern_detected"
     session_id: str
     category: str
@@ -488,6 +512,7 @@ class SessionConstraintRecorded(DomainEvent):
     See weebot.domain.models.session_constraint and
     tasks/specs/side_constraint_integrity_plan.md.
     """
+
     type: str = "session_constraint_recorded"
     session_id: str
     text: str
@@ -497,6 +522,7 @@ class SessionConstraintRecorded(DomainEvent):
 
 class SessionConstraintRevoked(DomainEvent):
     """Emitted when a SessionConstraint is revoked or superseded."""
+
     type: str = "session_constraint_revoked"
     session_id: str
     text: str

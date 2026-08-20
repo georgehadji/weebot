@@ -22,12 +22,13 @@ Loaded once per process and cached: this is read on every gated file
 operation, and re-parsing YAML per call would put disk I/O in the tool path.
 Call ``load_fs_permission_checker.cache_clear()`` in tests.
 """
+
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.services.fs_permission_checker import FSPermissionChecker
 from weebot.domain.models.fs_permission import FilesystemPermission
@@ -61,7 +62,9 @@ def parse_rules(raw: Any) -> list[FilesystemPermission]:
 
         bad_ops = set(operations) - _VALID_OPERATIONS
         if bad_ops:
-            logger.warning("fs_permissions rule %d has unknown operations %s; skipped", index, sorted(bad_ops))
+            logger.warning(
+                "fs_permissions rule %d has unknown operations %s; skipped", index, sorted(bad_ops)
+            )
             continue
         if not operations or not paths:
             logger.warning("fs_permissions rule %d needs both operations and paths; skipped", index)
@@ -76,13 +79,14 @@ def parse_rules(raw: Any) -> list[FilesystemPermission]:
     return rules
 
 
-def load_rules(path: Optional[Path] = None) -> list[FilesystemPermission]:
+def load_rules(path: Path | None = None) -> list[FilesystemPermission]:
     """Read and parse the rules file. Returns [] when it does not exist."""
     rules_path = path or _RULES_PATH
     if not rules_path.exists():
         return []
     try:
         import yaml
+
         with rules_path.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
     except Exception as exc:

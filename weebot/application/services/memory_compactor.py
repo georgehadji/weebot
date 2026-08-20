@@ -1,7 +1,7 @@
 """Memory compaction service — reduces token bloat from large tool outputs."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
 
 from weebot.domain.models.event import AgentEvent, ToolEvent, MessageEvent
 from weebot.domain.models.session import Session
@@ -11,7 +11,7 @@ from .constraint_extractor import ConstraintExtractor, Constraint
 
 class MemoryCompactor:
     """Compact session events to reduce context window pressure.
-    
+
     Now with constraint preservation — critical instructions (safety rules,
     negative constraints) are extracted before compaction and re-injected
     to prevent the amnesia problem documented in the MEMORY_ARTICLE.
@@ -34,7 +34,7 @@ class MemoryCompactor:
 
     def compact_session(self, session: Session) -> Session:
         """Return a new session with compacted events.
-        
+
         If constraint preservation is enabled, critical constraints are
         extracted before compaction and injected into the result.
         """
@@ -50,7 +50,7 @@ class MemoryCompactor:
         #      UNTRUSTED_OUTPUT_TOOLS), so inbound text could promote itself into
         #      a "[CRITICAL CONSTRAINTS - DO NOT VIOLATE]" header.
         # Constraints are user-issued by definition, so the filter costs nothing.
-        extracted_constraints: List[Constraint] = []
+        extracted_constraints: list[Constraint] = []
         if self.preserve_constraints and self._constraint_extractor:
             user_messages = [
                 e.message
@@ -64,24 +64,24 @@ class MemoryCompactor:
             # window just because tool output pushed the event count past 200.
             all_event_text = "\n".join(user_messages[-200:])
             extracted_constraints = self._constraint_extractor.extract(all_event_text)
-        
+
         # Perform compaction
-        compacted: List[AgentEvent] = []
+        compacted: list[AgentEvent] = []
         for event in session.events:
             compacted.append(self._compact_event(event))
         compacted = self._deduplicate_repeated_tool_results(compacted)
-        
+
         # Create compacted session — replace_events() rebuilds _memory_index for
         # the new (possibly shrunk/reordered) event list; a plain model_copy()
         # carries the old index by identity and get_last_plan() reads stale
         # positions into it, raising IndexError.
         compacted_session = session.replace_events(compacted)
-        
+
         # Re-inject constraints if any were found
         if extracted_constraints:
             constraint_text = self._constraint_extractor.format_constraints(extracted_constraints)
             compacted_session = self._inject_constraints(compacted_session, constraint_text)
-        
+
         return compacted_session
 
     def _compact_event(self, event: AgentEvent) -> AgentEvent:
@@ -89,13 +89,13 @@ class MemoryCompactor:
             return self._compact_tool_event(event)
         return event
 
-    def _deduplicate_repeated_tool_results(self, events: List[AgentEvent]) -> List[AgentEvent]:
+    def _deduplicate_repeated_tool_results(self, events: list[AgentEvent]) -> list[AgentEvent]:
         """Replace consecutive identical tool results with a count marker."""
         if not events:
             return events
 
-        deduped: List[AgentEvent] = []
-        prev_key: Optional[tuple] = None
+        deduped: list[AgentEvent] = []
+        prev_key: tuple | None = None
         run_count = 0
 
         for event in events:
@@ -108,9 +108,9 @@ class MemoryCompactor:
                     # Replace the last inserted identical event with a marker
                     last = deduped[-1]
                     if isinstance(last, ToolEvent):
-                        deduped[-1] = last.model_copy(update={
-                            "result": f"[Repeated {run_count}x] {last.result}"
-                        })
+                        deduped[-1] = last.model_copy(
+                            update={"result": f"[Repeated {run_count}x] {last.result}"}
+                        )
                 prev_key = key
                 run_count = 1
                 deduped.append(event)
@@ -118,9 +118,9 @@ class MemoryCompactor:
                 if run_count > 1 and prev_key is not None:
                     last = deduped[-1]
                     if isinstance(last, ToolEvent):
-                        deduped[-1] = last.model_copy(update={
-                            "result": f"[Repeated {run_count}x] {last.result}"
-                        })
+                        deduped[-1] = last.model_copy(
+                            update={"result": f"[Repeated {run_count}x] {last.result}"}
+                        )
                 prev_key = None
                 run_count = 0
                 deduped.append(event)
@@ -129,9 +129,9 @@ class MemoryCompactor:
         if run_count > 1 and prev_key is not None:
             last = deduped[-1]
             if isinstance(last, ToolEvent):
-                deduped[-1] = last.model_copy(update={
-                    "result": f"[Repeated {run_count}x] {last.result}"
-                })
+                deduped[-1] = last.model_copy(
+                    update={"result": f"[Repeated {run_count}x] {last.result}"}
+                )
 
         return deduped
 
@@ -139,45 +139,53 @@ class MemoryCompactor:
         if event.tool_name in ("browser_view", "browser_screenshot", "screen_capture"):
             result = event.result or ""
             if len(result) > self.max_screenshot_chars:
-                return event.model_copy(update={
-                    "result": f"[Screenshot compacted: {len(result)} chars]"
-                })
+                return event.model_copy(
+                    update={"result": f"[Screenshot compacted: {len(result)} chars]"}
+                )
 
         if event.tool_name in ("bash", "shell_exec", "powershell"):
             result = event.result or ""
             lines = result.splitlines()
             if len(lines) > self.max_shell_lines:
-                tail = lines[-self.shell_tail_lines:]
-                return event.model_copy(update={
-                    "result": f"[Output truncated from {len(lines)} lines]\n" + "\n".join(tail)
-                })
+                tail = lines[-self.shell_tail_lines :]
+                return event.model_copy(
+                    update={
+                        "result": f"[Output truncated from {len(lines)} lines]\n" + "\n".join(tail)
+                    }
+                )
 
         return event
-    
+
     def _inject_constraints(self, session: Session, constraint_text: str) -> Session:
         """Inject constraints into the session.
-        
+
         Looks for an existing system message to prepend to, or creates
         a new system message if none exists.
-        
+
         Args:
             session: The compacted session.
             constraint_text: Formatted constraint text to inject.
-            
+
         Returns:
             Session with constraints injected.
         """
         if not constraint_text:
             return session
-        
+
         constraint_marker = self._CONSTRAINT_MARKER
 
         # Look for an existing injected constraint message
         for i, event in enumerate(session.events):
-            if isinstance(event, MessageEvent) and event.role == "assistant" and event.message.startswith(constraint_marker):
+            if (
+                isinstance(event, MessageEvent)
+                and event.role == "assistant"
+                and event.message.startswith(constraint_marker)
+            ):
                 # Refresh existing constraint message
                 new_events = list(session.events)
-                new_events[i] = event.model_copy(update={"message": f"{constraint_marker}\n{constraint_text}"})
+                new_events[i] = event.model_copy(
+                    update={"message": f"{constraint_marker}\n{constraint_text}"}
+                )
                 return session.replace_events(new_events)
 
         # Inject at the tail, not the head. Position matters: the paper's

@@ -8,6 +8,7 @@ were all inert on the live (mediator) execution path, and the resume/steering
 
 See tasks/specs/side_constraint_integrity_plan.md Phase 0.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -61,8 +62,7 @@ async def test_uses_executor_factory_when_provided():
         return fake_executor
 
     handler = ExecuteStepHandler(
-        state_repo=state_repo, llm=None, tools=None, event_bus=None,
-        executor_factory=_factory,
+        state_repo=state_repo, llm=None, tools=None, event_bus=None, executor_factory=_factory
     )
     result = await handler.handle(
         ExecuteStepCommand(session_id="sess-1", step_id="s1", model="m1", user_input="the answer")
@@ -88,9 +88,7 @@ async def test_falls_back_to_bare_executor_without_factory():
     # No real LLM call is made because the step fails fast on model routing
     # in a way that's swallowed by the handler's try/except -- we only assert
     # construction and dispatch didn't raise before reaching ExecutorAgent.
-    result = await handler.handle(
-        ExecuteStepCommand(session_id="sess-1", step_id="s1")
-    )
+    result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
     # Either it runs (success) or fails inside the real executor machinery
     # (error_code set) -- both prove the legacy path is still reachable and
     # didn't crash on handler construction/dispatch itself.
@@ -101,10 +99,18 @@ async def test_falls_back_to_bare_executor_without_factory():
 async def test_session_constraints_delivered_to_executor():
     """Phase 4: hydrated constraints reach the executor via set_session_constraints."""
     session = _session_with_step()
-    state_repo = _FakeStateRepo(session, active_constraints=[
-        {"text": "never delete files", "evidence_span": "never delete files",
-         "kind": "action", "direction": "tighten", "turn_index": 0},
-    ])
+    state_repo = _FakeStateRepo(
+        session,
+        active_constraints=[
+            {
+                "text": "never delete files",
+                "evidence_span": "never delete files",
+                "kind": "action",
+                "direction": "tighten",
+                "turn_index": 0,
+            }
+        ],
+    )
 
     async def _fake_execute_step(plan, step, user_input="", session_id=""):
         yield StepEvent(step_id=step.id, description=step.description, status=StepStatus.STARTED)
@@ -113,7 +119,10 @@ async def test_session_constraints_delivered_to_executor():
     fake_executor.execute_step = _fake_execute_step
 
     handler = ExecuteStepHandler(
-        state_repo=state_repo, llm=None, tools=None, event_bus=None,
+        state_repo=state_repo,
+        llm=None,
+        tools=None,
+        event_bus=None,
         executor_factory=lambda *, model, session: fake_executor,
     )
     result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
@@ -136,7 +145,10 @@ async def test_no_constraints_does_not_call_setter():
     fake_executor.execute_step = _fake_execute_step
 
     handler = ExecuteStepHandler(
-        state_repo=state_repo, llm=None, tools=None, event_bus=None,
+        state_repo=state_repo,
+        llm=None,
+        tools=None,
+        event_bus=None,
         executor_factory=lambda *, model, session: fake_executor,
     )
     result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))
@@ -164,7 +176,10 @@ async def test_constraint_hydration_failure_does_not_block_execution():
     fake_executor.execute_step = _fake_execute_step
 
     handler = ExecuteStepHandler(
-        state_repo=_BrokenStateRepo(), llm=None, tools=None, event_bus=None,
+        state_repo=_BrokenStateRepo(),
+        llm=None,
+        tools=None,
+        event_bus=None,
         executor_factory=lambda *, model, session: fake_executor,
     )
     result = await handler.handle(ExecuteStepCommand(session_id="sess-1", step_id="s1"))

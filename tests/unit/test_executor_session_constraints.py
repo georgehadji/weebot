@@ -3,12 +3,12 @@
 Verifies the block lands as messages[-1] in the actual LLM call — the
 paper's K_ub position — not merely that a setter exists.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-import pytest
 
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.models.tool_collection import ToolCollection
@@ -23,8 +23,7 @@ class _FakeCascadeResponse:
 
 def _make_executor(session_constraints=None) -> ExecutorAgent:
     executor = ExecutorAgent(
-        llm=MagicMock(), tools=ToolCollection(),
-        session_constraints=session_constraints,
+        llm=MagicMock(), tools=ToolCollection(), session_constraints=session_constraints
     )
     return executor
 

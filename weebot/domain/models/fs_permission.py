@@ -2,11 +2,11 @@
 
 Pure domain model: no imports from Application or Infrastructure.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
-
 
 FilesystemOperation = Literal["read", "write", "execute"]
 """Operations that can be gated by a permission rule."""

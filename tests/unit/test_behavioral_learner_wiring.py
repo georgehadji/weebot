@@ -14,6 +14,7 @@ have wired dead code to dead code:
 
 See tasks/specs/side_constraint_integrity_plan.md Phase 7.1.
 """
+
 from __future__ import annotations
 
 from weebot.application.services.behavioral_learner import BehavioralLearner
@@ -27,8 +28,9 @@ class _FakeRepo:
         self.rows = rows if rows is not None else []
         self.saved: list[tuple] = []
 
-    async def save_behavioral_rule(self, rule_id, rule_text, source_session_id="",
-                                   source_message="", scope="global"):
+    async def save_behavioral_rule(
+        self, rule_id, rule_text, source_session_id="", source_message="", scope="global"
+    ):
         self.saved.append((rule_id, rule_text, source_session_id, source_message, scope))
 
     async def list_behavioral_rules(self):
@@ -37,8 +39,11 @@ class _FakeRepo:
 
 def _row(rule_id, text, scope="global"):
     return {
-        "id": rule_id, "rule_text": text, "source_session_id": "s0",
-        "source_message": "m", "scope": scope,
+        "id": rule_id,
+        "rule_text": text,
+        "source_session_id": "s0",
+        "source_message": "m",
+        "scope": scope,
     }
 
 
@@ -68,9 +73,7 @@ class TestScope:
         assert BehavioralLearner._determine_scope("never use tabs", {}) == "session"
 
     def test_tool_scoped_rule_still_detected(self):
-        scope = BehavioralLearner._determine_scope(
-            "never call bash with rm", {"tool_name": "bash"},
-        )
+        scope = BehavioralLearner._determine_scope("never call bash with rm", {"tool_name": "bash"})
         assert scope == "per_tool"
 
 
@@ -88,10 +91,12 @@ class TestHydration:
         assert "# Behavioral Rules" in prompt
 
     async def test_session_scoped_rules_do_not_leak_across_sessions(self):
-        repo = _FakeRepo([
-            _row("r1", "session-only rule", scope="session"),
-            _row("r2", "durable rule", scope="global"),
-        ])
+        repo = _FakeRepo(
+            [
+                _row("r1", "session-only rule", scope="session"),
+                _row("r2", "durable rule", scope="global"),
+            ]
+        )
         learner = BehavioralLearner(state_repo=repo)
         await learner.hydrate()
 
@@ -110,8 +115,11 @@ class TestHydration:
 
     async def test_hydrate_does_not_duplicate_existing_rules(self):
         existing = BehavioralRule(
-            id="r1", rule_text="always run tests", source_session_id="s0",
-            source_message="m", scope="global",
+            id="r1",
+            rule_text="always run tests",
+            source_session_id="s0",
+            source_message="m",
+            scope="global",
         )
         repo = _FakeRepo([_row("r1", "always run tests")])
         learner = BehavioralLearner(state_repo=repo, store=[existing])
@@ -135,10 +143,9 @@ class TestHydration:
         assert await learner.get_active_rules() == []
 
     async def test_malformed_row_does_not_poison_the_rest(self):
-        repo = _FakeRepo([
-            {"scope": "global"},  # no id -> KeyError inside the loop
-            _row("r2", "good rule"),
-        ])
+        repo = _FakeRepo(
+            [{"scope": "global"}, _row("r2", "good rule")]  # no id -> KeyError inside the loop
+        )
         learner = BehavioralLearner(state_repo=repo)
         await learner.hydrate()
 

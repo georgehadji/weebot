@@ -14,6 +14,7 @@ Usage::
     )
     flow = PlanActFlow(config)
 """
+
 from __future__ import annotations
 
 import logging
@@ -174,16 +175,20 @@ class PlanActFlowConfig:
         if self.harness_config is None and self.model:
             try:
                 from weebot.config.model_refs import get_harness_for_model
+
                 harness_path = get_harness_for_model(self.model)
                 # Only import if a per-model variant exists (get_harness_for_model
                 # returns the default path if no per-model file exists, which means
                 # we'd load the default harness — that's fine, it's just redundant)
                 if "/models/" in harness_path:  # Per-model variant exists
                     from weebot.config.harness.schema import HarnessConfig
+
                     self.harness_config = HarnessConfig.load(harness_path)
             except Exception as exc:
                 # Graceful fallback — use default harness, but don't hide why.
                 logger.warning(
                     "Per-model harness load failed for model=%r — falling back "
-                    "to default harness: %s", self.model, exc,
+                    "to default harness: %s",
+                    self.model,
+                    exc,
                 )

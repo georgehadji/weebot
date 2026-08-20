@@ -1,14 +1,23 @@
 """Executing state for Plan-Act flow."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.audit import AuditVerdict
-from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent, ToolApprovalEvent, ToolEvent, WaitForUserEvent
+from weebot.domain.models.event import (
+    AgentEvent,
+    ErrorEvent,
+    MessageEvent,
+    ToolApprovalEvent,
+    ToolEvent,
+    WaitForUserEvent,
+)
 from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
@@ -16,25 +25,50 @@ logger = logging.getLogger(__name__)
 
 # ── Code step detection helpers (Phase 8: per-step code review) ────
 # Tool names whose presence indicates a code-producing step
-_CODE_TOOL_NAMES: frozenset[str] = frozenset({
-    "file_editor", "edit_file", "write_file", "create_file",
-    "bash", "shell", "execute_command", "run_command",
-    "write", "edit", "patch",
-})
+_CODE_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "file_editor",
+        "edit_file",
+        "write_file",
+        "create_file",
+        "bash",
+        "shell",
+        "execute_command",
+        "run_command",
+        "write",
+        "edit",
+        "patch",
+    }
+)
 
 # Step description keywords that indicate code production
-_CODE_KEYWORDS: frozenset[str] = frozenset({
-    "implement", "write", "create file", "edit file", "modify",
-    "add function", "add method", "add class", "fix bug",
-    "refactor", "update file", "generate", "scaffold", "build",
-    "code", "script", "patch",
-})
+_CODE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "implement",
+        "write",
+        "create file",
+        "edit file",
+        "modify",
+        "add function",
+        "add method",
+        "add class",
+        "fix bug",
+        "refactor",
+        "update file",
+        "generate",
+        "scaffold",
+        "build",
+        "code",
+        "script",
+        "patch",
+    }
+)
 
 # Reviewer retries gate — must match _MAX_REVIEW_RETRIES in ReviewingState
 _MAX_REVIEW_RETRIES_GATE: int = 2
 
 
-def _is_code_step(step: "Step", events: list[Any] | None = None) -> bool:
+def _is_code_step(step: Step, events: list[Any] | None = None) -> bool:
     """Return True if this step likely produced or modified code.
 
     Uses both keyword matching on the step description and, when available,
@@ -75,12 +109,13 @@ def _step_fetched_inbound_mail(events: list[Any]) -> bool:
 
 class ExecutingState(FlowState):
     """Handles the execution of individual steps in the plan."""
+
     status = AgentStatus.EXECUTING
 
     # ── Browser invocation audit ───────────────────────────────────
 
     @staticmethod
-    def _audit_browser_invocation(context: "PlanActFlow") -> None:
+    def _audit_browser_invocation(context: PlanActFlow) -> None:
         """Post-execution check: if plan mentions browser tools but none were invoked, warn.
 
         Scans plan step descriptions for browser-related keywords. If any match,
@@ -88,16 +123,23 @@ class ExecutingState(FlowState):
         Emits WARNING if the plan expected browser interaction but none occurred.
         """
         _browser_kw = {
-            "browser_navigator", "advanced_browser", "web_scraper", "browser_inspector",
-            "navigate", "click", "fill", "screenshot", "compose", "login",
+            "browser_navigator",
+            "advanced_browser",
+            "web_scraper",
+            "browser_inspector",
+            "navigate",
+            "click",
+            "fill",
+            "screenshot",
+            "compose",
+            "login",
         }
         _plan = getattr(context, "_plan", None)
         if _plan is None or not hasattr(_plan, "steps"):
             return
 
         _plan_has_browser = any(
-            any(kw in (s.description or "").lower() for kw in _browser_kw)
-            for s in _plan.steps
+            any(kw in (s.description or "").lower() for kw in _browser_kw) for s in _plan.steps
         )
         if not _plan_has_browser:
             return
@@ -115,20 +157,24 @@ class ExecutingState(FlowState):
 
         if not _browser_called:
             import logging as _log
+
             _log.getLogger("weebot.application.flows.states.executing").warning(
                 "Plan contains browser-related steps (%d browser keywords found), "
                 "but no browser tool was invoked during execution. "
                 "The model may not support browser tool calls. "
                 "Consider using a model with higher tool-use capability.",
-                sum(1 for s in _plan.steps for kw in _browser_kw if kw in (s.description or "").lower()),
+                sum(
+                    1
+                    for s in _plan.steps
+                    for kw in _browser_kw
+                    if kw in (s.description or "").lower()
+                ),
             )
 
     # ── Constraint enforcement gate (Lost-in-Compaction Phase 5.4) ─────
 
     @staticmethod
-    def _constraint_violations(
-        context: "PlanActFlow", step: "Step", prompt: str
-    ) -> list:
+    def _constraint_violations(context: PlanActFlow, step: Step, prompt: str) -> list:
         """Return the constraints *step* appears to violate, or an empty list.
 
         Prefers the session-constraint registry, which accumulates every user
@@ -172,7 +218,7 @@ class ExecutingState(FlowState):
 
     @staticmethod
     async def _journal_constraint_violation(
-        context: "PlanActFlow", step: "Step", constraint_text: str
+        context: PlanActFlow, step: Step, constraint_text: str
     ) -> None:
         """Record the pause in the misalignment journal, best-effort.
 
@@ -187,19 +233,19 @@ class ExecutingState(FlowState):
         try:
             from weebot.domain.models.misalignment_entry import MisalignmentEntry
 
-            await journal.record(MisalignmentEntry(
-                session_id=context._session.id,
-                project_path=context._session.context.get("working_dir", ""),
-                symptom="constraint_violation",
-                constraint_text=constraint_text,
-                step_description=step.description,
-            ))
+            await journal.record(
+                MisalignmentEntry(
+                    session_id=context._session.id,
+                    project_path=context._session.context.get("working_dir", ""),
+                    symptom="constraint_violation",
+                    constraint_text=constraint_text,
+                    step_description=step.description,
+                )
+            )
         except Exception as exc:
             logger.warning("Misalignment journal write failed: %s", exc)
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.verifying import VerifyingState
         from weebot.application.flows.states.updating import UpdatingState
 
@@ -224,14 +270,11 @@ class ExecutingState(FlowState):
         # require explicit user confirmation before the agent acts on that content.
         if context._session.get_fact("atomic_mail_inbound_pending"):
             from weebot.core.approval_policy import ExecApprovalPolicy
-            _mail_ap = ExecApprovalPolicy().evaluate(
-                "act on inbound email content", "inbound_mail"
-            )
+
+            _mail_ap = ExecApprovalPolicy().evaluate("act on inbound email content", "inbound_mail")
             if _mail_ap.requires_confirmation:
                 # Clear flag before pausing so the resume call proceeds normally.
-                context._session = context._session.set_fact(
-                    "atomic_mail_inbound_pending", False
-                )
+                context._session = context._session.set_fact("atomic_mail_inbound_pending", False)
                 context._session = context._session.set_status(SessionStatus.WAITING)
                 yield WaitForUserEvent(
                     question=(
@@ -257,8 +300,7 @@ class ExecutingState(FlowState):
         if _violations:
             _violation_text = "; ".join(c.text for c in _violations[:2])
             logger.warning(
-                "Step '%s' may violate constraint: %s — pausing for user",
-                step.id, _violation_text,
+                "Step '%s' may violate constraint: %s — pausing for user", step.id, _violation_text
             )
             await self._journal_constraint_violation(context, step, _violations[0].text)
             # Clear the gate for this step BEFORE pausing. On resume FlowRouter
@@ -284,6 +326,7 @@ class ExecutingState(FlowState):
         _dedup_window = 30.0
         if context._behavioral_learner is not None and prompt:
             import time as _time
+
             now = _time.monotonic()
             last = getattr(context, "_last_blearn_ts", {}).get(context._session.id, 0)
             if now - last > _dedup_window:
@@ -309,8 +352,7 @@ class ExecutingState(FlowState):
             steering_msg = await context._steering.poll(context._session.id)
             if steering_msg:
                 logger.info(
-                    "Steering received for session %s: %s",
-                    context._session.id, steering_msg[:80],
+                    "Steering received for session %s: %s", context._session.id, steering_msg[:80]
                 )
                 effective_prompt = (
                     f"{prompt}\n\n[STEERING — the user says: {steering_msg}. "
@@ -324,11 +366,13 @@ class ExecutingState(FlowState):
         if step_exec_count > context._max_step_repetitions:
             logger.warning(
                 "Step %s executed %d times (limit: %d). Forcing completion.",
-                step.id, step_exec_count, context._max_step_repetitions
+                step.id,
+                step_exec_count,
+                context._max_step_repetitions,
             )
             yield ErrorEvent(
                 error=f"Step '{step.description}' repeated {step_exec_count} times. "
-                      f"Agent may be stuck in a loop. Completing task."
+                f"Agent may be stuck in a loop. Completing task."
             )
             context.set_state(VerifyingState())
             return
@@ -339,17 +383,18 @@ class ExecutingState(FlowState):
         logger.info("Executing step %s: %s", step.id, step.description)
 
         if getattr(context, "_hooks", None) is not None:
-            _step_idx = next(
-                (i for i, s in enumerate(context._plan.steps) if s.id == step.id), 0
+            _step_idx = next((i for i, s in enumerate(context._plan.steps) if s.id == step.id), 0)
+            await context._hooks.execute_hooks(
+                "pre_task",
+                {
+                    "session_id": context._session.id,
+                    "step_id": step.id,
+                    "step_description": step.description,
+                    "step_index": _step_idx,
+                    "total_steps": len(context._plan.steps),
+                    "plan": context._plan,
+                },
             )
-            await context._hooks.execute_hooks("pre_task", {
-                "session_id": context._session.id,
-                "step_id": step.id,
-                "step_description": step.description,
-                "step_index": _step_idx,
-                "total_steps": len(context._plan.steps),
-                "plan": context._plan,
-            })
 
         # Initialize flags before the event consumption paths
         hitl_paused = False
@@ -370,9 +415,11 @@ class ExecutingState(FlowState):
             return
 
         import time as _time
+
         _step_t0 = _time.monotonic()
         from weebot.application.cqrs.commands import ExecuteStepCommand
         from weebot.config.model_refs import MODEL_BUDGET
+
         cmd_result = await context._mediator.send(
             ExecuteStepCommand(
                 session_id=context._session.id,
@@ -384,14 +431,13 @@ class ExecutingState(FlowState):
         )
         _step_elapsed = _time.monotonic() - _step_t0
         if not cmd_result.success:
-            yield ErrorEvent(
-                error=f"Step execution rejected: {cmd_result.error}"
-            )
+            yield ErrorEvent(error=f"Step execution rejected: {cmd_result.error}")
             context.set_state(UpdatingState())
             return
 
         # Consume events from the mediator result via shared reconstructor.
         from weebot.application.cqrs.event_reconstructor import reconstruct_events
+
         _current_step_events: list[Any] = []
         for event in reconstruct_events(cmd_result.data.get("events", [])):
             _current_step_events.append(event)
@@ -403,61 +449,69 @@ class ExecutingState(FlowState):
                 hitl_paused = True
                 logger.info(
                     "Tool '%s' requires approval (risk=%s): %s",
-                    event.tool_name, event.risk_level, event.reason,
+                    event.tool_name,
+                    event.risk_level,
+                    event.reason,
                 )
             elif isinstance(event, ErrorEvent):
                 execution_failed = True
             # Reconstruct shutdown signals from the serialised events
-            if getattr(event, "type", "") == "tool" and getattr(event, "tool_name", "") == "terminate":
+            if (
+                getattr(event, "type", "") == "tool"
+                and getattr(event, "tool_name", "") == "terminate"
+            ):
                 inner_should_terminate = True
 
         # ── Inbound-mail content flag (ADR 006) ──────────────────────────────
         # If this step called atomic_mail jmap_request and returned content,
         # flag the session so the NEXT step is gated through approval_policy.
         if _step_fetched_inbound_mail(_current_step_events):
-            context._session = context._session.set_fact(
-                "atomic_mail_inbound_pending", True
-            )
+            context._session = context._session.set_fact("atomic_mail_inbound_pending", True)
         # ─────────────────────────────────────────────────────────────────────
 
         # ── Extract step result from execution events for quality validation ──
         _last_result_text = ""
         for event in _current_step_events:
-            if isinstance(event, MessageEvent) and getattr(event, 'role', '') == 'assistant':
-                msg = getattr(event, 'message', '') or ''
+            if isinstance(event, MessageEvent) and getattr(event, "role", "") == "assistant":
+                msg = getattr(event, "message", "") or ""
                 if msg and len(msg) > len(_last_result_text):
                     _last_result_text = msg
             elif isinstance(event, ToolEvent):
-                tr = getattr(event, 'result', '') or ''
+                tr = getattr(event, "result", "") or ""
                 if tr and len(tr) > len(_last_result_text):
                     _last_result_text = tr
         if _last_result_text:
             step = step.model_copy(update={"result": _last_result_text})
 
         if hitl_paused:
-            logger.info("Step %s paused for human input after %.1fs",
-                        step.id, _step_elapsed)
+            logger.info("Step %s paused for human input after %.1fs", step.id, _step_elapsed)
             # Fire post_task on pause so observers track step timing
             if getattr(context, "_hooks", None) is not None:
-                await context._hooks.execute_hooks("post_task", {
-                    "session_id": context._session.id,
-                    "step_id": step.id,
-                    "step_description": step.description,
-                    "elapsed_ms": _step_elapsed * 1000,
-                    "plan": context._plan,
-                })
+                await context._hooks.execute_hooks(
+                    "post_task",
+                    {
+                        "session_id": context._session.id,
+                        "step_id": step.id,
+                        "step_description": step.description,
+                        "elapsed_ms": _step_elapsed * 1000,
+                        "plan": context._plan,
+                    },
+                )
             context._session = context._session.set_status(SessionStatus.WAITING)
             return
 
         if execution_failed:
             if getattr(context, "_hooks", None) is not None:
-                await context._hooks.execute_hooks("on_error", {
-                    "session_id": context._session.id,
-                    "step_id": step.id,
-                    "error": "step execution failed",
-                    "error_type": "step_failure",
-                    "plan": context._plan,
-                })
+                await context._hooks.execute_hooks(
+                    "on_error",
+                    {
+                        "session_id": context._session.id,
+                        "step_id": step.id,
+                        "error": "step execution failed",
+                        "error_type": "step_failure",
+                        "plan": context._plan,
+                    },
+                )
             eval_events = cmd_result.data.get("events", [])
             # If ALL models are circuit-broken, replanning will also fail.
             # Skip the replan cycle and go straight to terminal state.
@@ -469,13 +523,15 @@ class ExecutingState(FlowState):
             if _all_tripped:
                 logger.warning(
                     "Step %s: all models tripped — skipping replan, marking UNVERIFIED (%.1fs)",
-                    step.id, _step_elapsed,
+                    step.id,
+                    _step_elapsed,
                 )
                 # Not COMPLETED: no model was able to run, so there is no
                 # evidence a real audit could check. Forcing completion here
                 # would be exactly the silent bypass E1 exists to close.
                 context._plan = context._plan.update_step_status(
-                    step.id, StepStatus.UNVERIFIED,
+                    step.id,
+                    StepStatus.UNVERIFIED,
                     result="all models circuit-broken — step did not execute",
                 )
                 context.set_state(VerifyingState())
@@ -488,33 +544,30 @@ class ExecutingState(FlowState):
                     _error_msg = str(_ev.error or _error_msg)
 
             # Classify failure severity and route accordingly (3-tier)
-            from weebot.application.agents.executor._error_handler import (
-                classify_failure_severity,
-            )
+            from weebot.application.agents.executor._error_handler import classify_failure_severity
+
             _severity = classify_failure_severity(_error_msg)
             if _severity == "minor_fix" and step.retry_count < 1:
-                logger.warning(
-                    "Step %s MINOR failure (%s) — retrying once",
-                    step.id, _severity,
-                )
+                logger.warning("Step %s MINOR failure (%s) — retrying once", step.id, _severity)
                 # Reset step to PENDING so get_next_step() picks it up again
-                step = step.model_copy(update={
-                    "status": StepStatus.PENDING,
-                    "retry_count": step.retry_count + 1,
-                })
+                step = step.model_copy(
+                    update={"status": StepStatus.PENDING, "retry_count": step.retry_count + 1}
+                )
                 context._plan = context._plan.update_step(step)
                 context.set_state(ExecutingState())
             elif _severity == "full_replan":
                 logger.warning(
-                    "Step %s CRITICAL failure (%s) — restarting planning",
-                    step.id, _severity,
+                    "Step %s CRITICAL failure (%s) — restarting planning", step.id, _severity
                 )
                 from weebot.application.flows.states.planning import PlanningState
+
                 context.set_state(PlanningState())
             else:
                 logger.warning(
                     "Step %s failed during execution in %.1fs (%s); transitioning to UPDATING",
-                    step.id, _step_elapsed, _severity,
+                    step.id,
+                    _step_elapsed,
+                    _severity,
                 )
                 context.set_state(UpdatingState())
             return
@@ -522,11 +575,11 @@ class ExecutingState(FlowState):
         # ── Phase 3: Step-result quality check ──────────────────────
         # Gated on task_preset.enable_step_validation (default True).
         _sv_enabled = getattr(
-            getattr(context, "_task_preset", None),
-            "enable_step_validation", True,
+            getattr(context, "_task_preset", None), "enable_step_validation", True
         )
         if _sv_enabled and step.retry_count < 1:
             from weebot.application.services.step_result_validator import StepResultValidator
+
             _validator = StepResultValidator()
             validation = _validator.validate(
                 result=str(step.result or ""),
@@ -537,14 +590,17 @@ class ExecutingState(FlowState):
             if not validation.passed:
                 logger.info(
                     "Step '%s' failed quality check (%s) — retrying with hint",
-                    step.id, validation.reason,
+                    step.id,
+                    validation.reason,
                 )
                 # Inject quality hint into step description and retry
-                updated_step = step.model_copy(update={
-                    "description": f"{step.description}\n[Quality hint: {validation.quality_hint}]",
-                    "retry_count": 1,
-                    "status": StepStatus.PENDING,
-                })
+                updated_step = step.model_copy(
+                    update={
+                        "description": f"{step.description}\n[Quality hint: {validation.quality_hint}]",
+                        "retry_count": 1,
+                        "status": StepStatus.PENDING,
+                    }
+                )
                 context._plan = context._plan.replace_step(step.id, updated_step)
                 # Stay in ExecutingState to retry the same step
                 context.set_state(ExecutingState())
@@ -554,7 +610,8 @@ class ExecutingState(FlowState):
         _step_evaluator = getattr(context, "_step_evaluator", None)
         if _step_evaluator is not None and step.result:
             _prev_outputs = [
-                s.result for s in context._plan.steps
+                s.result
+                for s in context._plan.steps
                 if s.is_done() and s.id != step.id and s.result
             ]
             _eval = await _step_evaluator.evaluate(
@@ -566,7 +623,10 @@ class ExecutingState(FlowState):
             if not _eval.passed:
                 logger.warning(
                     "Step '%s' failed progress eval (score=%.2f, regression=%s): %s",
-                    step.id, _eval.score, _eval.regression_detected, _eval.reasoning,
+                    step.id,
+                    _eval.score,
+                    _eval.regression_detected,
+                    _eval.reasoning,
                 )
                 context.set_state(UpdatingState())
                 return
@@ -580,24 +640,28 @@ class ExecutingState(FlowState):
         if _step_audit_service is not None:
             _step_tool_events = [e for e in _current_step_events if isinstance(e, ToolEvent)]
             _audit_report = await _step_audit_service.audit_step(
-                step=step, events=_step_tool_events, session_id=context._session.id,
+                step=step, events=_step_tool_events, session_id=context._session.id
             )
             if _audit_report.verdict != AuditVerdict.PASS:
                 logger.warning(
                     "Step '%s' failed evidence audit (%s): %s",
-                    step.id, _audit_report.verdict.value, _audit_report.summary,
+                    step.id,
+                    _audit_report.verdict.value,
+                    _audit_report.summary,
                 )
                 if step.retry_count < 1:
-                    updated_step = step.model_copy(update={
-                        "description": f"{step.description}\n[Evidence gap: {_audit_report.summary}]",
-                        "retry_count": 1,
-                        "status": StepStatus.PENDING,
-                    })
+                    updated_step = step.model_copy(
+                        update={
+                            "description": f"{step.description}\n[Evidence gap: {_audit_report.summary}]",
+                            "retry_count": 1,
+                            "status": StepStatus.PENDING,
+                        }
+                    )
                     context._plan = context._plan.replace_step(step.id, updated_step)
                     context.set_state(ExecutingState())
                     return
                 context._plan = context._plan.update_step_status(
-                    step.id, StepStatus.UNVERIFIED, result=_audit_report.summary,
+                    step.id, StepStatus.UNVERIFIED, result=_audit_report.summary
                 )
                 logger.info("Step %s UNVERIFIED after retry (%.1fs)", step.id, _step_elapsed)
                 context.set_state(UpdatingState())
@@ -605,18 +669,21 @@ class ExecutingState(FlowState):
 
         # Update step as completed, carrying the extracted result through
         context._plan = context._plan.update_step_status(
-            step.id, StepStatus.COMPLETED, result=step.result or None,
+            step.id, StepStatus.COMPLETED, result=step.result or None
         )
         logger.info("Step %s completed in %.1fs", step.id, _step_elapsed)
 
         if getattr(context, "_hooks", None) is not None:
-            await context._hooks.execute_hooks("post_task", {
-                "session_id": context._session.id,
-                "step_id": step.id,
-                "step_description": step.description,
-                "elapsed_ms": _step_elapsed * 1000,
-                "plan": context._plan,
-            })
+            await context._hooks.execute_hooks(
+                "post_task",
+                {
+                    "session_id": context._session.id,
+                    "step_id": step.id,
+                    "step_description": step.description,
+                    "elapsed_ms": _step_elapsed * 1000,
+                    "plan": context._plan,
+                },
+            )
 
         # Persist any facts extracted by the executor BEFORE checking termination
         for key, value in inner_facts.items():
@@ -680,6 +747,7 @@ class ExecutingState(FlowState):
             and step.retry_count < _MAX_REVIEW_RETRIES_GATE
         ):
             from weebot.application.flows.states.reviewing import ReviewingState
+
             context.set_state(
                 ReviewingState(
                     step=step,

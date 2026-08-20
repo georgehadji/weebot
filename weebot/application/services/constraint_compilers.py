@@ -34,9 +34,10 @@ mechanical gate that exists — ``EgressGuard``'s outbound-mail branch — gates
 tool identity and needs no compiled rule. Add the dispatch when a second
 consumer needs a second shape.
 """
+
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from weebot.domain.models.session_constraint import (
     ConstraintDirection,
@@ -55,9 +56,7 @@ _COMPILED_TYPE = "negative"
 _COMPILED_PRIORITY = 2
 
 
-def compile_enforceable(
-    registry: Optional[SessionConstraintRegistry],
-) -> List[Constraint]:
+def compile_enforceable(registry: SessionConstraintRegistry | None) -> list[Constraint]:
     """Return the subset of *registry* that a step gate may enforce.
 
     Adapts ``SessionConstraint`` to the ``Constraint`` shape
@@ -71,17 +70,13 @@ def compile_enforceable(
     if registry is None:
         return []
     return [
-        Constraint(
-            text=c.text,
-            constraint_type=_COMPILED_TYPE,
-            priority=_COMPILED_PRIORITY,
-        )
+        Constraint(text=c.text, constraint_type=_COMPILED_TYPE, priority=_COMPILED_PRIORITY)
         for c in registry.active(direction=ConstraintDirection.TIGHTEN)
         if c.kind in _ENFORCEABLE_KINDS
     ]
 
 
-def compile_from_flow(flow: Any) -> List[Constraint]:
+def compile_from_flow(flow: Any) -> list[Constraint]:
     """Compile the registry a ``PlanActFlow`` is already holding.
 
     ``PlanActFlow._session_constraints`` is hydrated and updated per user turn

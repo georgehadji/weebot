@@ -8,10 +8,11 @@ SOUL.md identity is resolved from the DI container and injected into
 PlanActFlow.  The ``profile_name`` parameter maps to the SOUL.md profile
 under ``~/.weebot/profiles/<name>/SOUL.md``.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -21,15 +22,20 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.session import Session
 from weebot.domain.models.task_route import TaskRoute
+
+
 # Lazy import via importlib to avoid import-linter trace
 def _get_tool_collection_cls():
     import importlib as _il
+
     return _il.import_module("weebot.tools.base").ToolCollection
+
 
 _log = logging.getLogger(__name__)
 
 # Shared DI container — initialized once and cached for all flow creation.
 import threading
+
 _shared_container = None
 _shared_container_lock = threading.Lock()
 
@@ -40,9 +46,7 @@ def _build_ponytail_skill_prompt(existing: str | None) -> str | None:
     Delegates to the Application-layer helper so CLI and web share the same
     resolution logic.
     """
-    from weebot.application.services.ponytail_skill_prompt import (
-        build_ponytail_skill_prompt,
-    )
+    from weebot.application.services.ponytail_skill_prompt import build_ponytail_skill_prompt
 
     return build_ponytail_skill_prompt(existing)
 
@@ -58,6 +62,7 @@ def _cached(key: str):
             if _shared_container is None:
                 try:
                     from weebot.application.di import Container
+
                     _shared_container = Container()
                     _shared_container.configure_defaults()
                 except Exception:
@@ -74,12 +79,12 @@ async def route_and_create_flow(
     llm: LLMPort,
     tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
     router: TaskRouterPort,
-    event_bus: Optional[EventBusPort] = None,
-    model: Optional[str] = None,
-    skill_prompt: Optional[str] = None,
-    mediator = None,
-    state_repo: Optional[StateRepositoryPort] = None,
-    steering = None,
+    event_bus: EventBusPort | None = None,
+    model: str | None = None,
+    skill_prompt: str | None = None,
+    mediator=None,
+    state_repo: StateRepositoryPort | None = None,
+    steering=None,
     profile_name: str | None = None,
 ) -> tuple[BaseFlow, TaskRoute]:
     """Route *query* through *router*, then create the appropriate flow.
@@ -108,6 +113,7 @@ def _resolve_personality():
     """Resolve PersonalityManager from the DI container, or None."""
     try:
         from weebot.application.di import Container
+
         c = Container()
         c.configure_defaults()
         return c.get("personality")
@@ -121,13 +127,13 @@ def create_flow(
     session: Session,
     llm: LLMPort,
     tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
-    event_bus: Optional[EventBusPort] = None,
-    model: Optional[str] = None,
-    skill_prompt: Optional[str] = None,
-    mediator = None,
-    state_repo: Optional[StateRepositoryPort] = None,
-    steering = None,
-    task_route: Optional[TaskRoute] = None,
+    event_bus: EventBusPort | None = None,
+    model: str | None = None,
+    skill_prompt: str | None = None,
+    mediator=None,
+    state_repo: StateRepositoryPort | None = None,
+    steering=None,
+    task_route: TaskRoute | None = None,
     profile_name: str | None = None,
 ) -> BaseFlow:
     """Factory for creating agent flows.
@@ -155,6 +161,7 @@ def create_flow(
         # port unresolved keeps that cost off the default path entirely — the
         # guard then records NOT_RUN, which is not a pass.
         from weebot.config.feature_flags import WORKSPACE_INTEGRITY_GUARD_ENABLED
+
         _workspace_snapshots = (
             _cached("workspace_snapshots") if WORKSPACE_INTEGRITY_GUARD_ENABLED else None
         )
@@ -164,10 +171,12 @@ def create_flow(
         _task_preset = None
         if task_route is not None:
             from weebot.config.task_preset_registry import select_preset
+
             _task_preset = select_preset(task_route)
         # Knowledge-graph extraction is opt-in: the hook in ExecutingState
         # writes a node per "key: value" line of every step result.
         from weebot.config.feature_flags import KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
+
         _knowledge_graph = (
             _cached("knowledge_graph") if KNOWLEDGE_GRAPH_EXTRACTION_ENABLED else None
         )
@@ -199,19 +208,16 @@ def create_flow(
         )
     if flow_type == "chat":
         import importlib as _il
+
         _chat_flow_mod = _il.import_module("weebot.application.flows.chat_flow")
         ChatFlow = _chat_flow_mod.ChatFlow
         return ChatFlow(
-            llm=llm,
-            session=session,
-            event_bus=event_bus,
-            model=model,
-            mediator=mediator,
+            llm=llm, session=session, event_bus=event_bus, model=model, mediator=mediator
         )
     raise ValueError(f"Unknown flow type: {flow_type}")
 
 
-def _get_flow_factory(llm_port: Optional[LLMPort]) -> Any | None:
+def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:
     """Build a flow_factory for tools that spawn sub-agent PlanActFlows.
 
     Returns ``None`` when LLM port is unavailable or Container wiring fails.
@@ -220,16 +226,20 @@ def _get_flow_factory(llm_port: Optional[LLMPort]) -> Any | None:
         return None
     try:
         from weebot.application.di import Container
+
         c = Container()
         c.configure_defaults()
         from weebot.application.ports.state_repo_port import StateRepositoryPort
+
         state_repo = c.get(StateRepositoryPort)
         from weebot.application.ports.event_bus_port import EventBusPort
+
         event_bus = c.get(EventBusPort)
 
         def _factory(session):
             from weebot.application.flows.plan_act_flow import PlanActFlow
             from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+
             config = PlanActFlowConfig(
                 llm=llm_port,
                 tools=None,
@@ -246,13 +256,14 @@ def _get_flow_factory(llm_port: Optional[LLMPort]) -> Any | None:
 
 async def build_tools(
     role: str = "admin",
-    mcp_config: Optional[dict] = None,
-    extra_tools: Optional[list] = None,
-    llm_port: Optional[LLMPort] = None,
-    mcp_adapter: Optional[object] = None,
+    mcp_config: dict | None = None,
+    extra_tools: list | None = None,
+    llm_port: LLMPort | None = None,
+    mcp_adapter: object | None = None,
 ) -> Any:  # ToolCollection — resolved via _get_tool_collection_cls()
     """Factory for building a ToolCollection for a given role and optional MCP config."""
     import importlib as _il
+
     _tool_registry_mod = _il.import_module("weebot.tools.tool_registry")
     _base_mod = _il.import_module("weebot.tools.base")
     RoleBasedToolRegistry = _tool_registry_mod.RoleBasedToolRegistry
@@ -263,15 +274,16 @@ async def build_tools(
     # Build flow_factory for tools that spawn sub-agents (debate, dispatch_parallel_tasks)
     flow_factory = _get_flow_factory(llm_port)
 
-    combined: list[BaseTool] = list(registry.create_tool_collection(
-        role, llm_port=llm_port, flow_factory=flow_factory,
-    ))
+    combined: list[BaseTool] = list(
+        registry.create_tool_collection(role, llm_port=llm_port, flow_factory=flow_factory)
+    )
 
     if mcp_config:
         if mcp_adapter is not None:
             adapter = mcp_adapter
         else:
             import importlib as _il
+
             _mcp_mod = _il.import_module("weebot.infrastructure.mcp.mcp_toolkit_adapter")
             adapter = _mcp_mod.MCPToolkitAdapter()
         await adapter.initialize(mcp_config)
@@ -283,10 +295,12 @@ async def build_tools(
     # Apify preset tools — opt-in via APIFY_API_KEY env var
     import os
     import logging as _logging
+
     _apify_logger = _logging.getLogger("weebot.interfaces.factories")
     if os.getenv("APIFY_API_KEY"):
         try:
             import importlib as _il
+
             ApifyService = _il.import_module("weebot.infrastructure.adapters.apify").ApifyService
             _apify_presets = _il.import_module("weebot.tools.apify_presets")
             create_apify_preset_tools = _apify_presets.create_apify_preset_tools

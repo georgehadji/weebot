@@ -5,6 +5,7 @@ directive persisted per-session so it survives compaction and reconnects
 independently of the (evictable, compactable) executor conversation buffer.
 See tasks/specs/side_constraint_integrity_plan.md.
 """
+
 from __future__ import annotations
 
 from weebot.domain.models.session_constraint import SessionConstraint
@@ -35,7 +36,7 @@ class SessionConstraintRepo:
                     constraint.kind.value,
                     constraint.direction.value,
                     constraint.turn_index,
-                    constraint.revoked_at.isoformat() if constraint.revoked_at else None,
+                    (constraint.revoked_at.isoformat() if constraint.revoked_at else None),
                     constraint.superseded_by,
                     constraint.created_at.isoformat(),
                 ),

@@ -1,4 +1,5 @@
 """Plan-Act flow — core state machine for autonomous task execution."""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,9 +29,7 @@ from weebot.application.services.memory_compactor import MemoryCompactor
 from weebot.application.services.context_switcher import ContextSwitcher
 from weebot.application.services.plan_history import PlanHistory
 from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
-from weebot.application.services.model_aware_harness_resolver import (
-    ModelAwareHarnessResolver,
-)
+from weebot.application.services.model_aware_harness_resolver import ModelAwareHarnessResolver
 
 
 class PlanStuckError(RuntimeError):
@@ -39,16 +38,14 @@ class PlanStuckError(RuntimeError):
     This breaks the replanning loop and surfaces the stuck state to the
     operator rather than silently retrying with identical plans.
     """
+
     pass
-from weebot.domain.services.continuation_detector import (  # noqa: E402
-    ContinuationDetector,
-)
+
+
+from weebot.domain.services.continuation_detector import ContinuationDetector  # noqa: E402
 from weebot.application.services.plan_critic import PlanCriticService  # noqa: E402
 from weebot.application.services.truth_binder import TruthBinder  # noqa: E402
-from weebot.domain.models.event import (  # noqa: E402
-    AgentEvent,
-    ErrorEvent,
-)
+from weebot.domain.models.event import AgentEvent, ErrorEvent  # noqa: E402
 from weebot.domain.models.plan import Plan  # noqa: E402
 from weebot.domain.models.session import Session, SessionStatus  # noqa: E402
 from weebot.domain.models.task_preset import TaskPreset  # noqa: E402
@@ -68,7 +65,9 @@ if TYPE_CHECKING:
 # The module-level logger is a fallback for static/class methods only.
 logger = logging.getLogger(__name__)
 
-from weebot.application.services.metrics_bridge import get_metrics as _get_metrics_bridge  # noqa: E402
+from weebot.application.services.metrics_bridge import (  # noqa: E402
+    get_metrics as _get_metrics_bridge,
+)
 
 
 class PlanActFlow(BaseFlow):
@@ -86,10 +85,10 @@ class PlanActFlow(BaseFlow):
         event_bus: EventBusPort | None = None,
         model: str | None = None,
         skill_prompt: str | None = None,
-        episodic_memory = None,
+        episodic_memory=None,
         mediator: Mediator | None = None,
         state_repo: StateRepositoryPort | None = None,
-        steering = None,
+        steering=None,
         max_step_repetitions: int = DEFAULT_MAX_STEP_REPETITIONS,
         max_iterations: int = DEFAULT_MAX_FLOW_ITERATIONS,
         auto_terminate_on_plan_complete: bool = True,
@@ -107,7 +106,7 @@ class PlanActFlow(BaseFlow):
         logger: StructuredLogger | None = None,
         checkpoint_port: CheckpointPort | None = None,
         profile_name: str | None = None,
-        personality = None,
+        personality=None,
         agent_role: str | None = None,
         session_constraint_extractor: Any | None = None,
         correction_tracker: Any | None = None,
@@ -169,7 +168,9 @@ class PlanActFlow(BaseFlow):
         self._code_reviewer = cfg.code_reviewer  # CodeReviewerPort — per-step code review
         self._step_audit_service = cfg.step_audit_service  # StepAuditPort — per-step evidence gate
         self._verifier_llm = cfg.verifier_llm  # Optional cheap-tier LLM for VerifyingState (E6)
-        self._workspace_snapshots = cfg.workspace_snapshots  # WorkspaceSnapshotPort — integrity axis (E7b)
+        self._workspace_snapshots = (
+            cfg.workspace_snapshots
+        )  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
@@ -180,7 +181,9 @@ class PlanActFlow(BaseFlow):
         self._hooks = cfg.hooks  # Optional[HookRegistry] — None = no-op
         self._misalignment_journal = cfg.misalignment_journal  # Optional[MisalignmentJournalPort]
         self._correction_tracker = cfg.correction_tracker  # Optional[CorrectionTracker]
-        self._sc_extractor = cfg.session_constraint_extractor  # Optional[SessionConstraintExtractor]
+        self._sc_extractor = (
+            cfg.session_constraint_extractor
+        )  # Optional[SessionConstraintExtractor]
         self._session_constraints = None  # SessionConstraintRegistry — hydrated lazily in run()
         self._profile_name = cfg.profile_name
         self._agent_role = cfg.agent_role
@@ -229,9 +232,7 @@ class PlanActFlow(BaseFlow):
         if cfg.harness_config is not None:
             try:
                 hc = cfg.harness_config
-                self._harness_resolver = ModelAwareHarnessResolver(
-                    base_config=hc,
-                )
+                self._harness_resolver = ModelAwareHarnessResolver(base_config=hc)
                 self._harness_instruction_block = HarnessPromptAssembler.assemble(
                     instructions=hc.instructions,
                     runtime_control=hc.runtime_control,
@@ -274,16 +275,14 @@ class PlanActFlow(BaseFlow):
             # fed by the flow, so _prompt_builder's "# Behavioral Rules"
             # block stayed empty even when a learner was configured.
             behavioral_learner=cfg.behavioral_learner,
-            harness_instruction_block=self._harness_instruction_block
-            if self._harness_instruction_block
-            else None,
+            harness_instruction_block=(
+                self._harness_instruction_block if self._harness_instruction_block else None
+            ),
             middleware_chain=cfg.middleware_chain,
             state_repo=cfg.state_repo,
             tracing_port=self._tracing_port,
             trajectory_config=(
-                self._harness_config.trajectory
-                if self._harness_config is not None
-                else None
+                self._harness_config.trajectory if self._harness_config is not None else None
             ),
         )
         if cfg.max_steps is not None:
@@ -356,18 +355,14 @@ class PlanActFlow(BaseFlow):
         # Signal 1: plan was updated mid-execution (failure replan)
         # Each replan creates a snapshot in the plan history undo stack.
         plan_snapshots = (
-            len(self._plan_history.get_all())
-            if hasattr(self._plan_history, "get_all")
-            else 0
+            len(self._plan_history.get_all()) if hasattr(self._plan_history, "get_all") else 0
         )
         plan_updates = max(plan_snapshots - 1, 0)  # first plan = 0 updates
         if plan_updates > 0:
             signals.append(f"replans={plan_updates}")
 
         # Signal 2: step repetition rate (>30% of steps retried)
-        retried = sum(
-            1 for count in self._step_execution_counts.values() if count > 1
-        )
+        retried = sum(1 for count in self._step_execution_counts.values() if count > 1)
         retry_rate = retried / total_steps
         if retry_rate > 0.3:
             signals.append(f"retry_rate={retried}/{total_steps}")
@@ -390,21 +385,14 @@ class PlanActFlow(BaseFlow):
 
         entry = MisalignmentEntry(
             session_id=self._session.id,
-            project_path=(
-                str(self._session.context.working_dir)
-                if self._session.context
-                else ""
-            ),
+            project_path=(str(self._session.context.working_dir) if self._session.context else ""),
             symptom="decomposition_quality",
             step_description=f"total_steps={total_steps}",
             constraint_text="; ".join(signals),
             correction_text="Proxy DA signals detected — review decomposition granularity",
         )
         await self._misalignment_journal.record(entry)
-        self._log.info(
-            "Decomposition quality signals recorded: %s",
-            "; ".join(signals),
-        )
+        self._log.info("Decomposition quality signals recorded: %s", "; ".join(signals))
 
     async def _on_skill_gap_detected(self, event) -> None:
         """Handle ``SkillGapDetected`` domain events (Enhancement 5).
@@ -429,8 +417,7 @@ class PlanActFlow(BaseFlow):
         )
         await self._misalignment_journal.record(entry)
         self._log.debug(
-            "Skill gap recorded for step: %s",
-            getattr(event, "step_description", "")[:80],
+            "Skill gap recorded for step: %s", getattr(event, "step_description", "")[:80]
         )
 
     @property
@@ -442,6 +429,7 @@ class PlanActFlow(BaseFlow):
         """Return the shared EventPublisher instance (lazy-init)."""
         if self._event_publisher is None:
             from weebot.application.flows.event_publisher import EventPublisher
+
             self._event_publisher = EventPublisher(
                 session=self._session,
                 event_bus=self._event_bus,
@@ -487,18 +475,12 @@ class PlanActFlow(BaseFlow):
 
     async def _emit_domain_event(self, event: AgentEvent) -> None:
         """Publish domain events derived from agent events."""
-        from weebot.domain.models.event import (
-            PlanStepCompleted,
-            FactDiscovered,
-        )
+        from weebot.domain.models.event import PlanStepCompleted, FactDiscovered
 
         # Plan step completion
         if event.type == "step":
             step_id = getattr(event, "step_id", None) or getattr(event, "id", "unknown")
-            domain_event = PlanStepCompleted(
-                session_id=self._session.id,
-                step_id=str(step_id),
-            )
+            domain_event = PlanStepCompleted(session_id=self._session.id, step_id=str(step_id))
             await self._event_bus.publish_domain_event(domain_event)
 
         # Facts discovered (MessageEvent from assistant with new info)
@@ -506,12 +488,9 @@ class PlanActFlow(BaseFlow):
             msg = getattr(event, "message", "")
             if isinstance(msg, str) and len(msg) > 50:
                 from hashlib import md5
+
                 key = md5(msg.encode()).hexdigest()[:12]
-                domain_event = FactDiscovered(
-                    session_id=self._session.id,
-                    key=key,
-                    value=msg[:500],
-                )
+                domain_event = FactDiscovered(session_id=self._session.id, key=key, value=msg[:500])
                 await self._event_bus.publish_domain_event(domain_event)
 
     async def _extract_session_constraints(self, prompt: str) -> None:
@@ -527,12 +506,14 @@ class PlanActFlow(BaseFlow):
 
         if not hasattr(self, "_sc_accumulator"):
             self._sc_accumulator = SessionConstraintAccumulator(
-                self._sc_extractor, state_repo=self._state_repo, event_bus=self._event_bus,
+                self._sc_extractor, state_repo=self._state_repo, event_bus=self._event_bus
             )
         if self._session_constraints is None:
             self._session_constraints = await self._sc_accumulator.hydrate(self._session.id)
         self._session_constraints = await self._sc_accumulator.extract_and_apply(
-            self._session.id, prompt, self._session_constraints,
+            self._session.id,
+            prompt,
+            self._session_constraints,
             turn_index=len(self._session.events),
         )
 
@@ -550,6 +531,7 @@ class PlanActFlow(BaseFlow):
         Prometheus metric and logs per-state duration.
         """
         import time as _time
+
         now = _time.monotonic()
         prev_name = type(self._state).__name__ if self._state is not None else "start"
         prev_duration = (now - self._state_entered_at) if self._state_entered_at else 0.0
@@ -559,9 +541,9 @@ class PlanActFlow(BaseFlow):
             _m = _get_metrics_bridge()
             if _m:
                 with contextlib.suppress(Exception):
-                    _m.flow_step_duration_seconds.labels(
-                        state=type(self._state).__name__,
-                    ).observe(prev_duration)
+                    _m.flow_step_duration_seconds.labels(state=type(self._state).__name__).observe(
+                        prev_duration
+                    )
 
         # Each FlowState subclass declares its own status class attribute
         # so adding a new state does not require modifying this method.
@@ -572,8 +554,12 @@ class PlanActFlow(BaseFlow):
         self._last_state_type = type(state)
 
         if prev_duration > 0.001:
-            self._log.info("Transition to state: %s (was in %s for %.1fs)",
-                            type(state).__name__, prev_name, prev_duration)
+            self._log.info(
+                "Transition to state: %s (was in %s for %.1fs)",
+                type(state).__name__,
+                prev_name,
+                prev_duration,
+            )
         else:
             self._log.info("Transition to state: %s", type(state).__name__)
         # Trace the state transition (no-op if tracing port not wired)
@@ -585,6 +571,7 @@ class PlanActFlow(BaseFlow):
 
     async def run(self, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         import time as _time
+
         self._flow_started_at = _time.monotonic()
         self._log.info(f"PlanActFlow started for session {self._session.id}")
 
@@ -597,6 +584,7 @@ class PlanActFlow(BaseFlow):
         self._run_span = None
         if self._tracing_port is not None:
             from weebot.config.feature_flags import is_enabled
+
             if is_enabled("OTEL_TRACING_ENABLED"):
                 self._run_span = self._tracing_port.start_span("plan_act_iteration")
                 self._run_span.set_attribute("session.id", self._session.id)
@@ -609,9 +597,11 @@ class PlanActFlow(BaseFlow):
         if not original_task and prompt.strip():
             original_task = prompt.strip()
             self._session = self._session.model_copy(
-                update={"context": self._session.context.model_copy(
-                    update={"original_task": original_task}
-                )}
+                update={
+                    "context": self._session.context.model_copy(
+                        update={"original_task": original_task}
+                    )
+                }
             )
 
         # ── Lost-in-Compaction: extract session-scoped side constraints ──
@@ -633,9 +623,7 @@ class PlanActFlow(BaseFlow):
 
         # Resolve effective prompt — enrich vague continuations via service
         effective_prompt = ContinuationDetector.resolve_prompt(
-            user_prompt=prompt,
-            original_task=original_task,
-            event_count=len(self._session.events),
+            user_prompt=prompt, original_task=original_task, event_count=len(self._session.events)
         )
 
         # ── Enhancement H1: scope external MCP tools to the current query ────
@@ -649,9 +637,7 @@ class PlanActFlow(BaseFlow):
                 logger=self._stdlib_logger,
             )
         self._tools = await self._tool_assembler.assemble(
-            effective_prompt=effective_prompt,
-            tools=self._tools,
-            executor=self._executor,
+            effective_prompt=effective_prompt, tools=self._tools, executor=self._executor
         )
 
         # ── Resolve initial state via FlowRouter ───────────────────────────
@@ -673,16 +659,16 @@ class PlanActFlow(BaseFlow):
             )
             if was_rejected and self._misalignment_journal is not None:
                 await FlowRouter.record_misalignment(
-                    session=self._session,
-                    prompt=was_rejected,
-                    journal=self._misalignment_journal,
+                    session=self._session, prompt=was_rejected, journal=self._misalignment_journal
                 )
             self._plan = None
 
             # ── Product-mode gate: inject ProductGateState before planning ──
             from weebot.config.feature_flags import PRODUCT_MODE_ENABLED
+
             if PRODUCT_MODE_ENABLED:
                 from weebot.application.flows.states.product_gate import ProductGateState
+
                 self.set_state(ProductGateState())
             else:
                 self.set_state(initial_state)
@@ -691,11 +677,10 @@ class PlanActFlow(BaseFlow):
         # ────────────────────────────────────────────────────────────────────
 
         if self._hooks is not None:
-            await self._hooks.execute_hooks("pre_execute", {
-                "session_id": self._session.id,
-                "prompt": effective_prompt,
-                "plan": None,
-            })
+            await self._hooks.execute_hooks(
+                "pre_execute",
+                {"session_id": self._session.id, "prompt": effective_prompt, "plan": None},
+            )
 
         max_iterations = self._max_iterations
         iteration_count = 0
@@ -722,14 +707,15 @@ class PlanActFlow(BaseFlow):
             ctx = IterationContext(
                 session=self._session,
                 plan=self._plan,
-                current_state_name=current_state_type.__name__ if self._state else "unknown",
-                similar_plan_count=getattr(self, '_similar_plan_count', 0),
+                current_state_name=(current_state_type.__name__ if self._state else "unknown"),
+                similar_plan_count=getattr(self, "_similar_plan_count", 0),
                 awm=self._awm,
             )
 
             # ── Composable termination check ──────────────────────────
             if self._termination_conditions:
                 import time as _term_time
+
                 _term_ctx = TerminationContext(
                     iteration=iteration_count,
                     total_tokens=self._executor.token_usage.get("total_tokens", 0),
@@ -740,6 +726,7 @@ class PlanActFlow(BaseFlow):
                     if _result.should_terminate:
                         self._log.info("Termination condition met: %s", _result.reason)
                         from weebot.application.flows.states.completed import CompletedState
+
                         if self._run_span is not None:
                             self._run_span.end()
                         self.set_state(CompletedState(termination_reason=_result.reason))
@@ -758,16 +745,13 @@ class PlanActFlow(BaseFlow):
                     # back.  Phase 7+ may add a post-step callback to track
                     # which model actually responded and re-resolve.
                     model_id = self._model or self._executor._model or ""
-                    resolved_block = self._harness_resolver.resolve_instruction_block(
-                        model_id,
-                    )
+                    resolved_block = self._harness_resolver.resolve_instruction_block(model_id)
                     if resolved_block and resolved_block != self._harness_instruction_block:
                         self._harness_instruction_block = resolved_block
                         self._executor.set_harness_block(resolved_block)
                 except Exception as exc:
                     self._stdlib_logger.debug(
-                        "Per-step harness resolution failed: %s — using previous block",
-                        exc,
+                        "Per-step harness resolution failed: %s — using previous block", exc
                     )
 
             # Execute current state.
@@ -779,7 +763,7 @@ class PlanActFlow(BaseFlow):
                 result = self._state.execute(self, state_prompt)
                 # States may be async generators (yield events) or regular
                 # coroutines (MetaAnalysisState does work then transitions).
-                if hasattr(result, '__aiter__'):
+                if hasattr(result, "__aiter__"):
                     async for event in result:
                         yield event
                         if state_prompt and event.type != "error":
@@ -789,13 +773,16 @@ class PlanActFlow(BaseFlow):
             except PlanStuckError as stuck:
                 self._log.error("Plan stuck: %s — terminating flow", stuck)
                 if self._hooks is not None:
-                    await self._hooks.execute_hooks("on_error", {
-                        "session_id": self._session.id,
-                        "step_id": None,
-                        "error": f"PLAN_STUCK: {stuck}",
-                        "error_type": "plan_stuck",
-                        "plan": self._plan,
-                    })
+                    await self._hooks.execute_hooks(
+                        "on_error",
+                        {
+                            "session_id": self._session.id,
+                            "step_id": None,
+                            "error": f"PLAN_STUCK: {stuck}",
+                            "error_type": "plan_stuck",
+                            "plan": self._plan,
+                        },
+                    )
                 yield ErrorEvent(
                     error=(
                         f"Plan is stuck after {self._similar_plan_count} identical plans. "
@@ -819,15 +806,19 @@ class PlanActFlow(BaseFlow):
 
         if self._hooks is not None:
             import time as _post_timer
+
             _post_elapsed = (_post_timer.monotonic() - self._flow_started_at) * 1000
             _total_tokens = 0
-            await self._hooks.execute_hooks("post_execute", {
-                "session_id": self._session.id,
-                "plan": self._plan,
-                "status": self._session.status.value,
-                "elapsed_ms": _post_elapsed,
-                "total_tokens": _total_tokens,
-            })
+            await self._hooks.execute_hooks(
+                "post_execute",
+                {
+                    "session_id": self._session.id,
+                    "plan": self._plan,
+                    "status": self._session.status.value,
+                    "elapsed_ms": _post_elapsed,
+                    "total_tokens": _total_tokens,
+                },
+            )
 
         # Enhancement 4: record decomposition quality proxy signals
         await self._record_decomposition_signals()
@@ -849,6 +840,7 @@ class PlanActFlow(BaseFlow):
         """
         # Allow disabling context-aware model selection via env var (batch mode)
         import os as _os_cam
+
         if _os_cam.environ.get("CONTEXT_AWARE_MODEL_SELECTION", "").lower() == "false":
             return None
         return self._context_switcher.maybe_switch_model_for_context(
@@ -885,12 +877,10 @@ class PlanActFlow(BaseFlow):
         from weebot.config.constants import PLAN_DIVERSIFICATION_WINDOW, PLAN_SIMILARITY_THRESHOLD
 
         if self._plan is not None and self._plan_history.is_too_similar(
-            self._plan,
-            threshold=PLAN_SIMILARITY_THRESHOLD,
-            window=PLAN_DIVERSIFICATION_WINDOW,
+            self._plan, threshold=PLAN_SIMILARITY_THRESHOLD, window=PLAN_DIVERSIFICATION_WINDOW
         ):
             fp = self._plan_history.plan_fingerprint(self._plan)
-            self._similar_plan_count = getattr(self, '_similar_plan_count', 0) + 1
+            self._similar_plan_count = getattr(self, "_similar_plan_count", 0) + 1
             if self._similar_plan_count >= self._MAX_SIMILAR_PLANS:
                 raise PlanStuckError(
                     f"Plan is stuck: {self._similar_plan_count} consecutive plans "
@@ -901,7 +891,9 @@ class PlanActFlow(BaseFlow):
             self._log.warning(
                 "Plan fingerprint %s is too similar to recent plans "
                 "(attempt %d/%d) — consider diversifying.",
-                fp, self._similar_plan_count, self._MAX_SIMILAR_PLANS,
+                fp,
+                self._similar_plan_count,
+                self._MAX_SIMILAR_PLANS,
             )
         else:
             self._similar_plan_count = 0  # reset on a fresh plan
@@ -950,21 +942,18 @@ class PlanActFlow(BaseFlow):
         """
         if self._awm is None and self._llm is not None:
             from weebot.application.services.workflow_memory import AgentWorkflowMemory
+
             self._awm = AgentWorkflowMemory(llm=self._llm)
         return self._awm
 
     async def _maybe_save_checkpoint(self) -> None:
         """Save a flow checkpoint if a CheckpointPort is wired.
         Delegates to CheckpointScheduler."""
-        if not hasattr(self, '_checkpoint_scheduler'):
-            self._checkpoint_scheduler = CheckpointScheduler(
-                checkpoint_port=self._checkpoint_port
-            )
+        if not hasattr(self, "_checkpoint_scheduler"):
+            self._checkpoint_scheduler = CheckpointScheduler(checkpoint_port=self._checkpoint_port)
         current_state_name = type(self._state).__name__ if self._state else "planning"
         await self._checkpoint_scheduler.maybe_save(
-            session=self._session,
-            plan=self._plan,
-            current_state_name=current_state_name,
+            session=self._session, plan=self._plan, current_state_name=current_state_name
         )
 
         # End the plan_act_iteration span (ARCH-AUDIT-V2 B2)

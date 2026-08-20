@@ -10,6 +10,7 @@ without reference to the tool budget it has to hold:
 
 See tasks/specs/side_constraint_integrity_plan.md 8.1.
 """
+
 from __future__ import annotations
 
 from collections import deque
@@ -115,10 +116,7 @@ class TestSanitizeToolCallPairing:
         out = sanitize_tool_call_pairing([{"role": "system", "content": "s"}] + list(buf))
 
         offered = {
-            tc["id"]
-            for m in out
-            if m.get("role") == "assistant"
-            for tc in m.get("tool_calls", [])
+            tc["id"] for m in out if m.get("role") == "assistant" for tc in m.get("tool_calls", [])
         }
         answered = {m["tool_call_id"] for m in out if m.get("role") == "tool"}
         assert answered == offered, "every tool reply must have its parent call"

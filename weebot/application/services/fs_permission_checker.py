@@ -15,12 +15,12 @@ file. Both sides are therefore reduced to one canonical form before any
 comparison. Candidate paths are additionally resolved against the workspace
 root so a relative rule means what it appears to mean.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from weebot.domain.models.fs_permission import (
     FilesystemOperation,
@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import wcmatch.glob as wcglob
+
     _WCMATCH_AVAILABLE = True
 except ImportError:
     _WCMATCH_AVAILABLE = False
@@ -63,9 +64,7 @@ class FSPermissionChecker:
     """
 
     def __init__(
-        self,
-        rules: Optional[list[FilesystemPermission]] = None,
-        workspace_root: Optional[str] = None,
+        self, rules: list[FilesystemPermission] | None = None, workspace_root: str | None = None
     ) -> None:
         self._rules = rules or []
         self._workspace = _canonical(str(Path(workspace_root or os.getcwd())))
@@ -75,11 +74,7 @@ class FSPermissionChecker:
         """True if any rule is configured. Lets callers skip the work entirely."""
         return bool(self._rules)
 
-    def check(
-        self,
-        operation: FilesystemOperation,
-        path: str,
-    ) -> PermissionMode:
+    def check(self, operation: FilesystemOperation, path: str) -> PermissionMode:
         """Check if *operation* on *path* is allowed.
 
         Returns:
@@ -95,11 +90,7 @@ class FSPermissionChecker:
                 return rule.mode
         return "allow"
 
-    def filter_paths(
-        self,
-        operation: FilesystemOperation,
-        paths: list[str],
-    ) -> list[str]:
+    def filter_paths(self, operation: FilesystemOperation, paths: list[str]) -> list[str]:
         """Filter *paths*, removing those a rule denies or gates.
 
         Interrupt-mode paths are removed too. Listing a path is itself a
@@ -137,4 +128,5 @@ class FSPermissionChecker:
             flags = wcglob.BRACE | wcglob.GLOBSTAR
             return bool(wcglob.globmatch(candidate, pattern, flags=flags))
         import fnmatch
+
         return fnmatch.fnmatch(candidate, pattern)

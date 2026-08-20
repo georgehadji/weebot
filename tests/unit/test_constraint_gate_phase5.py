@@ -12,6 +12,7 @@ Covers the three defects the audit measured in ExecutingState's gate
 Plus the resume defect: the gate cleared nothing, so on resume it re-fired
 against the same step and the user could never get past it.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -30,9 +31,7 @@ from weebot.domain.models.session_constraint import (
 
 
 def _sc(text: str, *, kind=ConstraintKind.ACTION, direction=ConstraintDirection.TIGHTEN):
-    return SessionConstraint(
-        text=text, evidence_span=text, kind=kind, direction=direction,
-    )
+    return SessionConstraint(text=text, evidence_span=text, kind=kind, direction=direction)
 
 
 class _FakeFlow:
@@ -57,25 +56,33 @@ class TestCompileEnforceable:
 
     def test_loosen_never_compiles(self):
         """Paper SC#1 -- the inversion that made the gate self-violating."""
-        reg = SessionConstraintRegistry(constraints=[
-            _sc("don't ask me to confirm before running commands",
-                direction=ConstraintDirection.LOOSEN),
-        ])
+        reg = SessionConstraintRegistry(
+            constraints=[
+                _sc(
+                    "don't ask me to confirm before running commands",
+                    direction=ConstraintDirection.LOOSEN,
+                )
+            ]
+        )
         assert compile_enforceable(reg) == []
 
     def test_unjudgeable_kinds_do_not_compile(self):
         """PROCESS/PREFERENCE/OUTPUT are prompt-delivered, not step-gated."""
-        reg = SessionConstraintRegistry(constraints=[
-            _sc("never use imperial units", kind=ConstraintKind.PREFERENCE),
-            _sc("never answer without checking the docs", kind=ConstraintKind.PROCESS),
-            _sc("never reply in prose", kind=ConstraintKind.OUTPUT),
-        ])
+        reg = SessionConstraintRegistry(
+            constraints=[
+                _sc("never use imperial units", kind=ConstraintKind.PREFERENCE),
+                _sc("never answer without checking the docs", kind=ConstraintKind.PROCESS),
+                _sc("never reply in prose", kind=ConstraintKind.OUTPUT),
+            ]
+        )
         assert compile_enforceable(reg) == []
 
     def test_information_kind_compiles(self):
-        reg = SessionConstraintRegistry(constraints=[
-            _sc("never put my phone number in a file", kind=ConstraintKind.INFORMATION),
-        ])
+        reg = SessionConstraintRegistry(
+            constraints=[
+                _sc("never put my phone number in a file", kind=ConstraintKind.INFORMATION)
+            ]
+        )
         assert len(compile_enforceable(reg)) == 1
 
     def test_revoked_constraint_does_not_compile(self):
@@ -134,16 +141,18 @@ class TestGateSourceSelection:
         step = Step(id="s1", description="Delete the user pool entries")
 
         # No registry -> the prompt argument is the legacy fallback source.
-        assert ExecutingState._constraint_violations(
-            flow, step, "do not delete the user pool"
-        )
+        assert ExecutingState._constraint_violations(flow, step, "do not delete the user pool")
 
     def test_loosen_registry_does_not_gate(self):
         """Defect 3 end to end: the gate must not pause on a LOOSEN constraint."""
-        reg = SessionConstraintRegistry(constraints=[
-            _sc("don't ask me to confirm before running commands",
-                direction=ConstraintDirection.LOOSEN),
-        ])
+        reg = SessionConstraintRegistry(
+            constraints=[
+                _sc(
+                    "don't ask me to confirm before running commands",
+                    direction=ConstraintDirection.LOOSEN,
+                )
+            ]
+        )
         flow = _FakeFlow(registry=reg, session=Session(id="s1"))
         step = Step(id="s1", description="Run the deploy command")
 

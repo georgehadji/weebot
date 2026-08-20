@@ -13,6 +13,7 @@ Usage:
     container.configure_defaults()
     runner = container.build_agent_runner(role="admin")
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,7 +40,9 @@ from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E4
 from weebot.application.ports.task_runner_port import TaskRunnerPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
-from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort  # noqa: E402
+from weebot.application.ports.sub_agent_cost_tracker_port import (  # noqa: E402
+    SubAgentCostTrackerPort,
+)
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort  # noqa: E402
 from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
 from weebot.application.services.task_runner import TaskRunner  # noqa: E402
@@ -54,15 +57,19 @@ from weebot.application.di._capabilities import CapabilitiesMixin  # noqa: E402
 def _lazy_cost_tracker():
     """Lazy-import SubAgentCostTracker to avoid top-level infra import."""
     from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTracker
+
     return SubAgentCostTracker(budget_usd=0.50)
+
+
 from weebot.application.di._skills import SkillsMixin  # noqa: E402
 from weebot.application.di._skillopt import SkillOptMixin  # noqa: E402
 from weebot.application.di._learning import LearningMixin  # noqa: E402
 
 
 @dataclass
-class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
-                SkillsMixin, SkillOptMixin, LearningMixin):
+class Container(
+    FactoriesMixin, AgentToolsMixin, CapabilitiesMixin, SkillsMixin, SkillOptMixin, LearningMixin
+):
     """Simple service-locator / DI container.
 
     Bindings are Callable factories (lazy) to avoid instantiating
@@ -105,14 +112,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
     # ── convenience binders ─────────────────────────────────────────
 
-    def configure_defaults(
-        self, *, db_path="./weebot_sessions.db", default_model=None,
-    ) -> None:
+    def configure_defaults(self, *, db_path="./weebot_sessions.db", default_model=None) -> None:
         """Wire all defaults: LLM → OpenRouter, state → SQLite, etc."""
         self.register(StateRepositoryPort, lambda: self._create_state_repo(db_path))
         self.register("session_persistence", lambda: self._create_session_persistence_adapter())
         self.register(EventBusPort, self._create_event_bus)
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+
         self.register(TracingAdapter, self._create_tracing)
         self.register(EventPublisher, self._create_event_bridge)
         self.register(LLMPort, lambda: self._create_llm(default_model))
@@ -135,10 +141,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("personality", self._create_personality)
         self.register("structured_logger", lambda: self._create_structured_logger())
         from weebot.application.services.audit_service import AuditService
+
         self.register(AuditService, lambda: self._create_audit_service())
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
+
         self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
         from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
+
         self.register(ConfigAdapter, lambda: self._create_config_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
@@ -158,6 +167,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         from weebot.application.ports.file_storage_port import FileStoragePort
+
         self.register(FileStoragePort, lambda: self._create_file_storage())
         self.register("step_audit_service", self._create_step_evidence_auditor)
         # LongHorizon-Harness E6: verifier calls on the cheap ROLE_MODEL_CONFIG
@@ -168,15 +178,19 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)
         from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
+
         self.register(SandboxBackendAdapter, self._create_backend)
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
+
         self.register(PrometheusMetricsAdapter, self._create_metrics_port)
         # Scheduler — APScheduler singleton, started/stopped via FastAPI lifespan
         from weebot.scheduling.scheduler import SchedulingManager
+
         self.register("scheduler", lambda: SchedulingManager())
 
         # Flow registry — breaks services/flows circular dependency
         from weebot.application.abstractions import FlowRegistry
+
         self.register("flow_registry", lambda: FlowRegistry())
         # Populate the registry with known flow types
         self.build_flow_registry()
@@ -186,6 +200,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # The composition root owns cross-layer imports; services must not.
         def _create_flow_callable():
             from weebot.interfaces.factories import create_flow
+
             return create_flow
 
         self.register("create_flow", _create_flow_callable)
@@ -195,11 +210,10 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # infrastructure adapters directly (composition root owns that import).
         def _build_action_canonicalizer(tools):
             from weebot.infrastructure.adapters.action_canonicalizer import ActionCanonicalizer
+
             cfg = self.get(HarnessConfig).canonicalizer
             return ActionCanonicalizer(
-                tools=tools,
-                strict_mode=cfg.strict_mode,
-                coerce_types=cfg.coerce_types,
+                tools=tools, strict_mode=cfg.strict_mode, coerce_types=cfg.coerce_types
             )
 
         self.register("build_action_canonicalizer", lambda: _build_action_canonicalizer)
@@ -210,6 +224,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         # rather than a factory-returning-a-factory.
         def _create_contract_loader():
             from weebot.infrastructure.adapters.contract_loader import ContractLoader
+
             contracts_dir = self.get(HarnessConfig).canonicalizer.contracts_dir
             return ContractLoader(contracts_dir=contracts_dir)
 
@@ -227,6 +242,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             _report.log_summary()
         except Exception as _exc:
             import logging as _logging
+
             _logging.getLogger("weebot.application.di").warning(
                 "Catalog validation skipped: %s", _exc
             )
@@ -234,13 +250,16 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         # Egress guard — migrated from global singleton to DI
         from weebot.core.egress_guard import EgressGuard
+
         self.register(EgressGuard, self._create_egress_guard)
 
         # Global LLM concurrency pool — bounds parallel API calls (WP-8)
         def _create_llm_pool():
             from weebot.application.strategies.llm_pool import LLMPool
             from weebot.config.settings import WeebotSettings
+
             return LLMPool(max_concurrent=WeebotSettings().llm_max_concurrent_requests)
+
         self.register("llm_pool", _create_llm_pool)
 
         # Browser pool — DI-managed singleton replacing module-level _global_pool
@@ -267,48 +286,61 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         registry = self.get("flow_registry")
 
         # PlanActFlow — the primary agent flow
-        registry.register("plan_act", lambda **kw: PlanActFlow(
-            llm=self.get(LLMPort),
-            tools=kw.get("tools"),
-            session=kw.get("session"),
-            event_bus=self.get(EventBusPort) if kw.get("event_bus") is not False else None,
-            model=kw.get("model") or self._maybe_get_model(),
-            mediator=self._maybe_get(Mediator),
-            state_repo=self.get(StateRepositoryPort),
-            skill_prompt=kw.get("skill_prompt"),
-            tracing_port=self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None,
-            knowledge_graph=(
-                self._maybe_get_str("knowledge_graph")
-                if self._is_kg_extraction_enabled() else None
+        registry.register(
+            "plan_act",
+            lambda **kw: PlanActFlow(
+                llm=self.get(LLMPort),
+                tools=kw.get("tools"),
+                session=kw.get("session"),
+                event_bus=(self.get(EventBusPort) if kw.get("event_bus") is not False else None),
+                model=kw.get("model") or self._maybe_get_model(),
+                mediator=self._maybe_get(Mediator),
+                state_repo=self.get(StateRepositoryPort),
+                skill_prompt=kw.get("skill_prompt"),
+                tracing_port=(
+                    self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None
+                ),
+                knowledge_graph=(
+                    self._maybe_get_str("knowledge_graph")
+                    if self._is_kg_extraction_enabled()
+                    else None
+                ),
             ),
-        ))
+        )
 
         # ChatFlow — lightweight conversational flow
-        registry.register("chat", lambda **kw: ChatFlow(
-            llm=self.get(LLMPort),
-            session=kw.get("session"),
-            event_bus=self.get(EventBusPort) if kw.get("event_bus") is not False else None,
-            model=kw.get("model") or self._maybe_get_model(),
-            mediator=self._maybe_get(Mediator),
-            state_repo=self.get(StateRepositoryPort),
-        ))
+        registry.register(
+            "chat",
+            lambda **kw: ChatFlow(
+                llm=self.get(LLMPort),
+                session=kw.get("session"),
+                event_bus=(self.get(EventBusPort) if kw.get("event_bus") is not False else None),
+                model=kw.get("model") or self._maybe_get_model(),
+                mediator=self._maybe_get(Mediator),
+                state_repo=self.get(StateRepositoryPort),
+            ),
+        )
 
         return registry
 
     def build_scheduler(self) -> SchedulingManager:  # noqa: F821
         """Return the DI-managed SchedulingManager singleton."""
         from weebot.scheduling.scheduler import SchedulingManager  # noqa: F401
+
         return self.get("scheduler")
 
     def build_agent_runner(self, role="admin", mcp_config=None, use_rich=True):
         """Construct a ready-to-use AgentRunner."""
         from weebot.interfaces.cli.agent_runner import AgentRunner
+
         return AgentRunner(
             llm=self.get(LLMPort),
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
             model=self._maybe_get_model(),
-            role=role, mcp_config=mcp_config, use_rich=use_rich,
+            role=role,
+            mcp_config=mcp_config,
+            use_rich=use_rich,
             mediator=self._maybe_get(Mediator),
         )
 
@@ -330,22 +362,25 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         tools = None
         if llm is not None:
             from weebot.tools.tool_registry import RoleBasedToolRegistry
+
             try:
                 sandbox = self._maybe_get(SandboxPort)
                 registry = RoleBasedToolRegistry()
+
                 def _flow_factory(s):
                     return self._build_plan_act_flow_for_session(s)
+
                 tools = registry.create_tool_collection(
-                    role="admin", sandbox_port=sandbox, llm_port=llm,
-                    flow_factory=_flow_factory,
+                    role="admin", sandbox_port=sandbox, llm_port=llm, flow_factory=_flow_factory
                 )
             except Exception as exc:
                 # Do not fail silently: "no tools configured" and "tool
                 # construction blew up" are indistinguishable downstream, and
                 # the latter silently disables all agent tool use.
                 logger.warning(
-                    "Tool collection construction failed — agent will run "
-                    "tool-less: %s", exc, exc_info=True,
+                    "Tool collection construction failed — agent will run " "tool-less: %s",
+                    exc,
+                    exc_info=True,
                 )
                 tools = None
         scoring_port = self._maybe_get_str("scoring_port")
@@ -365,6 +400,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             from weebot.application.agents.executor import ExecutorAgent
             from weebot.application.models.tool_collection import ToolCollection
             from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+
             return ExecutorAgent(
                 llm=llm,
                 tools=tools if tools is not None else ToolCollection(),
@@ -379,9 +415,14 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             )
 
         register_default_handlers(
-            mediator, state_repo, task_runner,
-            llm=llm, tools=tools, event_bus=event_bus,
-            scoring_port=scoring_port, trajectory_builder=trajectory_builder,
+            mediator,
+            state_repo,
+            task_runner,
+            llm=llm,
+            tools=tools,
+            event_bus=event_bus,
+            scoring_port=scoring_port,
+            trajectory_builder=trajectory_builder,
             executor_factory=_executor_factory,
         )
         return mediator
@@ -389,11 +430,11 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
     def build_chat_flow(self, session, model=None):
         """Construct a ChatFlow for conversational sessions."""
         from weebot.application.flows.chat_flow import ChatFlow
-        from weebot.application.services.session_scoped_event_bus import (
-            SessionScopedEventBus,
-        )
+        from weebot.application.services.session_scoped_event_bus import SessionScopedEventBus
+
         return ChatFlow(
-            llm=self.get(LLMPort), session=session,
+            llm=self.get(LLMPort),
+            session=session,
             event_bus=SessionScopedEventBus(self.get(EventBusPort), session.id),
             model=model,
             mediator=self._maybe_get(Mediator),
@@ -405,11 +446,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
     @staticmethod
     def _is_tracing_enabled() -> bool:
         from weebot.config.feature_flags import OTEL_TRACING_ENABLED
+
         return OTEL_TRACING_ENABLED
 
     @staticmethod
     def _is_kg_extraction_enabled() -> bool:
         from weebot.config.feature_flags import KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
+
         return KNOWLEDGE_GRAPH_EXTRACTION_ENABLED
 
     def _maybe_get(self, port_type: type) -> Any | None:
@@ -433,17 +476,13 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
         )
         from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
-        retry = RetryWithBackoff(
-            BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25)
-        )
-        return SessionPersistenceAdapter(
-            repo=self.get(StateRepositoryPort),
-            retry=retry,
-        )
+        retry = RetryWithBackoff(BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25))
+        return SessionPersistenceAdapter(repo=self.get(StateRepositoryPort), retry=retry)
 
     def _create_swarm_bus(self):
         """Create a SwarmEventBus."""
         from weebot.infrastructure.swarm_event_bus import SwarmEventBus
+
         return SwarmEventBus()
 
     def _create_sub_agent_factory(self):
@@ -454,9 +493,12 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
 
         sandbox = self._maybe_get(SandboxPort)
         registry = RoleBasedToolRegistry()
+
         def _flow_factory(s):
             return self._build_plan_act_flow_for_session(s)
+
         from weebot.application.ports.llm_port import LLMPort
+
         tools = registry.create_tool_collection(
             role="admin",
             sandbox_port=sandbox,
@@ -470,6 +512,7 @@ class Container(FactoriesMixin, AgentToolsMixin, CapabilitiesMixin,
             MODEL_ROLE_CODER,
         )
         from weebot.domain.models.sub_agent import AgentTier
+
         _TIER_MODEL: dict[AgentTier, str] = {
             AgentTier.BUDGET: MODEL_CASCADE_TIER2,
             AgentTier.STANDARD: MODEL_ROLE_CODER,
