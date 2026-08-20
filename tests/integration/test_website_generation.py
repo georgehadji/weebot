@@ -5,7 +5,8 @@ page from a natural-language prompt.  Uses the Plan-Act flow to plan the
 site, execute the build step, and produce a summary.
 
 Requires a valid OPENROUTER_API_KEY in .env.
-Mark: real_api
+Mark: external — gated behind WEEBOT_TEST_LIVE=1 (see B2 of the test-suite
+repair plan; a bare ``pytest`` must never make a live, billed call).
 """
 
 from __future__ import annotations
@@ -14,6 +15,9 @@ import os
 from pathlib import Path
 
 import pytest
+
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
 
 from weebot.application.agents.executor import ExecutorAgent
 from weebot.application.agents.planner import PlannerAgent
@@ -69,7 +73,8 @@ def tools() -> ToolCollection:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @_needs_key
 @pytest.mark.asyncio
 async def test_planner_creates_website_plan(llm: LLMPort) -> None:
@@ -99,7 +104,8 @@ async def test_planner_creates_website_plan(llm: LLMPort) -> None:
     print(f"\n  Plan: {title} ({len(steps)} steps)")
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @_needs_key
 @pytest.mark.asyncio
 async def test_executor_runs_website_step(llm: LLMPort, tools: ToolCollection) -> None:
@@ -154,7 +160,8 @@ async def test_executor_runs_website_step(llm: LLMPort, tools: ToolCollection) -
     print(f"  Output preview: {full_output[:200]}...")
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @_needs_key
 @pytest.mark.asyncio
 async def test_full_flow_builds_website(
@@ -224,7 +231,8 @@ async def test_full_flow_builds_website(
     print(f"  Output length: {len(full_output)} chars")
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @_needs_key
 @pytest.mark.asyncio
 async def test_direct_html_generation(llm: LLMPort) -> None:

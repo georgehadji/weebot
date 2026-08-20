@@ -49,16 +49,30 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 
-def pytest_configure(config):
-    """Register custom markers so --strict-markers doesn't warn."""
-    config.addinivalue_line(
-        "markers", "real_api: marks tests that require a real API key (skipped when key is not set)"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Environment helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_dotenv_settings(monkeypatch):
+    """Stop WeebotSettings from reading the repo-root .env file.
+
+    ``dotenv_settings`` is ranked above ``env_settings`` (settings.py:64-69),
+    so a real ``.env`` on disk resolves API keys regardless of what
+    ``clean_env`` below strips from ``os.environ`` — the file is read
+    independently of the process environment. Without this, every test
+    outside ``tests/unit/`` (which already had its own copy of this fixture)
+    silently made live, billed calls whenever a developer's ``.env`` was
+    present.
+    """
+    try:
+        from weebot.config import settings as settings_module
+    except Exception:
+        return
+    new_config = dict(settings_module.WeebotSettings.model_config)
+    new_config["env_file"] = None
+    monkeypatch.setattr(settings_module.WeebotSettings, "model_config", new_config)
 
 
 @pytest.fixture(autouse=True)
@@ -136,6 +150,36 @@ def reset_settings_singletons():
         mod = sys.modules.get(mod_name)
         if mod is not None:
             mod._SETTINGS = None
+
+
+@pytest.fixture(autouse=True)
+def force_dense_embeddings_unavailable():
+    """Force the local-embeddings singleton unavailable for every test.
+
+    ``get_local_embeddings()`` (qmd_integration/embeddings.py:343-350) is the
+    one chokepoint all six dense-leg call sites route through. The moment
+    anything calls ``embed_query``/``embed_documents`` it lazily imports
+    ``sentence_transformers`` -> torch (a >60s cold import that also
+    downloads ~90MB uncached) -- a unit test has no business paying that.
+    Pre-seed the singleton with an instance whose availability flags are
+    forced False so ``is_available()`` reports "no dense leg" everywhere,
+    without ever reaching ``_load_model``. Same reset-around-each-test
+    convention as reset_connection_pool/reset_settings_singletons above.
+    """
+    import sys
+
+    from weebot.qmd_integration.embeddings import LocalEmbeddings
+
+    mod = sys.modules.get("weebot.qmd_integration.embeddings")
+    if mod is None:
+        yield
+        return
+    forced = LocalEmbeddings()
+    forced._llama_available = False
+    forced._sentence_transformers_available = False
+    mod._embeddings = forced
+    yield
+    mod._embeddings = None
 
 
 @pytest.fixture

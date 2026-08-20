@@ -23,6 +23,9 @@ import pytest
 from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 from weebot.domain.models.session import Session, SessionStatus
 
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═════════════════════════════════════════════════════════════════════════════
@@ -47,12 +50,13 @@ def _cli_python(args: list[str], env: dict | None = None) -> subprocess.Complete
 
 
 @pytest.mark.external
+@_SKIP
 class TestFlowRunE2E:
     """End-to-end smoke tests for ``weebot flow run``.
 
     Marked ``external`` because they invoke subprocess and require
-    the project to be installed.  Run with ``pytest tests/e2e/ -m external``
-    or set ``WEEBOT_E2E=1``.
+    the project to be installed.  Run with
+    ``WEEBOT_TEST_LIVE=1 pytest tests/e2e/ -m external``.
     """
 
     @pytest.mark.asyncio

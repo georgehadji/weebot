@@ -8,11 +8,15 @@ fallback still works when FTS5 is unavailable.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
+
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
 
 from weebot.domain.models.knowledge_graph import (
     CONFIDENCE_KEY,
@@ -419,7 +423,13 @@ class TestHybridSearch:
     async def test_dense_leg_does_not_crash_when_unavailable(
         self, kg: SQLiteKnowledgeGraph
     ) -> None:
-        """When embeddings are not available, dense leg degrades gracefully."""
+        """When embeddings are not available, dense leg degrades gracefully.
+
+        force_dense_embeddings_unavailable (tests/conftest.py) forces this
+        for every unit test. The observable consequence of a degraded dense
+        leg is dense_score == 0.0 for every result -- sparse_score >= 0 is
+        Pydantic-enforced (Field(..., ge=0.0)) and cannot fail either way.
+        """
         await kg.upsert_node(
             KnowledgeNode(
                 id="hs-5",
@@ -432,7 +442,36 @@ class TestHybridSearch:
         # dense_weight=0.4 should not crash even without embedding model
         results = await kg.hybrid_search("gravity", dense_weight=0.4, limit=5)
         assert len(results) >= 1
-        assert all(r.sparse_score >= 0 for r in results)
+        assert all(r.dense_score == 0.0 for r in results)
+
+    @pytest.mark.external
+    @_SKIP
+    @pytest.mark.asyncio
+    async def test_dense_leg_uses_real_embeddings_when_available(
+        self, kg: SQLiteKnowledgeGraph
+    ) -> None:
+        """Opt-in coverage for the genuine embedding path (§D3) -- runs the
+        real sentence-transformers model, so it stays out of the default
+        unit-test run rather than paying its cold-import/download cost."""
+        import sys
+
+        from weebot.qmd_integration.embeddings import LocalEmbeddings
+
+        mod = sys.modules["weebot.qmd_integration.embeddings"]
+        mod._embeddings = LocalEmbeddings()
+
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-6",
+                label="fact",
+                name="gravity",
+                properties={"value": "9.81", "_confidence": 0.9},
+            )
+        )
+
+        results = await kg.hybrid_search("gravity", dense_weight=0.4, limit=5)
+        assert len(results) >= 1
+        assert any(r.dense_score > 0.0 for r in results)
 
 
 # ═══════════════════════════════════════════════════════════════════

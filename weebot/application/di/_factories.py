@@ -293,9 +293,10 @@ class FactoriesMixin:
 
     @staticmethod
     def _create_file_storage():
+        from weebot.config.settings import WORKSPACE_ROOT
         from weebot.infrastructure.adapters.file_storage_adapter import LocalFileStorageAdapter
 
-        return LocalFileStorageAdapter(root_dir=".")
+        return LocalFileStorageAdapter(root_dir=WORKSPACE_ROOT)
 
     def _create_step_evidence_auditor(self):
         from weebot.application.services.step_evidence_auditor import StepEvidenceAuditor

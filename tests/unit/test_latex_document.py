@@ -7,6 +7,8 @@ end-to-end compile test is gated on the XeLaTeX toolchain being installed
 
 from __future__ import annotations
 
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,7 @@ import pytest
 from weebot.application.document.book_assembler import assemble_main_tex, write_project
 from weebot.application.document.book_generation_flow import BookGenerationFlow
 from weebot.application.document.stub_content_provider import StubContentProvider
+from weebot.core.bash_guard import RiskLevel
 from weebot.domain.models.book import Book, Chapter, CompileErrorCategory, Section
 from weebot.infrastructure.document.latex_compiler import LatexCompilerService
 from weebot.infrastructure.document.log_parser import has_blocking_errors, parse_log
@@ -143,6 +146,39 @@ def test_write_project_emits_files(tmp_path):
     assert (tmp_path / "main.tex").exists()
     assert (tmp_path / "refs.bib").exists()
     assert "Euler" in (tmp_path / "refs.bib").read_text()
+
+
+@pytest.mark.timeout(15)
+def test_compile_timeout_returns_result_instead_of_hanging(tmp_path, monkeypatch):
+    """Finding G: a slow compile must return a TIMEOUT CompileResult, not hang.
+
+    Regresses the bug where killing only the direct child (latexmk) left an
+    orphaned grandchild (xelatex) holding the stdout/stderr pipes open, so
+    the post-kill drain blocked forever. Simulates that exact shape: a
+    wrapper process spawns a child that outlives it. Hangs on the
+    pre-fix subprocess.run(timeout=) implementation — the @pytest.mark.timeout
+    is a backstop, not the thing under test.
+    """
+    service = LatexCompilerService(timeout_seconds=1)
+    monkeypatch.setattr(service._guard, "evaluate", lambda cmd: (RiskLevel.SAFE, "test"))
+    orphaning_wrapper = (
+        "import subprocess, sys; "
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], close_fds=False); "
+        "p.wait()"
+    )
+    monkeypatch.setattr(
+        service,
+        "_build_command",
+        lambda main_tex, shell_escape: [sys.executable, "-c", orphaning_wrapper],
+    )
+
+    started = time.monotonic()
+    result = service.compile(tmp_path, "main.tex")
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 10, f"compile() must return shortly after its own timeout, took {elapsed:.1f}s"
+    assert not result.ok
+    assert any(e.category == CompileErrorCategory.TIMEOUT for e in result.errors)
 
 
 # ── end-to-end flow (needs XeLaTeX) ─────────────────────────────────────────

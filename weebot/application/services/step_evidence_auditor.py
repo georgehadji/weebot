@@ -92,7 +92,28 @@ class StepEvidenceAuditor(StepAuditPort):
         for p in written_paths:
             try:
                 exists = await self._files.exists(p)
-            except (OSError, ValueError):
+            except ValueError:
+                # Out-of-root: a configuration fault, not a data fault. The
+                # gate cannot inspect its subject, so it must not report a
+                # clean bill of health — log loudly and count it.
+                _log.warning(
+                    "Step audit cannot inspect %r — outside FileStoragePort root %r",
+                    p,
+                    getattr(self._files, "_root", self._files),
+                )
+                violations.append(
+                    Violation(
+                        dimension=AuditDimension.INTEGRITY,
+                        severity=ViolationSeverity.MEDIUM,
+                        description=f"written file outside audit root, could not verify: {p}",
+                        location=p,
+                        recommendation="Check WORKSPACE_ROOT / FileStoragePort root_dir configuration.",
+                    )
+                )
+                continue
+            except OSError:
+                # Genuinely malformed path — the agent's problem to have
+                # already failed on, not the gate's. Skip without blocking.
                 _log.debug(
                     "Invalid path in step audit — skipping without blocking: %s", p, exc_info=True
                 )

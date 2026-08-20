@@ -13,6 +13,7 @@ callers on the sandbox path opt in explicitly. The command is still evaluated by
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,30 @@ from pathlib import Path
 from weebot.core.bash_guard import BashGuard, RiskLevel
 from weebot.domain.models.book import CompileError, CompileErrorCategory, CompileResult
 from weebot.infrastructure.document.log_parser import parse_log
+
+_DRAIN_TIMEOUT_SECONDS = 5
+
+
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Kill *proc* and every descendant it spawned.
+
+    ``proc.kill()`` alone only terminates the direct child (e.g. latexmk);
+    grandchildren (xelatex, biber, pygmentize) survive, keep the stdout/
+    stderr pipes open, and the post-kill ``communicate()`` blocks forever
+    waiting for EOF on a pipe an orphan still holds (see finding G).
+    """
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+            capture_output=True,
+        )
+    else:
+        import signal
+
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 class LatexCompilerService:
@@ -83,17 +108,27 @@ class LatexCompilerService:
                 ],
             )
 
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(project),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=(os.name != "nt"),
+        )
         try:
-            proc = subprocess.run(
-                cmd, cwd=str(project), capture_output=True, text=True, timeout=self._timeout
-            )
+            stdout, _stderr = proc.communicate(timeout=self._timeout)
             timed_out = False
-        except subprocess.TimeoutExpired as exc:
-            proc = None
+        except subprocess.TimeoutExpired:
             timed_out = True
-            stdout = exc.stdout or ""
-        else:
-            stdout = proc.stdout or ""
+            _kill_process_tree(proc)
+            try:
+                stdout, _stderr = proc.communicate(timeout=_DRAIN_TIMEOUT_SECONDS)
+            except subprocess.TimeoutExpired:
+                # Pipe still won't close (an orphaned grandchild holds it
+                # open) — abandon stdout rather than block. The .log file
+                # on disk, read below, is parse_log's primary source anyway.
+                stdout = ""
 
         log_path = project / (Path(main_tex).stem + ".log")
         log_text = log_path.read_text(errors="replace") if log_path.exists() else stdout

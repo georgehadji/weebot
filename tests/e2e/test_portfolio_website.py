@@ -10,11 +10,12 @@ Uses the same production adapter path as ``run.py --interactive``:
 ``provider="moonshot"`` → DirectOrFallbackAdapter (Kimi direct with OpenRouter
 fallback).  Requires both OPENROUTER_API_KEY and KIMI_API_KEY in .env.
 
-Mark: real_api
+Mark: external — gated behind WEEBOT_TEST_LIVE=1 (see B2 of the test-suite
+repair plan; a bare ``pytest`` must never make a live, billed call).
 
 Usage:
-    pytest tests/e2e/test_portfolio_website.py -v -m real_api -s
-    pytest tests/e2e/ -v -m "not real_api"   # CI-safe
+    WEEBOT_TEST_LIVE=1 pytest tests/e2e/test_portfolio_website.py -v -m external -s
+    pytest tests/e2e/ -v   # CI-safe, external tests skip by default
 """
 
 from __future__ import annotations
@@ -25,6 +26,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
 
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.models.tool_collection import ToolCollection
@@ -191,7 +195,8 @@ _PORTFOLIO_PROMPT = (
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @pytest.mark.asyncio
 async def test_planner_creates_portfolio_plan(llm: LLMPort, container: Any) -> None:
     """Planner creates a structured plan via the CQRS Mediator pipeline.
@@ -258,7 +263,8 @@ async def test_planner_creates_portfolio_plan(llm: LLMPort, container: Any) -> N
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @pytest.mark.asyncio
 async def test_full_flow_builds_portfolio_website(
     llm: LLMPort, tools: ToolCollection, container: Any, mediator: Any
@@ -486,7 +492,8 @@ async def test_full_flow_builds_portfolio_website(
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @pytest.mark.asyncio
 async def test_portfolio_file_written_to_disk(
     llm: LLMPort, tools: ToolCollection, container: Any, mediator: Any, tmp_path: Path
@@ -616,7 +623,8 @@ async def test_portfolio_file_written_to_disk(
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @pytest.mark.asyncio
 async def test_direct_html_portfolio_generation(llm: LLMPort) -> None:
     """Fast canary: verify the LLM can produce a valid portfolio page in one shot.

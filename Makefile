@@ -1,10 +1,11 @@
 # Weebot — development convenience targets
-.PHONY: help install test lint-imports lint-env-access check-arch check
+.PHONY: help install test test-live lint-imports lint-env-access check-arch check
 
 help:
 	@echo "Available targets:"
 	@echo "  install       Install dependencies"
-	@echo "  test          Run all tests"
+	@echo "  test          Run all tests (excludes external/live-network tests)"
+	@echo "  test-live     Run tests including external/live, billed LLM calls"
 	@echo "  lint-imports  Run import-linter architecture checks"
 	@echo "  check-arch    Run all architecture verification gates"
 	@echo "  check         Run full suite: tests + arch + lint"
@@ -23,7 +24,10 @@ install:
 	pip install import-linter
 
 test:
-	pytest tests/ -v --tb=short
+	pytest tests/ -v --tb=short -m "not external"
+
+test-live:
+	WEEBOT_TEST_LIVE=1 pytest tests/ -v --tb=short
 
 lint-imports:
 	@echo "=== Import-Linter Architecture Checks ==="

@@ -5,9 +5,10 @@ Unit tests must be hermetic. WeebotSettings loads the repo-root ``.env`` via
 real ``.env`` (API keys, ``DAILY_AI_BUDGET``, ``BASH_TIMEOUT`` …) leaks into
 settings-based unit tests and makes assertions environment-dependent.
 
-The autouse fixture below points ``env_file`` at nothing and clears the
-ambient config/provider variables so each unit test controls settings
-explicitly via constructor kwargs or ``monkeypatch.setenv``.
+``env_file`` is disabled suite-wide (``tests/conftest.py``). The autouse
+fixture below additionally clears the ambient config/provider variables so
+each unit test controls settings explicitly via constructor kwargs or
+``monkeypatch.setenv``.
 """
 
 from __future__ import annotations
@@ -39,19 +40,12 @@ _AMBIENT_SETTINGS_VARS = (
 
 @pytest.fixture(autouse=True)
 def _isolate_weebot_settings(monkeypatch, tmp_path):
-    """Stop the real .env and ambient env vars from polluting settings tests."""
-    try:
-        from weebot.config import settings as settings_module
-    except Exception:
-        # Settings module unavailable in this context — nothing to isolate.
-        yield
-        return
+    """Stop ambient env vars from polluting settings tests.
 
-    # Disable .env loading for the duration of the test (auto-restored).
-    new_config = dict(settings_module.WeebotSettings.model_config)
-    new_config["env_file"] = None
-    monkeypatch.setattr(settings_module.WeebotSettings, "model_config", new_config)
-
+    ``.env`` is already disabled suite-wide by ``tests/conftest.py``'s
+    ``_no_dotenv_settings`` fixture; this one only handles the extra,
+    unit-test-specific isolation (ambient config vars, the memory dir).
+    """
     # Clear ambient provider/config vars; individual tests opt back in via
     # monkeypatch.setenv or explicit constructor kwargs.
     for var in _AMBIENT_SETTINGS_VARS:

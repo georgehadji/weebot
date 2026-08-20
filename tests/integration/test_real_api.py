@@ -5,12 +5,12 @@ OpenRouterAdapter) correctly sends requests to the OpenRouter API and returns
 valid responses.
 
 These tests require a valid OPENROUTER_API_KEY in the environment or .env file.
-They are marked with ``@pytest.mark.real_api`` so they can be selected or
-excluded independently.
+They are marked with ``@pytest.mark.external`` and gated behind
+``WEEBOT_TEST_LIVE=1`` so a bare ``pytest`` never makes a live, billed call.
 
 Usage:
-    pytest tests/integration/test_real_api.py -v -m real_api
-    pytest tests/integration/ -v -m "not real_api"  # CI-safe
+    WEEBOT_TEST_LIVE=1 pytest tests/integration/test_real_api.py -v -m external
+    pytest tests/integration/ -v  # CI-safe, external tests skip by default
 """
 
 from __future__ import annotations
@@ -25,8 +25,11 @@ from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Skip marker
+# Skip markers
 # ═════════════════════════════════════════════════════════════════════════════
+
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
 
 _real_api_reason: str | None = None
 if not os.getenv("OPENROUTER_API_KEY"):
@@ -80,7 +83,8 @@ def adapter(factory: AdapterFactory) -> LLMPort:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_simple_chat_returns_content(adapter: LLMPort):
@@ -92,7 +96,8 @@ async def test_simple_chat_returns_content(adapter: LLMPort):
     assert "hello" in response.content.lower()
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_multi_turn_conversation(adapter: LLMPort):
@@ -106,7 +111,8 @@ async def test_multi_turn_conversation(adapter: LLMPort):
     assert "TestBot" in response.content
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_system_prompt_influences_response(adapter: LLMPort):
@@ -120,7 +126,8 @@ async def test_system_prompt_influences_response(adapter: LLMPort):
     # The important thing is we got a non-empty response.
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_json_response_mode(adapter: LLMPort):
@@ -141,7 +148,8 @@ async def test_json_response_mode(adapter: LLMPort):
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_usage_tokens_are_populated(adapter: LLMPort):
@@ -151,7 +159,8 @@ async def test_usage_tokens_are_populated(adapter: LLMPort):
     assert response.usage.get("completion_tokens", 0) > 0
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_adapter_caching():
@@ -162,7 +171,8 @@ async def test_adapter_caching():
     assert a1 is a2
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_router
 @pytest.mark.asyncio
 async def test_long_prompt_handled(adapter: LLMPort):

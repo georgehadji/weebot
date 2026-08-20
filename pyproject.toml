@@ -78,7 +78,7 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 timeout = 60
-addopts = "--tb=short --strict-markers -ra"
+addopts = "--tb=short --strict-markers -ra -m \"not external\""
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",

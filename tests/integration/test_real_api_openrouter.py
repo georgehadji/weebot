@@ -5,15 +5,15 @@ OpenRouterAdapter) correctly sends requests to the OpenRouter API and returns
 valid responses.
 
 These tests require a valid OPENROUTER_API_KEY in the environment or .env file.
-They are marked with ``@pytest.mark.real_api`` so they can be selected or
-excluded independently.
+They are marked with ``@pytest.mark.external`` and gated behind
+``WEEBOT_TEST_LIVE=1`` so a bare ``pytest`` never makes a live, billed call.
 
 Usage:
-    # Run only real-API tests
-    pytest tests/integration/test_real_api_openrouter.py -v -m real_api
+    # Run only live tests
+    WEEBOT_TEST_LIVE=1 pytest tests/integration/test_real_api_openrouter.py -v -m external
 
-    # Exclude real-API tests (safe for CI without secrets)
-    pytest tests/integration/ -v -m "not real_api"
+    # Default — safe for CI, no secrets needed
+    pytest tests/integration/ -v
 """
 
 from __future__ import annotations
@@ -54,8 +54,11 @@ _load_dotenv()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Skip marker
+# Skip markers
 # ═════════════════════════════════════════════════════════════════════════════
+
+_LIVE = os.environ.get("WEEBOT_TEST_LIVE", "").strip().lower() in ("1", "true", "yes")
+_SKIP = pytest.mark.skipif(not _LIVE, reason="Set WEEBOT_TEST_LIVE=1 to run live-network tests")
 
 _real_api_reason: str | None = None
 if not os.getenv("OPENROUTER_API_KEY"):
@@ -93,7 +96,8 @@ def adapter(factory: AdapterFactory) -> LLMPort:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_simple_chat_returns_content(adapter: LLMPort):
@@ -110,7 +114,8 @@ async def test_simple_chat_returns_content(adapter: LLMPort):
     ), f"Expected 'hello' in response, got: {response.content!r}"
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_multi_turn_conversation(adapter: LLMPort):
@@ -128,7 +133,8 @@ async def test_multi_turn_conversation(adapter: LLMPort):
     ), f"Expected 'TestBot' in multi-turn response, got: {response.content!r}"
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_system_prompt_influences_response(adapter: LLMPort):
@@ -145,7 +151,8 @@ async def test_system_prompt_influences_response(adapter: LLMPort):
     ), f"Expected 'Arrr!' in pirate response, got: {response.content!r}"
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_json_response_mode(adapter: LLMPort):
@@ -173,7 +180,8 @@ async def test_json_response_mode(adapter: LLMPort):
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_usage_tokens_are_populated(adapter: LLMPort):
@@ -189,7 +197,8 @@ async def test_usage_tokens_are_populated(adapter: LLMPort):
     assert completion_tokens > 0, f"Expected completion_tokens > 0, got {completion_tokens}"
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_adapter_caching(factory: AdapterFactory):
@@ -199,7 +208,8 @@ async def test_adapter_caching(factory: AdapterFactory):
     assert a1 is a2, "Adapter factory should cache adapters"
 
 
-@pytest.mark.real_api
+@pytest.mark.external
+@_SKIP
 @needs_openrouter
 @pytest.mark.asyncio
 async def test_long_prompt_handled(adapter: LLMPort):
