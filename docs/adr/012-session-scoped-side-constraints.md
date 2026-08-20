@@ -74,9 +74,12 @@ Storage that is not the transcript is the only design robust to compaction
 The rendered block is appended to the executor's local `messages` list as
 `messages[-1]`, rebuilt fresh on every loop iteration.
 
-It is **never** written to `_conversation_buffer`: that is a `deque(maxlen=15)`
+It is **never** written to `_conversation_buffer`: that is a bounded deque
 which `_maybe_compress` rewrites wholesale, so anything placed there is both
-evictable and compactable — the failure this ADR exists to prevent.
+evictable and compactable — the failure this ADR exists to prevent. (The
+buffer's size was separately found to be smaller than one step's tool budget,
+which evicted the step description mid-step and split assistant/tool pairs
+into provider-rejected orphans; it is now derived from that budget.)
 
 Re-rendered once per model turn, not once per tool result. The paper's
 Appendix E shows repetition saturating below 40% while one well-placed
