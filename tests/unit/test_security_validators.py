@@ -1,4 +1,5 @@
 """Unit tests for security validators — Fixes 1-4 from execution_fixes_plan."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -140,22 +141,22 @@ class TestCommandValidatorBashPowerShellSeparation:
 
     def test_powershell_subexpression_not_flagged(self) -> None:
         v = CommandValidator()
-        r = v.validate_bash('Get-ChildItem | Where-Object {$_.Length -gt $($limit * 2)}')
+        r = v.validate_bash("Get-ChildItem | Where-Object {$_.Length -gt $($limit * 2)}")
         assert r.result == ValidationResult.VALID
 
     def test_bash_command_substitution_still_blocked(self) -> None:
         v = CommandValidator()
-        r = v.validate_bash('echo $(cat /etc/passwd)')
+        r = v.validate_bash("echo $(cat /etc/passwd)")
         assert r.result == ValidationResult.DANGEROUS_PATTERN
 
     def test_short_substitution_not_blocked(self) -> None:
         v = CommandValidator()
-        r = v.validate_bash('echo $()')
+        r = v.validate_bash("echo $()")
         assert r.result == ValidationResult.VALID
 
     def test_powershell_without_cmdlet_indicators_is_bash_substitution(self) -> None:
         """$(expr) without PowerShell cmdlet indicators is treated as bash substitution."""
         v = CommandValidator()
-        r = v.validate_bash('$(1 + 2)')
+        r = v.validate_bash("$(1 + 2)")
         # This is bash $() substitution with 3+ chars content — correctly blocked
         assert r.result == ValidationResult.DANGEROUS_PATTERN

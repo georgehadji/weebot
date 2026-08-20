@@ -1,4 +1,5 @@
 """Event bus publish middleware — publishes events to the message bus."""
+
 from __future__ import annotations
 
 from typing import Any

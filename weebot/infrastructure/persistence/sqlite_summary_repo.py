@@ -1,11 +1,11 @@
 """SQLite-based summary repository with lightweight in-memory vector search."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import math
 import sqlite3
-from typing import List, Tuple
 
 from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
 
@@ -19,23 +19,16 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
 
     def _init_db(self) -> None:
         with sqlite3.connect(self._db_path) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS summaries (
                     session_id TEXT PRIMARY KEY,
                     summary TEXT NOT NULL,
                     embedding_json TEXT NOT NULL
                 )
-                """
-            )
+                """)
             conn.commit()
 
-    async def save_summary(
-        self,
-        session_id: str,
-        summary: str,
-        embedding: List[float],
-    ) -> None:
+    async def save_summary(self, session_id: str, summary: str, embedding: list[float]) -> None:
         def _save() -> None:
             with sqlite3.connect(self._db_path) as conn:
                 conn.execute(
@@ -43,21 +36,21 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
                     (session_id, summary, json.dumps(embedding)),
                 )
                 conn.commit()
+
         await asyncio.to_thread(_save)
 
     async def find_similar(
-        self,
-        embedding: List[float],
-        k: int = 3,
-    ) -> List[Tuple[str, str, float]]:
+        self, embedding: list[float], k: int = 3
+    ) -> list[tuple[str, str, float]]:
         def _query():
             with sqlite3.connect(self._db_path) as conn:
                 return conn.execute(
                     "SELECT session_id, summary, embedding_json FROM summaries"
                 ).fetchall()
+
         rows = await asyncio.to_thread(_query)
 
-        results: List[Tuple[str, str, float]] = []
+        results: list[tuple[str, str, float]] = []
         query_norm = _norm(embedding)
         for session_id, summary, emb_json in rows:
             candidate = json.loads(emb_json)
@@ -68,11 +61,11 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
         return results[:k]
 
 
-def _norm(v: List[float]) -> float:
+def _norm(v: list[float]) -> float:
     return math.sqrt(sum(x * x for x in v))
 
 
-def _cosine_similarity(a: List[float], b: List[float], norm_a: float | None = None) -> float:
+def _cosine_similarity(a: list[float], b: list[float], norm_a: float | None = None) -> float:
     if len(a) != len(b):
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))

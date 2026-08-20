@@ -1,9 +1,9 @@
 """Parse agency-style agent markdown into structured personas."""
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from weebot.agents.models import AgentPersona
 
@@ -37,8 +37,8 @@ _SECTION_MAP = {
 }
 
 
-def _extract_bullets(lines: List[str]) -> List[str]:
-    items: List[str] = []
+def _extract_bullets(lines: list[str]) -> list[str]:
+    items: list[str] = []
     for line in lines:
         m = _BULLET_RE.match(line)
         if m:
@@ -59,7 +59,12 @@ class AgentPersonaParser:
 
     def parse_file(self, path: Path) -> AgentPersona:
         content = Path(path).read_text(encoding="utf-8")
-        return self.parse(content, source_path=str(path), filename=Path(path).name, division_hint=Path(path).parent.name)
+        return self.parse(
+            content,
+            source_path=str(path),
+            filename=Path(path).name,
+            division_hint=Path(path).parent.name,
+        )
 
     def parse(
         self,
@@ -107,9 +112,9 @@ class AgentPersonaParser:
             source_path=source_path,
         )
 
-    def _split_sections(self, content: str) -> Dict[str, str]:
+    def _split_sections(self, content: str) -> dict[str, str]:
         current_key = "description"
-        sections: Dict[str, List[str]] = {current_key: []}
+        sections: dict[str, list[str]] = {current_key: []}
 
         for line in content.splitlines():
             heading = _HEADING_RE.match(line)
@@ -132,10 +137,7 @@ class AgentPersonaParser:
         return {k: "\n".join(v).strip() for k, v in sections.items()}
 
     def _extract_name(
-        self,
-        sections: Dict[str, str],
-        filename: str | None,
-        first_heading: str | None,
+        self, sections: dict[str, str], filename: str | None, first_heading: str | None
     ) -> str:
         if sections.get("description"):
             first_line = sections["description"].splitlines()[0].strip()
@@ -161,6 +163,6 @@ class AgentPersonaParser:
             return filename.replace(".md", "").replace("_", " ").replace("-", " ").title()
         return "Agent"
 
-    def _derive_expertise_from_name(self, name: str, division: str) -> List[str]:
+    def _derive_expertise_from_name(self, name: str, division: str) -> list[str]:
         tokens = re.findall(r"[A-Za-z]+", f"{division} {name}")
         return [t.lower() for t in tokens if t]

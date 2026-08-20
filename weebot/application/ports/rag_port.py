@@ -4,6 +4,7 @@ Defines the abstract interface for searching across embedded skill
 content and past session data. Implementations perform hybrid BM25 + vector
 search and return ranked text results.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,4 +1,5 @@
 """CQRS handlers for trajectory evidence pipeline."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
-from weebot.application.cqrs.base import CommandHandler, CommandResult, QueryHandler, QueryResult
+from weebot.application.cqrs.base import CommandHandler, CommandResult
 from weebot.application.cqrs.commands.trajectory_commands import (
     BuildOptimizationBatchCommand,
     ScoreTrajectoryCommand,
@@ -16,12 +17,8 @@ from weebot.application.services.trajectory_builder import TrajectoryBuilder
 from weebot.domain.models.trajectory import OptimizationBatch
 
 if TYPE_CHECKING:
-    from weebot.application.ports.event_store_port import EventStorePort
-    from weebot.application.ports.llm_port import LLMPort
     from weebot.application.ports.state_repo_port import StateRepositoryPort
-    from weebot.application.ports.trajectory_repository_port import (
-        TrajectoryRepositoryPort,
-    )
+    from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
 
 
 class ScoreTrajectoryHandler(CommandHandler):
@@ -52,8 +49,7 @@ class ScoreTrajectoryHandler(CommandHandler):
             session = await self._state_repo.load_session(command.session_id)
             if session is None:
                 return CommandResult.fail(
-                    error=f"Session {command.session_id} not found",
-                    error_code="SESSION_NOT_FOUND",
+                    error=f"Session {command.session_id} not found", error_code="SESSION_NOT_FOUND"
                 )
 
             # Score the session via the harness-specific scorer
@@ -88,7 +84,8 @@ class ScoreTrajectoryHandler(CommandHandler):
                 except Exception as exc:
                     logger.warning(
                         "Failed to emit failure signature extraction for session %s: %s",
-                        command.session_id, exc,
+                        command.session_id,
+                        exc,
                     )
 
             return CommandResult.ok(
@@ -100,9 +97,7 @@ class ScoreTrajectoryHandler(CommandHandler):
                 }
             )
         except Exception as exc:
-            return CommandResult.fail(
-                error=str(exc), error_code="TRAJECTORY_SCORE_ERROR"
-            )
+            return CommandResult.fail(error=str(exc), error_code="TRAJECTORY_SCORE_ERROR")
 
     # Setter for optional event store injection (avoids import at module level)
     def set_event_store(self, store: Any) -> None:
@@ -142,12 +137,7 @@ class BuildOptimizationBatchHandler(CommandHandler):
             )
 
             return CommandResult.ok(
-                data={
-                    "batch": batch.model_dump(),
-                    "trajectory_count": len(trajectories),
-                }
+                data={"batch": batch.model_dump(), "trajectory_count": len(trajectories)}
             )
         except Exception as exc:
-            return CommandResult.fail(
-                error=str(exc), error_code="BATCH_BUILD_ERROR"
-            )
+            return CommandResult.fail(error=str(exc), error_code="BATCH_BUILD_ERROR")

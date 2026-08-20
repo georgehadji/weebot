@@ -1,9 +1,8 @@
 """Unit tests for TerminateTool and AskHumanTool."""
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from weebot.tools.control import AskHumanTool, TerminateTool
-
 
 # ---------------------------------------------------------------------------
 # TerminateTool
@@ -45,14 +44,14 @@ def test_terminate_to_param_requires_reason():
 @pytest.mark.asyncio
 async def test_ask_human_returns_special_result():
     """AskHumanTool returns a special result indicating human input is needed.
-    
+
     The tool now returns a ToolResult with awaiting_human flag instead of
     blocking on input. This enables the HITL (Human-in-the-Loop) flow.
     """
     tool = AskHumanTool()
-    
+
     result = await tool.execute(question="Are you ready?")
-    
+
     # Tool should return a result (not block)
     assert result is not None
     # Result should indicate human interaction is needed

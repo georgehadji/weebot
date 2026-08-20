@@ -1,9 +1,10 @@
 """Agent persona models and output contracts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.core.agent_profile import AgentProfile
 
@@ -12,11 +13,11 @@ from weebot.core.agent_profile import AgentProfile
 class DeliverableContract:
     """Output contract derived from a deliverable template."""
 
-    required_headings: List[str] = field(default_factory=list)
+    required_headings: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_template(cls, template: str) -> "DeliverableContract":
-        headings: List[str] = []
+    def from_template(cls, template: str) -> DeliverableContract:
+        headings: list[str] = []
         for line in template.splitlines():
             line = line.strip()
             if line.startswith("#"):
@@ -31,9 +32,9 @@ class DeliverableContract:
                     headings.append(line)
         return cls(required_headings=headings)
 
-    def validate(self, output: str) -> List[str]:
+    def validate(self, output: str) -> list[str]:
         """Return missing headings from output."""
-        missing: List[str] = []
+        missing: list[str] = []
         output_lower = output.lower()
         for heading in self.required_headings:
             if heading.lower() not in output_lower:
@@ -52,14 +53,14 @@ class AgentPersona:
     description: str = ""
     identity: str = ""
     mission: str = ""
-    critical_rules: List[str] = field(default_factory=list)
-    deliverables: List[str] = field(default_factory=list)
-    workflow: List[str] = field(default_factory=list)
+    critical_rules: list[str] = field(default_factory=list)
+    deliverables: list[str] = field(default_factory=list)
+    workflow: list[str] = field(default_factory=list)
     deliverable_template: str = ""
-    domain_expertise: List[str] = field(default_factory=list)
-    tools: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    source_path: Optional[str] = None
+    domain_expertise: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    source_path: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_profile(self) -> AgentProfile:
@@ -79,16 +80,16 @@ class AgentPersona:
             system_prompt_override=system_prompt,
         )
 
-    def contract(self) -> Optional[DeliverableContract]:
+    def contract(self) -> DeliverableContract | None:
         if not self.deliverable_template:
             return None
         return DeliverableContract.from_template(self.deliverable_template)
 
-    def validate_output(self, output: str) -> List[str]:
+    def validate_output(self, output: str) -> list[str]:
         contract = self.contract()
         if not contract:
             return []
         return contract.validate(output)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return asdict(self)

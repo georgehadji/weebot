@@ -1,9 +1,9 @@
 """OpenRouter LLM adapter — OpenAI-compatible with OpenRouter base URL and headers."""
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 from openai import AsyncOpenAI
 
@@ -23,15 +23,16 @@ class OpenRouterAdapter(OpenAIAdapter):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         default_model: str = MODEL_FACTORY_OPENROUTER,
-        http_referer: Optional[str] = None,
-        x_title: Optional[str] = None,
+        http_referer: str | None = None,
+        x_title: str | None = None,
     ):
         key = api_key
         if not key:
             try:
                 from weebot.config.settings import WeebotSettings
+
                 key = WeebotSettings().openrouter_api_key
             except Exception:
                 key = os.getenv("OPENROUTER_API_KEY")
@@ -53,7 +54,9 @@ class OpenRouterAdapter(OpenAIAdapter):
                 "OPENROUTER_API_KEY (prefix=%s...) does not start with '%s'.  "
                 "OpenRouter keys should begin with '%s'.  "
                 "Got an OpenAI key instead?",
-                key[:12], _OPENROUTER_KEY_PREFIX, _OPENROUTER_KEY_PREFIX,
+                key[:12],
+                _OPENROUTER_KEY_PREFIX,
+                _OPENROUTER_KEY_PREFIX,
             )
 
         headers = {
@@ -62,8 +65,6 @@ class OpenRouterAdapter(OpenAIAdapter):
         }
         # Re-initialize the OpenAI client with custom headers
         self._client = AsyncOpenAI(
-            api_key=key,
-            base_url=OPENROUTER_API_BASE,
-            default_headers=headers,
+            api_key=key, base_url=OPENROUTER_API_BASE, default_headers=headers
         )
         self._default_model = default_model

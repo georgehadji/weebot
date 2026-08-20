@@ -1,15 +1,11 @@
 """LangChain-compatible wrapper for LLMPort."""
+
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-)
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 
@@ -28,9 +24,9 @@ class LLMPortLangChainAdapter(BaseChatModel):
     """
 
     llm_port: Any  # LLMPort - using Any to avoid pydantic validation issues
-    model: Optional[str] = None
+    model: str | None = None
     temperature: float = 0.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
 
     @property
     def _llm_type(self) -> str:
@@ -38,12 +34,9 @@ class LLMPortLangChainAdapter(BaseChatModel):
 
     @property
     def _identifying_params(self) -> dict[str, Any]:
-        return {
-            "model": self.model,
-            "temperature": self.temperature,
-        }
+        return {"model": self.model, "temperature": self.temperature}
 
-    def _convert_messages(self, messages: List[BaseMessage]) -> list[dict[str, Any]]:
+    def _convert_messages(self, messages: list[BaseMessage]) -> list[dict[str, Any]]:
         """Convert LangChain messages to LLMPort format."""
         converted = []
         for msg in messages:
@@ -59,25 +52,30 @@ class LLMPortLangChainAdapter(BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[Any] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Synchronous generation (not recommended - use async)."""
         import asyncio
+
         try:
             loop = asyncio.get_event_loop()
-            response = loop.run_until_complete(self._agenerate(messages, stop, run_manager, **kwargs))
+            response = loop.run_until_complete(
+                self._agenerate(messages, stop, run_manager, **kwargs)
+            )
             return response
         except RuntimeError:
-            raise RuntimeError("LLMPortLangChainAdapter._generate cannot be used without an event loop; use async methods instead.")
+            raise RuntimeError(
+                "LLMPortLangChainAdapter._generate cannot be used without an event loop; use async methods instead."
+            )
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[Any] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Async generation using LLMPort."""

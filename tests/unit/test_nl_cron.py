@@ -5,7 +5,6 @@ Covers:
 - Edge cases (invalid input, boundary times)
 - CLI command registration
 """
-import pytest
 
 
 class TestNLCronParser:
@@ -104,6 +103,3 @@ class TestNLCronParser:
         result = parse_schedule("every day at 12am")
         assert result is not None
         assert "0 0" in result["cron_expression"]  # 12am = hour 0
-
-
-

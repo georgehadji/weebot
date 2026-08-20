@@ -5,10 +5,10 @@ Covers:
 - Skill without source_path and no history → 'archive-candidate'
 - Old file mtime → 'stale' or 'archive-candidate'
 """
+
 import os
 import time
-import pytest
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from weebot.application.services.skill_curator import SkillCurator
 from weebot.domain.models.skill import Skill
@@ -23,7 +23,7 @@ class TestSkillCuratorClassifyMtime:
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: new-skill\ndescription: x\n---\n")
         skill = Skill(name="new-skill", source_path=str(skill_md))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = SkillCurator._classify(skill, now)
         assert result == "active"
 
@@ -31,7 +31,7 @@ class TestSkillCuratorClassifyMtime:
         """A skill with no source_path and no history falls through
         to age_days 999 → 'archive-candidate'."""
         skill = Skill(name="orphan-skill")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = SkillCurator._classify(skill, now)
         assert result == "archive-candidate"
 
@@ -44,7 +44,7 @@ class TestSkillCuratorClassifyMtime:
         old_mtime = time.time() - (60 * 86400)
         os.utime(skill_md, (old_mtime, old_mtime))
         skill = Skill(name="old-skill", source_path=str(skill_md))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = SkillCurator._classify(skill, now)
         assert result == "stale"
 
@@ -56,7 +56,7 @@ class TestSkillCuratorClassifyMtime:
         old_mtime = time.time() - (100 * 86400)
         os.utime(skill_md, (old_mtime, old_mtime))
         skill = Skill(name="ancient-skill", source_path=str(skill_md))
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = SkillCurator._classify(skill, now)
         assert result == "archive-candidate"
 
@@ -66,6 +66,7 @@ class TestSkillCuratorClassifyMtime:
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: logged-skill\ndescription: x\n---\n")
         from weebot.domain.models.skill import EvolutionEntry
+
         skill = Skill(
             name="logged-skill",
             source_path=str(skill_md),
@@ -73,11 +74,11 @@ class TestSkillCuratorClassifyMtime:
                 EvolutionEntry(
                     epoch=0,
                     narrative="Used at some point",
-                    timestamp=datetime(2023, 1, 1, tzinfo=timezone.utc),
+                    timestamp=datetime(2023, 1, 1, tzinfo=UTC),
                 )
             ],
         )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = SkillCurator._classify(skill, now)
         # Over 90 days since last evolution entry → archive-candidate
         assert result == "archive-candidate"

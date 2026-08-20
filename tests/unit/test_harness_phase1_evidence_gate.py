@@ -7,6 +7,7 @@ Covers:
 4. RegressionSuite load and oracle evaluation
 5. TaskRunReport with composite metrics
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -14,12 +15,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from weebot.domain.models.harness_metrics import HarnessMetrics
-from weebot.domain.models.regression_task import OracleResult, RegressionTask
-
+from weebot.domain.models.regression_task import RegressionTask
 
 # ============================================================================
 # 1. RegressionGate — fail-closed default
 # ============================================================================
+
 
 class TestRegressionGateFailClosed:
     """RegressionGate must reject when no task_runner is configured."""
@@ -30,9 +31,7 @@ class TestRegressionGateFailClosed:
         from weebot.application.services.regression_gate import RegressionGate
 
         gate = RegressionGate()
-        result = await gate.validate(
-            baseline="v1", candidate="v2",
-        )
+        result = await gate.validate(baseline="v1", candidate="v2")
         assert not result.accepted
         assert "fail-closed" in result.reason
 
@@ -42,9 +41,7 @@ class TestRegressionGateFailClosed:
         from weebot.application.services.regression_gate import RegressionGate
 
         gate = RegressionGate(auto_accept=True)
-        result = await gate.validate(
-            baseline="v1", candidate="v2",
-        )
+        result = await gate.validate(baseline="v1", candidate="v2")
         assert result.accepted
         assert "auto_accept" in result.reason
 
@@ -53,13 +50,16 @@ class TestRegressionGateFailClosed:
         """Fewer held-out tasks than min_held_out_tasks => reject."""
         from weebot.application.services.regression_gate import RegressionGate
 
-        stub_runner = AsyncMock(return_value=[
-            {"passed": True, "metrics": HarnessMetrics(task_pass_rate=1.0).model_dump()},
-        ])
+        stub_runner = AsyncMock(
+            return_value=[
+                {"passed": True, "metrics": HarnessMetrics(task_pass_rate=1.0).model_dump()}
+            ]
+        )
         gate = RegressionGate(task_runner=stub_runner, min_held_out_tasks=2)
 
         result = await gate.validate(
-            baseline="v1", candidate="v2",
+            baseline="v1",
+            candidate="v2",
             held_in_tasks=["a", "b"],
             held_out_tasks=["c"],  # only 1, below floor of 2
         )
@@ -70,6 +70,7 @@ class TestRegressionGateFailClosed:
 # ============================================================================
 # 2. RegressionGate — composite metric acceptance
 # ============================================================================
+
 
 class TestRegressionGateComposite:
     """RegressionGate uses composite metric for acceptance/rejection."""
@@ -103,7 +104,8 @@ class TestRegressionGateComposite:
 
         gate = RegressionGate(task_runner=side_effect)
         result = await gate.validate(
-            baseline="v1", candidate="v2",
+            baseline="v1",
+            candidate="v2",
             held_in_tasks=["a", "b"],
             held_out_tasks=["c", "d"],
             repeats=1,
@@ -122,19 +124,37 @@ class TestRegressionGateComposite:
             phase = run_phase[0]
             run_phase[0] += 1
             if phase < 2:  # baseline runs (held-in + held-out, good scores)
-                return [{"passed": True, "metrics": HarnessMetrics(task_pass_rate=0.8, trajectory_efficiency=0.7).model_dump()}]
+                return [
+                    {
+                        "passed": True,
+                        "metrics": HarnessMetrics(
+                            task_pass_rate=0.8, trajectory_efficiency=0.7
+                        ).model_dump(),
+                    }
+                ]
             # candidate: held-in still good, but held-out regresses
             if phase == 2:  # candidate held-in (still good — pass delta)
-                return [{"passed": True, "metrics": HarnessMetrics(task_pass_rate=0.9, trajectory_efficiency=0.8).model_dump()}]
+                return [
+                    {
+                        "passed": True,
+                        "metrics": HarnessMetrics(
+                            task_pass_rate=0.9, trajectory_efficiency=0.8
+                        ).model_dump(),
+                    }
+                ]
             # candidate held-out (regresses)
-            return [{"passed": True, "metrics": HarnessMetrics(task_pass_rate=0.3, trajectory_efficiency=0.2).model_dump()}]
+            return [
+                {
+                    "passed": True,
+                    "metrics": HarnessMetrics(
+                        task_pass_rate=0.3, trajectory_efficiency=0.2
+                    ).model_dump(),
+                }
+            ]
 
         gate = RegressionGate(task_runner=side_effect, min_held_out_tasks=1)
         result = await gate.validate(
-            baseline="v1", candidate="v2",
-            held_in_tasks=["a"],
-            held_out_tasks=["b"],
-            repeats=1,
+            baseline="v1", candidate="v2", held_in_tasks=["a"], held_out_tasks=["b"], repeats=1
         )
         assert not result.accepted
         assert "regression" in result.reason.lower()
@@ -145,14 +165,13 @@ class TestRegressionGateComposite:
         from weebot.application.services.regression_gate import RegressionGate
 
         async def side_effect(task_ids, config):
-            return [{"passed": True, "metrics": HarnessMetrics(task_pass_rate=0.5).model_dump()}] * len(task_ids)
+            return [
+                {"passed": True, "metrics": HarnessMetrics(task_pass_rate=0.5).model_dump()}
+            ] * len(task_ids)
 
         gate = RegressionGate(task_runner=side_effect, min_held_out_tasks=1)
         result = await gate.validate(
-            baseline="v1", candidate="v2",
-            held_in_tasks=["a"],
-            held_out_tasks=["b"],
-            repeats=1,
+            baseline="v1", candidate="v2", held_in_tasks=["a"], held_out_tasks=["b"], repeats=1
         )
         assert not result.accepted
         assert "No improvement" in result.reason
@@ -162,14 +181,13 @@ class TestRegressionGateComposite:
 # 3. HarnessMetricScorer
 # ============================================================================
 
+
 class TestHarnessMetricScorer:
     """HarnessMetricScorer computes metrics from session events."""
 
     def test_score_passed_session_returns_high_scores(self):
         """A session that passed should have high task_pass_rate."""
-        from weebot.application.services.harness_metric_scorer import (
-            HarnessMetricScorer,
-        )
+        from weebot.application.services.harness_metric_scorer import HarnessMetricScorer
 
         session = MagicMock()
         session.events = []
@@ -180,9 +198,7 @@ class TestHarnessMetricScorer:
 
     def test_score_failed_session_returns_low_pass_rate(self):
         """A session that failed should have zero task_pass_rate."""
-        from weebot.application.services.harness_metric_scorer import (
-            HarnessMetricScorer,
-        )
+        from weebot.application.services.harness_metric_scorer import HarnessMetricScorer
 
         session = MagicMock()
         session.events = []
@@ -192,9 +208,7 @@ class TestHarnessMetricScorer:
 
     def test_recovery_ability_perfect_when_no_errors(self):
         """No errors => recovery_ability should be 1.0."""
-        from weebot.application.services.harness_metric_scorer import (
-            HarnessMetricScorer,
-        )
+        from weebot.application.services.harness_metric_scorer import HarnessMetricScorer
 
         session = MagicMock()
         session.events = []
@@ -226,6 +240,7 @@ class TestHarnessMetricScorer:
 # ============================================================================
 # 4. RegressionSuite
 # ============================================================================
+
 
 class TestRegressionSuite:
     """RegressionSuite loads tasks from JSONL and evaluates oracles."""
@@ -271,12 +286,8 @@ class TestRegressionSuite:
 
     def test_evaluate_file_exists_oracle(self):
         """file_exists oracle should pass when context has the file."""
-        from weebot.application.services.regression_suite import RegressionSuite
 
-        task = RegressionTask(
-            id="test-eval",
-            prompt="Create a file",
-        )
+        task = RegressionTask(id="test-eval", prompt="Create a file")
         task._oracle = lambda ctx: ctx.get("files_created", {}).get("test.txt", False)
 
         result = task.evaluate({"files_created": {"test.txt": True}})
@@ -287,7 +298,6 @@ class TestRegressionSuite:
 
     def test_evaluate_default_oracle_passes_no_error(self):
         """Default oracle should pass when context has no error."""
-        from weebot.application.services.regression_suite import RegressionSuite
 
         task = RegressionTask(id="test-eval", prompt="Do something")
         # No _oracle set = default
@@ -298,6 +308,7 @@ class TestRegressionSuite:
 # ============================================================================
 # 5. HarnessMetrics model
 # ============================================================================
+
 
 class TestHarnessMetricsModel:
     """HarnessMetrics domain model validation."""
@@ -316,6 +327,7 @@ class TestHarnessMetricsModel:
     def test_fields_validated_ge_le(self):
         """Fields raise ValidationError for out-of-range values."""
         import pydantic
+
         with pytest.raises(pydantic.ValidationError):
             HarnessMetrics(task_pass_rate=1.5)
         with pytest.raises(pydantic.ValidationError):

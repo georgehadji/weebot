@@ -3,12 +3,12 @@
 ModelJudge — LLM-based judge that scores output against criteria.
 ScoreJudge — deterministic judge (exact match, substring, regex).
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from typing import Optional
 
 from weebot.application.ports.judge_port import CriterionScore, JudgePort, JudgeVerdict
 from weebot.application.ports.llm_port import LLMPort
@@ -48,20 +48,12 @@ class ModelJudge(JudgePort):
         model: Model ID for the evaluation call (defaults to MODEL_BUDGET).
     """
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        model: Optional[str] = None,
-    ) -> None:
+    def __init__(self, llm: LLMPort, model: str | None = None) -> None:
         self._llm = llm
         self._model = model
 
     async def judge(
-        self,
-        task_description: str,
-        output: str,
-        criteria: list[str],
-        context: str = "",
+        self, task_description: str, output: str, criteria: list[str], context: str = ""
     ) -> JudgeVerdict:
         criteria_text = ", ".join(criteria) if criteria else "overall quality"
         prompt = (
@@ -102,10 +94,7 @@ class ModelJudge(JudgePort):
             )
         except Exception as exc:
             logger.warning("ModelJudge failed: %s — returning default fail verdict", exc)
-            return JudgeVerdict(
-                overall_score=0.0, passed=False,
-                reasoning=f"judge failed: {exc}",
-            )
+            return JudgeVerdict(overall_score=0.0, passed=False, reasoning=f"judge failed: {exc}")
 
 
 class ScoreJudge(JudgePort):
@@ -119,11 +108,7 @@ class ScoreJudge(JudgePort):
         self._pass_ratio = pass_ratio
 
     async def judge(
-        self,
-        task_description: str,
-        output: str,
-        criteria: list[str],
-        context: str = "",
+        self, task_description: str, output: str, criteria: list[str], context: str = ""
     ) -> JudgeVerdict:
         if not criteria:
             # No criteria given — check that output is non-empty
@@ -150,11 +135,11 @@ class ScoreJudge(JudgePort):
             score = 10.0 if matched else 0.0
             if matched:
                 matches += 1
-            criterion_scores.append(CriterionScore(
-                name=criterion[:30],
-                score=score,
-                reasoning="found" if matched else "not found",
-            ))
+            criterion_scores.append(
+                CriterionScore(
+                    name=criterion[:30], score=score, reasoning="found" if matched else "not found"
+                )
+            )
 
         match_ratio = matches / len(criteria) if criteria else 0.0
         overall_score = match_ratio

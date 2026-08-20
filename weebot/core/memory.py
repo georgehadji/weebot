@@ -14,11 +14,11 @@ Usage:
         # trigger summarization before the next LLM call
         ...
 """
+
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ _MODEL_CONTEXT_WINDOWS: dict[str, int] = {
 @dataclass
 class UsageSnapshot:
     """A point-in-time snapshot of the budgeter's internal state."""
+
     messages_count: int
     tokens_used: int
     tokens_remaining: int
@@ -60,11 +61,7 @@ class TokenBudgetManager:
     # Warn when remaining budget drops below this percentage
     _WARN_THRESHOLD: float = 0.25  # 25%
 
-    def __init__(
-        self,
-        model: str = "default",
-        max_tokens: Optional[int] = None,
-    ) -> None:
+    def __init__(self, model: str = "default", max_tokens: int | None = None) -> None:
         self._model = model
         self._max_tokens = max_tokens or _MODEL_CONTEXT_WINDOWS.get(
             model, _MODEL_CONTEXT_WINDOWS["default"]
@@ -76,6 +73,7 @@ class TokenBudgetManager:
         # Try tiktoken for precise counting
         try:
             import tiktoken
+
             self._encoder = tiktoken.get_encoding("cl100k_base")
             self._use_tiktoken = True
         except ImportError:
@@ -164,6 +162,9 @@ class TokenBudgetManager:
         if self.should_warn:
             logger.warning(
                 "Token budget: %d/%d used (%.0f%%) — last %s added %d tokens",
-                self._used_tokens, self._max_tokens,
-                self.usage_ratio * 100, label, tokens,
+                self._used_tokens,
+                self._max_tokens,
+                self.usage_ratio * 100,
+                label,
+                tokens,
             )

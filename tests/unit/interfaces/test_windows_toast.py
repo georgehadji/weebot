@@ -1,8 +1,8 @@
 # tests/unit/test_windows_toast.py
 """Unit tests for ."""
+
 import pytest
 from unittest.mock import patch, MagicMock
-from datetime import datetime
 from weebot.infrastructure.notifications import Notification, NotificationLevel
 from weebot.infrastructure.notifications.notifications import WindowsToastChannel
 

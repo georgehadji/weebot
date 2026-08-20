@@ -7,36 +7,48 @@ Write-tracking invalidates read_file entries after a write to the same path.
 Lives in the application layer with no infrastructure dependencies
 (pure Python: dict + time).
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from weebot.domain.models.tool_result import ToolResult
 
 # Tools whose results are NEVER cached (side effects or non-deterministic).
-NON_CACHEABLE_TOOLS: frozenset[str] = frozenset({
-    "bash", "powershell", "run_shell",
-    "write_file", "file_editor",
-    "str_replace_editor",
-    "advanced_browser", "browser_navigator", "browser_inspector",
-    "computer_use", "screen_capture", "screenshot_ocr", "detect_elements",
-    "terminate", "ask_human",
-    "dispatch_agents",
-    "voice_input", "voice_output",
-    "image_gen",
-})
+NON_CACHEABLE_TOOLS: frozenset[str] = frozenset(
+    {
+        "bash",
+        "powershell",
+        "run_shell",
+        "write_file",
+        "file_editor",
+        "str_replace_editor",
+        "advanced_browser",
+        "browser_navigator",
+        "browser_inspector",
+        "computer_use",
+        "screen_capture",
+        "screenshot_ocr",
+        "detect_elements",
+        "terminate",
+        "ask_human",
+        "dispatch_agents",
+        "voice_input",
+        "voice_output",
+        "image_gen",
+    }
+)
 
 # Per-tool TTL overrides (seconds). Tools not listed use "_default".
 DEFAULT_TTL_SECONDS: dict[str, int] = {
-    "web_search": 300,       # 5 min
+    "web_search": 300,  # 5 min
     "weather": 300,
     "weather_tool": 300,
-    "knowledge": 3600,      # 1 hr
-    "read_file": 60,         # 1 min
+    "knowledge": 3600,  # 1 hr
+    "read_file": 60,  # 1 min
     "list_directory": 60,
     "search_files": 120,
     "search_content": 120,
@@ -69,7 +81,7 @@ class ToolResultCache:
 
     # ── Public API ─────────────────────────────────────────────────
 
-    def get(self, tool_name: str, args: dict) -> Optional[ToolResult]:
+    def get(self, tool_name: str, args: dict) -> ToolResult | None:
         """Return cached result or None if not cached / expired / invalidated."""
         if tool_name in NON_CACHEABLE_TOOLS:
             return None
@@ -110,10 +122,7 @@ class ToolResultCache:
         if len(self._store) >= self._max_entries and key not in self._store:
             self._evict_one()
 
-        self._store[key] = _CacheEntry(
-            result=result,
-            expires_at=time.monotonic() + ttl,
-        )
+        self._store[key] = _CacheEntry(result=result, expires_at=time.monotonic() + ttl)
 
     def invalidate(self, tool_name: str, args: dict) -> None:
         """Remove a specific entry from the cache."""

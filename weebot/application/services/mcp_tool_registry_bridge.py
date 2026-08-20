@@ -7,6 +7,7 @@ namespaced tools (``mcp__<server>__<tool>``) into the RoleBasedToolRegistry.
 It also handles ``notifications/tools/list_changed`` for dynamic updates
 and manages the lifecycle of per-server tool registrations.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -45,7 +46,7 @@ def _parse_namespaced_name(namespaced: str) -> tuple[str, str] | None:
     """
     if not namespaced.startswith(MCP_TOOL_PREFIX):
         return None
-    rest = namespaced[len(MCP_TOOL_PREFIX):]
+    rest = namespaced[len(MCP_TOOL_PREFIX) :]
     parts = rest.split("__", 1)
     if len(parts) != 2:
         return None
@@ -53,8 +54,7 @@ def _parse_namespaced_name(namespaced: str) -> tuple[str, str] | None:
 
 
 def _apply_tool_filters(
-    server_config: MCPServerConfig,
-    tools: list[MCPToolInfo],
+    server_config: MCPServerConfig, tools: list[MCPToolInfo]
 ) -> list[MCPToolInfo]:
     """Apply include/exclude filters from *server_config* to *tools*.
 
@@ -67,14 +67,16 @@ def _apply_tool_filters(
     if server_config.tools.include:
         include_patterns = server_config.tools.include
         filtered = [
-            t for t in filtered
+            t
+            for t in filtered
             if any(fnmatch.fnmatch(t.original_name, pat) for pat in include_patterns)
         ]
 
     if server_config.tools.exclude:
         exclude_patterns = server_config.tools.exclude
         filtered = [
-            t for t in filtered
+            t
+            for t in filtered
             if not any(fnmatch.fnmatch(t.original_name, pat) for pat in exclude_patterns)
         ]
 
@@ -94,11 +96,7 @@ class MCPToolRegistryBridge:
         # Unregisters all MCP tools
     """
 
-    def __init__(
-        self,
-        mcp_client: Any = None,
-        registry: Any = None,
-    ) -> None:
+    def __init__(self, mcp_client: Any = None, registry: Any = None) -> None:
         self._mcp_client = mcp_client
         self._registry = registry or RoleBasedToolRegistry()
         self._server_configs: dict[str, MCPServerConfig] = {}
@@ -164,9 +162,7 @@ class MCPToolRegistryBridge:
         # H1: index external MCP tools for scoped retrieval
         if self._retrieval_service is not None and total > 0:
             all_tool_infos = [
-                info
-                for infos in self._registered_tool_infos.values()
-                for info in infos
+                info for infos in self._registered_tool_infos.values() for info in infos
             ]
             await self._retrieval_service.index_all_tools(all_tool_infos)
 
@@ -199,13 +195,15 @@ class MCPToolRegistryBridge:
             if server_name not in server_tools:
                 server_tools[server_name] = []
 
-            server_tools[server_name].append(MCPToolInfo(
-                original_name=original_name,
-                namespaced_name=namespaced,
-                description=func.get("description", ""),
-                input_schema=func.get("parameters", {}),
-                server_name=server_name,
-            ))
+            server_tools[server_name].append(
+                MCPToolInfo(
+                    original_name=original_name,
+                    namespaced_name=namespaced,
+                    description=func.get("description", ""),
+                    input_schema=func.get("parameters", {}),
+                    server_name=server_name,
+                )
+            )
 
         # Apply per-server filters and register
         for server_name, config in self._server_configs.items():
@@ -225,7 +223,8 @@ class MCPToolRegistryBridge:
             total += len(registered_names)
             logger.info(
                 "Bridge: registered %d tools from MCP server '%s' (%d filtered out)",
-                len(registered_names), server_name,
+                len(registered_names),
+                server_name,
                 len(raw_for_server) - len(registered_names),
             )
 
@@ -271,7 +270,10 @@ class MCPToolRegistryBridge:
 
         logger.debug(
             "Bridge: registered MCP tool %s (server: %s, write=%s, tier=%s)",
-            namespaced, server_name, is_write, tier,
+            namespaced,
+            server_name,
+            is_write,
+            tier,
         )
 
     async def reload(self) -> int:
@@ -316,11 +318,7 @@ class MCPToolRegistryBridge:
             stacklevel=2,
         )
         if self._retrieval_service is None:
-            return [
-                name
-                for names in self._registered_tools.values()
-                for name in names
-            ]
+            return [name for names in self._registered_tools.values() for name in names]
 
         relevant = await self._retrieval_service.scope_for_query(query)
         return [tool.namespaced_name for tool in relevant]
@@ -336,11 +334,7 @@ class MCPToolRegistryBridge:
             List of namespaced tool names.
         """
         if self._retrieval_service is None:
-            return [
-                name
-                for names in self._registered_tools.values()
-                for name in names
-            ]
+            return [name for names in self._registered_tools.values() for name in names]
 
         relevant = await self._retrieval_service.retrieve_for_query(query)
         return [tool.namespaced_name for tool in relevant]
@@ -388,7 +382,5 @@ class MCPToolRegistryBridge:
         return {
             "servers": len(self._registered_tools),
             "total_tools": total_tools,
-            "per_server": {
-                srv: len(tools) for srv, tools in self._registered_tools.items()
-            },
+            "per_server": {srv: len(tools) for srv, tools in self._registered_tools.items()},
         }

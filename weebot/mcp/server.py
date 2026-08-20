@@ -4,6 +4,7 @@ Transport options:
 - stdio: ``await server.run_stdio()``  — for Claude Desktop
 - SSE:   ``await server.run_sse()``    — for Claude IDE / web clients
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -13,8 +14,7 @@ try:
     from mcp.types import CallToolResult, TextContent
 except ImportError as _mcp_err:
     raise ImportError(
-        "weebot.mcp requires the 'mcp' package. "
-        "Install it with:  pip install 'mcp>=1.5'"
+        "weebot.mcp requires the 'mcp' package. " "Install it with:  pip install 'mcp>=1.5'"
     ) from _mcp_err
 
 from weebot.config.secret_accessor import SecretAccessor
@@ -30,6 +30,7 @@ from weebot.mcp.resources import (
     build_tools_json,
 )
 from weebot.utils.rate_limiter import check_rate_limit
+from datetime import UTC
 
 # Prometheus metrics — lazy import to avoid circular dependency at module level
 _metrics = None
@@ -39,8 +40,10 @@ def _get_metrics():
     global _metrics
     if _metrics is None:
         from weebot.infrastructure.observability import metrics as _m
+
         _metrics = _m
     return _metrics
+
 
 class _APIKeyTokenVerifier:
     """Simple Bearer-token verifier that checks against a static API key.
@@ -59,6 +62,7 @@ class _APIKeyTokenVerifier:
         timing side-channel attacks on token validation.
         """
         import hmac as _hmac
+
         return _hmac.compare_digest(token, self._expected)
 
 
@@ -134,6 +138,7 @@ class WeebotMCPServer:
         )
         if self._api_key:
             import logging
+
             logging.getLogger(__name__).info(
                 "MCP server auth enabled (API key from %s)",
                 "explicit param" if api_key else "WEEBOT_MCP_API_KEY env var",
@@ -166,44 +171,32 @@ class WeebotMCPServer:
     @staticmethod
     def _default_composite_registry():
         """Return a default CompositeToolRegistry."""
-        from weebot.application.services.composite_tool_registry import (
-            CompositeToolRegistry,
-        )
+        from weebot.application.services.composite_tool_registry import CompositeToolRegistry
+
         return CompositeToolRegistry()
 
     @staticmethod
     def _default_composite_executor():
         """Return a default CompositeToolExecutor."""
-        from weebot.infrastructure.adapters.composite_tool_executor import (
-            CompositeToolExecutor,
-        )
+        from weebot.infrastructure.adapters.composite_tool_executor import CompositeToolExecutor
+
         return CompositeToolExecutor()
 
     @staticmethod
     def _tool_error_response(error: str) -> CallToolResult:
         """Return MCP-compliant structured error content for a tool failure."""
-        return CallToolResult(
-            content=[TextContent(type="text", text=error)],
-            isError=True,
-        )
+        return CallToolResult(content=[TextContent(type="text", text=error)], isError=True)
 
     @staticmethod
     def _tool_success_response(output: str) -> CallToolResult:
         """Return MCP-compliant structured success content for a tool call."""
-        return CallToolResult(
-            content=[TextContent(type="text", text=output)],
-            isError=False,
-        )
+        return CallToolResult(content=[TextContent(type="text", text=output)], isError=False)
 
     def _register_dynamic_tools(self) -> None:
         """Register tools supplied via MCPToolkitAdapter or other dynamic sources."""
         for tool in self._dynamic_tools:
             wrapper = self._wrap_base_tool(tool)
-            self._mcp.add_tool(
-                wrapper,
-                name=tool.name,
-                description=tool.description,
-            )
+            self._mcp.add_tool(wrapper, name=tool.name, description=tool.description)
 
     @staticmethod
     def _wrap_base_tool(tool):
@@ -212,6 +205,7 @@ class WeebotMCPServer:
         Returns MCP-compliant structured error content on failure instead of
         raising an exception, so the client LLM can reason about retry/escalation.
         """
+
         async def wrapper(**kwargs) -> CallToolResult:
             result = await tool.execute(**kwargs)
             if result.is_error:
@@ -222,6 +216,7 @@ class WeebotMCPServer:
                     isError=True,
                 )
             return WeebotMCPServer._tool_success_response(result.output)
+
         return wrapper
 
     def _register_tools(self) -> None:
@@ -242,6 +237,7 @@ class WeebotMCPServer:
         try:
             from weebot.application.di import Container
             from weebot.application.ports.rerank_port import RerankPort
+
             c = Container()
             c.configure_defaults()
             rerank = c._maybe_get(RerankPort)
@@ -249,6 +245,7 @@ class WeebotMCPServer:
                 _search_tool.set_rerank(rerank)
         except Exception:
             import logging as _log
+
             _log.getLogger(__name__).debug(
                 "RerankPort not configured — search results use engine order", exc_info=True
             )
@@ -265,6 +262,7 @@ class WeebotMCPServer:
             use_wsl: bool = False,
         ) -> CallToolResult:
             import time as _time
+
             allowed, retry_after = check_rate_limit("bash")
             if not allowed:
                 _get_metrics().mcp_rate_limits_hit_total.labels(tool="bash").inc()
@@ -290,6 +288,7 @@ class WeebotMCPServer:
 
         async def _python_execute(code: str, timeout: float = 30.0) -> CallToolResult:
             import time as _time
+
             allowed, retry_after = check_rate_limit("python_execute")
             if not allowed:
                 _get_metrics().mcp_rate_limits_hit_total.labels(tool="python_execute").inc()
@@ -315,6 +314,7 @@ class WeebotMCPServer:
 
         async def _web_search(query: str, num_results: int = 5) -> CallToolResult:
             import time as _time
+
             allowed, retry_after = check_rate_limit("web_search")
             if not allowed:
                 _get_metrics().mcp_rate_limits_hit_total.labels(tool="web_search").inc()
@@ -355,9 +355,7 @@ class WeebotMCPServer:
                     _time.monotonic() - _t0
                 )
             activity.push(
-                "mcp",
-                "tool",
-                f"{tool_name}: {kwargs.get('command')} {kwargs.get('path', '')[:40]}",
+                "mcp", "tool", f"{tool_name}: {kwargs.get('command')} {kwargs.get('path', '')[:40]}"
             )
             success = not result.is_error
             _get_metrics().tool_calls_total.labels(tool=tool_name, success=str(success)).inc()
@@ -386,11 +384,7 @@ class WeebotMCPServer:
 
         async def _file_insert(path: str, insert_line: int, new_str: str) -> CallToolResult:
             return await _run_file_tool(
-                "file_insert",
-                command="insert",
-                path=path,
-                insert_line=insert_line,
-                new_str=new_str,
+                "file_insert", command="insert", path=path, insert_line=insert_line, new_str=new_str
             )
 
         async def _file_editor_legacy(
@@ -414,15 +408,11 @@ class WeebotMCPServer:
 
         async def _ping_tool() -> CallToolResult:
             import json as _json
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             return self._tool_success_response(
                 _json.dumps(
-                    {
-                        "status": "ok",
-                        "version": "1.0.0",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
+                    {"status": "ok", "version": "1.0.0", "timestamp": datetime.now(UTC).isoformat()}
                 )
             )
 
@@ -522,17 +512,13 @@ class WeebotMCPServer:
 
         # Register visible atomic tools.
         for name, description, handler in tool_specs:
-            if (
-                self._composite_registry is not None
-                and not self._composite_registry.is_visible(name)
+            if self._composite_registry is not None and not self._composite_registry.is_visible(
+                name
             ):
                 continue
             mcp.add_tool(handler, name=name, description=description)
 
-    def _register_composite_tools(
-        self,
-        dispatcher: dict[str, Callable[..., object]],
-    ) -> None:
+    def _register_composite_tools(self, dispatcher: dict[str, Callable[..., object]]) -> None:
         """Register composite workflow tools and hide covered atomics."""
         from weebot.mcp.composite_tools import DEFAULT_COMPOSITE_TOOLS
 
@@ -636,6 +622,5 @@ class WeebotMCPServer:
         )
         def routing_resource() -> str:
             from weebot.mcp.resources import build_routing_json
-            return build_routing_json(
-                cascade_tracker=cascade_tracker,
-            )
+
+            return build_routing_json(cascade_tracker=cascade_tracker)

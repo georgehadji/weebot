@@ -20,6 +20,7 @@ Example:
     result = await mediator.send(CreatePlanCommand(session_id="s1", prompt="Do something"))
     plan = await mediator.query(GetPlanVisualizationQuery(session_id="s1"))
 """
+
 from weebot.application.cqrs.base import (
     Command,
     CommandHandler,
@@ -47,11 +48,7 @@ from weebot.application.cqrs.handlers import (
     UpdatePlanHandler,
     register_default_handlers,
 )
-from weebot.application.cqrs.mediator import (
-    HandlerNotRegisteredError,
-    Mediator,
-    MediatorError,
-)
+from weebot.application.cqrs.mediator import HandlerNotRegisteredError, Mediator, MediatorError
 from weebot.application.cqrs.behaviors.logging import LoggingBehavior
 from weebot.application.cqrs.behaviors.validation import ValidationBehavior
 from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior

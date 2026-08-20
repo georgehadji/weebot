@@ -6,9 +6,10 @@ a planner rule, a behavioral rule) fixes every future run. This model is the
 unit of record; ``CorrectionTracker`` (application layer) accumulates them
 and detects recurring categories.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +23,7 @@ class CorrectionRecord(BaseModel):
     ``correction_category`` recurs across records, it signals a fixable
     source-level problem rather than a one-off.
     """
+
     model_config = {"frozen": True}
 
     session_id: str
@@ -31,7 +33,6 @@ class CorrectionRecord(BaseModel):
     corrected_output: str = Field(description="Step output after successful re-execution")
     correction_category: str = Field(
         default="",
-        description="Classified kind of edit: tone, format, scope, accuracy, "
-                    "or missing_info.",
+        description="Classified kind of edit: tone, format, scope, accuracy, " "or missing_info.",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

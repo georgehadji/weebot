@@ -1,8 +1,9 @@
 """Knowledge Graph port — abstract interface for entity and relationship storage."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.knowledge_graph import (
     KnowledgeEdge,
@@ -43,7 +44,7 @@ class KnowledgeGraphPort(ABC):
         ...
 
     @abstractmethod
-    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+    async def get_node(self, node_id: str) -> KnowledgeNode | None:
         """Fetch a single node by its unique ID.
 
         Args:
@@ -56,7 +57,7 @@ class KnowledgeGraphPort(ABC):
 
     @abstractmethod
     async def query(
-        self, label: Optional[str] = None, filters: Optional[dict[str, Any]] = None
+        self, label: str | None = None, filters: dict[str, Any] | None = None
     ) -> list[KnowledgeNode]:
         """Query nodes by label and optional property filters.
 
@@ -70,9 +71,7 @@ class KnowledgeGraphPort(ABC):
         ...
 
     @abstractmethod
-    async def get_neighbors(
-        self, node_id: str, depth: int = 1
-    ) -> dict[str, list[dict[str, Any]]]:
+    async def get_neighbors(self, node_id: str, depth: int = 1) -> dict[str, list[dict[str, Any]]]:
         """Get neighboring nodes and edges for a given node.
 
         Args:
@@ -85,7 +84,7 @@ class KnowledgeGraphPort(ABC):
         ...
 
     @abstractmethod
-    async def snapshot(self, node_id: str) -> Optional[KnowledgeSnapshot]:
+    async def snapshot(self, node_id: str) -> KnowledgeSnapshot | None:
         """Get the most recent snapshot of a node's properties.
 
         Args:
@@ -101,8 +100,8 @@ class KnowledgeGraphPort(ABC):
         self,
         query: str,
         *,
-        label: Optional[str] = None,
-        filters: Optional[dict[str, Any]] = None,
+        label: str | None = None,
+        filters: dict[str, Any] | None = None,
         limit: int = 10,
         dense_weight: float = 0.4,
         sparse_weight: float = 0.4,

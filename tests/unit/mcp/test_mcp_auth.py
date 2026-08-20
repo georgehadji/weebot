@@ -1,7 +1,7 @@
 """Unit tests for M12 MCP SSE authentication."""
+
 from __future__ import annotations
 
-import sys
 from unittest.mock import patch
 
 import pytest
@@ -43,19 +43,10 @@ class TestMCPSSECLI:
         SecretAccessor.set_source({})
         try:
             with (
-                patch(
-                    "weebot.config.settings.WeebotSettings.validate_at_least_one_key"
-                ),
+                patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),
                 patch(
                     "sys.argv",
-                    [
-                        "run_mcp.py",
-                        "--transport",
-                        "sse",
-                        "--host",
-                        "0.0.0.0",
-                        "--allow-remote",
-                    ],
+                    ["run_mcp.py", "--transport", "sse", "--host", "0.0.0.0", "--allow-remote"],
                 ),
             ):
                 with pytest.raises(SystemExit) as exc_info:

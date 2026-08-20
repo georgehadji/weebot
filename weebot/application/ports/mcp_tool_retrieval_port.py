@@ -6,6 +6,7 @@ a small, query-relevant subset of all bridged MCP tools instead of the
 full union, which avoids the accuracy collapse documented in the MCP
 High-Probability Enhancement Plan.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

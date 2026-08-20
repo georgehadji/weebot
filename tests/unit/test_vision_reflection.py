@@ -2,10 +2,11 @@
 
 TDD — written before implementation.
 """
+
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,6 +17,7 @@ _B64 = "aGVsbG8="  # base64("hello") — tiny valid-ish payload
 
 
 # ── Model validation ─────────────────────────────────────────────────────────
+
 
 class TestPageObservation:
     def test_minimal_valid(self):
@@ -43,9 +45,7 @@ class TestPageObservation:
 class TestNextActionPlan:
     def test_minimal_valid(self):
         plan = NextActionPlan(
-            action_type="click",
-            reasoning="button is visible",
-            expected_outcome="dialog opens",
+            action_type="click", reasoning="button is visible", expected_outcome="dialog opens"
         )
         assert plan.selector is None
         assert plan.coordinates is None
@@ -81,21 +81,23 @@ class TestVisionReflection:
         assert r2.plan.action_type == "none"
 
     def test_from_json_string(self):
-        raw = json.dumps({
-            "observation": {
-                "summary": "Browser open",
-                "key_elements": ["address bar", "tab"],
-                "is_task_complete": False,
-                "confidence": 0.8,
-            },
-            "plan": {
-                "action_type": "click",
-                "selector": "#submit",
-                "reasoning": "submit form",
-                "expected_outcome": "page navigates",
-                "confidence": 0.7,
-            },
-        })
+        raw = json.dumps(
+            {
+                "observation": {
+                    "summary": "Browser open",
+                    "key_elements": ["address bar", "tab"],
+                    "is_task_complete": False,
+                    "confidence": 0.8,
+                },
+                "plan": {
+                    "action_type": "click",
+                    "selector": "#submit",
+                    "reasoning": "submit form",
+                    "expected_outcome": "page navigates",
+                    "confidence": 0.7,
+                },
+            }
+        )
         r = VisionReflection.model_validate(json.loads(raw))
         assert r.observation.confidence == 0.8
         assert r.plan.selector == "#submit"
@@ -103,15 +105,18 @@ class TestVisionReflection:
 
 # ── ExecutorAgent integration ─────────────────────────────────────────────────
 
+
 def _make_executor(model: str = VISION_TEST_MODEL):
     from weebot.application.agents.executor._base import ExecutorAgent
     from weebot.application.models.tool_collection import ToolCollection
+
     return ExecutorAgent(llm=MagicMock(), tools=ToolCollection(), model=model)
 
 
 class TestReflectionEnabled:
     def test_reflection_requires_both_flags(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", False, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
         ex = _make_executor()
@@ -119,6 +124,7 @@ class TestReflectionEnabled:
 
     def test_reflection_requires_vision_flag(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", False, raising=False)
         ex = _make_executor()
@@ -126,6 +132,7 @@ class TestReflectionEnabled:
 
     def test_reflection_enabled_both_on(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
         ex = _make_executor(VISION_TEST_MODEL)
@@ -139,6 +146,7 @@ class TestReflectionEnabled:
         _resolve_model_for_step — see _reflection_enabled()'s docstring.
         """
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
         ex = _make_executor("deepseek-chat")
@@ -150,33 +158,38 @@ class TestReflectOnScreenshot:
     async def test_returns_reflection_on_valid_llm_response(self, monkeypatch):
         """_reflect_on_screenshot() returns VisionReflection when LLM gives valid JSON."""
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
         from weebot.application.ports.llm_port import LLMResponse
-        good_json = json.dumps({
-            "observation": {
-                "summary": "Desktop visible",
-                "key_elements": ["taskbar", "icons"],
-                "is_task_complete": False,
-                "confidence": 0.9,
-            },
-            "plan": {
-                "action_type": "click",
-                "selector": None,
-                "coordinates": {"x": 50, "y": 50},
-                "reasoning": "icon visible at top-left",
-                "expected_outcome": "app opens",
-                "confidence": 0.8,
-            },
-        })
+
+        good_json = json.dumps(
+            {
+                "observation": {
+                    "summary": "Desktop visible",
+                    "key_elements": ["taskbar", "icons"],
+                    "is_task_complete": False,
+                    "confidence": 0.9,
+                },
+                "plan": {
+                    "action_type": "click",
+                    "selector": None,
+                    "coordinates": {"x": 50, "y": 50},
+                    "reasoning": "icon visible at top-left",
+                    "expected_outcome": "app opens",
+                    "confidence": 0.8,
+                },
+            }
+        )
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content=good_json, tool_calls=None, model=VISION_TEST_MODEL
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=LLMResponse(content=good_json, tool_calls=None, model=VISION_TEST_MODEL)
+        )
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
+
         ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
 
         result = await ex._reflect_on_screenshot("computer_use", _B64)
@@ -189,17 +202,22 @@ class TestReflectOnScreenshot:
     async def test_returns_none_on_malformed_json(self, monkeypatch):
         """Reflection errors must never raise — graceful degradation."""
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
         from weebot.application.ports.llm_port import LLMResponse
+
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content="not json at all", tool_calls=None, model=VISION_TEST_MODEL
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=LLMResponse(
+                content="not json at all", tool_calls=None, model=VISION_TEST_MODEL
+            )
+        )
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
+
         ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
 
         result = await ex._reflect_on_screenshot("screen_tool", _B64)
@@ -208,6 +226,7 @@ class TestReflectOnScreenshot:
     @pytest.mark.asyncio
     async def test_returns_none_when_reflection_disabled(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", False, raising=False)
 
         ex = _make_executor()
@@ -271,9 +290,7 @@ class TestInjectReflection:
         reflection = VisionReflection(
             observation=PageObservation(summary="s", key_elements=[]),
             plan=NextActionPlan(
-                action_type="click",
-                reasoning="r",
-                expected_outcome="dialog should appear",
+                action_type="click", reasoning="r", expected_outcome="dialog should appear"
             ),
         )
         ex._inject_reflection(reflection)
@@ -286,21 +303,23 @@ class TestInjectReflection:
 
 
 def _good_reflection_json() -> str:
-    return json.dumps({
-        "observation": {
-            "summary": "Settings panel open",
-            "key_elements": ["gear icon"],
-            "is_task_complete": False,
-            "confidence": 0.9,
-        },
-        "plan": {
-            "action_type": "click",
-            "coordinates": {"x": 10, "y": 20},
-            "reasoning": "gear visible",
-            "expected_outcome": "settings menu expands",
-            "confidence": 0.8,
-        },
-    })
+    return json.dumps(
+        {
+            "observation": {
+                "summary": "Settings panel open",
+                "key_elements": ["gear icon"],
+                "is_task_complete": False,
+                "confidence": 0.9,
+            },
+            "plan": {
+                "action_type": "click",
+                "coordinates": {"x": 10, "y": 20},
+                "reasoning": "gear visible",
+                "expected_outcome": "settings menu expands",
+                "confidence": 0.8,
+            },
+        }
+    )
 
 
 class TestReflectionGrounding:
@@ -308,6 +327,7 @@ class TestReflectionGrounding:
 
     def _executor_with_capture(self):
         from weebot.application.ports.llm_port import LLMResponse
+
         captured: dict = {}
 
         async def _chat(**kwargs):
@@ -325,12 +345,14 @@ class TestReflectionGrounding:
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
+
         ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
         return ex, captured
 
     @pytest.mark.asyncio
     async def test_task_context_included_in_prompt(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
@@ -345,6 +367,7 @@ class TestReflectionGrounding:
     @pytest.mark.asyncio
     async def test_prior_expected_outcome_fed_back(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
@@ -359,6 +382,7 @@ class TestReflectionGrounding:
     @pytest.mark.asyncio
     async def test_no_prior_outcome_omits_feedback_line(self, monkeypatch):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
@@ -372,6 +396,7 @@ class TestReflectionGrounding:
     async def test_reflection_tokens_are_tracked(self, monkeypatch):
         """The extra reflection call must be counted in token_usage."""
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
@@ -384,6 +409,7 @@ class TestReflectionGrounding:
 
 # ── B1 regression: compaction failure must not be logged as a parse failure ───
 
+
 class TestReflectionErrorAttributionB1:
     @pytest.mark.asyncio
     async def test_compaction_failure_not_swallowed_as_parse_failure(self, monkeypatch, caplog):
@@ -392,22 +418,41 @@ class TestReflectionErrorAttributionB1:
         or propagate as an unhandled RuntimeError."""
         import logging
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "VISION_IN_LOOP_ENABLED", True, raising=False)
         monkeypatch.setattr(ff, "VISION_REFLECTION_ENABLED", True, raising=False)
 
-        good_json = json.dumps({
-            "observation": {"summary": "s", "key_elements": [], "is_task_complete": False, "confidence": 0.9},
-            "plan": {"action_type": "none", "reasoning": "r", "expected_outcome": "o", "confidence": 0.8},
-        })
+        good_json = json.dumps(
+            {
+                "observation": {
+                    "summary": "s",
+                    "key_elements": [],
+                    "is_task_complete": False,
+                    "confidence": 0.9,
+                },
+                "plan": {
+                    "action_type": "none",
+                    "reasoning": "r",
+                    "expected_outcome": "o",
+                    "confidence": 0.8,
+                },
+            }
+        )
         from weebot.application.ports.llm_port import LLMResponse
+
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content=good_json, tool_calls=None, model=VISION_TEST_MODEL,
-            usage={"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=LLMResponse(
+                content=good_json,
+                tool_calls=None,
+                model=VISION_TEST_MODEL,
+                usage={"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+            )
+        )
 
         from weebot.application.agents.executor._base import ExecutorAgent
         from weebot.application.models.tool_collection import ToolCollection
+
         ex = ExecutorAgent(llm=mock_llm, tools=ToolCollection(), model=VISION_TEST_MODEL)
 
         # Simulate compaction failure inside track_usage_and_maybe_compress (on compressor)
@@ -425,8 +470,8 @@ class TestReflectionErrorAttributionB1:
             "Compaction failure should quarantine (not propagate), "
             "and valid JSON should still parse successfully"
         )
-        assert "Compressor quarantine" in caplog.text, (
-            "Compaction failure must be logged as a WARN quarantine message"
-        )
+        assert (
+            "Compressor quarantine" in caplog.text
+        ), "Compaction failure must be logged as a WARN quarantine message"
         # The parse/validate log line must NOT have appeared (that's a different error path)
         assert "parse/validate failed" not in caplog.text

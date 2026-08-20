@@ -1,15 +1,15 @@
 """Human-in-the-loop interaction service."""
+
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, Optional
 
 
 class HumanInteractionService:
     """Async-safe singleton for managing pending human questions."""
 
     def __init__(self) -> None:
-        self._pending: Dict[str, asyncio.Future[str]] = {}
+        self._pending: dict[str, asyncio.Future[str]] = {}
 
     def ask(self, session_id: str, question: str) -> asyncio.Future[str]:
         """Create a pending future for a human question."""

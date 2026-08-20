@@ -1,11 +1,11 @@
 """Unit tests for Stripe webhook handler."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
 
-import pytest
 
 from weebot.application.services.stripe_webhook_handler import StripeWebhookHandler
 
@@ -13,9 +13,10 @@ from weebot.application.services.stripe_webhook_handler import StripeWebhookHand
 def _sign_payload(payload: dict, secret: str, timestamp: str | None = None) -> str:
     """Create a Stripe-compatible signature header."""
     import time as _time
+
     ts = timestamp if timestamp is not None else str(int(_time.time()))
     payload_str = json.dumps(payload)
-    signed = f"{ts}.{payload_str}".encode("utf-8")
+    signed = f"{ts}.{payload_str}".encode()
     sig = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
     return f"t={ts},v1={sig}"
 
@@ -49,6 +50,7 @@ class TestStripeSignatureValidation:
         monkeypatch.setenv("STRIPE_ALLOW_UNSIGNED_WEBHOOKS", "true")
         # Reset settings singleton so the env var is picked up
         import sys
+
         for mod in list(sys.modules.keys()):
             if "weebot.config.settings" in mod:
                 del sys.modules[mod]
@@ -61,19 +63,16 @@ class TestStripeSignatureValidation:
         # Use a timestamp from 10 minutes ago
         old_ts = "1700000000"
         sig = _sign_payload(payload, "whsec_test123", timestamp=old_ts)
-        assert self.handler.validate_signature(
-            json.dumps(payload).encode("utf-8"), sig
-        ) is False
+        assert self.handler.validate_signature(json.dumps(payload).encode("utf-8"), sig) is False
 
     def test_replay_future_timestamp_rejected(self):
         payload = {"type": "payment_intent.succeeded"}
         # Use a timestamp from 10 minutes in the future
         import time
+
         future_ts = str(int(time.time()) + 600)
         sig = _sign_payload(payload, "whsec_test123", timestamp=future_ts)
-        assert self.handler.validate_signature(
-            json.dumps(payload).encode("utf-8"), sig
-        ) is False
+        assert self.handler.validate_signature(json.dumps(payload).encode("utf-8"), sig) is False
 
 
 class TestStripeEventProcessing:
@@ -86,12 +85,7 @@ class TestStripeEventProcessing:
         payload = {
             "type": "payment_intent.succeeded",
             "data": {
-                "object": {
-                    "id": "pi_123",
-                    "amount": 2000,
-                    "currency": "usd",
-                    "status": "succeeded",
-                }
+                "object": {"id": "pi_123", "amount": 2000, "currency": "usd", "status": "succeeded"}
             },
         }
         prompt = self.handler.process_event(payload)
@@ -120,13 +114,7 @@ class TestStripeEventProcessing:
     def test_charge_refunded(self):
         payload = {
             "type": "charge.refunded",
-            "data": {
-                "object": {
-                    "id": "ch_789",
-                    "amount": 1500,
-                    "currency": "usd",
-                }
-            },
+            "data": {"object": {"id": "ch_789", "amount": 1500, "currency": "usd"}},
         }
         prompt = self.handler.process_event(payload)
         assert prompt is not None
@@ -135,13 +123,7 @@ class TestStripeEventProcessing:
     def test_dispute_created(self):
         payload = {
             "type": "charge.dispute.created",
-            "data": {
-                "object": {
-                    "id": "dp_123",
-                    "amount": 5000,
-                    "currency": "usd",
-                }
-            },
+            "data": {"object": {"id": "dp_123", "amount": 5000, "currency": "usd"}},
         }
         prompt = self.handler.process_event(payload)
         assert prompt is not None
@@ -157,12 +139,7 @@ class TestStripeEventProcessing:
         payload = {
             "type": "invoice.payment_succeeded",
             "data": {
-                "object": {
-                    "id": "in_123",
-                    "amount": 10000,
-                    "currency": "usd",
-                    "status": "paid",
-                }
+                "object": {"id": "in_123", "amount": 10000, "currency": "usd", "status": "paid"}
             },
         }
         prompt = self.handler.process_event(payload)
@@ -174,12 +151,7 @@ class TestStripeEventProcessing:
         payload = {
             "type": "payment_intent.succeeded",
             "data": {
-                "object": {
-                    "id": "pi_jpy",
-                    "amount": 500,
-                    "currency": "jpy",
-                    "status": "succeeded",
-                }
+                "object": {"id": "pi_jpy", "amount": 500, "currency": "jpy", "status": "succeeded"}
             },
         }
         prompt = self.handler.process_event(payload)

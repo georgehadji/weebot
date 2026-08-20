@@ -4,11 +4,12 @@ Allows ``TaskRunner`` to work with either the default in-memory queue
 or a Redis-backed queue (behind the ``WEEBOT_QUEUE_BACKEND=redis``
 feature flag).
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from collections.abc import Callable
 
 from weebot.application.abstractions import BaseFlow
 from weebot.domain.models.session import Session
@@ -23,6 +24,7 @@ class QueuedSession:
     ``priority`` is the sort key (lower = sooner).  ``session`` and
     ``flow_factory`` are the payload carried by the queue item.
     """
+
     priority: int
     session: Session = field(compare=False)
     flow_factory: FlowFactory = field(compare=False)
@@ -36,12 +38,7 @@ class TaskQueuePort(ABC):
     """
 
     @abstractmethod
-    async def enqueue(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-        priority: int = 5,
-    ) -> None:
+    async def enqueue(self, session: Session, flow_factory: FlowFactory, priority: int = 5) -> None:
         """Add a session to the queue.
 
         Args:

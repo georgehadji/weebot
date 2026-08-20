@@ -1,4 +1,5 @@
 """FastAPI web server for weebot."""
+
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 # ── Load .env into os.environ before any weebot module reads API keys ──
 # pydantic-settings loads .env into its own store but does NOT populate
@@ -25,6 +26,7 @@ from typing import AsyncGenerator
 # .env for the rest of the session — see cli/main.py for the same guard.
 if "PYTEST_VERSION" not in os.environ:
     from dotenv import load_dotenv
+
     load_dotenv(override=True)
 
 # Structured logging is configured inside create_app(), not at import time.
@@ -32,7 +34,9 @@ if "PYTEST_VERSION" not in os.environ:
 # that merely imports this module — including the test runner, where
 # structlog.stdlib.recreate_defaults() replaces pytest's caplog handler and
 # silently breaks every later caplog-based assertion.
-from weebot.infrastructure.observability.logging_config import configure_logging as _configure_weebot_logging
+from weebot.infrastructure.observability.logging_config import (
+    configure_logging as _configure_weebot_logging,
+)
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,7 +50,13 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.web.routers import sessions_router, models_router, health_router, dashboard_router, behavior_router
+from weebot.interfaces.web.routers import (
+    sessions_router,
+    models_router,
+    health_router,
+    dashboard_router,
+    behavior_router,
+)
 from weebot.interfaces.web.routers.ops_router import router as ops_router
 from weebot.interfaces.web.routers.chat_router import router as chat_router
 from weebot.interfaces.web.routers.sse import router as sse_router
@@ -192,6 +202,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Scheduler startup ──────────────────────────────────────
     scheduler = container.build_scheduler()
     from weebot.scheduling.default_jobs import register_default_jobs
+
     await register_default_jobs(scheduler, container)
     await scheduler.start()
     app.state.scheduler = scheduler
@@ -199,6 +210,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Restore circuit breaker state ──────────────────────────
     try:
         import importlib as _il
+
         _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
         ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
         llm = container.get(LLMPort)
@@ -212,12 +224,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── Telegram gateway (long-polling) ─────────────────────────
     from weebot.config.settings import WeebotSettings
+
     _settings = WeebotSettings()
     telegram_adapter = None
     if _settings.telegram_bot_token:
         try:
             from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
-            from weebot.infrastructure.persistence.gateway_session_store import SQLiteGatewaySessionStore
+            from weebot.infrastructure.persistence.gateway_session_store import (
+                SQLiteGatewaySessionStore,
+            )
             from weebot.interfaces.gateways.telegram import TelegramAdapter
 
             flow_resolver = GatewayFlowResolver(
@@ -279,7 +294,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("Email gateway failed to start: %s", exc)
     else:
-        logger.info("Email gateway disabled (set EMAIL_IMAP_USER and EMAIL_IMAP_PASSWORD to enable)")
+        logger.info(
+            "Email gateway disabled (set EMAIL_IMAP_USER and EMAIL_IMAP_PASSWORD to enable)"
+        )
 
     yield
 
@@ -296,6 +313,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Persist circuit breaker state before shutdown
     try:
         import importlib as _il
+
         _resilient_mod = _il.import_module("weebot.infrastructure.adapters.llm.resilient_adapter")
         ResilientLLMAdapter = _resilient_mod.ResilientLLMAdapter
         llm = container.get(LLMPort)
@@ -316,6 +334,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Close all connection pools to prevent leaks
     try:
         from weebot.infrastructure.persistence.connection_pool import close_all_pools
+
         await close_all_pools()
         logger.info("Connection pools closed")
     except Exception as exc:
@@ -333,6 +352,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     _configure_weebot_logging()
     import weebot
+
     app = FastAPI(
         title="Weebot API",
         description="Production-grade AI agent framework with real-time event streaming",
@@ -346,6 +366,7 @@ def create_app() -> FastAPI:
         """Attach a correlation ID to every request and response."""
         correlation_id = request.headers.get("X-Correlation-Id") or str(uuid.uuid4())
         from structlog.contextvars import bind_contextvars, clear_contextvars
+
         clear_contextvars()
         bind_contextvars(correlation_id=correlation_id)
         response = await call_next(request)
@@ -354,7 +375,13 @@ def create_app() -> FastAPI:
 
     # ── Rate limiting middleware ───────────────────────────────────
     from weebot.interfaces.web.rate_limit import RateLimitMiddleware
-    _rate_limit_enabled = os.environ.get("WEEBOT_RATE_LIMIT_ENABLED", "true").lower() not in ("0", "false", "no", "off")
+
+    _rate_limit_enabled = os.environ.get("WEEBOT_RATE_LIMIT_ENABLED", "true").lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
     app.add_middleware(RateLimitMiddleware, enabled=_rate_limit_enabled)
     if _rate_limit_enabled:
         logger.info("Rate limiting enabled (WEEBOT_RATE_LIMIT_ENABLED=true)")
@@ -394,12 +421,9 @@ def create_app() -> FastAPI:
                 "detail": "An unexpected error occurred. Check server logs for details.",
             },
         )
-    
+
     # CORS middleware — allow only known origins, never wildcard with credentials
-    _allowed_origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    _allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
     _extra_origin = os.getenv("WEEBOT_CORS_ORIGIN")
     if _extra_origin:
         _allowed_origins.append(_extra_origin)
@@ -414,6 +438,7 @@ def create_app() -> FastAPI:
 
     # API Key authentication middleware (optional) + fail-closed default
     from weebot.config.settings import WeebotSettings
+
     _ws = WeebotSettings()
 
     if _ws.weebot_api_key:
@@ -428,6 +453,7 @@ def create_app() -> FastAPI:
 
                 api_key = request.headers.get("X-API-Key")
                 import hmac as _hmac
+
                 if not _hmac.compare_digest(api_key or "", _ws.weebot_api_key or ""):
                     return JSONResponse(
                         status_code=401,
@@ -463,7 +489,7 @@ def create_app() -> FastAPI:
                                 "Set WEEBOT_API_KEY to enable remote access, or "
                                 "set WEEBOT_WEB_REQUIRE_AUTH=false to disable this check "
                                 "(not recommended for production deployments)."
-                            ),
+                            )
                         },
                         headers={"X-Error-Code": "AUTH_REQUIRED"},
                     )
@@ -479,8 +505,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         return JSONResponse(
-            status_code=exc.status_code,
-            content={"error_code": "HTTP_ERROR", "detail": exc.detail},
+            status_code=exc.status_code, content={"error_code": "HTTP_ERROR", "detail": exc.detail}
         )
 
     @app.exception_handler(Exception)
@@ -489,6 +514,7 @@ def create_app() -> FastAPI:
         # Increment exception counter
         try:
             from weebot.infrastructure.observability import metrics as _m
+
             _m.exceptions_total.labels(exception_type=type(exc).__name__).inc()
         except Exception:
             pass
@@ -511,24 +537,21 @@ def create_app() -> FastAPI:
     app.include_router(whatsapp_router)
     app.include_router(ops_router)
     app.include_router(ponytail_router, prefix="/api")
-    
+
     # Metrics endpoint — Prometheus scrape target
     @app.get("/metrics")
     async def metrics(request: Request):
         """Prometheus metrics endpoint. Returns metrics in text format."""
         container: Container = request.app.state.container
         adapter = container.get(PrometheusMetricsAdapter)
-        return Response(
-            content=adapter.render(),
-            media_type="text/plain; charset=utf-8",
-        )
+        return Response(content=adapter.render(), media_type="text/plain; charset=utf-8")
 
     # Root endpoint - WebSocket test UI
     @app.get("/", response_class=HTMLResponse)
     async def root() -> str:
         """Serve WebSocket test UI."""
         return WEBSOCKET_TEST_HTML
-    
+
     # WebSocket endpoints
     @app.websocket("/ws")
     async def websocket_global(websocket: WebSocket) -> None:
@@ -541,7 +564,7 @@ def create_app() -> FastAPI:
             return
 
         logger.info("WebSocket /ws connection from %s", client_host)
-        
+
         await manager.connect(websocket)
         try:
             while True:
@@ -553,7 +576,7 @@ def create_app() -> FastAPI:
             logger.warning("WebSocket /ws error: %s", e)
         finally:
             await manager.disconnect(websocket)
-    
+
     @app.websocket("/ws/sessions/{session_id}")
     async def websocket_session(websocket: WebSocket, session_id: str) -> None:
         """Session-specific WebSocket connection."""
@@ -565,7 +588,7 @@ def create_app() -> FastAPI:
             return
 
         logger.info("WebSocket /ws/sessions/%s connection from %s", session_id, client_host)
-        
+
         await manager.connect(websocket, session_id)
         try:
             while True:
@@ -577,13 +600,14 @@ def create_app() -> FastAPI:
             logger.warning("WebSocket /ws/sessions/%s error: %s", session_id, e)
         finally:
             await manager.disconnect(websocket, session_id)
-    
+
     # Serve static files if they exist (for production build)
     static_dir = Path(__file__).parent.parent.parent.parent / "weebot-ui" / "dist"
     if static_dir.exists():
         app.mount("/app", StaticFiles(directory=str(static_dir), html=True), name="app")
-    
+
     return app
+
 
 def _websocket_auth(websocket: WebSocket, settings) -> bool:
     """Authenticate a WebSocket connection.
@@ -606,16 +630,18 @@ def _websocket_auth(websocket: WebSocket, settings) -> bool:
     protocols = websocket.headers.get("sec-websocket-protocol", "")
     for proto in [p.strip() for p in protocols.split(",")]:
         if proto.startswith("bearer."):
-            token = proto[len("bearer."):]
+            token = proto[len("bearer.") :]
             import hmac as _hmac
+
             if _hmac.compare_digest(token, settings.weebot_api_key):
                 return True
 
     # 2. Authorization header (for non-browser clients)
     auth_header = websocket.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
-        token = auth_header[len("Bearer "):]
+        token = auth_header[len("Bearer ") :]
         import hmac as _hmac
+
         if _hmac.compare_digest(token, settings.weebot_api_key):
             return True
 
@@ -623,11 +649,13 @@ def _websocket_auth(websocket: WebSocket, settings) -> bool:
     token = websocket.query_params.get("token")
     if token:
         import logging as _logging
+
         _logging.getLogger(__name__).warning(
             "WebSocket authenticated via query parameter (deprecated). "
             "Use Sec-WebSocket-Protocol: bearer.<token> instead."
         )
         import hmac as _hmac
+
         if _hmac.compare_digest(token, settings.weebot_api_key):
             return True
 
@@ -641,15 +669,12 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
     from weebot.config.settings import WeebotSettings
+
     _settings = WeebotSettings()
-    
+
     port = int(os.getenv("WEEBOT_PORT", "8000"))
     host = _settings.web_host
-    
+
     uvicorn.run(
-        "weebot.interfaces.web.main:app",
-        host=host,
-        port=port,
-        reload=True,
-        log_level="info",
+        "weebot.interfaces.web.main:app", host=host, port=port, reload=True, log_level="info"
     )

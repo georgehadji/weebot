@@ -4,9 +4,10 @@ Publishes ``SessionStalenessEvent`` when staleness exceeds the configured
 threshold. Session count is emitted via Prometheus gauge ``session_stale_count``
 on every check (not only on transitions).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import SessionStatus
@@ -39,7 +40,7 @@ class SessionStalenessMonitor(Monitor):
     async def check(self) -> MonitorReport:
         """Scan running sessions and classify staleness."""
         sessions = await self._state_repo.list_sessions()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stale: list[str] = []
 
         for session in sessions:
@@ -50,7 +51,7 @@ class SessionStalenessMonitor(Monitor):
             # Normalize to UTC (SQLite may return naive datetimes)
             updated = session.updated_at
             if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
+                updated = updated.replace(tzinfo=UTC)
             minutes = (now - updated).total_seconds() / 60
             if minutes > self._threshold:
                 stale.append(session.id)

@@ -9,19 +9,21 @@ Prompts are stored as text files under config/prompts/variants/ with
 UUID filenames.  The in-memory registry maps variant_id → content
 and tracks which variant is active for each agent type.
 """
+
 from __future__ import annotations
 
 import logging
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from weebot.domain.models.prompt_variant import PromptVariant, PromptVariantSource
 
 logger = logging.getLogger(__name__)
 
 # Default prompt directory relative to weebot package
-_PROMPT_VARIANTS_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "variants"
+_PROMPT_VARIANTS_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "variants"
+)
 
 
 class PromptRegistry:
@@ -78,7 +80,10 @@ class PromptRegistry:
         self._cache[vid] = variant
         logger.info(
             "Created prompt variant %s for %s (source: %s, %d chars)",
-            vid, agent_type, source.value, len(content),
+            vid,
+            agent_type,
+            source.value,
+            len(content),
         )
         return vid
 
@@ -111,11 +116,7 @@ class PromptRegistry:
         content = self._load_from_disk(variant_id)
         if content is None:
             return None
-        return PromptVariant(
-            variant_id=variant_id,
-            agent_type="unknown",
-            prompt_content=content,
-        )
+        return PromptVariant(variant_id=variant_id, agent_type="unknown", prompt_content=content)
 
     def set_active(self, agent_type: str, variant_id: str) -> None:
         """Set the active variant for an agent type.

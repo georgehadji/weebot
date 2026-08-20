@@ -12,18 +12,13 @@ stores session IDs in Redis and maintains a local ``FactoryRegistry``
 mapping session_id → factory.  In multi-process deployments each worker
 must register factories independently.
 """
+
 from __future__ import annotations
 
-import json
 import logging
 import os
-from typing import Callable
 
-from weebot.application.ports.task_queue_port import (
-    TaskQueuePort,
-    QueuedSession,
-    FlowFactory,
-)
+from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSession, FlowFactory
 from weebot.domain.models.session import Session
 
 logger = logging.getLogger(__name__)
@@ -90,10 +85,9 @@ class RedisTaskQueue(TaskQueuePort):
         """Lazy-init the Redis connection."""
         if self._redis is None:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(
-                self._redis_url,
-                decode_responses=True,
-                socket_connect_timeout=5,
+                self._redis_url, decode_responses=True, socket_connect_timeout=5
             )
         return self._redis
 
@@ -114,12 +108,7 @@ class RedisTaskQueue(TaskQueuePort):
             if "BUSYGROUP" not in exc_str:
                 logger.warning("Redis consumer group setup: %s", exc)
 
-    async def enqueue(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-        priority: int = 5,
-    ) -> None:
+    async def enqueue(self, session: Session, flow_factory: FlowFactory, priority: int = 5) -> None:
         if self._closed:
             raise RuntimeError("TaskQueue is closed")
 
@@ -168,8 +157,7 @@ class RedisTaskQueue(TaskQueuePort):
             factory = self._factories.get(session_id)
             if factory is None:
                 logger.warning(
-                    "No factory registered for session %s — moving to dead-letter",
-                    session_id,
+                    "No factory registered for session %s — moving to dead-letter", session_id
                 )
                 await self._nack_to_dead_letter(msg_id, session_id, "no_factory")
                 continue
@@ -177,17 +165,9 @@ class RedisTaskQueue(TaskQueuePort):
             # Reconstruct the session from the state repo (already known to
             # the caller).  For the queued item we store a lightweight stub;
             # the consumer must reload from the state repo.
-            stub_session = Session(
-                id=session_id,
-                user_id="",
-                agent_id="",
-            )
+            stub_session = Session(id=session_id, user_id="", agent_id="")
 
-            item = QueuedSession(
-                priority=priority,
-                session=stub_session,
-                flow_factory=factory,
-            )
+            item = QueuedSession(priority=priority, session=stub_session, flow_factory=factory)
             # Store the Redis message ID so ack() can XACK it
             item._redis_msg_id = msg_id  # type: ignore[attr-defined]
             return item
@@ -212,9 +192,7 @@ class RedisTaskQueue(TaskQueuePort):
         except Exception:
             return 0
 
-    async def _nack_to_dead_letter(
-        self, msg_id: str, session_id: str, reason: str
-    ) -> None:
+    async def _nack_to_dead_letter(self, msg_id: str, session_id: str, reason: str) -> None:
         """Move a message to the dead-letter stream and XACK it."""
         r = await self._get_redis()
         try:

@@ -1,4 +1,5 @@
 """SchedulingManager - APScheduler-based task scheduling with persistence."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,10 +7,11 @@ import sqlite3
 import json
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime, timedelta
+from datetime import datetime, UTC
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Callable, Any, Dict, List
+from typing import Any
+from collections.abc import Callable
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class JobStatus(Enum):
     """Status of a scheduled job."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -29,6 +32,7 @@ class JobStatus(Enum):
 
 class TriggerType(Enum):
     """Type of trigger for job scheduling."""
+
     CRON = "cron"
     INTERVAL = "interval"
     DATE = "date"
@@ -38,20 +42,21 @@ class TriggerType(Enum):
 @dataclass
 class ScheduledJob:
     """Represents a scheduled job."""
+
     job_id: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     trigger_type: str = "cron"
-    trigger_config: Dict[str, Any] = None
-    command: Optional[str] = None  # Command to execute
-    callable_name: Optional[str] = None  # Name of callable to invoke
+    trigger_config: dict[str, Any] = None
+    command: str | None = None  # Command to execute
+    callable_name: str | None = None  # Name of callable to invoke
     status: str = "pending"
-    created_at: Optional[datetime] = None
-    last_run: Optional[datetime] = None
-    next_run: Optional[datetime] = None
+    created_at: datetime | None = None
+    last_run: datetime | None = None
+    next_run: datetime | None = None
     run_count: int = 0
     error_count: int = 0
-    last_error: Optional[str] = None
+    last_error: str | None = None
     enabled: bool = True
 
     def __post_init__(self) -> None:
@@ -60,27 +65,27 @@ class ScheduledJob:
         if self.trigger_config is None:
             self.trigger_config = {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         data = asdict(self)
-        data['created_at'] = self.created_at.isoformat() if self.created_at else None
-        data['last_run'] = self.last_run.isoformat() if self.last_run else None
-        data['next_run'] = self.next_run.isoformat() if self.next_run else None
+        data["created_at"] = self.created_at.isoformat() if self.created_at else None
+        data["last_run"] = self.last_run.isoformat() if self.last_run else None
+        data["next_run"] = self.next_run.isoformat() if self.next_run else None
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ScheduledJob:
+    def from_dict(cls, data: dict[str, Any]) -> ScheduledJob:
         """Create from dictionary."""
         data = dict(data)
-        if data.get('created_at'):
-            data['created_at'] = datetime.fromisoformat(data['created_at'])
-        if data.get('last_run'):
-            data['last_run'] = datetime.fromisoformat(data['last_run'])
-        if data.get('next_run'):
-            data['next_run'] = datetime.fromisoformat(data['next_run'])
+        if data.get("created_at"):
+            data["created_at"] = datetime.fromisoformat(data["created_at"])
+        if data.get("last_run"):
+            data["last_run"] = datetime.fromisoformat(data["last_run"])
+        if data.get("next_run"):
+            data["next_run"] = datetime.fromisoformat(data["next_run"])
         # Deserialize trigger_config if it's a JSON string
-        if isinstance(data.get('trigger_config'), str):
-            data['trigger_config'] = json.loads(data['trigger_config'])
+        if isinstance(data.get("trigger_config"), str):
+            data["trigger_config"] = json.loads(data["trigger_config"])
         return cls(**data)
 
 
@@ -91,12 +96,13 @@ def _parse_cron_expression(expr: str) -> dict:
     and simple interval expressions like "30min", "1h", "2hours".
     """
     import re as _cron_re
+
     expr = expr.strip().lower()
 
-    m = _cron_re.match(r'^(\d+)\s*(min|mins|m)$', expr)
+    m = _cron_re.match(r"^(\d+)\s*(min|mins|m)$", expr)
     if m:
         return {"minute": f"*/{m.group(1)}"}
-    m = _cron_re.match(r'^(\d+)\s*(h|hour|hours)$', expr)
+    m = _cron_re.match(r"^(\d+)\s*(h|hour|hours)$", expr)
     if m:
         return {"hour": f"*/{m.group(1)}"}
 
@@ -126,16 +132,16 @@ def _parse_cron_expression(expr: str) -> dict:
 class SchedulingManager:
     """Manages scheduled jobs with APScheduler and SQLite persistence."""
 
-    def __init__(self, db_path: Optional[Path] = None) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         """Initialize scheduling manager.
 
         Args:
             db_path: Path to SQLite database for job persistence
         """
-        self.db_path = db_path or Path.home() / '.weebot' / 'jobs.db'
+        self.db_path = db_path or Path.home() / ".weebot" / "jobs.db"
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.scheduler = AsyncIOScheduler()
-        self._callables: Dict[str, Callable] = {}
+        self._callables: dict[str, Callable] = {}
         # Defence-in-depth: track currently executing job IDs so that
         # the update_job() race window (remove_job → re-add) cannot cause
         # double execution. APScheduler's max_instances=1 is the primary
@@ -148,7 +154,7 @@ class SchedulingManager:
     def _init_db(self) -> None:
         """Initialize database schema."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute('''
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
                     job_id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -166,7 +172,7 @@ class SchedulingManager:
                     last_error TEXT,
                     enabled INTEGER DEFAULT 1
                 )
-            ''')
+            """)
             conn.commit()
 
     def register_callable(self, name: str, func: Callable) -> None:
@@ -184,10 +190,10 @@ class SchedulingManager:
         job_id: str,
         name: str,
         trigger_type: str,
-        trigger_config: Dict[str, Any],
-        command: Optional[str] = None,
-        callable_name: Optional[str] = None,
-        description: Optional[str] = None,
+        trigger_config: dict[str, Any],
+        command: str | None = None,
+        callable_name: str | None = None,
+        description: str | None = None,
         enabled: bool = True,
     ) -> ScheduledJob:
         """Create a new scheduled job.
@@ -230,11 +236,7 @@ class SchedulingManager:
         logger.info(f"Created job: {job_id} ({name})")
         return job
 
-    async def update_job(
-        self,
-        job_id: str,
-        **kwargs: Any,
-    ) -> ScheduledJob:
+    async def update_job(self, job_id: str, **kwargs: Any) -> ScheduledJob:
         """Update a scheduled job.
 
         Args:
@@ -287,14 +289,15 @@ class SchedulingManager:
         # Remove from database (offload to thread pool)
         def _delete():
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute('DELETE FROM jobs WHERE job_id = ?', (job_id,))
+                conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
                 conn.commit()
+
         await asyncio.to_thread(_delete)
 
         logger.info(f"Deleted job: {job_id}")
         return True
 
-    def get_job(self, job_id: str) -> Optional[ScheduledJob]:
+    def get_job(self, job_id: str) -> ScheduledJob | None:
         """Get a job by ID.
 
         Args:
@@ -305,10 +308,7 @@ class SchedulingManager:
         """
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                'SELECT * FROM jobs WHERE job_id = ?',
-                (job_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             if row:
                 return ScheduledJob.from_dict(dict(row))
         return None
@@ -318,10 +318,8 @@ class SchedulingManager:
         return asyncio.to_thread(lambda: func(*args, **kwargs))
 
     def list_jobs(
-        self,
-        status: Optional[str] = None,
-        enabled_only: bool = False,
-    ) -> List[ScheduledJob]:
+        self, status: str | None = None, enabled_only: bool = False
+    ) -> list[ScheduledJob]:
         """List all jobs with optional filtering.
 
         Args:
@@ -331,17 +329,17 @@ class SchedulingManager:
         Returns:
             List of ScheduledJob instances
         """
-        query = 'SELECT * FROM jobs WHERE 1=1'
-        params: List[Any] = []
+        query = "SELECT * FROM jobs WHERE 1=1"
+        params: list[Any] = []
 
         if status:
-            query += ' AND status = ?'
+            query += " AND status = ?"
             params.append(status)
 
         if enabled_only:
-            query += ' AND enabled = 1'
+            query += " AND enabled = 1"
 
-        query += ' ORDER BY created_at DESC'
+        query += " ORDER BY created_at DESC"
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -378,7 +376,7 @@ class SchedulingManager:
 
         logger.info(f"Scheduled job: {job.job_id} with {job.trigger_type} trigger")
 
-    def _create_trigger(self, trigger_type: str, config: Dict[str, Any]) -> Any:
+    def _create_trigger(self, trigger_type: str, config: dict[str, Any]) -> Any:
         """Create APScheduler trigger based on type.
 
         Args:
@@ -398,14 +396,14 @@ class SchedulingManager:
 
         elif trigger_type == TriggerType.DATE.value:
             # Date trigger: config = {run_date: '2026-03-15 14:30:00'}
-            run_date = config.get('run_date')
+            run_date = config.get("run_date")
             if isinstance(run_date, str):
                 run_date = datetime.fromisoformat(run_date)
             return DateTrigger(run_date=run_date)
 
         elif trigger_type == TriggerType.ONCE.value:
             # One-time execution
-            run_date = config.get('run_date')
+            run_date = config.get("run_date")
             if isinstance(run_date, str):
                 run_date = datetime.fromisoformat(run_date)
             return DateTrigger(run_date=run_date)
@@ -447,13 +445,9 @@ class SchedulingManager:
             if job.callable_name:
                 func = self._callables.get(job.callable_name)
                 if func is None:
-                    raise ValueError(
-                        f"Callable not registered: {job.callable_name}"
-                    )
+                    raise ValueError(f"Callable not registered: {job.callable_name}")
                 if not callable(func):
-                    raise TypeError(
-                        f"Registered callable is not callable: {job.callable_name}"
-                    )
+                    raise TypeError(f"Registered callable is not callable: {job.callable_name}")
                 if asyncio.iscoroutinefunction(func):
                     await func()
                 else:
@@ -466,9 +460,7 @@ class SchedulingManager:
                     "register a callable_name for this job."
                 )
             else:
-                raise ValueError(
-                    f"Job {job_id} has neither callable_name nor command"
-                )
+                raise ValueError(f"Job {job_id} has neither callable_name nor command")
 
             # Update success
             job.status = JobStatus.COMPLETED.value
@@ -491,24 +483,26 @@ class SchedulingManager:
         Args:
             job: ScheduledJob to save
         """
+
         def _save():
             with sqlite3.connect(self.db_path) as conn:
                 job_dict = job.to_dict()
                 # JSON-serialize trigger_config for storage
-                if isinstance(job_dict.get('trigger_config'), dict):
-                    job_dict['trigger_config'] = json.dumps(job_dict['trigger_config'])
+                if isinstance(job_dict.get("trigger_config"), dict):
+                    job_dict["trigger_config"] = json.dumps(job_dict["trigger_config"])
 
-                placeholders = ', '.join('?' * len(job_dict))
-                cols = ', '.join(job_dict.keys())
+                placeholders = ", ".join("?" * len(job_dict))
+                cols = ", ".join(job_dict.keys())
 
                 conn.execute(
-                    f'INSERT OR REPLACE INTO jobs ({cols}) VALUES ({placeholders})',
-                    tuple(job_dict.values())
+                    f"INSERT OR REPLACE INTO jobs ({cols}) VALUES ({placeholders})",
+                    tuple(job_dict.values()),
                 )
                 conn.commit()
+
         await asyncio.to_thread(_save)
 
-    async def load_from_config(self, config_path: Optional[Path] = None) -> int:
+    async def load_from_config(self, config_path: Path | None = None) -> int:
         """Load job definitions from a YAML config file.
 
         Args:
@@ -525,6 +519,7 @@ class SchedulingManager:
 
         try:
             import yaml
+
             with open(config_path) as f:
                 data = yaml.safe_load(f)
 
@@ -548,7 +543,7 @@ class SchedulingManager:
             logger.error("Failed to load jobs from config: %s", exc)
             return 0
 
-    async def load_cron_agent_jobs(self, jobs_path: Optional[Path] = None) -> int:
+    async def load_cron_agent_jobs(self, jobs_path: Path | None = None) -> int:
         """Load cron agent job records and register CronAgentRunner.
 
         Reads ``CronJobRecord`` JSON files and registers each as a
@@ -577,6 +572,7 @@ class SchedulingManager:
                 async def _run_cron_job(job_id: str) -> None:
                     """Wrapper that loads CronJobRecord and runs it."""
                     import json
+
                     try:
                         raw = json.loads(jobs_path.read_text(encoding="utf-8"))
                         data = raw.get(job_id)
@@ -584,6 +580,7 @@ class SchedulingManager:
                             logger.error("Cron job %s not found in %s", job_id, jobs_path)
                             return
                         from weebot.domain.models.cron_job import CronJobRecord
+
                         job = CronJobRecord(**data)
 
                         runner = CronAgentRunner(
@@ -597,12 +594,14 @@ class SchedulingManager:
                         from weebot.application.services.cron_delivery_service import (
                             CronDeliveryService,
                         )
+
                         delivery = CronDeliveryService()
                         await delivery.deliver(job, result)
 
                         # Update job record
-                        from datetime import datetime, timezone
-                        raw[job_id]["last_run_at"] = datetime.now(timezone.utc).isoformat()
+                        from datetime import datetime
+
+                        raw[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
                         raw[job_id]["last_result"] = result[:500]
                         raw[job_id]["run_count"] = data.get("run_count", 0) + 1
                         jobs_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
@@ -616,6 +615,7 @@ class SchedulingManager:
 
         # Load jobs from file
         import json
+
         try:
             data = json.loads(jobs_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
@@ -679,7 +679,9 @@ class SchedulingManager:
             if elapsed > total_seconds * 2:
                 logger.info(
                     "Catch-up: job '%s' last ran %.1f hours ago (interval: %.1f hrs)",
-                    job.job_id, elapsed / 3600, total_seconds / 3600,
+                    job.job_id,
+                    elapsed / 3600,
+                    total_seconds / 3600,
                 )
                 try:
                     await self._execute_job(job.job_id)
@@ -746,7 +748,7 @@ class SchedulingManager:
         logger.info(f"Resumed job: {job_id}")
         return True
 
-    def get_next_run_time(self, job_id: str) -> Optional[datetime]:
+    def get_next_run_time(self, job_id: str) -> datetime | None:
         """Get next scheduled run time for a job.
 
         Args:

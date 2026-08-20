@@ -6,6 +6,7 @@ Provides:
 - Screenshot + a11y tree observation handling
 - VLM-based action prediction loop
 """
+
 from weebot.osworld.agent_adapter import WeebotOSWorldAgent
 
 __all__ = ["WeebotOSWorldAgent"]

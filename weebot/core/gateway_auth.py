@@ -3,6 +3,7 @@
 Controls which users, chats, and platforms can interact with Weebot
 through gateway interfaces.  Supports DM-pairing and admin restrictions.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,9 @@ class GatewayAuth:
     """
 
     def __init__(self, config_path: str | Path | None = None) -> None:
-        self._config_path = Path(config_path) if config_path else Path.home() / ".weebot" / "gateway_auth.json"
+        self._config_path = (
+            Path(config_path) if config_path else Path.home() / ".weebot" / "gateway_auth.json"
+        )
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
         self._rules: dict[str, Any] = self._load()
 
@@ -39,18 +42,17 @@ class GatewayAuth:
                 logger.warning("Failed to load gateway auth config: %s", exc)
         return {
             "allowed_platforms": ["telegram", "discord", "slack", "whatsapp", "signal", "email"],
-            "allowed_chats": {},       # platform -> [chat_id]
-            "allowed_users": {},       # platform -> [user_id]
-            "blocked_users": {},       # platform -> [user_id]
-            "admin_ids": {},           # platform -> [user_id]
+            "allowed_chats": {},  # platform -> [chat_id]
+            "allowed_users": {},  # platform -> [user_id]
+            "blocked_users": {},  # platform -> [user_id]
+            "admin_ids": {},  # platform -> [user_id]
             "allow_all_by_default": False,
         }
 
     def _save(self) -> None:
         """Persist auth rules to disk."""
         self._config_path.write_text(
-            json.dumps(self._rules, indent=2, default=str),
-            encoding="utf-8",
+            json.dumps(self._rules, indent=2, default=str), encoding="utf-8"
         )
 
     def is_platform_allowed(self, platform: str) -> bool:

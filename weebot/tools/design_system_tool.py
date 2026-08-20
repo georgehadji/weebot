@@ -1,8 +1,8 @@
 """DesignSystemTool — extract design tokens via npx skillui (no API key needed)."""
+
 from __future__ import annotations
 import asyncio
 import json
-import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -61,9 +61,7 @@ class DesignSystemTool(BaseTool):
         # Validate: exactly one input source
         sources = [s for s in (url, repo, directory) if s]
         if len(sources) != 1:
-            return ToolResult.error_result(
-                error="Provide exactly one of: url, repo, or directory"
-            )
+            return ToolResult.error_result(error="Provide exactly one of: url, repo, or directory")
 
         # Build command
         cmd = self._build_cmd(url, repo, directory, name, ultra)
@@ -73,11 +71,7 @@ class DesignSystemTool(BaseTool):
             try:
                 result = await asyncio.to_thread(
                     lambda: subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=120,
-                        cwd=tmpdir,
+                        cmd, capture_output=True, text=True, timeout=120, cwd=tmpdir
                     )
                 )
             except subprocess.TimeoutExpired:
@@ -86,10 +80,7 @@ class DesignSystemTool(BaseTool):
                 )
             except FileNotFoundError:
                 return ToolResult.error_result(
-                    error=(
-                        "skillui not found. Install it with: "
-                        "npm install -g skillui"
-                    )
+                    error=("skillui not found. Install it with: " "npm install -g skillui")
                 )
 
             if result.returncode != 0:
@@ -112,11 +103,7 @@ class DesignSystemTool(BaseTool):
                         # Retry after install
                         result = await asyncio.to_thread(
                             lambda: subprocess.run(
-                                cmd,
-                                capture_output=True,
-                                text=True,
-                                timeout=120,
-                                cwd=tmpdir,
+                                cmd, capture_output=True, text=True, timeout=120, cwd=tmpdir
                             )
                         )
                         if result.returncode != 0:
@@ -124,9 +111,7 @@ class DesignSystemTool(BaseTool):
                                 error=f"skillui failed: {result.stderr[:1000]}"
                             )
                     except Exception as e:
-                        return ToolResult.error_result(
-                            error=f"skillui install/run failed: {e}"
-                        )
+                        return ToolResult.error_result(error=f"skillui install/run failed: {e}")
                 else:
                     return ToolResult.error_result(
                         error=f"skillui failed (exit {result.returncode}): {result.stderr[:1000]}"
@@ -135,9 +120,7 @@ class DesignSystemTool(BaseTool):
             # Find output directory and parse tokens
             return self._parse_output(tmpdir, name or self._derive_name(url, repo, directory))
 
-    def _build_cmd(
-        self, url: str, repo: str, directory: str, name: str, ultra: bool
-    ) -> list[str]:
+    def _build_cmd(self, url: str, repo: str, directory: str, name: str, ultra: bool) -> list[str]:
         """Build skillui command as a list (no shell injection risk)."""
         parts = ["npx", "skillui"]
         if url:
@@ -156,7 +139,9 @@ class DesignSystemTool(BaseTool):
 
     def _derive_name(self, url: str, repo: str, directory: str) -> str:
         if url:
-            return url.replace("https://", "").replace("http://", "").split("/")[0].replace(".", "-")
+            return (
+                url.replace("https://", "").replace("http://", "").split("/")[0].replace(".", "-")
+            )
         if repo:
             return repo.rstrip("/").split("/")[-1].replace(".git", "")
         if directory:
@@ -166,7 +151,11 @@ class DesignSystemTool(BaseTool):
     def _parse_output(self, tmpdir: str, name: str) -> ToolResult:
         """Find the output dir and extract structured data."""
         tmp = Path(tmpdir)
-        design_dirs = list(tmp.glob(f"*{name}*")) or list(tmp.glob("*design*")) or [d for d in tmp.iterdir() if d.is_dir()]
+        design_dirs = (
+            list(tmp.glob(f"*{name}*"))
+            or list(tmp.glob("*design*"))
+            or [d for d in tmp.iterdir() if d.is_dir()]
+        )
         if not design_dirs:
             # skillui might have produced files directly in tmpdir
             design_dir = tmp

@@ -1,7 +1,8 @@
 """Tests for DesktopA11yTool with mocked _with_pygetwindow."""
+
 import json
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 
 
 def _parse_elements(result) -> list:
@@ -18,12 +19,27 @@ def _parse_elements(result) -> list:
 def fake_elements():
     """Fake desktop elements to return from mocked _with_pygetwindow."""
     return [
-        {"name": "Settings", "role": "window",
-         "bounds": {"x": 100, "y": 100, "w": 800, "h": 600}, "enabled": True, "focused": True},
-        {"name": "Terminal", "role": "window",
-         "bounds": {"x": 200, "y": 200, "w": 640, "h": 480}, "enabled": True, "focused": False},
-        {"name": "Browser — Weebot", "role": "window",
-         "bounds": {"x": 0, "y": 0, "w": 1920, "h": 1080}, "enabled": True, "focused": False},
+        {
+            "name": "Settings",
+            "role": "window",
+            "bounds": {"x": 100, "y": 100, "w": 800, "h": 600},
+            "enabled": True,
+            "focused": True,
+        },
+        {
+            "name": "Terminal",
+            "role": "window",
+            "bounds": {"x": 200, "y": 200, "w": 640, "h": 480},
+            "enabled": True,
+            "focused": False,
+        },
+        {
+            "name": "Browser — Weebot",
+            "role": "window",
+            "bounds": {"x": 0, "y": 0, "w": 1920, "h": 1080},
+            "enabled": True,
+            "focused": False,
+        },
     ]
 
 
@@ -33,6 +49,7 @@ class TestDesktopA11y:
     @pytest.fixture
     def tool(self):
         from weebot.tools.desktop_a11y import DesktopA11yTool
+
         return DesktopA11yTool()
 
     @pytest.mark.asyncio
@@ -90,9 +107,13 @@ class TestDesktopA11y:
     async def test_truncation_at_max_elements(self, tool):
         """Elements above 200 are truncated."""
         many = [
-            {"name": f"Item {i}", "role": "button",
-             "bounds": {"x": 0, "y": 0, "w": 10, "h": 10},
-             "enabled": True, "focused": False}
+            {
+                "name": f"Item {i}",
+                "role": "button",
+                "bounds": {"x": 0, "y": 0, "w": 10, "h": 10},
+                "enabled": True,
+                "focused": False,
+            }
             for i in range(250)
         ]
         with patch.object(tool, "_extract_elements", return_value=many):

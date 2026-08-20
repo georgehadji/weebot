@@ -5,10 +5,10 @@ reducing the reasoning burden on external LLM clients.  The underlying atomic
 tools remain available for internal use and can be re-exposed by setting
 ``mcp_composite_tools_enabled=false``.
 """
+
 from __future__ import annotations
 
 from weebot.domain.models.composite_tool import CompositeToolSpec, SubToolCall
-
 
 DEFAULT_COMPOSITE_TOOLS: list[CompositeToolSpec] = [
     CompositeToolSpec(
@@ -34,11 +34,7 @@ DEFAULT_COMPOSITE_TOOLS: list[CompositeToolSpec] = [
             ),
             SubToolCall(
                 tool_name="file_str_replace",
-                arguments={
-                    "path": "${path}",
-                    "old_str": "${old_str}",
-                    "new_str": "${new_str}",
-                },
+                arguments={"path": "${path}", "old_str": "${old_str}", "new_str": "${new_str}"},
                 description="Apply the requested edit",
             ),
         ],
@@ -66,7 +62,7 @@ DEFAULT_COMPOSITE_TOOLS: list[CompositeToolSpec] = [
                         "import sys; "
                         "results = '''${search_results}'''; "
                         "print('Summary of', len(results.splitlines()), 'lines')"
-                    ),
+                    )
                 },
                 capture_output_as="summary",
                 description="Process search results",

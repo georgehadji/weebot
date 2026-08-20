@@ -18,17 +18,15 @@ Usage::
     profile.source  # → "benchmark"
     profile.axes    # → {CapabilityAxis.CODING: 8.5, CapabilityAxis.REASONING: 7.0, ...}
 """
+
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from weebot.config.model_registry import get_model_info
-from weebot.domain.models.capability import (
-    CapabilityAxis,
-    ModelQualityProfile,
-)
+from weebot.domain.models.capability import CapabilityAxis, ModelQualityProfile
 from weebot.infrastructure.benchmark.suites import ALL_SUITES, BenchmarkItem, BenchmarkSuite
 
 logger = logging.getLogger(__name__)
@@ -62,9 +60,7 @@ class BenchmarkRunner:
         self._max_retries = max_retries
 
     async def run(
-        self,
-        model_id: str,
-        suites: list[BenchmarkSuite] | None = None,
+        self, model_id: str, suites: list[BenchmarkSuite] | None = None
     ) -> ModelQualityProfile | None:
         """Run all (or specified) suites against *model_id*.
 
@@ -89,7 +85,9 @@ class BenchmarkRunner:
             )
         logger.info(
             "Benchmark: running %d suites for %s (est. $%.4f)",
-            len(suites), model_id, estimated_cost,
+            len(suites),
+            model_id,
+            estimated_cost,
         )
 
         # Execute each suite: collect responses and score
@@ -111,10 +109,7 @@ class BenchmarkRunner:
             try:
                 axis = CapabilityAxis(suite.axis)
                 axes[axis] = round(score, 1)
-                logger.debug(
-                    "Benchmark %s/%s: %.1f/10",
-                    model_id, suite.axis, score,
-                )
+                logger.debug("Benchmark %s/%s: %.1f/10", model_id, suite.axis, score)
             except ValueError:
                 logger.warning("Unknown axis '%s' — skipping", suite.axis)
 
@@ -122,26 +117,16 @@ class BenchmarkRunner:
             logger.warning("Benchmark: no valid axes scored for %s", model_id)
             return None
 
-        return ModelQualityProfile(
-            model_id=model_id,
-            axes=axes,
-            source="benchmark",
-        )
+        return ModelQualityProfile(model_id=model_id, axes=axes, source="benchmark")
 
-    async def _call_item(
-        self,
-        model_id: str,
-        item: BenchmarkItem,
-    ) -> str | None:
+    async def _call_item(self, model_id: str, item: BenchmarkItem) -> str | None:
         """Send a single prompt and return the response text.
 
         Retries on failure up to ``_max_retries`` times.
         """
         for attempt in range(self._max_retries + 1):
             try:
-                messages = [
-                    {"role": "user", "content": item.prompt},
-                ]
+                messages = [{"role": "user", "content": item.prompt}]
                 resp = await self._call_llm(model_id, messages)
                 if isinstance(resp, str):
                     return resp
@@ -154,12 +139,17 @@ class BenchmarkRunner:
                 if attempt < self._max_retries:
                     logger.debug(
                         "Benchmark retry %d/%d for %s: %s",
-                        attempt + 1, self._max_retries, model_id, exc,
+                        attempt + 1,
+                        self._max_retries,
+                        model_id,
+                        exc,
                     )
                 else:
                     logger.warning(
                         "Benchmark failed for %s after %d retries: %s",
-                        model_id, self._max_retries, exc,
+                        model_id,
+                        self._max_retries,
+                        exc,
                     )
         return None
 
@@ -189,4 +179,5 @@ class BenchmarkRunner:
 
 class CostGuardError(Exception):
     """Raised when estimated benchmark cost exceeds the configured ceiling."""
+
     pass

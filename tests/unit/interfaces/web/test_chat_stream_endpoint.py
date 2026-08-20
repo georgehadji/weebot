@@ -14,13 +14,13 @@ Only ``chat_router`` is mounted (not the full ``create_app()``) so the
 test isolates streaming behavior from auth/lifespan/DI concerns already
 covered elsewhere; auth and session persistence are stubbed directly.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -70,9 +70,9 @@ def _parse_sse_events(raw_text: str) -> list[tuple[str, dict]]:
     event_name = None
     for line in raw_text.splitlines():
         if line.startswith("event:"):
-            event_name = line[len("event:"):].strip()
+            event_name = line[len("event:") :].strip()
         elif line.startswith("data:"):
-            data = json.loads(line[len("data:"):].strip())
+            data = json.loads(line[len("data:") :].strip())
             parsed.append((event_name, data))
     return parsed
 
@@ -82,9 +82,7 @@ def test_stream_emits_session_event_first():
     app, session = _build_app(flow)
     client = TestClient(app)
 
-    response = client.post(
-        "/api/chat/stream", json={"message": "hello", "session_id": session.id}
-    )
+    response = client.post("/api/chat/stream", json={"message": "hello", "session_id": session.id})
 
     events = _parse_sse_events(response.text)
     assert events[0][0] == "session"
@@ -96,9 +94,7 @@ def test_stream_emits_one_sse_message_per_agent_event():
     app, session = _build_app(flow)
     client = TestClient(app)
 
-    response = client.post(
-        "/api/chat/stream", json={"message": "hello", "session_id": session.id}
-    )
+    response = client.post("/api/chat/stream", json={"message": "hello", "session_id": session.id})
 
     events = _parse_sse_events(response.text)
     event_names = [name for name, _ in events]
@@ -111,8 +107,7 @@ def test_stream_emits_one_sse_message_per_agent_event():
 def test_stream_first_byte_arrives_before_flow_completes():
     """A slow flow must not block the first SSE message behind later ones."""
     flow = _FakeFlow(
-        [MessageEvent(role="assistant", message="slow"), DoneEvent()],
-        delay_seconds=0.2,
+        [MessageEvent(role="assistant", message="slow"), DoneEvent()], delay_seconds=0.2
     )
     app, _ = _build_app(flow)
     client = TestClient(app)

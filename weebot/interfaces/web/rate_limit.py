@@ -10,13 +10,14 @@ Tiered limits by endpoint class:
 Keyed by principal (post-WI-11) falling back to client IP.
 In-memory token bucket implementation; Valkey backend optional.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
 from collections import defaultdict, deque
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -122,6 +123,7 @@ def _prune_buckets() -> None:
     if len(_buckets) <= 10000:
         return
     import random
+
     keys_to_drop = random.sample(list(_buckets.keys()), k=len(_buckets) // 2)
     for k in keys_to_drop:
         del _buckets[k]
@@ -163,14 +165,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             retry_after = int(bucket.retry_after(principal))
             _metrics.mcp_rate_limits_hit_total.labels(tool=tier).inc()
             from weebot.infrastructure.security.audit_logger import AuditEventType, AuditLogger
+
             AuditLogger.log(
                 AuditEventType.RATE_LIMIT_EXCEEDED,
                 {"tier": tier, "principal": principal, "path": path, "retry_after": retry_after},
             )
-            logger.warning(
-                "Rate limit hit: tier=%s principal=%s path=%s",
-                tier, principal, path,
-            )
+            logger.warning("Rate limit hit: tier=%s principal=%s path=%s", tier, principal, path)
             return Response(
                 status_code=429,
                 content=f'{{"detail":"Rate limit exceeded. Retry after {retry_after}s."}}',
@@ -199,6 +199,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         api_key = request.headers.get("X-API-Key", "")
         if api_key:
             import hashlib
+
             return f"key:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
         client_host = request.client.host if request.client else "unknown"
         return f"ip:{client_host}"

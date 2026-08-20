@@ -1,6 +1,9 @@
 """Unit tests for NotificationCategorizer."""
-import pytest
-from weebot.infrastructure.notifications.notifications_categorizer import NotificationCategorizer, UserRule
+
+from weebot.infrastructure.notifications.notifications_categorizer import (
+    NotificationCategorizer,
+    UserRule,
+)
 
 
 class TestBuiltinKeywords:
@@ -47,10 +50,12 @@ class TestMetadataOverride:
 
 class TestUserRules:
     def setup_method(self):
-        self.cat = NotificationCategorizer(user_rules=[
-            UserRule(pattern="invoice|receipt", is_regex=True, category="email"),
-            UserRule(pattern="standup", is_regex=False, category="calendar"),
-        ])
+        self.cat = NotificationCategorizer(
+            user_rules=[
+                UserRule(pattern="invoice|receipt", is_regex=True, category="email"),
+                UserRule(pattern="standup", is_regex=False, category="calendar"),
+            ]
+        )
 
     def test_regex_rule_matches(self):
         assert self.cat.categorize("new invoice available", {}) == "email"
@@ -66,14 +71,16 @@ class TestUserRules:
         assert result == "urgent"
 
     def test_disabled_rule_is_skipped(self):
-        cat = NotificationCategorizer(user_rules=[
-            UserRule(pattern="invoice", is_regex=False, category="email", enabled=False),
-        ])
+        cat = NotificationCategorizer(
+            user_rules=[
+                UserRule(pattern="invoice", is_regex=False, category="email", enabled=False)
+            ]
+        )
         assert cat.categorize("invoice received", {}) == "info"
 
     def test_metadata_intent_wins_over_user_rules(self):
-        cat = NotificationCategorizer(user_rules=[
-            UserRule(pattern="invoice", is_regex=False, category="email"),
-        ])
+        cat = NotificationCategorizer(
+            user_rules=[UserRule(pattern="invoice", is_regex=False, category="email")]
+        )
         result = cat.categorize("invoice due", {"intent": "urgent"})
         assert result == "urgent"

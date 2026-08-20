@@ -6,11 +6,12 @@ concurrent load with various failure modes injected into the inner adapter.
 Run with:
     pytest tests/stress/test_llm_resilience.py -v --tb=short
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -23,10 +24,10 @@ from weebot.infrastructure.adapters.llm.resilient_adapter import (
     ResilientLLMAdapter,
 )
 
-
 # ---------------------------------------------------------------------------
 # Configurable mock LLM adapter
 # ---------------------------------------------------------------------------
+
 
 class FakeInnerAdapter(LLMPort):
     """Mock LLM adapter with injectable failure behavior."""
@@ -59,20 +60,18 @@ class FakeInnerAdapter(LLMPort):
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         self.call_count += 1
-        self.call_log.append({
-            "call_num": self.call_count,
-            "model": model,
-            "time": time.monotonic(),
-        })
+        self.call_log.append(
+            {"call_num": self.call_count, "model": model, "time": time.monotonic()}
+        )
 
         if self._latency > 0:
             await asyncio.sleep(self._latency)
@@ -82,6 +81,7 @@ class FakeInnerAdapter(LLMPort):
 
         if self._behavior == "fail_rate":
             import random
+
             if random.random() < self._fail_rate:
                 raise self._error_class(self._error_msg)
 
@@ -160,8 +160,7 @@ class TestCircuitBreakerUnderLoad:
 
         # 20 concurrent calls — all should be rejected by circuit
         results = await asyncio.gather(
-            *[adapter.chat(MESSAGES) for _ in range(20)],
-            return_exceptions=True,
+            *[adapter.chat(MESSAGES) for _ in range(20)], return_exceptions=True
         )
         assert all(isinstance(r, CircuitBreakerOpen) for r in results)
         assert inner.call_count == call_count_after_trip, "Calls leaked through open circuit"
@@ -170,10 +169,7 @@ class TestCircuitBreakerUnderLoad:
     async def test_half_open_probe_allows_exactly_one(self):
         """After cooldown, HALF_OPEN allows a probe. Success closes the circuit."""
         cb = CircuitBreaker(
-            failure_threshold=2,
-            cooldown_seconds=0.1,
-            jitter_percent=0.0,
-            enable_stagger=False,
+            failure_threshold=2, cooldown_seconds=0.1, jitter_percent=0.0, enable_stagger=False
         )
 
         # Trip to OPEN
@@ -197,10 +193,7 @@ class TestCircuitBreakerUnderLoad:
     async def test_thundering_herd_jitter_spreads_probes(self):
         """With jitter, 20 concurrent evaluations after cooldown don't all probe at once."""
         cb = CircuitBreaker(
-            failure_threshold=1,
-            cooldown_seconds=0.05,
-            jitter_percent=0.3,
-            enable_stagger=True,
+            failure_threshold=1, cooldown_seconds=0.05, jitter_percent=0.3, enable_stagger=True
         )
 
         await cb.record_failure("model-x")
@@ -260,6 +253,7 @@ class TestRetryUnderLoad:
         inner = FakeInnerAdapter()
         inner.set_behavior("fail_then_succeed", fail_after=2)
         from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
+
         adapter = ResilientLLMAdapter(
             inner_adapter=inner,
             model_name="test-model",
@@ -291,6 +285,7 @@ class TestRetryUnderLoad:
 
         # Patch ErrorClassifier to recognize our custom auth error
         from weebot.core.error_classifier import ErrorClassifier
+
         original = ErrorClassifier.is_retryable
 
         def _mock_retryable(exc):
@@ -315,8 +310,7 @@ class TestRetryUnderLoad:
         adapter = _make_resilient(inner, timeout=30.0, circuit_breaker=False)
 
         results = await asyncio.gather(
-            *[adapter.chat(MESSAGES) for _ in range(10)],
-            return_exceptions=True,
+            *[adapter.chat(MESSAGES) for _ in range(10)], return_exceptions=True
         )
 
         successes = [r for r in results if isinstance(r, LLMResponse)]
@@ -334,6 +328,7 @@ class TestRetryUnderLoad:
         inner.set_behavior("fail_always", error_msg="persistent failure")
         # Use short backoff delays to avoid hitting the 60s pytest-timeout.
         from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
+
         adapter = ResilientLLMAdapter(
             inner_adapter=inner,
             model_name="test-model",
@@ -404,8 +399,7 @@ class TestTimeoutEnforcement:
 
         t0 = time.perf_counter()
         results = await asyncio.gather(
-            *[adapter.chat(MESSAGES) for _ in range(20)],
-            return_exceptions=True,
+            *[adapter.chat(MESSAGES) for _ in range(20)], return_exceptions=True
         )
         elapsed = time.perf_counter() - t0
 
@@ -427,16 +421,10 @@ class TestRecoveryPatterns:
         """Outage → circuit opens → service recovers → circuit closes."""
         inner = FakeInnerAdapter()
         cb = CircuitBreaker(
-            failure_threshold=3,
-            cooldown_seconds=0.1,
-            jitter_percent=0.0,
-            enable_stagger=False,
+            failure_threshold=3, cooldown_seconds=0.1, jitter_percent=0.0, enable_stagger=False
         )
         adapter = ResilientLLMAdapter(
-            inner_adapter=inner,
-            model_name="test",
-            timeout=5.0,
-            enable_retry=False,
+            inner_adapter=inner, model_name="test", timeout=5.0, enable_retry=False
         )
         # Inject our fast-cooldown breaker
         adapter._circuit = cb
@@ -462,16 +450,10 @@ class TestRecoveryPatterns:
         """50 pending requests when circuit recovers — none are lost."""
         inner = FakeInnerAdapter()
         cb = CircuitBreaker(
-            failure_threshold=2,
-            cooldown_seconds=0.05,
-            jitter_percent=0.0,
-            enable_stagger=False,
+            failure_threshold=2, cooldown_seconds=0.05, jitter_percent=0.0, enable_stagger=False
         )
         adapter = ResilientLLMAdapter(
-            inner_adapter=inner,
-            model_name="storm",
-            timeout=5.0,
-            enable_retry=False,
+            inner_adapter=inner, model_name="storm", timeout=5.0, enable_retry=False
         )
         adapter._circuit = cb
 
@@ -488,8 +470,7 @@ class TestRecoveryPatterns:
 
         # 50 requests hit at once
         results = await asyncio.gather(
-            *[adapter.chat(MESSAGES) for _ in range(50)],
-            return_exceptions=True,
+            *[adapter.chat(MESSAGES) for _ in range(50)], return_exceptions=True
         )
 
         successes = [r for r in results if isinstance(r, LLMResponse)]
@@ -543,8 +524,7 @@ class TestMixedFailureModes:
         adapter = _make_resilient(inner, timeout=30.0, circuit_breaker=False)
 
         results = await asyncio.gather(
-            *[adapter.chat(MESSAGES) for _ in range(20)],
-            return_exceptions=True,
+            *[adapter.chat(MESSAGES) for _ in range(20)], return_exceptions=True
         )
 
         successes = [r for r in results if isinstance(r, LLMResponse)]
@@ -557,8 +537,7 @@ class TestMixedFailureModes:
         """API keys in error messages should be redacted."""
         inner = FakeInnerAdapter()
         inner.set_behavior(
-            "fail_always",
-            error_msg="Request failed with api_key=sk-12345678901234567890abcdef",
+            "fail_always", error_msg="Request failed with api_key=sk-12345678901234567890abcdef"
         )
         adapter = _make_resilient(inner, retry=False, circuit_breaker=False)
 

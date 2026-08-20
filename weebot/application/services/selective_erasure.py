@@ -10,6 +10,7 @@ re-scored when later evaluations revisit the affected nodes, rather than
 re-scoring the entire archive at once.  This reduces the O(B^2) cost of
 re-scoring to O(B) via exponentially spaced checkpoints (Prop. 6 in RQGM).
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,10 +45,7 @@ class SelectiveErasure:
         self._total_lazy_rescored: int = 0
 
     def on_evaluator_replaced(
-        self,
-        old_evaluator_id: str,
-        new_evaluator_id: str,
-        epoch: int,
+        self, old_evaluator_id: str, new_evaluator_id: str, epoch: int
     ) -> None:
         """Register an evaluator replacement.
 
@@ -57,7 +55,9 @@ class SelectiveErasure:
         self._total_replacements += 1
         logger.info(
             "SelectiveErasure: evaluator %s replaced by %s (epoch %d)",
-            old_evaluator_id, new_evaluator_id, epoch,
+            old_evaluator_id,
+            new_evaluator_id,
+            epoch,
         )
 
     def is_stale(self, evaluator_id: str) -> bool:

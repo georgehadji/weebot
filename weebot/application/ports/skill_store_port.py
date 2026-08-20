@@ -4,10 +4,10 @@ Application layer defines the contract, infrastructure layer provides
 the SQLite adapter (SkillStore).  This enables flows and CQRS handlers
 to depend on the port, not the concrete implementation.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.skill import Skill
 
@@ -20,7 +20,7 @@ class SkillStorePort(ABC):
         """Persist a skill, creating or replacing it by name."""
 
     @abstractmethod
-    async def load(self, name: str) -> Optional[Skill]:
+    async def load(self, name: str) -> Skill | None:
         """Load a skill by name.  Returns None if not found."""
 
     @abstractmethod

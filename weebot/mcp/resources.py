@@ -7,6 +7,7 @@ without instantiating a FastMCP server.
 Live data is opt-in: pass a StateManager or SchedulingManager instance to
 get real runtime snapshots; omit them to get stub payloads.
 """
+
 from __future__ import annotations
 
 import json
@@ -105,10 +106,7 @@ def build_state_json(state_repo: Any | None = None) -> str:
         )
     except Exception as exc:
         _log.exception("Failed to build state resource payload: %s", exc)
-        return json.dumps(
-            {"status": "error", "error": _INTERNAL_ERROR},
-            indent=2,
-        )
+        return json.dumps({"status": "error", "error": _INTERNAL_ERROR}, indent=2)
 
 
 def build_roadmap_json(product_db_path: str | None = None) -> str:
@@ -165,10 +163,7 @@ def build_roadmap_json(product_db_path: str | None = None) -> str:
         return json.dumps({"requirements": [], "error": _INTERNAL_ERROR}, indent=2)
 
 
-async def build_tools_json(
-    tool_discovery: Any | None = None,
-    role: str | None = None,
-) -> str:
+async def build_tools_json(tool_discovery: Any | None = None, role: str | None = None) -> str:
     """Return the tool catalog as a JSON string.
 
     Args:
@@ -204,13 +199,7 @@ async def build_tools_json(
             for m in manifests
         ]
         return json.dumps(
-            sanitize_json_fields(
-                {
-                    "tools": tools,
-                    "total": len(tools),
-                    "role_filter": role,
-                }
-            ),
+            sanitize_json_fields({"tools": tools, "total": len(tools), "role_filter": role}),
             indent=2,
         )
     except Exception as exc:
@@ -261,15 +250,11 @@ def build_costs_json(cascade_tracker: Any | None = None) -> str:
         return json.dumps(sanitize_json_fields(summary), indent=2)
     except Exception as exc:
         _log.exception("Failed to build costs resource payload: %s", exc)
-        return json.dumps(
-            {"error": _INTERNAL_ERROR, "total_decisions": 0},
-            indent=2,
-        )
+        return json.dumps({"error": _INTERNAL_ERROR, "total_decisions": 0}, indent=2)
 
 
 def build_routing_json(
-    cascade_tracker: Any | None = None,
-    bandit_selector: Any | None = None,
+    cascade_tracker: Any | None = None, bandit_selector: Any | None = None
 ) -> str:
     """Return ACR routing analytics as a JSON string.
 
@@ -282,11 +267,13 @@ def build_routing_json(
     """
     if cascade_tracker is None:
         return json.dumps(
-            sanitize_json_fields({
-                "per_category": {},
-                "total_decisions": 0,
-                "note": "Pass cascade_tracker= to WeebotMCPServer for live data.",
-            }),
+            sanitize_json_fields(
+                {
+                    "per_category": {},
+                    "total_decisions": 0,
+                    "note": "Pass cascade_tracker= to WeebotMCPServer for live data.",
+                }
+            ),
             indent=2,
         )
 
@@ -318,18 +305,16 @@ def build_routing_json(
             result["per_category"][cat] = {
                 "total_attempts": total_attempts,
                 "total_successes": total_successes,
-                "success_rate": round(total_successes / total_attempts, 4)
-                    if total_attempts else 0.0,
+                "success_rate": (
+                    round(total_successes / total_attempts, 4) if total_attempts else 0.0
+                ),
                 "models": models,
             }
 
         return json.dumps(sanitize_json_fields(result), indent=2)
     except Exception as exc:
         _log.exception("Failed to build routing resource payload: %s", exc)
-        return json.dumps(
-            {"error": _INTERNAL_ERROR, "total_decisions": 0},
-            indent=2,
-        )
+        return json.dumps({"error": _INTERNAL_ERROR, "total_decisions": 0}, indent=2)
 
 
 def build_skills_json(skill_registry: Any | None = None) -> str:
@@ -381,10 +366,7 @@ def build_schedule_json(scheduler: Any | None = None) -> str:
     if scheduler is None:
         return json.dumps(
             sanitize_json_fields(
-                {
-                    "jobs": [],
-                    "note": "Pass scheduler= to WeebotMCPServer for live schedule data.",
-                }
+                {"jobs": [], "note": "Pass scheduler= to WeebotMCPServer for live schedule data."}
             ),
             indent=2,
         )
@@ -408,7 +390,4 @@ def build_schedule_json(scheduler: Any | None = None) -> str:
         )
     except Exception as exc:
         _log.exception("Failed to build schedule resource payload: %s", exc)
-        return json.dumps(
-            {"jobs": [], "error": _INTERNAL_ERROR},
-            indent=2,
-        )
+        return json.dumps({"jobs": [], "error": _INTERNAL_ERROR}, indent=2)

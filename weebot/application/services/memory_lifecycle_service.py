@@ -9,14 +9,14 @@ Prevents unbounded growth of memory files by classifying memories into tiers:
 This is a pure application-layer service.  It reads memory metadata from
 the MemoryPort and applies retention policies.  No infrastructure imports.
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
-from dataclasses import dataclass, field
+from datetime import datetime, UTC
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ class MemoryTier(str, Enum):
 @dataclass
 class MemoryEntry:
     """A single memory entry with lifecycle metadata."""
+
     key: str
     tier: MemoryTier = MemoryTier.HOT
     access_count: int = 0
@@ -43,11 +44,11 @@ class MemoryEntry:
 
 
 # Default retention policies (in seconds)
-_HOT_TTL = 3600        # 1 hour before HOT → WARM consideration
+_HOT_TTL = 3600  # 1 hour before HOT → WARM consideration
 _WARM_TTL = 86400 * 7  # 7 days before WARM → COLD
-_COLD_TTL = 86400 * 30 # 30 days before COLD → delete
-_HOT_MIN_ACCESS = 3     # accessed 3+ times → stays HOT
-_MAX_HOT_ENTRIES = 50   # max HOT entries before demotion
+_COLD_TTL = 86400 * 30  # 30 days before COLD → delete
+_HOT_MIN_ACCESS = 3  # accessed 3+ times → stays HOT
+_MAX_HOT_ENTRIES = 50  # max HOT entries before demotion
 
 
 class MemoryLifecycleService:
@@ -120,14 +121,16 @@ class MemoryLifecycleService:
         for entry in entries:
             intended = self.classify(entry)
             if intended != entry.tier:
-                candidates.append(MemoryEntry(
-                    key=entry.key,
-                    tier=intended,
-                    access_count=entry.access_count,
-                    created_at=entry.created_at,
-                    last_accessed=entry.last_accessed,
-                    size_bytes=entry.size_bytes,
-                ))
+                candidates.append(
+                    MemoryEntry(
+                        key=entry.key,
+                        tier=intended,
+                        access_count=entry.access_count,
+                        created_at=entry.created_at,
+                        last_accessed=entry.last_accessed,
+                        size_bytes=entry.size_bytes,
+                    )
+                )
         return candidates
 
     async def sweep(self, repo=None) -> dict:
@@ -150,17 +153,22 @@ class MemoryLifecycleService:
             logger.warning("MemoryLifecycleService sweep: failed to query: %s", exc)
             return stats
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         evict_hashes: list[str] = []
         for row in low_entries:
             stats["checked"] += 1
             try:
-                created = datetime.fromisoformat(row["created_at"]) if row.get("created_at") else now
+                created = (
+                    datetime.fromisoformat(row["created_at"]) if row.get("created_at") else now
+                )
                 # Normalise naive datetimes to aware for comparison
                 if created.tzinfo is None:
-                    created = created.replace(tzinfo=timezone.utc)
+                    created = created.replace(tzinfo=UTC)
             except (ValueError, TypeError):
-                logger.debug("MemoryLifecycleService sweep: skipping unparseable entry %s", row.get("entry_hash", "?"))
+                logger.debug(
+                    "MemoryLifecycleService sweep: skipping unparseable entry %s",
+                    row.get("entry_hash", "?"),
+                )
                 continue
             # Use classify() to determine tier, should_retain() for eviction decision
             entry = MemoryEntry(
@@ -178,7 +186,8 @@ class MemoryLifecycleService:
                 stats["evicted"] = deleted
                 logger.info(
                     "MemoryLifecycleService sweep: evicted %d/%d low-salience entries",
-                    deleted, len(evict_hashes),
+                    deleted,
+                    len(evict_hashes),
                 )
             except Exception as exc:
                 logger.warning("MemoryLifecycleService sweep: eviction failed: %s", exc)
@@ -193,7 +202,7 @@ class MemoryLifecycleService:
 
         # Sort by last_accessed ascending (oldest first)
         hot.sort(key=lambda e: e.last_accessed)
-        to_demote = hot[:len(hot) - self._max_hot_entries]
+        to_demote = hot[: len(hot) - self._max_hot_entries]
 
         return [
             MemoryEntry(

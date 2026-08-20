@@ -10,10 +10,11 @@ Usage:
     tools = await bridge.get_tools()  # Returns list[BaseTool]
     tc = ToolCollection(*tools)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.mcp_tool_port import MCPToolPort
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
@@ -44,8 +45,7 @@ class _MCPToolWrapper(BaseTool):
             return ToolResult.success_result(output=str(result))
         except Exception as exc:
             return ToolResult.error_result(
-                error=f"MCP tool '{self._mcp_tool_name}' failed: {exc}",
-                output="",
+                error=f"MCP tool '{self._mcp_tool_name}' failed: {exc}", output=""
             )
 
 
@@ -57,9 +57,9 @@ class MCPToolBridge(MCPToolPort):
                     weebot.config's mcpServers).
     """
 
-    def __init__(self, mcp_config: Optional[dict] = None) -> None:
+    def __init__(self, mcp_config: dict | None = None) -> None:
         self._mcp_config = mcp_config or {}
-        self._client: Optional[MCPClientManager] = None
+        self._client: MCPClientManager | None = None
         self._tools: list[BaseTool] = []
 
     async def initialize(self) -> None:
@@ -82,8 +82,11 @@ class MCPToolBridge(MCPToolPort):
             tool = self._wrap_tool(spec)
             self._tools.append(tool)
 
-        logger.info("MCP bridge: %d tools from %d server(s)", len(self._tools),
-                     len(self._mcp_config.get("mcpServers", {})))
+        logger.info(
+            "MCP bridge: %d tools from %d server(s)",
+            len(self._tools),
+            len(self._mcp_config.get("mcpServers", {})),
+        )
 
     @staticmethod
     def _wrap_tool(spec: dict) -> BaseTool:
@@ -101,11 +104,7 @@ class MCPToolBridge(MCPToolPort):
 
         parameters = func.get("parameters", {"type": "object", "properties": {}})
 
-        wrapper = _MCPToolWrapper(
-            name=name,
-            description=description,
-            parameters=parameters,
-        )
+        wrapper = _MCPToolWrapper(name=name, description=description, parameters=parameters)
         wrapper._bridge = None  # Will be set after creation
         wrapper._mcp_tool_name = mcp_tool_name
         return wrapper
@@ -128,7 +127,7 @@ class MCPToolBridge(MCPToolPort):
             self._client = None
             self._tools = []
 
-    async def __aenter__(self) -> "MCPToolBridge":
+    async def __aenter__(self) -> MCPToolBridge:
         await self.initialize()
         return self
 

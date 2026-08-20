@@ -7,14 +7,14 @@ cookies and JS-heavy sites via Deno runtime.
 
 Security: path traversal guard, HTTPS validation, size caps, timeout.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -33,28 +33,27 @@ _HTTPS_URL_RE = re.compile(r"^https?://")
 # We set this to True here since yt-dlp is a CLI tool, not a Python import.
 
 # ── Safety limits ──────────────────────────────────────────────────────
-_MAX_VIDEO_DURATION_SEC: int = 600         # 10 min — no long-form content
-_MAX_VIDEO_SIZE_MB: int = 500              # 500 MiB ceiling
-_DOWNLOAD_TIMEOUT_SEC: int = 300           # 5 min max download time
+_MAX_VIDEO_DURATION_SEC: int = 600  # 10 min — no long-form content
+_MAX_VIDEO_SIZE_MB: int = 500  # 500 MiB ceiling
+_DOWNLOAD_TIMEOUT_SEC: int = 300  # 5 min max download time
 _SAFE_BASE: Path = Path.cwd().resolve()
 
 
 class YouTubeDownloadParams(BaseModel):
     """Parameters for video download from any yt-dlp-supported site."""
+
     url: str = Field(
         description="Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site"
     )
     output_path: str = Field(
-        default="",
-        description="Output file path. If empty, auto-generated in Output/videos/"
+        default="", description="Output file path. If empty, auto-generated in Output/videos/"
     )
     format: str = Field(
         default="mp4",
-        description="Output format: mp4, webm, mkv, 'mp3' for MP3 audio extraction, or 'audio' for m4a audio only"
+        description="Output format: mp4, webm, mkv, 'mp3' for MP3 audio extraction, or 'audio' for m4a audio only",
     )
     quality: str = Field(
-        default="best",
-        description="Quality: best, worst, or resolution like 1080p, 720p, 480p"
+        default="best", description="Quality: best, worst, or resolution like 1080p, 720p, 480p"
     )
 
 
@@ -85,6 +84,7 @@ class YouTubeDownloadTool(BaseTool):
         youtube_download(url="https://twitter.com/user/status/123",
                          format="mp4")
     """
+
     default_timeout_seconds: int = _DOWNLOAD_TIMEOUT_SEC
     name: str = "youtube_download"
     description: str = (
@@ -110,28 +110,28 @@ class YouTubeDownloadTool(BaseTool):
         "properties": {
             "url": {
                 "type": "string",
-                "description": "Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site"
+                "description": "Video URL from YouTube, Twitter/X, TikTok, Instagram, Vimeo, Dailymotion, Facebook, Reddit, Twitch, or any yt-dlp-supported site",
             },
             "output_path": {
                 "type": "string",
-                "description": "Output file path (auto-generated if empty)"
+                "description": "Output file path (auto-generated if empty)",
             },
             "format": {
                 "type": "string",
                 "enum": ["mp4", "webm", "mkv", "mp3", "audio"],
-                "description": "Output format: mp4, webm, mkv, mp3 (audio extraction), or audio (m4a) (default mp4)"
+                "description": "Output format: mp4, webm, mkv, mp3 (audio extraction), or audio (m4a) (default mp4)",
             },
             "quality": {
                 "type": "string",
-                "description": "Quality: best, worst, or resolution like 1080p, 720p (default best)"
+                "description": "Quality: best, worst, or resolution like 1080p, 720p (default best)",
             },
             "cookies": {
                 "type": "string",
-                "description": "Path to Netscape-format cookies file for age-restricted videos"
+                "description": "Path to Netscape-format cookies file for age-restricted videos",
             },
             "js_runtime": {
                 "type": "string",
-                "description": "Path to Deno/Node.js for yt-dlp EJS extractors"
+                "description": "Path to Deno/Node.js for yt-dlp EJS extractors",
             },
         },
         "required": ["url"],
@@ -140,24 +140,22 @@ class YouTubeDownloadTool(BaseTool):
     # ── Public API ──────────────────────────────────────────────────────
 
     async def execute(self, url: str, **kwargs: Any) -> ToolResult:
-        params = YouTubeDownloadParams(url=url, **{
-            k: v for k, v in kwargs.items() if v is not None
-        })
+        params = YouTubeDownloadParams(
+            url=url, **{k: v for k, v in kwargs.items() if v is not None}
+        )
         # Reset per-call state
         self._last_download_error = ""
 
         # 1. Validate URL is HTTPS
         if not _HTTPS_URL_RE.match(params.url):
             return ToolResult.error_result(
-                f"Invalid URL: {params.url[:80]}. "
-                "Expected an https:// URL to a video page."
+                f"Invalid URL: {params.url[:80]}. " "Expected an https:// URL to a video page."
             )
 
         # 2. Check yt-dlp available (deferred — check on first call)
         if not await self._check_ytdlp():
             return ToolResult.error_result(
-                "yt-dlp is not installed or not on PATH. "
-                "Install with: pip install yt-dlp"
+                "yt-dlp is not installed or not on PATH. " "Install with: pip install yt-dlp"
             )
 
         # 3. Check video metadata before downloading
@@ -167,11 +165,10 @@ class YouTubeDownloadTool(BaseTool):
             transcript_hint = ""
             try:
                 from weebot.tools.video_ingest_tool import VideoIngestTool
+
                 vt = VideoIngestTool()
                 if await vt.health_check():
-                    transcript_hint = (
-                        " Try video_ingest to fetch the transcript/subtitles instead."
-                    )
+                    transcript_hint = " Try video_ingest to fetch the transcript/subtitles instead."
             except Exception:
                 pass
             return ToolResult.error_result(
@@ -196,6 +193,7 @@ class YouTubeDownloadTool(BaseTool):
         output_path = params.output_path
         if not output_path:
             import uuid
+
             if params.format == "mp3":
                 ext = "mp3"
             elif params.format == "audio":
@@ -229,15 +227,17 @@ class YouTubeDownloadTool(BaseTool):
                 "1. Use advanced_browser to navigate to youtube.com and sign in\n"
                 "2. Call advanced_browser get_cookies action to export cookies\n"
                 "3. Use python_execute to convert cookies to Netscape format\n"
-                "4. Retry: youtube_download(url=..., cookies=\"tmp/youtube_cookies.txt\")\n"
+                '4. Retry: youtube_download(url=..., cookies="tmp/youtube_cookies.txt")\n'
                 "5. If that fails, try video_ingest for transcript as last resort"
             )
-        elif "no supported javascript runtime" in error_lower or "javascript runtime" in error_lower:
+        elif (
+            "no supported javascript runtime" in error_lower or "javascript runtime" in error_lower
+        ):
             fallback = (
                 "\n\nDO NOT GIVE UP. Try the next approach IN THE SAME STEP:\n"
                 "1. Install Deno: winget install DenoLand.Deno\n"
                 "2. Find the path: (Get-Command deno).Source\n"
-                "3. Retry: youtube_download(url=..., js_runtime=\"<deno_path>\")\n"
+                '3. Retry: youtube_download(url=..., js_runtime="<deno_path>")\n'
                 "4. If that fails, try video_ingest for transcript"
             )
         elif "video unavailable" in error_lower or "private" in error_lower:
@@ -255,10 +255,7 @@ class YouTubeDownloadTool(BaseTool):
                 "3. Last resort: video_ingest for transcript"
             )
 
-        return ToolResult.error_result(
-            f"Video download failed for {params.url[:60]}."
-            + fallback
-        )
+        return ToolResult.error_result(f"Video download failed for {params.url[:60]}." + fallback)
 
     # ── Dependency check ────────────────────────────────────────────────
 
@@ -266,7 +263,8 @@ class YouTubeDownloadTool(BaseTool):
         """Check whether yt-dlp is available on PATH."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "yt-dlp", "--version",
+                "yt-dlp",
+                "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -287,7 +285,7 @@ class YouTubeDownloadTool(BaseTool):
             raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
         return resolved
 
-    async def _get_metadata(self, url: str) -> Optional[dict[str, Any]]:
+    async def _get_metadata(self, url: str) -> dict[str, Any] | None:
         """Fetch video metadata via yt-dlp --dump-json.
 
         Returns:
@@ -295,26 +293,17 @@ class YouTubeDownloadTool(BaseTool):
         """
         import json as _json
 
-        cmd = [
-            "yt-dlp", "--dump-json",
-            "--no-playlist",
-            "--skip-download",
-            url,
-        ]
+        cmd = ["yt-dlp", "--dump-json", "--no-playlist", "--skip-download", url]
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=30,
-            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
             if proc.returncode != 0:
                 logger.debug("yt-dlp metadata fetch failed: %s", stderr.decode()[:200])
                 return None
             return _json.loads(stdout.decode())
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("yt-dlp metadata fetch timed out")
             return None
         except Exception as exc:
@@ -331,7 +320,7 @@ class YouTubeDownloadTool(BaseTool):
         quality: str,
         cookies: str = "",
         js_runtime: str = "",
-    ) -> Optional[ToolResult]:
+    ) -> ToolResult | None:
         """Run yt-dlp subprocess to download the video.
 
         Args:
@@ -361,18 +350,25 @@ class YouTubeDownloadTool(BaseTool):
             "yt-dlp",
             "--no-playlist",
             "--no-overwrites",
-            "--print", "after_move:filepath",
-            "-o", str(output_path),
-            "-f", format_spec,
+            "--print",
+            "after_move:filepath",
+            "-o",
+            str(output_path),
+            "-f",
+            format_spec,
         ]
 
         # Audio extraction: --extract-audio --audio-format with quality
         if fmt == "mp3":
-            cmd.extend([
-                "--extract-audio",
-                "--audio-format", "mp3",
-                "--audio-quality", "0",  # best (320kbps for mp3)
-            ])
+            cmd.extend(
+                [
+                    "--extract-audio",
+                    "--audio-format",
+                    "mp3",
+                    "--audio-quality",
+                    "0",  # best (320kbps for mp3)
+                ]
+            )
         elif fmt == "audio":
             cmd.extend(["--merge-output-format", "mp4"])
         else:
@@ -404,12 +400,10 @@ class YouTubeDownloadTool(BaseTool):
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=_DOWNLOAD_TIMEOUT_SEC,
+                proc.communicate(), timeout=_DOWNLOAD_TIMEOUT_SEC
             )
             if proc.returncode != 0:
                 error_text = stderr.decode()[:500]
@@ -444,7 +438,7 @@ class YouTubeDownloadTool(BaseTool):
                     "url": url[:80],
                 },
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("YouTube download timed out after %ds", _DOWNLOAD_TIMEOUT_SEC)
             return None
         except Exception as exc:
@@ -455,7 +449,8 @@ class YouTubeDownloadTool(BaseTool):
         """yt-dlp must be installed and callable."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "yt-dlp", "--version",
+                "yt-dlp",
+                "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

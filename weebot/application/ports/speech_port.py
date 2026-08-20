@@ -3,17 +3,17 @@
 Optional dependency: pip install weebot[speech] (installs openai-whisper + pyttsx3).
 All implementations return clean errors when deps are missing.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class SpeechPort(ABC):
     """Convert between speech and text."""
 
     @abstractmethod
-    async def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    async def transcribe(self, audio_path: str, language: str | None = None) -> str:
         """Transcribe an audio file to text.
 
         Args:
@@ -29,7 +29,7 @@ class SpeechPort(ABC):
         ...
 
     @abstractmethod
-    async def synthesize(self, text: str, voice: Optional[str] = None) -> bytes:
+    async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Synthesize text to speech audio.
 
         Args:

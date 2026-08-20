@@ -3,12 +3,12 @@
 Supports delivery to Telegram, Discord, Slack, file paths, or no delivery
 (just logging).
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
 
 from weebot.domain.models.cron_job import CronJobRecord, DeliveryTargetType
 
@@ -18,11 +18,7 @@ logger = logging.getLogger(__name__)
 class CronDeliveryService:
     """Delivers cron agent results to configured targets."""
 
-    async def deliver(
-        self,
-        job: CronJobRecord,
-        result_text: str,
-    ) -> bool:
+    async def deliver(self, job: CronJobRecord, result_text: str) -> bool:
         """Deliver *result_text* according to the job's delivery target.
 
         Args:
@@ -61,13 +57,16 @@ class CronDeliveryService:
         logger.info("Cron job %s: delivered to %s", job.id, output_path)
         return True
 
-    async def _deliver_to_telegram(self, job: CronJobRecord, text: str, chat_id: str | None) -> bool:
+    async def _deliver_to_telegram(
+        self, job: CronJobRecord, text: str, chat_id: str | None
+    ) -> bool:
         """Send result to a Telegram chat."""
         if not chat_id:
             logger.warning("Cron job %s: no Telegram chat_id configured", job.id)
             return False
 
         from weebot.config.settings import WeebotSettings
+
         settings = WeebotSettings()
         token = settings.telegram_bot_token
         if not token:
@@ -75,19 +74,23 @@ class CronDeliveryService:
             return False
 
         import aiohttp
+
         api = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {"chat_id": chat_id, "text": text[:4096]}
         async with aiohttp.ClientSession() as session:
             async with session.post(api, json=payload) as resp:
                 return resp.status == 200
 
-    async def _deliver_to_discord(self, job: CronJobRecord, text: str, channel_id: str | None) -> bool:
+    async def _deliver_to_discord(
+        self, job: CronJobRecord, text: str, channel_id: str | None
+    ) -> bool:
         """Send result to a Discord channel."""
         if not channel_id:
             logger.warning("Cron job %s: no Discord channel_id configured", job.id)
             return False
 
         from weebot.config.settings import WeebotSettings
+
         settings = WeebotSettings()
         token = settings.discord_bot_token
         if not token:
@@ -95,6 +98,7 @@ class CronDeliveryService:
             return False
 
         import aiohttp
+
         url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
         headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
         payload = {"content": text[:2000]}
@@ -102,13 +106,16 @@ class CronDeliveryService:
             async with session.post(url, json=payload, headers=headers) as resp:
                 return resp.status == 200
 
-    async def _deliver_to_slack(self, job: CronJobRecord, text: str, webhook_url: str | None) -> bool:
+    async def _deliver_to_slack(
+        self, job: CronJobRecord, text: str, webhook_url: str | None
+    ) -> bool:
         """Send result to a Slack webhook."""
         if not webhook_url:
             logger.warning("Cron job %s: no Slack webhook URL configured", job.id)
             return False
 
         import aiohttp
+
         payload = {"text": text[:4000]}
         async with aiohttp.ClientSession() as session:
             async with session.post(webhook_url, json=payload) as resp:

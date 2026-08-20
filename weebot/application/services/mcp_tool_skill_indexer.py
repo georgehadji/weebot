@@ -11,10 +11,11 @@ MCP-derived skills are tagged ``provenance="imported"`` and
 ``CANDIDATE_PROMOTION_USES`` validated uses, the curator can promote to
 ``trusted`` for live injection).
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance
@@ -82,8 +83,7 @@ class MCPToolSkillIndexer:
             count += 1
         if count:
             logger.info(
-                "MCPToolSkillIndexer: indexed %d tools from server '%s'",
-                count, server_name,
+                "MCPToolSkillIndexer: indexed %d tools from server '%s'", count, server_name
             )
         return count
 
@@ -102,10 +102,7 @@ class MCPToolSkillIndexer:
             content=desc,  # description is the primary embedding signal
             metadata=SkillMetadata(
                 trust="candidate",
-                provenance=SkillProvenance(
-                    origin="imported",
-                    created_at=datetime.now(timezone.utc),
-                ),
+                provenance=SkillProvenance(origin="imported", created_at=datetime.now(UTC)),
             ),
         )
         self._registry.update_skill(skill)

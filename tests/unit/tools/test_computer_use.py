@@ -1,21 +1,15 @@
 """Unit tests for computer use tools."""
+
 import importlib.util
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-import base64
+from unittest.mock import patch
 from PIL import Image
-from io import BytesIO
 
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("pyautogui") is None,
-    reason="pyautogui not installed",
+    importlib.util.find_spec("pyautogui") is None, reason="pyautogui not installed"
 )
 
-from weebot.tools.computer_use import (
-    ComputerUseTool,
-    ScreenshotWithOCRTool,
-    ElementDetectorTool,
-)
+from weebot.tools.computer_use import ComputerUseTool, ScreenshotWithOCRTool, ElementDetectorTool
 
 
 class TestComputerUseTool:
@@ -103,9 +97,7 @@ class TestComputerUseTool:
         """Test pressing key with modifiers."""
         tool = ComputerUseTool()
         with patch.object(tool, "_press_with_modifiers") as mock_mod:
-            result = await tool.execute(
-                action="press_key", key="a", modifiers=["ctrl"]
-            )
+            result = await tool.execute(action="press_key", key="a", modifiers=["ctrl"])
             assert not result.is_error
             mock_mod.assert_called_once_with("a", ["ctrl"])
 
@@ -185,9 +177,7 @@ class TestScreenshotWithOCRTool:
         mock_img = Image.new("RGB", (50, 50), color="white")
 
         with patch("pyautogui.screenshot", return_value=mock_img):
-            result = await tool.execute(
-                region={"x": 10, "y": 10, "width": 50, "height": 50}
-            )
+            result = await tool.execute(region={"x": 10, "y": 10, "width": 50, "height": 50})
             assert not result.is_error
             assert "50x50" in result.output
 

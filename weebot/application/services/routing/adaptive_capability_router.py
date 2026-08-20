@@ -15,28 +15,18 @@ Feature-flagged:
 - ``WEEBOT_ACR_SHADOW`` — log-only mode (static router still executes).
 - ``WEEBOT_ACR_BANDIT`` — bandit stage on/off (default OFF in P2).
 """
+
 from __future__ import annotations
 
-import json
 import logging
-from typing import Optional
 
 from weebot.application.services.routing.bandit import BanditSelector
 from weebot.application.services.routing.constraint_checker import ConstraintChecker
-from weebot.application.services.routing.utility_scorer import RouteCandidate, UtilityScorer
-from weebot.application.services.task_model_router import (
-    TaskCategory,
-    category_for_step,
-    classify_step,
-    model_for_step,
-)
+from weebot.application.services.routing.utility_scorer import UtilityScorer
+from weebot.application.services.task_model_router import classify_step, model_for_step
 from weebot.config.capability_profiles import get_all_profiles, get_requirement
 from weebot.config.feature_flags import WEEBOT_ACR_BANDIT, WEEBOT_ACR_SHADOW, WEEBOT_ENABLE_ACR
-from weebot.core.model_cascade_tracker import (
-    CascadeDecision,
-    CascadeOutcome,
-    ModelCascadeTracker,
-)
+from weebot.core.model_cascade_tracker import CascadeDecision, CascadeOutcome, ModelCascadeTracker
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +97,8 @@ class AdaptiveCapabilityRouter:
             requirement = get_requirement(category)
             logger.debug(
                 "ACR: classified '%s' as %s",
-                description[:60], category.value,
+                description[:60],
+                category.value,
                 extra={"acr_event": "classify", "category": category.value},
             )
 
@@ -122,9 +113,9 @@ class AdaptiveCapabilityRouter:
             eligible = self._checker.eligible(candidates, requirement)
             if not eligible:
                 logger.warning(
-                    "ACR: all %d candidates failed constraints for %s — "
-                    "falling back to static",
-                    len(candidates), category.value,
+                    "ACR: all %d candidates failed constraints for %s — " "falling back to static",
+                    len(candidates),
+                    category.value,
                 )
                 return [model_for_step(description)]
 
@@ -175,9 +166,13 @@ class AdaptiveCapabilityRouter:
             if self._shadow_mode:
                 logger.info(
                     "ACR (shadow): %s → %s",
-                    category.value, ordered[:3],
-                    extra={"acr_event": "shadow", "category": category.value,
-                            "acr_choice": ordered},
+                    category.value,
+                    ordered[:3],
+                    extra={
+                        "acr_event": "shadow",
+                        "category": category.value,
+                        "acr_choice": ordered,
+                    },
                 )
                 return [model_for_step(description)]
 
@@ -208,7 +203,8 @@ class AdaptiveCapabilityRouter:
         )
         logger.debug(
             "ACR outcome: %s/%s → %s",
-            decision.task_category, decision.model_name,
+            decision.task_category,
+            decision.model_name,
             "success" if success else "failure",
         )
 

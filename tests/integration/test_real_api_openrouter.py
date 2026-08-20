@@ -15,10 +15,10 @@ Usage:
     # Exclude real-API tests (safe for CI without secrets)
     pytest tests/integration/ -v -m "not real_api"
 """
+
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -26,10 +26,10 @@ import pytest
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Load .env if present (so tests work without manual export)
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def _load_dotenv() -> None:
     """Load .env file from project root into os.environ."""
@@ -62,8 +62,7 @@ if not os.getenv("OPENROUTER_API_KEY"):
     _real_api_reason = "OPENROUTER_API_KEY not set — export it or add to .env"
 
 needs_openrouter = pytest.mark.skipif(
-    _real_api_reason is not None,
-    reason=_real_api_reason or "OPENROUTER_API_KEY not set",
+    _real_api_reason is not None, reason=_real_api_reason or "OPENROUTER_API_KEY not set"
 )
 
 
@@ -86,10 +85,7 @@ def adapter(factory: AdapterFactory) -> LLMPort:
     on OpenRouter with generous rate limits.  Falls back to
     ``google/gemini-2.0-flash-001`` (also free) if Phi is unavailable.
     """
-    return factory.create_adapter(
-        provider="openrouter",
-        model="microsoft/phi-4-mini-instruct",
-    )
+    return factory.create_adapter(provider="openrouter", model="microsoft/phi-4-mini-instruct")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -103,15 +99,15 @@ def adapter(factory: AdapterFactory) -> LLMPort:
 async def test_simple_chat_returns_content(adapter: LLMPort):
     """A simple one-message chat should return non-empty content."""
     response = await adapter.chat(
-        messages=[{"role": "user", "content": "Say exactly: hello world"}],
+        messages=[{"role": "user", "content": "Say exactly: hello world"}]
     )
 
     assert isinstance(response, LLMResponse)
     assert response.content is not None, "Response must have content"
     assert len(response.content.strip()) > 0, "Response content must not be empty"
-    assert "hello" in response.content.lower(), (
-        f"Expected 'hello' in response, got: {response.content!r}"
-    )
+    assert (
+        "hello" in response.content.lower()
+    ), f"Expected 'hello' in response, got: {response.content!r}"
 
 
 @pytest.mark.real_api
@@ -127,9 +123,9 @@ async def test_multi_turn_conversation(adapter: LLMPort):
     response = await adapter.chat(messages=messages)
 
     assert response.content is not None
-    assert "TestBot" in response.content, (
-        f"Expected 'TestBot' in multi-turn response, got: {response.content!r}"
-    )
+    assert (
+        "TestBot" in response.content
+    ), f"Expected 'TestBot' in multi-turn response, got: {response.content!r}"
 
 
 @pytest.mark.real_api
@@ -144,9 +140,9 @@ async def test_system_prompt_influences_response(adapter: LLMPort):
     response = await adapter.chat(messages=messages)
 
     assert response.content is not None
-    assert "Arrr" in response.content, (
-        f"Expected 'Arrr!' in pirate response, got: {response.content!r}"
-    )
+    assert (
+        "Arrr" in response.content
+    ), f"Expected 'Arrr!' in pirate response, got: {response.content!r}"
 
 
 @pytest.mark.real_api
@@ -164,6 +160,7 @@ async def test_json_response_mode(adapter: LLMPort):
 
     assert response.content is not None
     import json
+
     try:
         data = json.loads(response.content)
         assert "language" in data, f"JSON missing 'language' key: {data}"
@@ -181,9 +178,7 @@ async def test_json_response_mode(adapter: LLMPort):
 @pytest.mark.asyncio
 async def test_usage_tokens_are_populated(adapter: LLMPort):
     """A successful call should populate usage tokens."""
-    response = await adapter.chat(
-        messages=[{"role": "user", "content": "Count to 3: 1, 2, 3."}],
-    )
+    response = await adapter.chat(messages=[{"role": "user", "content": "Count to 3: 1, 2, 3."}])
 
     assert response.usage is not None, "Usage must be populated by resilient adapter"
     # Prompt tokens should always be > 0
@@ -211,12 +206,10 @@ async def test_long_prompt_handled(adapter: LLMPort):
     """A moderately long prompt should be handled without errors."""
     long_text = "The quick brown fox jumps over the lazy dog. " * 50  # ~2,200 chars
     response = await adapter.chat(
-        messages=[{"role": "user", "content": f"Summarize in one sentence: {long_text}"}],
+        messages=[{"role": "user", "content": f"Summarize in one sentence: {long_text}"}]
     )
 
     assert response.content is not None
     assert len(response.content) > 0
     # The summary should be shorter than the input
-    assert len(response.content) < len(long_text), (
-        "Summary should be shorter than input"
-    )
+    assert len(response.content) < len(long_text), "Summary should be shorter than input"

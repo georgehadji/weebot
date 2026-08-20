@@ -5,6 +5,7 @@ Extracted from ``EventBusPort`` to follow Interface Segregation Principle.
 forced to implement ``subscribe_domain()`` and other subscriber-management
 methods that only ``AsyncEventBus`` uses.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

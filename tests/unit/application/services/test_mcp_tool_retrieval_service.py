@@ -1,48 +1,42 @@
 """Unit tests for McpToolRetrievalService."""
+
 from __future__ import annotations
 
-from typing import List
 
 import pytest
 
-from weebot.application.ports.mcp_tool_registration_port import (
-    McpToolRegistrationPort,
-)
+from weebot.application.ports.mcp_tool_registration_port import McpToolRegistrationPort
 from weebot.application.ports.mcp_tool_retrieval_port import McpToolRetrievalPort
-from weebot.application.services.mcp_tool_retrieval_service import (
-    McpToolRetrievalService,
-)
+from weebot.application.services.mcp_tool_retrieval_service import McpToolRetrievalService
 from weebot.domain.models.mcp import MCPToolInfo
 
 
 class _FakeRetrievalPort(McpToolRetrievalPort):
     """In-memory retrieval port for testing."""
 
-    def __init__(self, tools: List[MCPToolInfo]) -> None:
+    def __init__(self, tools: list[MCPToolInfo]) -> None:
         self._tools = list(tools)
-        self.indexed: List[MCPToolInfo] = []
+        self.indexed: list[MCPToolInfo] = []
 
-    async def index_tools(self, tools: List[MCPToolInfo]) -> None:
+    async def index_tools(self, tools: list[MCPToolInfo]) -> None:
         self.indexed = list(tools)
 
-    async def retrieve_for_query(self, query: str, k: int = 8) -> List[MCPToolInfo]:
+    async def retrieve_for_query(self, query: str, k: int = 8) -> list[MCPToolInfo]:
         # Simple deterministic stub: return first k tools whose description
         # contains the query substring (case-insensitive).  Empty query returns
         # nothing so the service degrades gracefully.
         if not query:
             return []
         query_lower = query.lower()
-        matches = [
-            t for t in self._tools if query_lower in t.description.lower()
-        ]
+        matches = [t for t in self._tools if query_lower in t.description.lower()]
         return matches[:k]
 
 
 class _FakeRegistrationPort(McpToolRegistrationPort):
     """In-memory registration port capturing role mutations."""
 
-    def __init__(self, roles: List[str] | None = None) -> None:
-        self._roles: dict[str, List[str]] = {role: [] for role in (roles or [])}
+    def __init__(self, roles: list[str] | None = None) -> None:
+        self._roles: dict[str, list[str]] = {role: [] for role in (roles or [])}
 
     def add_tool_to_role(self, role: str, tool_name: str) -> None:
         if role not in self._roles:
@@ -54,10 +48,10 @@ class _FakeRegistrationPort(McpToolRegistrationPort):
         if role in self._roles and tool_name in self._roles[role]:
             self._roles[role].remove(tool_name)
 
-    def list_roles(self) -> List[str]:
+    def list_roles(self) -> list[str]:
         return list(self._roles.keys())
 
-    def tools_in_role(self, role: str) -> List[str]:
+    def tools_in_role(self, role: str) -> list[str]:
         return list(self._roles.get(role, []))
 
 
@@ -124,9 +118,7 @@ class TestMcpToolRetrievalService:
 
     @pytest.mark.asyncio
     async def test_scope_for_query_adds_relevant_tools_to_all_roles(self):
-        tools = [
-            self._make_tool("get_weather", "Get weather for a city"),
-        ]
+        tools = [self._make_tool("get_weather", "Get weather for a city")]
         retrieval = _FakeRetrievalPort(tools)
         registration = _FakeRegistrationPort(roles=["admin", "coder"])
         service = McpToolRetrievalService(retrieval, registration, k=8)
@@ -139,9 +131,7 @@ class TestMcpToolRetrievalService:
 
     @pytest.mark.asyncio
     async def test_scope_for_query_empty_query_returns_empty(self):
-        tools = [
-            self._make_tool("get_weather", "Get weather"),
-        ]
+        tools = [self._make_tool("get_weather", "Get weather")]
         retrieval = _FakeRetrievalPort(tools)
         registration = _FakeRegistrationPort(roles=["admin"])
         service = McpToolRetrievalService(retrieval, registration, k=8)
@@ -170,9 +160,7 @@ class TestMcpToolRetrievalService:
 
     @pytest.mark.asyncio
     async def test_scope_for_query_no_roles_is_noop(self):
-        tools = [
-            self._make_tool("get_weather", "Get weather"),
-        ]
+        tools = [self._make_tool("get_weather", "Get weather")]
         retrieval = _FakeRetrievalPort(tools)
         registration = _FakeRegistrationPort(roles=[])
         service = McpToolRetrievalService(retrieval, registration, k=8)

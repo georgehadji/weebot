@@ -17,6 +17,7 @@ which crashed the API container on startup (docker-entrypoint.sh runs
 The two branches touch disjoint tables and neither depends on the
 other's changes, so this is a pure graph merge: no schema operations.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

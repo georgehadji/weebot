@@ -6,9 +6,9 @@ Covers:
 - Empty file, missing file, unknown role, malformed XML
 - Hot-reload (refresh())
 """
+
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,8 +16,8 @@ import pytest
 from weebot.core.personality_manager import PersonalityManager
 from weebot.domain.models.personality import RoleSectionMapping
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def xml_core_content() -> str:
@@ -62,12 +62,18 @@ def empty_core_file(tmp_path: Path) -> Path:
 
 # ── Section Parsing Tests ─────────────────────────────────────────────
 
+
 class TestParseXmlSections:
     """Test the static XML section parser."""
 
     def test_parses_all_sections(self, xml_core_content: str):
         sections = PersonalityManager._parse_xml_sections(xml_core_content)
-        assert set(sections.keys()) == {"identity", "invariant_rules", "operating_principles", "response_style"}
+        assert set(sections.keys()) == {
+            "identity",
+            "invariant_rules",
+            "operating_principles",
+            "response_style",
+        }
 
     def test_strips_xml_tags_from_content(self, xml_core_content: str):
         sections = PersonalityManager._parse_xml_sections(xml_core_content)
@@ -96,13 +102,19 @@ class TestParseXmlSections:
 
 # ── PersonalityManager Tests ─────────────────────────────────────────
 
+
 class TestPersonalityManager:
     """Test the PersonalityManager with XML-scoped prompts."""
 
     def test_loads_sections_from_file(self, core_file: Path):
         pm = PersonalityManager(core_path=core_file)
         assert pm.loaded
-        assert pm.section_names == ["identity", "invariant_rules", "operating_principles", "response_style"]
+        assert pm.section_names == [
+            "identity",
+            "invariant_rules",
+            "operating_principles",
+            "response_style",
+        ]
 
     def test_missing_file_logs_warning_and_returns_empty(self):
         pm = PersonalityManager(core_path=Path("/nonexistent/WEEBOT_CORE.md"))
@@ -178,6 +190,7 @@ class TestPersonalityManager:
 
 
 # ── RoleSectionMapping Tests ──────────────────────────────────────────
+
 
 class TestRoleSectionMapping:
     """Test the role-to-section mapping logic."""

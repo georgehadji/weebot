@@ -1,7 +1,9 @@
 """Mediator — central dispatcher for commands and queries."""
+
 from __future__ import annotations
 
-from typing import Any, Callable, Type, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 import logging
 
@@ -22,11 +24,13 @@ TResult = TypeVar("TResult")
 
 class MediatorError(Exception):
     """Exception raised by the Mediator."""
+
     pass
 
 
 class HandlerNotRegisteredError(MediatorError):
     """Raised when no handler is registered for a command/query type."""
+
     pass
 
 
@@ -60,8 +64,8 @@ class Mediator:
 
     def __init__(self):
         """Initialize the mediator."""
-        self._command_handlers: dict[Type[Command], CommandHandler] = {}
-        self._query_handlers: dict[Type[Query], QueryHandler] = {}
+        self._command_handlers: dict[type[Command], CommandHandler] = {}
+        self._query_handlers: dict[type[Query], QueryHandler] = {}
         self._behaviors: list[IPipelineBehavior] = []
         self._tracer = None  # lazily resolved via DI
 
@@ -70,15 +74,14 @@ class Mediator:
         if self._tracer is None:
             from weebot.application.di import Container
             from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
+
             c = Container()
             c.configure_defaults()
             self._tracer = c.get(TracingAdapter)
         return self._tracer
 
     def register_command_handler(
-        self,
-        command_type: Type[Command],
-        handler: CommandHandler,
+        self, command_type: type[Command], handler: CommandHandler
     ) -> None:
         """Register a handler for a command type.
 
@@ -94,11 +97,7 @@ class Mediator:
 
         self._command_handlers[command_type] = handler
 
-    def register_query_handler(
-        self,
-        query_type: Type[Query],
-        handler: QueryHandler,
-    ) -> None:
+    def register_query_handler(self, query_type: type[Query], handler: QueryHandler) -> None:
         """Register a handler for a query type.
 
         Args:
@@ -113,7 +112,7 @@ class Mediator:
 
         self._query_handlers[query_type] = handler
 
-    def unregister_command_handler(self, command_type: Type[Command]) -> None:
+    def unregister_command_handler(self, command_type: type[Command]) -> None:
         """Unregister a command handler.
 
         Args:
@@ -122,7 +121,7 @@ class Mediator:
         if command_type in self._command_handlers:
             del self._command_handlers[command_type]
 
-    def unregister_query_handler(self, query_type: Type[Query]) -> None:
+    def unregister_query_handler(self, query_type: type[Query]) -> None:
         """Unregister a query handler.
 
         Args:
@@ -152,9 +151,7 @@ class Mediator:
             self._behaviors.remove(behavior)
 
     async def _execute_with_pipeline(
-        self,
-        request: Command | Query,
-        handler_func: Callable[[], Any],
+        self, request: Command | Query, handler_func: Callable[[], Any]
     ) -> Any:
         """Execute a request through the pipeline of behaviors.
 
@@ -220,15 +217,16 @@ class Mediator:
 
         except Exception as e:
             from weebot.core.error_classifier import ErrorClassifier
+
             category = ErrorClassifier.classify(e).value
             logger.warning(
                 "Command %s failed: %s (type=%s, category=%s)",
-                type(command).__name__, e, type(e).__name__, category,
+                type(command).__name__,
+                e,
+                type(e).__name__,
+                category,
             )
-            return CommandResult.fail(
-                error=str(e),
-                error_code=type(e).__name__,
-            )
+            return CommandResult.fail(error=str(e), error_code=type(e).__name__)
 
     async def query(self, query: Query) -> QueryResult:
         """Send a query to its handler. Wraps execution in a trace span."""
@@ -273,7 +271,7 @@ class Mediator:
         except Exception as e:
             return QueryResult.fail(str(e))
 
-    def is_command_registered(self, command_type: Type[Command]) -> bool:
+    def is_command_registered(self, command_type: type[Command]) -> bool:
         """Check if a handler is registered for a command type.
 
         Args:
@@ -284,7 +282,7 @@ class Mediator:
         """
         return command_type in self._command_handlers
 
-    def is_query_registered(self, query_type: Type[Query]) -> bool:
+    def is_query_registered(self, query_type: type[Query]) -> bool:
         """Check if a handler is registered for a query type.
 
         Args:
@@ -295,7 +293,7 @@ class Mediator:
         """
         return query_type in self._query_handlers
 
-    def get_registered_commands(self) -> list[Type[Command]]:
+    def get_registered_commands(self) -> list[type[Command]]:
         """Get all registered command types.
 
         Returns:
@@ -303,7 +301,7 @@ class Mediator:
         """
         return list(self._command_handlers.keys())
 
-    def get_registered_queries(self) -> list[Type[Query]]:
+    def get_registered_queries(self) -> list[type[Query]]:
         """Get all registered query types.
 
         Returns:

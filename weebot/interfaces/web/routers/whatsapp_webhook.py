@@ -19,6 +19,7 @@ Returns:
 - ``503`` if the DI container (or WhatsApp credentials) is not configured.
 - ``200`` on every valid, authenticated event.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +37,9 @@ async def whatsapp_verify(request: Request):
     """Answer Meta's webhook subscription verification handshake."""
     adapter = _get_or_create_adapter(request)
     if adapter is None:
-        raise HTTPException(status_code=503, detail="WhatsApp adapter not configured (missing credentials)")
+        raise HTTPException(
+            status_code=503, detail="WhatsApp adapter not configured (missing credentials)"
+        )
 
     mode = request.query_params.get("hub.mode", "")
     token = request.query_params.get("hub.verify_token", "")
@@ -59,7 +62,9 @@ async def whatsapp_events(request: Request):
 
     adapter = _get_or_create_adapter(request)
     if adapter is None:
-        raise HTTPException(status_code=503, detail="WhatsApp adapter not configured (missing credentials)")
+        raise HTTPException(
+            status_code=503, detail="WhatsApp adapter not configured (missing credentials)"
+        )
 
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")

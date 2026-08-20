@@ -6,11 +6,11 @@ Verifies:
      steering is a running-flow concept, distinct from /resume.
   3. A missing session returns 404.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -35,7 +35,9 @@ def _build_app(session_status: SessionStatus, session_found: bool = True):
     steering = AsyncMock(spec=SteeringPort)
 
     container = MagicMock()
-    container.get = MagicMock(side_effect=lambda port: steering if port is SteeringPort else state_repo)
+    container.get = MagicMock(
+        side_effect=lambda port: steering if port is SteeringPort else state_repo
+    )
 
     app.state.container = container
     return app, steering

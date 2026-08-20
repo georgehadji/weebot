@@ -5,6 +5,7 @@ Covers:
 - search_sessions returns results after indexing events
 - CLI command is registered
 """
+
 import pytest
 
 
@@ -14,9 +15,7 @@ class TestFTSSearch:
     @pytest.mark.asyncio
     async def test_search_empty_on_no_data(self, with_openai_key, tmp_db):
         """Search on an empty database returns empty list."""
-        from weebot.infrastructure.persistence.sqlite_state_repo import (
-            SQLiteStateRepository,
-        )
+        from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
 
         repo = SQLiteStateRepository(db_path=str(tmp_db))
         results = await repo.search_sessions("test query")
@@ -25,19 +24,12 @@ class TestFTSSearch:
     @pytest.mark.asyncio
     async def test_search_after_indexing(self, with_openai_key, tmp_db):
         """After saving a session, search finds indexed events."""
-        import json
-        from datetime import datetime, timezone
-        from weebot.infrastructure.persistence.sqlite_state_repo import (
-            SQLiteStateRepository,
-        )
+        from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
         from weebot.domain.models.session import Session, SessionStatus
 
         repo = SQLiteStateRepository(db_path=str(tmp_db))
         session = Session(
-            id="test-session-1",
-            user_id="test",
-            agent_id="test",
-            status=SessionStatus.COMPLETED,
+            id="test-session-1", user_id="test", agent_id="test", status=SessionStatus.COMPLETED
         )
 
         # Simulate an event
@@ -60,9 +52,7 @@ class TestFTSSearch:
     @pytest.mark.asyncio
     async def test_search_respects_limit(self, with_openai_key, tmp_db):
         """Search limit restricts results."""
-        from weebot.infrastructure.persistence.sqlite_state_repo import (
-            SQLiteStateRepository,
-        )
+        from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
 
         repo = SQLiteStateRepository(db_path=str(tmp_db))
         results = await repo.search_sessions("test", limit=5)

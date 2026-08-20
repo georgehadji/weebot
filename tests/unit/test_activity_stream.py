@@ -1,7 +1,8 @@
 """Unit tests for ActivityStream."""
+
 import pytest
 from datetime import datetime
-from weebot.core.activity_stream import ActivityStream, ActivityEvent
+from weebot.core.activity_stream import ActivityStream
 
 
 class TestActivityStream:
@@ -33,7 +34,7 @@ class TestActivityStream:
             stream.push("p", "job", f"event {i}")
         events = stream.recent()
         assert len(events) == 5
-        assert events[-1].message == "event 2"   # oldest kept
+        assert events[-1].message == "event 2"  # oldest kept
 
     def test_filter_by_project(self):
         stream = ActivityStream()

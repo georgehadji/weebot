@@ -9,10 +9,10 @@ Architecture note: This is a **domain model** — it has no dependencies on
 infrastructure or application services.  It models the concept of an
 evaluator that can be evolved, replaced, and tracked across epochs.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -23,14 +23,14 @@ class EvaluatorReplacement(BaseModel):
     Logged each time an evaluator is replaced at an epoch boundary.
     """
 
-    replaced_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
+    replaced_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     epoch: int = Field(description="Epoch at which replacement occurred")
     old_evaluator_id: str = Field(description="Evaluator that was replaced")
     new_evaluator_id: str = Field(description="Evaluator that replaced it")
     old_anchor_accuracy: float = Field(ge=0.0, le=1.0, description="Incumbent's accuracy on anchor")
-    new_anchor_accuracy: float = Field(ge=0.0, le=1.0, description="Challenger's accuracy on anchor")
+    new_anchor_accuracy: float = Field(
+        ge=0.0, le=1.0, description="Challenger's accuracy on anchor"
+    )
     reason: str = Field(default="", description="Why the replacement was triggered")
 
 
@@ -45,27 +45,16 @@ class EvaluatorState(BaseModel):
     """
 
     evaluator_id: str = Field(description="Unique evaluator identifier")
-    evaluator_type: str = Field(
-        description="Type: judge, scorer, or reviewer",
-    )
-    prompt: str = Field(
-        description="The evaluator's scoring/rubric prompt (mutable via optimizer)",
-    )
+    evaluator_type: str = Field(description="Type: judge, scorer, or reviewer")
+    prompt: str = Field(description="The evaluator's scoring/rubric prompt (mutable via optimizer)")
     anchor_accuracy: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Accuracy on ground-truth anchor dataset",
+        default=0.0, ge=0.0, le=1.0, description="Accuracy on ground-truth anchor dataset"
     )
-    anchor_total: int = Field(
-        default=0, ge=0,
-        description="Number of anchor tasks evaluated",
-    )
+    anchor_total: int = Field(default=0, ge=0, description="Number of anchor tasks evaluated")
     replacement_history: list[EvaluatorReplacement] = Field(
-        default_factory=list,
-        description="Lineage of evaluator replacements leading to this state",
+        default_factory=list, description="Lineage of evaluator replacements leading to this state"
     )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def best_belief(self) -> float:
@@ -84,6 +73,7 @@ class EvaluatorState(BaseModel):
         # Beta(1 + S, 1 + F) posterior, epsilon = 0.05 (lower bound)
         # Simplified: use lower Wald confidence interval bound
         import math
+
         if successes + failures == 0:
             return 0.0
         p = successes / (successes + failures)
@@ -91,7 +81,7 @@ class EvaluatorState(BaseModel):
         se = math.sqrt(p * (1 - p) / (successes + failures))
         return max(0.0, p - z * se)
 
-    def statistically_outperforms(self, other: "EvaluatorState", epsilon: float = 0.05) -> bool:
+    def statistically_outperforms(self, other: EvaluatorState, epsilon: float = 0.05) -> bool:
         """Return True if this evaluator statistically outperforms *other*.
 
         Uses best-belief comparison at epsilon confidence level.

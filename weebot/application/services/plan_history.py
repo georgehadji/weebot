@@ -3,9 +3,10 @@
 Extracted from PlanActFlow to isolate the snapshot/undo/redo concern
 into its own service with a single responsibility.
 """
+
 from __future__ import annotations
 
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 TPlan = TypeVar("TPlan")
 
@@ -39,7 +40,7 @@ class PlanHistory:
             self._undo_stack.append(plan)
             self._redo_stack.clear()
 
-    def undo(self, current_plan: TPlan) -> Optional[TPlan]:
+    def undo(self, current_plan: TPlan) -> TPlan | None:
         """Revert to the previous plan state if available.
 
         The current plan is pushed onto the redo stack so the undo
@@ -57,7 +58,7 @@ class PlanHistory:
             self._redo_stack.append(current_plan)
         return self._undo_stack.pop()
 
-    def redo(self, current_plan: TPlan) -> Optional[TPlan]:
+    def redo(self, current_plan: TPlan) -> TPlan | None:
         """Re-apply a plan state that was previously undone.
 
         The current plan is pushed onto the undo stack.
@@ -164,12 +165,7 @@ class PlanHistory:
                     tokens.add(word)
         return tokens
 
-    def is_too_similar(
-        self,
-        new_plan: TPlan,
-        threshold: float = 0.7,
-        window: int = 3,
-    ) -> bool:
+    def is_too_similar(self, new_plan: TPlan, threshold: float = 0.7, window: int = 3) -> bool:
         """Check if *new_plan* is too similar to recent plans.
 
         Uses Jaccard similarity on tokenized step descriptions so that

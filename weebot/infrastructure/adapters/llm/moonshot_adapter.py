@@ -9,11 +9,12 @@ value to prevent ``BadRequestError`` (400: invalid temperature).
 
 Kimi K2.6 API docs: https://platform.kimi.ai/docs/api/
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .openai_adapter import OpenAIAdapter
 from weebot.application.ports.llm_port import LLMResponse
@@ -22,7 +23,9 @@ from weebot.config.model_refs import MODEL_CASCADE_TIER1 as _MODEL_CASCADE_TIER1
 
 # Strip OpenRouter prefix + ":free" suffix for direct API:
 # "moonshotai/kimi-k2.6:free" → "kimi-k2.6"
-_tmp = _MODEL_CASCADE_TIER1.split("/", 1)[-1] if "/" in _MODEL_CASCADE_TIER1 else _MODEL_CASCADE_TIER1
+_tmp = (
+    _MODEL_CASCADE_TIER1.split("/", 1)[-1] if "/" in _MODEL_CASCADE_TIER1 else _MODEL_CASCADE_TIER1
+)
 _MODEL_CASCADE_TIER1_STRIPPED = _tmp.split(":")[0] if ":" in _tmp else _tmp
 del _MODEL_CASCADE_TIER1, _tmp
 
@@ -45,26 +48,13 @@ class MoonshotAdapter(OpenAIAdapter):
     _FORCED_TEMPERATURE: float = 1.0
 
     def __init__(
-        self,
-        api_key: Optional[str] = None,
-        default_model: str = _MODEL_CASCADE_TIER1_STRIPPED,
+        self, api_key: str | None = None, default_model: str = _MODEL_CASCADE_TIER1_STRIPPED
     ):
-        key = (
-            api_key
-            or os.getenv("KIMI_API_KEY")
-            or os.getenv("MOONSHOT_API_KEY")
-            or ""
-        )
-        super().__init__(
-            api_key=key,
-            base_url=MOONSHOT_API_BASE,
-            default_model=default_model,
-        )
+        key = api_key or os.getenv("KIMI_API_KEY") or os.getenv("MOONSHOT_API_KEY") or ""
+        super().__init__(api_key=key, base_url=MOONSHOT_API_BASE, default_model=default_model)
 
     @staticmethod
-    def _sanitize_messages_for_kimi(
-        messages: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+    def _sanitize_messages_for_kimi(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return a copy of *messages* with Kimi K2.6-incompatible fields fixed.
 
         Kimi's API rejects shapes that OpenAI / OpenRouter accept:
@@ -83,9 +73,8 @@ class MoonshotAdapter(OpenAIAdapter):
            compression, model-cascade switching, or message re-ordering),
            orphan ``tool`` messages are stripped to avoid a 400 error.
         """
-        import uuid
 
-        sanitized: List[Dict[str, Any]] = []
+        sanitized: list[dict[str, Any]] = []
         # Track valid tool_call_ids from the most recent assistant message
         valid_tool_call_ids: set[str] = set()
 
@@ -125,11 +114,7 @@ class MoonshotAdapter(OpenAIAdapter):
             # Fix 3: Kimi thinking model requires reasoning_content on
             # every assistant message that has tool_calls.  If absent
             # entirely, add an empty placeholder.
-            if (
-                role == "assistant"
-                and has_tool_calls
-                and "reasoning_content" not in m
-            ):
+            if role == "assistant" and has_tool_calls and "reasoning_content" not in m:
                 m["reasoning_content"] = ""
 
             sanitized.append(m)
@@ -137,13 +122,13 @@ class MoonshotAdapter(OpenAIAdapter):
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """Override chat for Kimi K2.6 compatibility.
 

@@ -8,13 +8,13 @@ Surfacing runs on session start to:
 - Inject pending/overdue commitments into session context
 - Allow the agent to proactively address outstanding promises
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
-from weebot.domain.models.commitment import Commitment, CommitmentStatus
+from weebot.domain.models.commitment import CommitmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,8 @@ class CommitmentEngine:
                         )
                         if cmt.source_session_id:
                             await self._kg.relate_nodes(
-                                node_id, f"session:{cmt.source_session_id[:16]}",
+                                node_id,
+                                f"session:{cmt.source_session_id[:16]}",
                                 "originates_from",
                                 confidence=0.8,
                                 evidence=f"Commitment extracted from session {cmt.source_session_id[:16]}",
@@ -80,19 +81,22 @@ class CommitmentEngine:
             except Exception as exc:
                 logger.debug("KG provenance for commitments skipped: %s", exc)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for cmt in pending:
             stats["checked"] += 1
             if cmt.due_at and cmt.due_at < now:
                 try:
                     await self._repo.update_commitment_status(
-                        cmt.id, "overdue",
+                        cmt.id,
+                        "overdue",
                         failure_reason="Heartbeat: due_at passed without follow-up",
                     )
                     stats["marked_overdue"] += 1
                     logger.info(
                         "Commitment %s marked OVERDUE (due_at=%s, promise=%r)",
-                        cmt.id[:8], cmt.due_at.isoformat(), cmt.promise_text[:60],
+                        cmt.id[:8],
+                        cmt.due_at.isoformat(),
+                        cmt.promise_text[:60],
                     )
                 except Exception as exc:
                     logger.warning("Failed to update commitment %s: %s", cmt.id[:8], exc)
@@ -125,7 +129,7 @@ class CommitmentEngine:
         if overdue:
             lines.append(f"You have {len(overdue)} overdue commitment(s):")
             for c in overdue:
-                lines.append(f"  - \"{c.promise_text}\"")
+                lines.append(f'  - "{c.promise_text}"')
                 if c.due_at:
                     lines[-1] += f" (was due {c.due_at.strftime('%Y-%m-%d %H:%M')})"
                 if c.context:
@@ -133,7 +137,7 @@ class CommitmentEngine:
         if active:
             lines.append(f"You have {len(active)} pending commitment(s):")
             for c in active:
-                lines.append(f"  - \"{c.promise_text}\"")
+                lines.append(f'  - "{c.promise_text}"')
                 if c.due_at:
                     lines[-1] += f" (due {c.due_at.strftime('%Y-%m-%d %H:%M')})"
 

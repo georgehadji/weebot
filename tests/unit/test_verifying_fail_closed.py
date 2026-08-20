@@ -15,6 +15,7 @@ and retroactively corrupted the audit trail.
 
 See tasks/specs/longhorizon_harness_implementation_plan.md (E4/E6/E7).
 """
+
 import httpx
 import pytest
 from openai import AuthenticationError
@@ -161,13 +162,20 @@ async def test_revision_does_not_mutate_step_result(monkeypatch):
     original_result = flow._plan.steps[0].result
 
     state = VerifyingState()
-    monkeypatch.setattr(state, "_generate_questions", AsyncMock(return_value=["Was it done right?"]))
+    monkeypatch.setattr(
+        state, "_generate_questions", AsyncMock(return_value=["Was it done right?"])
+    )
     monkeypatch.setattr(state, "_answer_independently", AsyncMock(return_value="Not sure"))
-    monkeypatch.setattr(state, "_check_consistency", AsyncMock(return_value=False))  # force a revision
+    monkeypatch.setattr(
+        state, "_check_consistency", AsyncMock(return_value=False)
+    )  # force a revision
     monkeypatch.setattr(state, "_revise_summary", AsyncMock(return_value="LLM-REWRITTEN TEXT"))
     monkeypatch.setattr(
-        state, "_score_and_revise",
-        AsyncMock(return_value=("LLM-REWRITTEN TEXT", {"correctness": 5}, VerificationStatus.PASSED)),
+        state,
+        "_score_and_revise",
+        AsyncMock(
+            return_value=("LLM-REWRITTEN TEXT", {"correctness": 5}, VerificationStatus.PASSED)
+        ),
     )
     monkeypatch.setattr(state, "_gate_sweep", AsyncMock(return_value=[]))
 
@@ -183,10 +191,12 @@ class _DirtySnapshots:
 
     async def snapshot(self):
         from weebot.application.ports.workspace_snapshot_port import WorkspaceSnapshot
+
         return WorkspaceSnapshot(backend="stub")
 
     async def diff(self, before):
         from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift
+
         return WorkspaceDrift(modified=("weebot/domain/models/plan.py",))
 
 
@@ -218,8 +228,8 @@ async def test_integrity_is_stamped_on_an_early_return_path():
     await _run(flow)
 
     extra = _verification_extra(flow)
-    assert extra.get("verification_status") == "not_run"          # the LLM never ran
-    assert extra.get("workspace_integrity_status") == "failed"    # but the workspace still moved
+    assert extra.get("verification_status") == "not_run"  # the LLM never ran
+    assert extra.get("workspace_integrity_status") == "failed"  # but the workspace still moved
     assert any("plan.py" in v for v in extra.get("workspace_integrity_violations", []))
 
 
@@ -231,6 +241,7 @@ async def test_integrity_passes_on_a_clean_full_episode(monkeypatch):
     class _CleanSnapshots(_DirtySnapshots):
         async def diff(self, before):
             from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift
+
             return WorkspaceDrift()
 
     flow._workspace_snapshots = _CleanSnapshots()
@@ -240,7 +251,8 @@ async def test_integrity_passes_on_a_clean_full_episode(monkeypatch):
     monkeypatch.setattr(state, "_answer_independently", AsyncMock(return_value="A"))
     monkeypatch.setattr(state, "_check_consistency", AsyncMock(return_value=True))
     monkeypatch.setattr(
-        state, "_score_and_revise",
+        state,
+        "_score_and_revise",
         AsyncMock(return_value=("summary", {"correctness": 5}, VerificationStatus.PASSED)),
     )
     monkeypatch.setattr(state, "_gate_sweep", AsyncMock(return_value=[]))

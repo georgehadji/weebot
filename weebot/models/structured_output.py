@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import random
 import re
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -31,19 +31,13 @@ class TaskStatus(str, Enum):
 class CodeChange(BaseModel):
     """A single code change proposed by the agent."""
 
-    file_path: str = Field(
-        ..., description="Path to the file to modify (relative to project root)"
-    )
+    file_path: str = Field(..., description="Path to the file to modify (relative to project root)")
     change_type: Literal["create", "modify", "delete"] = Field(
         ..., description="Type of change to make"
     )
-    description: str = Field(
-        ..., description="Human-readable description of what changed"
-    )
+    description: str = Field(..., description="Human-readable description of what changed")
     reasoning: str = Field(..., description="Why this change is needed")
-    code: Optional[str] = Field(
-        None, description="Actual code content (for create/modify operations)"
-    )
+    code: str | None = Field(None, description="Actual code content (for create/modify operations)")
 
     @field_validator("file_path")
     @classmethod
@@ -63,18 +57,14 @@ class BashCommand(BaseModel):
 
     command: str = Field(..., description="The command to execute")
     purpose: str = Field(..., description="Why this command is needed")
-    expected_output: Optional[str] = Field(
+    expected_output: str | None = Field(
         None, description="What output is expected (for verification)"
     )
-    fallback_command: Optional[str] = Field(
-        None, description="Alternative command if primary fails"
-    )
+    fallback_command: str | None = Field(None, description="Alternative command if primary fails")
     requires_approval: bool = Field(
         False, description="Whether user approval is required before execution"
     )
-    timeout_seconds: int = Field(
-        60, ge=1, le=3600, description="Command timeout in seconds"
-    )
+    timeout_seconds: int = Field(60, ge=1, le=3600, description="Command timeout in seconds")
 
 
 class ValidationResult(BaseModel):
@@ -86,7 +76,7 @@ class ValidationResult(BaseModel):
     severity: Literal["info", "warning", "error", "critical"] = Field(
         "info", description="Severity of the result"
     )
-    details: Optional[dict[str, Any]] = Field(None, description="Additional details")
+    details: dict[str, Any] | None = Field(None, description="Additional details")
 
 
 class WeebotOutput(BaseModel):
@@ -98,15 +88,9 @@ class WeebotOutput(BaseModel):
     """
 
     # Core fields (required)
-    status: TaskStatus = Field(
-        ..., description="Overall task status indicating completion level"
-    )
-    message: str = Field(
-        ..., description="Human-readable summary of what was done"
-    )
-    reasoning: str = Field(
-        ..., description="Agent's step-by-step thought process"
-    )
+    status: TaskStatus = Field(..., description="Overall task status indicating completion level")
+    message: str = Field(..., description="Human-readable summary of what was done")
+    reasoning: str = Field(..., description="Agent's step-by-step thought process")
 
     # Work products
     code_changes: list[CodeChange] = Field(
@@ -120,16 +104,11 @@ class WeebotOutput(BaseModel):
     )
 
     # User interaction
-    requires_user_input: bool = Field(
-        False, description="Whether user input is needed to proceed"
-    )
+    requires_user_input: bool = Field(False, description="Whether user input is needed to proceed")
     suggested_questions: list[str] = Field(
-        default_factory=list,
-        description="Questions the user could ask to clarify",
+        default_factory=list, description="Questions the user could ask to clarify"
     )
-    next_action: Optional[str] = Field(
-        None, description="Recommended next action for the user"
-    )
+    next_action: str | None = Field(None, description="Recommended next action for the user")
 
     # Metadata
     confidence: float = Field(
@@ -149,23 +128,17 @@ class WeebotOutput(BaseModel):
 
     # Timing
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="When this output was created"
+        default_factory=lambda: datetime.now(UTC), description="When this output was created"
     )
-    processing_time_ms: int = Field(
-        0, description="Time taken to process in milliseconds"
-    )
+    processing_time_ms: int = Field(0, description="Time taken to process in milliseconds")
 
 
 class OutputParseError(BaseModel):
     """Error information when parsing fails."""
 
-    raw_text: str = Field(
-        ..., description="The raw text that failed to parse"
-    )
-    error_message: str = Field(
-        ..., description="Explanation of why parsing failed"
-    )
-    partial_output: Optional[WeebotOutput] = Field(
+    raw_text: str = Field(..., description="The raw text that failed to parse")
+    error_message: str = Field(..., description="Explanation of why parsing failed")
+    partial_output: WeebotOutput | None = Field(
         None, description="Partially parsed output if available"
     )
 
@@ -325,6 +298,7 @@ STRUCTURED_OUTPUT_PROMPT = create_system_prompt()
 # Verbalized Sampling — Phase 0 models
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class SampledResponse(BaseModel):
     """One candidate from a verbalized distribution (VS paper).
 
@@ -335,9 +309,12 @@ class SampledResponse(BaseModel):
             0.12 (float), "0.12" (string), "12%" (string percent),
             12 (bare integer, read as percent).
     """
+
     text: str = Field(..., description="Candidate response text or JSON payload")
     probability: float = Field(
-        ..., ge=0.0, le=1.0,
+        ...,
+        ge=0.0,
+        le=1.0,
         description="Verbalized probability — steering signal only, not confidence",
     )
 
@@ -410,14 +387,15 @@ class SampledDistribution(BaseModel):
 
 # Re-export prompt template path (loaded via load_prompt_with_fallback)
 VS_PROMPT_FILENAME: str = "verbalized_sampling.txt"
-VS_FALLBACK_PROMPT: str = \
-    "You are a helpful assistant. For the given task, generate a set of {k} DISTINCT " \
-    "candidate responses that together approximate the full distribution of good answers.\n\n" \
-    "Return ONLY valid JSON, no markdown:\n" \
-    '{{"responses": [{{"text": "<candidate>", "probability": <0..1>}}, ...]}}\n\n' \
-    "- Each candidate must be meaningfully different from the others.\n" \
-    '"probability" is your estimate of how typical/likely each candidate is.\n' \
+VS_FALLBACK_PROMPT: str = (
+    "You are a helpful assistant. For the given task, generate a set of {k} DISTINCT "
+    "candidate responses that together approximate the full distribution of good answers.\n\n"
+    "Return ONLY valid JSON, no markdown:\n"
+    '{{"responses": [{{"text": "<candidate>", "probability": <0..1>}}, ...]}}\n\n'
+    "- Each candidate must be meaningfully different from the others.\n"
+    '"probability" is your estimate of how typical/likely each candidate is.\n'
     "{threshold_clause}"
+)
 
 
 def parse_sampled_distribution(raw_text: str) -> SampledDistribution:
@@ -460,6 +438,7 @@ def parse_sampled_distribution(raw_text: str) -> SampledDistribution:
 
 # ── Phase 2: Vision reflection models (PicoAgents audit) ────────────────────
 
+
 class PageObservation(BaseModel):
     """Structured description of the current screen state, produced by a vision LLM.
 
@@ -468,7 +447,7 @@ class PageObservation(BaseModel):
     """
 
     summary: str = Field(..., description="One-sentence description of the current screen state")
-    key_elements: List[str] = Field(
+    key_elements: list[str] = Field(
         default_factory=list,
         description="Salient UI elements visible (buttons, text fields, dialogs, icons)",
     )
@@ -491,13 +470,13 @@ class NextActionPlan(BaseModel):
     action_type: Literal["click", "type", "scroll", "navigate", "wait", "none"] = Field(
         ..., description="Category of the next action"
     )
-    selector: Optional[str] = Field(
+    selector: str | None = Field(
         None, description="CSS selector or visible text label for the target element"
     )
-    value: Optional[str] = Field(
+    value: str | None = Field(
         None, description="Text to type or URL to navigate to (if applicable)"
     )
-    coordinates: Optional[Dict[str, int]] = Field(
+    coordinates: dict[str, int] | None = Field(
         None,
         description="Pixel coordinates {x, y} — used when no selector is available (visual targets)",
     )

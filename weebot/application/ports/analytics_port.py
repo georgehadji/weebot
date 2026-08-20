@@ -7,6 +7,7 @@ registered simultaneously — each receives every event.
 Pattern follows :class:`TracingPort` — an ABC in the application layer so
 infrastructure code can be swapped without touching domain or application logic.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -30,7 +31,7 @@ class AnalyticsSinkPort(ABC):
     """
 
     @abstractmethod
-    async def push(self, event: "ActivityEvent") -> None:
+    async def push(self, event: ActivityEvent) -> None:
         """Receive a single activity event.
 
         Must be non-blocking — implementations should buffer and flush

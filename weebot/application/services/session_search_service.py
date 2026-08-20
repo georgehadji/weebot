@@ -5,11 +5,12 @@ Wraps the raw FTS5 search and loads each matching session to extract:
 - Resolution: last assistant message or DoneEvent content
 - Match: the FTS5 snippet that triggered the hit
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +18,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SearchResult:
     """A single enriched search result with goal→match→resolution bookends."""
+
     session_id: str
     goal: str
     resolution: str
     match_summary: str
     score: float
     event_count: int = 0
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class SessionSearchService:
@@ -37,9 +39,7 @@ class SessionSearchService:
     def __init__(self, state_repo: Any) -> None:
         self._repo = state_repo
 
-    async def search(
-        self, query: str, limit: int = 20
-    ) -> list[SearchResult]:
+    async def search(self, query: str, limit: int = 20) -> list[SearchResult]:
         """Search sessions and return enriched results.
 
         Args:
@@ -85,15 +85,21 @@ class SessionSearchService:
                         resolution = msg[:200]
                         break
 
-            enriched.append(SearchResult(
-                session_id=session_id,
-                goal=goal or "(untitled)",
-                resolution=resolution or "(in progress)",
-                match_summary=(row.get("summary", "") or "")[:200],
-                score=row.get("score", 0.0) or 0.0,
-                event_count=len(session.events),
-                created_at=session.created_at.isoformat() if hasattr(session, "created_at") else None,
-                updated_at=session.updated_at.isoformat() if hasattr(session, "updated_at") else None,
-            ))
+            enriched.append(
+                SearchResult(
+                    session_id=session_id,
+                    goal=goal or "(untitled)",
+                    resolution=resolution or "(in progress)",
+                    match_summary=(row.get("summary", "") or "")[:200],
+                    score=row.get("score", 0.0) or 0.0,
+                    event_count=len(session.events),
+                    created_at=(
+                        session.created_at.isoformat() if hasattr(session, "created_at") else None
+                    ),
+                    updated_at=(
+                        session.updated_at.isoformat() if hasattr(session, "updated_at") else None
+                    ),
+                )
+            )
 
         return enriched

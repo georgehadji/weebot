@@ -5,6 +5,7 @@ shipped catalog and the real role cascades agree. Without it, drift between
 ``_ROLE_MODEL_CASCADE`` and the model catalog only ever surfaced as a startup
 log line that nothing failed on.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -29,6 +30,7 @@ def _cfg(provider: str) -> ModelConfig:
 
 # ── the real catalog ──────────────────────────────────────────────────
 
+
 class TestDefaultCatalog:
     def test_default_catalog_is_clean(self):
         """Every model in every role cascade resolves with a matching provider.
@@ -39,9 +41,8 @@ class TestDefaultCatalog:
         api_key_env="OPENROUTER_API_KEY".
         """
         report = CatalogValidator.run_default_validation()
-        assert report.warning_count == 0, (
-            "Catalog/cascade drift:\n  "
-            + "\n  ".join(str(w) for w in report.warnings)
+        assert report.warning_count == 0, "Catalog/cascade drift:\n  " + "\n  ".join(
+            str(w) for w in report.warnings
         )
 
     def test_default_validation_actually_checks_models(self):
@@ -52,11 +53,11 @@ class TestDefaultCatalog:
 
 # ── provider mismatch ─────────────────────────────────────────────────
 
+
 class TestProviderMismatch:
     def test_mismatched_provider_is_flagged(self):
         report = CatalogValidator().validate(
-            role_cascades={"vision": ["openai/gpt-4o"]},
-            catalog={"openai/gpt-4o": _cfg("openai")},
+            role_cascades={"vision": ["openai/gpt-4o"]}, catalog={"openai/gpt-4o": _cfg("openai")}
         )
         assert report.warning_count == 1
         assert report.warnings[0].field == "provider_mismatch"
@@ -81,17 +82,18 @@ class TestProviderMismatch:
 
 # ── missing models ────────────────────────────────────────────────────
 
+
 class TestMissingModel:
     def test_model_absent_from_catalog_is_flagged(self):
         report = CatalogValidator().validate(
-            role_cascades={"vision": ["openai/does-not-exist"]},
-            catalog={},
+            role_cascades={"vision": ["openai/does-not-exist"]}, catalog={}
         )
         assert report.warning_count == 1
         assert report.warnings[0].field == "missing"
 
 
 # ── routing suffixes ──────────────────────────────────────────────────
+
 
 class TestRoutingSuffixes:
     @pytest.mark.parametrize("suffix", [":thinking", ":free", ":nitro"])
@@ -115,11 +117,11 @@ class TestRoutingSuffixes:
 
 # ── malformed input ───────────────────────────────────────────────────
 
+
 class TestMalformedCascade:
     def test_non_list_cascade_is_skipped_not_crashed(self):
         report = CatalogValidator().validate(
-            role_cascades={"bogus": "not-a-list"},  # type: ignore[dict-item]
-            catalog={},
+            role_cascades={"bogus": "not-a-list"}, catalog={}  # type: ignore[dict-item]
         )
         assert report.total_models_checked == 0
         assert report.warning_count == 0

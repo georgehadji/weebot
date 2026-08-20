@@ -12,6 +12,7 @@ artifacts that the old evaluator accepted but ground truth rejected.
 This follows RQGM §5.4: after each evaluator replacement, the subsequent epoch
 adds an adversarial regularization term to correct for evaluator drift.
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,12 +44,7 @@ class AdversarialPool:
         self._total_artifacts: int = 0
         self._replacements_with_adversarial: int = 0
 
-    def add_artifacts(
-        self,
-        evaluator_id: str,
-        epoch: int,
-        artifacts: list[dict],
-    ) -> None:
+    def add_artifacts(self, evaluator_id: str, epoch: int, artifacts: list[dict]) -> None:
         """Add adversarial artifacts produced by *evaluator_id* at *epoch*.
 
         Artifacts should be dicts with at least ``task_id``, ``description``,
@@ -68,7 +64,10 @@ class AdversarialPool:
         self._total_artifacts += len(artifacts)
         logger.info(
             "AdversarialPool: %d artifacts from %s (epoch %d, total=%d)",
-            len(artifacts), evaluator_id, epoch, self._total_artifacts,
+            len(artifacts),
+            evaluator_id,
+            epoch,
+            self._total_artifacts,
         )
 
     def get_artifacts_for_epoch(self, epoch: int) -> list[dict]:
@@ -97,6 +96,7 @@ class AdversarialPool:
         # Sample to keep prompt size manageable
         if len(artifacts) > max_samples:
             import random
+
             artifacts = random.sample(artifacts, max_samples)
 
         lines = [
@@ -113,12 +113,14 @@ class AdversarialPool:
             eval_score = art.get("evaluator_score", "N/A")
             lines.append(f"{i}. {desc} (old score: {eval_score})")
 
-        lines.extend([
-            "",
-            "Adversarial objective: The new evaluator should correctly reject "
-            "artifacts like these.  If the old evaluator was over-lenient, "
-            "tighten the scoring criteria.",
-        ])
+        lines.extend(
+            [
+                "",
+                "Adversarial objective: The new evaluator should correctly reject "
+                "artifacts like these.  If the old evaluator was over-lenient, "
+                "tighten the scoring criteria.",
+            ]
+        )
 
         return "\n".join(lines)
 

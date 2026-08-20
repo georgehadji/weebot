@@ -10,12 +10,14 @@ Each task is paired with an ``oracle`` — a deterministic checker that verifies
 the agent's output.  Oracles are loaded as DSL strings from JSONL and compiled
 to callables at load time.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any, Union
+from collections.abc import Callable
 
 from weebot.domain.models.regression_task import OracleFn, RegressionTask
 
@@ -36,9 +38,11 @@ _ORACLE_DISPATCH: dict[str, Callable[[dict, dict], Callable]] = {}
 
 def _register_oracle(name: str):
     """Decorator to register an oracle constructor."""
+
     def _wrap(fn):
         _ORACLE_DISPATCH[name] = fn
         return fn
+
     return _wrap
 
 
@@ -49,6 +53,7 @@ def _oracle_file_exists(params: dict, _meta: dict) -> OracleFn:
 
     def _check(context: dict[str, Any]) -> bool:
         return context.get("files_created", {}).get(path, False)
+
     return _check
 
 
@@ -60,6 +65,7 @@ def _oracle_stdout_contains(params: dict, _meta: dict) -> OracleFn:
     def _check(context: dict[str, Any]) -> bool:
         stdout = context.get("stdout", "") or ""
         return substring in stdout
+
     return _check
 
 
@@ -71,17 +77,20 @@ def _oracle_test_passes(params: dict, _meta: dict) -> OracleFn:
     def _check(context: dict[str, Any]) -> bool:
         test_results = context.get("test_results", {})
         return test_results.get(test_name, False)
+
     return _check
 
 
 @_register_oracle("all_tests_pass")
 def _oracle_all_tests_pass(_params: dict, _meta: dict) -> OracleFn:
     """Oracle that checks all tests passed."""
+
     def _check(context: dict[str, Any]) -> bool:
         test_results = context.get("test_results", {})
         if not test_results:
             return False
         return all(test_results.values())
+
     return _check
 
 
@@ -120,20 +129,14 @@ class RegressionSuite:
         all_tasks = suite.held_in + suite.held_out
     """
 
-    def __init__(
-        self,
-        held_in: list[RegressionTask],
-        held_out: list[RegressionTask],
-    ):
+    def __init__(self, held_in: list[RegressionTask], held_out: list[RegressionTask]):
         self.held_in = held_in
         self.held_out = held_out
 
     @classmethod
     def load(
-        cls,
-        held_in_path: Union[str, Path],
-        held_out_path: Union[str, Path],
-    ) -> "RegressionSuite":
+        cls, held_in_path: Union[str, Path], held_out_path: Union[str, Path]
+    ) -> RegressionSuite:
         """Load regression suite from two JSONL fixture files.
 
         Each line in the JSONL file should be a JSON object with fields:
@@ -150,13 +153,10 @@ class RegressionSuite:
         Returns:
             Loaded RegressionSuite.
         """
-        return cls(
-            held_in=cls._load_file(held_in_path),
-            held_out=cls._load_file(held_out_path),
-        )
+        return cls(held_in=cls._load_file(held_in_path), held_out=cls._load_file(held_out_path))
 
     @classmethod
-    def empty(cls) -> "RegressionSuite":
+    def empty(cls) -> RegressionSuite:
         """Create an empty regression suite (no tasks).
 
         Useful for tests or when regression testing is disabled.
@@ -203,7 +203,7 @@ class RegressionSuite:
         """Return list of all task IDs."""
         return self.held_in_ids() + self.held_out_ids()
 
-    def get_by_id(self, task_id: str) -> Optional[RegressionTask]:
+    def get_by_id(self, task_id: str) -> RegressionTask | None:
         """Look up a task by ID across both sets."""
         for task in self.held_in + self.held_out:
             if task.id == task_id:

@@ -1,9 +1,11 @@
 """Base class for Flow states."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -12,10 +14,11 @@ from weebot.domain.models.event import AgentEvent
 
 class AgentStatus(str, Enum):
     """Status of the Plan-Act flow state machine."""
+
     IDLE = "idle"
     PLANNING = "planning"
     EXECUTING = "executing"
-    REVIEWING = "reviewing"   # Per-step code review after execution
+    REVIEWING = "reviewing"  # Per-step code review after execution
     UPDATING = "updating"
     VERIFYING = "verifying"
     SUMMARIZING = "summarizing"
@@ -31,8 +34,6 @@ class FlowState(ABC):
     status: AgentStatus = AgentStatus.IDLE
 
     @abstractmethod
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         """Execute the state's logic."""
         ...

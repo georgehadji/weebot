@@ -8,17 +8,16 @@ Each skill is a folder containing:
 The packager validates manifests, resolves dependencies, and loads
 skills into the ToolCollection and SkillRegistry.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
 
 from weebot.application.skills.skill_registry import SkillRegistry
 from weebot.domain.models.skill import Skill, SkillMetadata
 from weebot.domain.models.base_tool import BaseTool
-from weebot.tools.base import ToolCollection
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +34,7 @@ class SkillPackager:
     """
 
     def __init__(
-        self,
-        skills_dir: Optional[Path] = None,
-        registry: Optional[SkillRegistry] = None,
+        self, skills_dir: Path | None = None, registry: SkillRegistry | None = None
     ) -> None:
         self._skills_dir = skills_dir or _SKILLS_DIR
         self._registry = registry or SkillRegistry()
@@ -52,7 +49,7 @@ class SkillPackager:
                     skills.append(entry)
         return skills
 
-    def load_manifest(self, skill_dir: Path) -> Optional[dict]:
+    def load_manifest(self, skill_dir: Path) -> dict | None:
         """Load and validate a skill manifest.
 
         Args:
@@ -76,15 +73,12 @@ class SkillPackager:
         required = {"name", "prompt_file"}
         missing = required - set(manifest.keys())
         if missing:
-            logger.warning(
-                "Manifest in %s missing required fields: %s",
-                skill_dir, missing,
-            )
+            logger.warning("Manifest in %s missing required fields: %s", skill_dir, missing)
             return None
 
         return manifest
 
-    def load_skill(self, skill_dir: Path) -> Optional[Skill]:
+    def load_skill(self, skill_dir: Path) -> Skill | None:
         """Load a skill from its directory into the registry.
 
         Args:
@@ -141,9 +135,7 @@ class SkillPackager:
         import importlib.util
         import sys
 
-        spec = importlib.util.spec_from_file_location(
-            f"skill_tools_{skill_dir.name}", tools_path
-        )
+        spec = importlib.util.spec_from_file_location(f"skill_tools_{skill_dir.name}", tools_path)
         if spec is None or spec.loader is None:
             return []
 
@@ -154,19 +146,13 @@ class SkillPackager:
         tools = []
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
-            if (
-                isinstance(attr, type)
-                and issubclass(attr, BaseTool)
-                and attr is not BaseTool
-            ):
+            if isinstance(attr, type) and issubclass(attr, BaseTool) and attr is not BaseTool:
                 tools.append(attr())
-                logger.debug(
-                    "Loaded custom tool %s from %s", attr.__name__, tools_path
-                )
+                logger.debug("Loaded custom tool %s from %s", attr.__name__, tools_path)
 
         return tools
 
-    def install_from_path(self, source: Path) -> Optional[Skill]:
+    def install_from_path(self, source: Path) -> Skill | None:
         """Install a skill from an external path by copying its directory.
 
         Args:
@@ -183,6 +169,7 @@ class SkillPackager:
         target = self._skills_dir / name
 
         import shutil
+
         if target.exists():
             logger.warning("Skill %s already installed at %s", name, target)
             return None

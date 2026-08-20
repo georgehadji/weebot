@@ -4,6 +4,7 @@ Backs CorrectionTracker (ICM edit-source principle): persists each
 output-correction delta and answers "how many times has this category
 recurred" so recurring patterns can be surfaced as source-level fixes.
 """
+
 from __future__ import annotations
 
 from weebot.domain.models.correction import CorrectionRecord

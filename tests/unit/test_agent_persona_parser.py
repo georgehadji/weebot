@@ -1,4 +1,5 @@
 """Tests for agent persona parsing and routing."""
+
 from pathlib import Path
 
 from weebot.agents.parser import AgentPersonaParser

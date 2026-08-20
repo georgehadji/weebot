@@ -5,6 +5,7 @@ reordered by semantic relevance to a query.  The default implementation
 calls the OpenRouter rerank endpoint (Cohere models), but any reranker
 can be swapped in behind this port.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -21,11 +22,7 @@ class RerankPort(ABC):
 
     @abstractmethod
     async def rerank(
-        self,
-        query: str,
-        documents: list[str],
-        model: str | None = None,
-        top_n: int | None = None,
+        self, query: str, documents: list[str], model: str | None = None, top_n: int | None = None
     ) -> list[RerankResult]:
         """Rerank *documents* against *query*.
 

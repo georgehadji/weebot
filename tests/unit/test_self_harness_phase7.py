@@ -1,8 +1,8 @@
 """Phase 7 tests: CLI harness evolve command + integration smoke test."""
+
 from __future__ import annotations
 
 from click.testing import CliRunner
-import pytest
 
 
 class TestHarnessEvolveCli:
@@ -36,18 +36,24 @@ class TestHarnessEvolveCli:
         runner = CliRunner()
         # Pass valid options but let it fail on DI (no API keys in test env).
         # We're testing option parsing, not the async flow.
-        result = runner.invoke(cli, [
-            "harness", "evolve",
-            "--iterations", "1",
-            "--max-proposals", "2",
-            "--harness-path", "weebot/config/harness/v0.2.0.yaml",
-            "--db", ":memory:",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "harness",
+                "evolve",
+                "--iterations",
+                "1",
+                "--max-proposals",
+                "2",
+                "--harness-path",
+                "weebot/config/harness/v0.2.0.yaml",
+                "--db",
+                ":memory:",
+            ],
+        )
         # Exit code 0 = clean run, 1 = runtime error (no LLM configured).
         # Exit code 2 = Click argument parse error — that's a real bug.
-        assert result.exit_code != 2, (
-            f"CLI argument parsing failed:\n{result.output}"
-        )
+        assert result.exit_code != 2, f"CLI argument parsing failed:\n{result.output}"
 
 
 class TestJobsYaml:

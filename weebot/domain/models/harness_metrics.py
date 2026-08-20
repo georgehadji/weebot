@@ -4,9 +4,9 @@ Represents the six dimensions for evaluating harness quality after a
 harness edit (or a set of evaluation sessions).  A ``composite()`` helper
 produces a single comparable scalar for the ``RegressionGate``.
 """
+
 from __future__ import annotations
 
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -34,40 +34,44 @@ class HarnessMetrics(BaseModel):
     """
 
     trajectory_efficiency: float = Field(
-        default=0.0, ge=0.0, le=1.0,
+        default=0.0,
+        ge=0.0,
+        le=1.0,
         description="Normalised efficiency score (tool calls / tokens / wall-clock)",
     )
     verification_strength: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Gate coverage × oracle diversity",
+        default=0.0, ge=0.0, le=1.0, description="Gate coverage × oracle diversity"
     )
     recovery_ability: float = Field(
-        default=0.0, ge=0.0, le=1.0,
+        default=0.0,
+        ge=0.0,
+        le=1.0,
         description="Fraction of transient failures recovered without human help",
     )
     state_consistency: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Checkpoint/replay divergence score",
+        default=0.0, ge=0.0, le=1.0, description="Checkpoint/replay divergence score"
     )
     safety_compliance: float = Field(
-        default=0.0, ge=0.0, le=1.0,
+        default=0.0,
+        ge=0.0,
+        le=1.0,
         description="Fraction of actions within permitted capability tier",
     )
     replayability: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Fraction of trajectory reconstructable from logs",
+        default=0.0, ge=0.0, le=1.0, description="Fraction of trajectory reconstructable from logs"
     )
     task_pass_rate: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Fraction of evaluation tasks solved",
+        default=0.0, ge=0.0, le=1.0, description="Fraction of evaluation tasks solved"
     )
     code_quality_score: float = Field(
-        default=0.0, ge=0.0, le=1.0,
+        default=0.0,
+        ge=0.0,
+        le=1.0,
         description="Cheap LLM-judge score: artifact presence, verification evidence, structure quality. "
-                    "Faster to compute than full task execution.",
+        "Faster to compute than full task execution.",
     )
 
-    def composite(self, weights: Optional[dict[str, float]] = None) -> float:
+    def composite(self, weights: dict[str, float] | None = None) -> float:
         """Weighted composite score for the RegressionGate.
 
         Default weights reflect the paper's prioritisation: task_pass_rate
@@ -87,10 +91,10 @@ class HarnessMetrics(BaseModel):
             total = sum(v for v in weights.values())
             if total <= 0:
                 raise ValueError("Sum of weights must be > 0")
-            score = sum(
-                getattr(self, metric, 0.0) * weight
-                for metric, weight in weights.items()
-            ) / total
+            score = (
+                sum(getattr(self, metric, 0.0) * weight for metric, weight in weights.items())
+                / total
+            )
         else:
             # Default weights: pass rate + verification strength highest
             score = (

@@ -1,12 +1,13 @@
 """Browser session persistence manager."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class BrowserSessionManager:
     Sessions are stored as JSON files in the configured directory.
     """
 
-    def __init__(self, storage_dir: Optional[Path] = None) -> None:
+    def __init__(self, storage_dir: Path | None = None) -> None:
         """Initialize session manager.
 
         Args:
@@ -59,11 +60,13 @@ class BrowserSessionManager:
 
             session_data = {
                 "version": 1,
-                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "saved_at": datetime.now(UTC).isoformat(),
                 "storage_state": storage_state,
             }
 
-            await asyncio.to_thread(path.write_text, json.dumps(session_data, indent=2), encoding="utf-8")
+            await asyncio.to_thread(
+                path.write_text, json.dumps(session_data, indent=2), encoding="utf-8"
+            )
             logger.info(f"Saved browser session '{name}' to {path}")
             return True
 
@@ -112,7 +115,9 @@ class BrowserSessionManager:
                         try:
                             await page.goto(origin, timeout=10000)
                         except Exception as e:
-                            logger.warning(f"Failed to navigate to {origin} for storage restore: {e}")
+                            logger.warning(
+                                f"Failed to navigate to {origin} for storage restore: {e}"
+                            )
                             continue
 
                         # Restore localStorage
@@ -123,7 +128,9 @@ class BrowserSessionManager:
                                 try:
                                     escaped_key = json.dumps(key)
                                     escaped_value = json.dumps(value)
-                                    await page.evaluate(f"localStorage.setItem({escaped_key}, {escaped_value})")
+                                    await page.evaluate(
+                                        f"localStorage.setItem({escaped_key}, {escaped_value})"
+                                    )
                                 except Exception as e:
                                     logger.debug(f"Failed to restore localStorage item {key}: {e}")
 
@@ -135,9 +142,13 @@ class BrowserSessionManager:
                                 try:
                                     escaped_key = json.dumps(key)
                                     escaped_value = json.dumps(value)
-                                    await page.evaluate(f"sessionStorage.setItem({escaped_key}, {escaped_value})")
+                                    await page.evaluate(
+                                        f"sessionStorage.setItem({escaped_key}, {escaped_value})"
+                                    )
                                 except Exception as e:
-                                    logger.debug(f"Failed to restore sessionStorage item {key}: {e}")
+                                    logger.debug(
+                                        f"Failed to restore sessionStorage item {key}: {e}"
+                                    )
 
             logger.info(f"Loaded browser session '{name}' from {path}")
             return True
@@ -152,11 +163,13 @@ class BrowserSessionManager:
         for path in self.storage_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                sessions.append({
-                    "name": path.stem,
-                    "saved_at": data.get("saved_at", "unknown"),
-                    "path": str(path),
-                })
+                sessions.append(
+                    {
+                        "name": path.stem,
+                        "saved_at": data.get("saved_at", "unknown"),
+                        "path": str(path),
+                    }
+                )
             except Exception:
                 pass
         return sorted(sessions, key=lambda x: x["saved_at"], reverse=True)

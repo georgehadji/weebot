@@ -6,6 +6,7 @@ structured result of compiling it to a print-ready PDF.
 
 See tasks/scientific-book-latex-plan.md for the full design.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -84,9 +85,7 @@ class CompileError(BaseModel):
     message: str = Field(default="")
     file: str | None = Field(default=None)
     line: int | None = Field(default=None)
-    fatal: bool = Field(
-        default=False, description="True for '! ...' errors that abort the run"
-    )
+    fatal: bool = Field(default=False, description="True for '! ...' errors that abort the run")
 
     @property
     def signature(self) -> str:

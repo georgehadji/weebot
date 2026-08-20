@@ -6,12 +6,11 @@ Scoring priority:
   3. Exact match against expected_answer (case-insensitive, stripped)
   4. Token-overlap Jaccard (no external dependencies)
 """
+
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
-from typing import Optional
 
 from weebot.domain.models.benchmark_task import WeebotTask
 from weebot.domain.models.session import Session
@@ -28,7 +27,7 @@ class TaskScorer:
 
         Returns a float in [0.0, 1.0].
         """
-        expected: Optional[str] = None
+        expected: str | None = None
         if sample_idx < len(task.samples):
             expected = task.samples[sample_idx].expected_answer
 
@@ -64,7 +63,7 @@ class TaskScorer:
         return overlap
 
     @staticmethod
-    def _extract_answer(session: Session) -> Optional[str]:
+    def _extract_answer(session: Session) -> str | None:
         """Return the last assistant message text from session events, or None."""
         for event in reversed(session.events):
             role = getattr(event, "role", None)

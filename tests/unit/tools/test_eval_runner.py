@@ -1,8 +1,8 @@
 """Unit tests for EvalRunner + judges (Improvement #6)."""
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 
-from weebot.application.eval.eval_runner import EvalRunner, EvalTask, EvalReport
+import pytest
+
+from weebot.application.eval.eval_runner import EvalRunner, EvalTask
 from weebot.application.eval.judges import ScoreJudge
 from weebot.application.ports.judge_port import CriterionScore, JudgeVerdict
 
@@ -23,9 +23,7 @@ class TestScoreJudge:
     async def test_exact_match_scores_10(self):
         judge = ScoreJudge(pass_ratio=1.0)
         verdict = await judge.judge(
-            task_description="say hello",
-            output="hello world",
-            criteria=["hello"],
+            task_description="say hello", output="hello world", criteria=["hello"]
         )
         assert verdict.criteria[0].score == 10.0
         assert verdict.passed is True
@@ -34,9 +32,7 @@ class TestScoreJudge:
     async def test_no_match_scores_0(self):
         judge = ScoreJudge(pass_ratio=1.0)
         verdict = await judge.judge(
-            task_description="count to ten",
-            output="1 2 3 4 5",
-            criteria=["banana"],
+            task_description="count to ten", output="1 2 3 4 5", criteria=["banana"]
         )
         assert verdict.criteria[0].score == 0.0
         assert verdict.passed is False
@@ -56,18 +52,14 @@ class TestScoreJudge:
     @pytest.mark.asyncio
     async def test_no_criteria_checks_non_empty(self):
         judge = ScoreJudge()
-        verdict = await judge.judge(
-            task_description="any", output="something", criteria=[],
-        )
+        verdict = await judge.judge(task_description="any", output="something", criteria=[])
         assert verdict.passed is True
         assert verdict.overall_score == 1.0
 
     @pytest.mark.asyncio
     async def test_no_criteria_empty_output_fails(self):
         judge = ScoreJudge()
-        verdict = await judge.judge(
-            task_description="any", output="", criteria=[],
-        )
+        verdict = await judge.judge(task_description="any", output="", criteria=[])
         assert verdict.passed is False
 
     @pytest.mark.asyncio
@@ -143,11 +135,7 @@ class TestCriterionScore:
 class TestJudgeVerdict:
     def test_average_score(self):
         verdict = JudgeVerdict(
-            criteria=[
-                CriterionScore("a", 8.0),
-                CriterionScore("b", 6.0),
-            ],
-            overall_score=0.7,
+            criteria=[CriterionScore("a", 8.0), CriterionScore("b", 6.0)], overall_score=0.7
         )
         assert verdict.average_score == 7.0
 

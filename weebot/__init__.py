@@ -1,4 +1,5 @@
 """weebot: AI Agent Framework for Windows 11."""
+
 # Lazy imports — heavyweight modules are loaded on demand via __getattr__
 # to keep the root namespace fast and prevent transitive layer leaks.
 import typing as _t
@@ -30,6 +31,7 @@ _LAZY_MAP: dict[str, str] = {}
 def __getattr__(name: str) -> _t.Any:
     if name in _LAZY_MAP:
         import importlib
+
         if name in _DEPRECATED:
             warnings.warn(
                 f"weebot.{name} is deprecated. "

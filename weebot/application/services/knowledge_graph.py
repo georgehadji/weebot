@@ -6,12 +6,13 @@ policy, and temporal versioning on top of a KnowledgeGraphPort adapter.
 The merge policy lives here (Application layer), NOT in the adapter
 (infrastructure layer), respecting Clean Architecture dependency rules.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
 from weebot.domain.models.knowledge_graph import (
@@ -21,7 +22,6 @@ from weebot.domain.models.knowledge_graph import (
     VALID_TO_KEY,
     KnowledgeEdge,
     KnowledgeNode,
-    KnowledgeSnapshot,
     ScoredNode,
 )
 
@@ -83,7 +83,7 @@ def merge_properties(
         ``adapter.upsert_node()``.
     """
     if new_timestamp is None:
-        new_timestamp = datetime.now(timezone.utc)
+        new_timestamp = datetime.now(UTC)
 
     old_confidence = old_props.get(CONFIDENCE_KEY, 0.0)
     new_confidence = new_props.get(CONFIDENCE_KEY, 0.0)
@@ -107,9 +107,9 @@ def merge_properties(
                 try:
                     old_valid_from = datetime.fromisoformat(raw)
                 except (ValueError, TypeError):
-                    old_valid_from = datetime.now(timezone.utc)
+                    old_valid_from = datetime.now(UTC)
             else:
-                old_valid_from = datetime.now(timezone.utc)
+                old_valid_from = datetime.now(UTC)
 
         age_delta = (new_timestamp - old_valid_from).total_seconds()
         if age_delta >= recency_margin_seconds:
@@ -123,7 +123,9 @@ def merge_properties(
 
     # Rule 3: agreement / negligible delta → keep old, bump corroboration
     merged = dict(old_props)
-    merged.update({k: v for k, v in new_props.items() if k not in old_props or old_props.get(k) == v})
+    merged.update(
+        {k: v for k, v in new_props.items() if k not in old_props or old_props.get(k) == v}
+    )
     merged[CORROBORATION_KEY] = merged.get(CORROBORATION_KEY, 1) + 1
     return merged
 
@@ -186,25 +188,31 @@ def reciprocal_rank_fusion(
 
         sr_score = sparse_weight / (k + sr) if sparse_weight > 0 and in_sparse else 0.0
         dr_score = dense_weight / (k + dr) if dense_weight > 0 and in_dense else 0.0
-        st_score = (structured_weight / (k + 1)
-                    if in_struct and structured_weight > 0
-                    else 0.0)
+        st_score = structured_weight / (k + 1) if in_struct and structured_weight > 0 else 0.0
         fused = sr_score + dr_score + st_score
-        scored.append(ScoredNode(
-            node=None,  # caller hydrates
-            score=min(fused, 1.0),
-            sparse_score=min(sr_score / sparse_weight, 1.0) if sparse_weight > 0 and in_sparse else 0.0,
-            dense_score=min(dr_score / dense_weight, 1.0) if dense_weight > 0 and in_dense else 0.0,
-            structured_score=min(st_score / structured_weight, 1.0) if structured_weight > 0 and in_struct else 0.0,
-        ))
+        scored.append(
+            ScoredNode(
+                node=None,  # caller hydrates
+                score=min(fused, 1.0),
+                sparse_score=(
+                    min(sr_score / sparse_weight, 1.0) if sparse_weight > 0 and in_sparse else 0.0
+                ),
+                dense_score=(
+                    min(dr_score / dense_weight, 1.0) if dense_weight > 0 and in_dense else 0.0
+                ),
+                structured_score=(
+                    min(st_score / structured_weight, 1.0)
+                    if structured_weight > 0 and in_struct
+                    else 0.0
+                ),
+            )
+        )
 
     scored.sort(key=lambda x: -x.score)
     return scored[:limit]
 
 
-def _has_conflict(
-    old_props: dict[str, Any], new_props: dict[str, Any]
-) -> bool:
+def _has_conflict(old_props: dict[str, Any], new_props: dict[str, Any]) -> bool:
     """Return True when the two dicts assign different values to the same key.
 
     Reserved keys (``_valid_*``, ``_corroboration_*``) and confidence are
@@ -275,16 +283,12 @@ class KnowledgeGraphService:
             props = merge_properties(
                 old_props=existing.properties,
                 new_props=props,
-                new_timestamp=datetime.now(timezone.utc),
+                new_timestamp=datetime.now(UTC),
                 old_timestamp=existing.properties.get(VALID_FROM_KEY),
             )
 
         node = KnowledgeNode(
-            id=node_id,
-            label=label,
-            name=name,
-            properties=props,
-            source_session_id=session_id,
+            id=node_id, label=label, name=name, properties=props, source_session_id=session_id
         )
 
         return await self._adapter.upsert_node(node)
@@ -319,11 +323,7 @@ class KnowledgeGraphService:
         return await self._adapter.add_edge(edge)
 
     async def extract_from_step_result(
-        self,
-        step_description: str,
-        result: str,
-        session_id: str,
-        user_input: str | None = None,
+        self, step_description: str, result: str, session_id: str, user_input: str | None = None
     ) -> int:
         """Extract knowledge nodes from a step execution result (F7).
 
@@ -378,11 +378,7 @@ class KnowledgeGraphService:
                 props["user_context"] = user_input.strip()[:500]
 
             await self.discover_node(
-                label=LABEL_FACT,
-                name=key,
-                properties=props,
-                session_id=session_id,
-                confidence=0.6,
+                label=LABEL_FACT, name=key, properties=props, session_id=session_id, confidence=0.6
             )
             count += 1
 
@@ -439,12 +435,15 @@ class KnowledgeGraphService:
                     response_format={"type": "json_object"},
                     temperature=0.0,
                 )
-                content = response.get("content", "") if isinstance(response, dict) else str(response)
+                content = (
+                    response.get("content", "") if isinstance(response, dict) else str(response)
+                )
             else:
                 logger.warning("LLM provider lacks chat() method — skipping extraction")
                 return 0
 
             import json as _json
+
             triplets = _json.loads(content)
             if isinstance(triplets, dict) and "triplets" in triplets:
                 triplets = triplets["triplets"]
@@ -574,7 +573,7 @@ class KnowledgeGraphService:
         """
         return await self._adapter.get_stats()
 
-    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+    async def get_node(self, node_id: str) -> KnowledgeNode | None:
         """Fetch a single node by ID.
 
         Args:

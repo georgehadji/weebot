@@ -1,4 +1,5 @@
 """Tests for H2 webhook auth and tool role."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,12 +10,12 @@ from fastapi.testclient import TestClient
 
 from weebot.interfaces.web.routers.webhook import require_webhook_auth
 
-
 # ── helpers ─────────────────────────────────────────────────────────────────
 
 
 def _mock_settings_class(**overrides):
     """Build a fake WeebotSettings class for monkeypatching."""
+
     class _MockSettings:
         def __init__(self, **kw):
             values = {
@@ -28,16 +29,15 @@ def _mock_settings_class(**overrides):
             values.update(kw)
             for k, v in values.items():
                 setattr(self, k, v)
+
     return _MockSettings
 
 
 def _make_webhook_app(monkeypatch, **settings):
     """Build a minimal FastAPI app with the webhook router and a mock container."""
-    monkeypatch.setattr(
-        "weebot.config.settings.WeebotSettings",
-        _mock_settings_class(**settings),
-    )
+    monkeypatch.setattr("weebot.config.settings.WeebotSettings", _mock_settings_class(**settings))
     from weebot.interfaces.web.routers.webhook import router as webhook_router
+
     app = FastAPI()
     app.include_router(webhook_router)
 
@@ -81,8 +81,7 @@ class TestRequireWebhookAuth:
 
     async def test_webhook_webhook_key_wrong(self, monkeypatch):
         monkeypatch.setattr(
-            "weebot.config.settings.WeebotSettings",
-            _mock_settings_class(webhook_api_key="secret"),
+            "weebot.config.settings.WeebotSettings", _mock_settings_class(webhook_api_key="secret")
         )
         request = MagicMock(spec=Request)
         request.headers = {"X-Webhook-Key": "wrong"}
@@ -95,8 +94,7 @@ class TestRequireWebhookAuth:
 
     async def test_webhook_webhook_key_correct(self, monkeypatch):
         monkeypatch.setattr(
-            "weebot.config.settings.WeebotSettings",
-            _mock_settings_class(webhook_api_key="secret"),
+            "weebot.config.settings.WeebotSettings", _mock_settings_class(webhook_api_key="secret")
         )
         request = MagicMock(spec=Request)
         request.headers = {"X-Webhook-Key": "secret"}
@@ -139,15 +137,10 @@ class TestWebhookToolRole:
             "weebot.interfaces.web.routers.webhook.build_tools",
             new=AsyncMock(return_value=mock_tools),
         ) as mock_build_tools:
-            with patch(
-                "weebot.interfaces.web.routers.webhook.create_flow",
-                return_value=mock_flow,
-            ):
+            with patch("weebot.interfaces.web.routers.webhook.create_flow", return_value=mock_flow):
                 client = TestClient(app)
                 response = client.post(
-                    "/api/webhook/run",
-                    json={"text": "hello"},
-                    headers={"X-Webhook-Key": "secret"},
+                    "/api/webhook/run", json={"text": "hello"}, headers={"X-Webhook-Key": "secret"}
                 )
                 assert response.status_code == 200
                 mock_build_tools.assert_awaited_once_with(role="webhook")
@@ -172,15 +165,10 @@ class TestWebhookToolRole:
             "weebot.interfaces.web.routers.webhook.build_tools",
             new=AsyncMock(return_value=mock_tools),
         ) as mock_build_tools:
-            with patch(
-                "weebot.interfaces.web.routers.webhook.create_flow",
-                return_value=mock_flow,
-            ):
+            with patch("weebot.interfaces.web.routers.webhook.create_flow", return_value=mock_flow):
                 client = TestClient(app)
                 response = client.post(
-                    "/api/webhook/run",
-                    json={"text": "hello"},
-                    headers={"X-Webhook-Key": "secret"},
+                    "/api/webhook/run", json={"text": "hello"}, headers={"X-Webhook-Key": "secret"}
                 )
                 assert response.status_code == 200
                 mock_build_tools.assert_awaited_once_with(role="admin")

@@ -14,10 +14,10 @@ The underlying vector store is abstracted behind ``VectorStorePort``.
 Default is ``NumpyVectorStore`` (in-memory, numpy).  A future persistent
 backend (e.g. Zvec) can be swapped without changing this class.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -49,23 +49,18 @@ class SemanticSkillRetriever(SkillRetrieverPort):
     """
 
     def __init__(
-        self,
-        registry: SkillRegistry,
-        top_k: int = 3,
-        store: Optional[VectorStorePort] = None,
+        self, registry: SkillRegistry, top_k: int = 3, store: VectorStorePort | None = None
     ) -> None:
         self._registry = registry
         self._top_k = top_k
         if store is None:
             from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
+
             store = NumpyVectorStore(dim=_DEFAULT_DIM)
         self._store = store
         self._index_built = False
         self._embeddings = None  # LocalEmbeddings singleton, lazy
-        logger.debug(
-            "SemanticSkillRetriever created (store=%s)",
-            type(self._store).__name__,
-        )
+        logger.debug("SemanticSkillRetriever created (store=%s)", type(self._store).__name__)
 
     @property
     def registry(self) -> SkillRegistry:
@@ -167,10 +162,7 @@ class SemanticSkillRetriever(SkillRetrieverPort):
             return
 
         # Push to vector store
-        metadata = [
-            {"description": d, "preview": p}
-            for d, p in zip(descriptions, previews)
-        ]
+        metadata = [{"description": d, "preview": p} for d, p in zip(descriptions, previews)]
         await self._store.upsert(names, matrix, metadata)
         self._index_built = True
         logger.info(

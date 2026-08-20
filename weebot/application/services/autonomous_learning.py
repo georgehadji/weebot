@@ -11,13 +11,14 @@ Architecture note:
   - When LIVE_SKILL_DISTILLATION_ENABLED is False, DI returns _NoOpDistiller
     (from ``weebot.application.di._learning``) so callers need no guard.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from datetime import datetime, UTC
+from typing import TYPE_CHECKING
 
 from weebot.application.services.proposal_tracker import ProposalTracker
 from weebot.config.constants import MAX_TOKENS_MODERATE, TEMPERATURE_BALANCED
@@ -74,13 +75,14 @@ _MAX_NAME_LEN = 50
 _NAME_RE = re.compile(r"[^a-z0-9-]")
 
 # Singleton proposal tracker for anti-pattern detection across sessions
-_proposal_tracker: Optional["ProposalTracker"] = None
+_proposal_tracker: ProposalTracker | None = None
 
 
-def _get_proposal_tracker() -> "ProposalTracker":
+def _get_proposal_tracker() -> ProposalTracker:
     global _proposal_tracker
     if _proposal_tracker is None:
         from weebot.application.services.proposal_tracker import ProposalTracker
+
         _proposal_tracker = ProposalTracker(suppression_threshold=3)
     return _proposal_tracker
 
@@ -96,21 +98,17 @@ class AutonomousSkillCreator:
 
     def __init__(
         self,
-        llm: Optional["LLMPort"] = None,
-        skill_store: Optional["SkillStore"] = None,
-        skills_dir: Optional[str] = None,  # legacy param, ignored when skill_store provided
-        proposal_tracker: Optional["ProposalTracker"] = None,
+        llm: LLMPort | None = None,
+        skill_store: SkillStore | None = None,
+        skills_dir: str | None = None,  # legacy param, ignored when skill_store provided
+        proposal_tracker: ProposalTracker | None = None,
     ) -> None:
         self._llm = llm
         self._skill_store = skill_store
         # Allow injection for test isolation; None falls back to the process singleton.
         self._proposal_tracker = proposal_tracker
 
-    async def analyze_session(
-        self,
-        session_id: str,
-        trajectory: str,
-    ) -> Optional[Skill]:
+    async def analyze_session(self, session_id: str, trajectory: str) -> Skill | None:
         """Analyze a completed trajectory and distil a quarantined skill.
 
         Args:
@@ -135,37 +133,34 @@ class AutonomousSkillCreator:
         name, description, content = parsed
 
         prov = SkillProvenance(
-            origin="distilled",
-            session_id=session_id,
-            created_at=datetime.now(timezone.utc),
+            origin="distilled", session_id=session_id, created_at=datetime.now(UTC)
         )
         meta = SkillMetadata(trust="quarantined", provenance=prov)
         skill = Skill(name=name, description=description, content=content, metadata=meta)
 
         # ── Anti-pattern guard: suppress identical proposals ──
-        tracker = self._proposal_tracker if self._proposal_tracker is not None else _get_proposal_tracker()
+        tracker = (
+            self._proposal_tracker
+            if self._proposal_tracker is not None
+            else _get_proposal_tracker()
+        )
         fp = tracker.fingerprint(content)
         if not tracker.record_and_check(fp):
-            logger.info(
-                "Anti-pattern guard suppressed skill '%s' (repeated proposal)", name
-            )
+            logger.info("Anti-pattern guard suppressed skill '%s' (repeated proposal)", name)
             return None
 
         if self._skill_store is not None:
             try:
                 await self._skill_store.save(skill)
                 logger.info(
-                    "Distilled quarantined skill '%s' from session %s",
-                    name, session_id[:8],
+                    "Distilled quarantined skill '%s' from session %s", name, session_id[:8]
                 )
             except Exception as exc:
                 logger.warning("Failed to persist distilled skill '%s': %s", name, exc)
 
         return skill
 
-    async def _call_distiller(
-        self, trajectory: str
-    ) -> Optional[tuple[str, str, str]]:
+    async def _call_distiller(self, trajectory: str) -> tuple[str, str, str] | None:
         """Ask the LLM to extract a skill from *trajectory*.
 
         Returns (name, description, content) or None.
@@ -191,7 +186,7 @@ class AutonomousSkillCreator:
 # ── parser (module-level so it's testable in isolation) ───────────────────────
 
 
-def _parse_distiller_response(raw: str) -> Optional[tuple[str, str, str]]:
+def _parse_distiller_response(raw: str) -> tuple[str, str, str] | None:
     """Extract (name, description, content) from the LLM JSON response.
 
     Returns None if the LLM decided not worth creating, or if parsing fails.
@@ -244,7 +239,7 @@ class MemoryNudgeService:
             )
         return nudges
 
-    async def generate_insight_nudge(self, session_summary: str) -> Optional[str]:
+    async def generate_insight_nudge(self, session_summary: str) -> str | None:
         if len(session_summary) > 500 and "tool" in session_summary.lower():
             return (
                 "This session contains useful tool usage patterns. "

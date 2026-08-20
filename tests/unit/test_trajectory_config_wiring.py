@@ -4,6 +4,7 @@ Phase 5: TrajectoryConfig thresholds (repetition_threshold, stagnation_window,
 budget_hotspot_ratio, exhaustion_ratio) previously never flowed anywhere —
 TrajectoryMonitor() was always constructed with its own hardcoded defaults.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -16,9 +17,7 @@ def _make_executor(trajectory_config=None) -> ExecutorAgent:
     from weebot.application.models.tool_collection import ToolCollection
 
     return ExecutorAgent(
-        llm=MagicMock(),
-        tools=ToolCollection(),
-        trajectory_config=trajectory_config,
+        llm=MagicMock(), tools=ToolCollection(), trajectory_config=trajectory_config
     )
 
 
@@ -33,10 +32,7 @@ def test_defaults_when_no_trajectory_config_given():
 
 def test_custom_trajectory_config_reaches_monitor():
     cfg = TrajectoryConfig(
-        repetition_threshold=7,
-        stagnation_window=5,
-        budget_hotspot_ratio=0.6,
-        exhaustion_ratio=0.75,
+        repetition_threshold=7, stagnation_window=5, budget_hotspot_ratio=0.6, exhaustion_ratio=0.75
     )
     executor = _make_executor(trajectory_config=cfg)
     monitor = executor._trajectory_monitor

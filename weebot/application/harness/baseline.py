@@ -14,13 +14,15 @@ The comparison logic is deliberately pure (no I/O, no LLM) so it is testable
 without credentials. Only :func:`Baseline.save` / :func:`Baseline.load` touch
 the filesystem, and only the CLI runs tasks.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
+from collections.abc import Iterable
 
 SCHEMA_VERSION = 1
 
@@ -48,7 +50,7 @@ class TaskOutcome:
     fingerprint: str
     passed: bool
     score: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -63,7 +65,7 @@ class TaskOutcome:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "TaskOutcome":
+    def from_dict(cls, d: dict[str, Any]) -> TaskOutcome:
         return cls(
             task_id=d["task_id"],
             split=d.get("split", HELD_IN),
@@ -129,7 +131,7 @@ class Baseline:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Baseline":
+    def from_dict(cls, d: dict[str, Any]) -> Baseline:
         version = int(d.get("schema_version", 0))
         if version != SCHEMA_VERSION:
             raise ValueError(
@@ -150,13 +152,12 @@ class Baseline:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            json.dumps(self.to_dict(), indent=2, sort_keys=False) + "\n",
-            encoding="utf-8",
+            json.dumps(self.to_dict(), indent=2, sort_keys=False) + "\n", encoding="utf-8"
         )
         return path
 
     @classmethod
-    def load(cls, path: Path | str) -> "Baseline":
+    def load(cls, path: Path | str) -> Baseline:
         path = Path(path)
         if not path.exists():
             raise FileNotFoundError(
@@ -220,7 +221,7 @@ class Comparison:
     def summary(self) -> str:
         lines = [
             f"baseline {self.baseline_pass_rate:.1%} → fresh {self.fresh_pass_rate:.1%} "
-            f"(Δ {self.delta:+.1%}, tolerance {self.tolerance:.1%})",
+            f"(Δ {self.delta:+.1%}, tolerance {self.tolerance:.1%})"
         ]
         if self.drifted:
             lines.append(
@@ -240,11 +241,7 @@ class Comparison:
         return "\n".join(lines)
 
 
-def compare(
-    baseline: Baseline,
-    fresh: Iterable[TaskOutcome],
-    tolerance: float = 0.0,
-) -> Comparison:
+def compare(baseline: Baseline, fresh: Iterable[TaskOutcome], tolerance: float = 0.0) -> Comparison:
     """Measure a fresh run against a recorded *baseline*.
 
     Args:

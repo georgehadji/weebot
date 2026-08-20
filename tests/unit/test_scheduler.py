@@ -1,19 +1,14 @@
 """Unit tests for scheduling manager and tool."""
+
 import pytest
-import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import tempfile
 import shutil
 
-from weebot.scheduling.scheduler import (
-    SchedulingManager,
-    ScheduledJob,
-    JobStatus,
-    TriggerType,
-)
-from weebot.tools.schedule_tool import ScheduleTool, get_scheduler
+from weebot.scheduling.scheduler import SchedulingManager, ScheduledJob, JobStatus, TriggerType
+from weebot.tools.schedule_tool import ScheduleTool
 
 
 class TestScheduledJob:
@@ -22,10 +17,7 @@ class TestScheduledJob:
     def test_job_creation(self):
         """Test creating a ScheduledJob."""
         job = ScheduledJob(
-            job_id="job1",
-            name="Test Job",
-            trigger_type="cron",
-            trigger_config={"hour": 12},
+            job_id="job1", name="Test Job", trigger_type="cron", trigger_config={"hour": 12}
         )
         assert job.job_id == "job1"
         assert job.name == "Test Job"
@@ -34,11 +26,7 @@ class TestScheduledJob:
 
     def test_job_to_dict(self):
         """Test converting job to dictionary."""
-        job = ScheduledJob(
-            job_id="job1",
-            name="Test Job",
-            trigger_type="cron",
-        )
+        job = ScheduledJob(job_id="job1", name="Test Job", trigger_type="cron")
         job_dict = job.to_dict()
         assert job_dict["job_id"] == "job1"
         assert job_dict["name"] == "Test Job"
@@ -148,10 +136,7 @@ class TestSchedulingManager:
             manager = SchedulingManager(db_path=db_path)
             with pytest.raises(ValueError):
                 await manager.create_job(
-                    job_id="job1",
-                    name="Test Job",
-                    trigger_type="cron",
-                    trigger_config={},
+                    job_id="job1", name="Test Job", trigger_type="cron", trigger_config={}
                 )
         finally:
             self.cleanup_temp_db(tmpdir)
@@ -291,10 +276,7 @@ class TestSchedulingManager:
         db_path, tmpdir = self.make_temp_db()
         try:
             manager = SchedulingManager(db_path=db_path)
-            trigger = manager._create_trigger(
-                TriggerType.CRON.value,
-                {"hour": 12, "minute": 30}
-            )
+            trigger = manager._create_trigger(TriggerType.CRON.value, {"hour": 12, "minute": 30})
             assert trigger is not None
         finally:
             self.cleanup_temp_db(tmpdir)
@@ -304,10 +286,7 @@ class TestSchedulingManager:
         db_path, tmpdir = self.make_temp_db()
         try:
             manager = SchedulingManager(db_path=db_path)
-            trigger = manager._create_trigger(
-                TriggerType.INTERVAL.value,
-                {"seconds": 300}
-            )
+            trigger = manager._create_trigger(TriggerType.INTERVAL.value, {"seconds": 300})
             assert trigger is not None
         finally:
             self.cleanup_temp_db(tmpdir)
@@ -393,11 +372,7 @@ class TestScheduleTool:
     async def test_create_job_missing_name(self):
         """Test create_job without name."""
         tool = ScheduleTool()
-        result = await tool.execute(
-            action="create_job",
-            trigger_type="cron",
-            callable_name="test",
-        )
+        result = await tool.execute(action="create_job", trigger_type="cron", callable_name="test")
         assert result.is_error
         assert "name" in result.error
 
@@ -405,11 +380,7 @@ class TestScheduleTool:
     async def test_create_job_missing_trigger(self):
         """Test create_job without trigger_type."""
         tool = ScheduleTool()
-        result = await tool.execute(
-            action="create_job",
-            name="Test Job",
-            callable_name="test",
-        )
+        result = await tool.execute(action="create_job", name="Test Job", callable_name="test")
         assert result.is_error
         assert "trigger_type" in result.error
 
@@ -417,11 +388,7 @@ class TestScheduleTool:
     async def test_create_job_missing_callable_or_command(self):
         """Test create_job without callable_name or command."""
         tool = ScheduleTool()
-        result = await tool.execute(
-            action="create_job",
-            name="Test Job",
-            trigger_type="cron",
-        )
+        result = await tool.execute(action="create_job", name="Test Job", trigger_type="cron")
         assert result.is_error
 
     @pytest.mark.asyncio

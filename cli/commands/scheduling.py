@@ -1,11 +1,12 @@
 """CLI commands — cron"""
+
 from __future__ import annotations
-from pathlib import Path
 
 import click
 from rich.console import Console
 
 console = Console()
+
 
 @click.group()
 def cron() -> None:
@@ -52,6 +53,7 @@ def cron_schedule(schedule_text: tuple[str, ...], task: str, name: str | None) -
         mgr = SchedulingManager()
         try:
             from apscheduler.triggers.cron import CronTrigger
+
             trigger = CronTrigger.from_crontab(parsed["cron_expression"])
             await mgr.create_job(
                 job_id=job_id,
@@ -95,7 +97,11 @@ def cron_list() -> None:
         table.add_column("Enabled", style="green")
 
         for j in jobs:
-            schedule = j.trigger_config.get("cron_expression", j.trigger_type) if hasattr(j, "trigger_config") else j.trigger_type
+            schedule = (
+                j.trigger_config.get("cron_expression", j.trigger_type)
+                if hasattr(j, "trigger_config")
+                else j.trigger_type
+            )
             enabled = "✓" if getattr(j, "enabled", True) else "✗"
             table.add_row(
                 getattr(j, "job_id", "?")[:12],
@@ -129,9 +135,8 @@ def companion() -> None:
     """Start the Windows desktop companion (system tray + global hotkey).
     Requires optional dependencies: pystray, keyboard, and tkinter.
     """
-    import asyncio
+
     async def _run():
         from weebot.interfaces.windows import run_companion
+
         await run_companion()
-
-

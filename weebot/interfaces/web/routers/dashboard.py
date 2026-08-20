@@ -1,9 +1,9 @@
 """Dashboard metrics API routes."""
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Request
 
@@ -34,31 +34,28 @@ async def get_dashboard_metrics(
     try:
         all_sessions = await state_repo.list_sessions()
         total_sessions = len(all_sessions)
-        active_sessions = sum(
-            1 for s in all_sessions
-            if s.status == SessionStatus.RUNNING
-        )
-        completed_sessions = sum(
-            1 for s in all_sessions if s.status == SessionStatus.COMPLETED
-        )
+        active_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.RUNNING)
+        completed_sessions = sum(1 for s in all_sessions if s.status == SessionStatus.COMPLETED)
     except Exception as e:
         logger.warning(f"Failed to query session metrics: {e}")
 
     # Generate sample cost data for last 7 days
     # This is placeholder data; a real implementation would use a cost tracking table
-    daily_costs: List[CostData] = []
+    daily_costs: list[CostData] = []
     today = datetime.now()
     for i in range(6, -1, -1):
         date = today - timedelta(days=i)
         base_cost = 0.5 if date.weekday() < 5 else 0.2  # Weekdays higher
-        daily_costs.append(CostData(
-            date=date.strftime("%a"),
-            cost=round(base_cost + (i % 3) * 0.1, 2),
-            tokens=int((base_cost * 20000) + (i % 3) * 1000)
-        ))
+        daily_costs.append(
+            CostData(
+                date=date.strftime("%a"),
+                cost=round(base_cost + (i % 3) * 0.1, 2),
+                tokens=int((base_cost * 20000) + (i % 3) * 1000),
+            )
+        )
 
     # Sample model usage - placeholder until per-model tracking is implemented
-    model_usage: List[ModelUsage] = [
+    model_usage: list[ModelUsage] = [
         ModelUsage(name="GPT-4o", cost=2.45, usage=45),
         ModelUsage(name="Claude Sonnet", cost=1.89, usage=62),
         ModelUsage(name="DeepSeek", cost=0.45, usage=120),
@@ -70,6 +67,7 @@ async def get_dashboard_metrics(
     memory_usage = 0.0
     try:
         import psutil  # type: ignore[import-untyped]
+
         cpu_usage = psutil.cpu_percent(interval=0.1)
         memory = psutil.virtual_memory()
         memory_usage = memory.percent
@@ -80,6 +78,7 @@ async def get_dashboard_metrics(
     db_size = "0 MB"
     try:
         from weebot.config.settings import WORKSPACE_ROOT
+
         db_path = WORKSPACE_ROOT / "weebot_sessions.db"
         if db_path.exists():
             size_bytes = db_path.stat().st_size

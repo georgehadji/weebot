@@ -4,10 +4,11 @@ Replaces hard-coded priority numbers in FlowRouter with a data-driven
 transition table.  Adding a new state requires only a new entry in the
 transition list — no edits to the router loop.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from dataclasses import dataclass
+from collections.abc import Callable
 
 from weebot.domain.models.session import Session, SessionStatus
 
@@ -22,9 +23,10 @@ class StateTransition:
         state_factory: Callable that returns the target state name.
         priority: Lower number = checked first.
     """
+
     name: str
-    condition: Callable[[Session, str, Optional[dict]], bool]
-    state_factory: Callable[[Session, str, Optional[dict]], tuple[str, Session]]
+    condition: Callable[[Session, str, dict | None], bool]
+    state_factory: Callable[[Session, str, dict | None], tuple[str, Session]]
     priority: int = 10
 
 
@@ -58,14 +60,16 @@ class StateGraph:
         """Return registered transitions in priority order."""
         return list(self._transitions)
 
-    def resolve(self, session: Session, prompt: str,
-                extra: Optional[dict] = None) -> tuple[str, Session]:
+    def resolve(
+        self, session: Session, prompt: str, extra: dict | None = None
+    ) -> tuple[str, Session]:
         """Walk transitions in priority order; return (state_name, session).
 
         Raises:
             ValueError: If no transition matches.
         """
         import logging
+
         _log = logging.getLogger(__name__)
         for t in self._transitions:
             try:
@@ -115,10 +119,12 @@ def build_default_state_graph() -> StateGraph:
         StateTransition(
             name="resume_incomplete_plan",
             condition=lambda s, p, e: (
-                s.get_last_plan() is not None
-                and not s.get_last_plan().is_complete()
+                s.get_last_plan() is not None and not s.get_last_plan().is_complete()
             ),
-            state_factory=lambda s, p, e: ("ExecutingState", s.set_status(SessionStatus.RUNNING) if s.status == SessionStatus.WAITING else s),
+            state_factory=lambda s, p, e: (
+                "ExecutingState",
+                s.set_status(SessionStatus.RUNNING) if s.status == SessionStatus.WAITING else s,
+            ),
             priority=2,
         )
     )
@@ -128,8 +134,7 @@ def build_default_state_graph() -> StateGraph:
         StateTransition(
             name="resume_waiting_session",
             condition=lambda s, p, e: (
-                s.status == SessionStatus.WAITING
-                and s.get_last_plan() is not None
+                s.status == SessionStatus.WAITING and s.get_last_plan() is not None
             ),
             state_factory=lambda s, p, e: ("ExecutingState", s),
             priority=3,

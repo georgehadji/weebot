@@ -1,4 +1,5 @@
 """Tests for Phase 3: CodeReviewerService."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,7 +30,7 @@ def review_context():
         "plan_title": "Sorting implementation",
         "completed_steps": 2,
         "step_events": [
-            {"type": "tool", "tool_name": "file_editor", "tool_input": "def sort(arr):"},
+            {"type": "tool", "tool_name": "file_editor", "tool_input": "def sort(arr):"}
         ],
     }
 
@@ -71,8 +72,8 @@ async def test_reject_verdict_with_issues(service, mock_llm, sample_step, review
 @pytest.mark.asyncio
 async def test_timeout_returns_approved(service, mock_llm, sample_step, review_context):
     """Timeout returns approved default."""
-    import asyncio
-    mock_llm.chat.side_effect = asyncio.TimeoutError()
+
+    mock_llm.chat.side_effect = TimeoutError()
     result = await service.review(sample_step, review_context)
     assert result.verdict == "approved"
 
@@ -89,7 +90,7 @@ async def test_json_parse_failure_returns_approved(service, mock_llm, sample_ste
 async def test_markdown_fence_stripped(service, mock_llm, sample_step, review_context):
     """JSON in ```json``` fences is stripped correctly."""
     mock_llm.chat.return_value = MagicMock(
-        content="```json\n{\"verdict\": \"approved\", \"issues\": [], \"hint\": \"\", \"confidence\": 1.0, \"severity\": \"info\"}\n```"
+        content='```json\n{"verdict": "approved", "issues": [], "hint": "", "confidence": 1.0, "severity": "info"}\n```'
     )
     result = await service.review(sample_step, review_context)
     assert result.verdict == "approved"
@@ -162,22 +163,27 @@ def test_is_actionable():
 # Fix 5: _render_tool_events prioritization
 # ---------------------------------------------------------------------------
 
+
 class TestRenderToolEventsPrioritization:
     """Tests for Fix 5: prioritized tool event rendering."""
 
     def test_render_tool_events_prioritizes_writes(self, service, mock_llm, review_context):
         """Write operations (file_editor) appear even when outnumbered by read-only tools."""
         # Use tool names NOT in WRITE_TOOLS for non-significant events
-        events = [
-            {"type": "tool", "tool_name": "list_directory", "tool_input": f"Explore dir_{i}"}
-            for i in range(40)
-        ] + [
-            {"type": "tool", "tool_name": "file_editor", "tool_input": f"write file_{i}.py"}
-            for i in range(5)
-        ] + [
-            {"type": "tool", "tool_name": "web_search", "tool_input": f"Search query {i}"}
-            for i in range(5)
-        ]
+        events = (
+            [
+                {"type": "tool", "tool_name": "list_directory", "tool_input": f"Explore dir_{i}"}
+                for i in range(40)
+            ]
+            + [
+                {"type": "tool", "tool_name": "file_editor", "tool_input": f"write file_{i}.py"}
+                for i in range(5)
+            ]
+            + [
+                {"type": "tool", "tool_name": "web_search", "tool_input": f"Search query {i}"}
+                for i in range(5)
+            ]
+        )
         rendered = service._render_tool_events(events, max_events=10)
         assert "file_editor" in rendered
 
@@ -201,6 +207,7 @@ class TestRenderToolEventsPrioritization:
 # Fix 6: retry on parse error
 # ---------------------------------------------------------------------------
 
+
 class TestCodeReviewerRetry:
     """Tests for Fix 6: retry once on JSON parse error before auto-approving."""
 
@@ -209,7 +216,9 @@ class TestCodeReviewerRetry:
         """First call returns bad JSON, second succeeds."""
         mock_llm.chat.side_effect = [
             MagicMock(content="not valid json"),
-            MagicMock(content='{"verdict": "approved", "issues": [], "hint": "", "confidence": 1.0, "severity": "info"}'),
+            MagicMock(
+                content='{"verdict": "approved", "issues": [], "hint": "", "confidence": 1.0, "severity": "info"}'
+            ),
         ]
         svc = CodeReviewerService(llm=mock_llm, timeout_seconds=5)
         result = await svc.review(sample_step, review_context)
@@ -217,7 +226,9 @@ class TestCodeReviewerRetry:
         assert mock_llm.chat.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_auto_approve_after_two_parse_failures(self, mock_llm, sample_step, review_context):
+    async def test_auto_approve_after_two_parse_failures(
+        self, mock_llm, sample_step, review_context
+    ):
         """Both attempts fail JSON parse — auto-approve."""
         mock_llm.chat.side_effect = [
             MagicMock(content="bad json 1"),
@@ -229,10 +240,12 @@ class TestCodeReviewerRetry:
         assert mock_llm.chat.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_llm_error_returns_approved_immediately(self, mock_llm, sample_step, review_context):
+    async def test_llm_error_returns_approved_immediately(
+        self, mock_llm, sample_step, review_context
+    ):
         """LLM error (timeout) returns approved immediately without retry."""
-        import asyncio
-        mock_llm.chat.side_effect = asyncio.TimeoutError()
+
+        mock_llm.chat.side_effect = TimeoutError()
         svc = CodeReviewerService(llm=mock_llm, timeout_seconds=5)
         result = await svc.review(sample_step, review_context)
         assert result.verdict == "approved"

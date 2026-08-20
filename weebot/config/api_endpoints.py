@@ -2,6 +2,7 @@
 
 All modules import base URLs from here instead of hardcoding them.
 """
+
 from __future__ import annotations
 
 # ── LLM Provider Base URLs ─────────────────────────────────────────

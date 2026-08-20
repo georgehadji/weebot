@@ -3,11 +3,12 @@
 Saves audio to a file and returns the path.  Requires pip install pyttsx3.
 Returns clean error when missing.
 """
+
 from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.config.settings import WORKSPACE_ROOT
@@ -28,10 +29,7 @@ class VoiceOutputTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "text": {
-                "type": "string",
-                "description": "Text to speak.",
-            },
+            "text": {"type": "string", "description": "Text to speak."},
             "voice": {
                 "type": "string",
                 "description": "Optional voice name (e.g., 'Microsoft David').",
@@ -44,12 +42,13 @@ class VoiceOutputTool(BaseTool):
         "required": ["text"],
     }
 
-    _speech: Optional[SpeechPort] = None
+    _speech: SpeechPort | None = None
 
-    def __init__(self, speech: Optional[SpeechPort] = None, **data: Any) -> None:
+    def __init__(self, speech: SpeechPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if speech is None:
             import importlib as _il
+
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
             speech = _c.get(SpeechPort)
@@ -59,6 +58,7 @@ class VoiceOutputTool(BaseTool):
         """Check if TTS dependencies are available."""
         try:
             import pyttsx3  # noqa: F401
+
             return True
         except ImportError:
             return False
@@ -67,6 +67,7 @@ class VoiceOutputTool(BaseTool):
         self, text: str, voice: str = "", output_path: str = "", **_: Any
     ) -> ToolResult:
         import sys as _sys
+
         if _sys.platform == "win32":
             pass  # Windows — pyttsx3 and speech APIs available
         elif _sys.platform == "darwin":

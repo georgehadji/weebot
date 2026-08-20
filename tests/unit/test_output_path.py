@@ -1,4 +1,5 @@
 """Unit tests for output_path resolver."""
+
 from __future__ import annotations
 
 import pytest
@@ -15,8 +16,8 @@ class TestOutputPath:
         assert "weebot" in norm
 
     def test_already_absolute_under_project(self):
-        import os
         from pathlib import Path
+
         root = Path(__file__).resolve().parent.parent.parent.parent
         abs_path = str(root / "Output" / "x.txt")
         result = output_path(abs_path)
@@ -35,8 +36,10 @@ class TestOutputPath:
 
     def test_output_dir_creates_parents(self, tmp_path):
         import os
+
         # Override the module-level cache for testing
         import weebot.core.output_path as mod
+
         old_root = mod._PROJECT_ROOT
         mod._PROJECT_ROOT = tmp_path
         try:

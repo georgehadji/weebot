@@ -1,9 +1,10 @@
 """Browser Tool using browser-use and playwright."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 # NOTE: langchain BaseTool import is deferred to __init__ because
 # importing langchain triggers network calls at module load time.
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from browser_use import Browser, Agent as BrowserAgent
+
     BROWSER_USE_AVAILABLE = True
 except ImportError:
     BROWSER_USE_AVAILABLE = False
@@ -53,14 +55,16 @@ class BrowserTool:
             "task": {
                 "type": "string",
                 "description": "What to do: navigate to URL, log in, fill forms, post content, click buttons, extract data",
-            },
+            }
         },
         "required": ["task"],
     }
 
-    browser: Optional[Any] = None
+    browser: Any | None = None
 
-    def __init__(self, llm_port: Optional["LLMPort"] = None, model: Optional[str] = None, use_vision: bool = True):
+    def __init__(
+        self, llm_port: LLMPort | None = None, model: str | None = None, use_vision: bool = True
+    ):
         """Initialize BrowserTool.
 
         Args:
@@ -101,10 +105,9 @@ class BrowserTool:
         # ── 1. Weebot LLMPort (DI-injected, free via OpenRouter) ────
         if self._llm_port is not None:
             from weebot.infrastructure.llm.langchain_adapter import LLMPortLangChainAdapter
+
             llm = LLMPortLangChainAdapter(
-                llm_port=self._llm_port,
-                model=self._model,
-                temperature=TEMPERATURE_DETERMINISTIC,
+                llm_port=self._llm_port, model=self._model, temperature=TEMPERATURE_DETERMINISTIC
             )
             return self._add_provider_attr(llm)
 
@@ -112,6 +115,7 @@ class BrowserTool:
         if _os.environ.get("BROWSER_USE_API_KEY"):
             try:
                 from browser_use import ChatBrowserUse
+
                 llm = ChatBrowserUse()
                 logger.debug("BrowserTool using ChatBrowserUse (purpose-built browser LLM)")
                 return llm
@@ -125,6 +129,7 @@ class BrowserTool:
         if or_key:
             from langchain_openai import ChatOpenAI
             from weebot.config.model_refs import MODEL_DI_DEFAULT
+
             llm = ChatOpenAI(
                 model=_os.environ.get("OPENROUTER_MODEL", MODEL_DI_DEFAULT),
                 openai_api_key=or_key,
@@ -137,15 +142,18 @@ class BrowserTool:
         # ── 4. OpenAI fallback ──────────────────────────────────────
         from langchain_openai import ChatOpenAI
         from weebot.config.model_refs import MODEL_FACTORY_OPENAI
+
         llm = ChatOpenAI(model=MODEL_FACTORY_OPENAI, temperature=0)
-        logger.debug("BrowserTool using OpenAI fallback (no BROWSER_USE_API_KEY or OPENROUTER_API_KEY)")
+        logger.debug(
+            "BrowserTool using OpenAI fallback (no BROWSER_USE_API_KEY or OPENROUTER_API_KEY)"
+        )
         return self._add_provider_attr(llm)
 
     @staticmethod
     def _add_provider_attr(llm):
         """browser-use expects LLM to have a 'provider' attribute."""
-        if not hasattr(llm, 'provider'):
-            object.__setattr__(llm, 'provider', 'openai')
+        if not hasattr(llm, "provider"):
+            object.__setattr__(llm, "provider", "openai")
         return llm
 
     async def _run_browser_task(self, task: str) -> str:
@@ -156,10 +164,7 @@ class BrowserTool:
             llm = self._get_llm()
 
             agent = BrowserAgent(
-                task=task,
-                llm=llm,
-                browser=self._browser,
-                use_vision=self._use_vision,
+                task=task, llm=llm, browser=self._browser, use_vision=self._use_vision
             )
 
             result = await agent.run()

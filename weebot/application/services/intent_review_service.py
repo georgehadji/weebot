@@ -3,12 +3,12 @@
 Uses the "critic" role model to assess coherence, actionability, and safety.
 Fail-open: returns NOT_READY on any error.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Any
 
 from weebot.application.ports.intent_review_port import IntentReviewPort
 from weebot.application.ports.llm_port import LLMPort
@@ -45,12 +45,15 @@ class IntentReviewService(IntentReviewPort):
                 self._llm.chat(
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": (
-                            f"Title: {contract.title}\n\n"
-                            f"Prompt: {contract.prompt}\n\n"
-                            f"Source: {contract.source.value}\n"
-                            f"Evidence: {', '.join(contract.evidence[:5])}"
-                        )},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Title: {contract.title}\n\n"
+                                f"Prompt: {contract.prompt}\n\n"
+                                f"Source: {contract.source.value}\n"
+                                f"Evidence: {', '.join(contract.evidence[:5])}"
+                            ),
+                        },
                     ],
                     temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,

@@ -6,15 +6,13 @@ anywhere in the codebase; it was removed along with GetActiveTasksQuery.
 Both handlers below are live — dispatched by
 ``interfaces/web/routers/ops_router.py``.
 """
+
 from __future__ import annotations
 
 from weebot.application.cqrs.base import QueryHandler, QueryResult
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
-from weebot.application.cqrs.queries import (
-    GetActiveSessionsQuery,
-    GetCostSummaryQuery,
-)
+from weebot.application.cqrs.queries import GetActiveSessionsQuery, GetCostSummaryQuery
 
 
 class GetActiveSessionsHandler(QueryHandler):
@@ -29,40 +27,38 @@ class GetActiveSessionsHandler(QueryHandler):
             # documented as returning only the caller's sessions, and
             # without this filter it returned every user's running
             # sessions.
-            sessions = await self._state_repo.list_sessions(
-                user_id=query.user_id, status="running",
-            )
+            sessions = await self._state_repo.list_sessions(user_id=query.user_id, status="running")
             limited = sessions[: query.limit]
 
             active = []
             for s in limited:
                 plan = s.get_last_plan() if hasattr(s, "get_last_plan") else None
                 step_count = len(plan.steps) if plan else 0
-                completed = sum(
-                    1 for st in plan.steps
-                    if hasattr(st.status, "value") and st.status.value == "completed"
-                ) if plan else 0
-
-                # Count tool calls from events
-                tool_calls = sum(
-                    1 for e in s.events
-                    if hasattr(e, "type") and e.type == "tool"
+                completed = (
+                    sum(
+                        1
+                        for st in plan.steps
+                        if hasattr(st.status, "value") and st.status.value == "completed"
+                    )
+                    if plan
+                    else 0
                 )
 
-                active.append({
-                    "session_id": s.id,
-                    "status": s.status.value if hasattr(s.status, "value") else str(s.status),
-                    "step_count": step_count,
-                    "steps_completed": completed,
-                    "tool_calls": tool_calls,
-                    "elapsed_events": len(s.events),
-                })
+                # Count tool calls from events
+                tool_calls = sum(1 for e in s.events if hasattr(e, "type") and e.type == "tool")
 
-            return QueryResult.ok({
-                "sessions": active,
-                "total": len(active),
-                "limit": query.limit,
-            })
+                active.append(
+                    {
+                        "session_id": s.id,
+                        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                        "step_count": step_count,
+                        "steps_completed": completed,
+                        "tool_calls": tool_calls,
+                        "elapsed_events": len(s.events),
+                    }
+                )
+
+            return QueryResult.ok({"sessions": active, "total": len(active), "limit": query.limit})
         except Exception as exc:
             return QueryResult.fail(str(exc))
 
@@ -78,6 +74,7 @@ class GetCostSummaryHandler(QueryHandler):
             # Try to get cascade tracker from DI container
             try:
                 from weebot.application.di import Container
+
                 c = Container()
                 c.configure_defaults()
                 tracker = c.get("cascade_tracker")

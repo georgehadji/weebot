@@ -1,9 +1,9 @@
 """PlanTemplate — a validated plan stored for reuse on similar tasks."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 
 @dataclass
@@ -21,11 +21,12 @@ class PlanTemplate:
         created_at: When the template was first saved.
         last_used_at: When the template was last retrieved for seeding.
     """
+
     template_id: str
     task_hash: str
     task_description: str
     plan_json: str
     success_score: float = 1.0
     use_count: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_used_at: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_used_at: datetime | None = None

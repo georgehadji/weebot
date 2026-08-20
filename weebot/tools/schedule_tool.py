@@ -1,16 +1,15 @@
 """ScheduleTool - Agent interface for creating and managing scheduled jobs."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any
 
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.scheduling.scheduler import SchedulingManager, TriggerType
-
+from weebot.scheduling.scheduler import SchedulingManager
 
 # Module-level scheduling manager (singleton)
-_scheduler: Optional[SchedulingManager] = None
+_scheduler: SchedulingManager | None = None
 
 
 def get_scheduler() -> SchedulingManager:
@@ -52,10 +51,7 @@ class ScheduleTool(BaseTool):
                 "type": "string",
                 "description": "Job identifier (auto-generated if not provided)",
             },
-            "name": {
-                "type": "string",
-                "description": "Job name (required for create_job)",
-            },
+            "name": {"type": "string", "description": "Job name (required for create_job)"},
             "trigger_type": {
                 "type": "string",
                 "enum": ["cron", "interval", "date", "once"],
@@ -65,18 +61,12 @@ class ScheduleTool(BaseTool):
                 "type": "object",
                 "description": "Trigger configuration (cron: {hour, minute, day_of_week}, interval: {seconds/minutes/hours}, date: {run_date})",
             },
-            "description": {
-                "type": "string",
-                "description": "Job description",
-            },
+            "description": {"type": "string", "description": "Job description"},
             "callable_name": {
                 "type": "string",
                 "description": "Name of registered callable to invoke",
             },
-            "command": {
-                "type": "string",
-                "description": "Command to execute",
-            },
+            "command": {"type": "string", "description": "Command to execute"},
             "status": {
                 "type": "string",
                 "enum": ["pending", "running", "completed", "failed", "paused"],
@@ -94,6 +84,7 @@ class ScheduleTool(BaseTool):
         """Check if schedule library is available."""
         try:
             import schedule  # noqa: F401
+
             return True
         except ImportError:
             return False
@@ -101,14 +92,14 @@ class ScheduleTool(BaseTool):
     async def execute(
         self,
         action: str,
-        job_id: Optional[str] = None,
-        name: Optional[str] = None,
-        trigger_type: Optional[str] = None,
-        trigger_config: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
-        callable_name: Optional[str] = None,
-        command: Optional[str] = None,
-        status: Optional[str] = None,
+        job_id: str | None = None,
+        name: str | None = None,
+        trigger_type: str | None = None,
+        trigger_config: dict[str, Any] | None = None,
+        description: str | None = None,
+        callable_name: str | None = None,
+        command: str | None = None,
+        status: str | None = None,
         enabled_only: bool = False,
         **_,
     ) -> ToolResult:
@@ -117,6 +108,7 @@ class ScheduleTool(BaseTool):
         # Check for a sentinel env-var or module-level flag set when a cron
         # agent runner is active.  This prevents infinite scheduling loops.
         import os as _cron_guard_os
+
         if _cron_guard_os.environ.get("WEEBOT_CRON_CONTEXT", "").lower() in ("1", "true", "yes"):
             return ToolResult(
                 output="",
@@ -128,14 +120,10 @@ class ScheduleTool(BaseTool):
 
             if action == "create_job":
                 if not name or not trigger_type:
-                    return ToolResult(
-                        output="",
-                        error="create_job requires name and trigger_type"
-                    )
+                    return ToolResult(output="", error="create_job requires name and trigger_type")
                 if not (callable_name or command):
                     return ToolResult(
-                        output="",
-                        error="create_job requires either callable_name or command"
+                        output="", error="create_job requires either callable_name or command"
                     )
 
                 job_id = job_id or str(uuid.uuid4())[:8]
@@ -245,13 +233,13 @@ class ScheduleTool(BaseTool):
 
                 kwargs = {}
                 if name:
-                    kwargs['name'] = name
+                    kwargs["name"] = name
                 if trigger_type:
-                    kwargs['trigger_type'] = trigger_type
+                    kwargs["trigger_type"] = trigger_type
                 if trigger_config:
-                    kwargs['trigger_config'] = trigger_config
+                    kwargs["trigger_config"] = trigger_config
                 if description:
-                    kwargs['description'] = description
+                    kwargs["description"] = description
 
                 job = await scheduler.update_job(job_id, **kwargs)
                 return ToolResult(output=f"Updated job: {job.job_id}")

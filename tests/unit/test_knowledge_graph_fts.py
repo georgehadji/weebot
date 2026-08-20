@@ -4,11 +4,12 @@ Verifies that the external-content kg_nodes_fts table is properly
 populated by triggers on INSERT/UPDATE/DELETE and that the LIKE
 fallback still works when FTS5 is unavailable.
 """
+
 from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
@@ -20,14 +21,11 @@ from weebot.domain.models.knowledge_graph import (
     KnowledgeNode,
 )
 from weebot.application.services.knowledge_graph import (
-    DEFAULT_CONFIDENCE_MARGIN,
     KnowledgeGraphService,
     merge_properties,
     reciprocal_rank_fusion,
 )
-from weebot.infrastructure.persistence.sqlite_knowledge_graph import (
-    SQLiteKnowledgeGraph,
-)
+from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
 
 
 @pytest.fixture
@@ -61,8 +59,7 @@ async def test_fts_index_populated_on_upsert(kg: SQLiteKnowledgeGraph) -> None:
     # Also verify the FTS table has the row directly
     with kg._get_conn() as conn:
         row = conn.execute(
-            "SELECT rowid FROM kg_nodes_fts WHERE kg_nodes_fts MATCH ?",
-            ("Python",),
+            "SELECT rowid FROM kg_nodes_fts WHERE kg_nodes_fts MATCH ?", ("Python",)
         ).fetchone()
     assert row is not None, "FTS table should have indexed the node"
 
@@ -71,10 +68,7 @@ async def test_fts_index_populated_on_upsert(kg: SQLiteKnowledgeGraph) -> None:
 async def test_fts_reflects_update(kg: SQLiteKnowledgeGraph) -> None:
     """After updating a node's name, the old term should no longer match."""
     node = KnowledgeNode(
-        id="test-node-2",
-        label="person",
-        name="Alice",
-        properties={"_confidence": 0.8},
+        id="test-node-2", label="person", name="Alice", properties={"_confidence": 0.8}
     )
     await kg.upsert_node(node)
 
@@ -84,10 +78,7 @@ async def test_fts_reflects_update(kg: SQLiteKnowledgeGraph) -> None:
 
     # Update to new name
     updated = KnowledgeNode(
-        id="test-node-2",
-        label="person",
-        name="Bob",
-        properties={"_confidence": 0.9},
+        id="test-node-2", label="person", name="Bob", properties={"_confidence": 0.9}
     )
     await kg.upsert_node(updated)
 
@@ -118,7 +109,10 @@ async def test_fts_reflects_delete(kg: SQLiteKnowledgeGraph) -> None:
     # Directly delete the node to test the DELETE trigger
     with kg._get_conn() as conn:
         conn.execute("DELETE FROM kg_snapshots WHERE node_id = ?", ("test-node-3",))
-        conn.execute("DELETE FROM kg_edges WHERE source_id = ? OR target_id = ?", ("test-node-3", "test-node-3"))
+        conn.execute(
+            "DELETE FROM kg_edges WHERE source_id = ? OR target_id = ?",
+            ("test-node-3", "test-node-3"),
+        )
         conn.execute("DELETE FROM kg_nodes WHERE id = ?", ("test-node-3",))
         conn.commit()
 
@@ -134,11 +128,7 @@ async def test_fts_properties_match(kg: SQLiteKnowledgeGraph) -> None:
         id="test-node-4",
         label="fact",
         name="population",
-        properties={
-            "value": "8.2 million",
-            "location": "Berlin",
-            "_confidence": 0.7,
-        },
+        properties={"value": "8.2 million", "location": "Berlin", "_confidence": 0.7},
     )
     await kg.upsert_node(node)
 
@@ -166,12 +156,14 @@ async def test_backfill_populates_existing_rows(kg: SQLiteKnowledgeGraph) -> Non
             """INSERT INTO kg_nodes (id, label, name, properties, created_at, source_session_id, version, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                node.id, node.label, node.name,
+                node.id,
+                node.label,
+                node.name,
                 json.dumps(node.properties),
                 node.created_at.isoformat(),
                 node.source_session_id,
                 node.version,
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
             ),
         )
         conn.commit()
@@ -202,15 +194,9 @@ async def test_search_falls_back_to_like(db_path: str) -> None:
     try:
         with kg._get_conn() as conn:
             conn.execute("DROP TABLE IF EXISTS kg_nodes_fts")
-            conn.execute(
-                "DROP TRIGGER IF EXISTS kg_nodes_ai"
-            )
-            conn.execute(
-                "DROP TRIGGER IF EXISTS kg_nodes_ad"
-            )
-            conn.execute(
-                "DROP TRIGGER IF EXISTS kg_nodes_au"
-            )
+            conn.execute("DROP TRIGGER IF EXISTS kg_nodes_ai")
+            conn.execute("DROP TRIGGER IF EXISTS kg_nodes_ad")
+            conn.execute("DROP TRIGGER IF EXISTS kg_nodes_au")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # Some builds may not allow dropping virtual tables
@@ -261,16 +247,14 @@ class TestMergePolicy:
 
     def test_recency_overwrites_conflicting_stale(self) -> None:
         """When values conflict and new is more recent, new wins (F3)."""
-        old_ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        new_ts = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        old_ts = datetime(2024, 1, 1, tzinfo=UTC)
+        new_ts = datetime(2024, 6, 1, tzinfo=UTC)
 
         old = {"ceo": "Alice", CONFIDENCE_KEY: 0.7, VALID_FROM_KEY: old_ts.isoformat()}
         new = {"ceo": "Bob", CONFIDENCE_KEY: 0.7}
 
         merged = merge_properties(
-            old, new,
-            new_timestamp=new_ts,
-            recency_margin_seconds=3600,  # 1 hour
+            old, new, new_timestamp=new_ts, recency_margin_seconds=3600  # 1 hour
         )
 
         assert merged["ceo"] == "Bob"
@@ -329,9 +313,7 @@ class TestRRFFusion:
         dense = [("a", 0.9), ("c", 0.8)]
         struct = {"a", "d"}
 
-        result = reciprocal_rank_fusion(
-            sparse, dense, struct, limit=4,
-        )
+        result = reciprocal_rank_fusion(sparse, dense, struct, limit=4)
 
         ids = [s.node.id if s.node else None for s in result]  # all None here
         # Without node hydration, we check id via stored data — but in pure
@@ -379,14 +361,22 @@ class TestHybridSearch:
     @pytest.mark.asyncio
     async def test_sparse_leg_finds_matching_nodes(self, kg: SQLiteKnowledgeGraph) -> None:
         """Sparse (FTS5) leg alone should find nodes by name."""
-        await kg.upsert_node(KnowledgeNode(
-            id="hs-1", label="technology", name="Python",
-            properties={"paradigm": "interpreted", "_confidence": 0.8},
-        ))
-        await kg.upsert_node(KnowledgeNode(
-            id="hs-2", label="technology", name="Java",
-            properties={"paradigm": "compiled", "_confidence": 0.8},
-        ))
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-1",
+                label="technology",
+                name="Python",
+                properties={"paradigm": "interpreted", "_confidence": 0.8},
+            )
+        )
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-2",
+                label="technology",
+                name="Java",
+                properties={"paradigm": "compiled", "_confidence": 0.8},
+            )
+        )
 
         results = await kg.hybrid_search("Python", dense_weight=0.0, limit=5)
         assert len(results) >= 1
@@ -395,18 +385,29 @@ class TestHybridSearch:
     @pytest.mark.asyncio
     async def test_structured_leg_filters_by_label(self, kg: SQLiteKnowledgeGraph) -> None:
         """Structured leg should filter by label."""
-        await kg.upsert_node(KnowledgeNode(
-            id="hs-3", label="person", name="Alice",
-            properties={"role": "engineer", "_confidence": 0.7},
-        ))
-        await kg.upsert_node(KnowledgeNode(
-            id="hs-4", label="technology", name="Alice",
-            properties={"version": "1.0", "_confidence": 0.7},
-        ))
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-3",
+                label="person",
+                name="Alice",
+                properties={"role": "engineer", "_confidence": 0.7},
+            )
+        )
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-4",
+                label="technology",
+                name="Alice",
+                properties={"version": "1.0", "_confidence": 0.7},
+            )
+        )
 
         results = await kg.hybrid_search(
-            "Alice", label="person",
-            dense_weight=0.0, sparse_weight=0.0, structured_weight=1.0,
+            "Alice",
+            label="person",
+            dense_weight=0.0,
+            sparse_weight=0.0,
+            structured_weight=1.0,
             limit=5,
         )
         assert len(results) >= 1
@@ -415,12 +416,18 @@ class TestHybridSearch:
             assert r.node is None or r.node.label == "person"
 
     @pytest.mark.asyncio
-    async def test_dense_leg_does_not_crash_when_unavailable(self, kg: SQLiteKnowledgeGraph) -> None:
+    async def test_dense_leg_does_not_crash_when_unavailable(
+        self, kg: SQLiteKnowledgeGraph
+    ) -> None:
         """When embeddings are not available, dense leg degrades gracefully."""
-        await kg.upsert_node(KnowledgeNode(
-            id="hs-5", label="fact", name="gravity",
-            properties={"value": "9.81", "_confidence": 0.9},
-        ))
+        await kg.upsert_node(
+            KnowledgeNode(
+                id="hs-5",
+                label="fact",
+                name="gravity",
+                properties={"value": "9.81", "_confidence": 0.9},
+            )
+        )
 
         # dense_weight=0.4 should not crash even without embedding model
         results = await kg.hybrid_search("gravity", dense_weight=0.4, limit=5)
@@ -439,7 +446,7 @@ class TestExtraction:
     @pytest.mark.asyncio
     async def test_extraction_preserves_surrounding_context(self, kg: SQLiteKnowledgeGraph) -> None:
         """Extracted facts should include surrounding lines as evidence."""
-        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+
         svc = KnowledgeGraphService(adapter=kg)
 
         result = (
@@ -450,29 +457,21 @@ class TestExtraction:
             "  status: healthy\n"
         )
         count = await svc.extract_from_step_result(
-            step_description="check server health",
-            result=result,
-            session_id="sess-test-1",
+            step_description="check server health", result=result, session_id="sess-test-1"
         )
         assert count >= 4
 
         # Each node should have evidence with surrounding context
-        node = await kg.get_node(
-            svc._make_node_id("fact", "memory")
-        )
+        node = await kg.get_node(svc._make_node_id("fact", "memory"))
         assert node is not None
         evidence = node.properties.get("evidence", "")
-        assert "cpu: 45%" in evidence, (
-            "Evidence should include preceding context lines"
-        )
-        assert "disk: 234 GB free" in evidence, (
-            "Evidence should include following context lines"
-        )
+        assert "cpu: 45%" in evidence, "Evidence should include preceding context lines"
+        assert "disk: 234 GB free" in evidence, "Evidence should include following context lines"
 
     @pytest.mark.asyncio
     async def test_extraction_keeps_user_and_tool_lines(self, kg: SQLiteKnowledgeGraph) -> None:
         """When user_input is provided, both user and tool turns survive."""
-        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+
         svc = KnowledgeGraphService(adapter=kg)
 
         result = "price: $29.99\navailability: in stock\nrating: 4.5 stars"
@@ -484,34 +483,27 @@ class TestExtraction:
         )
         assert count >= 3
 
-        node = await kg.get_node(
-            svc._make_node_id("fact", "price")
-        )
+        node = await kg.get_node(svc._make_node_id("fact", "price"))
         assert node is not None
         user_ctx = node.properties.get("user_context", "")
-        assert "premium plan" in user_ctx, (
-            "User input context should be preserved on the fact"
-        )
+        assert "premium plan" in user_ctx, "User input context should be preserved on the fact"
 
     @pytest.mark.asyncio
     async def test_llm_extraction_noop_when_no_llm(self) -> None:
         """extract_with_llm should be a no-op when llm=None."""
-        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+
         # No adapter needed for this test — the method returns 0 before touching DB
         svc = KnowledgeGraphService(adapter=None)  # type: ignore[arg-type]
 
         count = await svc.extract_with_llm(
-            step_description="test",
-            result="some text",
-            session_id="sess-test-3",
-            llm=None,
+            step_description="test", result="some text", session_id="sess-test-3", llm=None
         )
         assert count == 0, "Should return 0 when llm is None"
 
     @pytest.mark.asyncio
     async def test_extraction_short_values_skipped(self, kg: SQLiteKnowledgeGraph) -> None:
         """Lines without ':' or with empty values should be skipped."""
-        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+
         svc = KnowledgeGraphService(adapter=kg)
 
         result = (
@@ -522,21 +514,17 @@ class TestExtraction:
             "another: value\n"
         )
         count = await svc.extract_from_step_result(
-            step_description="test",
-            result=result,
-            session_id="sess-test-4",
+            step_description="test", result=result, session_id="sess-test-4"
         )
         assert count == 2, "Only 2 valid key:value lines should be extracted"
 
     @pytest.mark.asyncio
     async def test_extraction_empty_result(self, kg: SQLiteKnowledgeGraph) -> None:
         """Empty result string should produce 0 extractions."""
-        from weebot.application.services.knowledge_graph import KnowledgeGraphService
+
         svc = KnowledgeGraphService(adapter=kg)
 
         count = await svc.extract_from_step_result(
-            step_description="test",
-            result="",
-            session_id="sess-test-5",
+            step_description="test", result="", session_id="sess-test-5"
         )
         assert count == 0

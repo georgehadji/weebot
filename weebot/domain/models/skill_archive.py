@@ -11,12 +11,11 @@ exploitation (high-success nodes are sampled more often).
 Archive growth is controlled by a UCB-Air gate: expand (create a child) if
 ``evaluations_done^alpha >= archive_size``, otherwise evaluate an existing node.
 """
+
 from __future__ import annotations
 
-import math
 import random
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -30,13 +29,13 @@ class SkillArchiveNode(BaseModel):
     """
 
     node_id: str = Field(description="Unique node identifier")
-    parent_id: Optional[str] = Field(default=None, description="Parent node ID, None for root")
+    parent_id: str | None = Field(default=None, description="Parent node ID, None for root")
     skill_version: str = Field(default="", description="The skill document version at this node")
     successes: int = Field(default=0, ge=0, description="Successful evaluations")
     failures: int = Field(default=0, ge=0, description="Failed evaluations")
     children: list[str] = Field(default_factory=list, description="Child node IDs")
     created_at_epoch: int = Field(default=0, description="Epoch when this node was created")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     meta: dict = Field(default_factory=dict, description="Arbitrary metadata (evaluator_id, etc.)")
 
     @property
@@ -57,7 +56,7 @@ class SkillArchiveNode(BaseModel):
             self.failures += 1
 
     @classmethod
-    def thompson_sample(cls, nodes: list["SkillArchiveNode"]) -> "SkillArchiveNode":
+    def thompson_sample(cls, nodes: list[SkillArchiveNode]) -> SkillArchiveNode:
         """Select a node using Thompson sampling over Beta posterior.
 
         For each node, sample from ``Beta(1 + successes, 1 + failures)``
@@ -80,12 +79,7 @@ class SkillArchiveNode(BaseModel):
         return best_node
 
     @classmethod
-    def should_expand(
-        cls,
-        evaluations_done: int,
-        archive_size: int,
-        alpha: float = 0.3,
-    ) -> bool:
+    def should_expand(cls, evaluations_done: int, archive_size: int, alpha: float = 0.3) -> bool:
         """UCB-Air gate: should we expand (create a child) or evaluate?
 
         Expands if ``evaluations_done^alpha >= archive_size``, meaning
@@ -101,7 +95,7 @@ class SkillArchiveNode(BaseModel):
         """
         if evaluations_done <= 0:
             return True  # Always expand the first node
-        return evaluations_done ** alpha >= archive_size
+        return evaluations_done**alpha >= archive_size
 
 
 class SkillArchive(BaseModel):
@@ -111,10 +105,9 @@ class SkillArchive(BaseModel):
     """
 
     nodes: dict[str, SkillArchiveNode] = Field(
-        default_factory=dict,
-        description="All nodes keyed by node_id",
+        default_factory=dict, description="All nodes keyed by node_id"
     )
-    root_id: Optional[str] = Field(default=None, description="Root node ID")
+    root_id: str | None = Field(default=None, description="Root node ID")
     total_evaluations: int = Field(default=0, ge=0, description="Cumulative evaluations")
 
     def add_node(self, node: SkillArchiveNode) -> None:
@@ -127,7 +120,7 @@ class SkillArchive(BaseModel):
         if self.root_id is None:
             self.root_id = node.node_id
 
-    def get_node(self, node_id: str) -> Optional[SkillArchiveNode]:
+    def get_node(self, node_id: str) -> SkillArchiveNode | None:
         return self.nodes.get(node_id)
 
     def get_leaves(self) -> list[SkillArchiveNode]:

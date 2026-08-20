@@ -8,10 +8,11 @@ The planner then sees "prior experience" that guides it toward approaches
 that worked well in other domains, enabling zero-shot transfer of
 meta-improvement knowledge.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.infrastructure.persistence.strategy_store import StrategyStore
@@ -33,10 +34,7 @@ class StrategyTransferService:
     """
 
     def __init__(
-        self,
-        store: "StrategyStore",
-        min_score: float = 0.7,
-        max_strategies: int = 3,
+        self, store: StrategyStore, min_score: float = 0.7, max_strategies: int = 3
     ) -> None:
         if store is None:
             raise TypeError(
@@ -47,9 +45,7 @@ class StrategyTransferService:
         self._min_score = min_score
         self._max_strategies = max_strategies
 
-    async def get_strategies_for(
-        self, domain: str
-    ) -> list:
+    async def get_strategies_for(self, domain: str) -> list:
         """Return transferable strategies for a target domain.
 
         Args:
@@ -59,17 +55,13 @@ class StrategyTransferService:
             List of ImprovementStrategy objects from different domains
             with effectiveness_score >= min_score.
         """
-        from weebot.domain.models.self_improvement import ImprovementStrategy
 
         strategies = await self._store.get_for_domain(
-            target_domain=domain,
-            min_score=self._min_score,
-            limit=self._max_strategies,
+            target_domain=domain, min_score=self._min_score, limit=self._max_strategies
         )
         if strategies:
             logger.info(
-                "Found %d strategies for domain '%s' from other domains",
-                len(strategies), domain,
+                "Found %d strategies for domain '%s' from other domains", len(strategies), domain
             )
         return strategies
 
@@ -130,6 +122,8 @@ class StrategyTransferService:
         sid = await self._store.insert(strategy)
         logger.info(
             "Recorded improvement strategy %s from domain '%s' (score: %.2f)",
-            sid, source_domain, score,
+            sid,
+            source_domain,
+            score,
         )
         return sid

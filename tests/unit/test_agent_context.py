@@ -3,8 +3,7 @@
 import asyncio
 import pytest
 
-from weebot.core.agent_context import AgentContext, EventBroker, ContextEvent
-from weebot.core.activity_stream import ActivityStream
+from weebot.core.agent_context import AgentContext, EventBroker
 
 
 class TestEventBroker:
@@ -57,7 +56,7 @@ class TestEventBroker:
         # Wait for subscriber with timeout
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             task.cancel()
             try:
                 await task
@@ -93,7 +92,7 @@ class TestEventBroker:
 
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             task.cancel()
             try:
                 await task
@@ -188,7 +187,7 @@ class TestAgentContext:
 
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except (TimeoutError, asyncio.CancelledError):
             task.cancel()
             try:
                 await task

@@ -1,18 +1,17 @@
 """
 Model Registry for Weebot - AI Model Characteristics & Pricing Information
 
-This module provides a registry of AI models with their characteristics, 
+This module provides a registry of AI models with their characteristics,
 pricing information, and capabilities for intelligent model selection.
 """
-import json
+
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
-from pathlib import Path
 
 
 class ModelProvider(Enum):
     """Supported AI model providers."""
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
@@ -56,6 +55,7 @@ class ModelProvider(Enum):
 @dataclass
 class ModelInfo:
     """Information about a specific AI model."""
+
     model_name: str
     provider: ModelProvider
     input_cost_per_token: float
@@ -70,17 +70,19 @@ class ModelInfo:
     supports_response_schema: bool = False
     supports_prompt_caching: bool = False
     description: str = ""
-    
+
     def calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Calculate the cost for a specific usage."""
-        return (input_tokens * self.input_cost_per_token) + (output_tokens * self.output_cost_per_token)
+        return (input_tokens * self.input_cost_per_token) + (
+            output_tokens * self.output_cost_per_token
+        )
 
     def calculate_cost_per_1k_tokens(self) -> float:
         """Get the average cost per 1k tokens (assuming equal input/output)."""
         return (self.input_cost_per_token + self.output_cost_per_token) * 1000
 
 
-def _load_model_registry() -> Dict[str, ModelInfo]:
+def _load_model_registry() -> dict[str, ModelInfo]:
     """Load model registry from built-in defaults."""
     return _get_default_model_registry()
 
@@ -146,19 +148,19 @@ def _infer_provider_from_model_name(model_name: str) -> ModelProvider:
     return ModelProvider.OPENAI
 
 
-def _get_default_model_registry() -> Dict[str, ModelInfo]:
+def _get_default_model_registry() -> dict[str, ModelInfo]:
     """Get a default model registry with common models."""
     return {
         # Frontier/Reasoning Models
         "minimax/minimax-m3": ModelInfo(
             model_name="minimax/minimax-m3",
             provider=ModelProvider.MINIMAX,
-            input_cost_per_token=0.0,          # FREE via OpenRouter
-            output_cost_per_token=0.0,         # FREE via OpenRouter
-            max_input_tokens=1_000_000,        # 1M context (MSA architecture)
+            input_cost_per_token=0.0,  # FREE via OpenRouter
+            output_cost_per_token=0.0,  # FREE via OpenRouter
+            max_input_tokens=1_000_000,  # 1M context (MSA architecture)
             max_output_tokens=32768,
             supports_function_calling=True,
-            supports_vision=True,              # native multimodal (image + video)
+            supports_vision=True,  # native multimodal (image + video)
             supports_system_messages=True,
             supports_response_schema=True,
             description=(
@@ -183,7 +185,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Opus 5 — current-generation flagship, supersedes Opus 4.6/4.7/4.8 in this catalog. Verified present on OpenRouter."
+            description="Anthropic's Claude Opus 5 — current-generation flagship, supersedes Opus 4.6/4.7/4.8 in this catalog. Verified present on OpenRouter.",
         ),
         "claude-4.6-opus": ModelInfo(
             model_name="claude-4.6-opus",
@@ -196,7 +198,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Opus 4.6 - Frontier model for deep reasoning, agent teams, and long-horizon tasks. Native multi-agent collaboration with 14.5h autonomous task horizon."
+            description="Anthropic's Claude Opus 4.6 - Frontier model for deep reasoning, agent teams, and long-horizon tasks. Native multi-agent collaboration with 14.5h autonomous task horizon.",
         ),
         "openai/gpt-5.6-sol-pro": ModelInfo(
             model_name="openai/gpt-5.6-sol-pro",
@@ -209,7 +211,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI's GPT-5.6 Sol Pro — current-generation flagship, supersedes GPT-5.2 in this catalog. Verified present on OpenRouter (sibling variants: terra, luna, each with a -pro tier, not individually catalogued here)."
+            description="OpenAI's GPT-5.6 Sol Pro — current-generation flagship, supersedes GPT-5.2 in this catalog. Verified present on OpenRouter (sibling variants: terra, luna, each with a -pro tier, not individually catalogued here).",
         ),
         "gpt-5.2": ModelInfo(
             model_name="gpt-5.2",
@@ -222,7 +224,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI's GPT-5.2 - Frontier model for multi-step reasoning, math, and multimodal tasks. Strong decomposition stability but high output cost."
+            description="OpenAI's GPT-5.2 - Frontier model for multi-step reasoning, math, and multimodal tasks. Strong decomposition stability but high output cost.",
         ),
         "gemini-3-pro": ModelInfo(
             model_name="gemini-3-pro",
@@ -235,7 +237,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Google's Gemini 3 Pro - Frontier model with 1M native context, strong in math reasoning (100% AIME 2025 with code exec). Charges for thinking tokens."
+            description="Google's Gemini 3 Pro - Frontier model with 1M native context, strong in math reasoning (100% AIME 2025 with code exec). Charges for thinking tokens.",
         ),
         "grok-4.1": ModelInfo(
             model_name="grok-4.1",
@@ -248,22 +250,21 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="xAI's Grok 4.1 - Frontier model for pure reasoning with 2M context window and ~4% hallucination rate. #1 LMArena Elo (1483)."
+            description="xAI's Grok 4.1 - Frontier model for pure reasoning with 2M context window and ~4% hallucination rate. #1 LMArena Elo (1483).",
         ),
         "grok-build-0.1": ModelInfo(
             model_name="grok-build-0.1",
             provider=ModelProvider.XAI,
-            input_cost_per_token=0.0,       # pricing TBD
-            output_cost_per_token=0.0,      # pricing TBD
-            max_input_tokens=131072,        # 128K context
+            input_cost_per_token=0.0,  # pricing TBD
+            output_cost_per_token=0.0,  # pricing TBD
+            max_input_tokens=131072,  # 128K context
             max_output_tokens=16384,
             supports_function_calling=True,
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="xAI Grok Build 0.1 — fast coding model for agentic SWE workflows. Direct API: XAI_API_KEY + https://api.x.ai/v1."
+            description="xAI Grok Build 0.1 — fast coding model for agentic SWE workflows. Direct API: XAI_API_KEY + https://api.x.ai/v1.",
         ),
-        
         # Performance/Best Value Models
         "claude-4.6-sonnet": ModelInfo(  # Map to Sonnet 5 — drop-in replacement
             model_name="openrouter/anthropic/claude-sonnet-5",
@@ -276,7 +277,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Sonnet 5 via OpenRouter — drop-in upgrade from Sonnet 4.6. Best value for coding agents and production use."
+            description="Anthropic's Claude Sonnet 5 via OpenRouter — drop-in upgrade from Sonnet 4.6. Best value for coding agents and production use.",
         ),
         "gpt-5.1": ModelInfo(
             model_name="gpt-5.1",
@@ -289,7 +290,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI's GPT-5.1 - Configurable reasoning effort with good balance of speed/quality. Perfect for agentic workflows."
+            description="OpenAI's GPT-5.1 - Configurable reasoning effort with good balance of speed/quality. Perfect for agentic workflows.",
         ),
         "deepseek-r1": ModelInfo(
             model_name="deepseek-r1",
@@ -302,9 +303,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="DeepSeek's R1 - Strong reasoning at fraction of cost with 87.5% AIME score. Good for specialized reasoning agents."
+            description="DeepSeek's R1 - Strong reasoning at fraction of cost with 87.5% AIME score. Good for specialized reasoning agents.",
         ),
-        
         # Budget/High-Volume Models
         "claude-4.5-haiku": ModelInfo(
             model_name="claude-4.5-haiku",
@@ -317,7 +317,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic's Claude Haiku 4.5 - Fast classification for agent orchestration. Ideal as router model in multi-agent systems."
+            description="Anthropic's Claude Haiku 4.5 - Fast classification for agent orchestration. Ideal as router model in multi-agent systems.",
         ),
         "gpt-5-mini": ModelInfo(
             model_name="gpt-5-mini",
@@ -330,7 +330,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="OpenAI's GPT-5 Mini - Budget option for simple agent tasks and inner-loop routing decisions."
+            description="OpenAI's GPT-5 Mini - Budget option for simple agent tasks and inner-loop routing decisions.",
         ),
         "gemini-2.5-flash": ModelInfo(
             model_name="gemini-2.5-flash",
@@ -343,7 +343,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Google's Gemini 2.5 Flash - Cheapest option with 1M context. Great for summarization sub-agents and ultra-cheap operations."
+            description="Google's Gemini 2.5 Flash - Cheapest option with 1M context. Great for summarization sub-agents and ultra-cheap operations.",
         ),
         "deepseek-v3.2": ModelInfo(
             model_name="deepseek-v3.2",
@@ -356,9 +356,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="DeepSeek's V3.2 - Ultra-budget model (~100x cheaper than GPT-5.2 output) with quality score 79/100. Best $/quality ratio."
+            description="DeepSeek's V3.2 - Ultra-budget model (~100x cheaper than GPT-5.2 output) with quality score 79/100. Best $/quality ratio.",
         ),
-        
         # Poolside Laguna (coding agent) — laguna-xs-2.1 is already used in the
         # "coder" role cascade (model_refs.py) but had no registry entry until now.
         "poolside/laguna-xs-2.1": ModelInfo(
@@ -371,7 +370,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=True,
             supports_vision=False,
             supports_system_messages=True,
-            description="Poolside Laguna XS 2.1 — extremely cheap agentic coding model. Used as a fallback in weebot's 'coder' role cascade."
+            description="Poolside Laguna XS 2.1 — extremely cheap agentic coding model. Used as a fallback in weebot's 'coder' role cascade.",
         ),
         "poolside/laguna-s-2.1": ModelInfo(
             model_name="poolside/laguna-s-2.1",
@@ -383,9 +382,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=True,
             supports_vision=False,
             supports_system_messages=True,
-            description="Poolside Laguna S 2.1 — larger sibling of Laguna XS 2.1. Verified present on OpenRouter; not yet wired into a role cascade."
+            description="Poolside Laguna S 2.1 — larger sibling of Laguna XS 2.1. Verified present on OpenRouter; not yet wired into a role cascade.",
         ),
-
         # Open Source Models
         "k2": ModelInfo(
             model_name="k2",
@@ -398,9 +396,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=False,
-            description="K2 Open Source model - Community model with strong agent capabilities (82) and good reasoning (78)."
+            description="K2 Open Source model - Community model with strong agent capabilities (82) and good reasoning (78).",
         ),
-        
         # Legacy models for backward compatibility
         "gpt-4o": ModelInfo(
             model_name="gpt-4o",
@@ -413,7 +410,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI's most advanced multimodal model"
+            description="OpenAI's most advanced multimodal model",
         ),
         "gpt-4o-mini": ModelInfo(
             model_name="gpt-4o-mini",
@@ -426,7 +423,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI's affordable multimodal model"
+            description="OpenAI's affordable multimodal model",
         ),
         "gpt-3.5-turbo": ModelInfo(
             model_name="gpt-3.5-turbo",
@@ -437,9 +434,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="OpenAI's efficient chat model"
+            description="OpenAI's efficient chat model",
         ),
-        
         # Anthropic Models
         "claude-3-5-sonnet-20241022": ModelInfo(
             model_name="claude-3-5-sonnet-20241022",
@@ -451,7 +447,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=True,
             supports_vision=True,
             supports_system_messages=True,
-            description="Anthropic's most intelligent model"
+            description="Anthropic's most intelligent model",
         ),
         "claude-3-opus-20240229": ModelInfo(
             model_name="claude-3-opus-20240229",
@@ -463,7 +459,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=True,
             supports_vision=True,
             supports_system_messages=True,
-            description="Anthropic's most powerful model"
+            description="Anthropic's most powerful model",
         ),
         "claude-3-haiku-20240307": ModelInfo(
             model_name="claude-3-haiku-20240307",
@@ -475,9 +471,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=True,
             supports_vision=True,
             supports_system_messages=True,
-            description="Anthropic's fastest model"
+            description="Anthropic's fastest model",
         ),
-        
         # Google Models (gemini-1.5-pro removed — deprecated; use openrouter/google/gemini-2.5-pro)
         "gemini/gemini-1.5-flash": ModelInfo(
             model_name="gemini/gemini-1.5-flash",
@@ -490,9 +485,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Google's fast and efficient multimodal model"
+            description="Google's fast and efficient multimodal model",
         ),
-        
         # Mistral Models
         "mistral-large-latest": ModelInfo(
             model_name="mistral-large-latest",
@@ -503,7 +497,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=32768,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Mistral's most capable model"
+            description="Mistral's most capable model",
         ),
         "mistral-medium-latest": ModelInfo(
             model_name="mistral-medium-latest",
@@ -514,9 +508,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=32768,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Mistral's balanced performance model"
+            description="Mistral's balanced performance model",
         ),
-        
         # Groq Models
         "groq/llama3-70b-8192": ModelInfo(
             model_name="groq/llama3-70b-8192",
@@ -527,7 +520,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Groq's fast Llama 3 70B model"
+            description="Groq's fast Llama 3 70B model",
         ),
         "groq/llama-3.1-8b-instant": ModelInfo(
             model_name="groq/llama-3.1-8b-instant",
@@ -538,9 +531,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Groq's instant Llama 3.1 8B model"
+            description="Groq's instant Llama 3.1 8B model",
         ),
-        
         # Ollama Models (Local)
         "llama3": ModelInfo(
             model_name="llama3",
@@ -551,7 +543,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Meta's Llama 3 model (local)"
+            description="Meta's Llama 3 model (local)",
         ),
         "phi3": ModelInfo(
             model_name="phi3",
@@ -562,9 +554,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Microsoft's Phi-3 model (local)"
+            description="Microsoft's Phi-3 model (local)",
         ),
-        
         # DeepSeek Models
         "deepseek-chat": ModelInfo(
             model_name="deepseek-chat",
@@ -575,7 +566,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek's efficient chat model (legacy)"
+            description="DeepSeek's efficient chat model (legacy)",
         ),
         "deepseek-coder": ModelInfo(
             model_name="deepseek-coder",
@@ -586,18 +577,18 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek's code generation model (legacy)"
+            description="DeepSeek's code generation model (legacy)",
         ),
         "deepseek-v4-pro": ModelInfo(
             model_name="deepseek-v4-pro",
             provider=ModelProvider.DEEPSEEK,
-            input_cost_per_token=5.5e-07,     # $0.55/M input
-            output_cost_per_token=2.19e-06,   # $2.19/M output
-            max_input_tokens=163840,           # 160K context (per OpenRouter listing)
+            input_cost_per_token=5.5e-07,  # $0.55/M input
+            output_cost_per_token=2.19e-06,  # $2.19/M output
+            max_input_tokens=163840,  # 160K context (per OpenRouter listing)
             max_output_tokens=8192,
-            supports_function_calling=True,    # confirmed: tool-calls docs
+            supports_function_calling=True,  # confirmed: tool-calls docs
             supports_system_messages=True,
-            supports_response_schema=True,     # confirmed: json_mode docs
+            supports_response_schema=True,  # confirmed: json_mode docs
             description=(
                 "DeepSeek V4 Pro — strongest reasoning model with chain-of-thought "
                 "thinking mode (thinking parameter via extra_body, reasoning_effort: "
@@ -645,9 +636,9 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
         "deepseek-v4-flash": ModelInfo(
             model_name="deepseek-v4-flash",
             provider=ModelProvider.DEEPSEEK,
-            input_cost_per_token=2.7e-07,     # $0.27/M input
-            output_cost_per_token=1.1e-06,    # $1.10/M output
-            max_input_tokens=163840,           # 160K context
+            input_cost_per_token=2.7e-07,  # $0.27/M input
+            output_cost_per_token=1.1e-06,  # $1.10/M output
+            max_input_tokens=163840,  # 160K context
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
@@ -658,7 +649,6 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
                 "Docs: https://api-docs.deepseek.com/"
             ),
         ),
-        
         # Moonshot / Kimi Models
         "moonshot-v1-8k": ModelInfo(
             model_name="moonshot-v1-8k",
@@ -669,7 +659,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Moonshot's 8K context model (legacy)"
+            description="Moonshot's 8K context model (legacy)",
         ),
         "moonshot-v1-32k": ModelInfo(
             model_name="moonshot-v1-32k",
@@ -680,17 +670,17 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=32768,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Moonshot's 32K context model (legacy)"
+            description="Moonshot's 32K context model (legacy)",
         ),
         "kimi-k2.6": ModelInfo(
             model_name="kimi-k2.6",
             provider=ModelProvider.MOONSHOT,
-            input_cost_per_token=1.0e-06,   # $1.0/M input (approximate — check pricing page)
+            input_cost_per_token=1.0e-06,  # $1.0/M input (approximate — check pricing page)
             output_cost_per_token=4.0e-06,  # $4.0/M output
-            max_input_tokens=262144,         # 256K context
-            max_output_tokens=32768,         # 32K output (1024*32 from docs example)
+            max_input_tokens=262144,  # 256K context
+            max_output_tokens=32768,  # 32K output (1024*32 from docs example)
             supports_function_calling=True,  # confirmed: tool-use docs
-            supports_vision=True,            # confirmed: model comparison shows vision support
+            supports_vision=True,  # confirmed: model comparison shows vision support
             supports_system_messages=True,
             supports_response_schema=True,
             description=(
@@ -700,7 +690,6 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
                 "Docs: https://platform.kimi.ai/docs/api/"
             ),
         ),
-        
         # XAI Models
         "grok/grok-2-1212": ModelInfo(
             model_name="grok/grok-2-1212",
@@ -711,9 +700,8 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="XAI's Grok 2 model"
+            description="XAI's Grok 2 model",
         ),
-        
         # OpenRouter Models
         "qwen/qwen3.7-plus": ModelInfo(
             model_name="qwen/qwen3.7-plus",
@@ -726,7 +714,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Qwen 3.7 Plus — powerful reasoning model via OpenRouter (weebot default)"
+            description="Qwen 3.7 Plus — powerful reasoning model via OpenRouter (weebot default)",
         ),
         "qwen/qwen3.7-flash": ModelInfo(
             model_name="qwen/qwen3.7-flash",
@@ -756,7 +744,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Google Gemini 2.5 Flash via OpenRouter"
+            description="Google Gemini 2.5 Flash via OpenRouter",
         ),
         # openrouter/anthropic/claude-3.5-sonnet removed — deprecated (no endpoints); use openrouter/anthropic/claude-3.7-sonnet
         "openrouter/openai/gpt-4o-mini": ModelInfo(
@@ -770,7 +758,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI GPT-4o Mini via OpenRouter"
+            description="OpenAI GPT-4o Mini via OpenRouter",
         ),
         "openrouter/auto": ModelInfo(
             model_name="openrouter/auto",
@@ -783,7 +771,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenRouter Auto - automatically selects the best model via NotDiamond"
+            description="OpenRouter Auto - automatically selects the best model via NotDiamond",
         ),
         "openrouter/openai/gpt-4.1": ModelInfo(
             model_name="openrouter/openai/gpt-4.1",
@@ -796,7 +784,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI GPT-4.1 via OpenRouter"
+            description="OpenAI GPT-4.1 via OpenRouter",
         ),
         "openrouter/openai/gpt-4.1-mini": ModelInfo(
             model_name="openrouter/openai/gpt-4.1-mini",
@@ -809,7 +797,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="OpenAI GPT-4.1 Mini via OpenRouter"
+            description="OpenAI GPT-4.1 Mini via OpenRouter",
         ),
         "openrouter/anthropic/claude-3.7-sonnet": ModelInfo(
             model_name="openrouter/anthropic/claude-3.7-sonnet",
@@ -822,7 +810,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic Claude 3.7 Sonnet via OpenRouter"
+            description="Anthropic Claude 3.7 Sonnet via OpenRouter",
         ),
         "openrouter/anthropic/claude-opus-4.6": ModelInfo(
             model_name="openrouter/anthropic/claude-opus-4.6",
@@ -835,7 +823,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Anthropic Claude Opus 4.6 via OpenRouter"
+            description="Anthropic Claude Opus 4.6 via OpenRouter",
         ),
         "openrouter/google/gemini-2.5-pro": ModelInfo(
             model_name="openrouter/google/gemini-2.5-pro",
@@ -848,7 +836,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Google Gemini 2.5 Pro via OpenRouter"
+            description="Google Gemini 2.5 Pro via OpenRouter",
         ),
         "openrouter/deepseek/deepseek-chat-v3.1": ModelInfo(
             model_name="openrouter/deepseek/deepseek-chat-v3.1",
@@ -859,7 +847,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=4096,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek Chat V3.1 via OpenRouter"
+            description="DeepSeek Chat V3.1 via OpenRouter",
         ),
         "openrouter/deepseek/deepseek-r1-0528": ModelInfo(
             model_name="openrouter/deepseek/deepseek-r1-0528",
@@ -870,7 +858,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="DeepSeek R1 reasoning model via OpenRouter"
+            description="DeepSeek R1 reasoning model via OpenRouter",
         ),
         "openrouter/x-ai/grok-4.1-fast": ModelInfo(
             model_name="openrouter/x-ai/grok-4.1-fast",
@@ -881,7 +869,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="xAI Grok 4.1 Fast via OpenRouter"
+            description="xAI Grok 4.1 Fast via OpenRouter",
         ),
         "openrouter/meta-llama/llama-4-maverick": ModelInfo(
             model_name="openrouter/meta-llama/llama-4-maverick",
@@ -892,7 +880,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             max_output_tokens=8192,
             supports_function_calling=True,
             supports_system_messages=True,
-            description="Meta Llama 4 Maverick via OpenRouter"
+            description="Meta Llama 4 Maverick via OpenRouter",
         ),
         "openrouter/moonshotai/kimi-k2.5": ModelInfo(
             model_name="openrouter/moonshotai/kimi-k2.5",
@@ -905,337 +893,433 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Moonshot Kimi K2.5 via OpenRouter"
+            description="Moonshot Kimi K2.5 via OpenRouter",
         ),
-
         # ═══════════════════════════════════════════════════════════════
         # Image Generation Models (text → image, via OpenRouter)
         # ═══════════════════════════════════════════════════════════════
-
         # ── Sourceful Riverflow (FREE tier) ──────────────────────────
         "sourceful/riverflow-v2.5-pro:free": ModelInfo(
             model_name="sourceful/riverflow-v2.5-pro:free",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2.5 Pro (FREE) — high-quality text-to-image. Best free image gen on OpenRouter."
+            description="Sourceful Riverflow V2.5 Pro (FREE) — high-quality text-to-image. Best free image gen on OpenRouter.",
         ),
         "sourceful/riverflow-v2.5-fast:free": ModelInfo(
             model_name="sourceful/riverflow-v2.5-fast:free",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2.5 Fast (FREE) — fast text-to-image generation. Lower quality than Pro, 2-3x faster."
+            description="Sourceful Riverflow V2.5 Fast (FREE) — fast text-to-image generation. Lower quality than Pro, 2-3x faster.",
         ),
-
         # ── Sourceful Riverflow (Paid) ───────────────────────────────
         "sourceful/riverflow-v2-pro": ModelInfo(
             model_name="sourceful/riverflow-v2-pro",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2 Pro — premium text-to-image generation, max quality."
+            description="Sourceful Riverflow V2 Pro — premium text-to-image generation, max quality.",
         ),
         "sourceful/riverflow-v2-fast": ModelInfo(
             model_name="sourceful/riverflow-v2-fast",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=4e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=4e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2 Fast — fast, cost-effective text-to-image."
+            description="Sourceful Riverflow V2 Fast — fast, cost-effective text-to-image.",
         ),
         "sourceful/riverflow-v2-max-preview": ModelInfo(
             model_name="sourceful/riverflow-v2-max-preview",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2 Max Preview (FREE) — max resolution preview."
+            description="Sourceful Riverflow V2 Max Preview (FREE) — max resolution preview.",
         ),
         "sourceful/riverflow-v2-standard-preview": ModelInfo(
             model_name="sourceful/riverflow-v2-standard-preview",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2 Standard Preview (FREE) — standard quality preview."
+            description="Sourceful Riverflow V2 Standard Preview (FREE) — standard quality preview.",
         ),
         "sourceful/riverflow-v2-fast-preview": ModelInfo(
             model_name="sourceful/riverflow-v2-fast-preview",
             provider=ModelProvider.SOURCEFUL,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Sourceful Riverflow V2 Fast Preview (FREE) — fastest preview generation."
+            description="Sourceful Riverflow V2 Fast Preview (FREE) — fastest preview generation.",
         ),
-
         # ── Recraft (professional design, vector + raster) ───────────
         "recraft/recraft-v4.1-pro-vector": ModelInfo(
             model_name="recraft/recraft-v4.1-pro-vector",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=1e-05, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-05,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 Pro Vector — professional SVG/vector design generation. Best for logos, icons, brand assets."
+            description="Recraft V4.1 Pro Vector — professional SVG/vector design generation. Best for logos, icons, brand assets.",
         ),
         "recraft/recraft-v4.1-vector": ModelInfo(
             model_name="recraft/recraft-v4.1-vector",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 Vector — standard vector design generation."
+            description="Recraft V4.1 Vector — standard vector design generation.",
         ),
         "recraft/recraft-v4.1-utility-pro": ModelInfo(
             model_name="recraft/recraft-v4.1-utility-pro",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=1e-05, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-05,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 Utility Pro — image editing, upscaling, background removal, style transfer."
+            description="Recraft V4.1 Utility Pro — image editing, upscaling, background removal, style transfer.",
         ),
         "recraft/recraft-v4.1-utility": ModelInfo(
             model_name="recraft/recraft-v4.1-utility",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 Utility — standard image editing and manipulation."
+            description="Recraft V4.1 Utility — standard image editing and manipulation.",
         ),
         "recraft/recraft-v4.1-pro": ModelInfo(
             model_name="recraft/recraft-v4.1-pro",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=1e-05, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-05,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 Pro — premium raster image generation, highest quality."
+            description="Recraft V4.1 Pro — premium raster image generation, highest quality.",
         ),
         "recraft/recraft-v4.1": ModelInfo(
             model_name="recraft/recraft-v4.1",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4.1 — standard raster image generation."
+            description="Recraft V4.1 — standard raster image generation.",
         ),
         "recraft/recraft-v4-pro-vector": ModelInfo(
             model_name="recraft/recraft-v4-pro-vector",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=1e-05, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-05,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4 Pro Vector — premium vector generation (previous generation)."
+            description="Recraft V4 Pro Vector — premium vector generation (previous generation).",
         ),
         "recraft/recraft-v4-vector": ModelInfo(
             model_name="recraft/recraft-v4-vector",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4 Vector — standard vector generation (previous generation)."
+            description="Recraft V4 Vector — standard vector generation (previous generation).",
         ),
         "recraft/recraft-v4-pro": ModelInfo(
             model_name="recraft/recraft-v4-pro",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=1e-05, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-05,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4 Pro — premium raster (previous generation)."
+            description="Recraft V4 Pro — premium raster (previous generation).",
         ),
         "recraft/recraft-v4": ModelInfo(
             model_name="recraft/recraft-v4",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V4 — standard raster (previous generation)."
+            description="Recraft V4 — standard raster (previous generation).",
         ),
         "recraft/recraft-v3": ModelInfo(
             model_name="recraft/recraft-v3",
             provider=ModelProvider.RECRAFT,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Recraft V3 — legacy image generation model."
+            description="Recraft V3 — legacy image generation model.",
         ),
-
         # ── Black Forest Labs Flux ──────────────────────────────────
         "black-forest-labs/flux.2-pro": ModelInfo(
             model_name="black-forest-labs/flux.2-pro",
             provider=ModelProvider.BLACK_FOREST_LABS,
-            input_cost_per_token=5e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Flux.2 Pro — Black Forest Labs' highest-quality text-to-image. Photorealistic output, excellent prompt adherence."
+            description="Flux.2 Pro — Black Forest Labs' highest-quality text-to-image. Photorealistic output, excellent prompt adherence.",
         ),
         "black-forest-labs/flux.2-max": ModelInfo(
             model_name="black-forest-labs/flux.2-max",
             provider=ModelProvider.BLACK_FOREST_LABS,
-            input_cost_per_token=8e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=8e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Flux.2 Max — maximum resolution and detail. For print-ready, high-DPI outputs."
+            description="Flux.2 Max — maximum resolution and detail. For print-ready, high-DPI outputs.",
         ),
         "black-forest-labs/flux.2-flex": ModelInfo(
             model_name="black-forest-labs/flux.2-flex",
             provider=ModelProvider.BLACK_FOREST_LABS,
-            input_cost_per_token=3e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=3e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Flux.2 Flex — balanced quality/speed for batch generation and iterations."
+            description="Flux.2 Flex — balanced quality/speed for batch generation and iterations.",
         ),
         "black-forest-labs/flux.2-klein-4b": ModelInfo(
             model_name="black-forest-labs/flux.2-klein-4b",
             provider=ModelProvider.BLACK_FOREST_LABS,
-            input_cost_per_token=1e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Flux.2 Klein 4B — lightweight 4B-param variant. Fast, cheap, good for thumbnails and icons."
+            description="Flux.2 Klein 4B — lightweight 4B-param variant. Fast, cheap, good for thumbnails and icons.",
         ),
-
         # ── Google Gemini Image ─────────────────────────────────────
         "google/gemini-2.5-flash-image": ModelInfo(
             model_name="google/gemini-2.5-flash-image",
             provider=ModelProvider.GEMINI,
-            input_cost_per_token=1e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=1e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Gemini 2.5 Flash Image — Google's fast text-to-image via Gemini. Good for diagrams, UI mockups, illustrations."
+            description="Gemini 2.5 Flash Image — Google's fast text-to-image via Gemini. Good for diagrams, UI mockups, illustrations.",
         ),
         "google/gemini-3.1-flash-image-preview": ModelInfo(
             model_name="google/gemini-3.1-flash-image-preview",
             provider=ModelProvider.GEMINI,
-            input_cost_per_token=0.0, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.0,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Gemini 3.1 Flash Image Preview (FREE) — next-gen Gemini image generation. Experimental."
+            description="Gemini 3.1 Flash Image Preview (FREE) — next-gen Gemini image generation. Experimental.",
         ),
-
         # ── xAI Grok Imagine ────────────────────────────────────────
         "x-ai/grok-imagine-image-quality": ModelInfo(
             model_name="x-ai/grok-imagine-image-quality",
             provider=ModelProvider.XAI,
-            input_cost_per_token=5e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Grok Imagine (Quality) — xAI's text-to-image model with photorealism focus. High prompt adherence."
+            description="Grok Imagine (Quality) — xAI's text-to-image model with photorealism focus. High prompt adherence.",
         ),
         "x-ai/grok-voice-latest": ModelInfo(
             model_name="x-ai/grok-voice-latest",
             provider=ModelProvider.XAI,
-            input_cost_per_token=1.5e-05, output_cost_per_token=1.5e-05,
-            max_input_tokens=131072, max_output_tokens=16384,
-            supports_function_calling=True, supports_vision=False,
-            supports_audio_input=True, supports_audio_output=True,
+            input_cost_per_token=1.5e-05,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_audio_input=True,
+            supports_audio_output=True,
             supports_system_messages=True,
-            description="Grok Voice Agent (Latest) — xAI's real-time bidirectional audio and voice assistant model."
+            description="Grok Voice Agent (Latest) — xAI's real-time bidirectional audio and voice assistant model.",
         ),
         "x-ai/grok-voice-think-fast-1.0": ModelInfo(
             model_name="x-ai/grok-voice-think-fast-1.0",
             provider=ModelProvider.XAI,
-            input_cost_per_token=2e-05, output_cost_per_token=2e-05,
-            max_input_tokens=131072, max_output_tokens=16384,
-            supports_function_calling=True, supports_vision=False,
-            supports_audio_input=True, supports_audio_output=True,
+            input_cost_per_token=2e-05,
+            output_cost_per_token=2e-05,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=False,
+            supports_audio_input=True,
+            supports_audio_output=True,
             supports_system_messages=True,
-            description="Grok Voice Agent (Think Fast 1.0) — flagship voice model with native real-time reasoning and deep analysis capabilities."
+            description="Grok Voice Agent (Think Fast 1.0) — flagship voice model with native real-time reasoning and deep analysis capabilities.",
         ),
         "x-ai/grok-imagine-video-1.5": ModelInfo(
             model_name="x-ai/grok-imagine-video-1.5",
             provider=ModelProvider.XAI,
-            input_cost_per_token=0.0005, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=True,
+            input_cost_per_token=0.0005,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=True,
             supports_system_messages=True,
-            description="Grok Imagine Video 1.5 — high-fidelity image-to-video and cinematic animation model. $0.50 per generation."
+            description="Grok Imagine Video 1.5 — high-fidelity image-to-video and cinematic animation model. $0.50 per generation.",
         ),
         "x-ai/grok-4.3": ModelInfo(
             model_name="x-ai/grok-4.3",
             provider=ModelProvider.XAI,
-            input_cost_per_token=2e-06, output_cost_per_token=1e-05,
-            max_input_tokens=131072, max_output_tokens=16384,
-            supports_function_calling=True, supports_vision=True,
-            supports_system_messages=True, supports_response_schema=True,
-            description="Grok 4.3 — xAI's flagship text generation, reasoning, and structured output model."
+            input_cost_per_token=2e-06,
+            output_cost_per_token=1e-05,
+            max_input_tokens=131072,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Grok 4.3 — xAI's flagship text generation, reasoning, and structured output model.",
         ),
         "x-ai/grok-4.5": ModelInfo(
             model_name="x-ai/grok-4.5",
             provider=ModelProvider.XAI,
-            input_cost_per_token=3e-06, output_cost_per_token=1.5e-05,
-            max_input_tokens=2000000, max_output_tokens=16384,
-            supports_function_calling=True, supports_vision=True,
-            supports_system_messages=True, supports_response_schema=True,
-            description="Grok 4.5 — xAI's flagship reasoning, agentic, and structured-output model. 2M context, successor to Grok 4.3."
+            input_cost_per_token=3e-06,
+            output_cost_per_token=1.5e-05,
+            max_input_tokens=2000000,
+            max_output_tokens=16384,
+            supports_function_calling=True,
+            supports_vision=True,
+            supports_system_messages=True,
+            supports_response_schema=True,
+            description="Grok 4.5 — xAI's flagship reasoning, agentic, and structured-output model. 2M context, successor to Grok 4.3.",
         ),
-
         # ── ByteDance Seedream ──────────────────────────────────────
         "bytedance-seed/seedream-4.5": ModelInfo(
             model_name="bytedance-seed/seedream-4.5",
             provider=ModelProvider.BYTEDANCE,
-            input_cost_per_token=4e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=4e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Seedream 4.5 — ByteDance's text-to-image model. Strong in Asian aesthetics, text rendering, and character consistency."
+            description="Seedream 4.5 — ByteDance's text-to-image model. Strong in Asian aesthetics, text rendering, and character consistency.",
         ),
-
         # ── Qwen Image 3 ─────────────────────────────────────────────
         "qwen/qwen-image-3": ModelInfo(
             model_name="qwen/qwen-image-3",
             provider=ModelProvider.OPENROUTER,
-            input_cost_per_token=0.03, output_cost_per_token=0.0,  # $0.03/img
-            max_input_tokens=65536, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.03,
+            output_cost_per_token=0.0,  # $0.03/img
+            max_input_tokens=65536,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Qwen Image 3 — unified image generation and editing. Precise text rendering down to 10px, enhanced world knowledge. Added 2026-08-05."
+            description="Qwen Image 3 — unified image generation and editing. Precise text rendering down to 10px, enhanced world knowledge. Added 2026-08-05.",
         ),
         "qwen/qwen-image-3-pro": ModelInfo(
             model_name="qwen/qwen-image-3-pro",
             provider=ModelProvider.OPENROUTER,
-            input_cost_per_token=0.04, output_cost_per_token=0.0,  # $0.04/img
-            max_input_tokens=65536, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=0.04,
+            output_cost_per_token=0.0,  # $0.04/img
+            max_input_tokens=65536,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Qwen Image 3 Pro — premium tier of Qwen Image 3. Precise text/detail rendering down to 10px, richer world knowledge. Added 2026-08-05."
+            description="Qwen Image 3 Pro — premium tier of Qwen Image 3. Precise text/detail rendering down to 10px, richer world knowledge. Added 2026-08-05.",
         ),
-
         # ── Microsoft MAI Image ──────────────────────────────────────
         "microsoft/mai-image-2.5": ModelInfo(
             model_name="microsoft/mai-image-2.5",
             provider=ModelProvider.MICROSOFT,
-            input_cost_per_token=5e-06, output_cost_per_token=0.0,
-            max_input_tokens=4096, max_output_tokens=1,
-            supports_function_calling=False, supports_vision=False,
+            input_cost_per_token=5e-06,
+            output_cost_per_token=0.0,
+            max_input_tokens=4096,
+            max_output_tokens=1,
+            supports_function_calling=False,
+            supports_vision=False,
             supports_system_messages=True,
-            description="Microsoft MAI Image 2.5 — enterprise-grade text-to-image. Strong in safety, branding, and consistency."
+            description="Microsoft MAI Image 2.5 — enterprise-grade text-to-image. Strong in safety, branding, and consistency.",
         ),
         "nvidia/llama-nemotron-rerank-vl-1b-v2:free": ModelInfo(
             model_name="nvidia/llama-nemotron-rerank-vl-1b-v2:free",
@@ -1247,7 +1331,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=True,
             supports_system_messages=False,
-            description="NVIDIA Nemotron Rerank VL 1B — free-tier rerank model via OpenRouter."
+            description="NVIDIA Nemotron Rerank VL 1B — free-tier rerank model via OpenRouter.",
         ),
         "z-ai/glm-5v-turbo": ModelInfo(
             model_name="z-ai/glm-5v-turbo",
@@ -1260,7 +1344,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Z.AI's GLM-5V-Turbo. Strong VLM coding model, excels in GUI agent tasks and pixel-level replication."
+            description="Z.AI's GLM-5V-Turbo. Strong VLM coding model, excels in GUI agent tasks and pixel-level replication.",
         ),
         "z-ai/glm-4.6v": ModelInfo(
             model_name="z-ai/glm-4.6v",
@@ -1273,7 +1357,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=True,
             supports_system_messages=True,
             supports_response_schema=True,
-            description="Z.AI's GLM-4.6V - Native multimodal model with support for mixed inputs and visual tool use."
+            description="Z.AI's GLM-4.6V - Native multimodal model with support for mixed inputs and visual tool use.",
         ),
         "z-ai/glm-ocr": ModelInfo(
             model_name="z-ai/glm-ocr",
@@ -1285,7 +1369,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=True,
             supports_system_messages=True,
-            description="Z.AI's GLM-OCR - Lightweight 0.9B layout parsing and high-accuracy text extraction model."
+            description="Z.AI's GLM-OCR - Lightweight 0.9B layout parsing and high-accuracy text extraction model.",
         ),
         "z-ai/glm-image": ModelInfo(
             model_name="z-ai/glm-image",
@@ -1297,7 +1381,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's GLM-Image - Autoregressive-diffusion model for high-fidelity text-to-image generation."
+            description="Z.AI's GLM-Image - Autoregressive-diffusion model for high-fidelity text-to-image generation.",
         ),
         "z-ai/cogview-4": ModelInfo(
             model_name="z-ai/cogview-4",
@@ -1309,7 +1393,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's CogView-4 - High-performance bilingual image generator with strong prompt adherence."
+            description="Z.AI's CogView-4 - High-performance bilingual image generator with strong prompt adherence.",
         ),
         "z-ai/cogvideox-3": ModelInfo(
             model_name="z-ai/cogvideox-3",
@@ -1321,7 +1405,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's CogVideoX-3 - Video generation model featuring new frame generation capabilities for high stability and clarity. $0.20 per video."
+            description="Z.AI's CogVideoX-3 - Video generation model featuring new frame generation capabilities for high stability and clarity. $0.20 per video.",
         ),
         "z-ai/vidu-q1": ModelInfo(
             model_name="z-ai/vidu-q1",
@@ -1333,7 +1417,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's Vidu Q1 - Next-generation high-quality video generation model, delivering photorealistic 1080P video clips. $0.40 per video."
+            description="Z.AI's Vidu Q1 - Next-generation high-quality video generation model, delivering photorealistic 1080P video clips. $0.40 per video.",
         ),
         "z-ai/vidu-2": ModelInfo(
             model_name="z-ai/vidu-2",
@@ -1345,7 +1429,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's Vidu 2 - Next-generation fast and efficient video generation model, optimized for pan-entertainment and e-commerce. $0.20 per video."
+            description="Z.AI's Vidu 2 - Next-generation fast and efficient video generation model, optimized for pan-entertainment and e-commerce. $0.20 per video.",
         ),
         "z-ai/glm-asr-2512": ModelInfo(
             model_name="z-ai/glm-asr-2512",
@@ -1358,7 +1442,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_vision=False,
             supports_audio_input=True,
             supports_system_messages=True,
-            description="Z.AI's GLM-ASR-2512 - Next-generation speech recognition model enabling real-time audio transcription with extremely low character error rate (CER 0.0717)."
+            description="Z.AI's GLM-ASR-2512 - Next-generation speech recognition model enabling real-time audio transcription with extremely low character error rate (CER 0.0717).",
         ),
         "z-ai/glm-agent-slide": ModelInfo(
             model_name="z-ai/glm-agent-slide",
@@ -1370,7 +1454,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's GLM Slide/Poster Agent - Natural language visual generation, smart search synthesis, and layout design. $0.70 per million tokens."
+            description="Z.AI's GLM Slide/Poster Agent - Natural language visual generation, smart search synthesis, and layout design. $0.70 per million tokens.",
         ),
         "z-ai/glm-agent-translation": ModelInfo(
             model_name="z-ai/glm-agent-translation",
@@ -1382,7 +1466,7 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's Translation Agent - Expert-level multilingual translation with terminology/glossary support and reflective optimization modes. $3.00 per million tokens."
+            description="Z.AI's Translation Agent - Expert-level multilingual translation with terminology/glossary support and reflective optimization modes. $3.00 per million tokens.",
         ),
         "z-ai/glm-agent-video-template": ModelInfo(
             model_name="z-ai/glm-agent-video-template",
@@ -1394,35 +1478,35 @@ def _get_default_model_registry() -> Dict[str, ModelInfo]:
             supports_function_calling=False,
             supports_vision=False,
             supports_system_messages=True,
-            description="Z.AI's Video Effect Template Agent - Single-image professional video generation using pre-defined templates (French Kiss, Bodyshake, etc.). $0.20 per video."
+            description="Z.AI's Video Effect Template Agent - Single-image professional video generation using pre-defined templates (French Kiss, Bodyshake, etc.). $0.20 per video.",
         ),
     }
 
 
 # Global model registry
-MODEL_REGISTRY: Dict[str, ModelInfo] = _load_model_registry()
+MODEL_REGISTRY: dict[str, ModelInfo] = _load_model_registry()
 
 
-def get_model_info(model_name: str) -> Optional[ModelInfo]:
+def get_model_info(model_name: str) -> ModelInfo | None:
     """
     Get information about a specific model.
-    
+
     Args:
         model_name: Name of the model to look up
-        
+
     Returns:
         ModelInfo object if found, None otherwise
     """
     return MODEL_REGISTRY.get(model_name)
 
 
-def get_models_by_provider(provider: ModelProvider) -> List[ModelInfo]:
+def get_models_by_provider(provider: ModelProvider) -> list[ModelInfo]:
     """
     Get all models for a specific provider.
-    
+
     Args:
         provider: Provider to filter models by
-        
+
     Returns:
         List of ModelInfo objects for the provider
     """
@@ -1432,73 +1516,72 @@ def get_models_by_provider(provider: ModelProvider) -> List[ModelInfo]:
 def get_cheapest_model_for_task(
     input_tokens: int,
     output_tokens: int,
-    providers: Optional[List[ModelProvider]] = None,
-    required_capabilities: Optional[List[str]] = None
-) -> Optional[ModelInfo]:
+    providers: list[ModelProvider] | None = None,
+    required_capabilities: list[str] | None = None,
+) -> ModelInfo | None:
     """
     Find the cheapest model that meets the requirements for a specific task.
-    
+
     Args:
         input_tokens: Expected number of input tokens
         output_tokens: Expected number of output tokens
         providers: Optional list of providers to consider
         required_capabilities: Optional list of required capabilities (function_calling, vision, etc.)
-        
+
     Returns:
         Cheapest ModelInfo that meets requirements, or None if no model found
     """
     candidates = []
-    
+
     for model in MODEL_REGISTRY.values():
         # Filter by provider if specified
         if providers and model.provider not in providers:
             continue
-            
+
         # Check if model has required capabilities
         if required_capabilities:
             has_all_caps = True
             for cap in required_capabilities:
-                if cap == "function_calling" and not model.supports_function_calling:
-                    has_all_caps = False
-                    break
-                elif cap == "vision" and not model.supports_vision:
-                    has_all_caps = False
-                    break
-                elif cap == "system_messages" and not model.supports_system_messages:
-                    has_all_caps = False
-                    break
-                elif cap == "response_schema" and not model.supports_response_schema:
-                    has_all_caps = False
-                    break
-                elif cap == "prompt_caching" and not model.supports_prompt_caching:
+                if (
+                    cap == "function_calling"
+                    and not model.supports_function_calling
+                    or cap == "vision"
+                    and not model.supports_vision
+                    or cap == "system_messages"
+                    and not model.supports_system_messages
+                    or cap == "response_schema"
+                    and not model.supports_response_schema
+                    or cap == "prompt_caching"
+                    and not model.supports_prompt_caching
+                ):
                     has_all_caps = False
                     break
             if not has_all_caps:
                 continue
-        
+
         # Check if model supports required token counts
         if input_tokens > model.max_input_tokens or output_tokens > model.max_output_tokens:
             continue
-            
+
         # Calculate cost for this task
         cost = model.calculate_cost(input_tokens, output_tokens)
         candidates.append((model, cost))
-    
+
     if not candidates:
         return None
-    
+
     # Return the model with the lowest cost
     candidates.sort(key=lambda x: x[1])
     return candidates[0][0]
 
 
-def get_model_cost_info(model_name: str) -> Dict[str, float]:
+def get_model_cost_info(model_name: str) -> dict[str, float]:
     """
     Get cost information for a specific model.
-    
+
     Args:
         model_name: Name of the model to look up
-        
+
     Returns:
         Dictionary with input_cost_per_1k_tokens and output_cost_per_1k_tokens
     """
@@ -1506,30 +1589,27 @@ def get_model_cost_info(model_name: str) -> Dict[str, float]:
     if model_info:
         return {
             "input_cost_per_1k_tokens": model_info.input_cost_per_token * 1000,
-            "output_cost_per_1k_tokens": model_info.output_cost_per_token * 1000
+            "output_cost_per_1k_tokens": model_info.output_cost_per_token * 1000,
         }
-    
+
     # Default values if model not found
-    return {
-        "input_cost_per_1k_tokens": 0.01,
-        "output_cost_per_1k_tokens": 0.03
-    }
+    return {"input_cost_per_1k_tokens": 0.01, "output_cost_per_1k_tokens": 0.03}
 
 
-def list_all_models() -> List[str]:
+def list_all_models() -> list[str]:
     """
     Get a list of all available model names.
-    
+
     Returns:
         List of model names
     """
     return list(MODEL_REGISTRY.keys())
 
 
-def list_all_providers() -> List[ModelProvider]:
+def list_all_providers() -> list[ModelProvider]:
     """
     Get a list of all supported providers.
-    
+
     Returns:
         List of ModelProvider enums
     """

@@ -7,6 +7,7 @@ Covers:
 - Agent design per pattern
 - File generation (dry-run mode)
 """
+
 import pytest
 
 
@@ -59,9 +60,7 @@ class TestHarnessGenerationFlow:
 
     @pytest.fixture
     def flow(self):
-        from weebot.application.flows.harness_generation_flow import (
-            HarnessGenerationFlow,
-        )
+        from weebot.application.flows.harness_generation_flow import HarnessGenerationFlow
 
         return HarnessGenerationFlow()
 
@@ -96,8 +95,7 @@ class TestHarnessGenerationFlow:
     def test_select_pattern_complex(self, flow):
         """Complex/enterprise keywords select hierarchical delegation."""
         pattern = flow._select_pattern(
-            ["research", "design", "implement"],
-            "enterprise-scale system migration",
+            ["research", "design", "implement"], "enterprise-scale system migration"
         )
         assert pattern.value == "hierarchical_delegation"
 
@@ -109,6 +107,7 @@ class TestHarnessGenerationFlow:
     def test_design_agents_pipeline(self, flow):
         """Pipeline produces 4 agents: analyst, designer, builder, reviewer."""
         from weebot.domain.models.team_architecture import TeamPattern
+
         agents = flow._design_agents("web app", TeamPattern.PIPELINE)
         assert len(agents) == 4
         assert agents[0].name == "analyst"
@@ -117,6 +116,7 @@ class TestHarnessGenerationFlow:
     def test_design_agents_fanout(self, flow):
         """Fan-out/fan-in produces 4 agents."""
         from weebot.domain.models.team_architecture import TeamPattern
+
         agents = flow._design_agents("research", TeamPattern.FAN_OUT_FAN_IN)
         assert len(agents) == 4
         names = [a.name for a in agents]
@@ -132,6 +132,7 @@ class TestHarnessGenerationFlow:
             AgentDefinition(name="a2", role="R2", skills=["research", "review"]),
         ]
         from weebot.domain.models.team_architecture import TeamPattern
+
         skills = flow._design_skills("test", agents, TeamPattern.PIPELINE)
         # 3 unique skills: research, write, review
         assert len(skills) == 3
@@ -171,20 +172,22 @@ class TestHarnessCLI:
         import hang in this test environment).
         """
         import re
+
         # harness group is defined in cli/commands/harness.py and registered
         # in cli/main.py via cli.add_command(harness)
         harness_src = open("cli/commands/harness.py", encoding="utf-8").read()
-        assert re.search(r'@click\.group\(\)\s*\n\s*def harness\(\)', harness_src) is not None
+        assert re.search(r"@click\.group\(\)\s*\n\s*def harness\(\)", harness_src) is not None
         main_src = open("cli/main.py", encoding="utf-8").read()
         assert "cli.add_command(harness)" in main_src
 
     def test_harness_generate_command(self):
         """The generate subcommand exists."""
         import re
+
         source = open("cli/commands/harness.py", encoding="utf-8").read()
         assert re.search(r'@harness\.command\("generate"\)', source) is not None
 
     def test_dry_run_flag(self):
         """The --dry-run flag is accepted."""
         source = open("cli/commands/harness.py", encoding="utf-8").read()
-        assert '--dry-run' in source
+        assert "--dry-run" in source

@@ -8,23 +8,15 @@ Five checks, all deterministic (no LLM):
 4. Schedule Honesty      — no phantom follow-up promises
 5. Prompt-Leak Redaction — system prompt fragments in user-facing text
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from typing import Any
 
-from weebot.domain.models.event import (
-    AgentEvent,
-    MessageEvent,
-    ToolEvent,
-    ToolStatus,
-)
-from weebot.domain.models.truth_binding import (
-    TruthBindingResult,
-    TruthCheck,
-    TruthViolation,
-)
+from weebot.domain.models.event import ToolEvent, ToolStatus
+from weebot.domain.models.truth_binding import TruthBindingResult, TruthCheck, TruthViolation
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +29,7 @@ _KNOWN_PROMPT_FRAGMENTS: list[re.Pattern] = [
     re.compile(r"# System Prompt", re.IGNORECASE),
     re.compile(r"## Constraints", re.IGNORECASE),
     re.compile(r"internal prompt", re.IGNORECASE),
-    re.compile(r"\binternal\s+prompt\b", re.IGNORECASE),   
+    re.compile(r"\binternal\s+prompt\b", re.IGNORECASE),
     re.compile(r"\bAs an? AI\b", re.IGNORECASE),
     re.compile(r"\bmy\s+training\s+data\b", re.IGNORECASE),
     re.compile(r"\bmy\s+instructions?\s+(?:are|say|state|tell)\b", re.IGNORECASE),
@@ -160,23 +152,17 @@ class TruthBinder:
             bound = self._redact_prompt_fragments(bound)
 
         passed = not any(
-            v.severity == "block"
-            or (v.severity == "warn" and self._strictness == "strict")
+            v.severity == "block" or (v.severity == "warn" and self._strictness == "strict")
             for v in violations
         )
 
         return TruthBindingResult(
-            passed=passed,
-            original_text=response,
-            bound_text=bound,
-            violations=violations,
+            passed=passed, original_text=response, bound_text=bound, violations=violations
         )
 
     # ── Check 1: URL Substitution ───────────────────────────────────
 
-    def _check_url_substitution(
-        self, text: str, context: dict[str, Any]
-    ) -> TruthViolation | None:
+    def _check_url_substitution(self, text: str, context: dict[str, Any]) -> TruthViolation | None:
         """Verify URLs in the response match the actual navigation trace."""
         urls_in_response = re.findall(r"https?://\S+", text)
         if not urls_in_response:
@@ -187,7 +173,9 @@ class TruthBinder:
         events = context.get("session_events", [])
         for event in events:
             if isinstance(event, ToolEvent) and event.tool_name in (
-                "advanced_browser", "web_search", "browser_inspector"
+                "advanced_browser",
+                "web_search",
+                "browser_inspector",
             ):
                 args = event.function_args or {}
                 url = args.get("url") or args.get("query") or ""
@@ -201,9 +189,7 @@ class TruthBinder:
                 if isinstance(u, str) and u.startswith("http"):
                     visited_urls.add(u)
 
-        unvisited = [u for u in urls_in_response if not any(
-            v in u for v in visited_urls
-        )]
+        unvisited = [u for u in urls_in_response if not any(v in u for v in visited_urls)]
         if unvisited:
             return TruthViolation(
                 check="url_substitution",
@@ -214,16 +200,30 @@ class TruthBinder:
 
     # ── Check 2: Action Announcer ───────────────────────────────────
 
-    def _check_action_announcer(
-        self, text: str, context: dict[str, Any]
-    ) -> TruthViolation | None:
+    def _check_action_announcer(self, text: str, context: dict[str, Any]) -> TruthViolation | None:
         """Verify claimed actions match actual ToolEvent history."""
         # Action verbs that LLMs commonly over-claim
         action_verbs = [
-            "searched", "researched", "browsed", "navigated", "visited",
-            "downloaded", "extracted", "compiled", "generated", "created",
-            "analyzed", "compared", "summarized", "reviewed", "inspected",
-            "verified", "validated", "tested", "ran", "executed",
+            "searched",
+            "researched",
+            "browsed",
+            "navigated",
+            "visited",
+            "downloaded",
+            "extracted",
+            "compiled",
+            "generated",
+            "created",
+            "analyzed",
+            "compared",
+            "summarized",
+            "reviewed",
+            "inspected",
+            "verified",
+            "validated",
+            "tested",
+            "ran",
+            "executed",
         ]
 
         actual_tools = set()
@@ -271,14 +271,11 @@ class TruthBinder:
 
     # ── Check 3: Response Grounder ──────────────────────────────────
 
-    def _check_response_grounder(
-        self, text: str, context: dict[str, Any]
-    ) -> TruthViolation | None:
+    def _check_response_grounder(self, text: str, context: dict[str, Any]) -> TruthViolation | None:
         """Check that success claims include concrete output."""
         # Only check sentences that start with success claims
         success_pattern = re.compile(
-            r"(?:successfully|done|complete|finished|ready)\s*[:\.]",
-            re.IGNORECASE,
+            r"(?:successfully|done|complete|finished|ready)\s*[:\.]", re.IGNORECASE
         )
         if not success_pattern.search(text):
             return None
@@ -296,9 +293,7 @@ class TruthBinder:
 
     # ── Check 4: Schedule Honesty ───────────────────────────────────
 
-    def _check_schedule_honesty(
-        self, text: str, context: dict[str, Any]
-    ) -> TruthViolation | None:
+    def _check_schedule_honesty(self, text: str, context: dict[str, Any]) -> TruthViolation | None:
         """Block promises the agent can't deliver without a schedule tool."""
         for pattern in _SCHEDULE_PROMISE_PATTERNS:
             if pattern.search(text):

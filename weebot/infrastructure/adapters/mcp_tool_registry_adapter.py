@@ -1,11 +1,10 @@
 """Thin adapter wrapping a role-based registry for scoped retrieval."""
+
 from __future__ import annotations
 
 from typing import Any
 
-from weebot.application.ports.mcp_tool_registration_port import (
-    McpToolRegistrationPort,
-)
+from weebot.application.ports.mcp_tool_registration_port import McpToolRegistrationPort
 
 
 class RoleBasedToolRegistryAdapter(McpToolRegistrationPort):

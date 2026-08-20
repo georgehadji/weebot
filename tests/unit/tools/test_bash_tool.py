@@ -1,4 +1,5 @@
 """Unit tests for BashTool."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -8,10 +9,10 @@ import pytest
 from weebot.application.ports.sandbox_port import SandboxResult
 from weebot.tools.bash_tool import BashTool
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _ok(stdout: str = "hello\n") -> SandboxResult:
     return SandboxResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=10.0)
@@ -22,12 +23,15 @@ def _fail(stderr: str = "something went wrong", returncode: int = 1) -> SandboxR
 
 
 def _timeout() -> SandboxResult:
-    return SandboxResult(stdout="", stderr="killed", returncode=-1, elapsed_ms=30_000.0, timed_out=True)
+    return SandboxResult(
+        stdout="", stderr="killed", returncode=-1, elapsed_ms=30_000.0, timed_out=True
+    )
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestBashTool:
 
@@ -35,7 +39,9 @@ class TestBashTool:
     async def test_successful_command_returns_output(self):
         """Happy path: stdout ends up in ToolResult.output."""
         tool = BashTool()
-        with patch.object(tool._sandbox, "execute_shell", new=AsyncMock(return_value=_ok("hello\n"))):
+        with patch.object(
+            tool._sandbox, "execute_shell", new=AsyncMock(return_value=_ok("hello\n"))
+        ):
             result = await tool.execute(command="echo hello")
 
         assert not result.is_error
@@ -107,8 +113,11 @@ class TestBashTool:
 
         # Simulate Windows platform regardless of actual CI OS
         import os as _os
-        with patch.object(_os, "name", "nt"), \
-             patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd):
+
+        with (
+            patch.object(_os, "name", "nt"),
+            patch.object(tool._sandbox, "execute_shell", side_effect=capture_cmd),
+        ):
             await tool.execute(command="Get-Date")
 
         assert captured, "sandbox.execute_shell was not called"

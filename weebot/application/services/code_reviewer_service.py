@@ -3,6 +3,7 @@
 Uses MODEL_CODE_REVIEW (grok-4.3 — reasoning, 1M context) to review the
 output of each code-producing step before the flow advances.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -71,11 +72,7 @@ def _ponytail_system_addendum(mode: str) -> str:
 class CodeReviewerService(CodeReviewerPort):
     """LLM-backed code reviewer. Fail-open: returns approved on any failure."""
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        timeout_seconds: float = 30.0,
-    ) -> None:
+    def __init__(self, llm: LLMPort, timeout_seconds: float = 30.0) -> None:
         """
         Args:
             llm: LLMPort instance. Should target MODEL_CODE_REVIEW (grok-4.3).
@@ -114,6 +111,7 @@ class CodeReviewerService(CodeReviewerPort):
                 raw = (response.content or "").strip()
                 # Strip markdown fences — handles both multi-line and one-liner forms
                 import re
+
                 raw = re.sub(r"^```(?:json)?\s*", "", raw)
                 raw = re.sub(r"\s*```$", "", raw)
 
@@ -134,15 +132,17 @@ class CodeReviewerService(CodeReviewerPort):
                 )
                 logger.info(
                     "Code review step=%s verdict=%s confidence=%.2f issues=%d",
-                    step.id, result.verdict, result.confidence, len(result.issues),
+                    step.id,
+                    result.verdict,
+                    result.confidence,
+                    len(result.issues),
                 )
                 self._consecutive_failures = 0
                 return result
 
             except (ValueError, KeyError, json.JSONDecodeError) as parse_exc:
                 logger.warning(
-                    "CodeReviewerService: parse error on attempt %d/2 — %s",
-                    attempt + 1, parse_exc,
+                    "CodeReviewerService: parse error on attempt %d/2 — %s", attempt + 1, parse_exc
                 )
                 if attempt == 1:
                     # Both attempts failed — fail open but log the traceback
@@ -159,7 +159,9 @@ class CodeReviewerService(CodeReviewerPort):
                 log_fn(
                     "Code reviewer failed for step %s (%s) [consecutive=%d]. "
                     "Proceeding as approved.",
-                    step.id, exc, self._consecutive_failures,
+                    step.id,
+                    exc,
+                    self._consecutive_failures,
                 )
                 return CodeReviewResult(step_id=step.id, verdict="approved")
 
@@ -178,16 +180,13 @@ class CodeReviewerService(CodeReviewerPort):
         tool_lines = self._render_tool_events(step_events, max_events=20)
 
         result_section = (
-            f"Result reported: {step.result}"
-            if step.result
-            else "Result reported: (none)"
+            f"Result reported: {step.result}" if step.result else "Result reported: (none)"
         )
 
         ponytail_section = ""
         if static_findings:
-            ponytail_section = (
-                "\n\n## Static Ponytail Hints\n"
-                + "\n".join(f"- {finding}" for finding in static_findings)
+            ponytail_section = "\n\n## Static Ponytail Hints\n" + "\n".join(
+                f"- {finding}" for finding in static_findings
             )
 
         return (
@@ -213,10 +212,7 @@ class CodeReviewerService(CodeReviewerPort):
 
         # Tier 1: write operations (file_editor, python_execute, terminate, bash)
         WRITE_TOOLS = {"file_editor", "python_execute", "terminate", "bash"}
-        significant = [
-            e for e in tool_events
-            if e.get("tool_name", "") in WRITE_TOOLS
-        ]
+        significant = [e for e in tool_events if e.get("tool_name", "") in WRITE_TOOLS]
 
         # Tier 2: recent events (last N of all remaining)
         recent = tool_events[-(max_events):]

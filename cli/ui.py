@@ -11,12 +11,13 @@ Usage:
     ui.emit_reasoning("I need to check the auth module...")
     ui.emit_result("3 files found")
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ try:
     from rich.panel import Panel
     from rich.text import Text
     from rich.prompt import Prompt
+
     _RICH_AVAILABLE = True
 except ImportError:
     _RICH_AVAILABLE = False
@@ -41,12 +43,12 @@ class AgenticUI:
 
     def __init__(self, title: str = "Weebot Agent") -> None:
         self._title = title
-        self._tree: Optional[Any] = None
-        self._live: Optional[Any] = None
+        self._tree: Any | None = None
+        self._live: Any | None = None
         self._tool_panels: list[Any] = []
         self._console = Console() if _RICH_AVAILABLE else None
 
-    def __enter__(self) -> "AgenticUI":
+    def __enter__(self) -> AgenticUI:
         if _RICH_AVAILABLE and self._console:
             self._tree = Tree(f"[bold cyan]{self._title}[/bold cyan]")
             self._live = Live(self._tree, console=self._console, refresh_per_second=4)
@@ -119,7 +121,9 @@ class AgenticUI:
         if os.getenv("WEEBOT_AUTO_APPROVE") == "1":
             return True
         if not sys.stdin.isatty():
-            logger.warning("[HITL] %s(%s) requires approval but stdin is not a TTY — denying", tool, args[:50])
+            logger.warning(
+                "[HITL] %s(%s) requires approval but stdin is not a TTY — denying", tool, args[:50]
+            )
             return False
         if _RICH_AVAILABLE and self._console:
             self._console.print(

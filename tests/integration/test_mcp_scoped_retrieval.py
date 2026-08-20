@@ -1,4 +1,5 @@
 """Integration test: PlanActFlow scopes MCP tools per query (H1)."""
+
 from __future__ import annotations
 
 import pytest

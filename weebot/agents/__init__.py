@@ -1,4 +1,5 @@
 """Agent personas, registry, and routing."""
+
 from weebot.agents.models import AgentPersona, DeliverableContract
 from weebot.agents.parser import AgentPersonaParser
 from weebot.agents.registry import AgentRegistry

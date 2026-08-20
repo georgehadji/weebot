@@ -2,9 +2,10 @@
 
 Extracted from PlanActFlow during architecture remediation (Step 2.2.1).
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
@@ -18,13 +19,10 @@ class FactResolver:
     for injection into planner/executor prompts.
     """
 
-    def __init__(
-        self,
-        state_repo: StateRepositoryPort,
-    ) -> None:
+    def __init__(self, state_repo: StateRepositoryPort) -> None:
         self._state = state_repo
 
-    def resolve_for_session(self, session: Session) -> Dict[str, Any]:
+    def resolve_for_session(self, session: Session) -> dict[str, Any]:
         """Resolve facts from a session's fact store.
 
         Args:
@@ -35,7 +33,7 @@ class FactResolver:
         """
         return session.get_facts() if hasattr(session, "get_facts") else {}
 
-    async def resolve_by_id(self, session_id: str) -> Dict[str, Any]:
+    async def resolve_by_id(self, session_id: str) -> dict[str, Any]:
         """Load session and resolve its facts by session ID.
 
         Args:

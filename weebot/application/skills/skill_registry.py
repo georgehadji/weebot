@@ -1,10 +1,9 @@
 """Skill registry — discovers, loads, and manages agent skills."""
+
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from weebot.domain.models.skill import Skill
 
@@ -20,6 +19,7 @@ def _yaml_load(text: str):
     Falls back to SafeLoader when PyYAML was built without libyaml.
     """
     import yaml
+
     loader = getattr(yaml, "CSafeLoader", None) or yaml.SafeLoader
     return yaml.load(text, Loader=loader)
 
@@ -27,9 +27,9 @@ def _yaml_load(text: str):
 class SkillRegistry:
     """Registry for agent skills loaded from filesystem."""
 
-    def __init__(self, search_paths: Optional[List[Path]] = None):
+    def __init__(self, search_paths: list[Path] | None = None):
         self._search_paths = search_paths or self._default_paths()
-        self._skills: Dict[str, Skill] = {}
+        self._skills: dict[str, Skill] = {}
 
     def add_search_path(self, path: Path) -> None:
         """Add *path* to the search paths if not already present.
@@ -45,7 +45,7 @@ class SkillRegistry:
             self._search_paths.append(path)
 
     @staticmethod
-    def _default_paths() -> List[Path]:
+    def _default_paths() -> list[Path]:
         paths = []
         # Project-local
         cwd = Path.cwd()
@@ -87,16 +87,16 @@ class SkillRegistry:
         """Return all loaded skill names."""
         return list(self._skills.keys())
 
-    def list_all(self) -> dict[str, "Skill"]:
+    def list_all(self) -> dict[str, Skill]:
         """Return all loaded skills as a dict."""
         return dict(self._skills)
 
-    def get(self, name: str) -> "Skill | None":
+    def get(self, name: str) -> Skill | None:
         """Get a skill by name, or None if not loaded."""
         return self._skills.get(name)
 
     @staticmethod
-    def _parse_skill(filepath: Path) -> Optional[Skill]:
+    def _parse_skill(filepath: Path) -> Skill | None:
         try:
             text = filepath.read_text(encoding="utf-8")
         except Exception:
@@ -113,7 +113,8 @@ class SkillRegistry:
         if not isinstance(frontmatter, dict):
             _log.warning(
                 "Skipping skill %s: frontmatter is %s, expected a mapping",
-                filepath, type(frontmatter).__name__,
+                filepath,
+                type(frontmatter).__name__,
             )
             return None
         content = parts[2].strip()
@@ -142,12 +143,16 @@ class SkillRegistry:
             emoji=openclaw_meta.get("emoji") or meta.get("emoji") or frontmatter.get("emoji"),
             env=openclaw_meta.get("env", []) or meta.get("env", []),
             primary_env=openclaw_meta.get("primaryEnv") or meta.get("primaryEnv"),
-            homepage=openclaw_meta.get("homepage") or meta.get("homepage") or frontmatter.get("homepage"),
+            homepage=openclaw_meta.get("homepage")
+            or meta.get("homepage")
+            or frontmatter.get("homepage"),
             source=openclaw_meta.get("source") or meta.get("source") or frontmatter.get("source"),
             platforms=hermes_meta.get("platforms", []) or meta.get("platforms", []),
             config=hermes_meta.get("config", []) or meta.get("config", []),
-            fallback_for_toolsets=hermes_meta.get("fallback_for_toolsets", []) or meta.get("fallback_for_toolsets", []),
-            requires_toolsets=hermes_meta.get("requires_toolsets", []) or meta.get("requires_toolsets", []),
+            fallback_for_toolsets=hermes_meta.get("fallback_for_toolsets", [])
+            or meta.get("fallback_for_toolsets", []),
+            requires_toolsets=hermes_meta.get("requires_toolsets", [])
+            or meta.get("requires_toolsets", []),
             trust=trust_val,
             provenance=provenance,
         )
@@ -166,21 +171,21 @@ class SkillRegistry:
 
         return skill
 
-    def get_skill(self, name: str) -> Optional[Skill]:
+    def get_skill(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
     def update_skill(self, skill: Skill) -> None:
         """Insert or replace *skill* in the in-memory registry by name."""
         self._skills[skill.name] = skill
 
-    def list_skills(self) -> List[Skill]:
+    def list_skills(self) -> list[Skill]:
         return list(self._skills.values())
 
-    def get_active_skills(self) -> List[Skill]:
+    def get_active_skills(self) -> list[Skill]:
         """Return skills that have all required environment variables."""
         return [s for s in self._skills.values() if s.is_ready()]
 
-    def build_system_prompt_extensions(self, skill_names: Optional[List[str]] = None) -> str:
+    def build_system_prompt_extensions(self, skill_names: list[str] | None = None) -> str:
         """Build combined system prompt from selected or active skills."""
         if skill_names:
             skills = [self._skills[n] for n in skill_names if n in self._skills]
@@ -207,7 +212,4 @@ def _discover_references(skill_dir: Path) -> list[str]:
     ref_dir = skill_dir / "references"
     if not ref_dir.is_dir():
         return []
-    return sorted(
-        p.relative_to(skill_dir).as_posix()
-        for p in ref_dir.rglob("*.md")
-    )
+    return sorted(p.relative_to(skill_dir).as_posix() for p in ref_dir.rglob("*.md"))

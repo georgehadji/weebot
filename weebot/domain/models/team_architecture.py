@@ -3,15 +3,16 @@
 These models describe an agent team design: which agents exist,
 what patterns they follow, and what skills they use.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class TeamPattern(Enum):
     """Six team architecture patterns from revfactory/harness."""
+
     PIPELINE = "pipeline"
     FAN_OUT_FAN_IN = "fan_out_fan_in"
     EXPERT_POOL = "expert_pool"
@@ -23,6 +24,7 @@ class TeamPattern(Enum):
 @dataclass
 class AgentDefinition:
     """An agent to be generated in the harness."""
+
     name: str
     role: str
     persona: str = ""
@@ -34,6 +36,7 @@ class AgentDefinition:
 @dataclass
 class SkillBlueprint:
     """A skill to be generated for the harness."""
+
     name: str
     description: str
     content: str = ""
@@ -43,6 +46,7 @@ class SkillBlueprint:
 @dataclass
 class TeamArchitecture:
     """Complete team architecture design from harness generation."""
+
     domain: str
     pattern: TeamPattern
     agents: list[AgentDefinition] = field(default_factory=list)

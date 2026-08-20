@@ -2,6 +2,7 @@
 
 Runs last in the pipeline.  Uses a lock for serial DB writes.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -43,8 +44,7 @@ class PersistenceMiddleware(EventMiddleware):
                 ok = await pa.save_session(session)
                 if not ok:
                     flow._log.error(
-                        "Session %s dead-lettered — persistence exhausted retries",
-                        session.id,
+                        "Session %s dead-lettered — persistence exhausted retries", session.id
                     )
                 return
 

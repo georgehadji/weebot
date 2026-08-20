@@ -5,6 +5,7 @@ exceptions, and a snapshot backend that cannot answer. Those are where a
 trailing "did anything change?" check would quietly not run — which is the
 whole reason this is a context manager.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -42,6 +43,7 @@ _UNKNOWN = WorkspaceDrift(unavailable_reason="git exploded")
 
 
 # ── Outcomes ─────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_clean_workspace_passes():
@@ -100,6 +102,7 @@ async def test_unwired_port_is_not_run_and_takes_no_snapshots():
 
 # ── The awkward paths ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_guard_still_reports_when_the_block_raises():
     port = _StubSnapshots(_DIRTY)
@@ -134,6 +137,7 @@ async def test_on_complete_fires_for_an_early_return():
 @pytest.mark.asyncio
 async def test_guard_survives_an_exploding_snapshot_port():
     """A broken guard must not take verification down with it."""
+
     class _Exploding(WorkspaceSnapshotPort):
         async def snapshot(self):
             raise OSError("disk on fire")

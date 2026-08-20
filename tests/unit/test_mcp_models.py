@@ -1,4 +1,5 @@
 """Unit tests for MCP domain models."""
+
 from __future__ import annotations
 
 import pytest
@@ -116,10 +117,7 @@ class TestMCPToolInfo:
             description="Create a payment intent",
             input_schema={
                 "type": "object",
-                "properties": {
-                    "amount": {"type": "integer"},
-                    "currency": {"type": "string"},
-                },
+                "properties": {"amount": {"type": "integer"}, "currency": {"type": "string"}},
                 "required": ["amount"],
             },
             server_name="stripe",
@@ -162,9 +160,7 @@ class TestMCPAuthConfig:
 
     def test_oauth_config(self):
         auth = MCPAuthConfig(
-            type="oauth",
-            oauth_client_id="client_123",
-            oauth_scopes=["read", "write"],
+            type="oauth", oauth_client_id="client_123", oauth_scopes=["read", "write"]
         )
         assert auth.type == "oauth"
         assert auth.oauth_client_id == "client_123"

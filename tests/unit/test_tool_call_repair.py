@@ -1,9 +1,9 @@
 """Unit tests for tool_call_repair — JSON repair + fuzzy tool-name matching."""
+
 from __future__ import annotations
 
 import json
 
-import pytest
 
 from weebot.application.services.tool_call_repair import (
     fuzzy_match_tool_name,
@@ -13,8 +13,8 @@ from weebot.application.services.tool_call_repair import (
     _fix_unquoted_keys,
 )
 
-
 # ── JSON repair strategies ───────────────────────────────────────────────────
+
 
 class TestFixTrailingCommas:
     def test_trailing_comma_in_object(self):
@@ -51,12 +51,12 @@ class TestFixSingleQuotes:
         result = _fix_single_quotes(raw)
         assert isinstance(result, str)
         # Double-quoted strings should be unchanged
-        assert 'hello' in result
+        assert "hello" in result
 
 
 class TestFixUnquotedKeys:
     def test_unquoted_key(self):
-        assert _fix_unquoted_keys("{key: 'value'}") == '{"key": \'value\'}'
+        assert _fix_unquoted_keys("{key: 'value'}") == "{\"key\": 'value'}"
 
     def test_unquoted_key_with_underscore(self):
         assert _fix_unquoted_keys("{my_key: 42}") == '{"my_key": 42}'
@@ -67,6 +67,7 @@ class TestFixUnquotedKeys:
 
 
 # ── repair_json_string (integration) ─────────────────────────────────────────
+
 
 class TestRepairJsonString:
     def test_already_valid_json(self):
@@ -80,7 +81,7 @@ class TestRepairJsonString:
         result = repair_json_string('{"a": 1, "b": 2,}')
         assert result is not None
         assert json.loads(result)  # must be parseable
-        assert "b\":2" in result  # no trailing comma after b
+        assert 'b":2' in result  # no trailing comma after b
 
     def test_single_quotes(self):
         """Single quotes are replaced with double quotes."""
@@ -137,6 +138,7 @@ class TestRepairJsonString:
 
 
 # ── fuzzy_match_tool_name ────────────────────────────────────────────────────
+
 
 class TestFuzzyMatchToolName:
     def test_exact_match(self):

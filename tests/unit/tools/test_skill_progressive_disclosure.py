@@ -7,8 +7,8 @@ Covers:
 - SkillRegistry discovers reference paths on load
 - Skills without references/ work unchanged
 """
+
 import pytest
-from pathlib import Path
 
 
 class TestProgressiveDisclosure:
@@ -23,9 +23,7 @@ class TestProgressiveDisclosure:
         skill_dir.mkdir()
 
         # Main SKILL.md
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: test-skill\ndescription: Test\n---\n\nBody"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: test-skill\ndescription: Test\n---\n\nBody")
 
         # Create references/
         ref_dir = skill_dir / "references"

@@ -15,14 +15,13 @@ One row per ``(category, model)`` pair.  ``alpha`` is the pseudo-count of
 successes, ``beta`` the pseudo-count of failures.  Posteriors are initialised
 with benchmark priors (strong, conservative pseudo-counts) at first write.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 _log = logging.getLogger(__name__)
 
@@ -63,9 +62,7 @@ class PosteriorRepository:
     """
 
     def __init__(
-        self,
-        db_path: str | Path = "acr_posteriors.db",
-        decay: float = _DECAY_GAMMA,
+        self, db_path: str | Path = "acr_posteriors.db", decay: float = _DECAY_GAMMA
     ) -> None:
         self._db_path = Path(db_path)
         self._decay = decay
@@ -84,12 +81,7 @@ class PosteriorRepository:
 
     # ── Write ───────────────────────────────────────────────────────
 
-    async def record_outcome(
-        self,
-        category: str,
-        model: str,
-        success: bool,
-    ) -> None:
+    async def record_outcome(self, category: str, model: str, success: bool) -> None:
         """Record a single outcome for ``(category, model)``.
 
         Applies exponential forgetting (decay) before the increment.
@@ -97,20 +89,9 @@ class PosteriorRepository:
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                self._record_sync,
-                category,
-                model,
-                success,
-            )
+            await loop.run_in_executor(None, self._record_sync, category, model, success)
 
-    def _record_sync(
-        self,
-        category: str,
-        model: str,
-        success: bool,
-    ) -> None:
+    def _record_sync(self, category: str, model: str, success: bool) -> None:
         with sqlite3.connect(str(self._db_path)) as conn:
             # Read current posterior (or use prior defaults)
             row = conn.execute(
@@ -145,29 +126,18 @@ class PosteriorRepository:
 
     # ── Read ────────────────────────────────────────────────────────
 
-    async def get_posterior(
-        self,
-        category: str,
-        model: str,
-    ) -> tuple[float, float]:
+    async def get_posterior(self, category: str, model: str) -> tuple[float, float]:
         """Return ``(alpha, beta)`` for a ``(category, model)``.
 
         Returns the prior pseudo-counts if no records exist.
         """
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            self._get_posterior_sync,
-            category,
-            model,
-        )
+        return await loop.run_in_executor(None, self._get_posterior_sync, category, model)
 
-    def _get_posterior_sync(
-        self,
-        category: str,
-        model: str,
-    ) -> tuple[float, float]:
-        row = self._execute("SELECT alpha, beta FROM acr_posteriors WHERE category=? AND model=?", (category, model))
+    def _get_posterior_sync(self, category: str, model: str) -> tuple[float, float]:
+        row = self._execute(
+            "SELECT alpha, beta FROM acr_posteriors WHERE category=? AND model=?", (category, model)
+        )
         if row is None:
             return (_PRIOR_ALPHA, _PRIOR_BETA)
         return (float(row[0]), float(row[1]))
@@ -189,7 +159,7 @@ class PosteriorRepository:
         result: dict[str, dict[str, tuple[float, float]]] = {}
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
-                "SELECT category, model, alpha, beta FROM acr_posteriors",
+                "SELECT category, model, alpha, beta FROM acr_posteriors"
             ).fetchall()
             for cat, model, alpha, beta in rows:
                 result.setdefault(cat, {})[model] = (alpha, beta)

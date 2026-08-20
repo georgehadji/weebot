@@ -1,4 +1,5 @@
 """Unit tests for ApifyActorTool and create_apify_preset_tools."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -9,10 +10,10 @@ from weebot.infrastructure.external_service_integration import ServiceResponse, 
 from weebot.tools.apify_actor_tool import ApifyActorTool
 from weebot.tools.apify_presets import create_apify_preset_tools
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_service(items=None, success=True, error=None):
     svc = MagicMock()
@@ -44,6 +45,7 @@ def _make_tool(actor_id="apify/test-actor", service=None):
 # Tests: execute
 # ---------------------------------------------------------------------------
 
+
 class TestApifyActorToolExecute:
     @pytest.mark.asyncio
     async def test_success_returns_items(self):
@@ -65,14 +67,13 @@ class TestApifyActorToolExecute:
         result = await tool.execute(run_input={})
 
         import json
+
         preview = json.loads(result.output)
         assert len(preview) == 50  # capped at 50
 
     @pytest.mark.asyncio
     async def test_actor_failure_returns_error_result(self):
-        tool = _make_tool(
-            service=_mock_service(success=False, error="Actor timed out")
-        )
+        tool = _make_tool(service=_mock_service(success=False, error="Actor timed out"))
         result = await tool.execute(run_input={})
 
         assert not result.success
@@ -141,6 +142,7 @@ class TestApifyActorToolExecute:
 # Tests: health_check
 # ---------------------------------------------------------------------------
 
+
 class TestApifyActorToolHealthCheck:
     @pytest.mark.asyncio
     async def test_healthy_when_service_healthy(self):
@@ -156,6 +158,7 @@ class TestApifyActorToolHealthCheck:
 # ---------------------------------------------------------------------------
 # Tests: preset tools
 # ---------------------------------------------------------------------------
+
 
 class TestApifyPresets:
     def test_returns_10_tools(self):

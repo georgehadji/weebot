@@ -5,6 +5,7 @@ Usage:
     python -m cli.main dream list          # List pending Ideas
     python -m cli.main dream build <id>    # Run PlanActFlow on an approved Idea
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +34,7 @@ def dream() -> None:
 @click.option("--max-contracts", default=5, type=int, help="Max ideas to generate")
 def dream_scan(max_contracts: int) -> None:
     """Run DreamerAgent + IdeaGate cycle and print approved ideas."""
+
     async def _run() -> None:
         container = Container()
         container.configure_defaults()
@@ -44,10 +46,13 @@ def dream_scan(max_contracts: int) -> None:
 
         # Gather signals
         from weebot.application.ports.event_store_port import EventStorePort
+
         event_store = container.get(EventStorePort)
-        failed_events = await event_store.query_recent_events(
-            event_type="error", limit=30,
-        ) if event_store else []
+        failed_events = (
+            await event_store.query_recent_events(event_type="error", limit=30)
+            if event_store
+            else []
+        )
 
         # Dream
         console.print("[yellow]Dreaming...[/yellow]")
@@ -72,8 +77,7 @@ def dream_scan(max_contracts: int) -> None:
 
         llm = container.get(LLMPort)
         gate = IdeaGate(
-            intent_reviewer=IntentReviewService(llm=llm),
-            main_reviewer=MainReviewService(llm=llm),
+            intent_reviewer=IntentReviewService(llm=llm), main_reviewer=MainReviewService(llm=llm)
         )
         approved = await gate.process(contracts)
 
@@ -96,10 +100,7 @@ def dream_scan(max_contracts: int) -> None:
                 else f"[dim]{c.intent_verdict or c.main_verdict or 'pending'}[/dim]"
             )
             table.add_row(
-                c.id[:12], c.title[:40],
-                f"{c.heat_score:.2f}",
-                c.estimated_effort,
-                status,
+                c.id[:12], c.title[:40], f"{c.heat_score:.2f}", c.estimated_effort, status
             )
         console.print(table)
 
@@ -141,6 +142,7 @@ def dream_list() -> None:
 @click.argument("contract_id")
 def dream_build(contract_id: str) -> None:
     """Load an approved IdeaContract and run PlanActFlow on its prompt."""
+
     async def _run() -> None:
         data = _idea_store.get(contract_id)
         if data is None:
@@ -148,9 +150,9 @@ def dream_build(contract_id: str) -> None:
             return
 
         from weebot.domain.models.idea_contract import IdeaContract
+
         contract = IdeaContract(**data)
 
-        from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.llm_port import LLMPort
         from weebot.domain.models.session import Session
@@ -168,10 +170,7 @@ def dream_build(contract_id: str) -> None:
         from weebot.domain.models.event import WaitForUserEvent
 
         runner = AgentRunner(
-            llm=llm,
-            state_repo=state_repo,
-            mediator=container.get("mediator"),
-            use_rich=False,
+            llm=llm, state_repo=state_repo, mediator=container.get("mediator"), use_rich=False
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 

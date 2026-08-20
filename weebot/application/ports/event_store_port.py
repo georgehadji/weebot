@@ -5,6 +5,7 @@ logging can be tested with an in-memory store.  Trajectory-related methods
 belong in the TrajectoryRepository, not here — this port covers raw event
 persistence only.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -29,9 +30,7 @@ class EventStorePort(ABC):
 
     @abstractmethod
     async def get_session_events(
-        self,
-        session_id: str,
-        event_type: str | None = None,
+        self, session_id: str, event_type: str | None = None
     ) -> list[dict[str, Any]]:
         """Get all events for a session, optionally filtered by type."""
         ...
@@ -43,9 +42,7 @@ class EventStorePort(ABC):
 
     @abstractmethod
     async def query_recent_events(
-        self,
-        event_type: str | None = None,
-        limit: int = 50,
+        self, event_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
         """Query recent events across all sessions, optionally filtered by type.
 

@@ -11,12 +11,12 @@ What happens:
     3. SynthesizerAgent clusters results, identifies consensus/dissent,
        and produces a structured synthesis report.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
 from weebot.tools.base import BaseTool, ToolResult
@@ -68,7 +68,7 @@ class SwarmTool(BaseTool):
         self,
         llm: Any = None,
         flow_factory: Any = None,
-        swarm_bus: Optional[SwarmEventBusPort] = None,
+        swarm_bus: SwarmEventBusPort | None = None,
         **data: Any,
     ) -> None:
         super().__init__(**data)
@@ -77,16 +77,10 @@ class SwarmTool(BaseTool):
         object.__setattr__(self, "_swarm_bus", swarm_bus)
 
     async def execute(
-        self,
-        prompt: str,
-        max_goals: int = 6,
-        max_concurrency: int = 4,
-        **_: Any,
+        self, prompt: str, max_goals: int = 6, max_concurrency: int = 4, **_: Any
     ) -> ToolResult:
         if not self._llm:
-            return ToolResult.error_result(
-                "SwarmTool has no LLMPort — wire it via DI"
-            )
+            return ToolResult.error_result("SwarmTool has no LLMPort — wire it via DI")
 
         max_goals = min(max(max_goals, 1), 8)
         t_start = time.monotonic()
@@ -96,9 +90,7 @@ class SwarmTool(BaseTool):
 
         goal_agent = GoalAgent(self._llm)
         try:
-            spec: SwarmSpec = await goal_agent.decompose(
-                prompt, max_goals=max_goals
-            )
+            spec: SwarmSpec = await goal_agent.decompose(prompt, max_goals=max_goals)
         except Exception as exc:
             return ToolResult.error_result(f"Goal decomposition failed: {exc}")
 
@@ -107,34 +99,35 @@ class SwarmTool(BaseTool):
 
         logger.info(
             "Swarm: %d goals, concurrency=%d, strategy=%s",
-            len(spec.goals), spec.max_concurrency, spec.synthesis_strategy,
+            len(spec.goals),
+            spec.max_concurrency,
+            spec.synthesis_strategy,
         )
 
         # 2. Create swarm event bus (injected via DI or fallback) and dispatch
         swarm_bus = self._swarm_bus
         if swarm_bus is None:
             from weebot.infrastructure.swarm_event_bus import SwarmEventBus
+
             swarm_bus = SwarmEventBus()
         tasks = []
         for goal in spec.goals:
-            tasks.append({
-                "task_id": goal.id,
-                "description": (
-                    f"Goal: {goal.description}\n"
-                    f"Role: {goal.role}\n"
-                    f"Use tools: {', '.join(goal.tools)}"
-                ),
-            })
+            tasks.append(
+                {
+                    "task_id": goal.id,
+                    "description": (
+                        f"Goal: {goal.description}\n"
+                        f"Role: {goal.role}\n"
+                        f"Use tools: {', '.join(goal.tools)}"
+                    ),
+                }
+            )
 
         from weebot.tools.dispatch_agents import DispatchAgentsTool
 
-        dispatcher = DispatchAgentsTool(
-            flow_factory=self._flow_factory,
-            swarm_bus=swarm_bus,
-        )
+        dispatcher = DispatchAgentsTool(flow_factory=self._flow_factory, swarm_bus=swarm_bus)
         dispatch_result = await dispatcher.execute(
-            tasks=tasks,
-            max_concurrency=min(max_concurrency, spec.max_concurrency),
+            tasks=tasks, max_concurrency=min(max_concurrency, spec.max_concurrency)
         )
 
         # 3. Synthesize — optionally using swarm bus for real-time insights
@@ -150,9 +143,7 @@ class SwarmTool(BaseTool):
 
         synthesizer = SynthesizerAgent(self._llm)
         swarm_result = await synthesizer.synthesize(
-            prompt=prompt,
-            results=sub_results,
-            strategy=spec.synthesis_strategy,
+            prompt=prompt, results=sub_results, strategy=spec.synthesis_strategy
         )
 
         swarm_result.elapsed_seconds = time.monotonic() - t_start

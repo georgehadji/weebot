@@ -10,11 +10,11 @@ Factored verification: each question is answered in its own LLM call
 without seeing the original summary.  This prevents the LLM from
 repeating hallucinations (the paper's key finding).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from openai import AuthenticationError
 
@@ -59,12 +59,14 @@ class VerifyingState(FlowState):
             prompt: Not used — verification runs on the flow's current plan/session.
         """
         from weebot.config.settings import WeebotSettings
+
         _settings = WeebotSettings()
 
         # ── Feature toggle ──────────────────────────────────────────
         if not _settings.cove_enabled:
             _log.debug("CoVe disabled — skipping verification")
             from weebot.application.flows.states.completed import CompletedState
+
             flow.set_state(CompletedState())
             return
 
@@ -75,14 +77,18 @@ class VerifyingState(FlowState):
         if plan is None:
             _log.debug("No plan to verify — skipping")
             from weebot.application.flows.states.completed import CompletedState
+
             flow.set_state(CompletedState())
             return
 
         # Collect completed step results as the "summary" to fact-check
-        completed = [s for s in plan.steps if hasattr(s.status, "value") and s.status.value == "completed"]
+        completed = [
+            s for s in plan.steps if hasattr(s.status, "value") and s.status.value == "completed"
+        ]
         if not completed:
             _log.debug("No completed steps to verify — skipping")
             from weebot.application.flows.states.completed import CompletedState
+
             flow.set_state(CompletedState())
             return
 
@@ -99,9 +105,8 @@ class VerifyingState(FlowState):
         # Wraps the whole episode as a context manager, not a trailing
         # check: the body below has three early returns, and any check
         # placed after them would silently not run on those paths.
-        from weebot.application.services.workspace_integrity_guard import (
-            WorkspaceIntegrityGuard,
-        )
+        from weebot.application.services.workspace_integrity_guard import WorkspaceIntegrityGuard
+
         _guard = WorkspaceIntegrityGuard(getattr(flow, "_workspace_snapshots", None))
 
         async with _guard.watch(on_complete=lambda w: self._stamp_integrity(flow, w)):
@@ -115,11 +120,13 @@ class VerifyingState(FlowState):
                 )
                 self._stamp_not_run(flow, reason="auth_error:question_generation")
                 from weebot.application.flows.states.completed import CompletedState
+
                 flow.set_state(CompletedState())
                 return
             if not questions:
                 _log.debug("No verification questions generated — skipping")
                 from weebot.application.flows.states.completed import CompletedState
+
                 flow.set_state(CompletedState())
                 return
 
@@ -139,6 +146,7 @@ class VerifyingState(FlowState):
                         )
                         self._stamp_not_run(flow, reason="auth_error:answer_loop")
                         from weebot.application.flows.states.completed import CompletedState
+
                         flow.set_state(CompletedState())
                         return
                     # Skip this question, continue with others
@@ -146,10 +154,7 @@ class VerifyingState(FlowState):
                 _auth_error_count = 0  # reset on success
 
                 yield VerificationEvent(
-                    step_id="verify",
-                    question=question,
-                    answer=answer,
-                    consistent=consistent,
+                    step_id="verify", question=question, answer=answer, consistent=consistent
                 )
 
                 if not consistent:
@@ -158,10 +163,7 @@ class VerifyingState(FlowState):
 
             # ── Step 3: Revise if needed ────────────────────────────────
             if inconsistencies:
-                _log.info(
-                    "CoVe found %d inconsistencies — revising summary",
-                    len(inconsistencies),
-                )
+                _log.info("CoVe found %d inconsistencies — revising summary", len(inconsistencies))
                 revised = await self._revise_summary(flow, summary, inconsistencies)
                 if revised:
                     # Do NOT write back into Step.result: `last` is the same
@@ -197,19 +199,27 @@ class VerifyingState(FlowState):
                     ctx.extra["gate_failures"] = gate_failures
                     ctx.extra["verification_status"] = verification_status.value
                 except Exception:
-                    _log.debug("Failed to store verification scores in session context", exc_info=True)
+                    _log.debug(
+                        "Failed to store verification scores in session context", exc_info=True
+                    )
 
             # ── Hook: post_verification ─────────────────────────────────
             if getattr(flow, "_hooks", None) is not None:
-                await flow._hooks.execute_hooks("post_verification", {
-                    "session_id": flow._session.id,
-                    "scores": scores,
-                    "gate_failures": gate_failures,
-                    "inconsistency_count": len(inconsistencies) if 'inconsistencies' in dir() else 0,
-                })
+                await flow._hooks.execute_hooks(
+                    "post_verification",
+                    {
+                        "session_id": flow._session.id,
+                        "scores": scores,
+                        "gate_failures": gate_failures,
+                        "inconsistency_count": (
+                            len(inconsistencies) if "inconsistencies" in dir() else 0
+                        ),
+                    },
+                )
 
         # ── Transition to Completed ─────────────────────────────────
         from weebot.application.flows.states.completed import CompletedState
+
         flow.set_state(CompletedState())
 
     @staticmethod
@@ -304,11 +314,14 @@ class VerifyingState(FlowState):
             # distinct NOT_RUN status instead.
             _log.warning(
                 "Self-critique scoring failed — verification did NOT "
-                "actually run (not counted as a pass)", exc_info=True,
+                "actually run (not counted as a pass)",
+                exc_info=True,
             )
             return {axis: VERIFICATION_SCORE_MIN for axis in VERIFICATION_AXES}, False
 
-    async def _score_and_revise(self, flow, summary: str) -> tuple[str, dict[str, int], "VerificationStatus"]:
+    async def _score_and_revise(
+        self, flow, summary: str
+    ) -> tuple[str, dict[str, int], VerificationStatus]:
         """Score the summary; revise if any axis < VERIFICATION_SCORE_MIN.
 
         Returns (final_summary, final_scores, status). Limits revision to
@@ -328,7 +341,10 @@ class VerifyingState(FlowState):
 
             _log.info(
                 "Self-critique attempt %d/%d — weak axes: %s (scores: %s)",
-                attempt, VERIFICATION_MAX_REVISION_PASSES, weak_axes, scores,
+                attempt,
+                VERIFICATION_MAX_REVISION_PASSES,
+                weak_axes,
+                scores,
             )
 
             # Revise: prompt the LLM to improve the weak axes
@@ -367,6 +383,7 @@ class VerifyingState(FlowState):
         # A blocked command followed by a successful retry is normal recovery.
         session = flow._session
         from weebot.domain.models.event import ToolEvent
+
         blocked_tool_names: set[str] = set()
         successful_tool_names: set[str] = set()
         for event in session.events:
@@ -387,6 +404,7 @@ class VerifyingState(FlowState):
         # Gate 3: Unresolved errors — check for ErrorEvents without recovery.
         # An error followed by a successful step completion is normal recovery.
         from weebot.domain.models.event import ErrorEvent, WaitForUserEvent, StepEvent, StepStatus
+
         has_error = any(isinstance(e, ErrorEvent) for e in session.events)
         has_recovery = any(isinstance(e, WaitForUserEvent) for e in session.events)
         has_completed_step = any(
@@ -405,15 +423,16 @@ class VerifyingState(FlowState):
         # Gate 5: Unverified file writes — check for write events without verification
         if hasattr(flow._session, "events"):
             write_count = sum(
-                1 for e in flow._session.events
+                1
+                for e in flow._session.events
                 if isinstance(e, ToolEvent)
                 and getattr(e, "tool_name", "") == "file_editor"
                 and "str_replace" in str(getattr(e, "function_args", {}))
             )
             verify_count = sum(
-                1 for e in flow._session.events
-                if isinstance(e, VerificationEvent)
-                and getattr(e, "step_id", "") == "gate_verify"
+                1
+                for e in flow._session.events
+                if isinstance(e, VerificationEvent) and getattr(e, "step_id", "") == "gate_verify"
             )
             if write_count > 0 and verify_count == 0:
                 failures.append("unverified_writes")
@@ -429,9 +448,7 @@ class VerifyingState(FlowState):
             else None
         )
         if _product_ctx and _product_ctx.get("success_metric"):
-            outcome_failure = await self._gate_outcome_verification(
-                flow, _product_ctx,
-            )
+            outcome_failure = await self._gate_outcome_verification(flow, _product_ctx)
             if outcome_failure:
                 failures.append(outcome_failure)
 
@@ -442,9 +459,7 @@ class VerifyingState(FlowState):
 
         return failures
 
-    async def _gate_outcome_verification(
-        self, flow, product_context: dict,
-    ) -> str | None:
+    async def _gate_outcome_verification(self, flow, product_context: dict) -> str | None:
         """Check whether the completed work achieves the stated success metric.
 
         product-mode Principle 5: "Define Done by Outcome, Not Output."
@@ -477,10 +492,7 @@ class VerifyingState(FlowState):
             f"Answer ONLY with one word: achieved, partial, missed, or unknown."
         )
         try:
-            from weebot.config.constants import (
-                MAX_TOKENS_VERDICT,
-                TEMPERATURE_DETERMINISTIC,
-            )
+            from weebot.config.constants import MAX_TOKENS_VERDICT, TEMPERATURE_DETERMINISTIC
 
             response = await self._llm(flow).chat(
                 messages=[{"role": "user", "content": prompt}],
@@ -488,20 +500,13 @@ class VerifyingState(FlowState):
                 max_tokens=MAX_TOKENS_VERDICT,
             )
             verdict = (response.content or "").strip().lower()
-            _log.info(
-                "Outcome gate verdict: %s (metric: %s)",
-                verdict, success_metric[:80],
-            )
+            _log.info("Outcome gate verdict: %s (metric: %s)", verdict, success_metric[:80])
 
             # Store verdict on session for analytics
             extra = dict(getattr(flow._session.context, "extra", {}) or {})
             extra["outcome_verdict"] = verdict
             flow._session = flow._session.model_copy(
-                update={
-                    "context": flow._session.context.model_copy(
-                        update={"extra": extra}
-                    )
-                }
+                update={"context": flow._session.context.model_copy(update={"extra": extra})}
             )
 
             if verdict in ("missed", "partial"):
@@ -533,7 +538,7 @@ class VerifyingState(FlowState):
         session = flow._session
         events = [e for e in session.events if isinstance(e, _ToolEvent)]
         report = await _step_audit_service.audit_step(
-            step=None, events=events, session_id=session.id,
+            step=None, events=events, session_id=session.id
         )
 
         failures: list[str] = []
@@ -563,7 +568,7 @@ class VerifyingState(FlowState):
             )
             content = response.content or ""
             questions = [
-                line.strip("-• "*3).strip()
+                line.strip("-• " * 3).strip()
                 for line in content.splitlines()
                 if line.strip() and "?" in line
             ]
@@ -588,6 +593,7 @@ class VerifyingState(FlowState):
         """
         # Collect raw tool outputs as ground-truth evidence
         from weebot.domain.models.event import ToolEvent
+
         tool_outputs: list[str] = []
         for event in flow._session.events:
             if isinstance(event, ToolEvent):
@@ -628,9 +634,7 @@ class VerifyingState(FlowState):
             _log.debug("Failed to answer verification question", exc_info=True)
             return "(verification failed)"
 
-    async def _check_consistency(
-        self, flow, question: str, answer: str, summary: str
-    ) -> bool:
+    async def _check_consistency(self, flow, question: str, answer: str, summary: str) -> bool:
         """Check if the independent answer is consistent with the summary."""
         prompt = (
             f"Original claim (from summary):\n{summary[:300]}\n\n"
@@ -656,8 +660,8 @@ class VerifyingState(FlowState):
             # read as a check that passed. Treating it as inconsistent routes
             # into the existing revision path rather than silently completing.
             _log.warning(
-                "Consistency check failed to run — treating as inconsistent, "
-                "not as a pass", exc_info=True,
+                "Consistency check failed to run — treating as inconsistent, " "not as a pass",
+                exc_info=True,
             )
             return False
 
@@ -665,9 +669,7 @@ class VerifyingState(FlowState):
         self, flow, summary: str, inconsistencies: list[tuple[str, str, str]]
     ) -> str | None:
         """Revise the summary based on verified inconsistencies."""
-        inc_block = "\n".join(
-            f"Q: {q}\nA: {a}\n" for q, a, _ in inconsistencies
-        )
+        inc_block = "\n".join(f"Q: {q}\nA: {a}\n" for q, a, _ in inconsistencies)
         prompt = (
             f"Original summary:\n{summary}\n\n"
             f"The following claims were found to be inconsistent:\n{inc_block}\n\n"

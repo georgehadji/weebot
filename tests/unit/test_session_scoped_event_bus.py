@@ -8,6 +8,7 @@ Verifies:
   4. subscribe/unsubscribe/subscribe_domain/unsubscribe_domain delegate
      straight through to the inner bus.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -81,11 +82,9 @@ def test_subscribe_and_unsubscribe_delegate_to_inner_bus():
     inner = _RecordingBus()
     bus = SessionScopedEventBus(inner, session_id="sess-1")
 
-    async def handler(event):
-        ...
+    async def handler(event): ...
 
-    async def domain_handler(event):
-        ...
+    async def domain_handler(event): ...
 
     bus.subscribe(handler)
     bus.subscribe_domain(domain_handler)

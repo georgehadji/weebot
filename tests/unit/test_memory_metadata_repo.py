@@ -5,6 +5,7 @@ Every existing test in this area used AsyncMock or InMemoryStateRepository
 mismatch, the write-once ON CONFLICT clause, or the ASC+LIMIT profile-lookup
 bug. These tests exercise a real SQLiteStateRepository against a tmp_path DB.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -88,15 +89,14 @@ class TestUserProfileInjection:
 
         repo = _repo(tmp_path)
         import hashlib
+
         key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
         for i in range(10):
             await repo.upsert_memory_metadata(f"low{i}", f"noise {i}", "agent")
         await repo.upsert_memory_metadata(key, "PROFILE-XYZ", "user", salience=1.0)
 
         prompt = await build_executor_prompt(
-            step_description="do a thing",
-            base_prompt="base",
-            state_repo=repo,
+            step_description="do a thing", base_prompt="base", state_repo=repo
         )
         assert "PROFILE-XYZ" in prompt
 
@@ -114,8 +114,7 @@ class TestTrackSalienceWarnOnce:
         broken_repo = MagicMock()
         broken_repo.upsert_memory_metadata = AsyncMock(side_effect=RuntimeError("boom"))
         tool = PersistentMemoryTool(
-            memory=FileSystemMemoryAdapter(memory_dir=tmp_path),
-            state_repo=broken_repo,
+            memory=FileSystemMemoryAdapter(memory_dir=tmp_path), state_repo=broken_repo
         )
 
         with caplog.at_level(logging.WARNING, logger="weebot.tools.persistent_memory"):

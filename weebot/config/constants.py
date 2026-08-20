@@ -3,19 +3,10 @@
 Single source of truth for magic numbers, limits, and defaults.
 Values inherited from :mod:`weebot.config.settings` where they exist.
 """
+
 from __future__ import annotations
 
-from weebot.config.settings import (
-    BROWSER_TIMEOUT,
-    HEADLESS,
-    LOGS_DIR,
-    LOG_FILE,
-    MAX_RETRIES,
-    REQUIRED_PATH_PREFIX,
-    SESSIONS_DB,
-    TEMPERATURE,
-    WORKSPACE_ROOT,
-)
+from weebot.config.settings import SESSIONS_DB, TEMPERATURE
 
 # ========================================================================
 # Token estimation

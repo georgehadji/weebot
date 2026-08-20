@@ -3,6 +3,7 @@
 Guards against regression on PowerShell-specific dangers and encoded
 payloads that were added in commit 8ebbe01.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -20,16 +21,18 @@ class TestBashGuardWindowsVectors:
     def test_remove_item_recursive_force_is_dangerous(self, guard):
         """Remove-Item -Recurse -Force is the PowerShell rm -rf equivalent."""
         risk, _ = guard.evaluate("Remove-Item -Recurse -Force -Path C:\\data")
-        assert risk in (RiskLevel.DANGEROUS, RiskLevel.BLOCKED), (
-            f"Expected DANGEROUS/BLOCKED, got {risk.value}"
-        )
+        assert risk in (
+            RiskLevel.DANGEROUS,
+            RiskLevel.BLOCKED,
+        ), f"Expected DANGEROUS/BLOCKED, got {risk.value}"
 
     def test_shutdown_is_dangerous(self, guard):
         """System shutdown must be flagged."""
         risk, _ = guard.evaluate("shutdown /s /t 0")
-        assert risk in (RiskLevel.DANGEROUS, RiskLevel.BLOCKED), (
-            f"Expected DANGEROUS/BLOCKED, got {risk.value}"
-        )
+        assert risk in (
+            RiskLevel.DANGEROUS,
+            RiskLevel.BLOCKED,
+        ), f"Expected DANGEROUS/BLOCKED, got {risk.value}"
 
     def test_invoke_expression_is_blocked(self, guard):
         """Invoke-Expression enables arbitrary code execution."""
@@ -64,17 +67,16 @@ class TestBashGuardWindowsVectors:
 
     def test_os_system_with_rm_rf_is_blocked(self, guard):
         """Python os.system with destructive command must be blocked."""
-        risk, _ = guard.evaluate(
-            "python -c \"import os; os.system('rm -rf /')\""
-        )
+        risk, _ = guard.evaluate("python -c \"import os; os.system('rm -rf /')\"")
         assert risk == RiskLevel.BLOCKED, f"Expected BLOCKED, got {risk.value}"
 
     def test_rm_rf_absolute_path_is_dangerous(self, guard):
         """rm -rf with absolute path must be DANGEROUS or higher."""
         risk, _ = guard.evaluate("rm -rf /important/data")
-        assert risk in (RiskLevel.DANGEROUS, RiskLevel.BLOCKED), (
-            f"Expected DANGEROUS/BLOCKED, got {risk.value}"
-        )
+        assert risk in (
+            RiskLevel.DANGEROUS,
+            RiskLevel.BLOCKED,
+        ), f"Expected DANGEROUS/BLOCKED, got {risk.value}"
 
     def test_safe_commands_stay_safe(self, guard):
         """Legitimate PowerShell commands must remain SAFE."""
@@ -87,6 +89,4 @@ class TestBashGuardWindowsVectors:
         ]
         for cmd in safe_commands:
             risk, _ = guard.evaluate(cmd)
-            assert risk == RiskLevel.SAFE, (
-                f"Command '{cmd[:50]}' should be SAFE, got {risk.value}"
-            )
+            assert risk == RiskLevel.SAFE, f"Command '{cmd[:50]}' should be SAFE, got {risk.value}"

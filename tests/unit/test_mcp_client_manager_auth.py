@@ -1,4 +1,5 @@
 """Tests for MCPClientManager auth header glue and timeout threading."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager

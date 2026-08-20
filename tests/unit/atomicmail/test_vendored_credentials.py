@@ -1,4 +1,5 @@
 """Tests for vendored atomicmail credential store (offline, no network)."""
+
 from __future__ import annotations
 
 from pathlib import Path

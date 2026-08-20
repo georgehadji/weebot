@@ -6,8 +6,9 @@ Covers:
 - WindowsDesktopAdapter: dependency checks, status updates, lifecycle
 - CLI companion command registration
 """
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 
 class TestDesktopPortInterface:
@@ -22,9 +23,7 @@ class TestDesktopPortInterface:
 
     def test_concrete_adapter_inherits(self):
         """WindowsDesktopAdapter is a concrete DesktopPort."""
-        from weebot.infrastructure.adapters.windows_desktop import (
-            WindowsDesktopAdapter,
-        )
+        from weebot.infrastructure.adapters.windows_desktop import WindowsDesktopAdapter
         from weebot.application.ports.desktop_port import DesktopPort
 
         assert issubclass(WindowsDesktopAdapter, DesktopPort)
@@ -104,6 +103,7 @@ class TestWindowsDesktopAdapter:
             assert adapter._running is False
 
         import asyncio
+
         asyncio.run(_test())
 
     @pytest.mark.asyncio
@@ -133,25 +133,18 @@ class TestWindowsDesktopAdapter:
     @pytest.mark.asyncio
     async def test_show_overlay_when_tkinter_unavailable(self):
         """When tkinter is not available, show_overlay returns None."""
-        from weebot.infrastructure.adapters.windows_desktop import (
-            WindowsDesktopAdapter,
-        )
+        from weebot.infrastructure.adapters.windows_desktop import WindowsDesktopAdapter
 
         adapter = WindowsDesktopAdapter(loop=AsyncMock())
 
-        with patch(
-            "weebot.infrastructure.adapters.windows_desktop._TKINTER_AVAILABLE",
-            False,
-        ):
+        with patch("weebot.infrastructure.adapters.windows_desktop._TKINTER_AVAILABLE", False):
             result = await adapter.show_overlay()
             assert result is None
 
     @pytest.mark.asyncio
     async def test_start_stop_graceful_when_not_running(self):
         """Calling stop when not running is a no-op."""
-        from weebot.infrastructure.adapters.windows_desktop import (
-            WindowsDesktopAdapter,
-        )
+        from weebot.infrastructure.adapters.windows_desktop import WindowsDesktopAdapter
 
         adapter = WindowsDesktopAdapter(loop=AsyncMock())
         await adapter.stop()

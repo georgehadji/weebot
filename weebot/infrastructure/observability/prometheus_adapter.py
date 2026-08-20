@@ -2,9 +2,9 @@
 
 Uses the existing metrics counters defined in ``weebot.infrastructure.observability.metrics``.
 """
+
 from __future__ import annotations
 
-from typing import Optional
 
 from prometheus_client import generate_latest, REGISTRY
 

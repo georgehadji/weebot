@@ -3,12 +3,12 @@
 Uses regex patterns to detect common commitment phrases and parses
 temporal expressions to estimate due dates.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
-from typing import Iterator, Optional
+from datetime import datetime, timedelta, UTC
 from uuid import uuid4
 
 from weebot.domain.models.commitment import Commitment, CommitmentStatus
@@ -19,32 +19,40 @@ logger = logging.getLogger(__name__)
 # Each pattern has a name group and captures the promise text.
 _COMMITMENT_PATTERNS: list[tuple[str, str]] = [
     # Follow-up / check-back promises
-    (r"(I'?ll|I will|Let me)\s+(check\s+(back|in)|follow\s+(up|back)|"
-     r"get\s+back\s+to\s+(you|ya)|report\s+back|circle\s+back)",
-     "follow_up"),
+    (
+        r"(I'?ll|I will|Let me)\s+(check\s+(back|in)|follow\s+(up|back)|"
+        r"get\s+back\s+to\s+(you|ya)|report\s+back|circle\s+back)",
+        "follow_up",
+    ),
     # Monitoring / watching
-    (r"(I'?ll|I will|Let me)\s+(monitor|keep\s+(an?\s+)?eye\s+on|"
-     r"watch|track|keep\s+(tabs?\s+)?on)",
-     "monitor"),
+    (
+        r"(I'?ll|I will|Let me)\s+(monitor|keep\s+(an?\s+)?eye\s+on|"
+        r"watch|track|keep\s+(tabs?\s+)?on)",
+        "monitor",
+    ),
     # Notification / updates
-    (r"(I'?ll|I will|Let me)\s+(notify|update|inform|let\s+(you|ya)\s+know)",
-     "notify"),
+    (r"(I'?ll|I will|Let me)\s+(notify|update|inform|let\s+(you|ya)\s+know)", "notify"),
     # Investigation / research
-    (r"(I'?ll|I will|Let me)\s+(look\s+into|investigate|research|"
-     r"dig\s+(into|deeper)|find\s+out|check\s+on)",
-     "investigate"),
+    (
+        r"(I'?ll|I will|Let me)\s+(look\s+into|investigate|research|"
+        r"dig\s+(into|deeper)|find\s+out|check\s+on)",
+        "investigate",
+    ),
     # "I'll see / I'll find / I'll get"
-    (r"(I'?ll|I will)\s+(see\s+(what|if|how)|find\s+out\s+(what|if|whether)|"
-     r"get\s+(you|ya)\s+(the|those|that))",
-     "investigate"),
+    (
+        r"(I'?ll|I will)\s+(see\s+(what|if|how)|find\s+out\s+(what|if|whether)|"
+        r"get\s+(you|ya)\s+(the|those|that))",
+        "investigate",
+    ),
 ]
 
-def _parse_due_at(text: str) -> Optional[datetime]:
+
+def _parse_due_at(text: str) -> datetime | None:
     """Parse a due_at datetime from temporal phrases in *text*.
 
     Returns None if no temporal phrase is found.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     text_lower = text.lower()
 
     # "in X hours/minutes/days/weeks"
@@ -92,7 +100,7 @@ def extract_commitments(
     assistant_text: str,
     context: str = "",
     source_session_id: str = "",
-    source_event_id: Optional[str] = None,
+    source_event_id: str | None = None,
 ) -> list[Commitment]:
     """Extract commitments (promises) from assistant response text.
 
@@ -129,7 +137,9 @@ def extract_commitments(
 
             logger.debug(
                 "Extracted commitment: %r (type=%s, due_at=%s)",
-                promise_text, commitment_type, due_at,
+                promise_text,
+                commitment_type,
+                due_at,
             )
 
     return found

@@ -3,19 +3,21 @@
 Extracted from weebot/application/ports/llm_port.py during architecture
 remediation (step-9) to keep application ports pure.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class LLMResponse:
     """Normalized LLM response regardless of provider."""
+
     content: str = ""
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     model: str = "unknown"
-    usage: Dict[str, int] = field(default_factory=dict)
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -29,11 +31,12 @@ class LLMChunk:
     OpenAI SDK's own streaming helper does; weebot does not re-parse them
     here so adapters stay a thin passthrough.
     """
+
     delta: str = ""
-    tool_call_deltas: Optional[List[Dict[str, Any]]] = None
-    finish_reason: Optional[str] = None
+    tool_call_deltas: list[dict[str, Any]] | None = None
+    finish_reason: str | None = None
     model: str = "unknown"
-    usage: Optional[Dict[str, int]] = None
+    usage: dict[str, int] | None = None
 
 
 __all__ = ["LLMResponse", "LLMChunk"]

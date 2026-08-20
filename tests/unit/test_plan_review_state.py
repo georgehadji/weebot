@@ -1,8 +1,9 @@
 """Tests for Enhancement 4 — PlanReviewState and plan approval flow."""
+
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,7 +12,6 @@ from weebot.application.flows.states.plan_review import (
     _APPROVE_TOKENS,
     next_state_after_plan,
 )
-from weebot.domain.models.event import PlanReviewEvent, WaitForUserEvent, ErrorEvent
 
 
 def _make_plan(steps=3):
@@ -26,7 +26,9 @@ def _make_plan(steps=3):
     plan.steps = step_mocks
     plan.model_dump = lambda mode=None: {
         "title": "Test Plan",
-        "steps": [{"id": s.id, "description": s.description, "status": "pending"} for s in step_mocks],
+        "steps": [
+            {"id": s.id, "description": s.description, "status": "pending"} for s in step_mocks
+        ],
     }
     return plan
 
@@ -37,10 +39,14 @@ def _make_flow(plan=None):
     ctx = MagicMock()
     ctx.extra = {}
     ctx.get = lambda k, d=None: ctx.extra.get(k, d)
-    ctx.model_copy = lambda update=None: MagicMock(extra={**ctx.extra, **(update or {}).get("extra", {})})
+    ctx.model_copy = lambda update=None: MagicMock(
+        extra={**ctx.extra, **(update or {}).get("extra", {})}
+    )
     session = MagicMock()
     session.context = ctx
-    session.model_copy = lambda update=None: MagicMock(context=update.get("context", ctx) if update else ctx)
+    session.model_copy = lambda update=None: MagicMock(
+        context=update.get("context", ctx) if update else ctx
+    )
     flow._session = session
     # No persistence in these tests — a bare MagicMock() is truthy, which
     # would make PlanReviewState's `if context._state_repo:` guard try to
@@ -109,6 +115,7 @@ class TestPlanReviewState:
 class TestNextStateAfterPlan:
     def test_returns_executing_when_disabled(self):
         from weebot.application.flows.states.executing import ExecutingState
+
         with patch.dict(os.environ, {"PLAN_REVIEW_ENABLED": "false"}):
             state = next_state_after_plan()
         assert isinstance(state, ExecutingState)

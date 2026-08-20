@@ -1,6 +1,5 @@
 """Tests for L17 FTS5 query sanitization."""
 
-import pytest
 from weebot.infrastructure.persistence.fts5_search import _sanitize_fts_query
 
 

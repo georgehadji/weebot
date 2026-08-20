@@ -1,4 +1,5 @@
 """CompositeToolRegistry — manages composite tools and visibility rules."""
+
 from __future__ import annotations
 
 from weebot.domain.models.composite_tool import CompositeToolSpec

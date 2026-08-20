@@ -1,12 +1,14 @@
 """Session CRUD queries — extracted from SQLiteStateRepository for modularity."""
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
+from datetime import UTC
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,13 @@ class SessionQueries:
         """Upsert a session row."""
         events_data = [e.model_dump() for e in session.events]
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
+
         events_json = json.dumps(events_data, default=str)
         while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
             logger.warning(
                 "Session %s events_json is %d bytes — truncating oldest events",
-                session.id, len(events_json),
+                session.id,
+                len(events_json),
             )
             events_data = events_data[1:]
             events_json = json.dumps(events_data, default=str)
@@ -60,21 +64,19 @@ class SessionQueries:
                 },
             )
 
-    async def load(self, session_id: str) -> Optional[dict[str, Any]]:
+    async def load(self, session_id: str) -> dict[str, Any] | None:
         """Load a session row by ID.
-        
+
         Returns a dict (converted from aiosqlite.Row for type safety)."""
         row = await self._pool.execute_read(
-            "SELECT * FROM sessions WHERE id = ?",
-            (session_id,),
-            fetch_all=False,
+            "SELECT * FROM sessions WHERE id = ?", (session_id,), fetch_all=False
         )
         return dict(row) if row is not None else None
 
     async def list(
         self,
-        user_id: Optional[str] = None,
-        status: Optional[str] = None,
+        user_id: str | None = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -96,11 +98,12 @@ class SessionQueries:
 
     async def update_status(self, session_id: str, status: SessionStatus) -> None:
         """Update just the status of a session."""
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, datetime.now(timezone.utc).isoformat(), session_id),
+                (status.value, datetime.now(UTC).isoformat(), session_id),
             )
 
     async def delete(self, session_id: str) -> None:
@@ -108,7 +111,7 @@ class SessionQueries:
         async with self._pool.acquire_write() as conn:
             await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
-    async def count(self, user_id: Optional[str] = None) -> int:
+    async def count(self, user_id: str | None = None) -> int:
         """Count session rows, optionally filtered by user."""
         if user_id:
             row = await self._pool.execute_read(
@@ -118,7 +121,6 @@ class SessionQueries:
             )
         else:
             row = await self._pool.execute_read(
-                "SELECT COUNT(*) as count FROM sessions",
-                fetch_all=False,
+                "SELECT COUNT(*) as count FROM sessions", fetch_all=False
             )
         return row["count"] if row else 0

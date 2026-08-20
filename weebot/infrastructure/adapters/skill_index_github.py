@@ -22,6 +22,7 @@ Index format:
       ]
     }
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,8 +30,6 @@ import json
 import logging
 import tarfile
 import tempfile
-from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -54,9 +53,7 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
     """
 
     def __init__(
-        self,
-        index_url: Optional[str] = None,
-        http_client: Optional[httpx.AsyncClient] = None,
+        self, index_url: str | None = None, http_client: httpx.AsyncClient | None = None
     ) -> None:
         if index_url is None:
             from weebot.config.settings import WeebotSettings
@@ -81,7 +78,9 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPStatusError as exc:
-            logger.warning("SkillHub index fetch failed (HTTP %d): %s", exc.response.status_code, exc)
+            logger.warning(
+                "SkillHub index fetch failed (HTTP %d): %s", exc.response.status_code, exc
+            )
             return []
         except (httpx.RequestError, json.JSONDecodeError, KeyError) as exc:
             logger.warning("SkillHub index fetch failed: %s", exc)
@@ -143,7 +142,8 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
                     if total > _MAX_DOWNLOAD_BYTES:
                         logger.warning(
                             "Download for %s exceeded %d bytes — aborting",
-                            skill.name, _MAX_DOWNLOAD_BYTES,
+                            skill.name,
+                            _MAX_DOWNLOAD_BYTES,
                         )
                         return False
                     chunks.append(chunk)
@@ -157,8 +157,7 @@ class GitHubSkillIndexAdapter(SkillIndexPort):
             actual = hashlib.sha256(content).hexdigest()
             if actual != skill.sha256:
                 logger.warning(
-                    "SHA-256 mismatch for %s: expected %s, got %s",
-                    skill.name, skill.sha256, actual,
+                    "SHA-256 mismatch for %s: expected %s, got %s", skill.name, skill.sha256, actual
                 )
                 return False
 

@@ -1,4 +1,5 @@
 """Unit tests for AuditLog (hash-chained append-only log)."""
+
 from __future__ import annotations
 
 import tempfile
@@ -20,6 +21,7 @@ class TestAuditLog:
     def teardown_method(self):
         # Force-close all connections by replacing _get_conn with a closed state
         import sqlite3
+
         try:
             # Access internal via a final dummy connect that we can close
             conn = sqlite3.connect(str(self._tmp.name))
@@ -84,6 +86,7 @@ class TestAuditLog:
 
         # Manually tamper with the database
         import sqlite3
+
         conn = sqlite3.connect(self._tmp.name)
         conn.execute("UPDATE audit_log SET details = '{}' WHERE sequence = 1")
         conn.commit()

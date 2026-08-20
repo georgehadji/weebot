@@ -3,11 +3,11 @@
 Uses a fast, cheap LLM call to condense the event stream into a compact
 natural-language trajectory text and to classify failure/success patterns.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
@@ -47,11 +47,7 @@ class TrajectoryBuilder:
     def __init__(self, llm: LLMPort):
         self._llm = llm
 
-    async def build(
-        self,
-        session: Session,
-        scored_event: TrajectoryScored,
-    ) -> TrajectorySummary:
+    async def build(self, session: Session, scored_event: TrajectoryScored) -> TrajectorySummary:
         """Build a TrajectorySummary from a completed session.
 
         Args:
@@ -130,8 +126,7 @@ class TrajectoryBuilder:
                 )
             elif e.type == "step":
                 lines.append(
-                    f"[{e.type}] {getattr(e, 'step_id', '')}: "
-                    f"{getattr(e, 'status', '')}"
+                    f"[{e.type}] {getattr(e, 'step_id', '')}: " f"{getattr(e, 'status', '')}"
                 )
             elif e.type == "error":
                 lines.append(f"[{e.type}] {(getattr(e, 'error', ''))[:200]}")
@@ -141,9 +136,7 @@ class TrajectoryBuilder:
 
     @staticmethod
     def from_events(
-        session: Session,
-        scored_event: TrajectoryScored,
-        analysis: dict,
+        session: Session, scored_event: TrajectoryScored, analysis: dict
     ) -> TrajectorySummary:
         """Build a TrajectorySummary from already-analysed data (no LLM call).
 

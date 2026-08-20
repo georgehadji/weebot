@@ -3,11 +3,13 @@
 This module provides decorators and helpers for automatically logging
 agent actions to the event store.
 """
+
 from __future__ import annotations
 
 import functools
 import logging
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 from weebot.infrastructure.event_store import EventStore
 
@@ -27,7 +29,7 @@ class EventLogger:
         >>> event_logger.log_tool_call("session-1", "bash", {"cmd": "ls"}, {"output": "file.txt"})
     """
 
-    def __init__(self, event_store: Optional[EventStore] = None):
+    def __init__(self, event_store: EventStore | None = None):
         """Initialize the event logger.
 
         Args:
@@ -43,7 +45,7 @@ class EventLogger:
         response: str,
         tokens_used: int,
         cost: float,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Log an LLM call.
 
@@ -84,7 +86,7 @@ class EventLogger:
         tool_name: str,
         parameters: dict[str, Any],
         result: dict[str, Any],
-        duration_ms: Optional[int] = None,
+        duration_ms: int | None = None,
     ) -> int:
         """Log a tool execution.
 
@@ -108,11 +110,7 @@ class EventLogger:
         if duration_ms is not None:
             data["duration_ms"] = duration_ms
 
-        return self.event_store.log_event(
-            session_id=session_id,
-            event_type="tool_call",
-            data=data,
-        )
+        return self.event_store.log_event(session_id=session_id, event_type="tool_call", data=data)
 
     def log_bash_command(
         self,
@@ -121,7 +119,7 @@ class EventLogger:
         risk_level: str,
         approved: bool,
         output: str,
-        exit_code: Optional[int] = None,
+        exit_code: int | None = None,
     ) -> int:
         """Log a bash command execution.
 
@@ -146,16 +144,10 @@ class EventLogger:
             data["exit_code"] = exit_code
 
         return self.event_store.log_event(
-            session_id=session_id,
-            event_type="bash_command",
-            data=data,
+            session_id=session_id, event_type="bash_command", data=data
         )
 
-    def log_plan_created(
-        self,
-        session_id: str,
-        plan: dict[str, Any],
-    ) -> int:
+    def log_plan_created(self, session_id: str, plan: dict[str, Any]) -> int:
         """Log plan creation.
 
         Args:
@@ -176,11 +168,7 @@ class EventLogger:
             },
         )
 
-    def log_plan_updated(
-        self,
-        session_id: str,
-        update: dict[str, Any],
-    ) -> int:
+    def log_plan_updated(self, session_id: str, update: dict[str, Any]) -> int:
         """Log plan update.
 
         Args:
@@ -191,17 +179,10 @@ class EventLogger:
             Event ID
         """
         return self.event_store.log_event(
-            session_id=session_id,
-            event_type="plan_updated",
-            data={"update": update},
+            session_id=session_id, event_type="plan_updated", data={"update": update}
         )
 
-    def log_step_started(
-        self,
-        session_id: str,
-        step_id: str,
-        step_description: str,
-    ) -> int:
+    def log_step_started(self, session_id: str, step_id: str, step_description: str) -> int:
         """Log step start.
 
         Args:
@@ -215,18 +196,11 @@ class EventLogger:
         return self.event_store.log_event(
             session_id=session_id,
             event_type="step_started",
-            data={
-                "step_id": step_id,
-                "description": step_description,
-            },
+            data={"step_id": step_id, "description": step_description},
         )
 
     def log_step_completed(
-        self,
-        session_id: str,
-        step_id: str,
-        success: bool = True,
-        result: Optional[str] = None,
+        self, session_id: str, step_id: str, success: bool = True, result: str | None = None
     ) -> int:
         """Log step completion.
 
@@ -242,19 +216,11 @@ class EventLogger:
         return self.event_store.log_event(
             session_id=session_id,
             event_type="step_completed",
-            data={
-                "step_id": step_id,
-                "success": success,
-                "result": result,
-            },
+            data={"step_id": step_id, "success": success, "result": result},
         )
 
     def log_error(
-        self,
-        session_id: str,
-        error_type: str,
-        error_message: str,
-        traceback: Optional[str] = None,
+        self, session_id: str, error_type: str, error_message: str, traceback: str | None = None
     ) -> int:
         """Log an error.
 
@@ -267,24 +233,13 @@ class EventLogger:
         Returns:
             Event ID
         """
-        data = {
-            "error_type": error_type,
-            "error_message": error_message,
-        }
+        data = {"error_type": error_type, "error_message": error_message}
         if traceback:
             data["traceback_preview"] = traceback[:1000] if len(traceback) > 1000 else traceback
 
-        return self.event_store.log_event(
-            session_id=session_id,
-            event_type="error",
-            data=data,
-        )
+        return self.event_store.log_event(session_id=session_id, event_type="error", data=data)
 
-    def log_user_message(
-        self,
-        session_id: str,
-        message: str,
-    ) -> int:
+    def log_user_message(self, session_id: str, message: str) -> int:
         """Log a user message.
 
         Args:
@@ -297,16 +252,10 @@ class EventLogger:
         return self.event_store.log_event(
             session_id=session_id,
             event_type="user_message",
-            data={
-                "message_preview": message[:500] if len(message) > 500 else message,
-            },
+            data={"message_preview": message[:500] if len(message) > 500 else message},
         )
 
-    def log_assistant_message(
-        self,
-        session_id: str,
-        message: str,
-    ) -> int:
+    def log_assistant_message(self, session_id: str, message: str) -> int:
         """Log an assistant message.
 
         Args:
@@ -319,9 +268,7 @@ class EventLogger:
         return self.event_store.log_event(
             session_id=session_id,
             event_type="assistant_message",
-            data={
-                "message_preview": message[:500] if len(message) > 500 else message,
-            },
+            data={"message_preview": message[:500] if len(message) > 500 else message},
         )
 
 
@@ -332,7 +279,7 @@ default_event_logger = EventLogger()
 def log_execution(
     event_type: str,
     session_id_arg: str = "session_id",
-    extract_data: Optional[Callable[..., dict[str, Any]]] = None,
+    extract_data: Callable[..., dict[str, Any]] | None = None,
 ) -> Callable[[T], T]:
     """Decorator to log function execution.
 
@@ -344,6 +291,7 @@ def log_execution(
     Returns:
         Decorator function
     """
+
     def decorator(func: T) -> T:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -368,9 +316,7 @@ def log_execution(
             # Log before execution
             try:
                 default_event_logger.event_store.log_event(
-                    session_id=session_id,
-                    event_type=f"{event_type}_started",
-                    data=data,
+                    session_id=session_id, event_type=f"{event_type}_started", data=data
                 )
             except Exception as e:
                 logger.warning(f"Failed to log event: {e}")
@@ -405,4 +351,5 @@ def log_execution(
                 raise
 
         return wrapper  # type: ignore
+
     return decorator

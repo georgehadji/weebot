@@ -3,19 +3,14 @@
 Also re-exports the main CQRS commands from the sibling commands.py
 module, which is shadowed by this sub-package.
 """
+
 from weebot.application.cqrs.commands.trajectory_commands import (
     ScoreTrajectoryCommand,
     BuildOptimizationBatchCommand,
 )
-from weebot.application.cqrs.commands.skill_edit_commands import (
-    ApplySkillEditsCommand,
-)
-from weebot.application.cqrs.commands.validation_commands import (
-    ValidateSkillCommand,
-)
-from weebot.application.cqrs.commands.transfer_commands import (
-    ValidateTransferCommand,
-)
+from weebot.application.cqrs.commands.skill_edit_commands import ApplySkillEditsCommand
+from weebot.application.cqrs.commands.validation_commands import ValidateSkillCommand
+from weebot.application.cqrs.commands.transfer_commands import ValidateTransferCommand
 
 # Re-export base commands from the sibling commands.py module.
 # The sub-package `commands/` shadows `commands.py` in Python's import

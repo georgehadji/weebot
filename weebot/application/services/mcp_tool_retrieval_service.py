@@ -4,14 +4,13 @@ This Application-layer service coordinates the retrieval port (semantic search)
 and the registration port (role-based registry mutations) so that only the
 most relevant external MCP tools are visible to the agent for a given turn.
 """
+
 from __future__ import annotations
 
 import contextlib
 import logging
 
-from weebot.application.ports.mcp_tool_registration_port import (
-    McpToolRegistrationPort,
-)
+from weebot.application.ports.mcp_tool_registration_port import McpToolRegistrationPort
 from weebot.application.ports.mcp_tool_retrieval_port import McpToolRetrievalPort
 from weebot.domain.models.mcp import MCPToolInfo
 
@@ -74,7 +73,5 @@ class McpToolRetrievalService:
                         "Could not add %s to role %s during scoping", tool.namespaced_name, role
                     )
 
-        logger.info(
-            "MCP scoped retrieval: %d tools selected for query %r", len(relevant), query
-        )
+        logger.info("MCP scoped retrieval: %d tools selected for query %r", len(relevant), query)
         return relevant

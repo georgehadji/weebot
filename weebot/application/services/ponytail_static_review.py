@@ -4,6 +4,7 @@ These are lightweight, rule-based heuristics that run only when Ponytail mode
 is active. They produce *hints*, not hard failures — the LLM reviewer has the
 final say.
 """
+
 from __future__ import annotations
 
 import re
@@ -32,8 +33,6 @@ def static_ponytail_review(code: str) -> list[str]:
 
     # Imports that duplicate stdlib (examples)
     if "import retrying" in code:
-        findings.append(
-            "stdlib: use tenacity or functools.wraps retry instead of retrying"
-        )
+        findings.append("stdlib: use tenacity or functools.wraps retry instead of retrying")
 
     return findings

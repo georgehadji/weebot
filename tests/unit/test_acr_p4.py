@@ -1,13 +1,11 @@
 """Unit tests for ACR Phase P4 — structured logging, MCP routing resource, GA readiness."""
+
 from __future__ import annotations
 
 import json
 
-import pytest
 
-from weebot.application.services.routing.adaptive_capability_router import (
-    AdaptiveCapabilityRouter,
-)
+from weebot.application.services.routing.adaptive_capability_router import AdaptiveCapabilityRouter
 from weebot.core.model_cascade_tracker import (
     CascadeDecision,
     CascadeOutcome,
@@ -22,16 +20,14 @@ class TestStructuredLogging:
     def test_decision_log_contains_extra(self, caplog):
         """Route() should emit a log record with extra dict containing acr_event."""
         import logging
+
         caplog.set_level(logging.DEBUG)
         router = AdaptiveCapabilityRouter(force_acr=True)
         result = router.route("refactor the database module")
         assert len(result) >= 1
 
         # Check that at least one log record has structured data
-        structured_records = [
-            r for r in caplog.records
-            if hasattr(r, "acr_event")
-        ]
+        structured_records = [r for r in caplog.records if hasattr(r, "acr_event")]
         # Note: standard logging doesn't preserve extra fields in caplog
         # on all Python versions. This is a best-effort check.
         assert len(result) >= 1, "Route must produce output regardless of log capture"
@@ -43,8 +39,7 @@ class TestStructuredLogging:
 
         caplog.set_level(logging.DEBUG)
         with patch(
-            "weebot.application.services.routing.adaptive_capability_router.WEEBOT_ACR_SHADOW",
-            True,
+            "weebot.application.services.routing.adaptive_capability_router.WEEBOT_ACR_SHADOW", True
         ):
             router = AdaptiveCapabilityRouter(force_acr=True)
             result = router.route("refactor the database module")
@@ -56,6 +51,7 @@ class TestRoutingMCPResource:
 
     def test_no_tracker_returns_stub(self):
         from weebot.mcp.resources import build_routing_json
+
         raw = build_routing_json()
         data = json.loads(raw)
         assert data["total_decisions"] == 0
@@ -66,21 +62,34 @@ class TestRoutingMCPResource:
         from weebot.mcp.resources import build_routing_json
 
         tracker = ModelCascadeTracker(max_decisions=100)
-        tracker.record(CascadeDecision(
-            model_name="model-a", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS, latency_ms=100.0,
-            task_category="coding",
-        ))
-        tracker.record(CascadeDecision(
-            model_name="model-a", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.FAILED, latency_ms=50.0,
-            error_message="timeout", task_category="coding",
-        ))
-        tracker.record(CascadeDecision(
-            model_name="model-b", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS, latency_ms=200.0,
-            task_category="research",
-        ))
+        tracker.record(
+            CascadeDecision(
+                model_name="model-a",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=100.0,
+                task_category="coding",
+            )
+        )
+        tracker.record(
+            CascadeDecision(
+                model_name="model-a",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=50.0,
+                error_message="timeout",
+                task_category="coding",
+            )
+        )
+        tracker.record(
+            CascadeDecision(
+                model_name="model-b",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=200.0,
+                task_category="research",
+            )
+        )
 
         raw = build_routing_json(cascade_tracker=tracker)
         data = json.loads(raw)
@@ -99,11 +108,15 @@ class TestRoutingMCPResource:
         from weebot.application.services.routing.bandit import BanditSelector
 
         tracker = ModelCascadeTracker(max_decisions=100)
-        tracker.record(CascadeDecision(
-            model_name="m", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS, latency_ms=50.0,
-            task_category="test",
-        ))
+        tracker.record(
+            CascadeDecision(
+                model_name="m",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=50.0,
+                task_category="test",
+            )
+        )
         bandit = BanditSelector(random_seed=42)
 
         raw = build_routing_json(cascade_tracker=tracker, bandit_selector=bandit)
@@ -118,22 +131,27 @@ class TestFeatureFlags:
 
     def test_acr_flag_default_off(self):
         from weebot.config.feature_flags import WEEBOT_ENABLE_ACR
+
         assert WEEBOT_ENABLE_ACR is False
 
     def test_bandit_flag_default_off(self):
         from weebot.config.feature_flags import WEEBOT_ACR_BANDIT
+
         assert WEEBOT_ACR_BANDIT is False
 
     def test_shadow_flag_default_off(self):
         from weebot.config.feature_flags import WEEBOT_ACR_SHADOW
+
         assert WEEBOT_ACR_SHADOW is False
 
     def test_env_toggle_enables_acr(self):
         """Simulate env var to verify flag wiring."""
         import os
         import importlib
+
         os.environ["WEEBOT_ENABLE_ACR"] = "true"
         import weebot.config.feature_flags
+
         importlib.reload(weebot.config.feature_flags)
         assert weebot.config.feature_flags.WEEBOT_ENABLE_ACR is True
         # Reset
@@ -147,6 +165,7 @@ class TestGAChecklist:
     def test_flag_off_produces_byte_identical_routing(self):
         """Flag-off routing == CATEGORY_MODEL (no behavior change)."""
         from weebot.application.services.task_model_router import model_for_step
+
         router = AdaptiveCapabilityRouter(force_acr=False)
         descriptions = [
             "refactor the database module",
@@ -159,9 +178,9 @@ class TestGAChecklist:
             static = model_for_step(desc)
             acr_result = router.route(desc)
             assert len(acr_result) == 1, f"Expected single model for '{desc}'"
-            assert acr_result[0] == static, (
-                f"Mismatch for '{desc}': ACR={acr_result[0]}, static={static}"
-            )
+            assert (
+                acr_result[0] == static
+            ), f"Mismatch for '{desc}': ACR={acr_result[0]}, static={static}"
 
     def test_flag_on_always_returns_eligible_order(self):
         """Flag-on routing returns valid ordered list with at least one candidate."""
@@ -179,9 +198,8 @@ class TestGAChecklist:
 
     def test_router_exception_returns_fallback(self):
         """If anything crashes in route(), fall back to static model."""
-        from weebot.application.services.routing.adaptive_capability_router import (
-            model_for_step,
-        )
+        from weebot.application.services.routing.adaptive_capability_router import model_for_step
+
         # Create a router that will fail by passing invalid data
         router = AdaptiveCapabilityRouter(force_acr=False)
         # With force_acr=False, should always return static

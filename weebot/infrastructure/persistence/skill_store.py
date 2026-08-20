@@ -4,13 +4,12 @@ Uses the same SQLite connection pool as the trajectory repository
 for a single database.  Skill documents are stored as JSON in a
 dedicated table alongside the existingsession/trajectory tables.
 """
+
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 from weebot.application.ports.skill_store_port import SkillStorePort
 from weebot.domain.models.skill import Skill
@@ -40,16 +39,14 @@ class SkillStore(SkillStorePort):
     async def _ensure_schema(self):
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
+            await conn.execute("""
                 CREATE TABLE IF NOT EXISTS skills (
                     name TEXT PRIMARY KEY,
                     description TEXT NOT NULL DEFAULT '',
                     data_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
-                """
-            )
+                """)
             logger.debug("Skill table schema ensured")
 
     async def save(self, skill: Skill) -> None:
@@ -65,18 +62,16 @@ class SkillStore(SkillStorePort):
                     skill.name,
                     skill.description,
                     skill.model_dump_json(),
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
             logger.debug("Skill '%s' saved (v%d)", skill.name, skill.current_version)
 
-    async def load(self, name: str) -> Optional[Skill]:
+    async def load(self, name: str) -> Skill | None:
         """Load a skill by name."""
         pool = await self._get_pool()
         row = await pool.execute_read(
-            "SELECT data_json FROM skills WHERE name = ?",
-            (name,),
-            fetch_all=False,
+            "SELECT data_json FROM skills WHERE name = ?", (name,), fetch_all=False
         )
         if not row:
             return None
@@ -89,18 +84,14 @@ class SkillStore(SkillStorePort):
     async def list_names(self) -> list[str]:
         """Return all stored skill names."""
         pool = await self._get_pool()
-        rows = await pool.execute_read(
-            "SELECT name FROM skills ORDER BY name"
-        )
+        rows = await pool.execute_read("SELECT name FROM skills ORDER BY name")
         return [r["name"] for r in rows]
 
     async def delete(self, name: str) -> bool:
         """Delete a skill.  Returns True if it existed."""
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
-            cursor = await conn.execute(
-                "DELETE FROM skills WHERE name = ?", (name,)
-            )
+            cursor = await conn.execute("DELETE FROM skills WHERE name = ?", (name,))
             deleted = cursor.rowcount > 0 if cursor.rowcount >= 0 else True
             await cursor.close()
             return deleted

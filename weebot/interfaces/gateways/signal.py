@@ -7,21 +7,17 @@ Configuration (in .env):
     SIGNAL_CLI_REST_URL=http://localhost:8080
     SIGNAL_ACCOUNT_NUMBER=+1234567890
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import (
-    GatewayAdapter,
-    GatewayMessage,
-    GatewayResponse,
-)
+from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +65,7 @@ class SignalAdapter(GatewayAdapter):
                         if text:
                             await self.send_response(
                                 GatewayResponse(
-                                    text=text, platform="signal", external_id=msg.external_id,
+                                    text=text, platform="signal", external_id=msg.external_id
                                 )
                             )
                     except Exception as exc:
@@ -86,8 +82,7 @@ class SignalAdapter(GatewayAdapter):
         """
         if not self.is_authorized("signal", message.external_id):
             logger.warning(
-                "Signal message rejected by gateway allowlist: from=%s",
-                message.external_id,
+                "Signal message rejected by gateway allowlist: from=%s", message.external_id
             )
             return ""
 
@@ -102,9 +97,7 @@ class SignalAdapter(GatewayAdapter):
 
         session_id = f"signal-{message.external_id}-{uuid.uuid4().hex[:6]}"
         session = Session(
-            id=session_id,
-            user_id=f"signal-{message.external_id}",
-            agent_id="signal-agent",
+            id=session_id, user_id=f"signal-{message.external_id}", agent_id="signal-agent"
         )
 
         tools = await build_tools(role="admin")
@@ -141,7 +134,9 @@ class SignalAdapter(GatewayAdapter):
                 async with session.post(url, json=payload) as resp:
                     if resp.status not in (200, 201):
                         error_body = await resp.text()
-                        logger.warning("Signal send failed (HTTP %d): %s", resp.status, error_body[:200])
+                        logger.warning(
+                            "Signal send failed (HTTP %d): %s", resp.status, error_body[:200]
+                        )
                         return False
                     return True
         except Exception as exc:
@@ -167,15 +162,17 @@ class SignalAdapter(GatewayAdapter):
                             data_message = envelope.get("dataMessage", {})
                             text = data_message.get("message", "")
                             if sender and text:
-                                messages.append(GatewayMessage(
-                                    platform="signal",
-                                    external_id=sender,
-                                    text=text.strip(),
-                                    metadata={
-                                        "timestamp": envelope.get("timestamp"),
-                                        "message_id": data_message.get("timestamp"),
-                                    },
-                                ))
+                                messages.append(
+                                    GatewayMessage(
+                                        platform="signal",
+                                        external_id=sender,
+                                        text=text.strip(),
+                                        metadata={
+                                            "timestamp": envelope.get("timestamp"),
+                                            "message_id": data_message.get("timestamp"),
+                                        },
+                                    )
+                                )
         except Exception as exc:
             logger.debug("Signal receive error (may be normal): %s", exc)
 

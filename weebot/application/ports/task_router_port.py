@@ -4,6 +4,7 @@ Enhancement 6 — Neural Task Router.  Implementations:
 - KeywordTaskRouter (always available, rule-based)
 - BARTTaskRouter (optional, ML-based, requires pip install weebot[router])
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

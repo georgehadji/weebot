@@ -4,6 +4,7 @@ Verifies: recurring same-category corrections cross PATTERN_THRESHOLD and
 are surfaced; heuristic classification buckets corrections sensibly when
 no LLM is configured.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -29,10 +30,7 @@ class _FakeStateRepo:
         counts: dict[str, int] = {}
         for r in self.records:
             counts[r.correction_category] = counts.get(r.correction_category, 0) + 1
-        return [
-            {"category": cat, "count": n}
-            for cat, n in counts.items() if n >= min_count
-        ]
+        return [{"category": cat, "count": n} for cat, n in counts.items() if n >= min_count]
 
 
 def _step(step_id: str = "s1", desc: str = "write something") -> Step:
@@ -46,10 +44,10 @@ async def test_record_correction_below_threshold_returns_none():
 
     # Same-length rewrites → heuristic classifies as "accuracy".
     r1 = await tracker.record_correction(
-        session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100,
+        session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100
     )
     r2 = await tracker.record_correction(
-        session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100,
+        session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100
     )
     assert r1 is None
     assert r2 is None
@@ -64,7 +62,7 @@ async def test_record_correction_at_threshold_returns_pattern():
     result = None
     for _ in range(tracker.PATTERN_THRESHOLD):
         result = await tracker.record_correction(
-            session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100,
+            session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100
         )
     assert result is not None
     assert isinstance(result, CorrectionRecord)
@@ -101,7 +99,7 @@ async def test_get_recurring_patterns_reflects_repo():
     tracker = CorrectionTracker(state_repo=repo)
     for _ in range(3):
         await tracker.record_correction(
-            session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100,
+            session_id="sess1", step=_step(), original_output="X" * 100, corrected_output="Y" * 100
         )
     patterns = await tracker.get_recurring_patterns(min_count=3)
     assert any(p["category"] == "accuracy" and p["count"] >= 3 for p in patterns)

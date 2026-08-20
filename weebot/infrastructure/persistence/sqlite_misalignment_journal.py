@@ -1,4 +1,5 @@
 """SQLite-backed misalignment journal."""
+
 from __future__ import annotations
 
 import asyncio
@@ -66,28 +67,31 @@ class SQLiteMisalignmentJournal(MisalignmentJournalPort):
     async def record(self, entry: MisalignmentEntry) -> None:
         def _sync_record():
             with self._connect() as conn:
-                conn.execute(_INSERT, (
-                    entry.id,
-                    entry.session_id,
-                    entry.project_path,
-                    entry.symptom,
-                    entry.constraint_text,
-                    entry.step_description,
-                    entry.correction_text,
-                    entry.created_at.isoformat(),
-                ))
+                conn.execute(
+                    _INSERT,
+                    (
+                        entry.id,
+                        entry.session_id,
+                        entry.project_path,
+                        entry.symptom,
+                        entry.constraint_text,
+                        entry.step_description,
+                        entry.correction_text,
+                        entry.created_at.isoformat(),
+                    ),
+                )
                 conn.commit()
+
         try:
             await asyncio.to_thread(_sync_record)
         except Exception as exc:
             _log.warning("MisalignmentJournal.record failed: %s", exc)
 
-    async def get_recent(
-        self, project_path: str, limit: int = 5
-    ) -> list[MisalignmentEntry]:
+    async def get_recent(self, project_path: str, limit: int = 5) -> list[MisalignmentEntry]:
         def _sync_get_recent():
             with self._connect() as conn:
                 return conn.execute(_SELECT_RECENT, (project_path, limit)).fetchall()
+
         try:
             rows = await asyncio.to_thread(_sync_get_recent)
             return [

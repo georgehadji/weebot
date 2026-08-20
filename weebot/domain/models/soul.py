@@ -4,10 +4,10 @@ A SoulProfile represents the free-form persona content loaded from a
 SOUL.md file (Hermes-style identity).  It is injected as slot #1 of the
 agent's system prompt, before WEEBOT_CORE.md safeguards.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -29,10 +29,8 @@ class SoulProfile(BaseModel):
 
     name: str = Field(default="default", min_length=1)
     content: str = Field(default="")
-    source_path: Optional[str] = Field(default=None)
-    loaded_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
+    source_path: str | None = Field(default=None)
+    loaded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def is_empty(self) -> bool:

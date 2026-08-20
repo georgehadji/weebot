@@ -7,6 +7,7 @@ This version is non-mutating: it queries the bridge for the relevant external
 tool subset and builds a fresh ``ToolCollection`` from native tools + those
 scoped external tools, without altering the shared registry.
 """
+
 from __future__ import annotations
 
 import logging
@@ -74,22 +75,18 @@ async def apply_mcp_tool_scope(scope_config: McpScopeConfig, prompt: str) -> Any
         if authorized_selected:
             native_names = authorized_selected
             stdlib_logger.debug(
-                "Native tool scoping: %d tools selected for role %r",
-                len(native_names), role,
+                "Native tool scoping: %d tools selected for role %r", len(native_names), role
             )
 
     scoped_tool_names = native_names + list(scoped_names)
 
     try:
         scoped_tools = registry.create_tool_collection_from_names(
-            scoped_tool_names,
-            llm_port=scope_config.llm,
+            scoped_tool_names, llm_port=scope_config.llm
         )
     except Exception as exc:
         stdlib_logger.warning(
-            "Failed to rebuild tool collection after MCP selection: %s",
-            exc,
-            exc_info=True,
+            "Failed to rebuild tool collection after MCP selection: %s", exc, exc_info=True
         )
         return None
 

@@ -5,6 +5,7 @@ Usage:
     python -m cli.main analytics dashboard
     python -m cli.main analytics export --format csv
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,8 @@ def analytics() -> None:
 @analytics.command("query")
 @click.argument("sql")
 @click.option(
-    "--dir", "analytics_dir",
+    "--dir",
+    "analytics_dir",
     default="./analytics",
     help="Directory containing Parquet files (default: ./analytics).",
 )
@@ -59,9 +61,7 @@ def analytics_query(sql: str, analytics_dir: str, json_output: bool) -> None:
 
         # Build a glob pattern for DuckDB
         glob_pattern = str(data_dir / "**" / "*.parquet")
-        result = duckdb.sql(
-            f"SELECT * FROM read_parquet('{glob_pattern}', hive_partitioning=true)"
-        )
+        result = duckdb.sql(f"SELECT * FROM read_parquet('{glob_pattern}', hive_partitioning=true)")
         # Run user query against the view
         final = duckdb.sql(sql)
 
@@ -70,7 +70,7 @@ def analytics_query(sql: str, analytics_dir: str, json_output: bool) -> None:
             console.print_json(json.dumps(rows, indent=2, default=str))
         else:
             # Render as rich table
-            table = Table(title=f"Analytics Query")
+            table = Table(title="Analytics Query")
             for col in final.columns:
                 table.add_column(col, style="cyan")
             for row in final.fetchmany(50):
@@ -87,9 +87,7 @@ def analytics_query(sql: str, analytics_dir: str, json_output: bool) -> None:
 
 @analytics.command("dashboard")
 @click.option(
-    "--dir", "analytics_dir",
-    default="./analytics",
-    help="Directory containing Parquet files.",
+    "--dir", "analytics_dir", default="./analytics", help="Directory containing Parquet files."
 )
 def analytics_dashboard(analytics_dir: str) -> None:
     """Show a summary dashboard of analytics data."""
@@ -101,12 +99,12 @@ def analytics_dashboard(analytics_dir: str) -> None:
 
     data_dir = Path(analytics_dir)
     if not data_dir.exists():
-        console.print(f"[yellow]Analytics directory not found. Run the agent first.[/yellow]")
+        console.print("[yellow]Analytics directory not found. Run the agent first.[/yellow]")
         return
 
     parquet_files = list(data_dir.glob("**/*.parquet"))
     if not parquet_files:
-        console.print(f"[yellow]No data yet. Run the agent to generate events.[/yellow]")
+        console.print("[yellow]No data yet. Run the agent to generate events.[/yellow]")
         return
 
     glob_pattern = str(data_dir / "**" / "*.parquet")

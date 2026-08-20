@@ -1,4 +1,5 @@
 """MainReviewPort — abstract interface for risk-scoring idea contracts."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,5 +16,4 @@ class MainReviewPort(ABC):
     """
 
     @abstractmethod
-    async def review(self, contract: IdeaContract, intent: IntentReview) -> MainReview:
-        ...
+    async def review(self, contract: IdeaContract, intent: IntentReview) -> MainReview: ...

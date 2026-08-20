@@ -4,6 +4,7 @@ This port decouples scoped retrieval orchestration from the concrete
 RoleBasedToolRegistry implementation, satisfying the Clean Architecture
 dependency rule.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

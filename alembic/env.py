@@ -4,6 +4,7 @@ Weebot uses raw SQL (not SQLAlchemy ORM), so migrations are written manually.
 This env.py configures Alembic to connect to the weebot sessions database
 using the path from weebot's own settings (or env var).
 """
+
 from logging.config import fileConfig
 from pathlib import Path
 
@@ -19,6 +20,7 @@ if config.config_file_name is not None:
 # Override sqlalchemy.url from weebot settings if available
 try:
     from weebot.config.settings import SESSIONS_DB
+
     db_path = Path(SESSIONS_DB).resolve()
     config.set_main_option("sqlalchemy.url", f"sqlite:///{db_path.as_posix()}")
 except ImportError:
@@ -45,6 +47,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode (connect to live DB)."""
     from sqlalchemy import create_engine
+
     url = config.get_main_option("sqlalchemy.url")
     connectable = create_engine(url)
 

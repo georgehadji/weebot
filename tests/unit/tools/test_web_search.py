@@ -1,4 +1,5 @@
 """Unit tests for WebSearchTool."""
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -21,8 +22,10 @@ async def test_execute_falls_back_to_bing():
     """When DuckDuckGo fails, execute tries Bing."""
     tool = WebSearchTool()
     mock_results = [{"title": "Bing Result", "url": "http://bing.com", "snippet": ""}]
-    with patch.object(tool, "_search_duckduckgo", AsyncMock(side_effect=ValueError("No results"))), \
-         patch.object(tool, "_search_bing", AsyncMock(return_value=mock_results)):
+    with (
+        patch.object(tool, "_search_duckduckgo", AsyncMock(side_effect=ValueError("No results"))),
+        patch.object(tool, "_search_bing", AsyncMock(return_value=mock_results)),
+    ):
         result = await tool.execute(query="test")
     assert not result.is_error
     assert "Bing Result" in result.output
@@ -32,8 +35,10 @@ async def test_execute_falls_back_to_bing():
 async def test_execute_returns_error_when_all_fail():
     """Returns ToolResult with error when both engines fail."""
     tool = WebSearchTool()
-    with patch.object(tool, "_search_duckduckgo", AsyncMock(side_effect=Exception("DDG down"))), \
-         patch.object(tool, "_search_bing", AsyncMock(side_effect=Exception("Bing down"))):
+    with (
+        patch.object(tool, "_search_duckduckgo", AsyncMock(side_effect=Exception("DDG down"))),
+        patch.object(tool, "_search_bing", AsyncMock(side_effect=Exception("Bing down"))),
+    ):
         result = await tool.execute(query="test")
     assert result.is_error
     assert "DDG down" in result.error

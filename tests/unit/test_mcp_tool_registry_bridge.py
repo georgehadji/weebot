@@ -1,7 +1,7 @@
 """Unit tests for MCPToolRegistryBridge."""
+
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
@@ -11,9 +11,7 @@ from weebot.application.services.mcp_tool_registry_bridge import (
     _parse_namespaced_name,
     _apply_tool_filters,
 )
-from weebot.application.services.mcp_tool_retrieval_service import (
-    McpToolRetrievalService,
-)
+from weebot.application.services.mcp_tool_retrieval_service import McpToolRetrievalService
 from weebot.domain.models.mcp import MCPServerConfig, MCPToolInfo, MCPToolFilterConfig
 from weebot.tools.tool_registry import RoleBasedToolRegistry
 
@@ -85,9 +83,7 @@ class TestToolFiltering:
 
     def _make_tool(self, name: str) -> MCPToolInfo:
         return MCPToolInfo(
-            original_name=name,
-            namespaced_name=f"mcp__server__{name}",
-            server_name="server",
+            original_name=name, namespaced_name=f"mcp__server__{name}", server_name="server"
         )
 
     def test_no_filters_passes_all(self):
@@ -98,8 +94,7 @@ class TestToolFiltering:
 
     def test_include_filter(self):
         config = MCPServerConfig(
-            name="srv", command="npx",
-            tools=MCPToolFilterConfig(include=["get_*"]),
+            name="srv", command="npx", tools=MCPToolFilterConfig(include=["get_*"])
         )
         tools = [self._make_tool("get_weather"), self._make_tool("delete_all")]
         result = _apply_tool_filters(config, tools)
@@ -108,8 +103,7 @@ class TestToolFiltering:
 
     def test_exclude_filter(self):
         config = MCPServerConfig(
-            name="srv", command="npx",
-            tools=MCPToolFilterConfig(exclude=["delete_*"]),
+            name="srv", command="npx", tools=MCPToolFilterConfig(exclude=["delete_*"])
         )
         tools = [self._make_tool("get_weather"), self._make_tool("delete_all")]
         result = _apply_tool_filters(config, tools)
@@ -118,10 +112,10 @@ class TestToolFiltering:
 
     def test_include_and_exclude(self):
         config = MCPServerConfig(
-            name="srv", command="npx",
+            name="srv",
+            command="npx",
             tools=MCPToolFilterConfig(
-                include=["get_*", "list_*", "create_*"],
-                exclude=["*_secret", "*_admin"],
+                include=["get_*", "list_*", "create_*"], exclude=["*_secret", "*_admin"]
             ),
         )
         tools = [
@@ -207,7 +201,6 @@ class TestMCPToolRegistryBridge:
         assert count == 1
         assert not registry.validate_tool_for_role("admin", "mcp__weather__get_weather")
 
-
     @pytest.mark.asyncio
     async def test_unregister_unknown_server(self):
         """Unregistering a non-existent server returns 0."""
@@ -249,9 +242,7 @@ class TestMCPToolRegistryBridgeRetrieval:
         retrieval_port = _FakeRetrievalPort(tools)
         registration_port = _FakeRegistrationPort(roles=["admin"])
         service = McpToolRetrievalService(
-            retrieval_port=retrieval_port,
-            registration_port=registration_port,
-            k=8,
+            retrieval_port=retrieval_port, registration_port=registration_port, k=8
         )
 
         registry = RoleBasedToolRegistry()
@@ -266,25 +257,16 @@ class TestMCPToolRegistryBridgeRetrieval:
 
     @pytest.mark.asyncio
     async def test_initialize_indexes_tools_when_service_wired(self):
-        tools = [
-            self._make_tool("get_weather", "Get weather"),
-        ]
+        tools = [self._make_tool("get_weather", "Get weather")]
 
         class _FakeClient:
             async def get_all_tools(self):
-                return [
-                    {
-                        "name": "mcp__srv__get_weather",
-                        "description": "Get weather",
-                    }
-                ]
+                return [{"name": "mcp__srv__get_weather", "description": "Get weather"}]
 
         retrieval_port = _FakeRetrievalPort(tools)
         registration_port = _FakeRegistrationPort(roles=["admin"])
         service = McpToolRetrievalService(
-            retrieval_port=retrieval_port,
-            registration_port=registration_port,
-            k=8,
+            retrieval_port=retrieval_port, registration_port=registration_port, k=8
         )
 
         registry = RoleBasedToolRegistry()

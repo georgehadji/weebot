@@ -7,6 +7,7 @@ span and exports via OTLP gRPC.
 Gracefully degrades to a no-op when ``opentelemetry`` packages are not installed
 or ``WEEBOT_OTEL_ENDPOINT`` is unset.
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ try:
     from opentelemetry.sdk.resources import Resource, SERVICE_NAME
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
     _OTEL_AVAILABLE = True
 except ImportError:
     pass
@@ -42,17 +44,9 @@ class OtelActivitySink(AnalyticsSinkPort):
     When OTel packages are missing or the endpoint is unset, the sink is a no-op.
     """
 
-    def __init__(
-        self,
-        endpoint: str | None = None,
-        service_name: str | None = None,
-    ) -> None:
-        self._endpoint = endpoint or os.getenv(
-            "WEEBOT_OTEL_ENDPOINT", ""
-        )
-        self._service_name = service_name or os.getenv(
-            "WEEBOT_OTEL_SERVICE_NAME", "weebot"
-        )
+    def __init__(self, endpoint: str | None = None, service_name: str | None = None) -> None:
+        self._endpoint = endpoint or os.getenv("WEEBOT_OTEL_ENDPOINT", "")
+        self._service_name = service_name or os.getenv("WEEBOT_OTEL_SERVICE_NAME", "weebot")
 
         self._tracer: trace.Tracer | None = None
         self._provider: TracerProvider | None = None
@@ -84,7 +78,7 @@ class OtelActivitySink(AnalyticsSinkPort):
 
     # ── AnalyticsSinkPort implementation ─────────────────────────────
 
-    async def push(self, event: "ActivityEvent") -> None:
+    async def push(self, event: ActivityEvent) -> None:
         """Convert an ActivityEvent to an OTel span and export it."""
         if self._tracer is None:
             return

@@ -22,6 +22,7 @@ These tests run the real migration chain against a temporary database and
 assert the resulting columns are a superset of what the application writes,
 so a future divergence fails here instead of at runtime.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -151,16 +152,16 @@ def test_behavioral_rule_insert_statement_still_works(migrated_db: Path) -> None
     assert row == ("never do X", "please stop doing X", "global", 0)
 
 
-def test_commitments_keeps_the_columns_the_app_writes(tmp_path: Path,
-                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+def test_commitments_keeps_the_columns_the_app_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """commitments is created by application code, so seed it before migrating."""
     db_path = tmp_path / "sessions_with_commitments.db"
     _point_settings_at(monkeypatch, db_path)
 
     conn = sqlite3.connect(db_path)
     try:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE sessions (
                 id TEXT PRIMARY KEY, user_id TEXT NOT NULL, agent_id TEXT NOT NULL,
                 status TEXT NOT NULL, title TEXT,
@@ -190,8 +191,7 @@ def test_commitments_keeps_the_columns_the_app_writes(tmp_path: Path,
                 applied_count INTEGER NOT NULL DEFAULT 0,
                 last_applied_at TEXT
             );
-            """
-        )
+            """)
         conn.execute(
             "INSERT INTO sessions (id, user_id, agent_id, status, created_at, updated_at) "
             "VALUES ('s1', 'u', 'a', 'completed', '2026-01-01', '2026-01-01')"
@@ -211,9 +211,9 @@ def test_commitments_keeps_the_columns_the_app_writes(tmp_path: Path,
     command.upgrade(cfg, "head")
 
     missing = APP_COMMITMENTS_COLUMNS - _columns(db_path, "commitments")
-    assert not missing, (
-        f"migrated commitments is missing columns the application writes: {sorted(missing)}"
-    )
+    assert (
+        not missing
+    ), f"migrated commitments is missing columns the application writes: {sorted(missing)}"
 
     conn = sqlite3.connect(db_path)
     try:

@@ -1,12 +1,10 @@
 """Tests for Phase 5: ToolResultCache."""
+
 import time
 import pytest
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 
-from weebot.application.services.tool_result_cache import (
-    ToolResultCache,
-    NON_CACHEABLE_TOOLS,
-)
+from weebot.application.services.tool_result_cache import ToolResultCache, NON_CACHEABLE_TOOLS
 from weebot.tools.base import ToolResult
 
 
@@ -21,6 +19,7 @@ def sample_result():
 
 
 # ── Basic cache operations ────────────────────────────────────────
+
 
 def test_cache_hit_returns_same_result(cache, sample_result):
     """Same tool+args called twice; second call returns cached."""
@@ -46,6 +45,7 @@ def test_cache_miss_on_different_tool(cache, sample_result):
 
 # ── Non-cacheable tools ───────────────────────────────────────────
 
+
 def test_non_cacheable_tool_bypasses_cache(cache, sample_result):
     """bash call never stored or returned from cache."""
     assert "bash" in NON_CACHEABLE_TOOLS
@@ -69,6 +69,7 @@ def test_write_file_not_cached(cache, sample_result):
 
 # ── Error results ─────────────────────────────────────────────────
 
+
 def test_error_result_not_cached(cache):
     """Error result not stored; next call misses."""
     err = ToolResult.error_result("Something broke")
@@ -77,6 +78,7 @@ def test_error_result_not_cached(cache):
 
 
 # ── TTL expiry ────────────────────────────────────────────────────
+
 
 def test_ttl_expiry(cache, sample_result):
     """Entry expires after TTL."""
@@ -89,6 +91,7 @@ def test_ttl_expiry(cache, sample_result):
 
 
 # ── Write invalidation ────────────────────────────────────────────
+
 
 def test_write_invalidates_read(cache, sample_result):
     """Write to path X; subsequent read_file for X bypasses cache."""
@@ -112,6 +115,7 @@ def test_write_diff_path_does_not_invalidate(cache, sample_result):
 
 # ── Cache metadata ────────────────────────────────────────────────
 
+
 def test_cache_hit_metadata_flag(cache, sample_result):
     """Cache hit sets result.metadata['cache_hit'] = True."""
     cache.set("web_search", {"query": "flag_test"}, sample_result)
@@ -123,6 +127,7 @@ def test_cache_hit_metadata_flag(cache, sample_result):
 
 
 # ── Manage operations ─────────────────────────────────────────────
+
 
 def test_invalidate_removes_entry(cache, sample_result):
     """invalidate() removes a specific entry."""
@@ -150,6 +155,7 @@ def test_size_property(cache, sample_result):
 
 
 # ── Key stability ─────────────────────────────────────────────────
+
 
 def test_same_args_same_key(cache, sample_result):
     """Same args produce same cache key regardless of order."""

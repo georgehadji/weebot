@@ -8,6 +8,7 @@ a clear "server not connected" error.
 FIX: _connect_with_retry() now raises RuntimeError after exhausting retries.
 initialize() raises RuntimeError when all enabled servers fail.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -73,11 +74,15 @@ async def test_initialize_succeeds_when_at_least_one_server_connects(monkeypatch
         if name == "good":
             # Simulate success: create a minimal fake session
             class FakeSession:
-                async def initialize(self): pass
+                async def initialize(self):
+                    pass
+
                 async def list_tools(self):
                     class FakeTools:
                         tools = []
+
                     return FakeTools()
+
             mgr._clients[name] = FakeSession()
             mgr._tools_cache[name] = []
             return
@@ -94,17 +99,9 @@ async def test_initialize_succeeds_when_at_least_one_server_connects(monkeypatch
 @pytest.mark.asyncio
 async def test_retry_exhaustion_raises():
     """After max_retries attempts, _connect_with_retry must raise."""
-    mgr = MCPClientManager(
-        config={"mcpServers": {}},
-        max_retries=2,
-    )
+    mgr = MCPClientManager(config={"mcpServers": {}}, max_retries=2)
 
     with pytest.raises(RuntimeError, match="failed after 2 attempts"):
         await mgr._connect_with_retry(
-            "doomed",
-            {
-                "transport": "stdio",
-                "command": "/definitely/does/not/exist",
-                "args": [],
-            },
+            "doomed", {"transport": "stdio", "command": "/definitely/does/not/exist", "args": []}
         )

@@ -6,6 +6,7 @@ Verifies:
   3. Timeout=None disables the timeout (handler runs to completion).
   4. Domain events also respect the timeout.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,12 +22,14 @@ from weebot.domain.models.event import AgentEvent, DomainEvent
 def fast_event() -> AgentEvent:
     """A minimal AgentEvent for testing."""
     from weebot.domain.models.event import MessageEvent
+
     return MessageEvent(role="user", message="test")
 
 
 @pytest.fixture
 def domain_event() -> DomainEvent:
     from weebot.domain.models.event import FactDiscovered
+
     return FactDiscovered(session_id="test", key="k", value="v")
 
 
@@ -34,9 +37,10 @@ def domain_event() -> DomainEvent:
 # Test 1: Timeout — slow handler times out, fast handler completes
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_slow_handler_times_out_fast_handler_succeeds(
-    fast_event: AgentEvent, caplog: pytest.LogCaptureFixture,
+    fast_event: AgentEvent, caplog: pytest.LogCaptureFixture
 ):
     """A handler taking 60s must time out with a 0.05s timeout;
     a concurrent 0s handler must still complete."""
@@ -70,6 +74,7 @@ async def test_slow_handler_times_out_fast_handler_succeeds(
 # Test 2: No timeout — handler runs to completion
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_no_timeout_when_disabled(fast_event: AgentEvent):
     """When handler_timeout is None, a slow handler must complete."""
@@ -90,10 +95,9 @@ async def test_no_timeout_when_disabled(fast_event: AgentEvent):
 # Test 3: Domain event timeout
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
-async def test_domain_event_timeout(
-    domain_event: DomainEvent, caplog: pytest.LogCaptureFixture,
-):
+async def test_domain_event_timeout(domain_event: DomainEvent, caplog: pytest.LogCaptureFixture):
     """Domain events must also respect the per-subscriber timeout."""
     bus = AsyncEventBus(handler_timeout=0.05)
     done = False
@@ -115,6 +119,7 @@ async def test_domain_event_timeout(
 # ═════════════════════════════════════════════════════════════════════════════
 # Test 4: Handler error does not crash publish
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_handler_exception_does_not_crash_bus(fast_event: AgentEvent):

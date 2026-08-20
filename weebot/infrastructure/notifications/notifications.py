@@ -23,6 +23,7 @@
 - TELEGRAM_CHAT_ID: Chat ID για αποστολή
 - SLACK_WEBHOOK_URL: Incoming Webhook URL από Slack Apps
 """
+
 import os
 import sys
 import asyncio
@@ -30,7 +31,6 @@ import logging
 import aiohttp
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, List, Dict
 from datetime import datetime
 
 from .notifications_categorizer import NotificationCategorizer
@@ -53,8 +53,8 @@ class Notification:
     message: str
     level: NotificationLevel
     timestamp: datetime
-    project_id: Optional[str] = None
-    metadata: Optional[dict] = None
+    project_id: str | None = None
+    metadata: dict | None = None
     category: str = "info"
 
 
@@ -87,44 +87,52 @@ class NotificationManager:
 
     async def notify_project_start(self, project_id: str, description: str) -> None:
         """Notify project initiation."""
-        await self.notify(Notification(
-            title="🚀 Project Started",
-            message=f"Project {project_id}: {description}",
-            level=NotificationLevel.INFO,
-            timestamp=datetime.now(),
-            project_id=project_id
-        ))
+        await self.notify(
+            Notification(
+                title="🚀 Project Started",
+                message=f"Project {project_id}: {description}",
+                level=NotificationLevel.INFO,
+                timestamp=datetime.now(),
+                project_id=project_id,
+            )
+        )
 
     async def notify_checkpoint(self, project_id: str, message: str) -> None:
         """Notify checkpoint reached."""
-        await self.notify(Notification(
-            title="⏸ Checkpoint Reached",
-            message=message,
-            level=NotificationLevel.WARNING,
-            timestamp=datetime.now(),
-            project_id=project_id
-        ))
+        await self.notify(
+            Notification(
+                title="⏸ Checkpoint Reached",
+                message=message,
+                level=NotificationLevel.WARNING,
+                timestamp=datetime.now(),
+                project_id=project_id,
+            )
+        )
 
     async def notify_completion(self, project_id: str, message: str) -> None:
         """Notify successful completion."""
-        await self.notify(Notification(
-            title="✅ Project Completed",
-            message=message,
-            level=NotificationLevel.SUCCESS,
-            timestamp=datetime.now(),
-            project_id=project_id
-        ))
+        await self.notify(
+            Notification(
+                title="✅ Project Completed",
+                message=message,
+                level=NotificationLevel.SUCCESS,
+                timestamp=datetime.now(),
+                project_id=project_id,
+            )
+        )
 
     async def notify_error(self, project_id: str, error: str, critical: bool = False) -> None:
         """Notify error."""
         level = NotificationLevel.CRITICAL if critical else NotificationLevel.ERROR
-        await self.notify(Notification(
-            title="❌ Error Occurred",
-            message=error,
-            level=level,
-            timestamp=datetime.now(),
-            project_id=project_id
-        ))
+        await self.notify(
+            Notification(
+                title="❌ Error Occurred",
+                message=error,
+                level=level,
+                timestamp=datetime.now(),
+                project_id=project_id,
+            )
+        )
 
 
 class TelegramChannel:
@@ -143,7 +151,7 @@ class TelegramChannel:
             NotificationLevel.SUCCESS: "✅",
             NotificationLevel.WARNING: "⚠️",
             NotificationLevel.ERROR: "❌",
-            NotificationLevel.CRITICAL: "🚨"
+            NotificationLevel.CRITICAL: "🚨",
         }
 
         emoji = emoji_map.get(notification.level, "📌")
@@ -152,22 +160,18 @@ class TelegramChannel:
         if notification.project_id:
             text += f"\n\nProject: <code>{notification.project_id}</code>"
 
-        payload = {
-            "chat_id": self.chat_id,
-            "text": text,
-            "parse_mode": "HTML"
-        }
+        payload = {"chat_id": self.chat_id, "text": text, "parse_mode": "HTML"}
 
         try:
+
             async def _post():
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{self.api_url}/sendMessage",
-                        json=payload
-                    ) as response:
-                        if response.status != 200:
-                            raise OSError(f"Telegram API returned {response.status}")
-                        return True
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.post(f"{self.api_url}/sendMessage", json=payload) as response,
+                ):
+                    if response.status != 200:
+                        raise OSError(f"Telegram API returned {response.status}")
+                    return True
 
             return await self._retry.call(_post)
         except Exception:
@@ -188,25 +192,28 @@ class SlackChannel:
             NotificationLevel.SUCCESS: "#28a745",
             NotificationLevel.WARNING: "#ffc107",
             NotificationLevel.ERROR: "#dc3545",
-            NotificationLevel.CRITICAL: "#721c24"
+            NotificationLevel.CRITICAL: "#721c24",
         }
-        
+
         payload = {
-            "attachments": [{
-                "color": color_map.get(notification.level, "#36a64f"),
-                "title": notification.title,
-                "text": notification.message,
-                "footer": f"Project: {notification.project_id}" if notification.project_id else "weebot Agent",
-                "ts": int(notification.timestamp.timestamp())
-            }]
+            "attachments": [
+                {
+                    "color": color_map.get(notification.level, "#36a64f"),
+                    "title": notification.title,
+                    "text": notification.message,
+                    "footer": (
+                        f"Project: {notification.project_id}"
+                        if notification.project_id
+                        else "weebot Agent"
+                    ),
+                    "ts": int(notification.timestamp.timestamp()),
+                }
+            ]
         }
-        
+
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.webhook_url,
-                    json=payload
-                ) as response:
+                async with session.post(self.webhook_url, json=payload) as response:
                     return response.status == 200
         except Exception:
             logger.warning("Slack notification failed")
@@ -222,35 +229,36 @@ class LogChannel:
     async def send(self, notification: Notification) -> bool:
         """Log notification to file (non-blocking)."""
         import json
-        
+
         entry = {
             "timestamp": notification.timestamp.isoformat(),
             "level": notification.level.value,
             "title": notification.title,
             "message": notification.message,
-            "project_id": notification.project_id
+            "project_id": notification.project_id,
         }
-        
+
         def _write():
             with open(self.log_file, "a") as f:
                 f.write(json.dumps(entry) + "\n")
-        
+
         await asyncio.to_thread(_write)
         return True
+
 
 class WindowsToastChannel:
     """Windows 10/11 native toast notification channel via winotify."""
 
     # Placeholder icons — all map to StoreLogo until per-category assets are added
-    CATEGORY_ICONS: Dict[str, str] = {
-        "health":   "ms-appx:///Assets/StoreLogo.png",
-        "urgent":   "ms-appx:///Assets/StoreLogo.png",
+    CATEGORY_ICONS: dict[str, str] = {
+        "health": "ms-appx:///Assets/StoreLogo.png",
+        "urgent": "ms-appx:///Assets/StoreLogo.png",
         "reminder": "ms-appx:///Assets/StoreLogo.png",
-        "email":    "ms-appx:///Assets/StoreLogo.png",
+        "email": "ms-appx:///Assets/StoreLogo.png",
         "calendar": "ms-appx:///Assets/StoreLogo.png",
-        "build":    "ms-appx:///Assets/StoreLogo.png",
-        "error":    "ms-appx:///Assets/StoreLogo.png",
-        "info":     "ms-appx:///Assets/StoreLogo.png",
+        "build": "ms-appx:///Assets/StoreLogo.png",
+        "error": "ms-appx:///Assets/StoreLogo.png",
+        "info": "ms-appx:///Assets/StoreLogo.png",
     }
 
     def __init__(self, app_name: str = "weebot") -> None:
@@ -277,7 +285,7 @@ class WindowsToastChannel:
             _level_name = getattr(getattr(notification, "level", None), "name", "").lower()
             if _category == "urgent" or _level_name in ("critical", "error"):
                 toast.set_audio(winotify.audio.Default, loop=True)
-            
+
             await asyncio.to_thread(toast.show)
             return True
         except Exception:

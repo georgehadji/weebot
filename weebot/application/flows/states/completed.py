@@ -1,8 +1,10 @@
 """Completed state for Plan-Act flow."""
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -11,27 +13,22 @@ from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus
 from weebot.domain.models.session import SessionStatus
 from weebot.domain.models.event import ProductDecisionEvent
+from datetime import UTC
 
 logger = logging.getLogger(__name__)
 
 
 async def _run_retention_review(
-    agent, session_id, session_summary, trust_report, error_count, tool_count,
+    agent, session_id, session_summary, trust_report, error_count, tool_count
 ) -> None:
     """Run RetentionAgent as a background task — never blocks completion."""
-    review = await agent.review(
-        session_id, session_summary, trust_report, error_count, tool_count,
-    )
+    review = await agent.review(session_id, session_summary, trust_report, error_count, tool_count)
     logger.info(
-        "RetentionReview %s: %s — %s",
-        session_id, review.verdict.value, review.reasoning[:120],
+        "RetentionReview %s: %s — %s", session_id, review.verdict.value, review.reasoning[:120]
     )
 
 
-async def _run_skill_gap_processing(
-    gaps: list[dict],
-    session_id: str,
-) -> None:
+async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
     """Submit skill-gap signals as IdeaContracts through the IdeaGate (Phase 2).
 
     Background task — never blocks CompletedState.  Runs after the flow
@@ -71,19 +68,21 @@ async def _run_skill_gap_processing(
         ]
 
         gate = IdeaGate(
-            intent_reviewer=IntentReviewService(llm=llm),
-            main_reviewer=MainReviewService(llm=llm),
+            intent_reviewer=IntentReviewService(llm=llm), main_reviewer=MainReviewService(llm=llm)
         )
         approved = await gate.process(contracts)
         if approved:
             logger.info(
                 "Phase 2: %d/%d skill-gap contracts approved for session %s",
-                len(approved), len(contracts), session_id[:8],
+                len(approved),
+                len(contracts),
+                session_id[:8],
             )
         else:
             logger.debug(
                 "Phase 2: %d skill-gap contracts processed, none approved (session %s)",
-                len(contracts), session_id[:8],
+                len(contracts),
+                session_id[:8],
             )
     except Exception:
         logger.debug("Phase 2 skill-gap background processing failed", exc_info=True)
@@ -102,9 +101,7 @@ async def _run_dream_scan() -> None:
         if dreamer is None or event_store is None:
             return
 
-        failed_events = await event_store.query_recent_events(
-            event_type="error", limit=30,
-        )
+        failed_events = await event_store.query_recent_events(event_type="error", limit=30)
         contracts = await dreamer.dream(
             opportunity_proposals=[],
             failed_step_events=failed_events,
@@ -128,12 +125,14 @@ async def _run_dream_scan() -> None:
             if high_heat:
                 logger.info(
                     "Dream scan found %d approved ideas (%d high-heat) — run 'dream build <id>' to execute",
-                    len(approved), len(high_heat),
+                    len(approved),
+                    len(high_heat),
                 )
             else:
                 logger.debug(
                     "Dream scan: %d contracts, %d approved, none auto-executable",
-                    len(contracts), len(approved),
+                    len(contracts),
+                    len(approved),
                 )
     except Exception:
         logger.debug("Dream scan background task failed", exc_info=True)
@@ -141,21 +140,16 @@ async def _run_dream_scan() -> None:
 
 class CompletedState(FlowState):
     """Final state marking the end of the Plan-Act flow."""
+
     status = AgentStatus.COMPLETED
 
     def __init__(self, termination_reason: str = "") -> None:
         self._termination_reason = termination_reason
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.plan_act_flow import AgentStatus
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 
         if self._termination_reason:
-            logger.info(
-                "Flow terminated: %s",
-                self._termination_reason,
-            )
+            logger.info("Flow terminated: %s", self._termination_reason)
 
         if context._plan:
             context._plan = context._plan.model_copy(update={"status": PlanStatus.COMPLETED})
@@ -170,7 +164,8 @@ class CompletedState(FlowState):
                             await awm.store(template)
                             logger.info(
                                 "AWM: induced and stored workflow '%s' (%d steps) from session %s",
-                                template.task_summary, len(template.generalized_steps),
+                                template.task_summary,
+                                len(template.generalized_steps),
                                 context._session.id[:8],
                             )
                 except Exception as exc:
@@ -185,16 +180,14 @@ class CompletedState(FlowState):
             # ── Save completed plan as template for reuse ────
             if context._plan and getattr(context, "_state_repo", None) is not None:
                 try:
-                    from weebot.domain.services.plan_template_cache import (
-                        compute_task_hash,
-                    )
+                    from weebot.domain.services.plan_template_cache import compute_task_hash
                     from weebot.domain.models.plan_template import PlanTemplate
-                    import json as _json, uuid as _uuid
+                    import json as _json
+                    import uuid as _uuid
+
                     # Compute success score from step completion ratio
                     total_steps = len(context._plan.steps)
-                    completed_steps = sum(
-                        1 for s in context._plan.steps if s.is_done()
-                    )
+                    completed_steps = sum(1 for s in context._plan.steps if s.is_done())
                     score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
                     template = PlanTemplate(
                         template_id=str(_uuid.uuid4()),
@@ -206,7 +199,9 @@ class CompletedState(FlowState):
                     await context._state_repo.save_plan_template(template)
                     logger.info(
                         "Saved plan template (hash=%s, score=%.2f) for session %s",
-                        template.task_hash, score, context._session.id[:8],
+                        template.task_hash,
+                        score,
+                        context._session.id[:8],
                     )
                 except Exception as exc:
                     logger.debug("Plan template save skipped: %s", exc)
@@ -219,26 +214,20 @@ class CompletedState(FlowState):
 
         # --- CQRS: score the trajectory if mediator is available ---
         if context._mediator:
-            from weebot.application.cqrs.commands.trajectory_commands import (
-                ScoreTrajectoryCommand,
-            )
+            from weebot.application.cqrs.commands.trajectory_commands import ScoreTrajectoryCommand
+
             try:
                 await context._mediator.send(
-                    ScoreTrajectoryCommand(
-                        session_id=context._session.id,
-                        harness="direct_chat",
-                    )
+                    ScoreTrajectoryCommand(session_id=context._session.id, harness="direct_chat")
                 )
             except Exception as exc:
                 logger.warning(
-                    "Trajectory scoring failed for session %s: %s",
-                    context._session.id,
-                    exc,
+                    "Trajectory scoring failed for session %s: %s", context._session.id, exc
                 )
 
         # ── SessionStamp emission (Hallmark-inspired) ──────────────────
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
             from weebot.domain.models.stamp import SessionStamp, VerificationScores
             from weebot.application.services.plan_history import PlanHistory
 
@@ -247,15 +236,20 @@ class CompletedState(FlowState):
             scores_raw = extra.get("verification_scores", {})
             gate_failures = extra.get("gate_failures", [])
 
-            verif_scores = VerificationScores(
-                correctness=scores_raw.get("correctness", 3),
-                completeness=scores_raw.get("completeness", 3),
-                specificity=scores_raw.get("specificity", 3),
-                restraint=scores_raw.get("restraint", 3),
-            ) if scores_raw else None
+            verif_scores = (
+                VerificationScores(
+                    correctness=scores_raw.get("correctness", 3),
+                    completeness=scores_raw.get("completeness", 3),
+                    specificity=scores_raw.get("specificity", 3),
+                    restraint=scores_raw.get("restraint", 3),
+                )
+                if scores_raw
+                else None
+            )
 
             # Count tool calls and errors from session events
             from weebot.domain.models.event import ToolEvent, ErrorEvent
+
             tool_count = sum(1 for e in context._session.events if isinstance(e, ToolEvent))
             error_count = sum(1 for e in context._session.events if isinstance(e, ErrorEvent))
 
@@ -273,7 +267,7 @@ class CompletedState(FlowState):
                 tool_calls=tool_count,
                 errors=error_count,
                 duration_ms=0,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=datetime.now(UTC).isoformat(),
             )
 
             # Store stamp on session context
@@ -284,14 +278,18 @@ class CompletedState(FlowState):
                     )
                 }
             )
-            logger.debug("SessionStamp emitted for %s: %s", context._session.id, stamp.plan_fingerprint)
+            logger.debug(
+                "SessionStamp emitted for %s: %s", context._session.id, stamp.plan_fingerprint
+            )
         except Exception:
             logger.debug("SessionStamp emission failed — non-blocking", exc_info=True)
 
         import time as _time
+
         _total_elapsed = _time.monotonic() - context._flow_started_at
-        logger.info("PlanActFlow completed for session %s in %.1fs",
-                    context._session.id, _total_elapsed)
+        logger.info(
+            "PlanActFlow completed for session %s in %.1fs", context._session.id, _total_elapsed
+        )
 
         # ── Collect extra dict for TrustReport + RetentionReview + ProductContext ──
         _extra: dict = {}
@@ -309,15 +307,15 @@ class CompletedState(FlowState):
                 _extra["trust_report"] = trust_report.model_dump()
                 context._session = context._session.model_copy(
                     update={
-                        "context": context._session.context.model_copy(
-                            update={"extra": _extra}
-                        )
+                        "context": context._session.context.model_copy(update={"extra": _extra})
                     }
                 )
                 logger.info(
                     "TrustReport session=%s band=%s confirmed=%d drift=%d regression=%d",
-                    context._session.id, trust_report.trust_band.value,
-                    trust_report.confirmed_count, trust_report.drift_count,
+                    context._session.id,
+                    trust_report.trust_band.value,
+                    trust_report.confirmed_count,
+                    trust_report.drift_count,
                     trust_report.regression_count,
                 )
             except Exception:
@@ -325,6 +323,7 @@ class CompletedState(FlowState):
 
         # ── ProductDecisionEvent (product-mode Principle 7) ─────────────
         from weebot.config.feature_flags import PRODUCT_DECISION_LOG_ENABLED
+
         if PRODUCT_DECISION_LOG_ENABLED:
             _pc = _extra.get("product_context")
             if _pc:
@@ -334,7 +333,11 @@ class CompletedState(FlowState):
                         problem=str(_pc.get("problem", "")),
                         why_now=str(_pc.get("why_now", "")),
                         choice=context._plan.title if context._plan else "unknown",
-                        rationale=context._plan.message[:300] if context._plan and context._plan.message else "",
+                        rationale=(
+                            context._plan.message[:300]
+                            if context._plan and context._plan.message
+                            else ""
+                        ),
                         reversibility=str(_pc.get("reversibility", "two-way")),
                         success_metric=str(_pc.get("success_metric", "")),
                         session_id=context._session.id,
@@ -342,10 +345,13 @@ class CompletedState(FlowState):
                     await context._emit(_decision)
                     logger.info(
                         "ProductDecisionEvent emitted for session %s (reversibility: %s)",
-                        context._session.id[:8], _decision.reversibility,
+                        context._session.id[:8],
+                        _decision.reversibility,
                     )
                 except Exception:
-                    logger.debug("ProductDecisionEvent emission failed — non-blocking", exc_info=True)
+                    logger.debug(
+                        "ProductDecisionEvent emission failed — non-blocking", exc_info=True
+                    )
 
         # ── RetentionReview (Enhancement 5 — background, non-blocking) ──
         if getattr(context, "_retention_agent", None) is not None:
@@ -353,60 +359,64 @@ class CompletedState(FlowState):
             _trust_extra = _extra.get("trust_report", {})
             # Counts from events
             _tool_count_ret = sum(
-                1 for e in context._session.events
-                if getattr(e, "type", "") == "tool"
+                1 for e in context._session.events if getattr(e, "type", "") == "tool"
             )
             _error_count_ret = sum(
-                1 for e in context._session.events
-                if getattr(e, "type", "") == "error"
+                1 for e in context._session.events if getattr(e, "type", "") == "error"
             )
             _session_summary = (
                 f"{_plan_for_retention.title}: "
                 + ", ".join(s.description for s in _plan_for_retention.steps[:5])
-                if _plan_for_retention else "unknown"
+                if _plan_for_retention
+                else "unknown"
             )
             import asyncio as _aio
-            _aio.ensure_future(_run_retention_review(
-                agent=context._retention_agent,
-                session_id=context._session.id,
-                session_summary=_session_summary,
-                trust_report=_trust_extra,
-                error_count=_error_count_ret,
-                tool_count=_tool_count_ret,
-            ))
+
+            _aio.ensure_future(
+                _run_retention_review(
+                    agent=context._retention_agent,
+                    session_id=context._session.id,
+                    session_summary=_session_summary,
+                    trust_report=_trust_extra,
+                    error_count=_error_count_ret,
+                    tool_count=_tool_count_ret,
+                )
+            )
 
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
         _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
         if _gaps:
             import asyncio as _aio
-            _aio.ensure_future(
-                _run_skill_gap_processing(list(_gaps), context._session.id)
-            )
+
+            _aio.ensure_future(_run_skill_gap_processing(list(_gaps), context._session.id))
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
         import asyncio as _aio
+
         _aio.ensure_future(_run_dream_scan())
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:
             from weebot.application.services.plan_history import PlanHistory
+
             _fp = PlanHistory.plan_fingerprint(context._plan) if context._plan else ""
             _tool_count = sum(
-                1 for e in context._session.events
-                if getattr(e, "type", "") == "tool"
+                1 for e in context._session.events if getattr(e, "type", "") == "tool"
             )
             _error_count = sum(
-                1 for e in context._session.events
-                if getattr(e, "type", "") == "error"
+                1 for e in context._session.events if getattr(e, "type", "") == "error"
             )
-            await context._hooks.execute_hooks("post_complete", {
-                "session_id": context._session.id,
-                "plan": context._plan,
-                "tool_count": _tool_count,
-                "error_count": _error_count,
-                "total_elapsed_ms": _total_elapsed * 1000,
-                "plan_fingerprint": _fp,
-            })
+            await context._hooks.execute_hooks(
+                "post_complete",
+                {
+                    "session_id": context._session.id,
+                    "plan": context._plan,
+                    "tool_count": _tool_count,
+                    "error_count": _error_count,
+                    "total_elapsed_ms": _total_elapsed * 1000,
+                    "plan_fingerprint": _fp,
+                },
+            )
 
         # Reset to IDLE for potential future runs in same session object
         # but the run loop in PlanActFlow will pick this up.

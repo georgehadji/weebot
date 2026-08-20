@@ -7,10 +7,11 @@ percentage.
 
 Emits TodoEvent into the event bus whenever called.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -73,7 +74,11 @@ class TodoWriteTool(BaseTool):
                 TodoEvent(
                     action=action,
                     description=description,
-                    status=status if action == "update" else "in_progress" if action == "add" else "completed",
+                    status=(
+                        status
+                        if action == "update"
+                        else "in_progress" if action == "add" else "completed"
+                    ),
                     progress=progress,
                 )
             )

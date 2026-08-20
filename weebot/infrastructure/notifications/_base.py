@@ -13,13 +13,14 @@ Usage::
                 ...
         # close() and __aexit__ are inherited
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
-
+from typing import Any
 
 try:
     import aiohttp as _aiohttp
+
     HAS_AIOHTTP = True
 except ImportError:
     _aiohttp = None
@@ -40,7 +41,7 @@ class BaseNotificationAdapter:
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._http_client: Optional[Any] = None
+        self._http_client: Any | None = None
 
     def _get_http_client(self) -> Any:
         """Get or create the HTTP client session."""
@@ -73,6 +74,7 @@ class BaseNotificationAdapter:
     def __del__(self):
         if self._http_client is not None and not self._http_client.closed:
             import asyncio as _asyncio
+
             try:
                 loop = _asyncio.get_running_loop()
             except RuntimeError:

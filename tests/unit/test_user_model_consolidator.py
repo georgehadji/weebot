@@ -1,4 +1,5 @@
 """Tests for UserModelConsolidator."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,13 +15,18 @@ class TestUserModelConsolidator:
         # A pydantic BehavioralRule fixture here would hide a `.rule_text`
         # attribute-access bug that is an AttributeError against real data.
         r = MagicMock()
-        r.list_behavioral_rules = AsyncMock(return_value=[
-            {
-                "id": "r1", "rule_text": "Never use rm -rf",
-                "source_session_id": "s1", "source_message": "",
-                "scope": "global", "applied_count": 3,
-            },
-        ])
+        r.list_behavioral_rules = AsyncMock(
+            return_value=[
+                {
+                    "id": "r1",
+                    "rule_text": "Never use rm -rf",
+                    "source_session_id": "s1",
+                    "source_message": "",
+                    "scope": "global",
+                    "applied_count": 3,
+                }
+            ]
+        )
         r.get_low_salience_entries = AsyncMock(return_value=[])
         r.upsert_memory_metadata = AsyncMock(spec=SQLiteStateRepository.upsert_memory_metadata)
         return r

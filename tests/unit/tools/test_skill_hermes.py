@@ -5,7 +5,7 @@ Covers:
 - M4: Skill config system (config field, get_missing_config)
 - M11: Conditional activation (requires_toolsets, fallback_for_toolsets)
 """
-import sys
+
 import pytest
 
 
@@ -67,9 +67,9 @@ class TestSkillConfigSystem:
             name="with-defaults",
             description="",
             content="",
-            metadata=SkillMetadata(config=[
-                {"key": "my.setting", "default": "value", "description": "A setting"},
-            ]),
+            metadata=SkillMetadata(
+                config=[{"key": "my.setting", "default": "value", "description": "A setting"}]
+            ),
         )
         missing = skill.get_missing_config()
         assert len(missing) == 0
@@ -82,9 +82,9 @@ class TestSkillConfigSystem:
             name="required-config",
             description="",
             content="",
-            metadata=SkillMetadata(config=[
-                {"key": "api.key", "description": "API key", "prompt": "Enter API key"},
-            ]),
+            metadata=SkillMetadata(
+                config=[{"key": "api.key", "description": "API key", "prompt": "Enter API key"}]
+            ),
         )
         missing = skill.get_missing_config()
         assert len(missing) == 1

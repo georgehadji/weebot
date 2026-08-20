@@ -15,11 +15,12 @@ Example:
     )
     result = await tool.execute(run_input={"queries": ["weebot AI"], "maxPagesPerQuery": 1})
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -36,10 +37,7 @@ class ApifyActorTool(BaseTool):
     default_timeout_seconds: int = 150
 
     async def execute(
-        self,
-        run_input: Optional[Dict[str, Any]] = None,
-        memory_mbytes: int = 256,
-        **kwargs: Any,
+        self, run_input: dict[str, Any] | None = None, memory_mbytes: int = 256, **kwargs: Any
     ) -> ToolResult:
         """Run the actor synchronously and return its dataset items.
 
@@ -77,11 +75,7 @@ class ApifyActorTool(BaseTool):
         preview = json.dumps(items[:50], indent=2, ensure_ascii=False)
         return ToolResult.success_result(
             output=preview,
-            data={
-                "items": items,
-                "count": len(items),
-                "actor_id": self.actor_id,
-            },
+            data={"items": items, "count": len(items), "actor_id": self.actor_id},
             execution_time_ms=resp.execution_time_ms,
         )
 

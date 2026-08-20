@@ -3,6 +3,7 @@
 These cover the pure logic only — no LLM, no network, no flow execution — so
 the regression gate itself is verifiable in CI even when eval runs are not.
 """
+
 from __future__ import annotations
 
 import json
@@ -195,8 +196,7 @@ class TestLoadEvalTasks:
     def test_loads_both_splits_with_stable_ids(self, tmp_path):
         p = tmp_path / "eval_tasks.yaml"
         p.write_text(
-            "held_in_tasks:\n  - 'first'\n  - 'second'\n"
-            "held_out_tasks:\n  - 'third'\n",
+            "held_in_tasks:\n  - 'first'\n  - 'second'\n" "held_out_tasks:\n  - 'third'\n",
             encoding="utf-8",
         )
         tasks = load_eval_tasks(p)

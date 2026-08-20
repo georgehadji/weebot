@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 import httpx
 import sys
 import asyncio
@@ -24,7 +24,7 @@ class BerbTool(BaseTool):
     from a single paper topic, or falls back to headless CLI execution.
     """
 
-    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+    _tool_config: ToolConfig | None = PrivateAttr(default=None)
 
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig (Berb endpoint/creds) via the tool registry."""
@@ -58,11 +58,7 @@ class BerbTool(BaseTool):
     }
 
     async def execute(
-        self,
-        topic: str,
-        auto_approve: bool = True,
-        from_stage: Optional[str] = None,
-        **kwargs: Any,
+        self, topic: str, auto_approve: bool = True, from_stage: str | None = None, **kwargs: Any
     ) -> ToolResult:
         api_url = resolve_setting(
             self._tool_config, "berb_api_url", "BERB_API_URL", "http://localhost:8004"
@@ -72,25 +68,17 @@ class BerbTool(BaseTool):
             self._tool_config, "berb_dir", "BERB_DIR", "E:\\Documents\\Vibe-Coding\\Berb"
         )
 
-        headers = {
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        payload = {
-            "topic": topic,
-            "auto_approve": auto_approve,
-            "from_stage": from_stage,
-        }
+        payload = {"topic": topic, "auto_approve": auto_approve, "from_stage": from_stage}
 
         # ── Call POST /api/research/run ──
         async def _call_berb(req_payload: dict) -> dict:
             async with httpx.AsyncClient(timeout=300.0) as client:
                 resp = await client.post(
-                    f"{api_url}/api/research/run",
-                    json=req_payload,
-                    headers=headers,
+                    f"{api_url}/api/research/run", json=req_payload, headers=headers
                 )
                 resp.raise_for_status()
                 return resp.json()
@@ -99,12 +87,7 @@ class BerbTool(BaseTool):
             # Nested try/except with CLI (Method 1) as DEFAULT and API (Method 2) as FALLBACK
             try:
                 # Construct CLI arguments: python -m berb run --topic "<topic>"
-                cli_args = [
-                    sys.executable,
-                    "-m", "berb",
-                    "run",
-                    "--topic", topic,
-                ]
+                cli_args = [sys.executable, "-m", "berb", "run", "--topic", topic]
                 if auto_approve:
                     cli_args.append("--auto-approve")
                 if from_stage:
@@ -123,9 +106,18 @@ class BerbTool(BaseTool):
                 stdout, stderr = await process.communicate()
 
                 if process.returncode != 0:
-                    err_msg = stderr.decode(errors="ignore").strip() or stdout.decode(errors="ignore").strip()
-                    logger.error("Berb CLI execution failed with exit code %d: %s", process.returncode, err_msg)
-                    raise RuntimeError(f"Berb CLI execution failed with exit code {process.returncode}: {err_msg}")
+                    err_msg = (
+                        stderr.decode(errors="ignore").strip()
+                        or stdout.decode(errors="ignore").strip()
+                    )
+                    logger.error(
+                        "Berb CLI execution failed with exit code %d: %s",
+                        process.returncode,
+                        err_msg,
+                    )
+                    raise RuntimeError(
+                        f"Berb CLI execution failed with exit code {process.returncode}: {err_msg}"
+                    )
 
                 # CLI logs standard output
                 logs_out = stdout.decode(errors="ignore").strip()
@@ -147,7 +139,11 @@ class BerbTool(BaseTool):
                     )
 
             # ── Handle response ──
-            summary_text = result.get("summary") or result.get("message") or "Berb academic research run completed successfully."
+            summary_text = (
+                result.get("summary")
+                or result.get("message")
+                or "Berb academic research run completed successfully."
+            )
             artifacts_dir = result.get("artifacts_dir") or str(Path(berb_dir) / "artifacts")
 
             summary = (

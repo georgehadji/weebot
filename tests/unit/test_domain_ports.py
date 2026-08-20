@@ -1,7 +1,7 @@
 """Unit tests for domain ports and exceptions."""
+
 from typing import Protocol
 
-import pytest
 
 from weebot.domain.exceptions import (
     BudgetExceededError,
@@ -55,8 +55,9 @@ class TestPorts:
 
     def test_concrete_class_satisfies_imodel_provider(self):
         class FakeProvider:
-            async def generate(self, prompt, task_type, system_prompt="",
-                               temperature=0.7, max_tokens=2000):
+            async def generate(
+                self, prompt, task_type, system_prompt="", temperature=0.7, max_tokens=2000
+            ):
                 return "result"
 
             async def estimate_cost(self, prompt, task_type):

@@ -1,4 +1,5 @@
 """MCP server entry point for weebot."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,10 +18,14 @@ import sys
 # override=True: .env values take priority over stale system environment
 # variables (e.g. an old OPENROUTER_API_KEY persisted in the OS profile).
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 # Configure structured logging
-from weebot.infrastructure.observability.logging_config import configure_logging as _configure_weebot_logging
+from weebot.infrastructure.observability.logging_config import (
+    configure_logging as _configure_weebot_logging,
+)
+
 _configure_weebot_logging()
 
 logger = logging.getLogger(__name__)
@@ -49,9 +54,7 @@ def _build_server():
         "SQLiteStateRepository",
     )
     scheduler = _try_attach(
-        "weebot.infrastructure.scheduling.scheduler",
-        "SchedulingManager",
-        "SchedulingManager",
+        "weebot.infrastructure.scheduling.scheduler", "SchedulingManager", "SchedulingManager"
     )
     return WeebotMCPServer(
         state_manager=state_repo,
@@ -80,6 +83,7 @@ def main() -> None:
     # Validate settings
     try:
         from weebot.config.settings import WeebotSettings
+
         WeebotSettings.validate_at_least_one_key()
     except ValueError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
@@ -98,6 +102,7 @@ def main() -> None:
     # When --allow-remote is used, an API key is mandatory
     if args.allow_remote:
         from weebot.config.secret_accessor import SecretAccessor
+
         _mcp_key = SecretAccessor.get("WEEBOT_MCP_API_KEY")
         if not _mcp_key:
             print(

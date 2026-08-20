@@ -4,9 +4,10 @@ Call create_apify_preset_tools(service) to get all 10 pre-wired tools.
 Each tool has a purpose-built run_input JSON Schema so the LLM knows what
 to pass without consulting the actor's documentation.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.infrastructure.adapters.apify.apify_service import ApifyService
@@ -32,7 +33,7 @@ _PRESETS = [
                 "_required": True,
                 "type": "array",
                 "items": {"type": "object", "properties": {"url": {"type": "string"}}},
-                "description": "List of start URLs, e.g. [{\"url\": \"https://example.com\"}]",
+                "description": 'List of start URLs, e.g. [{"url": "https://example.com"}]',
             },
             maxRequestsPerCrawl={
                 "type": "integer",
@@ -219,7 +220,7 @@ _PRESETS = [
 ]
 
 
-def create_apify_preset_tools(apify_service: "ApifyService") -> List["ApifyActorTool"]:
+def create_apify_preset_tools(apify_service: ApifyService) -> list[ApifyActorTool]:
     """Return all 10 pre-configured ApifyActorTool instances."""
     from weebot.tools.apify_actor_tool import ApifyActorTool
 

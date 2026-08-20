@@ -6,22 +6,20 @@ The flow_factory is mocked — no real LLM or PlanActFlow is used. Tests verify:
 - Error handling (failed sub-agents, missing factory, empty tasks)
 - ToolResult.data structure
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from weebot.tools.dispatch_agents import DispatchAgentsTool
-from weebot.tools.base import ToolResult
-from weebot.domain.models.event import AgentEvent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_message_event(content: str) -> MagicMock:
     ev = MagicMock()
@@ -37,32 +35,41 @@ async def _flow_that_succeeds(prompt: str, summary: str = "done"):
 
 def _factory_succeeds(summary: str = "done"):
     """Flow factory that always succeeds with a fixed summary."""
+
     def factory(session):
         flow = MagicMock()
         flow.run = AsyncMock(return_value=_flow_that_succeeds(session.id, summary))
+
         # Make run() return an async generator that yields one event
         async def _run(prompt):
             yield _make_message_event(summary)
+
         flow.run = _run
         return flow
+
     return factory
 
 
 def _factory_raises():
     """Flow factory whose flows always raise an exception."""
+
     def factory(session):
         flow = MagicMock()
+
         async def _run(prompt):
             raise RuntimeError("sub-agent exploded")
             yield  # make it a generator
+
         flow.run = _run
         return flow
+
     return factory
 
 
 # ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchAgentsMetadata:
     def test_tool_name(self):
@@ -85,6 +92,7 @@ class TestDispatchAgentsMetadata:
 # No factory guard
 # ---------------------------------------------------------------------------
 
+
 class TestNoFactory:
     @pytest.mark.asyncio
     async def test_returns_error_without_factory(self):
@@ -104,6 +112,7 @@ class TestNoFactory:
 # Successful parallel execution
 # ---------------------------------------------------------------------------
 
+
 class TestSuccessfulExecution:
     @pytest.mark.asyncio
     async def test_single_task_completes(self):
@@ -121,10 +130,7 @@ class TestSuccessfulExecution:
     @pytest.mark.asyncio
     async def test_multiple_tasks_all_complete(self):
         tool = DispatchAgentsTool(flow_factory=_factory_succeeds("ok"))
-        tasks = [
-            {"task_id": f"section-{i}", "description": f"Build section {i}"}
-            for i in range(4)
-        ]
+        tasks = [{"task_id": f"section-{i}", "description": f"Build section {i}"} for i in range(4)]
         result = await tool.execute(tasks=tasks, max_concurrency=4)
         assert result.success
         assert result.data["completed"] == 4
@@ -149,18 +155,24 @@ class TestSuccessfulExecution:
 
         def capturing_factory(session):
             flow = MagicMock()
+
             async def _run(prompt):
                 received_prompts.append(prompt)
                 yield _make_message_event("ok")
+
             flow.run = _run
             return flow
 
         tool = DispatchAgentsTool(flow_factory=capturing_factory)
-        await tool.execute(tasks=[{
-            "task_id": "t1",
-            "description": "Build hero component",
-            "context": "Spec: tasks/specs/hero.md",
-        }])
+        await tool.execute(
+            tasks=[
+                {
+                    "task_id": "t1",
+                    "description": "Build hero component",
+                    "context": "Spec: tasks/specs/hero.md",
+                }
+            ]
+        )
 
         assert len(received_prompts) == 1
         assert "Spec: tasks/specs/hero.md" in received_prompts[0]
@@ -170,6 +182,7 @@ class TestSuccessfulExecution:
 # ---------------------------------------------------------------------------
 # Partial failures
 # ---------------------------------------------------------------------------
+
 
 class TestPartialFailures:
     @pytest.mark.asyncio
@@ -194,10 +207,12 @@ class TestPartialFailures:
             idx = call_count
 
             flow = MagicMock()
+
             async def _run(prompt):
                 if idx % 2 == 0:
                     raise RuntimeError("even tasks fail")
                 yield _make_message_event("success")
+
             flow.run = _run
             return flow
 
@@ -213,6 +228,7 @@ class TestPartialFailures:
 # Concurrency limit
 # ---------------------------------------------------------------------------
 
+
 class TestConcurrencyLimit:
     @pytest.mark.asyncio
     async def test_max_concurrency_respected(self):
@@ -222,6 +238,7 @@ class TestConcurrencyLimit:
 
         def counting_factory(session):
             flow = MagicMock()
+
             async def _run(prompt):
                 nonlocal active_count, max_seen
                 active_count += 1
@@ -229,6 +246,7 @@ class TestConcurrencyLimit:
                 await asyncio.sleep(0.01)  # brief delay to allow overlap
                 active_count -= 1
                 yield _make_message_event("done")
+
             flow.run = _run
             return flow
 
@@ -243,6 +261,7 @@ class TestConcurrencyLimit:
 # Session creation
 # ---------------------------------------------------------------------------
 
+
 class TestSessionCreation:
     @pytest.mark.asyncio
     async def test_each_task_gets_unique_session_id(self):
@@ -251,16 +270,17 @@ class TestSessionCreation:
         def capturing_factory(session):
             session_ids.append(session.id)
             flow = MagicMock()
+
             async def _run(prompt):
                 yield _make_message_event("ok")
+
             flow.run = _run
             return flow
 
         tool = DispatchAgentsTool(flow_factory=capturing_factory)
-        await tool.execute(tasks=[
-            {"task_id": "t1", "description": "a"},
-            {"task_id": "t2", "description": "b"},
-        ])
+        await tool.execute(
+            tasks=[{"task_id": "t1", "description": "a"}, {"task_id": "t2", "description": "b"}]
+        )
 
         assert len(session_ids) == 2
         assert session_ids[0] != session_ids[1]

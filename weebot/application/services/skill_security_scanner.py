@@ -3,6 +3,7 @@
 Scans SKILL.md content and any bundled scripts for data exfiltration,
 destructive commands, prompt injection markers, and other security risks.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from weebot.domain.models.skill import Skill, TrustTier
+from weebot.domain.models.skill import Skill
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +30,36 @@ HIGH_RISK_PATTERNS: list[tuple[str, str, str]] = [
     ("shutdown", r"\bshutdown\s+-[rh]?\s*now", "System shutdown"),
     # Secret exfiltration / injection
     ("env_var_dump", r"\bprint(?:env|env)\s*(?:\(|$|\|)", "Environment variable dump"),
-    ("secret_in_curl_header", r"curl\s+.*-H\s+['\"](?:Authorization|X-API-Key):", "Secrets in HTTP headers (may be OK if target is trusted)"),
+    (
+        "secret_in_curl_header",
+        r"curl\s+.*-H\s+['\"](?:Authorization|X-API-Key):",
+        "Secrets in HTTP headers (may be OK if target is trusted)",
+    ),
     # Prompt injection markers
-    ("ignore_previous", r"ignore\s+(?:all\s+)?(?:previous|above)\s+instructions", "Prompt injection: ignore instructions"),
-    ("say_yes", r"say\s+(?:yes|always)\s+to\s+(?:all|every)", "Prompt injection: unconditional compliance"),
+    (
+        "ignore_previous",
+        r"ignore\s+(?:all\s+)?(?:previous|above)\s+instructions",
+        "Prompt injection: ignore instructions",
+    ),
+    (
+        "say_yes",
+        r"say\s+(?:yes|always)\s+to\s+(?:all|every)",
+        "Prompt injection: unconditional compliance",
+    ),
     # Unsafe eval
     ("eval_user_input", r"\beval\s*\(\s*input\s*", "Dangerous eval of user input"),
     ("exec_user_input", r"\bexec\s*\(\s*input\s*", "Dangerous exec of user input"),
-    ("os_system", r"\bos\.system\s*\(['\"](?:rm|del|format|shutdown)", "Destructive os.system call"),
+    (
+        "os_system",
+        r"\bos\.system\s*\(['\"](?:rm|del|format|shutdown)",
+        "Destructive os.system call",
+    ),
     # Network to unknown
-    ("unknown_webhook", r"webhook\.(?:example|test|local|internal)\.(?:com|net|org)", "Potential test/malicious webhook URL"),
+    (
+        "unknown_webhook",
+        r"webhook\.(?:example|test|local|internal)\.(?:com|net|org)",
+        "Potential test/malicious webhook URL",
+    ),
 ]
 
 
@@ -71,12 +92,14 @@ class SkillSecurityScanner:
         # Check against known patterns
         for pattern_id, pattern, description in HIGH_RISK_PATTERNS:
             if re.search(pattern, content, re.IGNORECASE):
-                self._findings.append({
-                    "pattern_id": pattern_id,
-                    "description": description,
-                    "severity": "high",
-                    "location": self._find_location(content, pattern),
-                })
+                self._findings.append(
+                    {
+                        "pattern_id": pattern_id,
+                        "description": description,
+                        "severity": "high",
+                        "location": self._find_location(content, pattern),
+                    }
+                )
 
         # Heuristic: check for bundled scripts with dangerous patterns
         if skill.source_path:
@@ -86,14 +109,18 @@ class SkillSecurityScanner:
                     try:
                         script_content = script_file.read_text(encoding="utf-8", errors="ignore")
                         if "rm -rf" in script_content or "os.system" in script_content:
-                            self._findings.append({
-                                "pattern_id": "dangerous_script",
-                                "description": f"Dangerous pattern in bundled script: {script_file.name}",
-                                "severity": "high",
-                                "location": str(script_file),
-                            })
+                            self._findings.append(
+                                {
+                                    "pattern_id": "dangerous_script",
+                                    "description": f"Dangerous pattern in bundled script: {script_file.name}",
+                                    "severity": "high",
+                                    "location": str(script_file),
+                                }
+                            )
                     except Exception:
-                        logger.debug("Failed to scan bundled script %s", script_file.name, exc_info=True)
+                        logger.debug(
+                            "Failed to scan bundled script %s", script_file.name, exc_info=True
+                        )
 
         # Determine risk tier
         if len(self._findings) >= 3:
@@ -113,12 +140,14 @@ class SkillSecurityScanner:
 
         for pattern_id, pattern, description in HIGH_RISK_PATTERNS:
             if re.search(pattern, content, re.IGNORECASE):
-                self._findings.append({
-                    "pattern_id": pattern_id,
-                    "description": description,
-                    "severity": "high",
-                    "location": "content",
-                })
+                self._findings.append(
+                    {
+                        "pattern_id": pattern_id,
+                        "description": description,
+                        "severity": "high",
+                        "location": "content",
+                    }
+                )
 
         risk_tier = "critical" if len(self._findings) >= 3 else "high" if self._findings else "safe"
         return self._result(risk_tier, self._findings)

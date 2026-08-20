@@ -9,11 +9,11 @@ This is the core mechanism enabling controlled utility evolution: within an
 epoch, the evaluator is frozen (stationary utility).  At epoch boundaries,
 the utility can change (evolved objective).
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
 
 import yaml
 
@@ -91,6 +91,7 @@ class EvaluatorSelector:
                 )
                 if response and response.content:
                     import re
+
                     match = re.search(r"(\d+\.?\d*)", response.content)
                     if match:
                         predicted = float(match.group(1))
@@ -111,17 +112,13 @@ class EvaluatorSelector:
         avg_error = total_error / len(self._anchor_tasks) if self._anchor_tasks else 0.0
         accuracy = 1.0 - avg_error
 
-        return evaluator.model_copy(update={
-            "anchor_accuracy": accuracy,
-            "anchor_total": len(self._anchor_tasks),
-        })
+        return evaluator.model_copy(
+            update={"anchor_accuracy": accuracy, "anchor_total": len(self._anchor_tasks)}
+        )
 
     async def compare_and_replace(
-        self,
-        incumbent: EvaluatorState,
-        challenger: EvaluatorState,
-        epoch: int,
-    ) -> tuple[bool, EvaluatorState, Optional[str]]:
+        self, incumbent: EvaluatorState, challenger: EvaluatorState, epoch: int
+    ) -> tuple[bool, EvaluatorState, str | None]:
         """Compare *incumbent* vs *challenger* on the anchor dataset.
 
         If the challenger statistically outperforms, returns
@@ -152,9 +149,9 @@ class EvaluatorSelector:
                 new_anchor_accuracy=challenger.anchor_accuracy,
                 reason="Challenger statistically outperforms incumbent on anchor",
             )
-            challenger = challenger.model_copy(update={
-                "replacement_history": incumbent.replacement_history + [replacement],
-            })
+            challenger = challenger.model_copy(
+                update={"replacement_history": incumbent.replacement_history + [replacement]}
+            )
             reason = (
                 f"Promoted {challenger.evaluator_id} over {incumbent.evaluator_id}: "
                 f"accuracy {incumbent.anchor_accuracy:.3f} → {challenger.anchor_accuracy:.3f}"

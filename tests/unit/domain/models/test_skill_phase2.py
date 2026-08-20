@@ -1,9 +1,9 @@
 """Phase 2 unit tests — retrieval-miss skill-gap detection."""
+
 from __future__ import annotations
 
 import pytest
 from unittest.mock import MagicMock, patch
-
 
 # ── _maybe_record_skill_gap ────────────────────────────────────────────────────
 
@@ -114,9 +114,7 @@ class TestSkillGapDetectedEvent:
         from weebot.domain.models.event import SkillGapDetected
 
         ev = SkillGapDetected(
-            session_id="s1",
-            step_description="deploy docker container",
-            best_score=0.12,
+            session_id="s1", step_description="deploy docker container", best_score=0.12
         )
         assert ev.type == "skill_gap_detected"
         assert ev.session_id == "s1"

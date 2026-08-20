@@ -1,11 +1,7 @@
 """Tests for M7 approval policy hardening."""
 
 import pytest
-from weebot.core.approval_policy import (
-    ExecApprovalPolicy,
-    ApprovalMode,
-    CommandRule,
-)
+from weebot.core.approval_policy import ExecApprovalPolicy
 
 
 class TestApprovalPolicyHardening:
@@ -48,9 +44,7 @@ class TestApprovalPolicyHardening:
         assert result.requires_confirmation is True
 
     def test_chained_output_bypass_blocked(self, policy):
-        result = policy.evaluate(
-            "remove-item C:\\Output\\x; remove-item C:\\Windows\\x"
-        )
+        result = policy.evaluate("remove-item C:\\Output\\x; remove-item C:\\Windows\\x")
         assert result.requires_confirmation is True
 
     def test_safe_format_table_auto_approved(self, policy):

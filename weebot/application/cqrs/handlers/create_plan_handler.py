@@ -2,9 +2,10 @@
 
 Split from weebot/application/cqrs/handlers.py during architecture remediation.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
 
@@ -17,9 +18,8 @@ from weebot.application.cqrs.commands import CreatePlanCommand
 
 import logging
 
-from weebot.domain.models.plan import Plan, Step, PlanStatus
-
 logger = logging.getLogger(__name__)
+
 
 class CreatePlanHandler(CommandHandler):
     """Executes plan creation through PlannerAgent and returns events.
@@ -30,10 +30,7 @@ class CreatePlanHandler(CommandHandler):
     """
 
     def __init__(
-        self,
-        state_repo: StateRepositoryPort,
-        llm: LLMPort,
-        event_bus: EventBusPort | None = None,
+        self, state_repo: StateRepositoryPort, llm: LLMPort, event_bus: EventBusPort | None = None
     ):
         self._state_repo = state_repo
         self._llm = llm
@@ -47,8 +44,7 @@ class CreatePlanHandler(CommandHandler):
             session = await self._state_repo.load_session(command.session_id)
             if session is None:
                 return CommandResult.fail(
-                    error=f"Session {command.session_id} not found",
-                    error_code="SESSION_NOT_FOUND",
+                    error=f"Session {command.session_id} not found", error_code="SESSION_NOT_FOUND"
                 )
 
             # Build skill context for the planner from session context
@@ -69,6 +65,7 @@ class CreatePlanHandler(CommandHandler):
                     build_meta_notes,
                     find_matching_templates,
                 )
+
                 templates = await find_matching_templates(self._state_repo, command.prompt)
                 template_notes = build_meta_notes(templates)
                 if template_notes:
@@ -81,16 +78,13 @@ class CreatePlanHandler(CommandHandler):
                             logger.debug("Failed to increment template use count", exc_info=True)
                     logger.info(
                         "Seeding planner with %d template(s) for %s",
-                        len(templates), command.session_id[:8],
+                        len(templates),
+                        command.session_id[:8],
                     )
             except Exception as exc:
                 logger.debug("Template cache lookup skipped: %s", exc)
 
-            planner = PlannerAgent(
-                llm=self._llm,
-                event_bus=self._event_bus,
-                **planner_cfg,
-            )
+            planner = PlannerAgent(llm=self._llm, event_bus=self._event_bus, **planner_cfg)
 
             events: list[dict] = []
             final_plan = None
@@ -114,7 +108,4 @@ class CreatePlanHandler(CommandHandler):
                 }
             )
         except Exception as exc:
-            return CommandResult.fail(
-                error=str(exc), error_code="PLAN_CREATION_ERROR"
-            )
-
+            return CommandResult.fail(error=str(exc), error_code="PLAN_CREATION_ERROR")

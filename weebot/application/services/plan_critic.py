@@ -3,11 +3,12 @@
 Uses the cheapest available model (free tier preferred) to review plans
 for common failure modes before they reach the executor.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_PRECISE
@@ -37,11 +38,7 @@ Be concise and actionable."""
 class PlanCriticService(PlanCriticPort):
     """Plan critic that uses a single cheap LLM call for validation."""
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        timeout_seconds: float = 5.0,
-    ) -> None:
+    def __init__(self, llm: LLMPort, timeout_seconds: float = 5.0) -> None:
         """Initialize the critic.
 
         Args:
@@ -92,8 +89,7 @@ class PlanCriticService(PlanCriticPort):
 
         except Exception as exc:
             logger.warning(
-                "Plan critic failed (timeout or parse error): %s. "
-                "Proceeding without critique.",
+                "Plan critic failed (timeout or parse error): %s. " "Proceeding without critique.",
                 exc,
             )
             return PlanCritique(

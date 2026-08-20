@@ -7,16 +7,16 @@ Covers:
 - Lazy index initialization on first retrieve()
 - Integration with the SkillMatch return contract
 """
+
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 import pytest
 
 from weebot.domain.models.skill import Skill, SkillMatch
 from weebot.application.ports.vector_store_port import VectorStorePort
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -114,15 +114,15 @@ class TestSemanticSkillRetriever:
         self, mock_registry, mock_store, mock_embeddings
     ):
         """retrieve() returns skills ordered by cosine similarity."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         # Wire the mock store to return controlled results
-        mock_store.query = AsyncMock(return_value=[
-            ("web_research", 0.95, {"description": "", "preview": ""}),
-            ("architecture_design", 0.80, {"description": "", "preview": ""}),
-        ])
+        mock_store.query = AsyncMock(
+            return_value=[
+                ("web_research", 0.95, {"description": "", "preview": ""}),
+                ("architecture_design", 0.80, {"description": "", "preview": ""}),
+            ]
+        )
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)
@@ -139,9 +139,7 @@ class TestSemanticSkillRetriever:
         self, mock_registry, mock_store, mock_embeddings
     ):
         """Different queries produce different top-1 results."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         mock_store.query = AsyncMock()
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
@@ -172,9 +170,7 @@ class TestSemanticSkillRetriever:
         self, mock_empty_registry, mock_store, mock_embeddings
     ):
         """An empty skill registry returns empty results."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         retriever = SemanticSkillRetriever(mock_empty_registry, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)
@@ -188,13 +184,9 @@ class TestSemanticSkillRetriever:
         self, mock_registry, mock_store, mock_embeddings
     ):
         """Index is built lazily on first retrieve() if refresh() wasn't called."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
-        mock_store.query = AsyncMock(return_value=[
-            ("web_research", 0.95, {}),
-        ])
+        mock_store.query = AsyncMock(return_value=[("web_research", 0.95, {})])
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)
@@ -206,13 +198,9 @@ class TestSemanticSkillRetriever:
         assert retriever._index_built is True
 
     @pytest.mark.asyncio
-    async def test_retrieve_respects_top_k(
-        self, mock_registry, mock_store, mock_embeddings
-    ):
+    async def test_retrieve_respects_top_k(self, mock_registry, mock_store, mock_embeddings):
         """retrieve() returns exactly top_k results."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         mock_store.query = AsyncMock()
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
@@ -232,13 +220,9 @@ class TestSemanticSkillRetriever:
         assert len(results) == 3  # only 3 skills exist
 
     @pytest.mark.asyncio
-    async def test_refresh_rebuilds_index(
-        self, mock_registry, mock_store, mock_embeddings
-    ):
+    async def test_refresh_rebuilds_index(self, mock_registry, mock_store, mock_embeddings):
         """Calling refresh() twice is safe and rebuilds the index."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)
@@ -248,26 +232,22 @@ class TestSemanticSkillRetriever:
 
         # Modify registry
         mock_registry._skills["new_skill"] = Skill(
-            name="new_skill",
-            description="A new skill",
-            content="New skill content",
+            name="new_skill", description="A new skill", content="New skill content"
         )
         await retriever.refresh()
         assert retriever._index_built is True
 
     @pytest.mark.asyncio
-    async def test_skillmatch_contract(
-        self, mock_registry, mock_store, mock_embeddings
-    ):
+    async def test_skillmatch_contract(self, mock_registry, mock_store, mock_embeddings):
         """Returned SkillMatch objects conform to the contract."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
-        mock_store.query = AsyncMock(return_value=[
-            ("web_research", 0.95, {"description": "Web search", "preview": "preview"}),
-            ("architecture_design", 0.80, {"description": "Arch", "preview": "preview2"}),
-        ])
+        mock_store.query = AsyncMock(
+            return_value=[
+                ("web_research", 0.95, {"description": "Web search", "preview": "preview"}),
+                ("architecture_design", 0.80, {"description": "Arch", "preview": "preview2"}),
+            ]
+        )
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)
@@ -282,13 +262,9 @@ class TestSemanticSkillRetriever:
             assert 0.0 <= r.score <= 1.0
 
     @pytest.mark.asyncio
-    async def test_embedding_failure_returns_empty(
-        self, mock_registry, mock_store
-    ):
+    async def test_embedding_failure_returns_empty(self, mock_registry, mock_store):
         """If embedding fails, retrieve() returns empty list gracefully."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
 
@@ -298,10 +274,9 @@ class TestSemanticSkillRetriever:
 
         # refresh must succeed to build the index
         good_embeddings = MagicMock()
-        good_embeddings.embed_documents = AsyncMock(return_value=[
-            MagicMock(embedding=np.zeros(384).tolist())
-            for _ in range(3)
-        ])
+        good_embeddings.embed_documents = AsyncMock(
+            return_value=[MagicMock(embedding=np.zeros(384).tolist()) for _ in range(3)]
+        )
         retriever._get_embeddings = MagicMock(return_value=good_embeddings)
         await retriever.refresh()
 
@@ -316,18 +291,14 @@ class TestSemanticSkillRetrieverEdgeCases:
     """Edge case behaviors."""
 
     @pytest.mark.asyncio
-    async def test_zero_vector_guard(
-        self, mock_registry, mock_store
-    ):
+    async def test_zero_vector_guard(self, mock_registry, mock_store):
         """Zero-vector skills are handled gracefully (norm clamped to 1.0)."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         # After refresh, query delegates to store
-        mock_store.query = AsyncMock(return_value=[
-            ("some_skill", 0.85, {"description": "", "preview": ""}),
-        ])
+        mock_store.query = AsyncMock(
+            return_value=[("some_skill", 0.85, {"description": "", "preview": ""})]
+        )
 
         retriever = SemanticSkillRetriever(mock_registry, store=mock_store)
 
@@ -363,9 +334,7 @@ class TestSemanticSkillRetrieverEdgeCases:
     @pytest.mark.asyncio
     async def test_refresh_on_empty_registry(self, mock_empty_registry, mock_store):
         """refresh() on an empty registry sets index_built=False cleanly."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
         retriever = SemanticSkillRetriever(mock_empty_registry, store=mock_store)
         await retriever.refresh()
@@ -376,14 +345,11 @@ class TestSemanticSkillRetrieverEdgeCases:
         self, mock_registry, mock_store, mock_embeddings
     ):
         """Negative top_k falls back to the instance default."""
-        from weebot.application.services.semantic_skill_retriever import (
-            SemanticSkillRetriever,
-        )
+        from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
 
-        mock_store.query = AsyncMock(return_value=[
-            ("web_research", 0.95, {}),
-            ("architecture_design", 0.80, {}),
-        ])
+        mock_store.query = AsyncMock(
+            return_value=[("web_research", 0.95, {}), ("architecture_design", 0.80, {})]
+        )
 
         retriever = SemanticSkillRetriever(mock_registry, top_k=2, store=mock_store)
         retriever._get_embeddings = MagicMock(return_value=mock_embeddings)

@@ -62,18 +62,8 @@ class RoleBasedToolRegistry:
             "search_images",
             "atomic_mail",
         ],
-        "documentation": [
-            "file_editor",
-            "knowledge",
-            "web_search",
-            "product",
-        ],
-        "product_manager": [
-            "product",
-            "file_editor",
-            "knowledge",
-            "bash",
-        ],
+        "documentation": ["file_editor", "knowledge", "web_search", "product"],
+        "product_manager": ["product", "file_editor", "knowledge", "bash"],
         "admin": [
             "web_search",
             "vane_search",
@@ -169,16 +159,8 @@ class RoleBasedToolRegistry:
             "browser_inspector",
             "web_search",
         ],
-        "reviewer": [
-            "file_editor",
-            "web_search",
-            "knowledge",
-        ],
-        "planner_sub": [
-            "file_editor",
-            "knowledge",
-            "web_search",
-        ],
+        "reviewer": ["file_editor", "web_search", "knowledge"],
+        "planner_sub": ["file_editor", "knowledge", "web_search"],
         "custom": [],  # Custom roles have no default tools
     }
 
@@ -231,6 +213,7 @@ class RoleBasedToolRegistry:
         """Return the ExpertProfile for a role, or None if unregistered."""
         try:
             from weebot.domain.models.expert_profile import get_expert_profile
+
             return get_expert_profile(role)
         except ImportError:
             return None
@@ -249,9 +232,7 @@ class RoleBasedToolRegistry:
         """
         if role not in self.role_mappings:
             available_roles = ", ".join(self.role_mappings.keys())
-            raise ValueError(
-                f"Unknown role '{role}'. Available roles: {available_roles}"
-            )
+            raise ValueError(f"Unknown role '{role}'. Available roles: {available_roles}")
 
         tools = self.role_mappings[role]
         logger.debug(f"Role '{role}' has access to {len(tools)} tools: {tools}")
@@ -349,10 +330,7 @@ class RoleBasedToolRegistry:
         self._TOOL_TIERS[tool_name] = tier
 
     def get_tools_for_role_with_gate(
-        self,
-        role: str,
-        gate: CapabilityGate,
-        context: dict[str, Any],
+        self, role: str, gate: CapabilityGate, context: dict[str, Any]
     ) -> list[str]:
         """Get tools for a role, filtered by capability tier gate.
 
@@ -369,6 +347,7 @@ class RoleBasedToolRegistry:
         for tool_name in all_tools:
             tier_str = self.get_tool_tier(tool_name)
             from weebot.domain.models.capability_tier import CapabilityTier
+
             try:
                 tier = CapabilityTier(tier_str)
             except ValueError:
@@ -379,7 +358,9 @@ class RoleBasedToolRegistry:
             else:
                 logger.info(
                     "Tool '%s' excluded from role '%s' by capability gate (tier: %s)",
-                    tool_name, role, tier_str,
+                    tool_name,
+                    role,
+                    tier_str,
                 )
         return passed
 
@@ -390,10 +371,7 @@ class RoleBasedToolRegistry:
             Dictionary with role metadata
         """
         return {
-            role: {
-                "tools": tools,
-                "tool_count": len(tools)
-            }
+            role: {"tools": tools, "tool_count": len(tools)}
             for role, tools in self.role_mappings.items()
         }
 
@@ -422,10 +400,9 @@ class RoleBasedToolRegistry:
         cls._TOOL_CLASS_MAP = {}
 
         import weebot.tools as _tools_pkg
+
         for _importer, modname, is_pkg in pkgutil.walk_packages(
-            path=_tools_pkg.__path__,
-            prefix="weebot.tools.",
-            onerror=lambda _: None,
+            path=_tools_pkg.__path__, prefix="weebot.tools.", onerror=lambda _: None
         ):
             if is_pkg or modname.endswith("__init__") or modname.endswith("base"):
                 continue
@@ -512,7 +489,8 @@ class RoleBasedToolRegistry:
 
         tool_names = self.get_tools_for_role(role)
         return self.create_tool_collection_from_names(
-            tool_names, llm_port=llm_port,
+            tool_names,
+            llm_port=llm_port,
             sandbox_port=sandbox_port,
             tool_config=tool_config,
             flow_factory=flow_factory,
@@ -565,10 +543,13 @@ class RoleBasedToolRegistry:
                     if flow_factory is None:
                         try:
                             import importlib as _il
+
                             _c_mod = _il.import_module("weebot.application.di")
                             _c = _c_mod.Container()
                             _c.configure_defaults()
-                            flow_factory = lambda session: _c._build_plan_act_flow_for_session(session)
+                            flow_factory = lambda session: _c._build_plan_act_flow_for_session(
+                                session
+                            )
                         except Exception:
                             pass
 
@@ -582,7 +563,10 @@ class RoleBasedToolRegistry:
                     state_repo = None
                     try:
                         import importlib as _il
-                        _state_repo_mod = _il.import_module("weebot.application.ports.state_repo_port")
+
+                        _state_repo_mod = _il.import_module(
+                            "weebot.application.ports.state_repo_port"
+                        )
                         StateRepositoryPort = _state_repo_mod.StateRepositoryPort
                         _c = _il.import_module("weebot.application.di").Container()
                         _c.configure_defaults()
@@ -596,6 +580,7 @@ class RoleBasedToolRegistry:
                         from weebot.infrastructure.browser.playwright_adapter import (
                             PlaywrightAdapter,
                         )
+
                         _shared_browser_adapter = PlaywrightAdapter()
                     tool = tool_cls(browser=_shared_browser_adapter)
                 else:
@@ -605,7 +590,8 @@ class RoleBasedToolRegistry:
                         logger.debug(
                             "Skipping tool %s: construction failed (%s). "
                             "This tool requires DI injection.",
-                            name, exc,
+                            name,
+                            exc,
                         )
                         continue
                 # Inject tool_config after construction if tool supports it
@@ -615,6 +601,7 @@ class RoleBasedToolRegistry:
                 if hasattr(tool, "set_rerank"):
                     try:
                         import importlib as _il
+
                         _rerank_mod = _il.import_module("weebot.application.ports.rerank_port")
                         RerankPort = _rerank_mod.RerankPort
                         _c = _il.import_module("weebot.application.di").Container()

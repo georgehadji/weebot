@@ -6,12 +6,12 @@ description causes correct trigger behaviour.
 
 Inspired by revfactory/harness Phase 6-4 trigger verification methodology.
 """
+
 from __future__ import annotations
 
 import logging
 import random
 from dataclasses import dataclass, field
-from typing import Optional
 
 from weebot.domain.models.skill import Skill
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TriggerTestResult:
     """Result of a single trigger test query."""
+
     query: str
     expected_trigger: bool
     actual_triggered: bool
@@ -30,6 +31,7 @@ class TriggerTestResult:
 @dataclass
 class TriggerTestReport:
     """Full report for a skill trigger test."""
+
     skill_name: str
     results: list[TriggerTestResult] = field(default_factory=list)
     should_triggers: list[TriggerTestResult] = field(default_factory=list)
@@ -92,14 +94,11 @@ class SkillTriggerTester:
         "What is 2 + 2?",
     ]
 
-    def __init__(self, llm: Optional[object] = None) -> None:
+    def __init__(self, llm: object | None = None) -> None:
         self._llm = llm
 
     async def test_skill(
-        self,
-        skill: Skill,
-        num_should: int = 5,
-        num_should_not: int = 5,
+        self, skill: Skill, num_should: int = 5, num_should_not: int = 5
     ) -> TriggerTestReport:
         """Run trigger validation against a skill.
 
@@ -190,12 +189,35 @@ class SkillTriggerTester:
     def _extract_keywords(description: str) -> list[str]:
         """Extract action-oriented keywords from a skill description."""
         import re
+
         # Find nouns and verbs that look like actions
-        words = re.findall(r'\b[a-zA-Z]{3,}\b', description)
+        words = re.findall(r"\b[a-zA-Z]{3,}\b", description)
         # Filter out common stop words
-        stop_words = {"the", "and", "for", "are", "but", "not", "you", "all",
-                      "can", "has", "was", "had", "its", "may", "use", "when",
-                      "this", "that", "with", "from", "your", "which", "will"}
+        stop_words = {
+            "the",
+            "and",
+            "for",
+            "are",
+            "but",
+            "not",
+            "you",
+            "all",
+            "can",
+            "has",
+            "was",
+            "had",
+            "its",
+            "may",
+            "use",
+            "when",
+            "this",
+            "that",
+            "with",
+            "from",
+            "your",
+            "which",
+            "will",
+        }
         return [w for w in words if w.lower() not in stop_words][:10]
 
     @staticmethod

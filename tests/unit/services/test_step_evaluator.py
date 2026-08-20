@@ -1,4 +1,5 @@
 """Unit tests for StepProgressEvaluator (Improvement #6)."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -39,8 +40,7 @@ class TestNoOpStepEvaluator:
     @pytest.mark.asyncio
     async def test_step_evaluation_fields_are_frozen(self):
         result = StepEvaluation(
-            step_id="s1", score=0.8, passed=True,
-            regression_detected=False, reasoning="good",
+            step_id="s1", score=0.8, passed=True, regression_detected=False, reasoning="good"
         )
         assert result.score == 0.8
         with pytest.raises(Exception):
@@ -59,8 +59,14 @@ class TestLLMStepEvaluator:
 
     @pytest.mark.asyncio
     async def test_high_score_passes(self):
-        llm = self._make_mock_llm({"score": 0.9, "regression_detected": False,
-                                    "reasoning": "excellent work", "recommendations": []})
+        llm = self._make_mock_llm(
+            {
+                "score": 0.9,
+                "regression_detected": False,
+                "reasoning": "excellent work",
+                "recommendations": [],
+            }
+        )
         evaluator = LLMStepEvaluator(llm=llm, threshold=0.4)
         step = Step(id="s1", description="implement feature")
         plan = Plan(title="build app", steps=[step])
@@ -70,8 +76,14 @@ class TestLLMStepEvaluator:
 
     @pytest.mark.asyncio
     async def test_low_score_fails(self):
-        llm = self._make_mock_llm({"score": 0.2, "regression_detected": False,
-                                    "reasoning": "incomplete", "recommendations": ["retry"]})
+        llm = self._make_mock_llm(
+            {
+                "score": 0.2,
+                "regression_detected": False,
+                "reasoning": "incomplete",
+                "recommendations": ["retry"],
+            }
+        )
         evaluator = LLMStepEvaluator(llm=llm, threshold=0.4)
         step = Step(id="s1", description="implement feature")
         plan = Plan(title="build app", steps=[step])
@@ -81,9 +93,14 @@ class TestLLMStepEvaluator:
 
     @pytest.mark.asyncio
     async def test_regression_fails_even_with_high_score(self):
-        llm = self._make_mock_llm({"score": 0.8, "regression_detected": True,
-                                    "reasoning": "reverted previous work",
-                                    "recommendations": ["check git diff"]})
+        llm = self._make_mock_llm(
+            {
+                "score": 0.8,
+                "regression_detected": True,
+                "reasoning": "reverted previous work",
+                "recommendations": ["check git diff"],
+            }
+        )
         evaluator = LLMStepEvaluator(llm=llm, threshold=0.4)
         step = Step(id="s1", description="refactor")
         plan = Plan(title="cleanup", steps=[step])
@@ -107,7 +124,9 @@ class TestLLMStepEvaluator:
         captured_messages = []
         mock_llm = MagicMock()
         mock_resp = MagicMock()
-        mock_resp.content = '{"score": 0.7, "regression_detected": false, "reasoning": "ok", "recommendations": []}'
+        mock_resp.content = (
+            '{"score": 0.7, "regression_detected": false, "reasoning": "ok", "recommendations": []}'
+        )
 
         async def capture_chat(messages, **kwargs):
             captured_messages.append(messages)

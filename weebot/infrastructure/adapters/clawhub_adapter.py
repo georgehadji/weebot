@@ -3,12 +3,12 @@
 This adapter is owned by the infrastructure layer so that the application
 layer (clawhub_importer.py) does not import ``subprocess`` directly.
 """
+
 from __future__ import annotations
 
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +22,14 @@ class ClawHubGitAdapter:
     depend on ``subprocess`` directly.
     """
 
-    def __init__(self, repo_path: Optional[Path] = None):
+    def __init__(self, repo_path: Path | None = None):
         self._repo_path = repo_path
 
     @property
     def repo_path(self) -> Path:
         if self._repo_path is None:
             import tempfile
+
             self._repo_path = Path(tempfile.gettempdir()) / "awesome-openclaw-skills"
         return self._repo_path
 
@@ -38,11 +39,13 @@ class ClawHubGitAdapter:
             logger.info("Updating repo at %s", self.repo_path)
             subprocess.run(
                 ["git", "-C", str(self.repo_path), "pull", "--ff-only"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
         else:
             logger.info("Cloning repo to %s", self.repo_path)
             subprocess.run(
                 ["git", "clone", "--depth", "1", _REPO_URL, str(self.repo_path)],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )

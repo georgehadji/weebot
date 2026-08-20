@@ -3,11 +3,11 @@
 Evaluates whether a step's output advances the plan toward its goal.
 Fails open on LLM errors so execution never blocks on evaluation.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.step_evaluator_port import StepEvaluation, StepEvaluatorPort
@@ -45,11 +45,7 @@ class NoOpStepEvaluator(StepEvaluatorPort):
     """
 
     async def evaluate(
-        self,
-        step: Step,
-        output: str,
-        plan: Plan,
-        previous_outputs: list[str],
+        self, step: Step, output: str, plan: Plan, previous_outputs: list[str]
     ) -> StepEvaluation:
         return StepEvaluation(
             step_id=step.id,
@@ -69,26 +65,18 @@ class LLMStepEvaluator(StepEvaluatorPort):
         threshold: Minimum score to pass (default 0.4).
     """
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        model: Optional[str] = None,
-        threshold: float = 0.4,
-    ) -> None:
+    def __init__(self, llm: LLMPort, model: str | None = None, threshold: float = 0.4) -> None:
         self._llm = llm
         self._model = model
         self._threshold = threshold
 
     async def evaluate(
-        self,
-        step: Step,
-        output: str,
-        plan: Plan,
-        previous_outputs: list[str],
+        self, step: Step, output: str, plan: Plan, previous_outputs: list[str]
     ) -> StepEvaluation:
-        prev_summary = "\n".join(
-            f"  [{i+1}] {o[:200]}" for i, o in enumerate(previous_outputs[-3:])
-        ) or "  (none)"
+        prev_summary = (
+            "\n".join(f"  [{i+1}] {o[:200]}" for i, o in enumerate(previous_outputs[-3:]))
+            or "  (none)"
+        )
 
         prompt = _EVAL_PROMPT.format(
             plan_goal=plan.title or plan.message or "",
@@ -114,9 +102,7 @@ class LLMStepEvaluator(StepEvaluatorPort):
                 recommendations=data.get("recommendations", []),
             )
         except Exception as exc:
-            logger.warning(
-                "StepEvaluator LLM call failed: %s — passing step (fail-open)", exc
-            )
+            logger.warning("StepEvaluator LLM call failed: %s — passing step (fail-open)", exc)
             return StepEvaluation(
                 step_id=step.id,
                 score=1.0,

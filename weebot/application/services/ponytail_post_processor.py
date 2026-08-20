@@ -5,6 +5,7 @@ by paragraphs of justification. This service truncates trailing prose after
 closing code fences while leaving code, tool outputs, and structured JSON
 intact.
 """
+
 from __future__ import annotations
 
 import re

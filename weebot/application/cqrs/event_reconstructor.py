@@ -3,6 +3,7 @@
 Extracted from inline ``TypeAdapter`` usage in flow states (planning, executing,
 updating) into a single reusable function with consistent error handling.
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,8 +52,7 @@ def reconstruct_events(event_dicts: list[dict[str, Any]]) -> list[AgentEvent]:
             events.append(event)
         except Exception:
             logger.warning(
-                "reconstruct_events: skipping unparseable event %s",
-                str(event_dict)[:200],
+                "reconstruct_events: skipping unparseable event %s", str(event_dict)[:200]
             )
             continue
 

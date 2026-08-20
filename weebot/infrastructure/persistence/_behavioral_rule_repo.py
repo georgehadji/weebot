@@ -1,10 +1,10 @@
 """Behavioral rules, opportunities, and plan templates repos — extracted from SQLiteStateRepository."""
+
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
 
@@ -17,11 +17,16 @@ class BehavioralRuleRepo:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def save(self, rule_id: str, rule_text: str,
-                   source_session_id: str = "", source_message: str = "",
-                   scope: str = "global") -> None:
+    async def save(
+        self,
+        rule_id: str,
+        rule_text: str,
+        source_session_id: str = "",
+        source_message: str = "",
+        scope: str = "global",
+    ) -> None:
         """Insert a behavioral rule."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 """
@@ -49,12 +54,17 @@ class OpportunityRepo:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def save(self, opp_id: str, prompt: str, source: str,
-                   evidence: Optional[list[str]] = None,
-                   confidence: float = 0.0,
-                   estimated_effort: str = "medium") -> None:
+    async def save(
+        self,
+        opp_id: str,
+        prompt: str,
+        source: str,
+        evidence: list[str] | None = None,
+        confidence: float = 0.0,
+        estimated_effort: str = "medium",
+    ) -> None:
         """Insert an opportunity."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         evidence_json = json.dumps(evidence or [], default=str)
         async with self._pool.acquire_write() as conn:
             await conn.execute(
@@ -85,16 +95,14 @@ class OpportunityRepo:
         """Mark an opportunity as presented."""
         async with self._pool.acquire_write() as conn:
             await conn.execute(
-                "UPDATE pending_opportunities SET presented = 1 WHERE id = ?",
-                (opp_id,),
+                "UPDATE pending_opportunities SET presented = 1 WHERE id = ?", (opp_id,)
             )
 
     async def accept(self, opp_id: str) -> None:
         """Mark an opportunity as accepted."""
         async with self._pool.acquire_write() as conn:
             await conn.execute(
-                "UPDATE pending_opportunities SET accepted = 1 WHERE id = ?",
-                (opp_id,),
+                "UPDATE pending_opportunities SET accepted = 1 WHERE id = ?", (opp_id,)
             )
 
 
@@ -104,10 +112,11 @@ class PlanTemplateRepo:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def save(self, template_id: str, task_hash: str,
-                   task_description: str, plan_json: str) -> None:
+    async def save(
+        self, template_id: str, task_hash: str, task_description: str, plan_json: str
+    ) -> None:
         """Insert a plan template."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 """
@@ -121,7 +130,7 @@ class PlanTemplateRepo:
                 (template_id, task_hash, task_description, plan_json, now, now, now),
             )
 
-    async def find_by_hash(self, task_hash: str) -> Optional[dict]:
+    async def find_by_hash(self, task_hash: str) -> dict | None:
         """Find a template by task hash."""
         row = await self._pool.execute_read(
             "SELECT * FROM plan_templates WHERE task_hash = ? ORDER BY use_count DESC LIMIT 1",
@@ -132,14 +141,12 @@ class PlanTemplateRepo:
 
     async def list_all(self) -> list[dict]:
         """List all plan templates."""
-        rows = await self._pool.execute_read(
-            "SELECT * FROM plan_templates ORDER BY use_count DESC"
-        )
+        rows = await self._pool.execute_read("SELECT * FROM plan_templates ORDER BY use_count DESC")
         return [dict(r) for r in rows]
 
     async def increment_use(self, template_id: str) -> None:
         """Increment use count for a template."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 "UPDATE plan_templates SET use_count = use_count + 1, last_used_at = ? WHERE template_id = ?",

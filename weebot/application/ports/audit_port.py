@@ -4,13 +4,12 @@ Provides a separate verification layer for multi-agent workflows.
 Can be called by the SwarmTool after sub-agents complete, or by
 an independent AuditTool.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.audit import AuditReport
-from weebot.domain.models.tool_result import ToolResult
 
 
 class AuditPort(ABC):
@@ -18,11 +17,7 @@ class AuditPort(ABC):
 
     @abstractmethod
     async def audit_output(
-        self,
-        output: str,
-        skill_name: Optional[str] = None,
-        session_id: str = "",
-        agent_id: str = "",
+        self, output: str, skill_name: str | None = None, session_id: str = "", agent_id: str = ""
     ) -> AuditReport:
         """Audit an agent's output and return a report.
 
@@ -38,7 +33,7 @@ class AuditPort(ABC):
         ...
 
     @abstractmethod
-    async def pass_threshold(self, report: AuditReport, skill_name: Optional[str] = None) -> bool:
+    async def pass_threshold(self, report: AuditReport, skill_name: str | None = None) -> bool:
         """Check if an audit report passes the threshold for its skill.
 
         Args:

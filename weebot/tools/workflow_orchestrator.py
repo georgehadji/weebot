@@ -6,21 +6,18 @@ agents.  Each task spawns a full PlanActFlow sub-agent.
 
 Exposes the WorkflowOrchestrator as an agent-callable tool.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 from pydantic import ConfigDict
 
-from weebot.core.workflow_orchestrator import (
-    WorkflowOrchestrator,
-    WorkflowResult,
-    TaskResult,
-    TaskStatus,
-)
+from weebot.core.workflow_orchestrator import WorkflowOrchestrator, WorkflowResult
 from weebot.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -99,25 +96,15 @@ class WorkflowOrchestratorTool(BaseTool):
     }
 
     # Private injected dependencies — excluded from Pydantic schema
-    _flow_factory: Optional[Callable] = None
-    _state_repo: Optional[Any] = None
+    _flow_factory: Callable | None = None
+    _state_repo: Any | None = None
 
-    def __init__(
-        self,
-        flow_factory: Optional[Callable] = None,
-        state_repo: Optional[Any] = None,
-        **data,
-    ):
+    def __init__(self, flow_factory: Callable | None = None, state_repo: Any | None = None, **data):
         super().__init__(**data)
         object.__setattr__(self, "_flow_factory", flow_factory)
         object.__setattr__(self, "_state_repo", state_repo)
 
-    async def execute(
-        self,
-        tasks: List[Dict[str, Any]],
-        max_parallel: int = 4,
-        **_,
-    ) -> ToolResult:
+    async def execute(self, tasks: list[dict[str, Any]], max_parallel: int = 4, **_) -> ToolResult:
         if not self._flow_factory:
             return ToolResult.error_result(
                 "WorkflowOrchestratorTool has no flow_factory — "
@@ -127,7 +114,7 @@ class WorkflowOrchestratorTool(BaseTool):
             return ToolResult.error_result("tasks list must not be empty")
 
         # ── Build task_graph in the format WorkflowOrchestrator expects ──
-        task_graph: Dict[str, Dict[str, Any]] = {}
+        task_graph: dict[str, dict[str, Any]] = {}
         for t in tasks:
             tid = t.get("task_id")
             if not tid:
@@ -140,51 +127,39 @@ class WorkflowOrchestratorTool(BaseTool):
                 return ToolResult.error_result(f"Task '{tid}': 'deps' must be a list")
             task_graph[tid] = {
                 "deps": list(deps),
-                "description": description[: _TASK_DESC_MAX_LEN],
+                "description": description[:_TASK_DESC_MAX_LEN],
                 "timeout": t.get("timeout", 300),
             }
 
         # ── Build a real task handler that spawns sub-agent flows ──
         async def _agent_task_handler(
             task_id: str,
-            task_config: Dict[str, Any],
+            task_config: dict[str, Any],
             context: Any,  # AgentContext from WorkflowOrchestrator
-        ) -> Dict[str, Any]:
+        ) -> dict[str, Any]:
             description = task_config.get("description", "")
             semaphore = asyncio.Semaphore(max_parallel)
 
             async with semaphore:
                 session = self._make_session(task_id)
                 flow = self._flow_factory(session)
-                summary_lines: List[str] = []
+                summary_lines: list[str] = []
                 prompt = description
                 try:
                     async for event in flow.run(prompt):
-                        event_type = (
-                            getattr(event, "type", None)
-                            or getattr(event, "event_type", None)
+                        event_type = getattr(event, "type", None) or getattr(
+                            event, "event_type", None
                         )
                         if event_type in ("message", "MESSAGE"):
-                            content = (
-                                getattr(event, "content", None)
-                                or getattr(event, "message", "")
+                            content = getattr(event, "content", None) or getattr(
+                                event, "message", ""
                             )
                             summary_lines.append(str(content))
                     summary = summary_lines[-1] if summary_lines else "(no output)"
-                    return {
-                        "task_id": task_id,
-                        "status": "completed",
-                        "summary": summary[:2000],
-                    }
+                    return {"task_id": task_id, "status": "completed", "summary": summary[:2000]}
                 except Exception as exc:
-                    logger.warning(
-                        "DAG sub-agent failed for task_id=%s: %s", task_id, exc
-                    )
-                    return {
-                        "task_id": task_id,
-                        "status": "failed",
-                        "error": str(exc)[:500],
-                    }
+                    logger.warning("DAG sub-agent failed for task_id=%s: %s", task_id, exc)
+                    return {"task_id": task_id, "status": "failed", "error": str(exc)[:500]}
 
         orchestrator = WorkflowOrchestrator(
             max_parallel_agents=min(max(1, max_parallel), 10),
@@ -203,17 +178,16 @@ class WorkflowOrchestratorTool(BaseTool):
         completed = [
             {
                 "task_id": tid,
-                "summary": result.task_results[tid].output.get("summary", "")
-                if isinstance(result.task_results[tid].output, dict)
-                else str(result.task_results[tid].output),
+                "summary": (
+                    result.task_results[tid].output.get("summary", "")
+                    if isinstance(result.task_results[tid].output, dict)
+                    else str(result.task_results[tid].output)
+                ),
             }
             for tid in result.completed_tasks
         ]
         failed = [
-            {
-                "task_id": tid,
-                "error": result.task_results[tid].error or "unknown",
-            }
+            {"task_id": tid, "error": result.task_results[tid].error or "unknown"}
             for tid in result.failed_tasks
         ]
 

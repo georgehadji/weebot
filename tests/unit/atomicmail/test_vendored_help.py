@@ -1,4 +1,5 @@
 """Tests for vendored atomicmail help module (offline, no network)."""
+
 from __future__ import annotations
 
 from atomicmail.help import HELP_TOPIC_LIST, get_help, help, normalize_help_topic

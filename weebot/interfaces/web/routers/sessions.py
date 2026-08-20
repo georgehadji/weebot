@@ -1,4 +1,5 @@
 """Session API routes."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
-from weebot.interfaces.web.auth import get_current_user_id, require_mutation_identity, verify_session_ownership
+from weebot.interfaces.web.auth import (
+    get_current_user_id,
+    require_mutation_identity,
+    verify_session_ownership,
+)
 from weebot.interfaces.web.dependencies import build_deletion_orchestrator
 from weebot.interfaces.web.schemas import (
     CreateSessionRequest,
@@ -58,10 +63,7 @@ async def list_sessions(
     )
     total = await state_repo.count_sessions(user_id=effective_user)
 
-    return SessionListResponse(
-        sessions=[_session_to_response(s) for s in sessions],
-        total=total,
-    )
+    return SessionListResponse(sessions=[_session_to_response(s) for s in sessions], total=total)
 
 
 @router.post("", response_model=SessionResponse)
@@ -74,6 +76,7 @@ async def create_session(
     """Create a new session."""
 
     import uuid
+
     context: dict[str, Any] = {"last_prompt": body.prompt, "model": body.model}
     if body.ponytail_mode is not None:
         context["ponytail_mode"] = body.ponytail_mode
@@ -102,13 +105,11 @@ async def search_sessions(
 ) -> dict:
     """Search sessions with goal→match→resolution bookends."""
     from weebot.application.services.session_search_service import SessionSearchService
+
     svc = SessionSearchService(state_repo=state_repo)
     results = await svc.search(q, limit=limit)
-    return {
-        "query": q,
-        "count": len(results),
-        "results": [r.__dict__ for r in results],
-    }
+    return {"query": q, "count": len(results), "results": [r.__dict__ for r in results]}
+
 
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
@@ -172,6 +173,7 @@ async def cancel_session(
     container = http_request.app.state.container
     try:
         from weebot.application.ports.task_runner_port import TaskRunnerPort
+
         task_runner = container.get(TaskRunnerPort)
         cancelled = await task_runner.cancel_session(session_id)
         if not cancelled:
@@ -211,11 +213,12 @@ async def resume_session(
     if session.status != SessionStatus.WAITING:
         raise HTTPException(
             status_code=400,
-            detail=f"Session {session_id} is not waiting for input (status: {session.status.value})"
+            detail=f"Session {session_id} is not waiting for input (status: {session.status.value})",
         )
 
     # Add user message and update status
     from weebot.domain.models.event import MessageEvent
+
     session = session.add_event(MessageEvent(role="user", message=request.answer))
     session = session.set_status(SessionStatus.RUNNING)
     await state_repo.save_session(session)
@@ -245,8 +248,7 @@ async def run_session(
 
     if session.status not in (SessionStatus.PENDING, SessionStatus.FAILED):
         raise HTTPException(
-            status_code=409,
-            detail=f"Session {session_id} is already {session.status.value}",
+            status_code=409, detail=f"Session {session_id} is already {session.status.value}"
         )
 
     prompt = session.context.get("last_prompt", "")
@@ -268,6 +270,7 @@ async def run_session(
         ponytail_mode = session.context.get("ponytail_mode") or None
 
         from weebot.interfaces.factories import build_tools
+
         tools = await build_tools(role="admin")
         try:
             factory = task_runner.create_plan_act_factory(

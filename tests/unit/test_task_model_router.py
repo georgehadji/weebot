@@ -3,9 +3,9 @@
 Any pattern change to task_model_router.py or semantic_task_router.py
 must maintain or improve this accuracy.
 """
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.application.services.task_model_router import classify_step, TaskCategory
 
@@ -48,10 +48,7 @@ class TestTaskRouterAccuracy:
     """Keyword router must maintain ≥ 70% on the 25-case benchmark."""
 
     def test_keyword_router_accuracy(self):
-        correct = sum(
-            1 for desc, expected in BENCHMARK
-            if classify_step(desc) == expected
-        )
+        correct = sum(1 for desc, expected in BENCHMARK if classify_step(desc) == expected)
         accuracy = correct / len(BENCHMARK)
         assert accuracy >= 0.70, (
             f"Keyword router accuracy {accuracy:.0%} below 70% threshold. "
@@ -76,6 +73,4 @@ class TestTaskRouterAccuracy:
             if precision <= 0.5:
                 failures.append(f"{cat.value}: {cat_correct[cat]}/{total} ({precision:.0%})")
 
-        assert not failures, (
-            f"Categories below 50% precision: {'; '.join(failures)}"
-        )
+        assert not failures, f"Categories below 50% precision: {'; '.join(failures)}"

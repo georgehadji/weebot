@@ -32,12 +32,12 @@ Pricing notes (2026-06-09, per 1M tokens):
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class ModelConfig:
     """Configuration for a specific model."""
+
     id: str
     name: str
     tier: str  # free, budget, standard, premium
@@ -171,7 +171,6 @@ MODEL_CASCADE = {
             description="Grok Build 0.1 — xAI agentic SWE model, $1/1M.",
         ),
     ],
-
     "analysis": [
         # --- FREE tier ---
         ModelConfig(
@@ -225,7 +224,6 @@ MODEL_CASCADE = {
             recommended=True,
         ),
     ],
-
     "chat": [
         # --- FREE tier ---
         ModelConfig(
@@ -279,7 +277,6 @@ MODEL_CASCADE = {
             recommended=True,
         ),
     ],
-
     "planning": [
         # --- FREE tier ---
         ModelConfig(
@@ -346,7 +343,6 @@ MODEL_CASCADE = {
             description="DeepSeek V4 Flash — fast, 1M context, budget planning fallback.",
         ),
     ],
-
     "subagent": [
         # Lightweight models for frequent, short-lived subagent calls
         ModelConfig(
@@ -400,7 +396,6 @@ MODEL_CASCADE = {
             recommended=True,
         ),
     ],
-
     "long_context": [
         ModelConfig(
             id="minimax/minimax-m3",
@@ -476,9 +471,9 @@ MODEL_CASCADE = {
 
 # Token thresholds based on MEMORY_ARTICLE insights
 TOKEN_THRESHOLDS = {
-    "short_context": 4000,        # < 4K: Full precision standard attention
-    "medium_context": 32000,      # 4K-32K: Standard models with good context
-    "long_context": 50000,        # 32K-50K: Extended context models
+    "short_context": 4000,  # < 4K: Full precision standard attention
+    "medium_context": 32000,  # 4K-32K: Standard models with good context
+    "long_context": 50000,  # 32K-50K: Extended context models
     "very_long_context": 100000,  # 50K+: Sparse attention / giant-context models
 }
 
@@ -517,7 +512,8 @@ def get_model_for_context_size(task_type: str, context_chars: int) -> ModelConfi
 # HELPER FUNCTIONS
 # ============================================================================
 
-def get_models_for_task(task_type: str, tier: Optional[str] = None) -> list[ModelConfig]:
+
+def get_models_for_task(task_type: str, tier: str | None = None) -> list[ModelConfig]:
     """Get models for a specific task type."""
     models = MODEL_CASCADE.get(task_type, [])
     if tier:
@@ -525,7 +521,7 @@ def get_models_for_task(task_type: str, tier: Optional[str] = None) -> list[Mode
     return models
 
 
-def get_recommended_model(task_type: str, tier: Optional[str] = None) -> Optional[ModelConfig]:
+def get_recommended_model(task_type: str, tier: str | None = None) -> ModelConfig | None:
     """Get the recommended model for a task."""
     models = get_models_for_task(task_type, tier)
     for model in models:
@@ -584,12 +580,13 @@ def get_model_stats() -> dict:
 # Each entry: [primary, fallback1, fallback2, ...]
 # Falls back to the flow's default model if the role is not configured.
 
-AGENT_ROLES = frozenset({
-    "planner",    # generates initial plans
-    "critic",     # validates plans (PlanCriticService, MetaCritic)
-    "executor",   # executes steps (ExecutorAgent)
-    "verifier",   # CoVe verification (VerifyingState)
-    "summarizer", # SummarizingState
-    "subagent",   # lightweight parallel sub-tasks
-})
-
+AGENT_ROLES = frozenset(
+    {
+        "planner",  # generates initial plans
+        "critic",  # validates plans (PlanCriticService, MetaCritic)
+        "executor",  # executes steps (ExecutorAgent)
+        "verifier",  # CoVe verification (VerifyingState)
+        "summarizer",  # SummarizingState
+        "subagent",  # lightweight parallel sub-tasks
+    }
+)

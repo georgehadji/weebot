@@ -8,11 +8,13 @@ Per-domain connection pools:
   - ``weebot_skills``   → skills, trajectories, knowledge graph
   - ``weebot_cache``    → response cache, tool data
 """
+
 from __future__ import annotations
 
 POSTGRESQL_AVAILABLE = False
 try:
     import asyncpg  # noqa: F401
+
     POSTGRESQL_AVAILABLE = True
 except ImportError:
     pass

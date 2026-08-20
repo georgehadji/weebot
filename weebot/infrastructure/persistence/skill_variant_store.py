@@ -3,14 +3,13 @@
 Implements SkillVariantStorePort using weebot's existing SQLite infrastructure.
 Supports insert, domain-scoped queries, score updates, and children counting.
 """
+
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from weebot.application.ports.skill_variant_store_port import SkillVariantStorePort
 from weebot.domain.models.skill_variant import SkillVariant
@@ -67,46 +66,51 @@ class SkillVariantStore(SkillVariantStorePort):
                         children_count, meta_notes, created_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        vid, variant.parent_id, variant.skill_name,
-                        variant.skill_content, variant.content_hash,
-                        variant.score, variant.domain, variant.generation,
-                        variant.children_count, variant.meta_notes,
+                        vid,
+                        variant.parent_id,
+                        variant.skill_name,
+                        variant.skill_content,
+                        variant.content_hash,
+                        variant.score,
+                        variant.domain,
+                        variant.generation,
+                        variant.children_count,
+                        variant.meta_notes,
                         variant.created_at.isoformat(),
                     ),
                 )
             return vid
 
         import asyncio
+
         return await asyncio.to_thread(_insert)
 
-    async def get_by_domain(
-        self, domain: str, limit: int = 50
-    ) -> list[SkillVariant]:
+    async def get_by_domain(self, domain: str, limit: int = 50) -> list[SkillVariant]:
         def _query() -> list[dict]:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT * FROM skill_variants WHERE domain = ? "
-                    "ORDER BY score DESC LIMIT ?",
+                    "SELECT * FROM skill_variants WHERE domain = ? " "ORDER BY score DESC LIMIT ?",
                     (domain, limit),
                 ).fetchall()
             return [dict(r) for r in rows]
 
         import asyncio
+
         rows = await asyncio.to_thread(_query)
         return [SkillVariant(**self._row_to_kwargs(r)) for r in rows]
 
-    async def get_by_id(self, variant_id: str) -> Optional[SkillVariant]:
+    async def get_by_id(self, variant_id: str) -> SkillVariant | None:
         def _query() -> dict | None:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute(
-                    "SELECT * FROM skill_variants WHERE variant_id = ?",
-                    (variant_id,),
+                    "SELECT * FROM skill_variants WHERE variant_id = ?", (variant_id,)
                 ).fetchone()
             return dict(row) if row else None
 
         import asyncio
+
         row = await asyncio.to_thread(_query)
         return SkillVariant(**self._row_to_kwargs(row)) if row else None
 
@@ -114,11 +118,11 @@ class SkillVariantStore(SkillVariantStorePort):
         def _update() -> None:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.execute(
-                    "UPDATE skill_variants SET score = ? WHERE variant_id = ?",
-                    (score, variant_id),
+                    "UPDATE skill_variants SET score = ? WHERE variant_id = ?", (score, variant_id)
                 )
 
         import asyncio
+
         await asyncio.to_thread(_update)
 
     async def increment_children(self, variant_id: str) -> None:
@@ -131,16 +135,16 @@ class SkillVariantStore(SkillVariantStorePort):
                 )
 
         import asyncio
+
         await asyncio.to_thread(_update)
 
-    async def get_parent_candidates(
-        self, domain: str, top_k: int = 10
-    ) -> list[SkillVariant]:
+    async def get_parent_candidates(self, domain: str, top_k: int = 10) -> list[SkillVariant]:
         """Return top variants ordered by novelty-biased composite score.
 
         Formula: score × (1 / (1 + children_count))
         Higher scores and fewer children = better parent candidate.
         """
+
         def _query() -> list[dict]:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
@@ -154,10 +158,11 @@ class SkillVariantStore(SkillVariantStorePort):
             return [dict(r) for r in rows]
 
         import asyncio
+
         rows = await asyncio.to_thread(_query)
         return [SkillVariant(**self._row_to_kwargs(r)) for r in rows]
 
     @staticmethod
     def _row_to_kwargs(row: dict) -> dict:
         """Convert a flat DB row to SkillVariant constructor kwargs."""
-        return {k: row.get(k, None) for k in SkillVariant.model_fields}
+        return {k: row.get(k) for k in SkillVariant.model_fields}

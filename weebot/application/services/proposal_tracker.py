@@ -8,11 +8,11 @@ without being promoted — the distillation loop is spinning without
 progress. After the suppression threshold, proposals are logged as
 WARN and skipped.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ class ProposalTracker:
             (should proceed). False if suppressed (anti-pattern).
         """
         import time
+
         now = time.time()
         if fingerprint not in self._history:
             self._history[fingerprint] = []
@@ -62,7 +63,9 @@ class ProposalTracker:
             logger.warning(
                 "ProposalTracker: anti-pattern detected — %d identical proposals "
                 "for fingerprint %s (threshold=%d). Suppressing.",
-                count, fingerprint, self._threshold,
+                count,
+                fingerprint,
+                self._threshold,
             )
             return False
         return True

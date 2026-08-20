@@ -1,25 +1,23 @@
 """Unit tests for MiddlewareChain (Improvement #1)."""
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from weebot.application.middleware.chain import MiddlewareChain
-from weebot.application.middleware.base import (
-    Middleware,
-    MiddlewareRequest,
-    MiddlewareResponse,
-    ToolCallResult,
-)
+from weebot.application.middleware.base import Middleware
 
 # ── Test doubles ──────────────────────────────────────────────────
 
+
 class _PassthroughMiddleware(Middleware):
     """Middleware that passes everything through unchanged."""
+
     def name(self) -> str:
         return "passthrough"
 
 
 class _ToolInjectMiddleware(Middleware):
     """Middleware that injects an extra tool."""
+
     def name(self) -> str:
         return "tool_inject"
 
@@ -32,6 +30,7 @@ class _ToolInjectMiddleware(Middleware):
 
 class _ContentModMiddleware(Middleware):
     """Middleware that modifies response content."""
+
     def name(self) -> str:
         return "content_mod"
 
@@ -42,6 +41,7 @@ class _ContentModMiddleware(Middleware):
 
 class _LogOrderMiddleware(Middleware):
     """Middleware that logs its execution order."""
+
     def __init__(self, name: str, log: list):
         self._mw_name = name
         self._log = log
@@ -60,6 +60,7 @@ class _LogOrderMiddleware(Middleware):
 
 # ── Tests ─────────────────────────────────────────────────────────
 
+
 class TestMiddlewareChain:
     """Validates MiddlewareChain pipeline behavior."""
 
@@ -67,18 +68,14 @@ class TestMiddlewareChain:
     async def test_empty_chain_passthrough_messages(self):
         chain = MiddlewareChain()
         assert chain.is_empty()
-        msgs, tools = await chain.apply_before_request(
-            [{"role": "user", "content": "hello"}], []
-        )
+        msgs, tools = await chain.apply_before_request([{"role": "user", "content": "hello"}], [])
         assert msgs == [{"role": "user", "content": "hello"}]
         assert tools == []
 
     @pytest.mark.asyncio
     async def test_empty_chain_passthrough_response(self):
         chain = MiddlewareChain()
-        content, tool_calls = await chain.apply_after_response(
-            "ok", [], [], []
-        )
+        content, tool_calls = await chain.apply_after_response("ok", [], [], [])
         assert content == "ok"
         assert tool_calls == []
 
@@ -92,8 +89,7 @@ class TestMiddlewareChain:
     async def test_single_middleware_modifies_tools(self):
         chain = MiddlewareChain([_ToolInjectMiddleware()])
         msgs, tools = await chain.apply_before_request(
-            [{"role": "user"}],
-            [{"function": {"name": "bash"}, "type": "function"}],
+            [{"role": "user"}], [{"function": {"name": "bash"}, "type": "function"}]
         )
         tool_names = [t.get("function", {}).get("name") for t in tools]
         assert "bash" in tool_names
@@ -102,9 +98,7 @@ class TestMiddlewareChain:
     @pytest.mark.asyncio
     async def test_single_middleware_modifies_response(self):
         chain = MiddlewareChain([_ContentModMiddleware()])
-        content, tool_calls = await chain.apply_after_response(
-            "hello", [], [], []
-        )
+        content, tool_calls = await chain.apply_after_response("hello", [], [], [])
         assert content == "[MODIFIED] hello"
 
     @pytest.mark.asyncio
@@ -117,10 +111,7 @@ class TestMiddlewareChain:
         await chain.apply_before_request([], [])
         await chain.apply_after_response("", [], [], [])
 
-        assert log == [
-            "A:before", "B:before",
-            "A:after", "B:after",
-        ]
+        assert log == ["A:before", "B:before", "A:after", "B:after"]
 
     @pytest.mark.asyncio
     async def test_after_tool_call_intercepts(self):
@@ -139,6 +130,7 @@ class TestMiddlewareChain:
     @pytest.mark.asyncio
     async def test_chain_state_isolated_per_call(self):
         """Each call to apply_* should create fresh state."""
+
         class _StateCheckMiddleware(Middleware):
             def name(self) -> str:
                 return "state_check"

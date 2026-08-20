@@ -1,4 +1,5 @@
 """Unit tests for CodeReviewerService, including Ponytail static hints."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -77,8 +78,7 @@ class TestCodeReviewerServicePonytail:
     @pytest.mark.asyncio
     async def test_off_mode_does_not_add_static_findings(self, monkeypatch, valid_llm_response):
         monkeypatch.setattr(
-            "weebot.application.services.code_reviewer_service.get_ponytail_mode",
-            lambda: "off",
+            "weebot.application.services.code_reviewer_service.get_ponytail_mode", lambda: "off"
         )
         step = Step(id="s1", description="write code", result="import retrying\n")
         service = CodeReviewerService(llm=_FakeLLMPort(valid_llm_response))
@@ -90,14 +90,9 @@ class TestCodeReviewerServicePonytail:
     @pytest.mark.asyncio
     async def test_full_mode_adds_static_findings_to_issues(self, monkeypatch, valid_llm_response):
         monkeypatch.setattr(
-            "weebot.application.services.code_reviewer_service.get_ponytail_mode",
-            lambda: "full",
+            "weebot.application.services.code_reviewer_service.get_ponytail_mode", lambda: "full"
         )
-        step = Step(
-            id="s1",
-            description="write code",
-            result="import retrying\n",
-        )
+        step = Step(id="s1", description="write code", result="import retrying\n")
         service = CodeReviewerService(llm=_FakeLLMPort(valid_llm_response))
 
         result = await service.review(step, {})
@@ -110,8 +105,7 @@ class TestCodeReviewerServicePonytail:
         self, monkeypatch, valid_llm_response
     ):
         monkeypatch.setattr(
-            "weebot.application.services.code_reviewer_service.get_ponytail_mode",
-            lambda: "full",
+            "weebot.application.services.code_reviewer_service.get_ponytail_mode", lambda: "full"
         )
 
         captured_messages: list[dict[str, Any]] = []
@@ -121,11 +115,7 @@ class TestCodeReviewerServicePonytail:
                 captured_messages.extend(messages)
                 return LLMResponse(content=valid_llm_response, model="fake")
 
-        step = Step(
-            id="s1",
-            description="write code",
-            result="import retrying\n",
-        )
+        step = Step(id="s1", description="write code", result="import retrying\n")
         service = CodeReviewerService(llm=_CapturingLLMPort())
         await service.review(step, {})
 

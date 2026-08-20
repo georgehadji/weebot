@@ -4,13 +4,13 @@ Black swan: BASH_TIMEOUT=0 in .env causes asyncio.wait_for to raise ValueError
 (not TimeoutError) in CPython 3.11+, leaking a zombie subprocess.  The validators
 here catch that at settings-load time with a clear, actionable message.
 """
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from weebot.config.settings import WeebotSettings
-
 
 # Minimal valid settings that won't hit API-key validation.
 _BASE = dict(anthropic_api_key="test-key")

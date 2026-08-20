@@ -6,6 +6,7 @@ CRITICAL: This policy runs on Windows 11 + PowerShell 5.1.
 - Disk formatting (format C:, Format-Volume) remains DENIED.
 - Python str.format() and similar are NO LONGER blanket-denied (false-positive source).
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,15 +14,14 @@ import re
 import types
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class ApprovalMode(Enum):
     AUTO_APPROVE = "auto_approve"
-    ALWAYS_ASK   = "always_ask"
-    DENY         = "deny"
+    ALWAYS_ASK = "always_ask"
+    DENY = "deny"
     FORCE_ALWAYS_ASK = "force_always_ask"  # Bypasses all normal rules; always asks.
 
 
@@ -44,10 +44,21 @@ class ApprovalResult:
 
 # Destructive PowerShell commands that always require confirmation
 _DESTRUCTIVE_KEYWORDS: set[str] = {
-    "remove-item", "del", "rm", "erase", "rd", "rmdir",
-    "stop-process", "kill", "shutdown", "restart-computer",
-    "clear-content", "set-content",
-    "move-item", "rename-item", "copy-item",
+    "remove-item",
+    "del",
+    "rm",
+    "erase",
+    "rd",
+    "rmdir",
+    "stop-process",
+    "kill",
+    "shutdown",
+    "restart-computer",
+    "clear-content",
+    "set-content",
+    "move-item",
+    "rename-item",
+    "copy-item",
 }
 
 # Built-in defaults: destructive → ask, format → deny, rest → auto
@@ -57,62 +68,124 @@ _DEFAULT_RULES: tuple[CommandRule, ...] = (
     CommandRule(
         # Anchored to the whole command so chained commands don't match
         r"^remove-item\s+['\"]?[A-Za-z]:[\\\/][^;&|]*[Oo]utput[\\\/][^;&|]*$",
-        ApprovalMode.AUTO_APPROVE, is_regex=True,
+        ApprovalMode.AUTO_APPROVE,
+        is_regex=True,
     ),
     CommandRule(
         r"open\s*\(\s*['\"].*[Oo]utput[\\\/].*['\"],\s*['\"]w",
-        ApprovalMode.AUTO_APPROVE, is_regex=True,
+        ApprovalMode.AUTO_APPROVE,
+        is_regex=True,
     ),
     # Disk formatting — always denied
-    CommandRule(r"\bformat\s+[a-zA-Z]:", ApprovalMode.DENY, is_regex=True,
-                undo_hint="Formatting is irreversible. Use Diskpart carefully."),
-    CommandRule(r"\bFormat-Volume\b", ApprovalMode.DENY, is_regex=True,
-                undo_hint="Formatting is irreversible. Use Diskpart carefully."),
+    CommandRule(
+        r"\bformat\s+[a-zA-Z]:",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Formatting is irreversible. Use Diskpart carefully.",
+    ),
+    CommandRule(
+        r"\bFormat-Volume\b",
+        ApprovalMode.DENY,
+        is_regex=True,
+        undo_hint="Formatting is irreversible. Use Diskpart carefully.",
+    ),
     # Registry editing — always ask
-    CommandRule(r"\breg\s+(delete|add)", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Registry changes are system-wide and may require a reboot."),
+    CommandRule(
+        r"\breg\s+(delete|add)",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Registry changes are system-wide and may require a reboot.",
+    ),
     # User/group management — always ask
-    CommandRule(r"\bnet\s+(user|localgroup)", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="User/group changes affect system security."),
+    CommandRule(
+        r"\bnet\s+(user|localgroup)",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="User/group changes affect system security.",
+    ),
     # ACL/permission changes — always ask
-    CommandRule(r"\bicacls\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="ACL changes may lock out users or expose sensitive files."),
-    CommandRule(r"\btakeown\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Taking ownership changes file access control."),
+    CommandRule(
+        r"\bicacls\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="ACL changes may lock out users or expose sensitive files.",
+    ),
+    CommandRule(
+        r"\btakeown\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Taking ownership changes file access control.",
+    ),
     # Boot configuration — always ask
-    CommandRule(r"\bbcdedit\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Boot configuration changes can prevent the system from starting."),
+    CommandRule(
+        r"\bbcdedit\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Boot configuration changes can prevent the system from starting.",
+    ),
     # Disk partition management — always ask
-    CommandRule(r"\bdiskpart\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Disk partition changes may cause data loss."),
+    CommandRule(
+        r"\bdiskpart\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Disk partition changes may cause data loss.",
+    ),
     # Scheduled tasks — always ask
-    CommandRule(r"\bschtasks\b", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Scheduled tasks can run with system privileges."),
+    CommandRule(
+        r"\bschtasks\b",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Scheduled tasks can run with system privileges.",
+    ),
     # Environment variable injection via Set-Content
-    CommandRule(r"\bSet-Content\b.*\$env:", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Modifying environment variables via Set-Content affects process behavior."),
+    CommandRule(
+        r"\bSet-Content\b.*\$env:",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Modifying environment variables via Set-Content affects process behavior.",
+    ),
     # Out-file targeting absolute paths outside workspace
-    CommandRule(r"\bout-file\b.*[A-Za-z]:[\\\/](?!.*[Oo]utput[\\\/])",
-                ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Writing files outside the workspace may affect system state."),
+    CommandRule(
+        r"\bout-file\b.*[A-Za-z]:[\\\/](?!.*[Oo]utput[\\\/])",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Writing files outside the workspace may affect system state.",
+    ),
     # Existing rules
-    CommandRule("remove-item", ApprovalMode.ALWAYS_ASK,
-                undo_hint="Move to Recycle Bin first: Remove-Item -Confirm"),
-    CommandRule("del ", ApprovalMode.ALWAYS_ASK,
-                undo_hint="Consider 'move' instead of permanent delete."),
-    CommandRule("rm ", ApprovalMode.ALWAYS_ASK,
-                undo_hint="Consider 'mv' to a temp folder first."),
-    CommandRule("stop-process", ApprovalMode.ALWAYS_ASK,
-                undo_hint="Note the PID before stopping in case restart is needed."),
-    CommandRule("kill", ApprovalMode.ALWAYS_ASK,
-                undo_hint="Save PID/name before killing."),
+    CommandRule(
+        "remove-item",
+        ApprovalMode.ALWAYS_ASK,
+        undo_hint="Move to Recycle Bin first: Remove-Item -Confirm",
+    ),
+    CommandRule(
+        "del ", ApprovalMode.ALWAYS_ASK, undo_hint="Consider 'move' instead of permanent delete."
+    ),
+    CommandRule("rm ", ApprovalMode.ALWAYS_ASK, undo_hint="Consider 'mv' to a temp folder first."),
+    CommandRule(
+        "stop-process",
+        ApprovalMode.ALWAYS_ASK,
+        undo_hint="Note the PID before stopping in case restart is needed.",
+    ),
+    CommandRule("kill", ApprovalMode.ALWAYS_ASK, undo_hint="Save PID/name before killing."),
     # Drive erase / wipe commands
-    CommandRule(r"\brd\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Removing a directory via rd is permanent. Use Remove-Item -Confirm."),
-    CommandRule(r"\berase\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="The erase command permanently deletes files."),
-    CommandRule(r"\brmdir\s", ApprovalMode.ALWAYS_ASK, is_regex=True,
-                undo_hint="Removing a directory is permanent. Use Remove-Item -Confirm."),
+    CommandRule(
+        r"\brd\s",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Removing a directory via rd is permanent. Use Remove-Item -Confirm.",
+    ),
+    CommandRule(
+        r"\berase\s",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="The erase command permanently deletes files.",
+    ),
+    CommandRule(
+        r"\brmdir\s",
+        ApprovalMode.ALWAYS_ASK,
+        is_regex=True,
+        undo_hint="Removing a directory is permanent. Use Remove-Item -Confirm.",
+    ),
 )
 
 
@@ -130,14 +203,14 @@ class ExecApprovalPolicy:
     Rules are checked longest-match first (most specific wins).
     """
 
-    def __init__(self, rules: Optional[List[CommandRule]] = None) -> None:
+    def __init__(self, rules: list[CommandRule] | None = None) -> None:
         # User rules first, then built-in defaults (frozen tuple — cast to list)
         self._rules = list(rules or []) + list(_DEFAULT_RULES)
 
         # Pre-compile regex patterns at init time so evaluate() never raises
         # re.error at runtime.  Invalid patterns are logged and silently skipped
         # (fail-open: the bad rule is ignored, all other rules still apply).
-        self._compiled: Dict[int, re.Pattern] = {}
+        self._compiled: dict[int, re.Pattern] = {}
         for i, rule in enumerate(self._rules):
             if rule.is_regex:
                 try:
@@ -146,7 +219,9 @@ class ExecApprovalPolicy:
                     logger.error(
                         "ExecApprovalPolicy: invalid regex pattern %r "
                         "(rule index %d) will be SKIPPED — %s",
-                        rule.pattern, i, exc,
+                        rule.pattern,
+                        i,
+                        exc,
                     )
 
     def evaluate(self, command: str, tool_category: str = "") -> ApprovalResult:
@@ -165,7 +240,7 @@ class ExecApprovalPolicy:
         cmd_lower = command.lower()
 
         # Find all matching rules, pick the most specific (longest pattern match)
-        matches: List[CommandRule] = []
+        matches: list[CommandRule] = []
         for i, rule in enumerate(self._rules):
             if rule.is_regex:
                 compiled = self._compiled.get(i)
@@ -183,10 +258,10 @@ class ExecApprovalPolicy:
         # longest-match result.  This prevents Output-folder bypass attacks
         # where a safe-looking rule matches a prefix before a chained
         # destructive action.
-        _has_separator = bool(re.search(r'[;&|]', command))
+        _has_separator = bool(re.search(r"[;&|]", command))
         if _has_separator:
             for kw in _DESTRUCTIVE_KEYWORDS:
-                if re.search(rf'\b{re.escape(kw)}\b', cmd_lower):
+                if re.search(rf"\b{re.escape(kw)}\b", cmd_lower):
                     return ApprovalResult(
                         command=command,
                         approved=True,
@@ -224,10 +299,7 @@ class ExecApprovalPolicy:
 
         # No rule matched → auto-approve
         return ApprovalResult(
-            command=command,
-            approved=True,
-            requires_confirmation=False,
-            undo_hint="",
+            command=command, approved=True, requires_confirmation=False, undo_hint=""
         )
 
 
@@ -243,8 +315,9 @@ TOOL_ANNOTATION_TIERS: dict[str, ApprovalMode] = {
 }
 
 
-def get_approval_mode_from_annotation(read_only: bool = False,
-                                       destructive: bool = False) -> ApprovalMode:
+def get_approval_mode_from_annotation(
+    read_only: bool = False, destructive: bool = False
+) -> ApprovalMode:
     """Map MCP-style annotations to an approval tier.
 
     Args:
@@ -266,13 +339,15 @@ def get_approval_mode_from_annotation(read_only: bool = False,
 # Tools tagged ``finance`` or ``payment`` always require approval.
 # Wrapped in MappingProxyType to prevent runtime mutation — any
 # TOOL_CATEGORIES["key"] = val will raise TypeError.
-TOOL_CATEGORIES: types.MappingProxyType = types.MappingProxyType({
-    "finance": ApprovalMode.FORCE_ALWAYS_ASK,
-    "payment": ApprovalMode.FORCE_ALWAYS_ASK,
-    # Inbound email is untrusted input (ADR 006). Any action that follows
-    # an atomic_mail jmap_request must be confirmed before execution.
-    "inbound_mail": ApprovalMode.FORCE_ALWAYS_ASK,
-})
+TOOL_CATEGORIES: types.MappingProxyType = types.MappingProxyType(
+    {
+        "finance": ApprovalMode.FORCE_ALWAYS_ASK,
+        "payment": ApprovalMode.FORCE_ALWAYS_ASK,
+        # Inbound email is untrusted input (ADR 006). Any action that follows
+        # an atomic_mail jmap_request must be confirmed before execution.
+        "inbound_mail": ApprovalMode.FORCE_ALWAYS_ASK,
+    }
+)
 
 
 def get_category_approval_mode(category: str) -> ApprovalMode:

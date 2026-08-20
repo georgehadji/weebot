@@ -8,6 +8,7 @@ while an admin agent gets the full file including response style.
 
 Maps to Hermes Evolution Phase 1.1 (Enhancement 1 — XML-scoped prompts).
 """
+
 from __future__ import annotations
 
 from typing import ClassVar

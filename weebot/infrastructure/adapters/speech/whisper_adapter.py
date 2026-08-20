@@ -2,10 +2,10 @@
 
 Optional dependency.  Clean errors when deps are missing.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.speech_port import SpeechPort
 
@@ -17,12 +17,14 @@ _TTS_AVAILABLE = False
 
 try:
     import whisper  # type: ignore
+
     _WHISPER_AVAILABLE = True
 except ImportError:
     whisper = None
 
 try:
     import pyttsx3  # type: ignore
+
     _TTS_AVAILABLE = True
 except ImportError:
     pyttsx3 = None
@@ -36,25 +38,18 @@ class WhisperSpeechAdapter(SpeechPort):
         self._whisper_model = None
         self._tts_engine = None
 
-    async def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    async def transcribe(self, audio_path: str, language: str | None = None) -> str:
         if not _WHISPER_AVAILABLE:
-            raise RuntimeError(
-                "Whisper STT not available. Install: pip install openai-whisper"
-            )
+            raise RuntimeError("Whisper STT not available. Install: pip install openai-whisper")
         if self._whisper_model is None:
             self._whisper_model = whisper.load_model(self._model_name)
 
-        result = self._whisper_model.transcribe(
-            audio_path, language=language or None
-        )
+        result = self._whisper_model.transcribe(audio_path, language=language or None)
         return result.get("text", "").strip()
 
-    async def synthesize(self, text: str, voice: Optional[str] = None) -> bytes:
+    async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         if not _TTS_AVAILABLE:
-            raise RuntimeError(
-                "TTS not available. Install: pip install pyttsx3"
-            )
-        import io
+            raise RuntimeError("TTS not available. Install: pip install pyttsx3")
         import tempfile
 
         engine = pyttsx3.init()
@@ -75,5 +70,6 @@ class WhisperSpeechAdapter(SpeechPort):
             audio_bytes = f.read()
 
         import os
+
         os.unlink(temp_path)
         return audio_bytes

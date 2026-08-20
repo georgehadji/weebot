@@ -7,11 +7,11 @@ using a cross-encoder model (Cohere Rerank via OpenRouter).
 The ``SkillRetrieverPort`` contract already says "ordered by relevance" —
 this wrapper improves the ordering without changing the interface.
 """
+
 from __future__ import annotations
 
 import inspect
 import logging
-from typing import Optional
 
 from weebot.application.ports.rerank_port import RerankPort
 from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
@@ -35,10 +35,7 @@ class RerankingSkillRetriever(SkillRetrieverPort):
     """
 
     def __init__(
-        self,
-        base_retriever: SkillRetrieverPort,
-        rerank: RerankPort,
-        model: str = RERANK_MODEL_PRO,
+        self, base_retriever: SkillRetrieverPort, rerank: RerankPort, model: str = RERANK_MODEL_PRO
     ) -> None:
         self._base = base_retriever
         self._rerank = rerank
@@ -61,20 +58,14 @@ class RerankingSkillRetriever(SkillRetrieverPort):
 
         # Phase 2: rerank against the task description
         documents = [
-            f"{c.skill_name}: {c.description or ''} {c.content_preview or ''}"
-            for c in candidates
+            f"{c.skill_name}: {c.description or ''} {c.content_preview or ''}" for c in candidates
         ]
         try:
             reranked = await self._rerank.rerank(
-                query=task,
-                documents=documents,
-                model=self._model,
-                top_n=top_k,
+                query=task, documents=documents, model=self._model, top_n=top_k
             )
         except Exception as exc:
-            logger.warning(
-                "Skill rerank failed, falling back to base ordering: %s", exc
-            )
+            logger.warning("Skill rerank failed, falling back to base ordering: %s", exc)
             return candidates[:top_k]
 
         # Phase 3: map rerank results back to SkillMatch objects

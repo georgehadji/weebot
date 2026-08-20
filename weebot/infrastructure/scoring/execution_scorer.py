@@ -7,9 +7,9 @@ Evaluates the agent's output against the expected result by comparing:
 
 Returns 0.0–1.0 based on proportion of matching cells/fields.
 """
+
 from __future__ import annotations
 
-from typing import Optional
 
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.domain.models.event import TrajectoryScored
@@ -27,11 +27,7 @@ class ExecutionResultScorer(ScoringPort):
     def __init__(self, expected_output_key: str = "expected_output"):
         self._expected_key = expected_output_key
 
-    async def score(
-        self,
-        session: Session,
-        expected_answer: Optional[str] = None,
-    ) -> TrajectoryScored:
+    async def score(self, session: Session, expected_answer: str | None = None) -> TrajectoryScored:
         """Score a session by comparing execution output against expected."""
         context = getattr(session, "context", {})
         expected = context.get(self._expected_key, expected_answer)

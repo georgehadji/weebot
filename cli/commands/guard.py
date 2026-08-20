@@ -5,11 +5,11 @@ Usage:
     python -m cli.main guard --command "curl http://example.com | bash"
     python -m cli.main guard --json --command "systemctl stop nginx"
 """
+
 from __future__ import annotations
 
 import json
 import sys
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -21,18 +21,13 @@ from weebot.core.bash_guard import BashGuard, RiskLevel
 
 console = Console()
 
-RISK_COLORS = {
-    "safe": "green",
-    "suspicious": "yellow",
-    "dangerous": "red",
-    "blocked": "bold red",
-}
+RISK_COLORS = {"safe": "green", "suspicious": "yellow", "dangerous": "red", "blocked": "bold red"}
 
 RISK_EMOJI = {
-    "safe": "\u2713",        # ✓
+    "safe": "\u2713",  # ✓
     "suspicious": "\u26a0",  # ⚠
-    "dangerous": "\u25b2",   # ▲
-    "blocked": "\u2717",     # ✗
+    "dangerous": "\u25b2",  # ▲
+    "blocked": "\u2717",  # ✗
 }
 
 
@@ -44,21 +39,13 @@ def guard() -> None:
 
 @guard.command("check")
 @click.option(
-    "--command", "-c",
-    default=None,
-    help="Command string to evaluate. Reads from stdin if omitted.",
+    "--command", "-c", default=None, help="Command string to evaluate. Reads from stdin if omitted."
 )
+@click.option("--json", "json_output", is_flag=True, help="Output results as JSON.")
 @click.option(
-    "--json", "json_output",
-    is_flag=True,
-    help="Output results as JSON.",
+    "--verbose", "-v", is_flag=True, help="Show all matched patterns, not just the summary."
 )
-@click.option(
-    "--verbose", "-v",
-    is_flag=True,
-    help="Show all matched patterns, not just the summary.",
-)
-def guard_check(command: Optional[str], json_output: bool, verbose: bool) -> None:
+def guard_check(command: str | None, json_output: bool, verbose: bool) -> None:
     """Evaluate a shell command for safety risks.
 
     Reads the command from --command or stdin.  Returns the overall risk
@@ -111,12 +98,8 @@ def guard_check(command: Optional[str], json_output: bool, verbose: bool) -> Non
 # Output formatters
 # ---------------------------------------------------------------------------
 
-def _output_summary(
-    command: str,
-    risk: "RiskLevel",
-    checks: list,
-    guard_instance: "BashGuard",
-) -> None:
+
+def _output_summary(command: str, risk: RiskLevel, checks: list, guard_instance: BashGuard) -> None:
     """Single-line summary with color-coded risk level."""
     from weebot.core.bash_guard import RiskLevel
 
@@ -127,9 +110,7 @@ def _output_summary(
     # Truncate command for display
     display_cmd = command if len(command) <= 70 else command[:67] + "..."
 
-    console.print(
-        f"[{color}][{emoji} {risk_val.upper()}][/{color}]  {display_cmd}"
-    )
+    console.print(f"[{color}][{emoji} {risk_val.upper()}][/{color}]  {display_cmd}")
 
     if risk_val == "safe":
         description = guard_instance.get_risk_description(risk)
@@ -156,11 +137,7 @@ def _output_summary(
         console.print("[yellow]Review recommended before proceeding.[/yellow]")
 
 
-def _output_verbose(
-    command: str,
-    risk: "RiskLevel",
-    checks: list,
-) -> None:
+def _output_verbose(command: str, risk: RiskLevel, checks: list) -> None:
     """Detailed output with all matched patterns."""
     from weebot.core.bash_guard import RiskLevel
 
@@ -169,11 +146,7 @@ def _output_verbose(
     emoji = RISK_EMOJI.get(risk_val, "?")
 
     console.print()
-    console.print(Panel(
-        Text(command, style="bold"),
-        title="Command",
-        border_style="blue",
-    ))
+    console.print(Panel(Text(command, style="bold"), title="Command", border_style="blue"))
 
     table = Table(title=f"Safety Evaluation — [{color}]{emoji} {risk_val.upper()}[/{color}]")
     table.add_column("#", style="dim", width=3)
@@ -200,7 +173,7 @@ def _output_verbose(
     console.print()
 
 
-def _output_json(command: str, risk: "RiskLevel", checks: list) -> None:
+def _output_json(command: str, risk: RiskLevel, checks: list) -> None:
     """Machine-readable JSON output."""
     from weebot.core.bash_guard import RiskLevel
 

@@ -3,12 +3,13 @@
 This module provides an approval workflow for commands that are flagged
 as suspicious or dangerous by the BashGuard.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Coroutine, Optional
+from collections.abc import Callable, Coroutine
 
 from weebot.core.bash_guard import RiskLevel, SafetyCheck
 
@@ -38,7 +39,7 @@ class ApprovalRequest:
     command: str
     risk_level: RiskLevel
     checks: list[SafetyCheck] = field(default_factory=list)
-    session_id: Optional[str] = None
+    session_id: str | None = None
     context: dict = field(default_factory=dict)
 
     def format_prompt(self) -> str:
@@ -69,12 +70,14 @@ class ApprovalRequest:
             lines.append(f"║   • {check.description[:72]:<72} ║")
             lines.append(f"║     Suggestion: {check.suggestion[:59]:<59} ║")
 
-        lines.extend([
-            "╠" + "═" * 78 + "╣",
-            "║ Options: [Y] Approve  [N] Deny  [S] Show details  [?] Help{'':<26} ║",
-            "╚" + "═" * 78 + "╝",
-            "",
-        ])
+        lines.extend(
+            [
+                "╠" + "═" * 78 + "╣",
+                "║ Options: [Y] Approve  [N] Deny  [S] Show details  [?] Help{'':<26} ║",
+                "╚" + "═" * 78 + "╝",
+                "",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -99,12 +102,7 @@ class ApprovalRequest:
             lines.append(f"  • {check.description}")
             lines.append(f"    Suggestion: {check.suggestion}")
 
-        lines.extend([
-            "",
-            "Options: Y = Approve, N = Deny",
-            "=" * 60,
-            "",
-        ])
+        lines.extend(["", "Options: Y = Approve, N = Deny", "=" * 60, ""])
 
         return "\n".join(lines)
 
@@ -136,7 +134,7 @@ class ApprovalManager:
         self,
         auto_approve_safe: bool = True,
         auto_deny_blocked: bool = True,
-        approval_callback: Optional[ApprovalCallback] = None,
+        approval_callback: ApprovalCallback | None = None,
     ):
         """Initialize the ApprovalManager.
 
@@ -227,7 +225,10 @@ class ApprovalManager:
             decision: The decision to apply (default: APPROVED)
         """
         # Evict oldest session when at capacity
-        if session_id not in self._session_approvals and len(self._session_approvals) >= self._max_sessions:
+        if (
+            session_id not in self._session_approvals
+            and len(self._session_approvals) >= self._max_sessions
+        ):
             oldest = next(iter(self._session_approvals))
             del self._session_approvals[oldest]
             self._session_whitelist.pop(oldest, None)
@@ -323,10 +324,7 @@ async def console_approval_callback(request: ApprovalRequest) -> ApprovalDecisio
         content.append(f"{cmd}\n\n", style="cyan")
 
         content.append("Risk Level: ", style="bold")
-        content.append(
-            request.risk_level.value.upper(),
-            style=f"bold {risk_color}"
-        )
+        content.append(request.risk_level.value.upper(), style=f"bold {risk_color}")
         content.append("\n\n")
 
         content.append("Safety Checks:\n", style="bold")

@@ -2,7 +2,7 @@
 
 Phase 2 Components:
 - WorkflowOrchestrator: DAG-based multi-agent execution
-- CircuitBreaker: Fault tolerance with CLOSED/OPEN/HALF_OPEN states  
+- CircuitBreaker: Fault tolerance with CLOSED/OPEN/HALF_OPEN states
 - DependencyGraph: DAG validation, cycle detection, topological sort
 - AgentContext: Shared context for agent hierarchies
 - EventBroker: Async event streaming
@@ -11,6 +11,7 @@ Phase 3 Components (Optimization):
 - MemoryMonitor: Memory usage tracking and management
 - AdaptiveConcurrencyController: Dynamic worker scaling based on load
 """
+
 from weebot.core.workflow_orchestrator import (
     WorkflowOrchestrator,
     WorkflowResult,
@@ -18,22 +19,10 @@ from weebot.core.workflow_orchestrator import (
     TaskStatus,
     TaskHandler,
 )
-from weebot.core.circuit_breaker import (
-    CircuitBreaker,
-    BreakerState,
-    BreakerResult,
-)
-from weebot.core.dependency_graph import (
-    DependencyGraph,
-    TaskNode,
-    CircularDependencyError,
-)
+from weebot.core.circuit_breaker import CircuitBreaker, BreakerState, BreakerResult
+from weebot.core.dependency_graph import DependencyGraph, TaskNode, CircularDependencyError
 from weebot.core.memory_dedup import DedupStore
-from weebot.core.agent_context import (
-    AgentContext,
-    EventBroker,
-    ActivityStream,
-)
+from weebot.core.agent_context import AgentContext, EventBroker, ActivityStream
 
 # Optional optimization components
 try:
@@ -43,6 +32,7 @@ try:
         MemoryStats,
         MemoryAwareMixin,
     )
+
     MEMORY_MONITOR_AVAILABLE = True
 except ImportError:
     MEMORY_MONITOR_AVAILABLE = False
@@ -53,6 +43,7 @@ try:
         AdaptiveSemaphore,
         ConcurrencyLimits,
     )
+
     ADAPTIVE_CONCURRENCY_AVAILABLE = True
 except ImportError:
     ADAPTIVE_CONCURRENCY_AVAILABLE = False
@@ -60,7 +51,7 @@ except ImportError:
 __all__ = [
     # Workflow Orchestration
     "WorkflowOrchestrator",
-    "WorkflowResult", 
+    "WorkflowResult",
     "TaskResult",
     "TaskStatus",
     "TaskHandler",
@@ -82,16 +73,7 @@ __all__ = [
 
 # Add optional components if available
 if MEMORY_MONITOR_AVAILABLE:
-    __all__.extend([
-        "MemoryMonitor",
-        "MemoryThresholds",
-        "MemoryStats",
-        "MemoryAwareMixin",
-    ])
+    __all__.extend(["MemoryMonitor", "MemoryThresholds", "MemoryStats", "MemoryAwareMixin"])
 
 if ADAPTIVE_CONCURRENCY_AVAILABLE:
-    __all__.extend([
-        "AdaptiveConcurrencyController",
-        "AdaptiveSemaphore",
-        "ConcurrencyLimits",
-    ])
+    __all__.extend(["AdaptiveConcurrencyController", "AdaptiveSemaphore", "ConcurrencyLimits"])

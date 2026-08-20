@@ -8,11 +8,11 @@ synthesis report.
 Implements the 'clustering agent' and 'synthesizer' patterns from the
 agent swarm literature (Kimi K2.5 style).
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
@@ -49,11 +49,7 @@ class SynthesizerAgent:
         self._llm = llm
 
     async def synthesize(
-        self,
-        prompt: str,
-        results: list[dict],
-        strategy: str = "cluster",
-        model: Optional[str] = None,
+        self, prompt: str, results: list[dict], strategy: str = "cluster", model: str | None = None
     ) -> SwarmResult:
         """Synthesize parallel agent results into a SwarmResult.
 
@@ -69,8 +65,7 @@ class SynthesizerAgent:
         """
         if not results:
             return SwarmResult(
-                prompt=prompt,
-                synthesis="No results were produced by the swarm agents.",
+                prompt=prompt, synthesis="No results were produced by the swarm agents."
             )
 
         t_start = time.monotonic()
@@ -141,10 +136,7 @@ class SynthesizerAgent:
             role = r.get("role", "agent")
             summary = r.get("summary", "")
             parts.append(f"**{role}**: {summary}")
-        return {
-            "clusters": [],
-            "synthesis": "\n\n".join(parts),
-        }
+        return {"clusters": [], "synthesis": "\n\n".join(parts)}
 
     @staticmethod
     def _fallback_synthesis(results: list[dict]) -> str:

@@ -6,10 +6,10 @@ checkpoint per session is retained.
 
 Schema managed by Alembic (migration c0re_5ch3m4_v1).
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -67,11 +67,7 @@ class SQLiteCheckpointStore(CheckpointPort):
         )
 
     def _save_sync(
-        self,
-        session_id: str,
-        flow_type: str,
-        current_state: str,
-        json_blob: str,
+        self, session_id: str, flow_type: str, current_state: str, json_blob: str
     ) -> None:
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.execute(
@@ -105,8 +101,7 @@ class SQLiteCheckpointStore(CheckpointPort):
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
-                "SELECT checkpoint_json FROM flow_checkpoints WHERE session_id = ?",
-                (session_id,),
+                "SELECT checkpoint_json FROM flow_checkpoints WHERE session_id = ?", (session_id,)
             ).fetchone()
         return row["checkpoint_json"] if row else None
 
@@ -121,8 +116,7 @@ class SQLiteCheckpointStore(CheckpointPort):
     def _delete_sync(self, session_id: str) -> bool:
         with sqlite3.connect(str(self._db_path)) as conn:
             cursor = conn.execute(
-                "DELETE FROM flow_checkpoints WHERE session_id = ?",
-                (session_id,),
+                "DELETE FROM flow_checkpoints WHERE session_id = ?", (session_id,)
             )
             conn.commit()
             return cursor.rowcount > 0
@@ -138,6 +132,6 @@ class SQLiteCheckpointStore(CheckpointPort):
     def _list_sync(self) -> list[str]:
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
-                "SELECT session_id FROM flow_checkpoints ORDER BY updated_at DESC",
+                "SELECT session_id FROM flow_checkpoints ORDER BY updated_at DESC"
             ).fetchall()
         return [r[0] for r in rows]

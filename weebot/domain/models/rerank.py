@@ -2,9 +2,10 @@
 
 No imports from outer layers (application, infrastructure, interfaces, core).
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

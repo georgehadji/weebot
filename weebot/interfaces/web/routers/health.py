@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 
-
 import logging
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from typing import Any
 
 
-
 from fastapi import APIRouter, Request, Depends
-
 
 
 from weebot.application.di import Container
@@ -23,11 +20,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.web.schemas import HealthResponse, HealthComponent
 
 
-
-
-
 async def get_state_repo(request: Request) -> StateRepositoryPort:
-
     """Resolve StateRepositoryPort from the application DI container."""
 
     container = request.app.state.container
@@ -35,25 +28,13 @@ async def get_state_repo(request: Request) -> StateRepositoryPort:
     return container.get(StateRepositoryPort)
 
 
-
-
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
 
 
-
-
-
 @router.get("", response_model=HealthResponse)
-
-async def health_check(
-
-    state_repo: StateRepositoryPort = Depends(get_state_repo),
-
-) -> HealthResponse:
-
+async def health_check(state_repo: StateRepositoryPort = Depends(get_state_repo)) -> HealthResponse:
     """
 
     Comprehensive health check including all system components.
@@ -70,8 +51,6 @@ async def health_check(
 
     overall_status = "healthy"
 
-
-
     # Check LLM providers
 
     try:
@@ -84,37 +63,25 @@ async def health_check(
 
         available = service.available_models()
 
-
-
         msg = f"{len(available)} providers available" if available else "No providers configured"
 
-        components.append(HealthComponent(
-
-            name="llm_providers",
-
-            status="healthy" if available else "degraded",
-
-            message=msg,
-
-        ))
+        components.append(
+            HealthComponent(
+                name="llm_providers", status="healthy" if available else "degraded", message=msg
+            )
+        )
 
     except Exception:
 
         logger.exception("LLM provider health check failed")
 
-        components.append(HealthComponent(
-
-            name="llm_providers",
-
-            status="unhealthy",
-
-            message="LLM provider check failed",
-
-        ))
+        components.append(
+            HealthComponent(
+                name="llm_providers", status="unhealthy", message="LLM provider check failed"
+            )
+        )
 
         overall_status = "unhealthy"
-
-
 
     # Check database
 
@@ -125,42 +92,24 @@ async def health_check(
         session_count = len(sessions)
 
         pool_msg = (
-
             f"Database operational ({session_count} sessions found)"
-
-            if session_count else "Database operational (no sessions)"
-
+            if session_count
+            else "Database operational (no sessions)"
         )
 
-
-
-        components.append(HealthComponent(
-
-            name="database",
-
-            status="healthy",
-
-            message=pool_msg,
-
-        ))
+        components.append(HealthComponent(name="database", status="healthy", message=pool_msg))
 
     except Exception:
 
         logger.exception("Database health check failed")
 
-        components.append(HealthComponent(
-
-            name="database",
-
-            status="unhealthy",
-
-            message="Database connection failed",
-
-        ))
+        components.append(
+            HealthComponent(
+                name="database", status="unhealthy", message="Database connection failed"
+            )
+        )
 
         overall_status = "unhealthy"
-
-
 
     # Check circuit breakers
 
@@ -170,31 +119,23 @@ async def health_check(
 
         # This is a simplified check - in production you'd track all CBs
 
-        components.append(HealthComponent(
-
-            name="circuit_breakers",
-
-            status="healthy",
-
-            message="Circuit breaker system operational",
-
-        ))
+        components.append(
+            HealthComponent(
+                name="circuit_breakers",
+                status="healthy",
+                message="Circuit breaker system operational",
+            )
+        )
 
     except Exception:
 
         logger.exception("Circuit breaker health check failed")
 
-        components.append(HealthComponent(
-
-            name="circuit_breakers",
-
-            status="unhealthy",
-
-            message="Circuit breaker check failed",
-
-        ))
-
-
+        components.append(
+            HealthComponent(
+                name="circuit_breakers", status="unhealthy", message="Circuit breaker check failed"
+            )
+        )
 
     # Check memory status
 
@@ -205,8 +146,6 @@ async def health_check(
         monitor = MemoryMonitor()
 
         stats = monitor.check_memory()
-
-
 
         memory_status = "healthy"
 
@@ -220,33 +159,21 @@ async def health_check(
 
             memory_status = "warning"
 
-
-
-        components.append(HealthComponent(
-
-            name="memory",
-
-            status=memory_status,
-
-            message=f"{stats.rss_mb:.0f}MB / {stats.max_mb}MB ({stats.percent:.1f}%)",
-
-        ))
+        components.append(
+            HealthComponent(
+                name="memory",
+                status=memory_status,
+                message=f"{stats.rss_mb:.0f}MB / {stats.max_mb}MB ({stats.percent:.1f}%)",
+            )
+        )
 
     except Exception:
 
         logger.exception("Memory health check failed")
 
-        components.append(HealthComponent(
-
-            name="memory",
-
-            status="unknown",
-
-            message="Memory monitor error",
-
-        ))
-
-
+        components.append(
+            HealthComponent(name="memory", status="unknown", message="Memory monitor error")
+        )
 
     # Check browser pool if available (importlib to avoid import-linter trace)
 
@@ -260,43 +187,31 @@ async def health_check(
 
         if session_pool_available:
 
-            components.append(HealthComponent(
-
-                name="browser_pool",
-
-                status="healthy",
-
-                message="Browser session pool available",
-
-            ))
+            components.append(
+                HealthComponent(
+                    name="browser_pool", status="healthy", message="Browser session pool available"
+                )
+            )
 
         else:
 
-            components.append(HealthComponent(
-
-                name="browser_pool",
-
-                status="healthy",
-
-                message="Browser pool not configured (optional)",
-
-            ))
+            components.append(
+                HealthComponent(
+                    name="browser_pool",
+                    status="healthy",
+                    message="Browser pool not configured (optional)",
+                )
+            )
 
     except Exception:
 
         logger.exception("Browser pool health check failed")
 
-        components.append(HealthComponent(
-
-            name="browser_pool",
-
-            status="degraded",
-
-            message="Browser pool check failed",
-
-        ))
-
-
+        components.append(
+            HealthComponent(
+                name="browser_pool", status="degraded", message="Browser pool check failed"
+            )
+        )
 
     # Check if any component is degraded
 
@@ -308,35 +223,14 @@ async def health_check(
 
         overall_status = "unhealthy"
 
-
-
-    return HealthResponse(
-
-        status=overall_status,
-
-        components=components,
-
-        timestamp=datetime.now(timezone.utc),
-
-    )
-
-
-
+    return HealthResponse(status=overall_status, components=components, timestamp=datetime.now(UTC))
 
 
 @router.get("/ready")
-
-async def readiness_check(
-
-    state_repo: StateRepositoryPort = Depends(get_state_repo),
-
-) -> dict:
-
+async def readiness_check(state_repo: StateRepositoryPort = Depends(get_state_repo)) -> dict:
     """Kubernetes-style readiness check."""
 
     checks = {}
-
-
 
     # Check database
 
@@ -353,8 +247,6 @@ async def readiness_check(
         checks["database"] = "error"
 
         return {"ready": False, "checks": checks}
-
-
 
     # Check LLM availability
 
@@ -382,30 +274,18 @@ async def readiness_check(
 
         return {"ready": False, "checks": checks}
 
-
-
     return {"ready": True, "checks": checks}
 
 
-
-
-
 @router.get("/live")
-
 async def liveness_check() -> dict:
-
     """Kubernetes-style liveness check."""
 
-    return {"alive": True, "timestamp": datetime.now(timezone.utc).isoformat()}
-
-
-
+    return {"alive": True, "timestamp": datetime.now(UTC).isoformat()}
 
 
 @router.get("/prometheus")
-
 async def prometheus_metrics(request: Request):
-
     """Prometheus exposition format — consumed by Prometheus / Grafana."""
 
     from fastapi.responses import PlainTextResponse
@@ -419,17 +299,10 @@ async def prometheus_metrics(request: Request):
     return PlainTextResponse(adapter.render(), media_type="text/plain")
 
 
-
-
-
 @router.get("/metrics")
-
 async def metrics_check(
-
     state_repo: StateRepositoryPort = Depends(get_state_repo),
-
 ) -> dict[str, Any]:
-
     """
 
     Detailed system metrics for monitoring.
@@ -448,15 +321,7 @@ async def metrics_check(
 
     """
 
-    metrics = {
-
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-
-        "components": {}
-
-    }
-
-
+    metrics = {"timestamp": datetime.now(UTC).isoformat(), "components": {}}
 
     # Memory metrics
 
@@ -469,17 +334,11 @@ async def metrics_check(
         stats = monitor.check_memory()
 
         metrics["components"]["memory"] = {
-
             "rss_mb": round(stats.rss_mb, 2),
-
             "python_current_mb": round(stats.python_current_mb, 2),
-
             "python_peak_mb": round(stats.python_peak_mb, 2),
-
             "percent_of_max": round(stats.percent, 2),
-
             "system_percent": round(stats.system_percent, 2) if stats.system_percent else None,
-
         }
 
     except Exception:
@@ -488,8 +347,6 @@ async def metrics_check(
 
         metrics["components"]["memory"] = {"error": "Memory check failed"}
 
-
-
     # Database pool metrics
 
     try:
@@ -497,11 +354,8 @@ async def metrics_check(
         sessions = await state_repo.list_sessions(limit=1)
 
         metrics["components"]["database_pool"] = {
-
             "status": "operational",
-
             "session_count": len(sessions),
-
         }
 
     except Exception:
@@ -509,8 +363,6 @@ async def metrics_check(
         logger.exception("Database pool metrics check failed")
 
         metrics["components"]["database_pool"] = {"error": "Database check failed"}
-
-
 
     # Circuit breaker metrics (global)
 
@@ -521,11 +373,8 @@ async def metrics_check(
         # For now, report that the system is operational
 
         metrics["components"]["circuit_breakers"] = {
-
             "status": "operational",
-
-            "note": "Per-adapter CB states available via adapter.get_metrics()"
-
+            "note": "Per-adapter CB states available via adapter.get_metrics()",
         }
 
     except Exception:
@@ -534,8 +383,6 @@ async def metrics_check(
 
         metrics["components"]["circuit_breakers"] = {"error": "Circuit breaker check failed"}
 
-
-
     # Cache metrics — use importlib so import-linter does not track this optional dep.
 
     try:
@@ -543,13 +390,7 @@ async def metrics_check(
         import importlib as _il
 
         _cache_instances = getattr(
-
-            _il.import_module("weebot.infrastructure.cache.llm_cache"),
-
-            "_cache_instances",
-
-            None,
-
+            _il.import_module("weebot.infrastructure.cache.llm_cache"), "_cache_instances", None
         )
 
         if _cache_instances:
@@ -578,8 +419,6 @@ async def metrics_check(
 
         metrics["components"]["caches"] = {"error": "Cache check failed"}
 
-
-
     # Browser pool metrics (importlib to avoid import-linter trace)
 
     try:
@@ -604,8 +443,6 @@ async def metrics_check(
 
         metrics["components"]["browser_pool"] = {"error": "Browser pool check failed"}
 
-
-
     # Adaptive concurrency metrics
 
     try:
@@ -613,11 +450,8 @@ async def metrics_check(
         # Would need a registry of controllers
 
         metrics["components"]["adaptive_concurrency"] = {
-
             "status": "available",
-
-            "note": "Per-component controllers track their own stats"
-
+            "note": "Per-component controllers track their own stats",
         }
 
     except Exception:
@@ -626,18 +460,11 @@ async def metrics_check(
 
         metrics["components"]["adaptive_concurrency"] = {"error": "Concurrency check failed"}
 
-
-
     return metrics
 
 
-
-
-
 @router.get("/status")
-
 async def detailed_status() -> dict[str, Any]:
-
     """
 
     Human-readable system status.
@@ -649,34 +476,19 @@ async def detailed_status() -> dict[str, Any]:
     """
 
     status = {
-
         "status": "operational",
-
         "version": "2.6.0",
-
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-
+        "timestamp": datetime.now(UTC).isoformat(),
         "features": {
-
             "resilient_adapters": True,
-
             "connection_pooling": True,
-
             "response_caching": True,
-
             "circuit_breaker": True,
-
             "memory_monitoring": True,
-
             "adaptive_concurrency": True,
-
             "browser_pooling": True,
-
-        }
-
+        },
     }
-
-
 
     # Overall health
 
@@ -687,11 +499,7 @@ async def detailed_status() -> dict[str, Any]:
         status["health"] = health.status
 
         status["components"] = [
-
-            {"name": c.name, "status": c.status, "message": c.message}
-
-            for c in health.components
-
+            {"name": c.name, "status": c.status, "message": c.message} for c in health.components
         ]
 
     except Exception:
@@ -702,7 +510,4 @@ async def detailed_status() -> dict[str, Any]:
 
         status["error"] = "Status check failed"
 
-
-
     return status
-

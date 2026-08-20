@@ -4,10 +4,10 @@ Each profile declares *domain_expertise* keywords so the
 :class:`WorkflowOrchestrator` can score which agent best fits a given task,
 following the selective-activation pattern from the ToT paper.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -39,7 +39,7 @@ class AgentProfile:
     """
 
     role: str
-    domain_expertise: List[str] = field(default_factory=list)
+    domain_expertise: list[str] = field(default_factory=list)
     preferred_model: str = ""
     performance: PerformanceRecord = field(default_factory=PerformanceRecord)
     max_steps: int = 30
@@ -69,9 +69,7 @@ class AgentProfile:
 
         # 2. Expertise overlap
         if self.domain_expertise:
-            matched = sum(
-                1 for kw in self.domain_expertise if kw.lower() in desc_lower
-            )
+            matched = sum(1 for kw in self.domain_expertise if kw.lower() in desc_lower)
             score += self._EXPERTISE_WEIGHT * (matched / len(self.domain_expertise))
 
         # 3. Performance bonus
@@ -90,9 +88,9 @@ class AgentProfile:
         p.tasks_completed += 1
         # Running average for latency
         if total_prev > 0:
-            p.avg_latency_seconds = (
-                p.avg_latency_seconds * total_prev + latency_seconds
-            ) / (total_prev + 1)
+            p.avg_latency_seconds = (p.avg_latency_seconds * total_prev + latency_seconds) / (
+                total_prev + 1
+            )
         else:
             p.avg_latency_seconds = latency_seconds
         p.total_cost_usd += cost_usd

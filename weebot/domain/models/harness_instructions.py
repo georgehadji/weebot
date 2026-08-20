@@ -6,6 +6,7 @@ runtime policy knobs, subagent declarations, and skill-selection config.
 
 All models carry defaults so adding a new field is backward-compatible.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -22,24 +23,13 @@ class InstructionConfig(BaseModel):
     """
 
     system_prompt_extension: str = Field(
-        default="",
-        description="Arbitrary text appended directly to the base system prompt",
+        default="", description="Arbitrary text appended directly to the base system prompt"
     )
-    bootstrap: str = Field(
-        default="",
-        description="Guidance for the very first action on a task",
-    )
-    execution: str = Field(
-        default="",
-        description="Guidance for how to approach execution",
-    )
-    verification: str = Field(
-        default="",
-        description="Guidance for verifying outcomes",
-    )
+    bootstrap: str = Field(default="", description="Guidance for the very first action on a task")
+    execution: str = Field(default="", description="Guidance for how to approach execution")
+    verification: str = Field(default="", description="Guidance for verifying outcomes")
     failure_recovery: str = Field(
-        default="",
-        description="Guidance for recovering from tool-call failures",
+        default="", description="Guidance for recovering from tool-call failures"
     )
 
     yagni_preflight: str = Field(
@@ -78,20 +68,16 @@ class RuntimeControlConfig(BaseModel):
     """
 
     enabled: bool = Field(
-        default=False,
-        description="Master switch — when False, none of the below apply",
+        default=False, description="Master switch — when False, none of the below apply"
     )
     max_recent_tool_errors: int | None = Field(
-        default=None,
-        description="Max consecutive tool errors before forced intervention",
+        default=None, description="Max consecutive tool errors before forced intervention"
     )
     max_total_tool_messages: int | None = Field(
-        default=None,
-        description="Max tool-call messages before forced summarisation",
+        default=None, description="Max tool-call messages before forced summarisation"
     )
     loop_detection_instruction: str | None = Field(
-        default=None,
-        description="Instruction injected when a tool-error loop is detected",
+        default=None, description="Instruction injected when a tool-error loop is detected"
     )
 
 
@@ -106,9 +92,7 @@ class SubagentConfig(BaseModel):
         description="Subagent definitions: [{'name': ..., 'role': ..., 'skills': [...]}]",
     )
     max_parallel: int = Field(
-        default=0,
-        ge=0,
-        description="Max parallel subagents (0 = disabled, 1 = serial delegation)",
+        default=0, ge=0, description="Max parallel subagents (0 = disabled, 1 = serial delegation)"
     )
 
 
@@ -119,6 +103,5 @@ class SkillSelectionConfig(BaseModel):
     """
 
     active_skills: list[str] = Field(
-        default_factory=list,
-        description="Skill names to load into executor context",
+        default_factory=list, description="Skill names to load into executor context"
     )

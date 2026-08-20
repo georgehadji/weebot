@@ -1,9 +1,11 @@
 """OpenAI-compatible LLM adapter implementing LLMPort."""
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
@@ -20,8 +22,8 @@ class OpenAIAdapter(LLMPort):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         default_model: str = MODEL_DEFAULT_OPENAI,
     ):
         # API key recovery chain
@@ -53,16 +55,16 @@ class OpenAIAdapter(LLMPort):
 
     def _build_kwargs(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        reasoning_effort: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
         """Build the ``chat.completions.create`` kwargs.
 
         Shared by ``chat()`` and ``stream()`` so the considerable
@@ -70,7 +72,7 @@ class OpenAIAdapter(LLMPort):
         GPT/Grok/GLM quirks) exists in exactly one place and cannot
         silently drift out of sync between the two call paths.
         """
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": model or self._default_model,
             "messages": convert_messages(messages, "openai"),
         }
@@ -87,16 +89,18 @@ class OpenAIAdapter(LLMPort):
             kwargs["extra_body"]["thinking"] = {"type": "enabled"}
             if "reasoning_effort" not in kwargs and not reasoning_effort:
                 kwargs["reasoning_effort"] = "max"
-        
-        # GPT models and reasoning models (o1, o3) often do not support 
+
+        # GPT models and reasoning models (o1, o3) often do not support
         # the temperature parameter or use a fixed default of 1.
         # As per user instruction, GPT models do not accept temperature argument.
         model_id = kwargs["model"].lower()
-        is_gpt_or_reasoning = "gpt" in model_id or any(x in model_id for x in ["o1-", "o3-", "/o1", "/o3"])
-        
+        is_gpt_or_reasoning = "gpt" in model_id or any(
+            x in model_id for x in ["o1-", "o3-", "/o1", "/o3"]
+        )
+
         if not is_gpt_or_reasoning and temperature is not None:
             kwargs["temperature"] = temperature
-            
+
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
         else:
@@ -107,7 +111,12 @@ class OpenAIAdapter(LLMPort):
         # GLM-5.2 / Z.ai thinking mode: disable for short queries to avoid
         # truncation (thinking consumes max_tokens before visible output).
         effective_model = kwargs["model"]
-        if effective_model and "glm" in effective_model.lower() and kwargs.get("max_tokens") and kwargs["max_tokens"] < 500:
+        if (
+            effective_model
+            and "glm" in effective_model.lower()
+            and kwargs.get("max_tokens")
+            and kwargs["max_tokens"] < 500
+        ):
             kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
             kwargs["extra_body"]["chat_template_kwargs"] = {"enable_thinking": False}
 
@@ -128,7 +137,7 @@ class OpenAIAdapter(LLMPort):
                     grok_effort = "high" if grok_effort == "high" else "medium"
                 elif grok_effort == "minimal":
                     grok_effort = "low"
-                    
+
                 kwargs["extra_body"] = kwargs.get("extra_body", {}) or {}
                 kwargs["extra_body"]["reasoning"] = {"effort": grok_effort}
             # x.AI rejects requests where both reasoning_effort and
@@ -147,19 +156,26 @@ class OpenAIAdapter(LLMPort):
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        extra_body: Optional[Dict[str, Any]] = None,
-        reasoning_effort: Optional[str] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        extra_body: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(
-            messages, tools, tool_choice, response_format, model,
-            temperature, max_tokens, extra_body, reasoning_effort,
+            messages,
+            tools,
+            tool_choice,
+            response_format,
+            model,
+            temperature,
+            max_tokens,
+            extra_body,
+            reasoning_effort,
         )
 
         response = None
@@ -185,9 +201,11 @@ class OpenAIAdapter(LLMPort):
 
             if is_openrouter:
                 from weebot.config.model_refs import MODEL_FALLBACK_OPENROUTER_CHAIN
+
                 fallback_models = MODEL_FALLBACK_OPENROUTER_CHAIN
             else:
                 from weebot.config.model_refs import MODEL_FALLBACK_NON_OPENROUTER
+
                 fallback_models = [MODEL_FALLBACK_NON_OPENROUTER]
 
             for fallback_model in fallback_models:
@@ -205,10 +223,10 @@ class OpenAIAdapter(LLMPort):
         # Handle cases where response.choices is None or empty
         if not response.choices:
             error_msg = "LLM returned empty response (no choices)"
-            if hasattr(response, 'error') and response.error:
+            if hasattr(response, "error") and response.error:
                 error_msg = f"LLM error: {response.error}"
             raise RuntimeError(error_msg)
-        
+
         msg = response.choices[0].message
 
         tool_calls = None
@@ -217,10 +235,7 @@ class OpenAIAdapter(LLMPort):
                 {
                     "id": tc.id,
                     "type": tc.type,
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
                 }
                 for tc in msg.tool_calls
             ]
@@ -242,12 +257,12 @@ class OpenAIAdapter(LLMPort):
 
     async def stream(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[LLMChunk]:
         """Stream a chat completion as ``LLMChunk`` deltas.
 
@@ -260,7 +275,7 @@ class OpenAIAdapter(LLMPort):
         falls back, matching ``chat()``'s behavior.
         """
         kwargs = self._build_kwargs(
-            messages, tools, tool_choice, None, model, temperature, max_tokens,
+            messages, tools, tool_choice, None, model, temperature, max_tokens
         )
         kwargs["stream"] = True
         kwargs["stream_options"] = {"include_usage": True}
@@ -272,7 +287,8 @@ class OpenAIAdapter(LLMPort):
             logger.error(
                 "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
                 "by the provider (base_url=%s) on stream open.",
-                key_prefix, self._client.base_url,
+                key_prefix,
+                self._client.base_url,
             )
             raise
         except RateLimitError:
@@ -280,9 +296,11 @@ class OpenAIAdapter(LLMPort):
             is_openrouter = model_name.startswith("openrouter/") or "/" in model_name
             if is_openrouter:
                 from weebot.config.model_refs import MODEL_FALLBACK_OPENROUTER_CHAIN
+
                 fallback_models = MODEL_FALLBACK_OPENROUTER_CHAIN
             else:
                 from weebot.config.model_refs import MODEL_FALLBACK_NON_OPENROUTER
+
                 fallback_models = [MODEL_FALLBACK_NON_OPENROUTER]
 
             response_stream = None

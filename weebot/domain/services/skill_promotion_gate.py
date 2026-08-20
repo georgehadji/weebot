@@ -8,10 +8,11 @@ Requires:
 Only when both thresholds are met is the skill's trust tier promoted
 from "candidate" to "trusted", making it injectable into the live executor.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.skill import Skill, SkillPromotionResult
 
@@ -44,7 +45,9 @@ class SkillPromotionGate:
         self._verify_threshold = verify_threshold
         self._harness_threshold = harness_threshold
 
-    async def evaluate(self, skill: Skill, trial_context: Optional[str] = None) -> SkillPromotionResult:
+    async def evaluate(
+        self, skill: Skill, trial_context: str | None = None
+    ) -> SkillPromotionResult:
         """Evaluate a candidate skill and promote if thresholds are met.
 
         Args:
@@ -61,8 +64,7 @@ class SkillPromotionGate:
         verify_detail = ""
         try:
             verify_result = await self._cov.verify(
-                query=f"Evaluate skill: {skill.name}",
-                response=skill.content[:2000],
+                query=f"Evaluate skill: {skill.name}", response=skill.content[:2000]
             )
             verify_score = getattr(verify_result, "score", 0) or 0.0
             verify_detail = getattr(verify_result, "corrected_response", "") or ""
@@ -80,19 +82,17 @@ class SkillPromotionGate:
         harness_score = 0.0
         try:
             harness_result = await self._harness.score(
-                session_events=[],
-                task_result=trial_context or skill.description,
+                session_events=[], task_result=trial_context or skill.description
             )
-            harness_score = harness_result.composite() if hasattr(harness_result, "composite") else 0.0
+            harness_score = (
+                harness_result.composite() if hasattr(harness_result, "composite") else 0.0
+            )
         except Exception as exc:
             logger.warning("SkillPromotionGate: Harness trial failed for %s: %s", skill.name, exc)
             harness_score = 0.0
 
         # ── Decision ───────────────────────────────────────────────
-        passed = (
-            verify_score >= self._verify_threshold
-            and harness_score >= self._harness_threshold
-        )
+        passed = verify_score >= self._verify_threshold and harness_score >= self._harness_threshold
 
         detail_parts = [
             f"verify={verify_score:.2f} (threshold={self._verify_threshold})",

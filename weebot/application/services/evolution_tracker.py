@@ -5,11 +5,11 @@ narrative summarising what changed and why, then append it to the skill's
 evolution_log. The log feeds back into the optimizer's reflection prompts so
 it can avoid repeating failed approaches across epochs (SIA ContextManager pattern).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_BALANCED
 
@@ -36,7 +36,7 @@ class EvolutionTracker:
         skill: Skill,
         prev_skill: Skill,
         epoch_event: EpochCompleted,
-        evaluator_replacement: Optional[dict] = None,
+        evaluator_replacement: dict | None = None,
     ) -> Skill:
         """Generate a narrative for the completed epoch and return the updated Skill.
 
@@ -52,8 +52,7 @@ class EvolutionTracker:
             A new Skill with the epoch's EvolutionEntry appended to evolution_log.
         """
         narrative = await self._generate_narrative(
-            skill, prev_skill, epoch_event,
-            evaluator_replacement=evaluator_replacement,
+            skill, prev_skill, epoch_event, evaluator_replacement=evaluator_replacement
         )
         prev_best = prev_skill.best.validation_score or 0.0
 
@@ -71,13 +70,15 @@ class EvolutionTracker:
         # Track evaluator replacement if one occurred
         if evaluator_replacement:
             self._evaluator_lineage.append(evaluator_replacement)
-            self._evaluator_lineage.append({
-                "epoch": epoch_event.epoch,
-                "old_evaluator_id": evaluator_replacement.get("old_id"),
-                "new_evaluator_id": evaluator_replacement.get("new_id"),
-                "old_accuracy": evaluator_replacement.get("old_acc"),
-                "new_accuracy": evaluator_replacement.get("new_acc"),
-            })
+            self._evaluator_lineage.append(
+                {
+                    "epoch": epoch_event.epoch,
+                    "old_evaluator_id": evaluator_replacement.get("old_id"),
+                    "new_evaluator_id": evaluator_replacement.get("new_id"),
+                    "old_accuracy": evaluator_replacement.get("old_acc"),
+                    "new_accuracy": evaluator_replacement.get("new_acc"),
+                }
+            )
 
         return skill
 
@@ -100,7 +101,11 @@ class EvolutionTracker:
         self._evaluator_lineage.append(entry)
         logger.info(
             "Evaluator lineage: %s → %s (acc %.3f → %.3f) at epoch %d",
-            old_evaluator_id, new_evaluator_id, old_accuracy, new_accuracy, epoch,
+            old_evaluator_id,
+            new_evaluator_id,
+            old_accuracy,
+            new_accuracy,
+            epoch,
         )
 
     @property
@@ -113,7 +118,7 @@ class EvolutionTracker:
         skill: Skill,
         prev_skill: Skill,
         epoch_event: EpochCompleted,
-        evaluator_replacement: Optional[dict] = None,
+        evaluator_replacement: dict | None = None,
     ) -> str:
         """Call the LLM with epoch stats + diff summary, return narrative string."""
         try:

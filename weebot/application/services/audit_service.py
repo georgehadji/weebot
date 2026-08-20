@@ -7,12 +7,11 @@ requirements.  Produces structured AuditReports.
 Can be called by SwarmTool after sub-agents complete to filter failing
 results, or independently via AuditTool.
 """
+
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -37,7 +36,7 @@ class AuditService(AuditPort):
         config_dir: Directory containing audit YAML files.
     """
 
-    def __init__(self, config_dir: Optional[Path] = None) -> None:
+    def __init__(self, config_dir: Path | None = None) -> None:
         self._config_dir = config_dir or _CONFIG_DIR
         self._matrix: dict = {}
         self._vulnerability_patterns: list[dict] = []
@@ -66,15 +65,13 @@ class AuditService(AuditPort):
 
         logger.info(
             "AuditService: %d skills, %d patterns, %d protocols",
-            len(self._matrix), len(self._vulnerability_patterns), len(self._protocols),
+            len(self._matrix),
+            len(self._vulnerability_patterns),
+            len(self._protocols),
         )
 
     async def audit_output(
-        self,
-        output: str,
-        skill_name: Optional[str] = None,
-        session_id: str = "",
-        agent_id: str = "",
+        self, output: str, skill_name: str | None = None, session_id: str = "", agent_id: str = ""
     ) -> AuditReport:
         violations: list[Violation] = []
 
@@ -82,13 +79,15 @@ class AuditService(AuditPort):
         for pattern in self._vulnerability_patterns:
             for match_str in pattern.get("match", []):
                 if match_str.lower() in output.lower():
-                    violations.append(Violation(
-                        dimension=AuditDimension(pattern.get("dimension", "safety")),
-                        severity=ViolationSeverity(pattern.get("severity", "medium")),
-                        description=pattern.get("description", "Unknown pattern"),
-                        location=f"matched: {match_str[:50]}",
-                        recommendation=f"Remove or rewrite: {match_str}",
-                    ))
+                    violations.append(
+                        Violation(
+                            dimension=AuditDimension(pattern.get("dimension", "safety")),
+                            severity=ViolationSeverity(pattern.get("severity", "medium")),
+                            description=pattern.get("description", "Unknown pattern"),
+                            location=f"matched: {match_str[:50]}",
+                            recommendation=f"Remove or rewrite: {match_str}",
+                        )
+                    )
                     break
 
         # 2. Count dimensions from violations
@@ -96,9 +95,7 @@ class AuditService(AuditPort):
         high_count = sum(1 for v in violations if v.severity == ViolationSeverity.HIGH)
 
         # 3. Determine verdict and score
-        if critical_count > 0:
-            verdict = AuditVerdict.FAIL
-        elif high_count > 2:
+        if critical_count > 0 or high_count > 2:
             verdict = AuditVerdict.FAIL
         elif high_count > 0 or len(violations) > 3:
             verdict = AuditVerdict.CONDITIONAL
@@ -116,9 +113,7 @@ class AuditService(AuditPort):
             score=round(score, 3),
         )
 
-    async def pass_threshold(
-        self, report: AuditReport, skill_name: Optional[str] = None
-    ) -> bool:
+    async def pass_threshold(self, report: AuditReport, skill_name: str | None = None) -> bool:
         skill_cfg = self._matrix.get(skill_name or "", self._matrix.get("default", {}))
         min_score = skill_cfg.get("min_score", 0.6)
         return report.score >= min_score

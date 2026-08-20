@@ -1,4 +1,5 @@
 """Unit tests for CompositeToolRegistry."""
+
 from __future__ import annotations
 
 from weebot.application.services.composite_tool_registry import CompositeToolRegistry

@@ -1,4 +1,5 @@
 """Unit tests for PythonExecuteTool."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -8,10 +9,10 @@ import pytest
 from weebot.application.ports.sandbox_port import SandboxResult
 from weebot.tools.python_tool import PythonExecuteTool
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _ok(stdout: str = "42\n") -> SandboxResult:
     return SandboxResult(stdout=stdout, stderr="", returncode=0, elapsed_ms=50.0)
@@ -31,13 +32,16 @@ def _timeout() -> SandboxResult:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestPythonExecuteTool:
 
     @pytest.mark.asyncio
     async def test_successful_code_returns_stdout(self):
         """Happy path: print() output captured in ToolResult.output."""
         tool = PythonExecuteTool()
-        with patch.object(tool._sandbox, "execute_python", new=AsyncMock(return_value=_ok("hello\n"))):
+        with patch.object(
+            tool._sandbox, "execute_python", new=AsyncMock(return_value=_ok("hello\n"))
+        ):
             result = await tool.execute(code='print("hello")')
 
         assert not result.is_error
@@ -132,30 +136,36 @@ class TestPythonExecuteTool:
 # Fix 7: _contextual_hint
 # ---------------------------------------------------------------------------
 
+
 class TestContextualHint:
     """Tests for Fix 7: contextual undo_hint based on code."""
 
     def test_contextual_hint_for_sys(self):
         from weebot.tools.python_tool import _contextual_hint
+
         hint = _contextual_hint("import sys\nprint(sys.argv)", "base hint")
         assert "sys module" in hint
 
     def test_contextual_hint_for_file_write(self):
         from weebot.tools.python_tool import _contextual_hint
+
         hint = _contextual_hint("with open('file.txt', 'w') as f: f.write('hello')", "base hint")
         assert "opens files" in hint
 
     def test_contextual_hint_for_delete(self):
         from weebot.tools.python_tool import _contextual_hint
+
         hint = _contextual_hint("os.remove('/tmp/test')", "base hint")
         assert "delete files" in hint
 
     def test_contextual_hint_passthrough(self):
         from weebot.tools.python_tool import _contextual_hint
+
         hint = _contextual_hint("x = 1 + 1", "base hint")
         assert hint == "base hint"
 
     def test_contextual_hint_for_rmtree(self):
         from weebot.tools.python_tool import _contextual_hint
+
         hint = _contextual_hint("shutil.rmtree('/tmp/build')", "base hint")
         assert "delete files" in hint

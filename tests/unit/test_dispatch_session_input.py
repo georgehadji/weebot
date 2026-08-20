@@ -5,6 +5,7 @@ exactly the verb the plan specifies: PENDING/FAILED → start, WAITING →
 resume, RUNNING → steer, COMPLETED → chat. Pure application-layer test —
 no FastAPI, no DI container — every collaborator is a plain stub.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -26,7 +27,9 @@ def _make_ctx(status: SessionStatus, text: str = "hello") -> SessionInputContext
 
     task_runner = MagicMock()
     task_runner.create_plan_act_factory = MagicMock(return_value=lambda s: MagicMock())
-    task_runner.start_session = AsyncMock(side_effect=lambda s, f: s.set_status(SessionStatus.RUNNING))
+    task_runner.start_session = AsyncMock(
+        side_effect=lambda s, f: s.set_status(SessionStatus.RUNNING)
+    )
 
     tools = MagicMock()
     tools.teardown = AsyncMock()

@@ -14,20 +14,17 @@ Key invariants enforced by this module:
   ``quality_live`` falls back to the benchmark-seeded ``ModelQualityProfile``
   axes (mean across all axes for the model).
 """
+
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 from weebot.config.capability_profiles import get_profile, get_requirement
 from weebot.config.model_registry import get_model_info
 from weebot.core.model_cascade_tracker import ModelCascadeTracker
-from weebot.domain.models.capability import (
-    CapabilityAxis,
-    TaskRequirement,
-)
+from weebot.domain.models.capability import TaskRequirement
 from weebot.application.services.task_model_router import TaskCategory
 
 logger = logging.getLogger(__name__)
@@ -36,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class RouteCandidate:
     """A scored model candidate with breakdown for observability."""
+
     model_id: str
     score: float
     cap_match: float
@@ -61,11 +59,7 @@ class UtilityScorer:
 
     # ── Public API ──────────────────────────────────────────────────
 
-    def score(
-        self,
-        candidates: list[str],
-        category: TaskCategory,
-    ) -> list[RouteCandidate]:
+    def score(self, candidates: list[str], category: TaskCategory) -> list[RouteCandidate]:
         """Score *candidates* and return them ranked by expected utility.
 
         Args:
@@ -89,13 +83,15 @@ class UtilityScorer:
             cost = self._compute_cost(model_id)
             latency = self._compute_latency(model_id, category)
 
-            scores.append({
-                "model_id": model_id,
-                "cap_match": cap_match,
-                "quality_live": quality_live,
-                "cost": cost,
-                "latency": latency,
-            })
+            scores.append(
+                {
+                    "model_id": model_id,
+                    "cap_match": cap_match,
+                    "quality_live": quality_live,
+                    "cost": cost,
+                    "latency": latency,
+                }
+            )
 
         # Normalise cost and latency across the candidate set (min-max)
         costs = [s["cost"] for s in scores]
@@ -121,25 +117,23 @@ class UtilityScorer:
                 - epsilon * lat_norm
             )
 
-            results.append(RouteCandidate(
-                model_id=s["model_id"],
-                score=round(u, 4),
-                cap_match=round(s["cap_match"], 4),
-                quality_live=round(s["quality_live"], 4),
-                cost_norm=round(cost_norm, 4),
-                lat_norm=round(lat_norm, 4),
-            ))
+            results.append(
+                RouteCandidate(
+                    model_id=s["model_id"],
+                    score=round(u, 4),
+                    cap_match=round(s["cap_match"], 4),
+                    quality_live=round(s["quality_live"], 4),
+                    cost_norm=round(cost_norm, 4),
+                    lat_norm=round(lat_norm, 4),
+                )
+            )
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results
 
     # ── Internal scoring helpers ────────────────────────────────────
 
-    def _compute_cap_match(
-        self,
-        model_id: str,
-        requirement: TaskRequirement,
-    ) -> float:
+    def _compute_cap_match(self, model_id: str, requirement: TaskRequirement) -> float:
         """Cosine similarity between model quality axes and requirement weights.
 
         Only quality axes are compared — cost and latency are NOT part of
@@ -172,10 +166,7 @@ class UtilityScorer:
         return dot / (norm_a * norm_b)
 
     def _compute_quality_live(
-        self,
-        model_id: str,
-        category: TaskCategory,
-        requirement: TaskRequirement,
+        self, model_id: str, category: TaskCategory, requirement: TaskRequirement
     ) -> float:
         """Success rate for (category, model) from telemetry, or benchmark prior.
 

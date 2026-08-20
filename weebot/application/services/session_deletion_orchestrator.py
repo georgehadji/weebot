@@ -3,6 +3,7 @@
 Ensures that deleting a session cleans up data across all persistence stores.
 Each store is called in turn; a failure in one does not block deletion in others.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,10 +21,7 @@ class SessionDeletionOrchestrator:
     layer without importing infrastructure adapters directly.
     """
 
-    def __init__(
-        self,
-        state_repo: StateRepositoryPort,
-    ):
+    def __init__(self, state_repo: StateRepositoryPort):
         self._state_repo = state_repo
         self._extras: list[tuple[str, Any, str]] = []
         # Each extra is (name, instance, method_name)

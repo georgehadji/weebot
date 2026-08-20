@@ -6,18 +6,14 @@ Handles:
 - Domain event publishing
 - Hook execution
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
-from weebot.domain.models.event import (
-    AgentEvent,
-    MessageEvent,
-    PlanStepCompleted,
-    FactDiscovered,
-)
+from weebot.domain.models.event import AgentEvent, MessageEvent, PlanStepCompleted, FactDiscovered
 
 if TYPE_CHECKING:
     from weebot.application.ports.event_bus_port import EventBusPort
@@ -35,12 +31,12 @@ class EventEmitter:
 
     def __init__(
         self,
-        event_bus: Optional["EventBusPort"] = None,
-        state_repo: Optional["StateRepositoryPort"] = None,
-        checkpoint_port: Optional["CheckpointPort"] = None,
+        event_bus: EventBusPort | None = None,
+        state_repo: StateRepositoryPort | None = None,
+        checkpoint_port: CheckpointPort | None = None,
         truth_binder: Any = None,
         hooks: Any = None,
-        logger_obj: Optional["StructuredLogger"] = None,
+        logger_obj: StructuredLogger | None = None,
     ):
         self._event_bus = event_bus
         self._state_repo = state_repo
@@ -51,12 +47,7 @@ class EventEmitter:
         self._emit_lock = asyncio.Lock()
         self._persistence_adapter = None
 
-    async def emit(
-        self,
-        event: AgentEvent,
-        session: "Session",
-        plan: Optional["Plan"] = None,
-    ) -> "Session":
+    async def emit(self, event: AgentEvent, session: Session, plan: Plan | None = None) -> Session:
         """Publish an event through all channels: memory, bus, persistence.
 
         Returns the updated session (with event appended).
@@ -86,6 +77,7 @@ class EventEmitter:
         # 2. Credential redaction for user input
         if isinstance(event, MessageEvent) and event.role == "user":
             from weebot.core.credential_sanitizer import sanitize
+
             sanitized = sanitize(event.message or "")
             if sanitized != event.message:
                 event = event.model_copy(update={"message": sanitized})
@@ -110,9 +102,7 @@ class EventEmitter:
                 if adapter is not None:
                     ok = await adapter.save_session(session)
                     if not ok:
-                        self._log.error(
-                            "Session %s dead-lettered", session.id,
-                        )
+                        self._log.error("Session %s dead-lettered", session.id)
                 else:
                     try:
                         await self._state_repo.save_session(session)
@@ -121,7 +111,7 @@ class EventEmitter:
 
         return session
 
-    async def _emit_domain_event(self, event: AgentEvent, session: "Session") -> None:
+    async def _emit_domain_event(self, event: AgentEvent, session: Session) -> None:
         """Publish domain events derived from agent events."""
         if not self._event_bus:
             return
@@ -136,23 +126,25 @@ class EventEmitter:
             msg = getattr(event, "message", "")
             if isinstance(msg, str) and len(msg) > 50:
                 from hashlib import md5
+
                 key = md5(msg.encode()).hexdigest()[:12]
                 await self._event_bus.publish_domain_event(
                     FactDiscovered(session_id=session.id, key=key, value=msg[:500])
                 )
 
-    async def _maybe_save_checkpoint(self, session: "Session", plan: "Plan") -> None:
+    async def _maybe_save_checkpoint(self, session: Session, plan: Plan) -> None:
         """Save a flow checkpoint after each completed step."""
         if self._checkpoint_port is None:
             return
         try:
             from weebot.domain.models.checkpoint import FlowCheckpoint, StepCheckpoint
+
             completed = [
                 StepCheckpoint(
-                    step_id=s.id, description=s.description,
-                    status=s.status.value, result=s.result,
+                    step_id=s.id, description=s.description, status=s.status.value, result=s.result
                 )
-                for s in plan.steps if s.status.value in ("completed", "failed")
+                for s in plan.steps
+                if s.status.value in ("completed", "failed")
             ]
             checkpoint = FlowCheckpoint(
                 session_id=session.id,
@@ -172,6 +164,7 @@ class EventEmitter:
         if self._persistence_adapter is None:
             try:
                 from weebot.application.di import Container
+
                 c = Container()
                 c.configure_defaults()
                 self._persistence_adapter = c.get("session_persistence")

@@ -1,7 +1,7 @@
 """In-memory state repository for testing and lightweight use."""
+
 from __future__ import annotations
 
-from typing import Dict, List, Optional
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.checkpoint import FlowCheckpoint
@@ -12,20 +12,24 @@ class InMemoryStateRepository(StateRepositoryPort):
     """In-memory session store. Not persistent across restarts."""
 
     def __init__(self) -> None:
-        self._sessions: Dict[str, Session] = {}
-        self._checkpoints: Dict[str, FlowCheckpoint] = {}
+        self._sessions: dict[str, Session] = {}
+        self._checkpoints: dict[str, FlowCheckpoint] = {}
 
     async def save_session(self, session: Session) -> None:
         self._sessions[session.id] = session.model_copy()
 
-    async def load_session(self, session_id: str) -> Optional[Session]:
+    async def load_session(self, session_id: str) -> Session | None:
         session = self._sessions.get(session_id)
         return session.model_copy() if session else None
 
     async def list_sessions(
-        self, user_id: Optional[str] = None, status: Optional[str] = None,
-        limit: int = 100, offset: int = 0, load_events: bool = False,
-    ) -> List[Session]:
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        load_events: bool = False,
+    ) -> list[Session]:
         # load_events is accepted for interface parity with
         # SQLiteStateRepository; sessions here always carry their full
         # events in memory, so there is nothing extra to load.
@@ -34,7 +38,7 @@ class InMemoryStateRepository(StateRepositoryPort):
             sessions = [s for s in sessions if s.status.value == status or str(s.status) == status]
         if user_id:
             sessions = [s for s in sessions if s.user_id == user_id]
-        sessions = sessions[offset:offset + limit]
+        sessions = sessions[offset : offset + limit]
         return [s.model_copy() for s in sessions]
 
     async def update_session_status(self, session_id: str, status: SessionStatus) -> None:
@@ -48,9 +52,7 @@ class InMemoryStateRepository(StateRepositoryPort):
     async def search_sessions(self, query: str, limit: int = 20) -> list[dict]:
         return []
 
-    async def get_low_salience_entries(
-        self, threshold: float = 0.3, limit: int = 50
-    ) -> list[dict]:
+    async def get_low_salience_entries(self, threshold: float = 0.3, limit: int = 50) -> list[dict]:
         return []
 
     # ── Checkpoint operations (last-write-wins per session) ────────
@@ -58,7 +60,7 @@ class InMemoryStateRepository(StateRepositoryPort):
     async def save_checkpoint(self, checkpoint: FlowCheckpoint) -> None:
         self._checkpoints[checkpoint.session_id] = checkpoint.model_copy(deep=True)
 
-    async def load_checkpoint(self, session_id: str) -> Optional[FlowCheckpoint]:
+    async def load_checkpoint(self, session_id: str) -> FlowCheckpoint | None:
         checkpoint = self._checkpoints.get(session_id)
         return checkpoint.model_copy(deep=True) if checkpoint else None
 

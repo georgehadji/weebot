@@ -3,6 +3,7 @@
 Decouples flow state serialization from storage so that checkpoint stores
 (SQLite, filesystem, cloud) can be swapped without touching flow logic.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

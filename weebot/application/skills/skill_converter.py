@@ -7,15 +7,13 @@ prompt.md) to the skills directory.
 The converter is registered in SkillPackager.install_from_path() so that
 any external skill is automatically converted on import.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-import shutil
-import tempfile
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -35,7 +33,7 @@ class ConversionReport:
         self,
         success: bool,
         source_path: str,
-        target_path: Optional[str] = None,
+        target_path: str | None = None,
         errors: list[str] | None = None,
         warnings: list[str] | None = None,
     ) -> None:
@@ -54,11 +52,7 @@ class SkillConverter:
         config_path: Path to tool mapping config.
     """
 
-    def __init__(
-        self,
-        skills_dir: Optional[Path] = None,
-        config_path: Optional[Path] = None,
-    ) -> None:
+    def __init__(self, skills_dir: Path | None = None, config_path: Path | None = None) -> None:
         self._skills_dir = skills_dir or SKILLS_DIR
         self._config = self._load_config(config_path or CONFIG_PATH)
 
@@ -111,16 +105,16 @@ class SkillConverter:
             return handler(source_path, source.name)
         except Exception as exc:
             return ConversionReport(
-                success=False,
-                source_path=str(source_path),
-                errors=[f"Conversion failed: {exc}"],
+                success=False, source_path=str(source_path), errors=[f"Conversion failed: {exc}"]
             )
 
     def _convert_manus(self, source_path: Path, name: str) -> ConversionReport:
         """Convert Manus/OpenClaw SKILL.md with YAML frontmatter."""
         skill_md = source_path / "SKILL.md" if source_path.is_dir() else source_path
         if not skill_md.exists():
-            return ConversionReport(success=False, source_path=str(source_path), errors=["SKILL.md not found"])
+            return ConversionReport(
+                success=False, source_path=str(source_path), errors=["SKILL.md not found"]
+            )
 
         content = skill_md.read_text(encoding="utf-8")
         parts = content.split("---", 2)
@@ -205,7 +199,7 @@ class SkillConverter:
         return self._write_skill(source_path, name, manifest, prompt_body)
 
     def _write_skill(
-        self, source_path: Path, name: str, manifest: dict, prompt_body: str,
+        self, source_path: Path, name: str, manifest: dict, prompt_body: str
     ) -> ConversionReport:
         """Write manifest.json + prompt.md to target directory."""
         target_dir = self._skills_dir / name
@@ -220,16 +214,12 @@ class SkillConverter:
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Write manifest
-        (target_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2), encoding="utf-8"
-        )
+        (target_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
         # Write prompt
         (target_dir / "prompt.md").write_text(prompt_body, encoding="utf-8")
 
         logger.info("Converted skill %s → %s (%d chars)", name, target_dir, len(prompt_body))
         return ConversionReport(
-            success=True,
-            source_path=str(source_path),
-            target_path=str(target_dir),
+            success=True, source_path=str(source_path), target_path=str(target_dir)
         )

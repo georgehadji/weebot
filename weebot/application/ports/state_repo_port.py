@@ -1,8 +1,8 @@
 """State repository port — abstract interface for session/task persistence."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from weebot.domain.models.session import Session, SessionStatus
 
@@ -16,17 +16,18 @@ class StateRepositoryPort(ABC):
         ...
 
     @abstractmethod
-    async def load_session(self, session_id: str) -> Optional[Session]:
+    async def load_session(self, session_id: str) -> Session | None:
         """Load a session by ID."""
         ...
 
     @abstractmethod
     async def list_sessions(
-        self, user_id: Optional[str] = None,
-        status: Optional[str] = None,
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Session]:
+    ) -> list[Session]:
         """List all sessions, optionally filtered by user, status, and paginated."""
         ...
 
@@ -54,9 +55,7 @@ class StateRepositoryPort(ABC):
         ...
 
     @abstractmethod
-    async def get_low_salience_entries(
-        self, threshold: float = 0.3, limit: int = 50
-    ) -> list[dict]:
+    async def get_low_salience_entries(self, threshold: float = 0.3, limit: int = 50) -> list[dict]:
         """Get memory entries below the salience threshold.
 
         Used for eviction candidates and user profile consolidation.

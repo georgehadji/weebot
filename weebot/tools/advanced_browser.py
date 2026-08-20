@@ -1,10 +1,9 @@
 """Advanced browser automation tools using Playwright."""
+
 from __future__ import annotations
 
 import base64
 import logging
-from io import BytesIO
-from typing import Optional
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.infrastructure.browser.session_manager import BrowserSessionManager
@@ -12,7 +11,6 @@ from weebot.infrastructure.browser.session_manager import BrowserSessionManager
 logger = logging.getLogger(__name__)
 
 import atexit
-import asyncio as _asyncio
 
 # Module-level Playwright globals — zeroed BEFORE their respective awaits
 # (τ-violation guard) so that a failed close/stop leaves them None and
@@ -88,26 +86,11 @@ class AdvancedBrowserTool(BaseTool):
                 ],
                 "description": "Action to perform",
             },
-            "url": {
-                "type": "string",
-                "description": "URL to navigate to (for goto action)",
-            },
-            "selector": {
-                "type": "string",
-                "description": "CSS selector for element interaction",
-            },
-            "text": {
-                "type": "string",
-                "description": "Text to type or button text to click",
-            },
-            "value": {
-                "type": "string",
-                "description": "Value to fill in form field or select",
-            },
-            "script": {
-                "type": "string",
-                "description": "JavaScript code to execute",
-            },
+            "url": {"type": "string", "description": "URL to navigate to (for goto action)"},
+            "selector": {"type": "string", "description": "CSS selector for element interaction"},
+            "text": {"type": "string", "description": "Text to type or button text to click"},
+            "value": {"type": "string", "description": "Value to fill in form field or select"},
+            "script": {"type": "string", "description": "JavaScript code to execute"},
             "timeout": {
                 "type": "integer",
                 "description": "Timeout in milliseconds (default: 30000)",
@@ -153,6 +136,7 @@ class AdvancedBrowserTool(BaseTool):
         """Check if Playwright is available on this system."""
         try:
             from playwright.async_api import async_playwright
+
             async with async_playwright() as p:
                 _ = p.chromium
             return True
@@ -162,15 +146,15 @@ class AdvancedBrowserTool(BaseTool):
     async def execute(
         self,
         action: str,
-        url: Optional[str] = None,
-        selector: Optional[str] = None,
-        text: Optional[str] = None,
-        value: Optional[str] = None,
-        script: Optional[str] = None,
+        url: str | None = None,
+        selector: str | None = None,
+        text: str | None = None,
+        value: str | None = None,
+        script: str | None = None,
         timeout: int = 30000,
         headless: bool = True,
         wait_type: str = "selector",
-        session_name: Optional[str] = None,
+        session_name: str | None = None,
         save_session: bool = False,
         **_,
     ) -> ToolResult:
@@ -279,10 +263,7 @@ class AdvancedBrowserTool(BaseTool):
                     return ToolResult(output="", error="Browser not launched")
                 screenshot_bytes = await page.screenshot()
                 img_base64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-                return ToolResult(
-                    output="Screenshot captured",
-                    base64_image=img_base64,
-                )
+                return ToolResult(output="Screenshot captured", base64_image=img_base64)
 
             elif action == "get_content":
                 page = self._page()
@@ -316,11 +297,14 @@ class AdvancedBrowserTool(BaseTool):
 
             elif action == "set_cookies":
                 if not value:
-                    return ToolResult(output="", error="value (JSON string) required for set_cookies")
+                    return ToolResult(
+                        output="", error="value (JSON string) required for set_cookies"
+                    )
                 page = self._page()
                 if not page:
                     return ToolResult(output="", error="Browser not launched")
                 import json
+
                 cookies = json.loads(value)
                 await page.context.add_cookies(cookies)
                 return ToolResult(output=f"Set {len(cookies)} cookies")
@@ -334,7 +318,11 @@ class AdvancedBrowserTool(BaseTool):
                 session_manager = BrowserSessionManager()
                 success = await session_manager.save_session(session_name, ctx)
                 return ToolResult(
-                    output=f"Session '{session_name}' saved" if success else f"Failed to save session '{session_name}'"
+                    output=(
+                        f"Session '{session_name}' saved"
+                        if success
+                        else f"Failed to save session '{session_name}'"
+                    )
                 )
 
             elif action == "list_sessions":
@@ -353,7 +341,11 @@ class AdvancedBrowserTool(BaseTool):
                 session_manager = BrowserSessionManager()
                 success = session_manager.delete_session(session_name)
                 return ToolResult(
-                    output=f"Session '{session_name}' deleted" if success else f"Session '{session_name}' not found"
+                    output=(
+                        f"Session '{session_name}' deleted"
+                        if success
+                        else f"Session '{session_name}' not found"
+                    )
                 )
 
             else:
@@ -364,14 +356,16 @@ class AdvancedBrowserTool(BaseTool):
         except Exception as exc:
             return ToolResult(output="", error=str(exc))
 
-    async def _launch_browser(self, headless: bool = True, session_name: Optional[str] = None) -> None:
+    async def _launch_browser(self, headless: bool = True, session_name: str | None = None) -> None:
         """Launch browser via the injected PlaywrightAdapter."""
         if self.browser is None:
             from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+
             self.browser = PlaywrightAdapter()
         if self._page() is not None:
             return  # Already launched
         from weebot.application.ports.browser_port import BrowserConfig
+
         config = BrowserConfig(headless=headless)
         await self.browser.start(config)
         # Load session if specified
@@ -420,14 +414,8 @@ class WebScraperTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "url": {
-                "type": "string",
-                "description": "URL to scrape",
-            },
-            "selector": {
-                "type": "string",
-                "description": "CSS selector for elements to extract",
-            },
+            "url": {"type": "string", "description": "URL to scrape"},
+            "selector": {"type": "string", "description": "CSS selector for elements to extract"},
             "extract_type": {
                 "type": "string",
                 "enum": ["text", "html", "attribute", "all", "markdown"],
@@ -459,8 +447,8 @@ class WebScraperTool(BaseTool):
         url: str,
         selector: str,
         extract_type: str = "text",
-        attribute: Optional[str] = None,
-        wait_for: Optional[str] = None,
+        attribute: str | None = None,
+        wait_for: str | None = None,
         timeout: int = 30000,
         max_tokens: int = 4000,
         **_,
@@ -472,10 +460,7 @@ class WebScraperTool(BaseTool):
         if not selector or not selector.strip():
             return ToolResult(output="", error="selector required for scraping")
         if extract_type == "attribute" and not attribute:
-            return ToolResult(
-                output="",
-                error="attribute required when extract_type='attribute'",
-            )
+            return ToolResult(output="", error="attribute required when extract_type='attribute'")
         if timeout <= 0:
             return ToolResult(output="", error="timeout must be > 0")
 
@@ -518,7 +503,7 @@ class WebScraperTool(BaseTool):
                             "truncated": len(markdown) >= max_tokens * 4,
                             "char_count": len(markdown),
                             "estimated_tokens": extractor.estimate_tokens(markdown),
-                        }
+                        },
                     )
 
                 await browser.close()
@@ -542,11 +527,13 @@ class WebScraperTool(BaseTool):
                     if value:
                         extracted.append(value)
                 elif extract_type == "all":
-                    extracted.append({
-                        "text": elem.get_text(strip=True),
-                        "html": str(elem),
-                        "attributes": elem.attrs,
-                    })
+                    extracted.append(
+                        {
+                            "text": elem.get_text(strip=True),
+                            "html": str(elem),
+                            "attributes": elem.attrs,
+                        }
+                    )
 
             output = f"Extracted {len(extracted)} items from {url}\n\n"
             for i, item in enumerate(extracted[:5], 1):

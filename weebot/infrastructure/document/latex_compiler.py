@@ -10,6 +10,7 @@ untrusted host. This service is intended to run **inside the sandbox**
 callers on the sandbox path opt in explicitly. The command is still evaluated by
 ``BashGuard`` and refused if BLOCKED.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -25,11 +26,7 @@ class LatexCompilerService:
     """Compile a ``.tex`` entry point to PDF, returning structured results."""
 
     def __init__(
-        self,
-        engine: str = "xelatex",
-        *,
-        guard: BashGuard | None = None,
-        timeout_seconds: int = 300,
+        self, engine: str = "xelatex", *, guard: BashGuard | None = None, timeout_seconds: int = 300
     ) -> None:
         self._engine = engine
         self._guard = guard or BashGuard()
@@ -43,11 +40,7 @@ class LatexCompilerService:
     @staticmethod
     def locked_preamble_path() -> Path:
         """Absolute path to the tested, locked Greek preamble template."""
-        return (
-            Path(__file__).resolve().parent
-            / "templates"
-            / "greek_scientific_preamble.tex"
-        )
+        return Path(__file__).resolve().parent / "templates" / "greek_scientific_preamble.tex"
 
     @classmethod
     def prepare_project(cls, project_dir: str | Path) -> Path:
@@ -70,11 +63,7 @@ class LatexCompilerService:
         return cmd
 
     def compile(
-        self,
-        project_dir: str | Path,
-        main_tex: str = "main.tex",
-        *,
-        shell_escape: bool = False,
+        self, project_dir: str | Path, main_tex: str = "main.tex", *, shell_escape: bool = False
     ) -> CompileResult:
         """Compile ``main_tex`` inside ``project_dir`` and return a CompileResult."""
         project = Path(project_dir)
@@ -96,11 +85,7 @@ class LatexCompilerService:
 
         try:
             proc = subprocess.run(
-                cmd,
-                cwd=str(project),
-                capture_output=True,
-                text=True,
-                timeout=self._timeout,
+                cmd, cwd=str(project), capture_output=True, text=True, timeout=self._timeout
             )
             timed_out = False
         except subprocess.TimeoutExpired as exc:

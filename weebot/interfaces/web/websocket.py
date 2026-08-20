@@ -1,12 +1,12 @@
 """WebSocket connection manager for real-time event streaming."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Dict, List, Set
 
-from starlette.websockets import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocket
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +16,9 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         # session_id -> set of WebSocket connections
-        self._connections: Dict[str, Set[WebSocket]] = {}
+        self._connections: dict[str, set[WebSocket]] = {}
         # Global connections (for broadcasts)
-        self._global_connections: Set[WebSocket] = set()
+        self._global_connections: set[WebSocket] = set()
         # Locks for thread-safe access
         self._connections_lock = asyncio.Lock()
         self._global_lock = asyncio.Lock()
@@ -30,7 +30,7 @@ class ConnectionManager:
         except Exception as e:
             logger.error(f"Failed to accept WebSocket connection: {e}")
             raise
-        
+
         if session_id:
             async with self._connections_lock:
                 if session_id not in self._connections:
@@ -51,15 +51,11 @@ class ConnectionManager:
                     if not self._connections[session_id]:
                         del self._connections[session_id]
             logger.debug(f"WebSocket disconnected from session {session_id}")
-        
+
         async with self._global_lock:
             self._global_connections.discard(websocket)
 
-    async def broadcast_to_session(
-        self, 
-        session_id: str, 
-        message: dict | str
-    ) -> None:
+    async def broadcast_to_session(self, session_id: str, message: dict | str) -> None:
         """Broadcast a message to all connections for a session."""
         async with self._connections_lock:
             if session_id not in self._connections:

@@ -8,6 +8,7 @@ This validator was extracted from the inline regex in
 shared domain service so both PostgreSQL and SQLite implementations
 use the same validation logic consistently.
 """
+
 from __future__ import annotations
 
 import re
@@ -31,6 +32,7 @@ def validate_filter_keys(filters: dict[str, Any]) -> dict[str, Any]:
     if filters is None:
         return {}
     import logging
+
     logger = logging.getLogger(__name__)
     safe = {}
     for k, v in filters.items():

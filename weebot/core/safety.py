@@ -3,13 +3,13 @@
 Decoupled from LangChain per ADR-009 (core = no I/O, no framework deps).
 Uses LLMPort for all LLM interactions.
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.core.approval_policy import ExecApprovalPolicy
-
 
 COUNTERFACTUAL_SIMULATION_PROMPT = """
 You are a safety module performing Counterfactual Simulation.
@@ -41,23 +41,22 @@ class SafetyChecker:
     def __init__(self, llm: LLMPort):
         self.llm = llm
         self.approval_policy = ExecApprovalPolicy()
-    
+
     def is_critical_operation(self, action: str, tool: str) -> bool:
         """Determine if action requires Counterfactual Simulation."""
         if tool != "powershell_executor":
             return False
-        
+
         action_lower = action.lower()
         return any(keyword in action_lower for keyword in self.CRITICAL_KEYWORDS)
-    
-    async def generate_plan_b(self, original_action: str, context: str) -> Dict[str, Any]:
+
+    async def generate_plan_b(self, original_action: str, context: str) -> dict[str, Any]:
         """
         Generate alternative plan before executing critical action.
         Counterfactual Simulation: "What if this goes wrong?"
         """
         prompt_text = COUNTERFACTUAL_SIMULATION_PROMPT.format(
-            action=original_action,
-            context=context,
+            action=original_action, context=context
         )
         messages = [{"role": "user", "content": prompt_text}]
         result = await self.llm.chat(messages=messages)
@@ -69,15 +68,15 @@ class SafetyChecker:
             "proceed": not approval.requires_confirmation,
             "undo_hint": approval.undo_hint,
         }
-    
-    def _parse_safety_response(self, content: str) -> Dict[str, str]:
+
+    def _parse_safety_response(self, content: str) -> dict[str, str]:
         """Parse LLM response into structured format."""
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         result = {}
-        
+
         for line in lines:
-            if ':' in line:
-                key, value = line.split(':', 1)
+            if ":" in line:
+                key, value = line.split(":", 1)
                 result[key.strip().lower()] = value.strip()
-        
+
         return result

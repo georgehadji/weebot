@@ -1,8 +1,9 @@
 """Swarm Event Bus port — inter-agent message routing via InterAgentMessage."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Awaitable
+from collections.abc import Callable, Awaitable
 
 from weebot.domain.models.inter_agent import InterAgentMessage
 

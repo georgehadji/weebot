@@ -12,12 +12,12 @@ clears per-step rolling windows while preserving cross-step accumulators,
 so the monitor can detect multi-step degenerate patterns (e.g. 3+
 consecutive error-producing steps).
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 from collections import deque
-from typing import Optional
 
 from weebot.domain.models.trajectory import TrajectoryDiagnosis, TrajectoryHealth
 
@@ -85,12 +85,12 @@ class TrajectoryMonitor:
     def diagnose(
         self,
         step_id: str,
-        tool_signature: Optional[str] = None,
-        tool_output: Optional[str] = None,
-        step_result: Optional[str] = None,
+        tool_signature: str | None = None,
+        tool_output: str | None = None,
+        step_result: str | None = None,
         total_budget: int = 0,
         used_budget: int = 0,
-        available_tools: Optional[list[str]] = None,
+        available_tools: list[str] | None = None,
     ) -> TrajectoryDiagnosis:
         """Analyze the current trajectory and return a diagnosis.
 
@@ -116,7 +116,7 @@ class TrajectoryMonitor:
 
         # 1. Exact repetition — same tool call repeatedly
         if len(self._tool_signatures) >= self._repetition_threshold:
-            recent = list(self._tool_signatures)[-self._repetition_threshold:]
+            recent = list(self._tool_signatures)[-self._repetition_threshold :]
             if len(set(recent)) == 1:
                 return TrajectoryDiagnosis(
                     health=TrajectoryHealth.REPEATING,
@@ -134,8 +134,8 @@ class TrajectoryMonitor:
         #    file_editor view, so require >= 2 distinct signatures before
         #    flagging. Mirrors how detector #5 correlates signatures + hashes.
         if len(self._output_hashes) >= self._stagnation_window:
-            recent = list(self._output_hashes)[-self._stagnation_window:]
-            recent_sigs = list(self._tool_signatures)[-self._stagnation_window:]
+            recent = list(self._output_hashes)[-self._stagnation_window :]
+            recent_sigs = list(self._tool_signatures)[-self._stagnation_window :]
             if len(set(recent)) <= 1 and len(set(recent_sigs)) >= 2:
                 tool_hint = ""
                 if available_tools:
@@ -157,7 +157,7 @@ class TrajectoryMonitor:
 
         # 3. Stagnation — step result unchanged across steps
         if len(self._step_results) >= self._stagnation_window:
-            recent = list(self._step_results)[-self._stagnation_window:]
+            recent = list(self._step_results)[-self._stagnation_window :]
             if len(set(recent)) <= 1:
                 return TrajectoryDiagnosis(
                     health=TrajectoryHealth.STAGNATING,
@@ -202,8 +202,8 @@ class TrajectoryMonitor:
                 return TrajectoryDiagnosis(
                     health=TrajectoryHealth.TERMINAL,
                     detail="All recent tool calls have produced identical (error) "
-                           "output despite different approaches — models or "
-                           "external services may be unavailable",
+                    "output despite different approaches — models or "
+                    "external services may be unavailable",
                     recovery_message=None,
                     affected_step_ids=[step_id],
                 )
@@ -213,15 +213,12 @@ class TrajectoryMonitor:
         #    Skip TDD RED-phase steps where test failure is expected,
         #    and exploratory path errors (normal probing).
         if tool_output and "ERROR" in tool_output.upper():
-            from weebot.application.agents.executor._error_handler import (
-                is_expected_failure,
-            )
+            from weebot.application.agents.executor._error_handler import is_expected_failure
             from weebot.core.error_classifier import ErrorClassifier
 
-            if (
-                not is_expected_failure(self._step_description)
-                and not ErrorClassifier.is_path_error(tool_output)
-            ):
+            if not is_expected_failure(
+                self._step_description
+            ) and not ErrorClassifier.is_path_error(tool_output):
                 self._cross_step_error_outputs.append(tool_output[:100])
                 self._consecutive_failed_steps += 1
         else:

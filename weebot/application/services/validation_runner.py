@@ -4,13 +4,14 @@ Runs the target model on validation tasks with the candidate skill,
 compares the average score against the current best skill's score,
 and decides acceptance or rejection.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.models.session import Session
 
@@ -34,7 +35,7 @@ class ValidationResult:
         candidate_score: float,
         current_score: float,
         n_tasks: int,
-        details: Optional[dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         self.passed = passed
         self.candidate_score = candidate_score
@@ -72,12 +73,7 @@ class ValidationRunner:
     returns a pass/fail decision.
     """
 
-    def __init__(
-        self,
-        task_runner: TaskRunner,
-        flow_factory: Callable,
-        scoring_fn: Callable,
-    ):
+    def __init__(self, task_runner: TaskRunner, flow_factory: Callable, scoring_fn: Callable):
         """
         Args:
             task_runner: For executing validation tasks.
@@ -93,7 +89,7 @@ class ValidationRunner:
         candidate_content: str,
         validation_task_ids: list[str],
         harness: str = "direct_chat",
-        baseline_score: Optional[float] = None,
+        baseline_score: float | None = None,
     ) -> ValidationResult:
         """Evaluate the candidate skill on held-out tasks.
 

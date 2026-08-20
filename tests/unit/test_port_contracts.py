@@ -6,6 +6,7 @@ Each test:
 3. Verifies the adapter can be constructed via DI
 4. Flags dead ports (zero adapters) with ``@pytest.mark.skip`` + TODO
 """
+
 from __future__ import annotations
 
 import inspect
@@ -22,22 +23,16 @@ from weebot.application.di import Container
 PORTS_DIR = Path(__file__).resolve().parent.parent.parent / "weebot" / "application" / "ports"
 
 # Classes that are NOT ports (concretes living in ports/ dir)
-_NON_PORT_CLASSES = {
-    "NotificationBus",  # concrete implementation defined inside ports/
-}
+_NON_PORT_CLASSES = {"NotificationBus"}  # concrete implementation defined inside ports/
 
 # Ports known to have zero adapters (tracked for future implementation)
 _ZERO_ADAPTER_PORTS = {
-    "SwarmEventBusPort": (
-        "SwarmEventBus exists but does not inherit the port interface"
-    ),
+    "SwarmEventBusPort": ("SwarmEventBus exists but does not inherit the port interface"),
     "SpeechPort": (
-        "WhisperSpeechAdapter exists but is not found by "
-        "conservative scan (nested package)"
+        "WhisperSpeechAdapter exists but is not found by " "conservative scan (nested package)"
     ),
     "TaskQueuePort": (
-        "InMemoryTaskQueue exists but is not found by "
-        "conservative scan (nested package)"
+        "InMemoryTaskQueue exists but is not found by " "conservative scan (nested package)"
     ),
     "OptimizerPort": (
         "OptimizerAgent inherits OptimizerPort but is not found by "
@@ -55,6 +50,7 @@ def _discover_ports() -> list[type]:
         mod_name = f"weebot.application.ports.{py_file.stem}"
         try:
             import importlib
+
             mod = importlib.import_module(mod_name)
         except ImportError as exc:
             print(f"  [SKIP] Could not import {mod_name}: {exc}")
@@ -113,7 +109,7 @@ def _get_adapter_classes(port_cls: type) -> list[type]:
             if not pkg_path:
                 continue
             for _importer, mod_name, _is_pkg in pkgutil.walk_packages(
-                pkg_path, prefix=f"{pkg_name}.",
+                pkg_path, prefix=f"{pkg_name}."
             ):
                 if not in_ci and mod_name in _HEAVY_SDK_MODULES:
                     continue
@@ -161,9 +157,7 @@ class TestPortContracts:
     def test_has_adapter(self, port_cls: type) -> None:
         """Port must have at least one concrete adapter."""
         if port_cls.__name__ in _ZERO_ADAPTER_PORTS:
-            pytest.skip(
-                f"{port_cls.__name__}: {_ZERO_ADAPTER_PORTS[port_cls.__name__]}"
-            )
+            pytest.skip(f"{port_cls.__name__}: {_ZERO_ADAPTER_PORTS[port_cls.__name__]}")
         adapters = _get_adapter_classes(port_cls)
 
         # Heavy SDK adapters (e.g. OpenAI/Anthropic LLM adapters) are skipped
@@ -176,8 +170,7 @@ class TestPortContracts:
                 instance = container.get(port_cls)  # type: ignore[type-abstract]
                 if isinstance(instance, port_cls):
                     pytest.skip(
-                        "LLMPort adapter resolved via DI "
-                        "(heavy SDK modules skipped locally)"
+                        "LLMPort adapter resolved via DI " "(heavy SDK modules skipped locally)"
                     )
             except Exception:
                 pass
@@ -195,10 +188,7 @@ class TestPortContracts:
         abstract_methods = _get_abstract_methods(port_cls)
 
         for adapter_cls in adapters:
-            missing = [
-                m for m in abstract_methods
-                if not hasattr(adapter_cls, m)
-            ]
+            missing = [m for m in abstract_methods if not hasattr(adapter_cls, m)]
             assert not missing, (
                 f"{adapter_cls.__name__} implements {port_cls.__name__} "
                 f"but is missing abstract methods: {missing}"
@@ -224,9 +214,7 @@ class TestPortContracts:
         # but a factory that itself raises KeyError (e.g. os.environ["MISSING"])
         # would then be misread as "not wired" — the same silent pass this test
         # is meant to eliminate.
-        is_wired = (
-            port_cls in container._bindings or port_cls in container._singletons
-        )
+        is_wired = port_cls in container._bindings or port_cls in container._singletons
         if not is_wired:
             pytest.skip(f"{port_cls.__name__} not wired in configure_defaults()")
 
@@ -239,6 +227,5 @@ class TestPortContracts:
             )
 
         assert isinstance(instance, port_cls), (
-            f"DI returned {type(instance).__name__} which is not a "
-            f"{port_cls.__name__}"
+            f"DI returned {type(instance).__name__} which is not a " f"{port_cls.__name__}"
         )

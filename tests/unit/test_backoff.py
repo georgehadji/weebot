@@ -1,6 +1,6 @@
 """Unit tests for exponential backoff retry utility."""
+
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, patch
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
@@ -62,7 +62,7 @@ class TestRetryWithBackoff:
         retry = RetryWithBackoff(BackoffConfig(delays=[0.01, 0.01, 0.01]))
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await retry.call(fn)
-        assert retry._delay_index == 0     # reset after success
+        assert retry._delay_index == 0  # reset after success
 
     @pytest.mark.asyncio
     async def test_passes_args_to_fn(self):
@@ -84,8 +84,7 @@ class TestRetryWithBackoff:
             raise ValueError("not retryable")
 
         cfg = BackoffConfig(
-            delays=[0.01, 0.01, 0.01],
-            retryable=lambda exc: not isinstance(exc, ValueError),
+            delays=[0.01, 0.01, 0.01], retryable=lambda exc: not isinstance(exc, ValueError)
         )
         retry = RetryWithBackoff(cfg)
         with pytest.raises(ValueError, match="not retryable"):
@@ -105,8 +104,7 @@ class TestRetryWithBackoff:
             return "ok"
 
         cfg = BackoffConfig(
-            delays=[0.01, 0.01, 0.01],
-            retryable=lambda exc: isinstance(exc, ConnectionError),
+            delays=[0.01, 0.01, 0.01], retryable=lambda exc: isinstance(exc, ConnectionError)
         )
         retry = RetryWithBackoff(cfg)
         with patch("asyncio.sleep", new_callable=AsyncMock):

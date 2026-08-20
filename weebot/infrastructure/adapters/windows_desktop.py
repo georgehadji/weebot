@@ -7,14 +7,14 @@ Implements ``DesktopPort`` using:
 
 All optional dependencies degrade gracefully with clear error messages.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import threading
 import queue
-from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.desktop_port import (
     DesktopPort,
@@ -33,6 +33,7 @@ _KEYBOARD_AVAILABLE = False
 
 try:
     import pystray  # type: ignore[import-untyped]
+
     _PYSTRAY_AVAILABLE = True
 except ImportError:
     pystray = None  # type: ignore[assignment]
@@ -40,18 +41,19 @@ except ImportError:
 try:
     import tkinter as tk
     import tkinter.scrolledtext as tkst
+
     _TKINTER_AVAILABLE = True
 except ImportError:
     tk = None  # type: ignore[assignment]
 
 try:
     import keyboard  # type: ignore[import-untyped]
+
     _KEYBOARD_AVAILABLE = True
 except ImportError:
     keyboard = None  # type: ignore[assignment]
 
 from PIL import Image, ImageDraw
-
 
 # ── constants ───────────────────────────────────────────────────────
 
@@ -69,19 +71,19 @@ class WindowsDesktopAdapter(DesktopPort):
             if not provided.
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self._loop = loop or asyncio.get_event_loop()
         self._status = DesktopStatus.DISCONNECTED
 
         # Tray state
-        self._icon: Optional["pystray.Icon"] = None
-        self._icon_thread: Optional[threading.Thread] = None
+        self._icon: pystray.Icon | None = None
+        self._icon_thread: threading.Thread | None = None
 
         # Overlay state
-        self._overlay_win: Optional["tk.Toplevel"] = None
-        self._overlay_queue: queue.Queue[Optional[str]] = queue.Queue()
-        self._tk_root: Optional["tk.Tk"] = None
-        self._tk_thread: Optional[threading.Thread] = None
+        self._overlay_win: tk.Toplevel | None = None
+        self._overlay_queue: queue.Queue[str | None] = queue.Queue()
+        self._tk_root: tk.Tk | None = None
+        self._tk_thread: threading.Thread | None = None
 
         # Running flag
         self._running = False
@@ -122,9 +124,7 @@ class WindowsDesktopAdapter(DesktopPort):
         # Start tray icon in background thread
         if _PYSTRAY_AVAILABLE:
             self._icon_thread = threading.Thread(
-                target=self._run_tray,
-                daemon=True,
-                name="weebot-tray",
+                target=self._run_tray, daemon=True, name="weebot-tray"
             )
             self._icon_thread.start()
             logger.info("System tray icon started")
@@ -133,11 +133,7 @@ class WindowsDesktopAdapter(DesktopPort):
 
         # Start tkinter root in background thread
         if _TKINTER_AVAILABLE:
-            self._tk_thread = threading.Thread(
-                target=self._run_tk,
-                daemon=True,
-                name="weebot-tk",
-            )
+            self._tk_thread = threading.Thread(target=self._run_tk, daemon=True, name="weebot-tk")
             self._tk_thread.start()
             logger.info("Tkinter overlay thread started")
         else:
@@ -202,12 +198,10 @@ class WindowsDesktopAdapter(DesktopPort):
             if ready:
                 with self._icon_lock:
                     if self._icon is not None:
-                        self._icon.icon = _generate_icon_image(
-                            _STATUS_COLORS.get(status, "gray"),
-                        )
+                        self._icon.icon = _generate_icon_image(_STATUS_COLORS.get(status, "gray"))
                         self._icon.title = f"weebot — {status.value}"
 
-    async def show_overlay(self) -> Optional[DesktopPrompt]:
+    async def show_overlay(self) -> DesktopPrompt | None:
         """Open the overlay and wait for user input (blocking)."""
         if not _TKINTER_AVAILABLE:
             logger.warning("Cannot show overlay — tkinter not available")
@@ -233,39 +227,31 @@ class WindowsDesktopAdapter(DesktopPort):
 
     def _run_tray(self) -> None:
         """Run the pystray icon (blocking — runs in daemon thread)."""
-        icon_image = _generate_icon_image(
-            _STATUS_COLORS.get(self._status, "gray"),
-        )
+        icon_image = _generate_icon_image(_STATUS_COLORS.get(self._status, "gray"))
         with self._icon_lock:
             self._icon = pystray.Icon(
-            name="weebot",
-            icon=icon_image,
-            title="weebot Agent",
-            menu=pystray.Menu(
-                pystray.MenuItem(
-                    f"Status: {self._status.value.capitalize()}",
-                    None,
-                    enabled=False,
+                name="weebot",
+                icon=icon_image,
+                title="weebot Agent",
+                menu=pystray.Menu(
+                    pystray.MenuItem(
+                        f"Status: {self._status.value.capitalize()}", None, enabled=False
+                    ),
+                    pystray.Menu.SEPARATOR,
+                    pystray.MenuItem("Quick Prompt", self._on_tray_prompt),
+                    pystray.MenuItem("Quit", self._on_tray_quit),
                 ),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Quick Prompt", self._on_tray_prompt),
-                pystray.MenuItem("Quit", self._on_tray_quit),
-            ),
-        )
+            )
         self._icon_ready.set()
         self._icon.run()
 
     def _on_tray_prompt(self, icon: Any, item: Any) -> None:
         """Tray menu callback — triggers the overlay."""
-        asyncio.run_coroutine_threadsafe(
-            self.show_overlay(), self._loop,
-        )
+        asyncio.run_coroutine_threadsafe(self.show_overlay(), self._loop)
 
     def _on_tray_quit(self, icon: Any, item: Any) -> None:
         """Tray menu callback — stops everything."""
-        asyncio.run_coroutine_threadsafe(
-            self.stop(), self._loop,
-        )
+        asyncio.run_coroutine_threadsafe(self.stop(), self._loop)
 
     # ── internal: overlay ───────────────────────────────────────────
 
@@ -295,7 +281,7 @@ class WindowsDesktopAdapter(DesktopPort):
             if command == "SHOW":
                 self._create_overlay_window()
             elif command and command.startswith("RESPONSE:"):
-                text = command[len("RESPONSE:"):]
+                text = command[len("RESPONSE:") :]
                 self._update_overlay_text(text)
         except queue.Empty:
             pass
@@ -336,7 +322,7 @@ class WindowsDesktopAdapter(DesktopPort):
 
         # Prompt label + input
         tk.Label(win, text="Prompt:", font=("Segoe UI", 10, "bold")).pack(
-            anchor="w", padx=10, pady=(10, 2),
+            anchor="w", padx=10, pady=(10, 2)
         )
         entry_var = tk.StringVar()
         entry = tk.Entry(win, textvariable=entry_var, font=("Segoe UI", 11))
@@ -345,18 +331,15 @@ class WindowsDesktopAdapter(DesktopPort):
 
         # Submit button (Enter also submits)
         submit_btn = tk.Button(
-            win, text="Submit (Enter)",
-            command=lambda: self._submit_prompt(entry_var),
+            win, text="Submit (Enter)", command=lambda: self._submit_prompt(entry_var)
         )
         submit_btn.pack(pady=(0, 5))
 
         # Response area
         tk.Label(win, text="Response:", font=("Segoe UI", 10, "bold")).pack(
-            anchor="w", padx=10, pady=(5, 2),
+            anchor="w", padx=10, pady=(5, 2)
         )
-        response_text = tkst.ScrolledText(
-            win, height=6, wrap=tk.WORD, font=("Segoe UI", 10),
-        )
+        response_text = tkst.ScrolledText(win, height=6, wrap=tk.WORD, font=("Segoe UI", 10))
         response_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         response_text.config(state=tk.DISABLED)
 
@@ -369,7 +352,7 @@ class WindowsDesktopAdapter(DesktopPort):
 
         self._overlay_win = win
 
-    def _submit_prompt(self, entry_var: "tk.StringVar") -> None:
+    def _submit_prompt(self, entry_var: tk.StringVar) -> None:
         """Submit the current prompt text and close the overlay."""
         text = entry_var.get().strip()
         if not text:
@@ -378,7 +361,7 @@ class WindowsDesktopAdapter(DesktopPort):
             self._overlay_win.withdraw()
         self._overlay_queue.put(text)
 
-    def _dismiss_overlay(self, win: "tk.Toplevel") -> None:
+    def _dismiss_overlay(self, win: tk.Toplevel) -> None:
         """Dismiss the overlay without submitting."""
         win.withdraw()
         self._overlay_queue.put(None)
@@ -401,9 +384,7 @@ class WindowsDesktopAdapter(DesktopPort):
 
     def _on_hotkey(self) -> None:
         """Global hotkey callback — triggers overlay from any thread."""
-        asyncio.run_coroutine_threadsafe(
-            self.show_overlay(), self._loop,
-        )
+        asyncio.run_coroutine_threadsafe(self.show_overlay(), self._loop)
 
 
 # ── module-level helpers ────────────────────────────────────────────
@@ -416,14 +397,11 @@ _STATUS_COLORS = {
 }
 
 
-def _generate_icon_image(color: str) -> "Image.Image":
+def _generate_icon_image(color: str) -> Image.Image:
     """Draw a 64x64 circle icon in the given color."""
     size = 64
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     margin = 4
-    draw.ellipse(
-        [(margin, margin), (size - margin, size - margin)],
-        fill=color,
-    )
+    draw.ellipse([(margin, margin), (size - margin, size - margin)], fill=color)
     return img

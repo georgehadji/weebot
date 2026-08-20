@@ -14,12 +14,12 @@ promotion from ``candidate`` to ``trusted`` — is a separate concern already
 covered by ``Skill.record_positive_use``'s usage counter and, optionally,
 ``SkillPromotionGate``'s verification-gated path.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.skill_store_port import SkillStorePort
@@ -66,18 +66,19 @@ class SkillReviewGate:
     def __init__(
         self,
         llm: LLMPort,
-        skill_store: Optional[SkillStorePort] = None,
-        model: Optional[str] = None,
+        skill_store: SkillStorePort | None = None,
+        model: str | None = None,
         coherence_threshold: float = 0.6,
         value_threshold: float = 0.5,
         safety_threshold: float = 0.8,
         similarity_threshold: float = 0.7,
-        max_promotions_per_run: Optional[int] = None,
+        max_promotions_per_run: int | None = None,
     ) -> None:
         self._llm = llm
         self._skill_store = skill_store
         if model is None:
             from weebot.config.model_refs import MODEL_BUDGET
+
             model = MODEL_BUDGET
         self._model = model
         self._coherence_threshold = coherence_threshold
@@ -86,6 +87,7 @@ class SkillReviewGate:
         self._similarity_threshold = similarity_threshold
         if max_promotions_per_run is None:
             from weebot.config.learning import MAX_SKILL_PROMOTIONS_PER_RUN
+
             max_promotions_per_run = MAX_SKILL_PROMOTIONS_PER_RUN
         self._max_promotions_per_run = max_promotions_per_run
         self._promotions_this_run = 0
@@ -141,7 +143,8 @@ class SkillReviewGate:
             logger.warning(
                 "Skill promotion cap (%d/run) reached — '%s' passed review "
                 "but promotion to candidate is being withheld",
-                self._max_promotions_per_run, skill.name,
+                self._max_promotions_per_run,
+                skill.name,
             )
             return skill, review
         self._promotions_this_run += 1
@@ -153,13 +156,17 @@ class SkillReviewGate:
                 logger.info(
                     "Promoted skill '%s' quarantined -> candidate "
                     "(coherence=%.2f value=%.2f safety=%.2f similarity=%.2f)",
-                    skill.name, review.coherence, review.value,
-                    review.safety, review.similarity,
+                    skill.name,
+                    review.coherence,
+                    review.value,
+                    review.safety,
+                    review.similarity,
                 )
             except Exception as exc:
                 logger.warning(
-                    "Reviewed and approved skill '%s' but failed to persist "
-                    "promotion: %s", skill.name, exc,
+                    "Reviewed and approved skill '%s' but failed to persist " "promotion: %s",
+                    skill.name,
+                    exc,
                 )
                 return skill, review
         return promoted_skill, review

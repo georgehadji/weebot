@@ -3,6 +3,7 @@
 Uses the "subagent" role (fast, lightweight). Fail-open: returns PARK.
 PRUNE verdict is a recommendation only — never triggers deletion.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,22 +53,22 @@ class RetentionAgent(RetentionAgentPort):
         tool_count: int,
     ) -> RetentionReview:
         try:
-            trust_band = (
-                trust_report.get("trust_band", "n/a")
-                if trust_report else "not available"
-            )
+            trust_band = trust_report.get("trust_band", "n/a") if trust_report else "not available"
             response = await asyncio.wait_for(
                 self._llm.chat(
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": (
-                            f"Session: {session_id}\n"
-                            f"Summary: {session_summary[:300]}\n"
-                            f"Trust band: {trust_band}\n"
-                            f"Tool calls: {tool_count}\n"
-                            f"Errors: {error_count}\n\n"
-                            f"Recommendation:"
-                        )},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Session: {session_id}\n"
+                                f"Summary: {session_summary[:300]}\n"
+                                f"Trust band: {trust_band}\n"
+                                f"Tool calls: {tool_count}\n"
+                                f"Errors: {error_count}\n\n"
+                                f"Recommendation:"
+                            ),
+                        },
                     ],
                     temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,

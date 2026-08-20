@@ -1,11 +1,12 @@
 """CLI commands — profile"""
+
 from __future__ import annotations
-from pathlib import Path
 
 import click
 from rich.console import Console
 
 console = Console()
+
 
 @click.group()
 def profile() -> None:
@@ -38,7 +39,9 @@ def profile_list() -> None:
     profiles = mgr.list_profiles()
 
     if not profiles:
-        console.print("[dim]No profiles found. Run 'weebot profile create <name>' to create one.[/dim]")
+        console.print(
+            "[dim]No profiles found. Run 'weebot profile create <name>' to create one.[/dim]"
+        )
         return
 
     active = ProfileManager.active_profile_name()
@@ -69,7 +72,7 @@ def profile_switch(name: str) -> None:
 
 @profile.command("delete")
 @click.argument("name")
-@click.confirmation_option(prompt=f"Delete profile '{{name}}'?")
+@click.confirmation_option(prompt="Delete profile '{name}'?")
 def profile_delete(name: str) -> None:
     """Delete a profile and its directory."""
     from weebot.application.services.profile_manager import ProfileManager
@@ -82,4 +85,3 @@ def profile_delete(name: str) -> None:
             console.print(f"[yellow]Profile '{name}' not found.[/yellow]")
     except ValueError as exc:
         console.print(f"[red]✗[/red] {exc}")
-

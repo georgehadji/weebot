@@ -1,4 +1,5 @@
 """Tests for weebot.infrastructure.mcp.config_loader — expand_env and ConfigError."""
+
 from __future__ import annotations
 
 import os
@@ -101,10 +102,7 @@ class TestExpandEnv:
         if "NONEXISTENT_VAR_XYZZY" in os.environ:
             del os.environ["NONEXISTENT_VAR_XYZZY"]
         data = {
-            "server": {
-                "auth": {"token": "${NONEXISTENT_VAR_XYZZY}"},
-                "url": "https://example.com",
-            }
+            "server": {"auth": {"token": "${NONEXISTENT_VAR_XYZZY}"}, "url": "https://example.com"}
         }
         with pytest.raises(ConfigError):
             expand_env(data)

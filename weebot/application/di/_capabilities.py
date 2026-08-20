@@ -6,6 +6,7 @@ Background job registration used to live here too, in a
 has a single home: ``weebot/scheduling/default_jobs.py``, driven by
 ``weebot/config/jobs.yaml`` and started from the web lifespan.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,9 +29,7 @@ class CapabilitiesMixin:
         ``interfaces/web/dependencies.py`` resolves it by class, so a
         string-only binding left that cascade silently skipping the graph.
         """
-        from weebot.infrastructure.persistence.sqlite_knowledge_graph import (
-            SQLiteKnowledgeGraph,
-        )
+        from weebot.infrastructure.persistence.sqlite_knowledge_graph import SQLiteKnowledgeGraph
 
         self.register(SQLiteKnowledgeGraph, lambda: SQLiteKnowledgeGraph(db_path=db_path))
         self.register("kg_adapter", lambda: self.get(SQLiteKnowledgeGraph))

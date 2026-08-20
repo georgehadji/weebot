@@ -1,4 +1,5 @@
 """Credential sanitizer middleware — redacts secrets from user input before storage."""
+
 from __future__ import annotations
 
 from typing import Any

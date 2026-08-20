@@ -11,11 +11,11 @@ classified as one of:
 
 This classification drives which layer editor is invoked during evolution.
 """
+
 from __future__ import annotations
 
 import logging
 from enum import Enum
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 class FailureLayer(str, Enum):
     """Which harness layer should be updated to address this failure."""
+
     CONTRACT = "contract"
     SKILL = "skill"
     ACTION = "action"
@@ -60,10 +61,7 @@ class LayerDiagnosticAgent:
         self._llm = llm
 
     async def diagnose(
-        self,
-        task: str,
-        trajectory_summary: str,
-        model: Optional[str] = None,
+        self, task: str, trajectory_summary: str, model: str | None = None
     ) -> tuple[FailureLayer, str]:
         """Classify a single failed trajectory.
 
@@ -99,9 +97,7 @@ class LayerDiagnosticAgent:
         try:
             layer = FailureLayer(first_line)
         except ValueError:
-            logger.warning(
-                "Unrecognised diagnosis %r, defaulting to REASONING", first_line
-            )
+            logger.warning("Unrecognised diagnosis %r, defaulting to REASONING", first_line)
             layer = FailureLayer.REASONING
 
         return layer, explanation

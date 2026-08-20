@@ -1,4 +1,5 @@
 """Unit tests for MCP resource builders, including sanitization behavior."""
+
 from __future__ import annotations
 
 import json
@@ -38,9 +39,7 @@ class TestResourceSanitization:
                 "status": SessionStatus.RUNNING,
             },
         )()
-        mock_repo = type(
-            "Repo", (), {"list_sessions": AsyncMock(return_value=[session])}
-        )()
+        mock_repo = type("Repo", (), {"list_sessions": AsyncMock(return_value=[session])})()
         data = json.loads(build_state_json(state_repo=mock_repo))
         assert "[REDACTED]" in data["sessions"][0]["session_id"]
 

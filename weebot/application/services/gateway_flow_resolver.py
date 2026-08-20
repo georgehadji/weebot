@@ -3,6 +3,7 @@
 Maps platform conversations to Weebot flow sessions, creating new sessions
 when needed and managing TTL/max-session limits.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,8 +12,6 @@ from typing import Any
 
 from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
 from weebot.domain.models.gateway_session import GatewaySession, GatewaySessionKey
-from weebot.domain.models.session import Session as WeebotSession
-from weebot.domain.models.session import SessionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,11 @@ class GatewayFlowResolver:
             if user_id:
                 updated = updated.model_copy(update={"user_id": user_id})
             await self._store.upsert(updated)
-            logger.debug("Resumed gateway session: %s → flow %s", key.composite_key(), updated.flow_session_id)
+            logger.debug(
+                "Resumed gateway session: %s → flow %s",
+                key.composite_key(),
+                updated.flow_session_id,
+            )
             return updated, updated.flow_session_id
 
         # Create new session
@@ -77,10 +80,7 @@ class GatewayFlowResolver:
         await self._enforce_platform_limit(key.platform)
 
         await self._store.upsert(session)
-        logger.info(
-            "Created gateway session: %s → flow %s",
-            key.composite_key(), flow_session_id,
-        )
+        logger.info("Created gateway session: %s → flow %s", key.composite_key(), flow_session_id)
         return session, flow_session_id
 
     async def close(self, key: GatewaySessionKey) -> None:
@@ -97,7 +97,7 @@ class GatewayFlowResolver:
         if len(sessions) > self._max_sessions_per_platform:
             # Sort by last_activity_at ascending and close the oldest
             sorted_sessions = sorted(sessions, key=lambda s: s.last_activity_at)
-            to_close = sorted_sessions[:len(sorted_sessions) - self._max_sessions_per_platform + 1]
+            to_close = sorted_sessions[: len(sorted_sessions) - self._max_sessions_per_platform + 1]
             for s in to_close:
                 await self._store.close_session(s.key)
                 logger.info("Closed oldest gateway session (limit): %s", s.key.composite_key())

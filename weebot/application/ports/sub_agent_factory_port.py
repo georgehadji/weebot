@@ -1,4 +1,5 @@
 """Port for sub-agent lifecycle management."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -4,13 +4,15 @@ Each cron job tick creates a fresh PlanActFlow with the configured
 prompt, attached skills, and toolset.  Results are captured and
 forwarded to the delivery service.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
-from weebot.domain.models.cron_job import CronJobRecord, DeliveryTarget
+from weebot.domain.models.cron_job import CronJobRecord
 from weebot.domain.models.session import Session as WeebotSession
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class CronAgentRunner:
 
     async def run(self, job: CronJobRecord) -> str:
         import os
+
         # Set recursion guard before spawning the flow
         # Set recursion guard — prevents infinite scheduling loops
         os.environ["WEEBOT_CRON_CONTEXT"] = "1"
@@ -56,11 +59,7 @@ class CronAgentRunner:
         import uuid
 
         session_id = f"cron-{job.id}-{uuid.uuid4().hex[:8]}"
-        session = WeebotSession(
-            id=session_id,
-            user_id="cron-agent",
-            agent_id="cron-agent",
-        )
+        session = WeebotSession(id=session_id, user_id="cron-agent", agent_id="cron-agent")
 
         # Build tools from configured toolset
         tools = None
@@ -99,9 +98,7 @@ class CronAgentRunner:
         # Build the prompt with skill injections
         prompt_parts = [job.prompt]
         if job.attached_skills:
-            skill_context = "\n".join(
-                f"- {skill}" for skill in job.attached_skills
-            )
+            skill_context = "\n".join(f"- {skill}" for skill in job.attached_skills)
             prompt_parts.insert(0, f"Attached skills:\n{skill_context}\n")
 
         full_prompt = "\n".join(prompt_parts)
@@ -110,13 +107,12 @@ class CronAgentRunner:
         response = ""
         try:
             async for event in asyncio.wait_for(
-                flow.run(full_prompt),
-                timeout=job.max_runtime_seconds,
+                flow.run(full_prompt), timeout=job.max_runtime_seconds
             ):
                 if getattr(event, "type", "") == "message":
                     response = getattr(event, "message", "") or response
-        except asyncio.TimeoutError:
-            response = "⚠️ Cron job timed out after {} seconds.".format(job.max_runtime_seconds)
+        except TimeoutError:
+            response = f"⚠️ Cron job timed out after {job.max_runtime_seconds} seconds."
             logger.warning("Cron job %s timed out", job.id)
         except Exception as exc:
             response = f"⚠️ Cron job failed: {exc}"

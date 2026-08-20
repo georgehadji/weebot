@@ -7,10 +7,10 @@ convergence.
 
 See: docs/plans/hyperagents-enhancement-plan.md
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -24,7 +24,7 @@ class SkillVariant(BaseModel):
     """
 
     variant_id: str = Field(default="")
-    parent_id: Optional[str] = Field(default=None)
+    parent_id: str | None = Field(default=None)
     skill_name: str = Field(default="")
     skill_content: str = Field(default="")
     content_hash: str = Field(default="")  # SHA-256 for dedup
@@ -33,6 +33,4 @@ class SkillVariant(BaseModel):
     generation: int = Field(default=0)  # depth in family tree
     children_count: int = Field(default=0)
     meta_notes: str = Field(default="")
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

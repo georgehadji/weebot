@@ -13,10 +13,10 @@ Each expert profile defines:
 - output_schema: what the expert produces
 - boundary_rules: when to delegate to other experts
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 
 @dataclass
@@ -36,6 +36,7 @@ class ExpertProfile:
         tier: Capability access level ("public", "controlled", "restricted",
               "privileged").
     """
+
     role_name: str = ""
     specialization: str = ""
     system_prompt_hint: str = ""
@@ -148,7 +149,7 @@ BUILTIN_EXPERTS: dict[str, ExpertProfile] = {
 }
 
 
-def get_expert_profile(role_name: str) -> Optional[ExpertProfile]:
+def get_expert_profile(role_name: str) -> ExpertProfile | None:
     """Return the expert profile for a given role, or None if unknown."""
     return BUILTIN_EXPERTS.get(role_name)
 

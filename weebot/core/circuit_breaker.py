@@ -12,6 +12,7 @@ HARDEN Mode Additions:
 The public API mirrors :class:`ExecApprovalPolicy` — call
 ``evaluate(entity_id)`` to get a typed :class:`BreakerResult`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ _log = logging.getLogger(__name__)
 @dataclass
 class ActionHashEntry:
     """A single action record in the sliding window."""
+
     tool_name: str
     arg_hash: str
     timestamp: float
@@ -57,11 +59,9 @@ class ActionHashQueue:
 
     def record(self, tool_name: str, arg_hash: str) -> None:
         """Record a tool call and prune the window if necessary."""
-        self._window.append(ActionHashEntry(
-            tool_name=tool_name,
-            arg_hash=arg_hash,
-            timestamp=time.time(),
-        ))
+        self._window.append(
+            ActionHashEntry(tool_name=tool_name, arg_hash=arg_hash, timestamp=time.time())
+        )
         if len(self._window) > self._window_size:
             self._window.pop(0)
 
@@ -151,7 +151,7 @@ class CircuitBreaker:
         failure_threshold: int = 3,
         cooldown_seconds: float = 60.0,
         success_threshold: int = 1,
-        event_broker: Optional[Any] = None,
+        event_broker: Any | None = None,
         jitter_percent: float = 0.2,
         enable_stagger: bool = True,
     ) -> None:
@@ -168,10 +168,10 @@ class CircuitBreaker:
         self._event_broker = event_broker
         self._jitter_percent = jitter_percent
         self._enable_stagger = enable_stagger
-        
-        self._breakers: Dict[str, _BreakerEntry] = {}
+
+        self._breakers: dict[str, _BreakerEntry] = {}
         self._lock = asyncio.Lock()
-        
+
         # HARDEN: Metrics for monitoring
         self._state_changes = 0
         self._recovery_attempts = 0
@@ -187,17 +187,9 @@ class CircuitBreaker:
         return self._breakers[entity_id]
 
     async def _publish_state_change(
-        self,
-        entity_id: str,
-        old_state: BreakerState,
-        new_state: BreakerState,
+        self, entity_id: str, old_state: BreakerState, new_state: BreakerState
     ) -> None:
-        _log.info(
-            "CircuitBreaker %s: %s -> %s",
-            entity_id,
-            old_state.value,
-            new_state.value,
-        )
+        _log.info("CircuitBreaker %s: %s -> %s", entity_id, old_state.value, new_state.value)
         if self._event_broker is not None:
             await self._event_broker.publish(
                 "circuit_breaker_state_change",
@@ -217,7 +209,7 @@ class CircuitBreaker:
         """HARDEN: Get cooldown with random jitter to prevent thundering herd."""
         jitter = self._cooldown_seconds * self._jitter_percent
         return self._cooldown_seconds + random.uniform(-jitter, jitter)
-    
+
     async def _maybe_stagger_probe(self) -> None:
         """HARDEN: Add random delay before HALF_OPEN probe."""
         if self._enable_stagger:
@@ -249,10 +241,11 @@ class CircuitBreaker:
         # delay when the two calls return different random jitter.
         jittered_cooldown = self._get_jittered_cooldown()
         entry_snapshot = self._breakers.get(entity_id)
-        if (entry_snapshot is not None
-                and entry_snapshot.state == BreakerState.OPEN
-                and (time.monotonic() - entry_snapshot.last_state_change
-                     >= jittered_cooldown)):
+        if (
+            entry_snapshot is not None
+            and entry_snapshot.state == BreakerState.OPEN
+            and (time.monotonic() - entry_snapshot.last_state_change >= jittered_cooldown)
+        ):
             await self._maybe_stagger_probe()
 
         # Phase 2: authoritative check and state mutation under lock.
@@ -280,9 +273,7 @@ class CircuitBreaker:
                     self._state_changes += 1
                     self._recovery_attempts += 1
 
-                    await self._publish_state_change(
-                        entity_id, old, BreakerState.HALF_OPEN
-                    )
+                    await self._publish_state_change(entity_id, old, BreakerState.HALF_OPEN)
                     return BreakerResult(
                         entity_id=entity_id,
                         allowed=True,
@@ -324,9 +315,7 @@ class CircuitBreaker:
                     entry.last_state_change = time.monotonic()
                     self._state_changes += 1
                     self._successful_recoveries += 1  # HARDEN: Track recovery
-                    await self._publish_state_change(
-                        entity_id, old, BreakerState.CLOSED
-                    )
+                    await self._publish_state_change(entity_id, old, BreakerState.CLOSED)
             elif entry.state == BreakerState.CLOSED:
                 # Reset failure count on success
                 entry.failure_count = 0
@@ -345,18 +334,14 @@ class CircuitBreaker:
                 entry.state = BreakerState.OPEN
                 entry.last_state_change = now
                 self._state_changes += 1  # HARDEN: Track state change
-                await self._publish_state_change(
-                    entity_id, old, BreakerState.OPEN
-                )
+                await self._publish_state_change(entity_id, old, BreakerState.OPEN)
             elif entry.state == BreakerState.CLOSED:
                 if entry.failure_count >= self._failure_threshold:
                     old = entry.state
                     entry.state = BreakerState.OPEN
                     entry.last_state_change = now
                     self._state_changes += 1  # HARDEN: Track state change
-                    await self._publish_state_change(
-                        entity_id, old, BreakerState.OPEN
-                    )
+                    await self._publish_state_change(entity_id, old, BreakerState.OPEN)
 
     # ------------------------------------------------------------------
     # Inspection / manual override
@@ -376,7 +361,7 @@ class CircuitBreaker:
         entry = self._breakers.get(entity_id)
         return entry.state if entry else BreakerState.CLOSED
 
-    def get_all_states(self) -> Dict[str, BreakerState]:
+    def get_all_states(self) -> dict[str, BreakerState]:
         """Snapshot of all tracked entity states."""
         return {eid: e.state for eid, e in self._breakers.items()}
 
@@ -387,9 +372,7 @@ class CircuitBreaker:
                 old = self._breakers[entity_id].state
                 self._breakers[entity_id] = _BreakerEntry()
                 if old != BreakerState.CLOSED:
-                    await self._publish_state_change(
-                        entity_id, old, BreakerState.CLOSED
-                    )
+                    await self._publish_state_change(entity_id, old, BreakerState.CLOSED)
 
     # ------------------------------------------------------------------
     # Persistence — save/load breaker state to survive restarts
@@ -402,6 +385,7 @@ class CircuitBreaker:
             path: File path to write state to (e.g. ``~/.weebot/breaker_state.json``).
         """
         import json as _json
+
         data = self.to_persistable()
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(_json.dumps(data, indent=2))
@@ -416,6 +400,7 @@ class CircuitBreaker:
             True if state was restored, False if file doesn't exist.
         """
         import json as _json
+
         p = Path(path)
         if not p.exists():
             return False
@@ -437,17 +422,19 @@ class CircuitBreaker:
         now = time.monotonic()
         states: list[dict[str, Any]] = []
         for entity_id, entry in self._breakers.items():
-            states.append({
-                "entity_id": entity_id,
-                "state": entry.state.value,
-                "failure_count": entry.failure_count,
-                "success_count": entry.success_count,
-                # Store both timestamps as offsets from now so they survive restarts.
-                "last_failure_time_offset": (
-                    now - entry.last_failure_time if entry.last_failure_time else None
-                ),
-                "last_state_change_offset": now - entry.last_state_change,
-            })
+            states.append(
+                {
+                    "entity_id": entity_id,
+                    "state": entry.state.value,
+                    "failure_count": entry.failure_count,
+                    "success_count": entry.success_count,
+                    # Store both timestamps as offsets from now so they survive restarts.
+                    "last_failure_time_offset": (
+                        now - entry.last_failure_time if entry.last_failure_time else None
+                    ),
+                    "last_state_change_offset": now - entry.last_state_change,
+                }
+            )
         return states
 
     def load_from_persistable(self, states: list[dict[str, Any]]) -> None:
@@ -474,22 +461,23 @@ class CircuitBreaker:
     # HARDEN: Metrics
     # ------------------------------------------------------------------
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Get circuit breaker metrics for monitoring.
-        
+
         Returns:
             Dict with recovery statistics and current state counts.
         """
         state_counts = {"CLOSED": 0, "OPEN": 0, "HALF_OPEN": 0}
         for entry in self._breakers.values():
             state_counts[entry.state.name] += 1
-        
+
         recovery_rate = (
             self._successful_recoveries / self._recovery_attempts
-            if self._recovery_attempts > 0 else 1.0
+            if self._recovery_attempts > 0
+            else 1.0
         )
-        
+
         return {
             "tracked_entities": len(self._breakers),
             "state_counts": state_counts,

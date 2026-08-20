@@ -7,12 +7,12 @@ by reading SOUL.md from the filesystem.  Scan order:
 2. ``./SOUL.md`` (project root)
 3. ``None`` — fallback; caller uses WEEBOT_CORE.md identity section
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from weebot.application.ports.soul_provider_port import SoulProviderPort
 from weebot.domain.models.soul import SoulProfile
@@ -51,10 +51,7 @@ _INJECTION_PATTERNS = [
         "jailbreak-persona",
     ),
     (
-        re.compile(
-            r"from\s+now\s+on\s+(you\s+are|your\s+name\s+is|respond\s+as)",
-            re.IGNORECASE,
-        ),
+        re.compile(r"from\s+now\s+on\s+(you\s+are|your\s+name\s+is|respond\s+as)", re.IGNORECASE),
         "identity-hijack",
     ),
 ]
@@ -74,8 +71,8 @@ class FileSystemSoulProvider(SoulProviderPort):
 
     def __init__(
         self,
-        project_root: Optional[Path] = None,
-        profiles_dir: Optional[Path] = None,
+        project_root: Path | None = None,
+        profiles_dir: Path | None = None,
         auto_seed: bool = True,
         scan_for_injection: bool = True,
     ) -> None:
@@ -156,11 +153,7 @@ class FileSystemSoulProvider(SoulProviderPort):
             content = self._scan_content(content, str(path))
 
         _log.info("Loaded SOUL.md for profile '%s' from %s", name, path)
-        return SoulProfile(
-            name=name,
-            content=content,
-            source_path=str(path.resolve()),
-        )
+        return SoulProfile(name=name, content=content, source_path=str(path.resolve()))
 
     def _seed_file(self, name: str, path: Path) -> SoulProfile:
         """Create a SOUL.md from the template and return it."""
@@ -168,9 +161,7 @@ class FileSystemSoulProvider(SoulProviderPort):
         path.write_text(_DEFAULT_SOUL_TEMPLATE, encoding="utf-8")
         _log.info("Seeded default SOUL.md at %s", path)
         return SoulProfile(
-            name=name,
-            content=_DEFAULT_SOUL_TEMPLATE,
-            source_path=str(path.resolve()),
+            name=name, content=_DEFAULT_SOUL_TEMPLATE, source_path=str(path.resolve())
         )
 
     @staticmethod
@@ -182,11 +173,7 @@ class FileSystemSoulProvider(SoulProviderPort):
         """
         for pattern, label in _INJECTION_PATTERNS:
             if pattern.search(content):
-                _log.warning(
-                    "SOUL.md %s blocked: matched injection pattern '%s'",
-                    source,
-                    label,
-                )
+                _log.warning("SOUL.md %s blocked: matched injection pattern '%s'", source, label)
                 return (
                     "[BLOCKED: SOUL.md contained potential prompt injection "
                     f"({label}). Using default identity instead.]\n\n"

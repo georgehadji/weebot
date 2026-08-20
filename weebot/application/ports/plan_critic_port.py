@@ -1,4 +1,5 @@
 """Plan Critic port — abstract interface for plan validation before execution."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

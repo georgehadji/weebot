@@ -6,10 +6,12 @@ is detected as having produced code. Verdicts:
   revise   → ExecutingState (same step, retry_count+1, hint injected)
   reject   → UpdatingState  (mark step FAILED, trigger replanning)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -48,9 +50,7 @@ class ReviewingState(FlowState):
         self._reviewer = reviewer
         self._step_events: list[Any] = step_events or []
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.executing import ExecutingState
         from weebot.application.flows.states.updating import UpdatingState
 
@@ -64,7 +64,8 @@ class ReviewingState(FlowState):
         if self._step.retry_count >= _MAX_REVIEW_RETRIES:
             logger.info(
                 "Step %s has reached review retry cap (%d) — approving automatically",
-                self._step.id, _MAX_REVIEW_RETRIES,
+                self._step.id,
+                _MAX_REVIEW_RETRIES,
             )
             context.set_state(ExecutingState())
             return
@@ -84,13 +85,8 @@ class ReviewingState(FlowState):
         }
 
         # ── Call the reviewer ────────────────────────────────────────
-        logger.info(
-            "Reviewing step %s: %s",
-            self._step.id, self._step.description[:80],
-        )
-        result: CodeReviewResult = await self._reviewer.review(
-            self._step, review_context,
-        )
+        logger.info("Reviewing step %s: %s", self._step.id, self._step.description[:80])
+        result: CodeReviewResult = await self._reviewer.review(self._step, review_context)
 
         # ── Emit ThoughtEvent for CLI/WebSocket/logs ─────────────────
         yield ThoughtEvent(
@@ -121,10 +117,7 @@ class ReviewingState(FlowState):
                     "One file if possible, one function if possible, one line if possible."
                 )
                 hint = (hint + over_eng_hint) if hint else over_eng_hint.strip()
-            logger.info(
-                "Review REVISE step %s — hint: %s",
-                self._step.id, hint[:120],
-            )
+            logger.info("Review REVISE step %s — hint: %s", self._step.id, hint[:120])
             # Stash the pre-revision output once (first revise only) so that
             # if/when this step is later approved, CorrectionTracker can diff
             # the original against the corrected result. ICM edit-source
@@ -132,33 +125,29 @@ class ReviewingState(FlowState):
             _fact_key = f"correction_original:{self._step.id}"
             if context._correction_tracker is not None and not context._session.get_fact(_fact_key):
                 context._session = context._session.set_fact(_fact_key, self._step.result or "")
-            revised_step = self._step.model_copy(update={
-                "status": StepStatus.PENDING,
-                "retry_count": self._step.retry_count + 1,
-                "description": (
-                    f"{self._step.description}\n"
-                    f"[Code review hint: {hint}]"
-                    if hint
-                    else self._step.description
-                ),
-            })
+            revised_step = self._step.model_copy(
+                update={
+                    "status": StepStatus.PENDING,
+                    "retry_count": self._step.retry_count + 1,
+                    "description": (
+                        f"{self._step.description}\n" f"[Code review hint: {hint}]"
+                        if hint
+                        else self._step.description
+                    ),
+                }
+            )
             context._plan = context._plan.replace_step(self._step.id, revised_step)
             context.set_state(ExecutingState())
 
         else:  # "reject"
-            logger.warning(
-                "Review REJECTED step %s — %s",
-                self._step.id, result.summary,
-            )
+            logger.warning("Review REJECTED step %s — %s", self._step.id, result.summary)
             context._plan = context._plan.update_step_status(
-                self._step.id,
-                StepStatus.FAILED,
-                result=f"[Code review rejected] {result.summary}",
+                self._step.id, StepStatus.FAILED, result=f"[Code review rejected] {result.summary}"
             )
             context.set_state(UpdatingState())
 
     async def _maybe_record_correction(
-        self, context: "PlanActFlow"
+        self, context: PlanActFlow
     ) -> AsyncGenerator[AgentEvent, None]:
         """If this step was previously revised, record the correction delta.
 
@@ -207,7 +196,7 @@ class ReviewingState(FlowState):
         lines = [
             f"**Code Review** — Verdict: {result.verdict.upper()}, "
             f"Confidence: {result.confidence:.0%}, "
-            f"Severity: {result.severity}",
+            f"Severity: {result.severity}"
         ]
         if result.issues:
             lines.append("\n**Issues:**")

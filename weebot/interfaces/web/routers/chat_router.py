@@ -6,6 +6,7 @@ Provides:
   GET /api/chat/history — list chat sessions
   GET /api/chat/{id}    — retrieve session details
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,11 @@ from sse_starlette.sse import EventSourceResponse
 from weebot.application.di import Container
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session
-from weebot.interfaces.web.auth import get_current_user_id, require_mutation_identity, verify_session_ownership
+from weebot.interfaces.web.auth import (
+    get_current_user_id,
+    require_mutation_identity,
+    verify_session_ownership,
+)
 from weebot.interfaces.web.schemas.chat_schemas import (
     ChatRequest,
     ChatResponse,
@@ -57,9 +62,7 @@ async def _resolve_session(
         return session
 
     session = Session(
-        id=f"chat-{uuid.uuid4().hex[:8]}",
-        user_id=current_user,
-        agent_id="chat-agent",
+        id=f"chat-{uuid.uuid4().hex[:8]}", user_id=current_user, agent_id="chat-agent"
     )
     await state_repo.save_session(session)
     return session
@@ -77,10 +80,7 @@ async def send_message(
     session = await _resolve_session(body, request, state_repo)
 
     # Build and run the chat flow
-    flow = container.build_chat_flow(
-        session=session,
-        model=body.model or None,
-    )
+    flow = container.build_chat_flow(session=session, model=body.model or None)
     # Run the flow and collect events
     events: list = []
     async for event in flow.run(body.message):
@@ -135,10 +135,7 @@ async def stream_message(
     flow = container.build_chat_flow(session=session, model=body.model or None)
 
     async def event_generator():
-        yield {
-            "event": "session",
-            "data": json.dumps({"session_id": session.id}),
-        }
+        yield {"event": "session", "data": json.dumps({"session_id": session.id})}
         async for event in flow.run(body.message):
             try:
                 data = event.model_dump(mode="json")
@@ -158,11 +155,7 @@ async def list_chat_sessions(
 ) -> ChatSessionList:
     """List recent chat sessions for the current user."""
     current_user = get_current_user_id(request)
-    sessions = await state_repo.list_sessions(
-        user_id=current_user,
-        limit=limit,
-        offset=offset,
-    )
+    sessions = await state_repo.list_sessions(user_id=current_user, limit=limit, offset=offset)
     summaries = [
         ChatSessionSummary(
             id=s.id,
@@ -179,9 +172,7 @@ async def list_chat_sessions(
 
 @router.get("/{session_id}")
 async def get_chat_session(
-    session_id: str,
-    request: Request,
-    state_repo: StateRepositoryPort = Depends(get_state_repo),
+    session_id: str, request: Request, state_repo: StateRepositoryPort = Depends(get_state_repo)
 ):
     """Retrieve a chat session with full message history."""
     session = await state_repo.load_session(session_id)

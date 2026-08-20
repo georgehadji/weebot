@@ -4,11 +4,13 @@ The runner takes a task bank, calls the target (agent) for each task,
 then scores each output through a judge. Results are aggregated into
 a report with per-criterion breakdowns.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from weebot.application.ports.judge_port import CriterionScore, JudgePort, JudgeVerdict
 
@@ -25,6 +27,7 @@ class EvalTask:
         expected_output: Optional expected output for comparison.
         criteria: Criteria to evaluate against (e.g. ["correctness", "completeness"]).
     """
+
     id: str
     prompt: str
     expected_output: str = ""
@@ -43,6 +46,7 @@ class EvalResult:
         reasoning: Summary reasoning from the judge.
         criteria: Per-criterion scores (if available).
     """
+
     task_id: str
     score: float
     passed: bool
@@ -63,6 +67,7 @@ class EvalReport:
         results: Per-task results.
         per_criterion: Per-criterion average scores, if criteria were used.
     """
+
     total: int = 0
     passed: int = 0
     pass_rate: float = 0.0
@@ -79,19 +84,11 @@ class EvalRunner:
         pass_threshold: Minimum score (0.0–1.0) for a task to pass.
     """
 
-    def __init__(
-        self,
-        judge: JudgePort,
-        pass_threshold: float = 0.6,
-    ) -> None:
+    def __init__(self, judge: JudgePort, pass_threshold: float = 0.6) -> None:
         self._judge = judge
         self._pass_threshold = pass_threshold
 
-    async def run(
-        self,
-        target: Callable[[str], Any],
-        tasks: list[EvalTask],
-    ) -> EvalReport:
+    async def run(self, target: Callable[[str], Any], tasks: list[EvalTask]) -> EvalReport:
         """Run all tasks through *target* and score outputs via the judge.
 
         Args:
@@ -122,19 +119,20 @@ class EvalRunner:
             except Exception as exc:
                 logger.warning("Judge failed for task %s: %s", task.id, exc)
                 verdict = JudgeVerdict(
-                    overall_score=0.0, passed=False,
-                    reasoning=f"judge error: {exc}",
+                    overall_score=0.0, passed=False, reasoning=f"judge error: {exc}"
                 )
 
             score = min(verdict.overall_score, 1.0)
-            results.append(EvalResult(
-                task_id=task.id,
-                score=score,
-                passed=score >= self._pass_threshold,
-                judge_used=type(self._judge).__name__,
-                reasoning=verdict.reasoning,
-                criteria=verdict.criteria,
-            ))
+            results.append(
+                EvalResult(
+                    task_id=task.id,
+                    score=score,
+                    passed=score >= self._pass_threshold,
+                    judge_used=type(self._judge).__name__,
+                    reasoning=verdict.reasoning,
+                    criteria=verdict.criteria,
+                )
+            )
 
         # Aggregate
         total = len(results)
@@ -148,8 +146,7 @@ class EvalRunner:
             for c in r.criteria:
                 per_criterion.setdefault(c.name, []).append(c.score)
         per_criterion_avg = {
-            name: sum(scores) / len(scores)
-            for name, scores in per_criterion.items()
+            name: sum(scores) / len(scores) for name, scores in per_criterion.items()
         }
 
         return EvalReport(

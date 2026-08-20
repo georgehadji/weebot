@@ -1,4 +1,5 @@
 """Unit tests for advanced browser automation tools."""
+
 import pytest
 from weebot.tools.advanced_browser import AdvancedBrowserTool, WebScraperTool
 
@@ -81,11 +82,7 @@ class TestWebScraperTool:
         tool = WebScraperTool()
         # Since selector is required positional, this will error at function call level
         # We test the error handling in the implementation
-        result = await tool.execute(
-            url="https://example.com",
-            selector="",
-            extract_type="text",
-        )
+        result = await tool.execute(url="https://example.com", selector="", extract_type="text")
         # Empty selector should work but find nothing
         assert not result.is_error or "selector" in result.error.lower()
 
@@ -96,9 +93,4 @@ class TestWebScraperTool:
         # Note: WebScraperTool will accept any string for extract_type
         # Real validation happens during execution
         for extract_type in ["text", "html", "attribute", "all"]:
-            assert extract_type in [
-                "text",
-                "html",
-                "attribute",
-                "all",
-            ]
+            assert extract_type in ["text", "html", "attribute", "all"]

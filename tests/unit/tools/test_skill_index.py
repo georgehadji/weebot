@@ -7,13 +7,13 @@ Covers:
 - SkillHub setting default value
 - CLI `skill update --check` and `skill update <name>`
 """
+
 import json
 import hashlib
 import tarfile
 import io
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
+from unittest.mock import AsyncMock, MagicMock
 
 # ── sample index ────────────────────────────────────────────────────
 
@@ -52,13 +52,10 @@ class TestSkillHubAdapter:
 
     @pytest.fixture
     def adapter(self):
-        from weebot.infrastructure.adapters.skill_index_github import (
-            GitHubSkillIndexAdapter,
-        )
+        from weebot.infrastructure.adapters.skill_index_github import GitHubSkillIndexAdapter
 
         return GitHubSkillIndexAdapter(
-            index_url="https://example.com/index.json",
-            http_client=MagicMock(),
+            index_url="https://example.com/index.json", http_client=MagicMock()
         )
 
     # ── fetch_index ────────────────────────────────────────────────
@@ -86,7 +83,7 @@ class TestSkillHubAdapter:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         mock_resp.raise_for_status.side_effect = HTTPStatusError(
-            "Not found", request=MagicMock(), response=mock_resp,
+            "Not found", request=MagicMock(), response=mock_resp
         )
 
         adapter._client.get = AsyncMock(return_value=mock_resp)
@@ -99,9 +96,7 @@ class TestSkillHubAdapter:
         """Network error returns empty list (graceful degradation)."""
         from httpx import RequestError
 
-        adapter._client.get = AsyncMock(
-            side_effect=RequestError("DNS failed"),
-        )
+        adapter._client.get = AsyncMock(side_effect=RequestError("DNS failed"))
 
         skills = await adapter.fetch_index()
         assert skills == []
@@ -178,8 +173,10 @@ class TestSkillHubAdapter:
 
         # Mock streaming HTTP response
         mock_resp = MagicMock()
+
         async def _iter_bytes():
             yield tar_bytes
+
         mock_resp.aiter_bytes = _iter_bytes
         mock_context = AsyncMock()
         mock_context.__aenter__.return_value = mock_resp
@@ -189,6 +186,7 @@ class TestSkillHubAdapter:
         skill = SAMPLE_INDEX["skills"][0].copy()
         skill["sha256"] = sha256
         from weebot.infrastructure.adapters.skill_index_github import _parse_skill
+
         remote = _parse_skill(skill)
 
         result = await adapter.download(remote, str(tmp_path))
@@ -205,20 +203,25 @@ class TestSkillHubAdapter:
         tar_bytes = tar_buffer.getvalue()
 
         mock_resp = MagicMock()
+
         async def _iter_bytes():
             yield tar_bytes
+
         mock_resp.aiter_bytes = _iter_bytes
         mock_context = AsyncMock()
         mock_context.__aenter__.return_value = mock_resp
         adapter._client.stream = MagicMock(return_value=mock_context)
 
         from weebot.infrastructure.adapters.skill_index_github import _parse_skill
-        skill = _parse_skill({
-            "name": "bad-skill",
-            "version": "1.0",
-            "download_url": "https://example.com/bad.tar.gz",
-            "sha256": "f" * 64,  # Wrong hash
-        })
+
+        skill = _parse_skill(
+            {
+                "name": "bad-skill",
+                "version": "1.0",
+                "download_url": "https://example.com/bad.tar.gz",
+                "sha256": "f" * 64,  # Wrong hash
+            }
+        )
 
         result = await adapter.download(skill, str(tmp_path))
         assert result is False
@@ -233,6 +236,7 @@ class TestSkillHubAdapter:
         adapter._client.stream = MagicMock(return_value=mock_context)
 
         from weebot.infrastructure.adapters.skill_index_github import _parse_skill
+
         skill = _parse_skill(SAMPLE_INDEX["skills"][0])
 
         result = await adapter.download(skill, str(tmp_path))

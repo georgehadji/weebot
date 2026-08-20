@@ -2,9 +2,10 @@
 
 Tests cover key lifecycle: create, hash, validate, revoke, expiry.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import pytest
 
@@ -126,10 +127,10 @@ class TestKeyLifecycle:
     async def test_expiry(self, store: SQLiteApiKeyStore):
         from weebot.application.ports.api_key_port import ApiKeyRecord
 
-        expired = datetime.now(timezone.utc) - timedelta(hours=1)
+        expired = datetime.now(UTC) - timedelta(hours=1)
         record = ApiKeyRecord("k-exp", "user", "lh", "kh", "s", [], datetime.now(), expired)
         assert not record.is_valid
 
-        future = datetime.now(timezone.utc) + timedelta(days=30)
+        future = datetime.now(UTC) + timedelta(days=30)
         record2 = ApiKeyRecord("k-fut", "user", "lh", "kh", "s", [], datetime.now(), future)
         assert record2.is_valid

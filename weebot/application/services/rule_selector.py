@@ -10,18 +10,20 @@ rule injection.
 
 Maps to Enhancement 2 — Domain-Specific Rule Injection.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 _RULES_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "rules"
-_CLASSIFICATION_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "task_classification.yaml"
+_CLASSIFICATION_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "task_classification.yaml"
+)
 
 # Always-injected rules for safety
 _ALWAYS_RULES = ["error_handling.md"]
@@ -36,9 +38,7 @@ class RuleSelector:
     """
 
     def __init__(
-        self,
-        rules_dir: Optional[Path] = None,
-        classification_path: Optional[Path] = None,
+        self, rules_dir: Path | None = None, classification_path: Path | None = None
     ) -> None:
         self._rules_dir = rules_dir or _RULES_DIR
         self._categories: dict = {}
@@ -52,9 +52,7 @@ class RuleSelector:
             except Exception as exc:
                 logger.warning("Failed to load classification: %s", exc)
 
-    def select_rules(
-        self, step_description: str, mandatory: Optional[list[str]] = None,
-    ) -> list[str]:
+    def select_rules(self, step_description: str, mandatory: list[str] | None = None) -> list[str]:
         """Return the content of rule modules relevant to *step_description*.
 
         Args:

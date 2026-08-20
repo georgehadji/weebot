@@ -62,9 +62,7 @@ def parse_credentials_json(raw: str, *, path_for_errors: str = "credentials.json
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as err:
-        raise ValueError(
-            f"Credentials file '{path_for_errors}' is not valid JSON: {err}"
-        ) from err
+        raise ValueError(f"Credentials file '{path_for_errors}' is not valid JSON: {err}") from err
 
     required_fields = (
         "apiKey",
@@ -98,8 +96,7 @@ def read_credentials(path: str | Path) -> Credentials:
         raw = file_path.read_text(encoding="utf-8")
     except OSError as err:
         raise ValueError(
-            f"Could not read credentials file '{file_path}': {err}. "
-            "Did you run register first?"
+            f"Could not read credentials file '{file_path}': {err}. " "Did you run register first?"
         ) from err
 
     return parse_credentials_json(raw, path_for_errors=str(file_path))

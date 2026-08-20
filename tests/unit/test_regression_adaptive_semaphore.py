@@ -8,6 +8,7 @@ waiters never woke up.
 FIX: The semaphore is created once at max_workers and never replaced.
 Scaling down is advisory (current_workers is updated for reporting).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,7 @@ async def test_semaphore_not_replaced_during_scale():
     ctrl = AdaptiveConcurrencyController(
         min_workers=2,
         max_workers=10,
-        cpu_threshold=0.0,    # force scale-down on any CPU
+        cpu_threshold=0.0,  # force scale-down on any CPU
         memory_threshold=0.0,  # force scale-down on any memory
         adjustment_interval=999,
     )
@@ -38,9 +39,9 @@ async def test_semaphore_not_replaced_during_scale():
 
     # The semaphore object must be the same instance — replacing it
     # would orphan any coroutines blocked on the old one.
-    assert sem_before is sem_after, (
-        "Semaphore was replaced during _adjust() — blocked waiters would be orphaned"
-    )
+    assert (
+        sem_before is sem_after
+    ), "Semaphore was replaced during _adjust() — blocked waiters would be orphaned"
 
 
 @pytest.mark.asyncio
@@ -73,7 +74,7 @@ async def test_max_workers_never_exceeded():
     ctrl = AdaptiveConcurrencyController(
         min_workers=1,
         max_workers=3,
-        cpu_threshold=100.0,   # never scale down
+        cpu_threshold=100.0,  # never scale down
         memory_threshold=100.0,
         adjustment_interval=999,
     )
@@ -93,6 +94,4 @@ async def test_max_workers_never_exceeded():
     tasks = [asyncio.create_task(worker()) for _ in range(10)]
     await asyncio.gather(*tasks)
 
-    assert max_observed <= 3, (
-        f"max_workers=3 but {max_observed} tasks ran concurrently"
-    )
+    assert max_observed <= 3, f"max_workers=3 but {max_observed} tasks ran concurrently"

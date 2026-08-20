@@ -4,12 +4,13 @@ Implements ``EventBusPort``.  When Valkey is unavailable (no ``WEEBOT_REDIS_URL`
 env var or connection fails at first publish), falls back to ``AsyncEventBus``
 so the system never breaks from a missing Valkey dependency.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any
 
 from weebot.application.ports.event_bus_port import EventBusPort, EventHandler, DomainEventHandler
 from weebot.domain.models.event import AgentEvent, DomainEvent
@@ -33,7 +34,7 @@ class ValkeyEventBus(EventBusPort):
     the environment.  If neither is set, falls back to in-memory event bus.
     """
 
-    def __init__(self, valkey_url: Optional[str] = None):
+    def __init__(self, valkey_url: str | None = None):
         self._valkey_url = valkey_url
         self._redis: Any = None  # valkey client or _VALKEY_UNAVAILABLE
         self._in_memory: Any = None  # AsyncEventBus fallback
@@ -53,15 +54,18 @@ class ValkeyEventBus(EventBusPort):
                 if url is None:
                     try:
                         from weebot.config.secret_accessor import SecretAccessor
-                        url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get("WEEBOT_REDIS_URL")
+
+                        url = SecretAccessor.get("WEEBOT_VALKEY_URL") or SecretAccessor.get(
+                            "WEEBOT_REDIS_URL"
+                        )
                     except Exception:
                         url = None
                 if url:
                     try:
                         import valkey.asyncio as aivalkey
+
                         self._redis = aivalkey.from_url(
-                            url, decode_responses=True,
-                            socket_connect_timeout=3,
+                            url, decode_responses=True, socket_connect_timeout=3
                         )
                         await self._redis.ping()  # Valkey RESP-compatible
                         logger.info("ValkeyEventBus: connected to %s", url)
@@ -70,7 +74,8 @@ class ValkeyEventBus(EventBusPort):
                         logger.warning(
                             "ValkeyEventBus: cannot connect to %s (%s). "
                             "Falling back to in-memory bus.",
-                            url, exc,
+                            url,
+                            exc,
                         )
                 # Fallback to in-memory
                 self._redis = _VALKEY_UNAVAILABLE
@@ -81,6 +86,7 @@ class ValkeyEventBus(EventBusPort):
     def _create_in_memory(self):
         """Create an in-memory AsyncEventBus instance as fallback."""
         from weebot.infrastructure.event_bus import AsyncEventBus
+
         bus = AsyncEventBus()
         for h in self._subscribers:
             bus.subscribe(h)

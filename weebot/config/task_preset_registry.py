@@ -3,6 +3,7 @@
 Three tiers mirroring Reasoner's Budget / Balanced / Premium pattern.
 Presets are pure data — no LLM calls or I/O at import time.
 """
+
 from __future__ import annotations
 
 from weebot.domain.models.task_preset import AuditDepth, TaskPreset
@@ -12,7 +13,7 @@ PRESET_SIMPLE = TaskPreset(
     name="simple",
     enable_premortem=False,
     enable_step_validation=False,
-    critique_warn_threshold=0.6,   # Less strict — simple tasks rarely fail
+    critique_warn_threshold=0.6,  # Less strict — simple tasks rarely fail
     critique_revise_threshold=0.3,
     max_steps=10,
     audit_depth=AuditDepth.EVIDENCE_ONLY,

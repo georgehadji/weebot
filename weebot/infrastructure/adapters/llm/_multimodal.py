@@ -11,10 +11,11 @@ provider's wire format. Messages whose ``content`` is a plain string (today's
 overwhelming common case) pass through untouched, so wiring this in is purely
 additive and low-risk.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Literal
+from typing import Any, Literal
 
 Provider = Literal["anthropic", "openai"]
 
@@ -61,11 +62,8 @@ def model_supports_vision(model: str) -> bool:
 
 
 def build_image_message(
-    text: str,
-    base64_image: str,
-    media_type: str = DEFAULT_MEDIA_TYPE,
-    role: str = "user",
-) -> Dict[str, Any]:
+    text: str, base64_image: str, media_type: str = DEFAULT_MEDIA_TYPE, role: str = "user"
+) -> dict[str, Any]:
     """Build a provider-neutral multimodal message carrying one screenshot.
 
     Args:
@@ -77,22 +75,20 @@ def build_image_message(
     Returns:
         A neutral message dict; convert it per-provider via :func:`convert_messages`.
     """
-    content: List[Dict[str, Any]] = []
+    content: list[dict[str, Any]] = []
     if text:
         content.append({"type": "text", "text": text})
     content.append({"type": "image", "data": base64_image, "media_type": media_type})
     return {"role": role, "content": content}
 
 
-def convert_messages(
-    messages: List[Dict[str, Any]], target: Provider
-) -> List[Dict[str, Any]]:
+def convert_messages(messages: list[dict[str, Any]], target: Provider) -> list[dict[str, Any]]:
     """Return a new message list with neutral image blocks mapped to *target* format.
 
     Messages whose ``content`` is not a list are returned unchanged. The input
     list and its dicts are never mutated.
     """
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for msg in messages:
         content = msg.get("content")
         if not isinstance(content, list):
@@ -102,11 +98,9 @@ def convert_messages(
     return out
 
 
-def _convert_blocks(
-    blocks: List[Any], target: Provider
-) -> List[Dict[str, Any]]:
+def _convert_blocks(blocks: list[Any], target: Provider) -> list[dict[str, Any]]:
     """Map a list of neutral content blocks to provider format (total — never raises)."""
-    converted: List[Dict[str, Any]] = []
+    converted: list[dict[str, Any]] = []
     for block in blocks:
         if not isinstance(block, dict):
             converted.append({"type": "text", "text": str(block)})
@@ -121,34 +115,24 @@ def _convert_blocks(
             url = block.get("url", "")
             filename = block.get("filename", "document.pdf")
             if target == "anthropic":
-                converted.append({
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": data,
+                converted.append(
+                    {
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": data},
                     }
-                })
+                )
             else:
                 file_data = f"data:application/pdf;base64,{data}" if data else url
-                converted.append({
-                    "type": "file",
-                    "file": {
-                        "filename": filename,
-                        "file_data": file_data
-                    }
-                })
+                converted.append(
+                    {"type": "file", "file": {"filename": filename, "file_data": file_data}}
+                )
         elif btype == "audio":
             data = block.get("data", "")
             fmt = block.get("format", "wav")
             if target == "openai":
-                converted.append({
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": data,
-                        "format": fmt
-                    }
-                })
+                converted.append(
+                    {"type": "input_audio", "input_audio": {"data": data, "format": fmt}}
+                )
             else:
                 converted.append(
                     {"type": "text", "text": f"[unsupported audio content block on {target}]"}
@@ -159,12 +143,7 @@ def _convert_blocks(
             media_type = block.get("media_type", "video/mp4")
             if target == "openai":
                 video_url = f"data:{media_type};base64,{data}" if data else url
-                converted.append({
-                    "type": "video_url",
-                    "video_url": {
-                        "url": video_url
-                    }
-                })
+                converted.append({"type": "video_url", "video_url": {"url": video_url}})
             else:
                 converted.append(
                     {"type": "text", "text": f"[unsupported video content block on {target}]"}
@@ -172,13 +151,11 @@ def _convert_blocks(
         else:
             # Unknown block type — degrade to text rather than send an invalid
             # payload that the provider would reject.
-            converted.append(
-                {"type": "text", "text": f"[unsupported content block: {btype}]"}
-            )
+            converted.append({"type": "text", "text": f"[unsupported content block: {btype}]"})
     return converted
 
 
-def _image_block(block: Dict[str, Any], target: Provider) -> Dict[str, Any]:
+def _image_block(block: dict[str, Any], target: Provider) -> dict[str, Any]:
     """Map a neutral image block to the provider's image content shape."""
     data = block.get("data", "")
     media_type = block.get("media_type", DEFAULT_MEDIA_TYPE)
@@ -188,7 +165,4 @@ def _image_block(block: Dict[str, Any], target: Provider) -> Dict[str, Any]:
             "source": {"type": "base64", "media_type": media_type, "data": data},
         }
     # OpenAI-compatible: inline data URL.
-    return {
-        "type": "image_url",
-        "image_url": {"url": f"data:{media_type};base64,{data}"},
-    }
+    return {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{data}"}}

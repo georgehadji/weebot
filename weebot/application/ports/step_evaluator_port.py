@@ -1,4 +1,5 @@
 """Port for evaluating step progress against plan goals."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -29,9 +30,5 @@ class StepEvaluatorPort(ABC):
 
     @abstractmethod
     async def evaluate(
-        self,
-        step: "Step",
-        output: str,
-        plan: "Plan",
-        previous_outputs: list[str],
+        self, step: Step, output: str, plan: Plan, previous_outputs: list[str]
     ) -> StepEvaluation: ...

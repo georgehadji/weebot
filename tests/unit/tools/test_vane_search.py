@@ -40,16 +40,16 @@ async def test_vane_search_success(mock_vane_settings):
         "sources": [
             {
                 "metadata": {"title": "Source 1", "url": "http://example.com/1"},
-                "content": "Content from source 1."
+                "content": "Content from source 1.",
             },
             {
                 "metadata": {"title": "Source 2", "url": "http://example.com/2"},
-                "content": "Content from source 2."
+                "content": "Content from source 2.",
             },
         ],
     }
 
-    with patch('httpx.AsyncClient') as MockAsyncClient:
+    with patch("httpx.AsyncClient") as MockAsyncClient:
         client = _mock_client(MockAsyncClient)
         client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
@@ -77,7 +77,7 @@ async def test_vane_search_success(mock_vane_settings):
 @pytest.mark.asyncio
 async def test_vane_search_http_error(mock_vane_settings):
     tool = VaneSearchTool()
-    with patch('httpx.AsyncClient') as MockAsyncClient:
+    with patch("httpx.AsyncClient") as MockAsyncClient:
         client = _mock_client(MockAsyncClient)
         resp = _mock_response(
             status_code=500,
@@ -99,11 +99,13 @@ async def test_vane_search_http_error(mock_vane_settings):
 @pytest.mark.asyncio
 async def test_vane_search_request_error(mock_vane_settings):
     tool = VaneSearchTool()
-    with patch('httpx.AsyncClient') as MockAsyncClient:
+    with patch("httpx.AsyncClient") as MockAsyncClient:
         client = _mock_client(MockAsyncClient)
-        client.post = AsyncMock(side_effect=httpx.RequestError(
-            "Network error", request=httpx.Request("POST", "http://mock-vane:3000/api/search")
-        ))
+        client.post = AsyncMock(
+            side_effect=httpx.RequestError(
+                "Network error", request=httpx.Request("POST", "http://mock-vane:3000/api/search")
+            )
+        )
 
         result = await tool.execute(query="Network issue")
 
@@ -117,7 +119,7 @@ async def test_vane_search_no_message_or_sources(mock_vane_settings):
     tool = VaneSearchTool()
     mock_response_data = {"some_other_field": "value"}
 
-    with patch('httpx.AsyncClient') as MockAsyncClient:
+    with patch("httpx.AsyncClient") as MockAsyncClient:
         client = _mock_client(MockAsyncClient)
         client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
@@ -134,14 +136,14 @@ async def test_vane_search_focus_mode_and_optimization(mock_vane_settings):
     tool = VaneSearchTool()
     mock_response_data = {"message": "Academic result", "sources": []}
 
-    with patch('httpx.AsyncClient') as MockAsyncClient:
+    with patch("httpx.AsyncClient") as MockAsyncClient:
         client = _mock_client(MockAsyncClient)
         client.post = AsyncMock(return_value=_mock_response(json_data=mock_response_data))
 
         result = await tool.execute(
             query="Quantum physics breakthroughs",
             focus_mode="academicSearch",
-            optimization="quality"
+            optimization="quality",
         )
 
         assert isinstance(result, ToolResult)

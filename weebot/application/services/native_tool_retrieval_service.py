@@ -4,6 +4,7 @@ Gated by ``mcp_scope_native_tools``; when enabled, PlanActFlow scopes the
 native tool set alongside external MCP tools so the total per-turn tool count
 stays within budget.
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,7 @@ class NativeToolRetrievalService:
     """
 
     def __init__(
-        self,
-        registry: RoleBasedToolRegistry,
-        retrieval_adapter: Any = None,
-        k: int = 4,
+        self, registry: RoleBasedToolRegistry, retrieval_adapter: Any = None, k: int = 4
     ) -> None:
         self._registry = registry
         self._k = k
@@ -69,13 +67,15 @@ class NativeToolRetrievalService:
                 logger.debug("Native tool %s instantiation skipped: %s", name, exc)
                 description = getattr(tool_cls, "description", "") or ""
 
-            infos.append(MCPToolInfo(
-                original_name=name,
-                namespaced_name=name,
-                description=description or name,
-                input_schema=getattr(tool_cls, "parameters", {}),
-                server_name="native",
-            ))
+            infos.append(
+                MCPToolInfo(
+                    original_name=name,
+                    namespaced_name=name,
+                    description=description or name,
+                    input_schema=getattr(tool_cls, "parameters", {}),
+                    server_name="native",
+                )
+            )
         return infos
 
     async def select_for_query(self, query: str) -> list[str]:

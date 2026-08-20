@@ -12,6 +12,7 @@ Returns:
 - ``503`` if the DI container is not initialized.
 - ``200`` with a Discord interaction response on success.
 """
+
 from __future__ import annotations
 
 import logging

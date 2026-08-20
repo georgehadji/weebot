@@ -1,4 +1,5 @@
 """Unit tests for SafetyChecker critical operation detection."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -12,9 +13,9 @@ from weebot.core.safety import SafetyChecker
 def checker():
     """SafetyChecker with mocked LLMPort to avoid real API calls."""
     mock_llm = MagicMock()
-    mock_llm.chat = AsyncMock(return_value=MagicMock(
-        content='{"confirmation_required": "yes", "plan_b": "backup first"}'
-    ))
+    mock_llm.chat = AsyncMock(
+        return_value=MagicMock(content='{"confirmation_required": "yes", "plan_b": "backup first"}')
+    )
     yield SafetyChecker(llm=mock_llm)
 
 

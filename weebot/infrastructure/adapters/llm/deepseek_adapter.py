@@ -8,11 +8,12 @@ DeepSeek V4 Pro thinking mode (enabled by default):
 
 Ref: https://api-docs.deepseek.com/guides/thinking_mode
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .openai_adapter import OpenAIAdapter
 from weebot.application.ports.llm_port import LLMResponse
@@ -20,7 +21,11 @@ from weebot.config.api_endpoints import DEEPSEEK_API_BASE
 from weebot.config.model_refs import MODEL_FACTORY_DEEPSEEK as _MODEL_FACTORY_DEEPSEEK
 
 # Strip provider prefix for direct API: "deepseek/deepseek-v4-pro" → "deepseek-v4-pro"
-_MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK.split("/", 1)[-1] if "/" in _MODEL_FACTORY_DEEPSEEK else _MODEL_FACTORY_DEEPSEEK
+_MODEL_FACTORY_DEEPSEEK_STRIPPED = (
+    _MODEL_FACTORY_DEEPSEEK.split("/", 1)[-1]
+    if "/" in _MODEL_FACTORY_DEEPSEEK
+    else _MODEL_FACTORY_DEEPSEEK
+)
 del _MODEL_FACTORY_DEEPSEEK
 MODEL_FACTORY_DEEPSEEK_STRIPPED = _MODEL_FACTORY_DEEPSEEK_STRIPPED
 
@@ -37,26 +42,20 @@ class DeepSeekAdapter(OpenAIAdapter):
     """
 
     def __init__(
-        self,
-        api_key: Optional[str] = None,
-        default_model: str = MODEL_FACTORY_DEEPSEEK_STRIPPED,
+        self, api_key: str | None = None, default_model: str = MODEL_FACTORY_DEEPSEEK_STRIPPED
     ):
         key = api_key or os.getenv("DEEPSEEK_API_KEY") or "no-key"
-        super().__init__(
-            api_key=key,
-            base_url=DEEPSEEK_API_BASE,
-            default_model=default_model,
-        )
+        super().__init__(api_key=key, base_url=DEEPSEEK_API_BASE, default_model=default_model)
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """Override chat to enable thinking mode for DeepSeek V4 Pro.
 

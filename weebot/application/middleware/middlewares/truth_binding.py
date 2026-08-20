@@ -1,4 +1,5 @@
 """Truth binding middleware — validates assistant responses against deterministic guards."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,16 +20,19 @@ class TruthBindingMiddleware(EventMiddleware):
         truth_binder = getattr(flow, "_truth_binder", None) if flow else None
         session = context.get("session")
 
-        if truth_binder is not None and isinstance(event, MessageEvent) and event.role == "assistant":
+        if (
+            truth_binder is not None
+            and isinstance(event, MessageEvent)
+            and event.role == "assistant"
+        ):
             the_plan = getattr(flow, "_plan", None) if flow else None
             step = the_plan.current_step if the_plan else None
             facts = session.get_facts() if session else {}
 
-            result = await truth_binder.bind(event.message, {
-                "session_events": session.events if session else [],
-                "step": step,
-                "facts": facts,
-            })
+            result = await truth_binder.bind(
+                event.message,
+                {"session_events": session.events if session else [], "step": step, "facts": facts},
+            )
             if not result.passed or result.has_rewrites():
                 flow._log.info(
                     "Truth binding %s for response (%d violations)",

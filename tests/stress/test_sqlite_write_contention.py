@@ -6,6 +6,7 @@ concurrency to find the breaking point and measure latency degradation.
 Run with:
     pytest tests/stress/test_sqlite_write_contention.py -v --tb=short
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,15 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from weebot.infrastructure.persistence.connection_pool import (
-    SQLiteConnectionPool,
-    close_all_pools,
-)
-
+from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _setup_pool(db_path: Path, max_read: int = 5) -> SQLiteConnectionPool:
     pool = SQLiteConnectionPool(db_path, max_read_connections=max_read, enable_wal=True)
@@ -41,7 +39,9 @@ async def _setup_pool(db_path: Path, max_read: int = 5) -> SQLiteConnectionPool:
     return pool
 
 
-async def _writer(pool: SQLiteConnectionPool, worker_id: int, n: int, latencies: list[float]) -> int:
+async def _writer(
+    pool: SQLiteConnectionPool, worker_id: int, n: int, latencies: list[float]
+) -> int:
     """Write *n* rows, recording per-write latency. Returns rows written."""
     written = 0
     for seq in range(n):
@@ -128,9 +128,9 @@ class TestWriteContention:
 
         # Latency assertion: p99 write should stay under 2s even at 50 writers.
         # SQLite write serialization means writers queue — but they shouldn't timeout.
-        assert report["p99_ms"] < 2000, (
-            f"Write p99 latency {report['p99_ms']}ms exceeds 2s at concurrency={concurrency}"
-        )
+        assert (
+            report["p99_ms"] < 2000
+        ), f"Write p99 latency {report['p99_ms']}ms exceeds 2s at concurrency={concurrency}"
 
     @pytest.mark.asyncio
     async def test_no_database_locked_errors(self):
@@ -166,12 +166,10 @@ class TestReadWriteInteraction:
         read_latencies: list[list[float]] = [[] for _ in range(5)]
 
         writers = [
-            asyncio.create_task(_writer(self.pool, i, 100, write_latencies[i]))
-            for i in range(10)
+            asyncio.create_task(_writer(self.pool, i, 100, write_latencies[i])) for i in range(10)
         ]
         readers = [
-            asyncio.create_task(_reader(self.pool, 3.0, read_latencies[i]))
-            for i in range(5)
+            asyncio.create_task(_reader(self.pool, 3.0, read_latencies[i])) for i in range(5)
         ]
 
         await asyncio.gather(*writers, *readers)
@@ -179,9 +177,9 @@ class TestReadWriteInteraction:
         all_read = [l for r in read_latencies for l in r]
         report = _report("read-during-write", all_read)
         assert report["count"] > 0, "No reads completed"
-        assert report["p95_ms"] < 100, (
-            f"Read p95 {report['p95_ms']}ms during write storm exceeds 100ms"
-        )
+        assert (
+            report["p95_ms"] < 100
+        ), f"Read p95 {report['p95_ms']}ms during write storm exceeds 100ms"
 
     @pytest.mark.asyncio
     async def test_read_pool_exhaustion_recovery(self):
@@ -196,7 +194,7 @@ class TestReadWriteInteraction:
                     await cursor.fetchone()
                     await cursor.close()
                 results.append(True)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 results.append(False)
 
         await asyncio.gather(*[_try_read(i) for i in range(6)])

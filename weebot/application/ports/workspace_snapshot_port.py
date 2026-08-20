@@ -19,6 +19,7 @@ Design notes:
     edits made by the user or another process. Reporting gives the
     invariant without the blast radius.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -34,6 +35,7 @@ class WorkspaceSnapshot:
     strategy's private representation. Application code must treat both as
     opaque and only pass the snapshot back to the adapter that made it.
     """
+
     backend: str
     payload: Any = None
 
@@ -41,6 +43,7 @@ class WorkspaceSnapshot:
 @dataclass(frozen=True)
 class WorkspaceDrift:
     """What changed in the workspace between two points in time."""
+
     added: tuple[str, ...] = field(default_factory=tuple)
     modified: tuple[str, ...] = field(default_factory=tuple)
     removed: tuple[str, ...] = field(default_factory=tuple)

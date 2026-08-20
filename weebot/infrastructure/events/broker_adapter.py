@@ -14,18 +14,14 @@ and converts EventBroker-style calls into AsyncEventBus publications.
 The EventBroker class itself is preserved for backward compatibility
 with code that uses its subscribe() / get_event_history() methods.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.domain.models.event import (
-    AgentEvent,
-    FactDiscovered,
-    NotificationEvent,
-)
-from weebot.domain.ports import EventPublisher
+from weebot.domain.models.event import AgentEvent, FactDiscovered, NotificationEvent
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +38,7 @@ class EventBrokerAdapter:
         self._bus = event_bus
 
     async def publish(
-        self,
-        event_type: str,
-        agent_id: str,
-        data: dict[str, Any] | None = None,
+        self, event_type: str, agent_id: str, data: dict[str, Any] | None = None
     ) -> bool:
         """Publish an event through the global AsyncEventBus.
 
@@ -57,11 +50,7 @@ class EventBrokerAdapter:
         await self._bus.publish(agent_event)
         return True
 
-    def subscribe(
-        self,
-        event_type: str,
-        handler: Any,
-    ) -> None:
+    def subscribe(self, event_type: str, handler: Any) -> None:
         """Subscribe to events of a given type via the AsyncEventBus.
 
         This bridges the old EventBroker.subscribe(event_type=…) API
@@ -73,12 +62,7 @@ class EventBrokerAdapter:
         """
         self._bus.subscribe_by_type(event_type, handler)
 
-    def _convert(
-        self,
-        event_type: str,
-        agent_id: str,
-        data: dict[str, Any],
-    ) -> AgentEvent:
+    def _convert(self, event_type: str, agent_id: str, data: dict[str, Any]) -> AgentEvent:
         """Convert an EventBroker-style (event_type, agent_id, data) triple
         into the most appropriate AgentEvent subtype.
 
@@ -102,6 +86,4 @@ class EventBrokerAdapter:
             event_type,
             agent_id,
         )
-        return NotificationEvent(
-            text=f"[{event_type}] from {agent_id}: {str(data)[:200]}",
-        )
+        return NotificationEvent(text=f"[{event_type}] from {agent_id}: {str(data)[:200]}")

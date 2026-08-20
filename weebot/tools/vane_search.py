@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 import httpx
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -15,10 +15,7 @@ class VaneSearchTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "query": {
-                "type": "string",
-                "description": "The research question or search query.",
-            },
+            "query": {"type": "string", "description": "The research question or search query."},
             "focus_mode": {
                 "type": "string",
                 "description": "The search universe (e.g., 'webSearch', 'academicSearch'). Defaults to 'webSearch'.",
@@ -36,25 +33,21 @@ class VaneSearchTool(BaseTool):
     }
 
     async def execute(
-        self,
-        query: str,
-        focus_mode: str = "webSearch",
-        optimization: str = "balanced",
-        **_: Any
+        self, query: str, focus_mode: str = "webSearch", optimization: str = "balanced", **_: Any
     ) -> ToolResult:
         base_url = os.environ.get("VANE_BASE_URL", "https://api.vane.ai")
-        
+
         payload = {
             "query": query,
             "focusMode": focus_mode,
             "optimizationMode": optimization,
-            "stream": False # Weebot expects a single response, not a stream
+            "stream": False,  # Weebot expects a single response, not a stream
         }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(f"{base_url}/api/search", json=payload)
-                resp.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                resp.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
                 data = resp.json()
 
                 message = data.get("message", "No message provided by Vane.")
@@ -63,11 +56,13 @@ class VaneSearchTool(BaseTool):
                 # Format sources for metadata
                 formatted_sources = []
                 for source in sources:
-                    formatted_sources.append({
-                        "title": source.get("metadata", {}).get("title", "N/A"),
-                        "url": source.get("metadata", {}).get("url", "N/A"),
-                        "content": source.get("content", "N/A")
-                    })
+                    formatted_sources.append(
+                        {
+                            "title": source.get("metadata", {}).get("title", "N/A"),
+                            "url": source.get("metadata", {}).get("url", "N/A"),
+                            "content": source.get("content", "N/A"),
+                        }
+                    )
 
                 return ToolResult(
                     output=message,
@@ -76,8 +71,7 @@ class VaneSearchTool(BaseTool):
 
         except httpx.RequestError as exc:
             return ToolResult(
-                output="",
-                error=f"Vane API request failed for {exc.request.url!r}: {exc}",
+                output="", error=f"Vane API request failed for {exc.request.url!r}: {exc}"
             )
         except httpx.HTTPStatusError as exc:
             return ToolResult(
@@ -86,7 +80,5 @@ class VaneSearchTool(BaseTool):
             )
         except Exception as e:
             return ToolResult(
-                output="",
-                error=f"An unexpected error occurred during Vane search: {e}",
+                output="", error=f"An unexpected error occurred during Vane search: {e}"
             )
-

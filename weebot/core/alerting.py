@@ -26,13 +26,15 @@ Usage:
     manager = AlertManager()
     manager.fire_alert(alert)
 """
+
 import asyncio
 import logging
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 class AlertSeverity(Enum):
     """Alert severity levels."""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -48,6 +51,7 @@ class AlertSeverity(Enum):
 
 class AlertState(Enum):
     """Alert lifecycle states."""
+
     FIRING = "firing"
     RESOLVED = "resolved"
     PENDING = "pending"
@@ -68,24 +72,21 @@ class Alert:
         ends_at: When the alert ends (None = ongoing)
         generator_url: Link to the source
     """
+
     name: str
     severity: AlertSeverity
     message: str
-    labels: Dict[str, str] = field(default_factory=dict)
-    annotations: Dict[str, str] = field(default_factory=dict)
-    starts_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    ends_at: Optional[datetime] = None
-    generator_url: Optional[str] = None
+    labels: dict[str, str] = field(default_factory=dict)
+    annotations: dict[str, str] = field(default_factory=dict)
+    starts_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    ends_at: datetime | None = None
+    generator_url: str | None = None
     state: AlertState = AlertState.FIRING
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert alert to dictionary format (Prometheus-compatible)."""
         return {
-            "labels": {
-                "alertname": self.name,
-                "severity": self.severity.value,
-                **self.labels
-            },
+            "labels": {"alertname": self.name, "severity": self.severity.value, **self.labels},
             "annotations": self.annotations,
             "startsAt": self.starts_at.isoformat(),
             "endsAt": self.ends_at.isoformat() if self.ends_at else "",
@@ -96,7 +97,7 @@ class Alert:
     def resolve(self) -> None:
         """Mark alert as resolved."""
         self.state = AlertState.RESOLVED
-        self.ends_at = datetime.now(timezone.utc)
+        self.ends_at = datetime.now(UTC)
 
 
 # Type alias for alert handlers
@@ -113,12 +114,12 @@ class AlertManager:
     """
 
     def __init__(self) -> None:
-        self._alerts: Dict[str, Alert] = {}
-        self._handlers: List[AlertHandler] = []
-        self._async_handlers: List[AsyncAlertHandler] = []
+        self._alerts: dict[str, Alert] = {}
+        self._handlers: list[AlertHandler] = []
+        self._async_handlers: list[AsyncAlertHandler] = []
         self._lock = threading.RLock()
-        self._grouping: Dict[str, List[Alert]] = defaultdict(list)
-        self._group_by: List[str] = ["name", "severity"]
+        self._grouping: dict[str, list[Alert]] = defaultdict(list)
+        self._group_by: list[str] = ["name", "severity"]
 
     def register_handler(self, handler: AlertHandler) -> None:
         """Register a synchronous alert handler."""
@@ -130,7 +131,7 @@ class AlertManager:
         with self._lock:
             self._async_handlers.append(handler)
 
-    def set_group_by(self, labels: List[str]) -> None:
+    def set_group_by(self, labels: list[str]) -> None:
         """Configure how alerts are grouped."""
         with self._lock:
             self._group_by = labels
@@ -160,8 +161,7 @@ class AlertManager:
             if existing and existing.state == AlertState.FIRING:
                 # Update existing alert, don't create duplicate
                 logger.debug(
-                    "Alert %s already firing, updating instead of creating new",
-                    alert.name
+                    "Alert %s already firing, updating instead of creating new", alert.name
                 )
                 existing.message = alert.message
                 existing.annotations = alert.annotations
@@ -174,13 +174,15 @@ class AlertManager:
 
                 logger.info(
                     "Alert fired: name=%s severity=%s message=%s",
-                    alert.name, alert.severity.value, alert.message
+                    alert.name,
+                    alert.severity.value,
+                    alert.message,
                 )
 
             # Dispatch to handlers
             self._dispatch(alert)
 
-    def resolve_alert(self, name: str, message: Optional[str] = None) -> bool:
+    def resolve_alert(self, name: str, message: str | None = None) -> bool:
         """
         Resolve an alert by name.
 
@@ -206,24 +208,22 @@ class AlertManager:
             self._dispatch(alert)
             return True
 
-    def get_alert(self, name: str) -> Optional[Alert]:
+    def get_alert(self, name: str) -> Alert | None:
         """Get alert by name."""
         with self._lock:
             return self._alerts.get(name)
 
-    def get_firing_alerts(self) -> List[Alert]:
+    def get_firing_alerts(self) -> list[Alert]:
         """Get all currently firing alerts."""
         with self._lock:
-            return [
-                a for a in self._alerts.values()
-                if a.state == AlertState.FIRING
-            ]
+            return [a for a in self._alerts.values() if a.state == AlertState.FIRING]
 
-    def get_alerts_by_severity(self, severity: AlertSeverity) -> List[Alert]:
+    def get_alerts_by_severity(self, severity: AlertSeverity) -> list[Alert]:
         """Get all firing alerts of a specific severity."""
         with self._lock:
             return [
-                a for a in self._alerts.values()
+                a
+                for a in self._alerts.values()
                 if a.state == AlertState.FIRING and a.severity == severity
             ]
 
@@ -234,10 +234,7 @@ class AlertManager:
             try:
                 handler(alert)
             except Exception as e:
-                logger.error(
-                    "Alert handler failed: handler=%s error=%s",
-                    handler.__name__, str(e)
-                )
+                logger.error("Alert handler failed: handler=%s error=%s", handler.__name__, str(e))
 
         # Asynchronous handlers
         if self._async_handlers:
@@ -247,8 +244,7 @@ class AlertManager:
                     asyncio.ensure_future(handler(alert))
                 except Exception as e:
                     logger.error(
-                        "Async alert handler failed: handler=%s error=%s",
-                        handler.__name__, str(e)
+                        "Async alert handler failed: handler=%s error=%s", handler.__name__, str(e)
                     )
 
     def clear_resolved(self) -> int:
@@ -260,8 +256,7 @@ class AlertManager:
         """
         with self._lock:
             resolved = [
-                name for name, alert in self._alerts.items()
-                if alert.state == AlertState.RESOLVED
+                name for name, alert in self._alerts.items() if alert.state == AlertState.RESOLVED
             ]
             for name in resolved:
                 del self._alerts[name]
@@ -274,7 +269,7 @@ class AlertManager:
 
             return len(resolved)
 
-    def export_prometheus(self) -> List[Dict[str, Any]]:
+    def export_prometheus(self) -> list[dict[str, Any]]:
         """
         Export alerts in Prometheus alertmanager format.
 
@@ -289,6 +284,7 @@ class AlertManager:
 # Built-in Handlers
 # =============================================================================
 
+
 def log_alert_handler(alert: Alert) -> None:
     """Log alerts using the standard logging module."""
     log_level = {
@@ -299,9 +295,7 @@ def log_alert_handler(alert: Alert) -> None:
     }.get(alert.severity, logging.INFO)
 
     logger.log(
-        log_level,
-        "[ALERT] %s: %s (severity: %s)",
-        alert.name, alert.message, alert.severity.value
+        log_level, "[ALERT] %s: %s (severity: %s)", alert.name, alert.message, alert.severity.value
     )
 
 
@@ -310,7 +304,7 @@ def log_alert_handler(alert: Alert) -> None:
 # =============================================================================
 
 # Global alert manager instance
-_default_manager: Optional[AlertManager] = None
+_default_manager: AlertManager | None = None
 _manager_lock = threading.Lock()
 
 
@@ -328,8 +322,8 @@ def fire_alert(
     name: str,
     severity: AlertSeverity,
     message: str,
-    labels: Optional[Dict[str, str]] = None,
-    annotations: Optional[Dict[str, str]] = None,
+    labels: dict[str, str] | None = None,
+    annotations: dict[str, str] | None = None,
 ) -> Alert:
     """
     Convenience function to fire an alert using the global manager.
@@ -355,7 +349,7 @@ def fire_alert(
     return alert
 
 
-def resolve_alert(name: str, message: Optional[str] = None) -> bool:
+def resolve_alert(name: str, message: str | None = None) -> bool:
     """
     Convenience function to resolve an alert using the global manager.
 

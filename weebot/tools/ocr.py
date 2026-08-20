@@ -1,9 +1,9 @@
 """OCR and text extraction tools."""
+
 from __future__ import annotations
 
 import base64
 from io import BytesIO
-from typing import Optional
 
 from PIL import Image
 
@@ -15,16 +15,12 @@ class OCRTool(BaseTool):
 
     name: str = "ocr"
     description: str = (
-        "Extract text from an image using OCR. "
-        "Accepts base64-encoded PNG/JPEG images."
+        "Extract text from an image using OCR. " "Accepts base64-encoded PNG/JPEG images."
     )
     parameters: dict = {
         "type": "object",
         "properties": {
-            "image_base64": {
-                "type": "string",
-                "description": "Base64-encoded image (PNG or JPEG)",
-            },
+            "image_base64": {"type": "string", "description": "Base64-encoded image (PNG or JPEG)"},
             "language": {
                 "type": "string",
                 "description": "Language code for OCR (e.g., 'eng', 'ell' for Greek, default: 'eng')",
@@ -38,11 +34,7 @@ class OCRTool(BaseTool):
     }
 
     async def execute(
-        self,
-        image_base64: str,
-        language: str = "eng",
-        config: str = "",
-        **_,
+        self, image_base64: str, language: str = "eng", config: str = "", **_
     ) -> ToolResult:
         """Extract text from image using OCR."""
         try:
@@ -59,9 +51,7 @@ class OCRTool(BaseTool):
             )
 
             if not text.strip():
-                return ToolResult(
-                    output="No text detected in image",
-                )
+                return ToolResult(output="No text detected in image")
 
             return ToolResult(output=f"Extracted text:\n\n{text}")
 
@@ -82,10 +72,7 @@ class StructuredOCRTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "image_base64": {
-                "type": "string",
-                "description": "Base64-encoded image (PNG or JPEG)",
-            },
+            "image_base64": {"type": "string", "description": "Base64-encoded image (PNG or JPEG)"},
             "language": {
                 "type": "string",
                 "description": "Language code for OCR (e.g., 'eng', 'ell', default: 'eng')",
@@ -99,11 +86,7 @@ class StructuredOCRTool(BaseTool):
     }
 
     async def execute(
-        self,
-        image_base64: str,
-        language: str = "eng",
-        min_confidence: int = 50,
-        **_,
+        self, image_base64: str, language: str = "eng", min_confidence: int = 50, **_
     ) -> ToolResult:
         """Extract structured text with positions."""
         try:
@@ -126,7 +109,7 @@ class StructuredOCRTool(BaseTool):
             top_list = details.get("top", [])
             width_list = details.get("width", [])
             height_list = details.get("height", [])
-            
+
             for i, text in enumerate(details.get("text", [])):
                 if not text.strip():
                     continue
@@ -139,7 +122,12 @@ class StructuredOCRTool(BaseTool):
                     continue
 
                 # Guard against mismatched position data
-                if i >= len(left_list) or i >= len(top_list) or i >= len(width_list) or i >= len(height_list):
+                if (
+                    i >= len(left_list)
+                    or i >= len(top_list)
+                    or i >= len(width_list)
+                    or i >= len(height_list)
+                ):
                     continue
 
                 item = {

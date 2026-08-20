@@ -1,6 +1,5 @@
 """Unit tests for AgentLogger with rotation."""
-import pytest
-from pathlib import Path
+
 from weebot.utils.logger import AgentLogger
 
 
@@ -18,7 +17,9 @@ class TestLogRotation:
         logger = AgentLogger(log_path=log_file)
         logger.get_logger().info("trigger rotation check")
         # After any write, original should be backed up or truncated
-        assert (tmp_path / "agent.log.1").exists() or log_file.stat().st_size < 5 * 1024 * 1024 + 200
+        assert (
+            tmp_path / "agent.log.1"
+        ).exists() or log_file.stat().st_size < 5 * 1024 * 1024 + 200
 
     def test_logger_accepts_custom_path(self, tmp_path):
         log_file = tmp_path / "subdir" / "custom.log"

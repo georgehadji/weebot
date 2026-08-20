@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from .shared_assets import try_read_shared_json, try_read_shared_text
 

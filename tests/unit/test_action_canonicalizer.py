@@ -1,4 +1,5 @@
 """Unit tests for ActionCanonicalizer (Tier 1.1 — Action Realization Layer)."""
+
 from __future__ import annotations
 
 from weebot.domain.models.base_tool import BaseTool
@@ -62,9 +63,7 @@ def test_coerces_stringified_boolean():
 def test_does_not_reinterpret_actual_bool_as_int():
     tool = _make_tool("search", SEARCH_SCHEMA)
     canon = ActionCanonicalizer(tools=[tool])
-    result = canon.canonicalize(
-        "search", {"query": "x", "verbose": False, "max_results": 5}
-    )
+    result = canon.canonicalize("search", {"query": "x", "verbose": False, "max_results": 5})
     assert result.corrected_args["verbose"] is False
     assert result.changes == []
 

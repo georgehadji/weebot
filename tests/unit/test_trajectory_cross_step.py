@@ -1,4 +1,5 @@
 """Tests for Phase 6: Cross-step TrajectoryMonitor."""
+
 import pytest
 
 from weebot.application.services.trajectory_monitor import TrajectoryMonitor
@@ -11,6 +12,7 @@ def monitor():
 
 
 # ── reset_step() preserves cross-step state ───────────────────────
+
 
 def test_reset_step_clears_tool_signatures(monitor):
     """reset_step() clears per-step rolling windows."""
@@ -25,14 +27,8 @@ def test_reset_step_clears_tool_signatures(monitor):
 def test_reset_step_preserves_consecutive_failures(monitor):
     """Cross-step failure counter is preserved across reset_step()."""
     # Simulate failed steps
-    monitor.diagnose(
-        step_id="step1", tool_signature="tool_a",
-        tool_output="ERROR: timeout",
-    )
-    monitor.diagnose(
-        step_id="step1", tool_signature="tool_b",
-        tool_output="ERROR: crash",
-    )
+    monitor.diagnose(step_id="step1", tool_signature="tool_a", tool_output="ERROR: timeout")
+    monitor.diagnose(step_id="step1", tool_signature="tool_b", tool_output="ERROR: crash")
     assert monitor._consecutive_failed_steps == 2
 
     monitor.reset_step()
@@ -50,12 +46,11 @@ def test_reset_step_preserves_step_results(monitor):
 
 # ── Semantic-loop detector requires genuinely different calls ─────
 
+
 def test_semantic_loop_fires_for_different_tools_with_same_output(monitor):
     """Distinct tool calls yielding identical output is a real semantic loop."""
     for i, sig in enumerate(("tool_a", "tool_b", "tool_c")):
-        diag = monitor.diagnose(
-            step_id="step1", tool_signature=sig, tool_output="identical output",
-        )
+        diag = monitor.diagnose(step_id="step1", tool_signature=sig, tool_output="identical output")
 
     assert diag.health == TrajectoryHealth.SEMANTIC_LOOP
 
@@ -68,14 +63,14 @@ def test_semantic_loop_ignores_repeated_identical_call(monitor):
     """
     for _ in range(3):
         diag = monitor.diagnose(
-            step_id="step1", tool_signature="file_editor:view:a.py",
-            tool_output="identical output",
+            step_id="step1", tool_signature="file_editor:view:a.py", tool_output="identical output"
         )
 
     assert diag.health == TrajectoryHealth.HEALTHY
 
 
 # ── Cross-step failure detection ──────────────────────────────────
+
 
 def test_cross_step_failure_triggers_at_threshold(monitor):
     """3 consecutive error-producing steps trigger TERMINAL."""
@@ -92,9 +87,7 @@ def test_cross_step_failure_triggers_at_threshold(monitor):
 
     # After 3 consecutive errors, the cross-step detector should fire
     diag = monitor.diagnose(
-        step_id="step2",
-        tool_signature="tool_2",
-        tool_output="ERROR: systematic failure",
+        step_id="step2", tool_signature="tool_2", tool_output="ERROR: systematic failure"
     )
     assert diag.health == TrajectoryHealth.TERMINAL
     assert "consecutive steps" in diag.detail
@@ -115,16 +108,11 @@ def test_non_error_resets_consecutive_counter(monitor):
 def test_healthy_after_recovery(monitor):
     """After an error streak is interrupted, no cross-step flag."""
     for i in range(2):
-        monitor.diagnose(
-            step_id=f"step{i}", tool_signature=f"t{i}",
-            tool_output=f"ERROR: fail {i}",
-        )
+        monitor.diagnose(step_id=f"step{i}", tool_signature=f"t{i}", tool_output=f"ERROR: fail {i}")
     # Success resets counter
     monitor.diagnose(step_id="step2", tool_signature="t2", tool_output="OK")
     # One more error should NOT trigger 3-consecutive
-    diag = monitor.diagnose(
-        step_id="step3", tool_signature="t3", tool_output="ERROR: isolated",
-    )
+    diag = monitor.diagnose(step_id="step3", tool_signature="t3", tool_output="ERROR: isolated")
     assert monitor._consecutive_failed_steps == 1  # Only 1, not 3
     # Should not be TERMINAL due to cross-step detector
     # (but could be other patterns, so just check health isn't TERMINAL
@@ -134,13 +122,12 @@ def test_healthy_after_recovery(monitor):
 
 # ── Within-step patterns still work after reset_step() ────────────
 
+
 def test_repetition_detection_after_reset(monitor):
     """repetition_threshold works correctly after reset_step()."""
     monitor.reset_step()
     for i in range(4):
-        diag = monitor.diagnose(
-            step_id="step1", tool_signature="same_tool",
-        )
+        diag = monitor.diagnose(step_id="step1", tool_signature="same_tool")
     assert diag.health == TrajectoryHealth.REPEATING
 
 

@@ -8,13 +8,14 @@ Tree-of-Thoughts (ToT) extends the standard UpdatingState by:
 This escapes local-minimum revision loops that plague greedy single-candidate
 re-planning.  All candidates are generated in parallel (asyncio.gather).
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
@@ -46,6 +47,7 @@ Return ONLY valid JSON: {"novelty": 3, "feasibility": 4, "specificity": 3}"""
 @dataclass
 class ScoredCandidate:
     """A plan revision candidate with its aggregate score."""
+
     description: str
     novelty: int = 1
     feasibility: int = 1
@@ -65,19 +67,11 @@ class TreeOfThoughtsScorer:
         num_candidates: Number of candidates to generate (default 3).
     """
 
-    def __init__(
-        self,
-        llm: "LLMPort",
-        num_candidates: int = _NUM_CANDIDATES,
-    ) -> None:
+    def __init__(self, llm: LLMPort, num_candidates: int = _NUM_CANDIDATES) -> None:
         self._llm = llm
         self._num_candidates = num_candidates
 
-    async def generate_candidates(
-        self,
-        step_description: str,
-        failure_context: str,
-    ) -> list[str]:
+    async def generate_candidates(self, step_description: str, failure_context: str) -> list[str]:
         """Generate N alternative approaches for the failed step.
 
         All candidates are generated via a single LLM call that returns
@@ -89,7 +83,7 @@ class TreeOfThoughtsScorer:
             f"Failure context: {failure_context}\n\n"
             f"Generate {self._num_candidates} completely different approaches "
             f"to replace this step. Each must be specific and actionable.\n\n"
-            f"Return ONLY valid JSON: {{\"candidates\": [\"approach 1\", \"...\"]}}"
+            f'Return ONLY valid JSON: {{"candidates": ["approach 1", "..."]}}'
         )
         try:
             response = await asyncio.wait_for(
@@ -106,15 +100,13 @@ class TreeOfThoughtsScorer:
             data = json.loads(raw)
             candidates = data.get("candidates", [])
             if candidates:
-                return candidates[:self._num_candidates]
+                return candidates[: self._num_candidates]
         except Exception as exc:
             logger.debug("ToT generation failed: %s", exc)
 
         return [f"Alternative approach for: {step_description[:100]}"]
 
-    async def score_candidate(
-        self, candidate: str, original_step: str,
-    ) -> ScoredCandidate:
+    async def score_candidate(self, candidate: str, original_step: str) -> ScoredCandidate:
         """Score a single candidate on novelty, feasibility, specificity."""
         try:
             response = await asyncio.wait_for(
@@ -148,17 +140,14 @@ class TreeOfThoughtsScorer:
             logger.debug("ToT scoring failed for candidate: %s", exc)
             return ScoredCandidate(description=candidate)
 
-    async def best_candidate(
-        self, step_description: str, failure_context: str,
-    ) -> str:
+    async def best_candidate(self, step_description: str, failure_context: str) -> str:
         """Generate and score candidates, return the best one's description."""
         candidates = await self.generate_candidates(step_description, failure_context)
         scored = await asyncio.gather(
-            *[self.score_candidate(c, step_description) for c in candidates],
-            return_exceptions=True,
+            *[self.score_candidate(c, step_description) for c in candidates], return_exceptions=True
         )
 
-        best: Optional[ScoredCandidate] = None
+        best: ScoredCandidate | None = None
         for s in scored:
             if isinstance(s, ScoredCandidate):
                 if best is None or s.aggregate > best.aggregate:
@@ -167,7 +156,10 @@ class TreeOfThoughtsScorer:
         if best is not None and best.aggregate >= 2.0:
             logger.info(
                 "ToT: best candidate score %.2f (nov=%d, feas=%d, spec=%d)",
-                best.aggregate, best.novelty, best.feasibility, best.specificity,
+                best.aggregate,
+                best.novelty,
+                best.feasibility,
+                best.specificity,
             )
             return best.description
 

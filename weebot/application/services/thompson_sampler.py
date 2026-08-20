@@ -20,10 +20,11 @@ Usage::
     )
     decision = await sampler.step(epoch, skill)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.skill_archive import SkillArchive, SkillArchiveNode
 
@@ -42,7 +43,7 @@ class ThompsonSampler:
         optimizer: Any,
         skill_store: Any,
         trajectory_repo: Any,
-        archive: Optional[SkillArchive] = None,
+        archive: SkillArchive | None = None,
         growth_alpha: float = 0.3,
     ):
         self._optimizer = optimizer
@@ -61,11 +62,8 @@ class ThompsonSampler:
         return self._step_count
 
     async def step(
-        self,
-        epoch: int,
-        current_skill: Any,
-        train_tasks: list[str],
-    ) -> tuple[str, Optional[SkillArchiveNode], Optional[SkillArchiveNode]]:
+        self, epoch: int, current_skill: Any, train_tasks: list[str]
+    ) -> tuple[str, SkillArchiveNode | None, SkillArchiveNode | None]:
         """Execute one search step.
 
         Returns:
@@ -87,10 +85,8 @@ class ThompsonSampler:
             return await self._evaluate(epoch, train_tasks)
 
     async def _expand(
-        self,
-        epoch: int,
-        current_skill: Any,
-    ) -> tuple[str, SkillArchiveNode, Optional[SkillArchiveNode]]:
+        self, epoch: int, current_skill: Any
+    ) -> tuple[str, SkillArchiveNode, SkillArchiveNode | None]:
         """Select a parent node via Thompson sampling, then create a child.
 
         The optimizer proposes edits to the parent's skill to create
@@ -99,10 +95,7 @@ class ThompsonSampler:
         if not self._archive.nodes:
             # Root node — first expansion
             node = SkillArchiveNode(
-                node_id=f"root-{epoch}",
-                parent_id=None,
-                skill_version="v0",
-                created_at_epoch=epoch,
+                node_id=f"root-{epoch}", parent_id=None, skill_version="v0", created_at_epoch=epoch
             )
             self._archive.add_node(node)
             logger.info("Archive: created root node %s", node.node_id)
@@ -124,14 +117,16 @@ class ThompsonSampler:
             meta={"parent_successes": parent.successes, "parent_failures": parent.failures},
         )
         self._archive.add_node(child)
-        logger.info("Archive: expanded %s → %s (size=%d)",
-                    parent.node_id, child_id, len(self._archive.nodes))
+        logger.info(
+            "Archive: expanded %s → %s (size=%d)",
+            parent.node_id,
+            child_id,
+            len(self._archive.nodes),
+        )
         return ("expand", parent, child)
 
     async def _evaluate(
-        self,
-        epoch: int,
-        train_tasks: list[str],
+        self, epoch: int, train_tasks: list[str]
     ) -> tuple[str, SkillArchiveNode, None]:
         """Select a node via Thompson sampling and return it for evaluation.
 
@@ -143,16 +138,23 @@ class ThompsonSampler:
             return ("evaluate", self._archive.nodes.get(list(self._archive.nodes.keys())[0]), None)
 
         node = self._archive.select_node()
-        logger.debug("Archive: selected %s for evaluation (S=%d, F=%d)",
-                     node.node_id, node.successes, node.failures)
+        logger.debug(
+            "Archive: selected %s for evaluation (S=%d, F=%d)",
+            node.node_id,
+            node.successes,
+            node.failures,
+        )
         return ("evaluate", node, None)
 
     async def record_evaluation(self, node_id: str, passed: bool) -> None:
         """Record a evaluation outcome for a node."""
         self._archive.record_evaluation(node_id, passed)
-        logger.debug("Archive: recorded %s for %s (total evals=%d)",
-                     "PASS" if passed else "FAIL", node_id,
-                     self._archive.total_evaluations)
+        logger.debug(
+            "Archive: recorded %s for %s (total evals=%d)",
+            "PASS" if passed else "FAIL",
+            node_id,
+            self._archive.total_evaluations,
+        )
 
     def stats(self) -> dict[str, Any]:
         """Return archive statistics."""

@@ -12,6 +12,7 @@ This is distinct from ``normalize_tool_call_arguments()`` in the caching adapter
 — that normalizes *already-valid* JSON for bit-stable cache prefixes, while this
 repairs *invalid* JSON that would otherwise be rejected.
 """
+
 from __future__ import annotations
 
 import ast
@@ -19,14 +20,13 @@ import json
 import logging
 import re
 from difflib import get_close_matches
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
 
-def repair_json_string(raw: str) -> Optional[str]:
+def repair_json_string(raw: str) -> str | None:
     """Attempt to repair a (possibly malformed) tool-call arguments JSON string.
 
     Tries multiple strategies in order of cost:
@@ -77,7 +77,7 @@ def repair_json_string(raw: str) -> Optional[str]:
     return None
 
 
-def fuzzy_match_tool_name(name: str, valid_names: list[str], cutoff: float = 0.6) -> Optional[str]:
+def fuzzy_match_tool_name(name: str, valid_names: list[str], cutoff: float = 0.6) -> str | None:
     """Find the closest matching valid tool name for a (possibly typo'd) name.
 
     Uses ``difflib.get_close_matches`` with a default similarity cutoff of 0.6.
@@ -95,10 +95,7 @@ def fuzzy_match_tool_name(name: str, valid_names: list[str], cutoff: float = 0.6
         return None
     matches = get_close_matches(name, valid_names, n=1, cutoff=cutoff)
     if matches:
-        logger.info(
-            "Fuzzy tool-name match: %r -> %r (cutoff=%.2f)",
-            name, matches[0], cutoff,
-        )
+        logger.info("Fuzzy tool-name match: %r -> %r (cutoff=%.2f)", name, matches[0], cutoff)
         return matches[0]
     return None
 

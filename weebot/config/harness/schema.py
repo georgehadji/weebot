@@ -15,10 +15,10 @@ can be reused on any other without retraining (LIFE-HARNESS paper finding).
 Behavioural instructions (the ``instructions`` field) are the Self-Harness
 optimiser's primary edit target.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -33,6 +33,7 @@ from weebot.domain.models.harness_instructions import (
 
 class CanonicalizerConfig(BaseModel):
     """Action Canonicalizer settings (Tier 1.1)."""
+
     strict_mode: bool = Field(default=False)
     coerce_types: bool = Field(default=True)
     contracts_dir: str = Field(default="config/contracts/")
@@ -40,14 +41,16 @@ class CanonicalizerConfig(BaseModel):
 
 class SkillRetrievalConfig(BaseModel):
     """Procedural Skill Layer settings (Tier 1.2)."""
+
     enabled: bool = Field(default=True)
     retriever: str = Field(default="bm25")
     top_k: int = Field(default=3, ge=1, le=10)
-    index_path: Optional[str] = Field(default=None)
+    index_path: str | None = Field(default=None)
 
 
 class TrajectoryConfig(BaseModel):
     """Trajectory Regulation Layer thresholds (Tier 1.3)."""
+
     repetition_threshold: int = Field(default=4, ge=2)
     stagnation_window: int = Field(default=3, ge=2)
     budget_hotspot_ratio: float = Field(default=0.4, ge=0.0, le=1.0)
@@ -70,7 +73,9 @@ class MiddlewareRule(BaseModel):
     name: str = Field(description="Unique middleware rule name")
     description: str = Field(default="", description="What this rule does")
     trigger: str = Field(description="Trigger condition (e.g. tool_error_after:3, loop_detected)")
-    action: str = Field(description="Action when triggered (e.g. redirect_to_recovery, force_replan)")
+    action: str = Field(
+        description="Action when triggered (e.g. redirect_to_recovery, force_replan)"
+    )
     enabled: bool = Field(default=True, description="Whether this rule is active")
 
 
@@ -87,9 +92,8 @@ class HarnessConfig(BaseModel):
 
     version: str = Field(default="0.0.0")
     description: str = Field(default="")
-    evolved_from: Optional[str] = Field(
-        default=None,
-        description="Prior harness version this was evolved from",
+    evolved_from: str | None = Field(
+        default=None, description="Prior harness version this was evolved from"
     )
 
     # ── Structural layers (Tier 1.1–1.3) ──────────────────────────
@@ -107,13 +111,12 @@ class HarnessConfig(BaseModel):
         description="Runtime policy knobs — safety-gated, not auto-evolvable",
     )
     subagents: SubagentConfig = Field(
-        default_factory=SubagentConfig,
-        description="Subagent declarations for parallel delegation",
+        default_factory=SubagentConfig, description="Subagent declarations for parallel delegation"
     )
     middleware: list[MiddlewareRule] = Field(
         default_factory=list,
         description="Middleware rules — tool-execution interceptors. "
-                    "Safety-gated (human approval required for auto-promotion).",
+        "Safety-gated (human approval required for auto-promotion).",
     )
     skill_selection: SkillSelectionConfig = Field(
         default_factory=SkillSelectionConfig,
@@ -121,7 +124,7 @@ class HarnessConfig(BaseModel):
     )
 
     @classmethod
-    def load(cls, path: Path | str) -> "HarnessConfig":
+    def load(cls, path: Path | str) -> HarnessConfig:
         """Load harness config from a YAML file."""
         path = Path(path)
         if not path.exists():
@@ -131,9 +134,6 @@ class HarnessConfig(BaseModel):
         return cls.model_validate(data)
 
     @classmethod
-    def default(cls) -> "HarnessConfig":
+    def default(cls) -> HarnessConfig:
         """Return default (un-evolved) harness configuration."""
-        return cls(
-            version="0.0.0",
-            description="Default harness — no evolution applied",
-        )
+        return cls(version="0.0.0", description="Default harness — no evolution applied")

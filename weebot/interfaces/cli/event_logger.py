@@ -1,9 +1,9 @@
 """CLI event subscriber that pretty-prints agent events."""
+
 from __future__ import annotations
 
-from typing import Awaitable, Callable
 
-from weebot.application.ports.event_bus_port import EventBusPort, EventHandler
+from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import (
     AgentEvent,
     DoneEvent,
@@ -57,6 +57,7 @@ class CLIEventSubscriber:
         if self.use_rich:
             try:
                 from rich.console import Console
+
                 Console().print(line)
                 return
             except Exception:
@@ -66,7 +67,7 @@ class CLIEventSubscriber:
             print(line)
         except UnicodeEncodeError:
             # Fallback for Windows terminals without UTF-8
-            safe_line = line.encode('ascii', 'ignore').decode('ascii')
+            safe_line = line.encode("ascii", "ignore").decode("ascii")
             print(safe_line)
 
     def subscribe_to(self, bus: EventBusPort) -> None:

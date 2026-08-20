@@ -12,6 +12,7 @@ Rules:
   5. File-creation bypass: if a registered file tool succeeded (ToolStatus.CALLED,
      no error), skip text-length checks — success is the signal, not string content.
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,7 @@ _SUSPICIOUSLY_EMPTY = frozenset({"none", "null", "undefined", "n/a", "", "false"
 
 # Only tools that are actually registered in the weebot tool registry.
 # write_file / create_file do not exist — omitted to avoid silent no-ops.
-_FILE_CREATION_TOOLS: frozenset[str] = frozenset({
-    "file_editor",
-    "edit_file",
-})
+_FILE_CREATION_TOOLS: frozenset[str] = frozenset({"file_editor", "edit_file"})
 
 
 @dataclass

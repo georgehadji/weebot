@@ -1,4 +1,5 @@
 """Tests for SessionSearchService."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -20,9 +21,9 @@ class TestSessionSearchService:
     async def test_search_returns_enriched_results(self, mock_session):
         """search() returns SearchResult objects with goal and resolution."""
         repo = MagicMock()
-        repo.search_sessions = AsyncMock(return_value=[
-            {"session_id": "sess-123", "summary": "error occurred", "score": 0.9},
-        ])
+        repo.search_sessions = AsyncMock(
+            return_value=[{"session_id": "sess-123", "summary": "error occurred", "score": 0.9}]
+        )
         repo.load_session = AsyncMock(return_value=mock_session)
 
         svc = SessionSearchService(state_repo=repo)

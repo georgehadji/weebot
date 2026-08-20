@@ -7,15 +7,15 @@ the CQRS mediator for all state mutations (commands flow through pipeline
 behaviours including the ValidationGateBehavior) and the TaskRunner for
 parallel rollout execution.
 """
+
 from __future__ import annotations
 
 import logging
 import uuid
-from collections import defaultdict
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator, Callable
 
 from weebot.application.flows.base_flow import BaseFlow
-from weebot.application.flows.states.base import FlowState
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.optimizer_port import OptimizerPort
 from weebot.application.services.lr_scheduler import LearningRateScheduler
@@ -30,6 +30,7 @@ from weebot.application.cqrs.commands.skill_edit_commands import ApplySkillEdits
 from weebot.domain.models.session import Session
 from weebot.domain.models.skill import Skill
 from weebot.domain.models.trajectory import OptimizationBatch
+
 if TYPE_CHECKING:
     from weebot.application.ports.skill_store_port import SkillStorePort
     from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
@@ -46,25 +47,25 @@ class SkillOptFlow(BaseFlow):
         skill_name: str,
         target_flow_factory: Callable,
         optimizer: OptimizerPort,
-        skill_store: "SkillStorePort",
-        trajectory_repo: "TrajectoryRepositoryPort",
+        skill_store: SkillStorePort,
+        trajectory_repo: TrajectoryRepositoryPort,
         event_bus: EventBusPort | None,
         mediator,
         epochs: int = 4,
         steps_per_epoch: int = 5,
         batch_size: int = 40,
         minibatch_size: int = 8,
-        validation_tasks: Optional[list[str]] = None,
-        train_tasks: Optional[list[str]] = None,
+        validation_tasks: list[str] | None = None,
+        train_tasks: list[str] | None = None,
         output_path: str = "best_skill.md",
-        evolution_tracker: Optional["EvolutionTracker"] = None,
+        evolution_tracker: EvolutionTracker | None = None,
         use_planning: bool = False,
-        evaluator_slot: Optional[Any] = None,
-        evaluator_selector: Optional[Any] = None,
-        selective_erasure: Optional[Any] = None,
-        adversarial_pool: Optional[Any] = None,
+        evaluator_slot: Any | None = None,
+        evaluator_selector: Any | None = None,
+        selective_erasure: Any | None = None,
+        adversarial_pool: Any | None = None,
         use_archive_search: bool = False,
-        thompson_sampler: Optional[Any] = None,
+        thompson_sampler: Any | None = None,
     ):
         self._skill_name = skill_name
         self._target_flow_factory = target_flow_factory
@@ -89,16 +90,14 @@ class SkillOptFlow(BaseFlow):
         self._use_archive_search = use_archive_search
         self._thompson_sampler = thompson_sampler
 
-        self._scheduler = LearningRateScheduler(
-            initial=8, floor=2, schedule="cosine"
-        )
+        self._scheduler = LearningRateScheduler(initial=8, floor=2, schedule="cosine")
         self._done = False
         # Edits the validation gate already rejected this run.  Without this the
         # optimizer sees no record of rejections and is free to re-propose the
         # same edit every step.
         # ponytail: in-process only — persist behind a port if a run ever has to
         # survive a restart.
-        self._tabu: set[tuple[str, Optional[str], str]] = set()
+        self._tabu: set[tuple[str, str | None, str]] = set()
 
     def _drop_tabu(self, edits: list) -> list:
         """Drop edits already rejected this run.
@@ -118,6 +117,7 @@ class SkillOptFlow(BaseFlow):
         """Ensure the archive has a root node before archive search begins."""
         if self._thompson_sampler is not None and not self._thompson_sampler.archive.nodes:
             from weebot.domain.models.skill_archive import SkillArchiveNode
+
             root = SkillArchiveNode(
                 node_id=f"root-e{epoch}",
                 parent_id=None,
@@ -141,8 +141,9 @@ class SkillOptFlow(BaseFlow):
         previous_skill = skill
 
         for epoch in range(self._epochs):
-            logger.info("Starting epoch %d/%d for skill '%s'",
-                        epoch + 1, self._epochs, self._skill_name)
+            logger.info(
+                "Starting epoch %d/%d for skill '%s'", epoch + 1, self._epochs, self._skill_name
+            )
 
             epoch_accepted = 0
             epoch_rejected = 0
@@ -161,7 +162,7 @@ class SkillOptFlow(BaseFlow):
                 # ── Archive-based step (Thompson sampling) ────────
                 if self._use_archive_search and self._thompson_sampler is not None:
                     decision, parent_node, child_node = await self._thompson_sampler.step(
-                        epoch, skill, self._train_tasks,
+                        epoch, skill, self._train_tasks
                     )
 
                     if decision == "expand" and child_node is not None:
@@ -170,21 +171,17 @@ class SkillOptFlow(BaseFlow):
                         evolution_ctx = self._build_evolution_context(skill)
 
                         failure_edits = await self._optimizer.reflect_on_failures(
-                            batch, skill,
-                            evolution_context=evolution_ctx,
+                            batch, skill, evolution_context=evolution_ctx
                         )
                         success_edits = await self._optimizer.reflect_on_successes(
-                            batch, skill,
-                            evolution_context=evolution_ctx,
+                            batch, skill, evolution_context=evolution_ctx
                         )
 
                         if failure_edits or success_edits:
-                            merged = await self._optimizer.merge_edits(
-                                failure_edits, success_edits,
+                            merged = await self._optimizer.merge_edits(failure_edits, success_edits)
+                            ranked = self._drop_tabu(
+                                await self._optimizer.rank_edits(merged, budget, skill)
                             )
-                            ranked = self._drop_tabu(await self._optimizer.rank_edits(
-                                merged, budget, skill,
-                            ))
                             if ranked:
                                 # Apply the best edit to create a new skill variant
                                 cmd = ApplySkillEditsCommand(
@@ -207,6 +204,7 @@ class SkillOptFlow(BaseFlow):
                         # Evaluate the selected node's skill on a train task
                         if self._train_tasks:
                             import random
+
                             task = random.choice(self._train_tasks)
                             try:
                                 session = Session(
@@ -259,9 +257,7 @@ class SkillOptFlow(BaseFlow):
                 merged = await self._optimizer.merge_edits(failure_edits, success_edits)
 
                 # 4. RANK + CLIP — rank by utility, clip to budget
-                ranked = self._drop_tabu(
-                    await self._optimizer.rank_edits(merged, budget, skill)
-                )
+                ranked = self._drop_tabu(await self._optimizer.rank_edits(merged, budget, skill))
 
                 if not ranked:
                     logger.info("No edits survived ranking at step %d", step)
@@ -283,9 +279,7 @@ class SkillOptFlow(BaseFlow):
                     candidate_skill = data.get("skill")
                     if candidate_skill:
                         skill = candidate_skill
-                        skill = skill.accept_current(
-                            validation_score=batch.batch_score
-                        )
+                        skill = skill.accept_current(validation_score=batch.batch_score)
                         await self._skill_store.save(skill)
                         epoch_accepted += 1
 
@@ -310,15 +304,11 @@ class SkillOptFlow(BaseFlow):
 
             # 6. EPOCH BOUNDARY — slow update + meta skill
             if epoch > 0:
-                longitudinal = await self._collect_longitudinal(
-                    previous_skill, skill
-                )
+                longitudinal = await self._collect_longitudinal(previous_skill, skill)
                 slow_guidance = await self._optimizer.slow_update(
                     previous_skill, skill, longitudinal
                 )
-                meta = await self._optimizer.meta_skill(
-                    previous_skill, skill, longitudinal
-                )
+                meta = await self._optimizer.meta_skill(previous_skill, skill, longitudinal)
 
                 if slow_guidance:
                     skill = skill.apply_slow_update(slow_guidance)
@@ -328,11 +318,15 @@ class SkillOptFlow(BaseFlow):
 
             # ── Evaluator co-evolution at epoch boundaries ────────
             evaluator_replacement_data = None
-            if self._evaluator_slot is not None and self._evaluator_selector is not None and epoch > 0:
+            if (
+                self._evaluator_slot is not None
+                and self._evaluator_selector is not None
+                and epoch > 0
+            ):
                 try:
                     # Score the current evaluator on the anchor dataset
                     scored_current = await self._evaluator_selector.score_evaluator(
-                        self._evaluator_slot,
+                        self._evaluator_slot
                     )
 
                     # Build adversarial context if there's a pool from prior replacements
@@ -343,32 +337,32 @@ class SkillOptFlow(BaseFlow):
                             eval_evolution_ctx = f"\n\n{adv_obj}"
                             logger.info(
                                 "Adversarial regularisation: %d artifacts in pool for epoch %d",
-                                len(self._adversarial_pool.get_artifacts_for_epoch(epoch)), epoch,
+                                len(self._adversarial_pool.get_artifacts_for_epoch(epoch)),
+                                epoch,
                             )
 
                     # Propose evaluator edits from trajectories
                     batch = await self._run_rollout(skill, epoch, 0)
                     evaluator_edits = await self._optimizer.reflect_on_evaluator(
-                        batch, scored_current,
-                        evolution_context=eval_evolution_ctx,
+                        batch, scored_current, evolution_context=eval_evolution_ctx
                     )
 
                     if evaluator_edits and self._selective_erasure is not None:
                         # Create a challenger with updated prompt
                         new_prompt = evaluator_edits[-1].content  # Use best edit
-                        challenger = scored_current.model_copy(update={
-                            "prompt": new_prompt,
-                            "anchor_accuracy": 0.0,  # Force re-scoring
-                            "anchor_total": 0,
-                            "evaluator_id": f"{scored_current.evaluator_id}_challenger",
-                        })
+                        challenger = scored_current.model_copy(
+                            update={
+                                "prompt": new_prompt,
+                                "anchor_accuracy": 0.0,  # Force re-scoring
+                                "anchor_total": 0,
+                                "evaluator_id": f"{scored_current.evaluator_id}_challenger",
+                            }
+                        )
 
                         # Compare incumbent vs challenger
                         promoted, result_evaluator, reason = (
                             await self._evaluator_selector.compare_and_replace(
-                                incumbent=scored_current,
-                                challenger=challenger,
-                                epoch=epoch,
+                                incumbent=scored_current, challenger=challenger, epoch=epoch
                             )
                         )
 
@@ -389,7 +383,7 @@ class SkillOptFlow(BaseFlow):
 
                             # Populate adversarial pool from old evaluator's mis-scored artifacts
                             if self._adversarial_pool is not None and hasattr(
-                                self._evaluator_selector, "_anchor_tasks",
+                                self._evaluator_selector, "_anchor_tasks"
                             ):
                                 artifacts = [
                                     {
@@ -409,9 +403,7 @@ class SkillOptFlow(BaseFlow):
                                     artifacts=artifacts,
                                 )
 
-                            logger.info(
-                                "Evaluator co-evolution: %s at epoch %d", reason, epoch,
-                            )
+                            logger.info("Evaluator co-evolution: %s at epoch %d", reason, epoch)
                 except Exception as exc:
                     logger.warning("Evaluator co-evolution failed at epoch %d: %s", epoch, exc)
 
@@ -429,7 +421,9 @@ class SkillOptFlow(BaseFlow):
             if self._evolution_tracker is not None:
                 try:
                     skill = await self._evolution_tracker.record_epoch(
-                        skill, previous_skill, epoch_event,
+                        skill,
+                        previous_skill,
+                        epoch_event,
                         evaluator_replacement=evaluator_replacement_data,
                     )
                     await self._skill_store.save(skill)
@@ -461,12 +455,7 @@ class SkillOptFlow(BaseFlow):
             )
         return "\n".join(lines)
 
-    async def _run_rollout(
-        self,
-        skill: Skill,
-        epoch: int,
-        step: int,
-    ) -> OptimizationBatch:
+    async def _run_rollout(self, skill: Skill, epoch: int, step: int) -> OptimizationBatch:
         """Run target model on training tasks, accumulate trajectories."""
         trajectories = []
 
@@ -499,8 +488,7 @@ class SkillOptFlow(BaseFlow):
 
         if not trajectories:
             return OptimizationBatch(
-                skill_name=self._skill_name,
-                skill_version=skill.current_version,
+                skill_name=self._skill_name, skill_version=skill.current_version
             )
 
         batch = OptimizationBatch(
@@ -514,10 +502,7 @@ class SkillOptFlow(BaseFlow):
         return batch
 
     async def _collect_longitudinal(
-        self,
-        prev_skill: Skill,
-        curr_skill: Skill,
-        n_samples: int = 20,
+        self, prev_skill: Skill, curr_skill: Skill, n_samples: int = 20
     ) -> list[tuple]:
         """Collect longitudinal comparison data for slow/meta update.
 
@@ -531,9 +516,7 @@ class SkillOptFlow(BaseFlow):
         comparisons = []
 
         for task_id in sampled:
-            prev_traj = await self._trajectory_repo.get_by_session(
-                f"opt-*-*-{task_id}"
-            )
+            prev_traj = await self._trajectory_repo.get_by_session(f"opt-*-*-{task_id}")
             curr = await self._trajectory_repo.get_by_skill(
                 self._skill_name, curr_skill.current_version, limit=1
             )

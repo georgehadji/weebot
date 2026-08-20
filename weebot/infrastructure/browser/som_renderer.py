@@ -11,18 +11,19 @@ Usage:
     # annotated["image"] -> base64 PNG with numbered boxes
     # annotated["marks"] -> list of element -> number mappings
 """
+
 from __future__ import annotations
 
 import base64
 import logging
-import math
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Pillow is optional — needed for image overlay rendering
 try:
     from PIL import Image, ImageDraw, ImageFont
+
     _PILLOW_AVAILABLE = True
 except ImportError:
     _PILLOW_AVAILABLE = False
@@ -37,10 +38,10 @@ class SomRenderer:
     """
 
     # SoM color scheme — high-contrast on most backgrounds
-    _BOX_COLOR: tuple[int, int, int] = (255, 50, 50)       # Red border
+    _BOX_COLOR: tuple[int, int, int] = (255, 50, 50)  # Red border
     _FILL_COLOR: tuple[int, int, int, int] = (255, 50, 50, 40)  # Semi-transparent red
-    _LABEL_BG: tuple[int, int, int] = (255, 50, 50)        # Red label background
-    _LABEL_FG: tuple[int, int, int] = (255, 255, 255)      # White label text
+    _LABEL_BG: tuple[int, int, int] = (255, 50, 50)  # Red label background
+    _LABEL_FG: tuple[int, int, int] = (255, 255, 255)  # White label text
 
     async def render(
         self,
@@ -103,10 +104,7 @@ class SomRenderer:
         return result
 
     @staticmethod
-    def _render_with_pillow(
-        screenshot_bytes: bytes,
-        marks: list[dict[str, Any]],
-    ) -> str:
+    def _render_with_pillow(screenshot_bytes: bytes, marks: list[dict[str, Any]]) -> str:
         """Draw numbered bounding boxes on a screenshot using Pillow.
 
         Returns base64-encoded PNG.
@@ -121,7 +119,7 @@ class SomRenderer:
         font = None
         try:
             font = ImageFont.truetype("arial.ttf", 14)
-        except (OSError, IOError):
+        except OSError:
             try:
                 font = ImageFont.load_default()
             except Exception:
@@ -235,18 +233,18 @@ class DesktopSomRenderer(SomRenderer):
 
         result = Image.alpha_composite(img, overlay).convert("RGB")
         import io as _io2
+
         buf = _io2.BytesIO()
         result.save(buf, format="PNG")
         logger.info("DesktopSoM: %d marks rendered", marked)
         return base64.b64encode(buf.getvalue()).decode("utf-8")
 
     async def _prepare_base(
-        self,
-        screenshot_bytes: bytes,
-        region: tuple[int, int, int, int] | None = None,
+        self, screenshot_bytes: bytes, region: tuple[int, int, int, int] | None = None
     ):
         """Load image and prepare overlay canvas, clipped to region if given."""
         import io as _io2
+
         img = Image.open(_io2.BytesIO(screenshot_bytes)).convert("RGBA")
         if region:
             rx, ry, rw, rh = region

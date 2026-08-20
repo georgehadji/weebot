@@ -8,6 +8,7 @@ ship. It is deliberately deterministic (uses ``pdffonts`` from poppler-utils).
 Further gates (color model / ≥300 DPI images / PDF/X-4 / geometry) are described
 in tasks/scientific-book-latex-plan.md §6.5 and slot in here as they land.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -59,8 +60,7 @@ def preflight_pdf(pdf_path: str | Path) -> PreflightReport:
 
     if not pdf.exists():
         return PreflightReport(
-            ok=False,
-            issues=[PreflightIssue(check="exists", message="PDF not found")],
+            ok=False, issues=[PreflightIssue(check="exists", message="PDF not found")]
         )
 
     total = not_embedded = 0
@@ -78,20 +78,14 @@ def preflight_pdf(pdf_path: str | Path) -> PreflightReport:
                     )
                 )
         except (subprocess.SubprocessError, OSError) as exc:
-            issues.append(
-                PreflightIssue(check="font_embedding", message=f"pdffonts failed: {exc}")
-            )
+            issues.append(PreflightIssue(check="font_embedding", message=f"pdffonts failed: {exc}"))
     else:
         issues.append(
             PreflightIssue(
-                check="font_embedding",
-                message="pdffonts unavailable — cannot verify embedding",
+                check="font_embedding", message="pdffonts unavailable — cannot verify embedding"
             )
         )
 
     return PreflightReport(
-        ok=not issues,
-        issues=issues,
-        fonts_total=total,
-        fonts_not_embedded=not_embedded,
+        ok=not issues, issues=issues, fonts_total=total, fonts_not_embedded=not_embedded
     )

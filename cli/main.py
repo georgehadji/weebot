@@ -14,6 +14,7 @@ export      Export project state
 costs       Αναφορά κόστους
 monitor     Real-time monitoring
 """
+
 import sys
 
 # ── Force UTF-8 stdio (must run before any click/print output) ─────────
@@ -31,7 +32,6 @@ if hasattr(sys.stderr, "reconfigure"):
 import click
 import asyncio
 import json
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -54,8 +54,10 @@ from typing import Any
 # WEEBOT_ACR_BANDIT=true into every test that runs afterwards, including
 # ones that bake feature-flag constants from os.environ at import time.
 import os
+
 if "PYTEST_VERSION" not in os.environ:
     from dotenv import load_dotenv
+
     load_dotenv(override=True)
 
 from weebot.application.di import Container
@@ -83,13 +85,13 @@ def _get_llm() -> Any:
         _container = Container()
         _container.configure_defaults()
     from weebot.application.ports.llm_port import LLMPort
+
     return _container.get(LLMPort)
+
+
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress
-
-
 
 # _deprecated_agent() and the 5 [DEPRECATED] CLI commands were removed
 # in ARCH-AUDIT-V2 (agent_core_v2 sunset). Use 'weebot flow *' commands instead.
@@ -103,11 +105,8 @@ from weebot.interfaces.cli.support import (
     check_template_updates,
     upgrade_templates,
 )
-from weebot.agents.registry import AgentRegistry
-from weebot.agents.router import PersonaRouter
+
 # agent_factory.py sunset in ARCH-AUDIT-V2 A5
-from weebot.core.agent_context import AgentContext
-from weebot.tools.tool_registry import RoleBasedToolRegistry
 from weebot.interfaces.cli.behavior_commands import behavior_cli
 from cli.commands.flow import flow as flow_group
 from cli.commands.skills import skill as skill_group
@@ -132,6 +131,7 @@ console = Console()
 def cli() -> None:
     """weebot Agent Framework CLI."""
     from weebot.infrastructure.observability.logging_config import configure_logging
+
     configure_logging()
 
 
@@ -145,25 +145,31 @@ def _wrap_main() -> None:
     """Entry-point wrapper with global exception handling."""
     import sys
     from weebot.domain.exceptions import WeebotError
+
     try:
         cli()
     except WeebotError as exc:
         from rich.console import Console
+
         console = Console()
-        console.print(f"[red]Error [/{exc.code.value if exc.code else 'unknown'}]: {exc.message}[/red]")
+        console.print(
+            f"[red]Error [/{exc.code.value if exc.code else 'unknown'}]: {exc.message}[/red]"
+        )
         sys.exit(1)
     except Exception as exc:
         from rich.console import Console
+
         console = Console()
         console.print(f"[red]Unexpected error: {exc}[/red]")
         sys.exit(1)
+
 
 @cli.command()
 @click.argument("project_id")
 @click.argument("description")
 def create(project_id: str, description: str) -> None:
     """[DEPRECATED] Use 'flow run' instead. Create new project."""
-    console.print(f"[yellow]Command 'create' is deprecated. Use 'flow run' instead.[/yellow]")
+    console.print("[yellow]Command 'create' is deprecated. Use 'flow run' instead.[/yellow]")
 
 
 @cli.command()
@@ -191,7 +197,7 @@ def list_projects() -> None:
 @click.argument("project_id")
 def status(project_id: str) -> None:
     """[DEPRECATED] Use 'flow list' instead. Check project status."""
-    console.print(f"[yellow]Command 'status' is deprecated. Use 'flow list' instead.[/yellow]")
+    console.print("[yellow]Command 'status' is deprecated. Use 'flow list' instead.[/yellow]")
 
 
 @cli.command()
@@ -199,14 +205,14 @@ def status(project_id: str) -> None:
 @click.argument("plan_file", type=click.Path(exists=True))
 def run(project_id: str, plan_file: str) -> None:
     """[DEPRECATED] Use 'flow run' instead. Execute task plan from JSON file."""
-    console.print(f"[yellow]Command 'run' is deprecated. Use 'flow run' instead.[/yellow]")
+    console.print("[yellow]Command 'run' is deprecated. Use 'flow run' instead.[/yellow]")
 
 
 @cli.command()
 @click.argument("project_id")
 def resume(project_id: str) -> None:
     """[DEPRECATED] Use 'flow resume' instead. Resume paused project."""
-    console.print(f"[yellow]Command 'resume' is deprecated. Use 'flow resume' instead.[/yellow]")
+    console.print("[yellow]Command 'resume' is deprecated. Use 'flow resume' instead.[/yellow]")
 
 
 @cli.command()
@@ -215,7 +221,9 @@ def resume(project_id: str) -> None:
 @click.argument("response")
 def checkpoint(project_id: str, checkpoint_id: str, response: str) -> None:
     """[DEPRECATED] Use 'flow' commands instead. Resolve pending checkpoint."""
-    console.print(f"[yellow]Command 'checkpoint' is deprecated. Use 'flow' commands instead.[/yellow]")
+    console.print(
+        "[yellow]Command 'checkpoint' is deprecated. Use 'flow' commands instead.[/yellow]"
+    )
 
 
 @cli.command()
@@ -237,11 +245,8 @@ def export(project_id: str, output: str) -> None:
 
     if session:
         import json
-        from pydantic import BaseModel
 
-        Path(output).write_text(
-            json.dumps(session.model_dump(), indent=2, default=str)
-        )
+        Path(output).write_text(json.dumps(session.model_dump(), indent=2, default=str))
         console.print(f"[green]Exported to: {output}[/green]")
     else:
         console.print(f"[red]Session not found: {project_id}[/red]")
@@ -255,11 +260,11 @@ def costs(days: int) -> None:
     table.add_column("Date", style="cyan")
     table.add_column("Cost", style="green")
     table.add_column("Tokens", style="magenta")
-    
+
     # Placeholder data
     table.add_row("Today", "$2.45", "12,340")
     table.add_row("Yesterday", "$1.23", "8,900")
-    
+
     console.print(table)
 
 
@@ -281,15 +286,13 @@ def research() -> None:
 @click.option("--force", is_flag=True, help="Overwrite existing config")
 @click.option("--no-env", is_flag=True, help="Do not create .env from .env.example")
 @click.option("--with-hooks/--no-hooks", default=True, help="Initialize hooks directory")
-def init(platform: str | None, tier: str | None, force: bool, no_env: bool, with_hooks: bool) -> None:
+def init(
+    platform: str | None, tier: str | None, force: bool, no_env: bool, with_hooks: bool
+) -> None:
     """Initialize a weebot project in the current directory."""
     root = Path.cwd()
     config_path = init_project(
-        root,
-        platform=platform,
-        tier=tier,
-        force=force,
-        create_env=not no_env,
+        root, platform=platform, tier=tier, force=force, create_env=not no_env
     )
     console.print(Panel(f"Initialized config: {config_path}", style="green"))
 
@@ -308,15 +311,25 @@ def _validate_model_catalog(json_output: bool) -> None:
     _report = CatalogValidator.run_default_validation()
     if json_output:
         import json as _json
-        console.print_json(_json.dumps({
-            "ok": _report.warning_count == 0,
-            "total_models_checked": _report.total_models_checked,
-            "elapsed_ms": round(_report.elapsed_ms, 1),
-            "warnings": [
-                {"model_id": w.model_id, "cascade_role": w.cascade_role, "field": w.field, "detail": str(w)}
-                for w in _report.warnings
-            ],
-        }))
+
+        console.print_json(
+            _json.dumps(
+                {
+                    "ok": _report.warning_count == 0,
+                    "total_models_checked": _report.total_models_checked,
+                    "elapsed_ms": round(_report.elapsed_ms, 1),
+                    "warnings": [
+                        {
+                            "model_id": w.model_id,
+                            "cascade_role": w.cascade_role,
+                            "field": w.field,
+                            "detail": str(w),
+                        }
+                        for w in _report.warnings
+                    ],
+                }
+            )
+        )
         return
     if _report.warning_count == 0:
         console.print(
@@ -348,7 +361,11 @@ def _print_doctor_table(report: Any) -> None:
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.option("--fix", is_flag=True, help="Auto-repair warnings (create dirs, init DBs)")
 @click.option("--dry-run", is_flag=True, help="Show what --fix would do without changing anything")
-@click.option("--validate-catalog", is_flag=True, help="Cross-validate cascade models against the model catalog")
+@click.option(
+    "--validate-catalog",
+    is_flag=True,
+    help="Cross-validate cascade models against the model catalog",
+)
 def doctor(json_output: bool, fix: bool, dry_run: bool, validate_catalog: bool) -> None:
     """Run diagnostics and environment checks."""
 
@@ -409,7 +426,7 @@ def health(json_output: bool) -> None:
     """Check health of Weebot components."""
     import asyncio
     from weebot.infrastructure.observability import HealthCheckService, HealthStatus
-    
+
     async def _check() -> None:
         service = HealthCheckService()
         report = await service.check_all()
@@ -417,19 +434,15 @@ def health(json_output: bool) -> None:
         # ── Model health ping ────────────────────────────────────
         from weebot.core.model_health import check_default_model
         from weebot.config.model_refs import MODEL_CASCADE_TIER1
-        model_ok = await check_default_model(
-            _get_llm(), MODEL_CASCADE_TIER1, timeout=10.0
-        )
+
+        model_ok = await check_default_model(_get_llm(), MODEL_CASCADE_TIER1, timeout=10.0)
 
         if json_output:
             data = report.to_dict()
-            data["model_health"] = {
-                "model": MODEL_CASCADE_TIER1,
-                "reachable": model_ok,
-            }
+            data["model_health"] = {"model": MODEL_CASCADE_TIER1, "reachable": model_ok}
             console.print_json(json.dumps(data))
             return
-        
+
         # Color-coded status
         status_colors = {
             HealthStatus.HEALTHY: "green",
@@ -437,13 +450,13 @@ def health(json_output: bool) -> None:
             HealthStatus.UNHEALTHY: "red",
             HealthStatus.UNKNOWN: "grey",
         }
-        
+
         table = Table(title="Weebot Health Check")
         table.add_column("Component", style="cyan")
         table.add_column("Status", style="magenta")
         table.add_column("Latency (ms)", style="blue")
         table.add_column("Message", style="green")
-        
+
         for comp in report.components:
             status_color = status_colors.get(comp.status, "white")
             table.add_row(
@@ -462,9 +475,9 @@ def health(json_output: bool) -> None:
             "—",
             "Reachable" if model_ok else "UNREACHABLE — check API key and credits",
         )
-        
+
         console.print(table)
-        
+
         # Overall status panel
         overall_color = status_colors.get(report.overall_status, "white")
         console.print(
@@ -473,7 +486,7 @@ def health(json_output: bool) -> None:
                 style=overall_color,
             )
         )
-    
+
     asyncio.run(_check())
 
 
@@ -501,10 +514,7 @@ def hooks_install(target: str, force: bool, allow_outside: bool) -> None:
     """Install hooks into a target directory."""
     try:
         installed = install_hooks(
-            Path.cwd(),
-            Path(target),
-            force=force,
-            allow_outside=allow_outside,
+            Path.cwd(), Path(target), force=force, allow_outside=allow_outside
         )
         if installed:
             console.print(f"[green]Installed {len(installed)} hook file(s)[/green]")
@@ -524,7 +534,9 @@ def hooks_install(target: str, force: bool, allow_outside: bool) -> None:
 @click.option("--template", "template_filter", default=None, help="Filter by template name/id")
 @click.option("--marketplace-url", default=None, help="Marketplace URL override")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def check_updates(template_filter: str | None, marketplace_url: str | None, json_output: bool) -> None:
+def check_updates(
+    template_filter: str | None, marketplace_url: str | None, json_output: bool
+) -> None:
     """Check for template updates from the marketplace."""
     result = check_template_updates(Path.cwd(), marketplace_url, template_filter)
     if json_output:
@@ -604,21 +616,20 @@ def implement(spec_file: str, output: str) -> None:
 def init_experiment(title: str, description: str, field: str):
     """Initialize new reproducible experiment"""
     from research_modules.reproducibility import ReproducibilityManager, ExperimentConfig
-    
+
     rm = ReproducibilityManager()
     config = ExperimentConfig(
-        title=title,
-        description=description,
-        tags=[field] if field else [],
-        random_seed=42
+        title=title, description=description, tags=[field] if field else [], random_seed=42
     )
     exp = rm.create_experiment(config)
-    console.print(Panel(
-        f"Created experiment: {exp.exp_id}\n"
-        f"Location: {exp.work_dir}\n"
-        f"Seed: {config.random_seed}",
-        title="Reproducible Experiment"
-    ))
+    console.print(
+        Panel(
+            f"Created experiment: {exp.exp_id}\n"
+            f"Location: {exp.work_dir}\n"
+            f"Seed: {config.random_seed}",
+            title="Reproducible Experiment",
+        )
+    )
 
 
 @research.command()
@@ -629,25 +640,22 @@ def validate_data(data_file: str, rules: str):
     from research_modules.data_validator import ScientificValidator
     import pandas as pd
     import json
-    
+
     df = pd.read_csv(data_file)
-    
+
     validator = ScientificValidator()
     validation_rules = json.loads(Path(rules).read_text()) if rules else {}
-    
+
     report = validator.validate_dataset(df, validation_rules)
-    
+
     console.print(f"Valid: {'✓' if report['valid'] else '✗'}")
     console.print(f"Issues found: {len(report['issues'])}")
-    
-    for issue in report['issues']:
-        color = {
-            'info': 'blue',
-            'warning': 'yellow',
-            'error': 'red',
-            'critical': 'red'
-        }.get(issue['severity'], 'white')
-        
+
+    for issue in report["issues"]:
+        color = {"info": "blue", "warning": "yellow", "error": "red", "critical": "red"}.get(
+            issue["severity"], "white"
+        )
+
         console.print(f"[{color}]{issue['severity'].upper()}: {issue['message']}[/{color}]")
 
 
@@ -657,9 +665,9 @@ def validate_data(data_file: str, rules: str):
 def obsidian_sync(vault_path: str, experiment: str):
     """Sync experiments to Obsidian vault"""
     from integrations.obsidian import ObsidianVault
-    
+
     vault = ObsidianVault(vault_path)
-    
+
     if experiment:
         vault.generate_from_experiment(experiment)
         console.print(f"[green]Synced experiment: {experiment}[/green]")
@@ -679,6 +687,7 @@ def obsidian_sync(vault_path: str, experiment: str):
 cli.add_command(behavior_cli)
 cli.add_command(flow_group)
 from cli.commands.hyper import hyper as hyper_group
+
 cli.add_command(hyper_group)
 cli.add_command(skill_group)
 cli.add_command(agents_group)
@@ -691,16 +700,21 @@ cli.add_command(guard_group)
 cli.add_command(analytics_group)
 cli.add_command(soul_group)
 from cli.commands.dream import dream as dream_group
+
 cli.add_command(dream_group)
 from cli.commands.mcp import mcp as mcp_group
+
 cli.add_command(mcp_group)
 from cli.commands.gateway import gateway as gateway_group
+
 cli.add_command(gateway_group)
 from cli.commands.cron_agent import cron_agent as cron_agent_group
+
 cli.add_command(cron_agent_group)
 
 # Auth (multi-principal key management)
 from cli.commands.auth import auth_group
+
 cli.add_command(auth_group)
 
 # Ponytail lazy-senior-dev commands

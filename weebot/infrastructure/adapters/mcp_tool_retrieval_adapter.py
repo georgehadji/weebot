@@ -1,4 +1,5 @@
 """Local-embedding retrieval adapter for MCP-bridged external tools."""
+
 from __future__ import annotations
 
 import math

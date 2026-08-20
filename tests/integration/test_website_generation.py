@@ -7,11 +7,10 @@ site, execute the build step, and produce a summary.
 Requires a valid OPENROUTER_API_KEY in .env.
 Mark: real_api
 """
+
 from __future__ import annotations
 
-import json
 import os
-import re
 from pathlib import Path
 
 import pytest
@@ -21,17 +20,11 @@ from weebot.application.agents.planner import PlannerAgent
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.llm_port import LLMPort
-from weebot.domain.models.event import (
-    MessageEvent,
-    PlanEvent,
-    StepEvent,
-    TitleEvent,
-)
+from weebot.domain.models.event import MessageEvent, PlanEvent, StepEvent, TitleEvent
 from weebot.domain.models.session import Session
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 from weebot.tools.bash_tool import BashTool
 from weebot.tools.file_editor import StrReplaceEditorTool
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Fixtures
@@ -51,10 +44,7 @@ def _load_key() -> str | None:
     return None
 
 
-_needs_key = pytest.mark.skipif(
-    _load_key() is None,
-    reason="OPENROUTER_API_KEY not set",
-)
+_needs_key = pytest.mark.skipif(_load_key() is None, reason="OPENROUTER_API_KEY not set")
 
 
 @pytest.fixture(scope="module")
@@ -71,10 +61,7 @@ def llm() -> LLMPort:
 
 @pytest.fixture
 def tools() -> ToolCollection:
-    return ToolCollection(
-        BashTool(),
-        StrReplaceEditorTool(),
-    )
+    return ToolCollection(BashTool(), StrReplaceEditorTool())
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -115,10 +102,7 @@ async def test_planner_creates_website_plan(llm: LLMPort) -> None:
 @pytest.mark.real_api
 @_needs_key
 @pytest.mark.asyncio
-async def test_executor_runs_website_step(
-    llm: LLMPort,
-    tools: ToolCollection,
-) -> None:
+async def test_executor_runs_website_step(llm: LLMPort, tools: ToolCollection) -> None:
     """The executor agent should build a website file when given a plan step."""
     # Step 1 — plan the site
     planner = PlannerAgent(llm=llm)
@@ -133,10 +117,14 @@ async def test_executor_runs_website_step(
             plan = event.plan
 
     assert plan is not None, "Planner must produce a plan"
-    steps = plan if isinstance(plan, list) else (plan.get("steps", []) if isinstance(plan, dict) else plan.steps)
+    steps = (
+        plan
+        if isinstance(plan, list)
+        else (plan.get("steps", []) if isinstance(plan, dict) else plan.steps)
+    )
     assert len(steps) >= 1, "Plan must have at least one step"
     step = steps[0]
-    desc = step.description if hasattr(step, 'description') else step.get("description", str(step))
+    desc = step.description if hasattr(step, "description") else step.get("description", str(step))
     print(f"\n  Running step: {desc}")
 
     # Step 2 — execute the first step
@@ -145,6 +133,7 @@ async def test_executor_runs_website_step(
     collected_output: list[str] = []
 
     from weebot.domain.models.plan import Plan, Step
+
     if isinstance(plan, dict):
         plan = Plan.model_validate(plan)
     if isinstance(step, dict):
@@ -169,9 +158,7 @@ async def test_executor_runs_website_step(
 @_needs_key
 @pytest.mark.asyncio
 async def test_full_flow_builds_website(
-    llm: LLMPort,
-    tools: ToolCollection,
-    tmp_path: Path,
+    llm: LLMPort, tools: ToolCollection, tmp_path: Path
 ) -> None:
     """End-to-end: PlanActFlow builds a complete website via the state machine."""
     session = Session(id="test-website-e2e", user_id="tester")
@@ -208,8 +195,15 @@ async def test_full_flow_builds_website(
 
         if isinstance(event, PlanEvent) and event.plan:
             raw = event.plan
-            steps = raw if isinstance(raw, list) else (raw.get("steps", []) if isinstance(raw, dict) else raw.steps)
-            plan_steps = [s.get("description", str(s)) if isinstance(s, dict) else s.description for s in steps]
+            steps = (
+                raw
+                if isinstance(raw, list)
+                else (raw.get("steps", []) if isinstance(raw, dict) else raw.steps)
+            )
+            plan_steps = [
+                s.get("description", str(s)) if isinstance(s, dict) else s.description
+                for s in steps
+            ]
         if isinstance(event, StepEvent):
             if event.status == "started":
                 print(f"\n  ▶ Step: {event.description}")
@@ -263,14 +257,12 @@ async def test_direct_html_generation(llm: LLMPort) -> None:
 
     # Validate the output
     assert len(html) > 200, f"Expected >200 chars of HTML, got {len(html)}"
-    assert "<!DOCTYPE html>" in html or "<html" in html.lower(), (
-        f"Expected HTML doctype or html tag in output"
-    )
+    assert (
+        "<!DOCTYPE html>" in html or "<html" in html.lower()
+    ), "Expected HTML doctype or html tag in output"
     assert "Alex Chen" in html, "Expected name 'Alex Chen' in output"
     assert "Python" in html, "Expected skill 'Python' in output"
-    assert "footer" in html.lower() or "<footer" in html, (
-        "Expected footer in output"
-    )
+    assert "footer" in html.lower() or "<footer" in html, "Expected footer in output"
 
     # Rough structure check
     has_head = "<head>" in html or "<head " in html

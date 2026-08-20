@@ -3,10 +3,11 @@
 Extracted from PlanActFlow to isolate session lifecycle concerns:
 checkpoint, teardown, state transitions, and plan snapshots.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.flows.states.base import FlowState
 
@@ -20,9 +21,9 @@ class AgentSessionManager:
         self,
         session: Any,
         plan_history: Any,
-        hooks: Optional[Any] = None,
-        tracing_port: Optional[Any] = None,
-        tools: Optional[Any] = None,
+        hooks: Any | None = None,
+        tracing_port: Any | None = None,
+        tools: Any | None = None,
     ) -> None:
         self._session = session
         self._plan_history = plan_history
@@ -36,6 +37,7 @@ class AgentSessionManager:
     @property
     def is_done(self) -> bool:
         from weebot.domain.models.session import SessionStatus
+
         return self._session.status == SessionStatus.COMPLETED
 
     async def teardown(self) -> None:
@@ -47,6 +49,7 @@ class AgentSessionManager:
     def set_state(self, state: FlowState, flow: Any) -> None:
         """Change the current flow state and record metrics."""
         import time as _time
+
         now = _time.monotonic()
         prev_state = getattr(flow, "_state", None)
         prev_name = type(prev_state).__name__ if prev_state else "start"
@@ -55,11 +58,12 @@ class AgentSessionManager:
         if prev_state is not None:
             try:
                 from weebot.application.services.metrics_bridge import get_metrics
+
                 metrics = get_metrics()
                 if metrics:
-                    metrics.flow_step_duration_seconds.labels(
-                        state=prev_name,
-                    ).observe(prev_duration)
+                    metrics.flow_step_duration_seconds.labels(state=prev_name).observe(
+                        prev_duration
+                    )
             except Exception:
                 logger.debug("Metrics recording failed", exc_info=True)
 
@@ -73,8 +77,7 @@ class AgentSessionManager:
         self._state_entered_at = now
 
         logger.info(
-            "State transition: %s → %s (%.2fs)",
-            prev_name, type(state).__name__, prev_duration,
+            "State transition: %s → %s (%.2fs)", prev_name, type(state).__name__, prev_duration
         )
 
     # ── Plan snapshots ────────────────────────────────────────────────────
@@ -89,8 +92,6 @@ class AgentSessionManager:
     async def maybe_save_checkpoint(self) -> None:
         if self._hooks is not None:
             try:
-                await self._hooks.execute_hooks("checkpoint", {
-                    "session_id": self._session.id,
-                })
+                await self._hooks.execute_hooks("checkpoint", {"session_id": self._session.id})
             except Exception:
                 logger.debug("Checkpoint hook failed", exc_info=True)

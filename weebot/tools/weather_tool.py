@@ -1,4 +1,5 @@
 """WeatherTool — get current weather and forecasts via wttr.in (free, no API key)."""
+
 from __future__ import annotations
 from typing import Any
 
@@ -36,53 +37,50 @@ class WeatherTool(BaseTool):
     }
 
     _FORMAT_MAP = {
-        "now": "j1",     # JSON current + today
-        "today": "j1",   # JSON (we filter to today)
-        "tomorrow": "j2", # JSON 2-day (we filter to day 2)
-        "week": "j2",    # JSON 2-day (gives today + tomorrow)
+        "now": "j1",  # JSON current + today
+        "today": "j1",  # JSON (we filter to today)
+        "tomorrow": "j2",  # JSON 2-day (we filter to day 2)
+        "week": "j2",  # JSON 2-day (gives today + tomorrow)
     }
 
     async def health_check(self) -> bool:
         """Check if aiohttp is available."""
         try:
             import aiohttp  # noqa: F401
+
             return True
         except ImportError:
             return False
 
-    async def execute(
-        self, location: str, forecast: str = "now", **kwargs: Any
-    ) -> ToolResult:
+    async def execute(self, location: str, forecast: str = "now", **kwargs: Any) -> ToolResult:
         fmt = self._FORMAT_MAP.get(forecast, "j1")
         url = f"{_WTTR_URL}/{location}?format={fmt}"
 
         try:
             import json as _json
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
+
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
                     url,
                     headers={"User-Agent": "weebot/1.0"},
                     timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status != 200:
-                        return ToolResult.error_result(
-                            error=f"wttr.in returned HTTP {resp.status} for '{location}'"
-                        )
-                    # wttr.in returns text/plain even for JSON format
-                    text = await resp.text()
-                    data = _json.loads(text)
+                ) as resp,
+            ):
+                if resp.status != 200:
+                    return ToolResult.error_result(
+                        error=f"wttr.in returned HTTP {resp.status} for '{location}'"
+                    )
+                # wttr.in returns text/plain even for JSON format
+                text = await resp.text()
+                data = _json.loads(text)
         except aiohttp.ClientError as e:
-            return ToolResult.error_result(
-                error=f"Failed to reach wttr.in: {e}"
-            )
+            return ToolResult.error_result(error=f"Failed to reach wttr.in: {e}")
         except Exception as e:
-            return ToolResult.error_result(
-                error=f"Failed to parse weather for '{location}': {e}"
-            )
+            return ToolResult.error_result(error=f"Failed to parse weather for '{location}': {e}")
 
         return ToolResult.success_result(
-            output=self._format_weather(data, location, forecast),
-            data=data,
+            output=self._format_weather(data, location, forecast), data=data
         )
 
     def _format_weather(self, data: dict, location: str, forecast: str) -> str:
@@ -126,9 +124,8 @@ class WeatherTool(BaseTool):
                     hourly = day.get("hourly", [])
                     # Pick midday (index 4 = ~10-12h depending on timezone)
                     midday = hourly[4] if len(hourly) > 4 else (hourly[0] if hourly else {})
-                    day_desc = (
-                        midday.get("weatherDesc", [{}])[0].get("value", "")
-                        or day.get("weatherDesc", "")
+                    day_desc = midday.get("weatherDesc", [{}])[0].get("value", "") or day.get(
+                        "weatherDesc", ""
                     )
 
                     if forecast == "tomorrow" and weather.index(day) == 0:

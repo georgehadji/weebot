@@ -8,19 +8,19 @@ Usage:
     python -m cli.main cron-agent delete <id>
     python -m cli.main cron-agent run <id>   # manual run
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
-from rich.prompt import Prompt
 from rich.panel import Panel
 
 from weebot.domain.models.cron_job import CronJobRecord, DeliveryTarget, DeliveryTargetType
@@ -57,15 +57,28 @@ def cron_agent() -> None:
 @click.argument("prompt")
 @click.option("--name", default=None, help="Job name (defaults to auto-generated)")
 @click.option("--skills", default=None, help="Comma-separated skill names")
-@click.option("--toolsets", default="automation", help="Comma-separated toolset names (default: automation)")
-@click.option("--deliver-to", default=None, help="Delivery target type: telegram|discord|slack|file|none")
-@click.option("--deliver-dest", default=None, help="Delivery destination (chat ID, file path, etc.)")
+@click.option(
+    "--toolsets", default="automation", help="Comma-separated toolset names (default: automation)"
+)
+@click.option(
+    "--deliver-to", default=None, help="Delivery target type: telegram|discord|slack|file|none"
+)
+@click.option(
+    "--deliver-dest", default=None, help="Delivery destination (chat ID, file path, etc.)"
+)
 @click.option("--max-runtime", default=300, help="Max runtime in seconds")
 @click.option("--model", default=None, help="Model override")
-def cron_create(schedule: str, prompt: str, name: str | None,
-                skills: str | None, toolsets: str | None,
-                deliver_to: str | None, deliver_dest: str | None,
-                max_runtime: int, model: str | None) -> None:
+def cron_create(
+    schedule: str,
+    prompt: str,
+    name: str | None,
+    skills: str | None,
+    toolsets: str | None,
+    deliver_to: str | None,
+    deliver_dest: str | None,
+    max_runtime: int,
+    model: str | None,
+) -> None:
     """Create a new cron agent job.
 
     SCHEDULE: Cron expression (e.g., "0 8 * * 1") or interval (e.g., "30min").
@@ -80,12 +93,13 @@ def cron_create(schedule: str, prompt: str, name: str | None,
     if deliver_to and deliver_to != "none":
         try:
             delivery = DeliveryTarget(
-                type=DeliveryTargetType(deliver_to.lower()),
-                destination=deliver_dest,
+                type=DeliveryTargetType(deliver_to.lower()), destination=deliver_dest
             )
         except ValueError:
-            console.print(f"[red]Invalid delivery type: {deliver_to}. "
-                          f"Choose from: telegram, discord, slack, file, none[/red]")
+            console.print(
+                f"[red]Invalid delivery type: {deliver_to}. "
+                f"Choose from: telegram, discord, slack, file, none[/red]"
+            )
             return
 
     # Parse skills and toolsets
@@ -120,8 +134,10 @@ def cron_create(schedule: str, prompt: str, name: str | None,
     console.print(f"  Prompt:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     if skill_list:
         console.print(f"  Skills:   {', '.join(skill_list)}")
-    console.print(f"  Delivery: {delivery.type.value}" +
-                  (f" → {delivery.destination}" if delivery.destination else ""))
+    console.print(
+        f"  Delivery: {delivery.type.value}"
+        + (f" → {delivery.destination}" if delivery.destination else "")
+    )
 
 
 @cron_agent.command("list")
@@ -251,7 +267,7 @@ def cron_run(job_id: str) -> None:
     console.print(Panel(result, title=f"Job Result: {job.name}", style="green"))
 
     # Update job record
-    jobs[job_id]["last_run_at"] = datetime.now(timezone.utc).isoformat()
+    jobs[job_id]["last_run_at"] = datetime.now(UTC).isoformat()
     jobs[job_id]["last_result"] = result[:500]
     jobs[job_id]["run_count"] = data.get("run_count", 0) + 1
     _save_jobs(jobs)

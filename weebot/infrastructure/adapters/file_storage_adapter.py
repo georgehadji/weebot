@@ -2,12 +2,12 @@
 
 Wraps aiofiles for async I/O with automatic parent-directory creation.
 """
+
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import aiofiles
 import yaml
@@ -35,7 +35,7 @@ class LocalFileStorageAdapter(FileStoragePort):
 
     async def read_text(self, path: str) -> str:
         full = self._resolve(path)
-        async with aiofiles.open(full, "r", encoding="utf-8") as f:
+        async with aiofiles.open(full, encoding="utf-8") as f:
             return await f.read()
 
     async def write_text(self, path: str, content: str) -> None:
@@ -63,7 +63,7 @@ class LocalFileStorageAdapter(FileStoragePort):
     async def exists(self, path: str) -> bool:
         return self._resolve(path).exists()
 
-    async def size(self, path: str) -> Optional[int]:
+    async def size(self, path: str) -> int | None:
         full = self._resolve(path)
         try:
             return full.stat().st_size

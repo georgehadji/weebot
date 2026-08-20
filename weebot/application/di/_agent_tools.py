@@ -2,6 +2,7 @@
 
 Web-clone bindings (BrowserInspector + DispatchAgents + WorkflowOrchestrator).
 """
+
 from __future__ import annotations
 
 
@@ -16,22 +17,29 @@ class AgentToolsMixin:
 
     def _create_browser_inspector(self):
         from weebot.tools.browser_inspector import BrowserInspectorTool
+
         return BrowserInspectorTool()
 
     def _create_dispatch_agents(self):
         from weebot.tools.dispatch_agents import DispatchAgentsTool
         from weebot.application.ports.state_repo_port import StateRepositoryPort
+
         state_repo = self._maybe_get(StateRepositoryPort)
+
         def _flow_factory(session):
             return self._build_plan_act_flow_for_session(session)
+
         return DispatchAgentsTool(flow_factory=_flow_factory, state_repo=state_repo)
 
     def _create_workflow_orchestrator(self):
         from weebot.tools.workflow_orchestrator import WorkflowOrchestratorTool
         from weebot.application.ports.state_repo_port import StateRepositoryPort
+
         state_repo = self._maybe_get(StateRepositoryPort)
+
         def _flow_factory(session):
             return self._build_plan_act_flow_for_session(session)
+
         return WorkflowOrchestratorTool(flow_factory=_flow_factory, state_repo=state_repo)
 
     def _build_plan_act_flow_for_session(self, session):
@@ -42,12 +50,12 @@ class AgentToolsMixin:
         from weebot.config.harness.schema import HarnessConfig
 
         registry = self.get("tool_registry")
+
         def _flow_factory(s):
             return self._build_plan_act_flow_for_session(s)
+
         tools = registry.create_tool_collection(
-            "admin",
-            llm_port=self._maybe_get(LLMPort),
-            flow_factory=_flow_factory,
+            "admin", llm_port=self._maybe_get(LLMPort), flow_factory=_flow_factory
         )
         cfg = PlanActFlowConfig(
             llm=self.get(LLMPort),

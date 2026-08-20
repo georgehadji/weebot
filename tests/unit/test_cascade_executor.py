@@ -9,11 +9,11 @@ Tests cover:
 - Fast-fail timeout reduction
 - AllModelsTrippedError terminal state
 """
+
 from __future__ import annotations
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Any, Dict, List
 
 from weebot.application.agents.executor._cascade import CascadeExecutor
 from weebot.application.ports.llm_port import LLMResponse
@@ -54,6 +54,7 @@ def executor(mock_llm, mock_tools):
 
 # ── Circuit breaker tests ─────────────────────────────────────────
 
+
 class TestCircuitBreaker:
     """Per-model circuit breaker tracking."""
 
@@ -86,6 +87,7 @@ class TestCircuitBreaker:
 
     def test_warning_at_3_failures(self, executor: CascadeExecutor, caplog) -> None:
         import logging
+
         with caplog.at_level(logging.WARNING):
             for _ in range(3):
                 executor._cascade_record_failure("warn/model")
@@ -93,6 +95,7 @@ class TestCircuitBreaker:
 
 
 # ── Fast-fail detection ───────────────────────────────────────────
+
 
 class TestFastFail:
     """Fast-fail on auth/not-found errors."""
@@ -110,12 +113,13 @@ class TestFastFail:
         assert executor._is_fast_fail_error(exc)
 
     def test_timeout_is_not_fast_fail(self, executor: CascadeExecutor) -> None:
-        import asyncio
-        exc = asyncio.TimeoutError("timed out")
+
+        exc = TimeoutError("timed out")
         assert not executor._is_fast_fail_error(exc)
 
 
 # ── Single model call ─────────────────────────────────────────────
+
 
 class TestSingleModelCall:
     """_cascade_try_chat behavior."""
@@ -125,34 +129,26 @@ class TestSingleModelCall:
         self, executor: CascadeExecutor, mock_llm
     ) -> None:
         resp = await executor._cascade_try_chat(
-            [{"role": "user", "content": "hello"}],
-            "test/model",
-            timeout=10.0,
+            [{"role": "user", "content": "hello"}], "test/model", timeout=10.0
         )
         assert resp is not None
         assert resp.content == "Test response"
         mock_llm.chat.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_tripped_model_returns_none(
-        self, executor: CascadeExecutor
-    ) -> None:
+    async def test_tripped_model_returns_none(self, executor: CascadeExecutor) -> None:
         for _ in range(5):
             executor._cascade_record_failure("dead/model")
         resp = await executor._cascade_try_chat(
-            [{"role": "user", "content": "hello"}],
-            "dead/model",
+            [{"role": "user", "content": "hello"}], "dead/model"
         )
         assert resp is None
 
     @pytest.mark.asyncio
-    async def test_error_records_failure(
-        self, executor: CascadeExecutor, mock_llm
-    ) -> None:
+    async def test_error_records_failure(self, executor: CascadeExecutor, mock_llm) -> None:
         mock_llm.chat.side_effect = ValueError("API error")
         resp = await executor._cascade_try_chat(
-            [{"role": "user", "content": "hello"}],
-            "failing/model",
+            [{"role": "user", "content": "hello"}], "failing/model"
         )
         assert resp is None
         assert executor.cascade_is_tripped("failing/model") is False
@@ -165,13 +161,13 @@ class TestSingleModelCall:
         """Fast-fail errors (401, 403, 404) should return None so cascade continues."""
         mock_llm.chat.side_effect = ValueError("unauthorized")
         resp = await executor._cascade_try_chat(
-            [{"role": "user", "content": "hello"}],
-            "auth/model",
+            [{"role": "user", "content": "hello"}], "auth/model"
         )
         assert resp is None, "Fast-fail should return None, not raise"
 
 
 # ── Cascade orchestration ─────────────────────────────────────────
+
 
 class TestCascadeOrchestration:
     """Full cascade: parallel → sequential → rescue."""
@@ -183,35 +179,28 @@ class TestCascadeOrchestration:
         """First model to respond should be returned."""
         with patch.object(executor, "_model_provider", return_value="fast/model"):
             resp = await executor.call_with_cascade(
-                [{"role": "user", "content": "hello"}],
-                description="test task",
+                [{"role": "user", "content": "hello"}], description="test task"
             )
         assert resp is not None
         assert resp.content == "Test response"
 
     @pytest.mark.asyncio
-    async def test_all_models_fail_raises_error(
-        self, executor: CascadeExecutor, mock_llm
-    ) -> None:
+    async def test_all_models_fail_raises_error(self, executor: CascadeExecutor, mock_llm) -> None:
         """When every model returns None, AllModelsTrippedError is raised."""
         mock_llm.chat.return_value = None  # empty response
         with pytest.raises(AllModelsTrippedError):
             await executor.call_with_cascade(
-                [{"role": "user", "content": "hello"}],
-                description="failing task",
+                [{"role": "user", "content": "hello"}], description="failing task"
             )
 
     @pytest.mark.asyncio
-    async def test_on_success_callback_invoked(
-        self, executor: CascadeExecutor, mock_llm
-    ) -> None:
+    async def test_on_success_callback_invoked(self, executor: CascadeExecutor, mock_llm) -> None:
         """When on_success is set, it should be called after a successful response."""
         callback = AsyncMock()
         executor._on_success = callback
         with patch.object(executor, "_model_provider", return_value="fast/model"):
             resp = await executor.call_with_cascade(
-                [{"role": "user", "content": "hello"}],
-                description="test task",
+                [{"role": "user", "content": "hello"}], description="test task"
             )
         assert resp is not None
         callback.assert_awaited_once()
@@ -219,23 +208,18 @@ class TestCascadeOrchestration:
 
 # ── Live model rescue ─────────────────────────────────────────────
 
+
 class TestLiveModelRescue:
     """Last-resort fallback to OpenRouter free models."""
 
     @pytest.mark.asyncio
-    async def test_rescue_returns_none_on_network_error(
-        self, executor: CascadeExecutor
-    ) -> None:
+    async def test_rescue_returns_none_on_network_error(self, executor: CascadeExecutor) -> None:
         with patch("httpx.AsyncClient", side_effect=ValueError("network error")):
-            result = await executor._live_model_rescue(
-                [{"role": "user", "content": "hello"}],
-            )
+            result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_rescue_with_no_free_models(
-        self, executor: CascadeExecutor
-    ) -> None:
+    async def test_rescue_with_no_free_models(self, executor: CascadeExecutor) -> None:
         with patch("httpx.AsyncClient.get") as mock_get:
             mock_response = MagicMock()
             mock_response.json.return_value = {"data": []}
@@ -243,7 +227,5 @@ class TestLiveModelRescue:
             mock_response.__aenter__ = AsyncMock(return_value=mock_response)
             mock_response.__aexit__ = AsyncMock(return_value=None)
             mock_get.return_value = mock_response
-            result = await executor._live_model_rescue(
-                [{"role": "user", "content": "hello"}],
-            )
+            result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
         assert result is None

@@ -4,24 +4,21 @@ Accepts JSON payloads from any external service (Zapier, n8n, custom scripts)
 and routes them through a PlanActFlow for processing.  Responses are returned
 synchronously.
 """
+
 from __future__ import annotations
 
-import asyncio
 import hmac as _hmac
 import logging
-from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from weebot.application.di import Container
-from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.domain.models.event import AgentEvent
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session
 from weebot.interfaces.factories import build_tools, create_flow
-from weebot.interfaces.gateways.base import GatewayMessage, GatewayResponse
+
 # Lazy import: ToolCollection imported inside handler functions
 
 logger = logging.getLogger(__name__)
@@ -40,6 +37,7 @@ async def require_webhook_auth(request: Request) -> None:
     3. Neither → allow loopback only (local dev).
     """
     from weebot.config.settings import WeebotSettings
+
     _settings = WeebotSettings()
 
     if _settings.webhook_api_key:
@@ -74,13 +72,15 @@ async def require_webhook_auth(request: Request) -> None:
 
 class WebhookRequest(BaseModel):
     """Incoming webhook payload."""
+
     text: str = Field(..., description="The message or task description")
-    session_id: Optional[str] = Field(default=None, description="Optional session ID for continuation")
-    model: Optional[str] = Field(default=None, description="Optional model override")
+    session_id: str | None = Field(default=None, description="Optional session ID for continuation")
+    model: str | None = Field(default=None, description="Optional model override")
 
 
 class WebhookResponse(BaseModel):
     """Synchronous response from the agent."""
+
     response: str = Field(default="")
     session_id: str = Field(default="")
     status: str = Field(default="")
@@ -89,9 +89,7 @@ class WebhookResponse(BaseModel):
 
 @router.post("/run")
 async def webhook_run(
-    body: WebhookRequest,
-    request: Request,
-    _auth: None = Depends(require_webhook_auth),
+    body: WebhookRequest, request: Request, _auth: None = Depends(require_webhook_auth)
 ) -> WebhookResponse:
     """Execute a one-shot prompt through PlanActFlow and return the result.
 
@@ -101,7 +99,7 @@ async def webhook_run(
     """
     from weebot.config.settings import WeebotSettings
 
-    container: Optional[Container] = getattr(request.app.state, "container", None)
+    container: Container | None = getattr(request.app.state, "container", None)
     if container is None:
         raise HTTPException(status_code=503, detail="DI container not initialized")
 
@@ -116,13 +114,9 @@ async def webhook_run(
     if body.session_id:
         session = await state_repo.load_session(session_id)
         if session is None:
-            session = Session(
-                id=session_id, user_id="webhook", agent_id="webhook-agent",
-            )
+            session = Session(id=session_id, user_id="webhook", agent_id="webhook-agent")
     else:
-        session = Session(
-            id=session_id, user_id="webhook", agent_id="webhook-agent",
-        )
+        session = Session(id=session_id, user_id="webhook", agent_id="webhook-agent")
 
     # Determine tool role based on exec-tools setting
     _settings = WeebotSettings()

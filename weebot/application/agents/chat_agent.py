@@ -4,13 +4,18 @@ Unlike PlannerAgent or ExecutorAgent, ChatAgent does not create plans
 or execute tool loops.  It sends the conversation history to the LLM
 and returns the response as message events.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.config.constants import TEMPERATURE_CREATIVE, MAX_TOKENS_CHAT, MAX_TOKENS_EXTENDED, DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
+from weebot.config.constants import (
+    TEMPERATURE_CREATIVE,
+    MAX_TOKENS_CHAT,
+    DEFAULT_MAX_CHAT_CONTEXT_MESSAGES,
+)
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.event import AgentEvent, MessageEvent
 
@@ -29,19 +34,14 @@ class ChatAgent:
     MAX_CONTEXT_MESSAGES = DEFAULT_MAX_CHAT_CONTEXT_MESSAGES
 
     def __init__(
-        self,
-        llm: LLMPort,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
+        self, llm: LLMPort, event_bus: EventBusPort | None = None, model: str | None = None
     ):
         self._llm = llm
         self._event_bus = event_bus
         self._model = model
 
     async def respond(
-        self,
-        message: str,
-        history: list[MessageEvent],
+        self, message: str, history: list[MessageEvent]
     ) -> AsyncGenerator[AgentEvent, None]:
         """Send the user message and conversation history to the LLM.
 
@@ -54,7 +54,7 @@ class ChatAgent:
         """
         # Build conversation context from history (sliding window)
         context_messages: list[dict[str, str]] = []
-        recent = history[-self.MAX_CONTEXT_MESSAGES:] if history else []
+        recent = history[-self.MAX_CONTEXT_MESSAGES :] if history else []
 
         for event in recent:
             if event.type == "message":

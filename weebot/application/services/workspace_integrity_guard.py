@@ -12,17 +12,15 @@ review for as long as it did.
 
 Detects and reports; never restores. See WorkspaceSnapshotPort for why.
 """
+
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Callable, Optional
+from collections.abc import AsyncIterator, Callable
 
-from weebot.application.ports.workspace_snapshot_port import (
-    WorkspaceDrift,
-    WorkspaceSnapshotPort,
-)
+from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift, WorkspaceSnapshotPort
 from weebot.domain.models.audit import (
     AuditDimension,
     VerificationStatus,
@@ -36,9 +34,10 @@ _log = logging.getLogger(__name__)
 @dataclass
 class IntegrityWatch:
     """Result of one guarded episode. Populated when the block exits."""
+
     status: VerificationStatus = VerificationStatus.NOT_RUN
     reason: str = ""
-    drift: Optional[WorkspaceDrift] = None
+    drift: WorkspaceDrift | None = None
     violations: list[Violation] = field(default_factory=list)
 
     @property
@@ -65,9 +64,7 @@ class WorkspaceIntegrityGuard:
 
     @asynccontextmanager
     async def watch(
-        self,
-        *,
-        on_complete: Callable[[IntegrityWatch], None] | None = None,
+        self, *, on_complete: Callable[[IntegrityWatch], None] | None = None
     ) -> AsyncIterator[IntegrityWatch]:
         """Guard the enclosed block.
 
@@ -129,21 +126,22 @@ class WorkspaceIntegrityGuard:
 
         watch.status = VerificationStatus.FAILED
         watch.reason = drift.describe()
-        watch.violations.append(Violation(
-            dimension=AuditDimension.INTEGRITY,
-            severity=ViolationSeverity.HIGH,
-            description=f"verification modified the workspace it was auditing — {drift.describe()}",
-            location=", ".join(drift.paths[:3]),
-            recommendation=(
-                "Verification must observe, not act. Find the write path and "
-                "remove it; the audited state changed underneath the audit."
-            ),
-        ))
+        watch.violations.append(
+            Violation(
+                dimension=AuditDimension.INTEGRITY,
+                severity=ViolationSeverity.HIGH,
+                description=f"verification modified the workspace it was auditing — {drift.describe()}",
+                location=", ".join(drift.paths[:3]),
+                recommendation=(
+                    "Verification must observe, not act. Find the write path and "
+                    "remove it; the audited state changed underneath the audit."
+                ),
+            )
+        )
 
     @staticmethod
     def _finish(
-        watch: IntegrityWatch,
-        on_complete: Callable[[IntegrityWatch], None] | None,
+        watch: IntegrityWatch, on_complete: Callable[[IntegrityWatch], None] | None
     ) -> None:
         if watch.status is VerificationStatus.FAILED:
             _log.warning("Workspace integrity FAILED: %s", watch.reason)

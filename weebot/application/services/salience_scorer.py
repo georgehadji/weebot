@@ -16,16 +16,13 @@ Frequency normalization:
 - 3-9 → 0.6
 - 1-2 → 0.3
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta, UTC
 
 
-def compute_salience(
-    access_count: int,
-    last_accessed: Optional[datetime] = None,
-) -> float:
+def compute_salience(access_count: int, last_accessed: datetime | None = None) -> float:
     """Compute a salience score (0.0-1.0) for a memory entry.
 
     Args:
@@ -40,14 +37,14 @@ def compute_salience(
     return round(0.4 * recency_norm + 0.6 * freq_norm, 4)
 
 
-def _recency_score(last_accessed: Optional[datetime]) -> float:
+def _recency_score(last_accessed: datetime | None) -> float:
     """Compute recency score (0.0-1.0) based on time since last access."""
     if last_accessed is None:
         return 0.1
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Make naive datetimes aware for comparison
     if last_accessed.tzinfo is None:
-        last_accessed = last_accessed.replace(tzinfo=timezone.utc)
+        last_accessed = last_accessed.replace(tzinfo=UTC)
     age = now - last_accessed
     if age < timedelta(hours=1):
         return 1.0

@@ -15,13 +15,14 @@ Changes from v1:
 - ``min_held_out_tasks`` configurable floor (default 2).
 - ``auto_accept`` explicit opt-in for legacy callers.
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
-from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.models.harness_edit import PromotionDecision
 from weebot.domain.models.harness_metrics import HarnessMetrics
 
@@ -52,10 +53,8 @@ class TaskRunReport:
 
     @classmethod
     def from_results(
-        cls,
-        results: list[dict],
-        weights: Optional[dict[str, float]] = None,
-    ) -> "TaskRunReport":
+        cls, results: list[dict], weights: dict[str, float] | None = None
+    ) -> TaskRunReport:
         """Build a report from task-run result dicts.
 
         Each dict must have at least:
@@ -78,15 +77,17 @@ class TaskRunReport:
                     else:
                         all_metrics.append(metrics_data)
                 except (TypeError, ValueError):
-                    all_metrics.append(HarnessMetrics(task_pass_rate=1.0 if r.get("passed") else 0.0))
+                    all_metrics.append(
+                        HarnessMetrics(task_pass_rate=1.0 if r.get("passed") else 0.0)
+                    )
             else:
                 all_metrics.append(HarnessMetrics(task_pass_rate=1.0 if r.get("passed") else 0.0))
 
         # Compute average composite score
         if all_metrics:
-            avg_composite = sum(
-                m.composite(weights=weights) for m in all_metrics
-            ) / len(all_metrics)
+            avg_composite = sum(m.composite(weights=weights) for m in all_metrics) / len(
+                all_metrics
+            )
         else:
             avg_composite = 0.0
 
@@ -115,12 +116,12 @@ class RegressionGate:
 
     def __init__(
         self,
-        task_runner: Optional[Callable] = None,
+        task_runner: Callable | None = None,
         *,
         auto_accept: bool = False,
         min_held_out_tasks: int = 2,
-        composite_weights: Optional[dict[str, float]] = None,
-        code_quality_signal: Optional[object] = None,
+        composite_weights: dict[str, float] | None = None,
+        code_quality_signal: object | None = None,
         code_quality_threshold: float = 0.3,
     ):
         """Initialize the gate.
@@ -155,8 +156,8 @@ class RegressionGate:
         self,
         baseline: Any,
         candidate: Any,
-        held_in_tasks: Optional[list[str]] = None,
-        held_out_tasks: Optional[list[str]] = None,
+        held_in_tasks: list[str] | None = None,
+        held_out_tasks: list[str] | None = None,
         repeats: int = 2,
     ) -> PromotionDecision:
         """Progressive validation with early rejection.
@@ -199,14 +200,7 @@ class RegressionGate:
                 f"{self._min_held_out_tasks}) — rejecting"
             )
             logger.warning(reason)
-            return PromotionDecision(
-                accepted=False,
-                delta_in=0.0,
-                delta_ho=0.0,
-                reason=reason,
-            )
-
-
+            return PromotionDecision(accepted=False, delta_in=0.0, delta_ho=0.0, reason=reason)
 
         # ── Phase 1: held-in evaluation ───────────────────────────
         logger.info(
@@ -215,10 +209,7 @@ class RegressionGate:
         )
 
         baseline_in_report, candidate_in_report = await self._run_split(
-            task_ids=held_in_tasks,
-            baseline=baseline,
-            candidate=candidate,
-            repeats=repeats,
+            task_ids=held_in_tasks, baseline=baseline, candidate=candidate, repeats=repeats
         )
 
         # ── Phase 1.5: code quality fast-reject on held-in outputs ─
@@ -249,25 +240,17 @@ class RegressionGate:
                 f"(Δ_composite={delta_composite_in:+.4f} < 0)"
             )
             logger.warning(reason)
-            return PromotionDecision(
-                accepted=False,
-                delta_in=delta_in,
-                delta_ho=0.0,
-                reason=reason,
-            )
+            return PromotionDecision(accepted=False, delta_in=delta_in, delta_ho=0.0, reason=reason)
 
         # ── Phase 2: held-out evaluation ──────────────────────────
         logger.info(
-            "RegressionGate: held-in OK (Δ_composite=%+.4f), "
-            "evaluating %d held-out tasks",
-            delta_composite_in, len(held_out_tasks),
+            "RegressionGate: held-in OK (Δ_composite=%+.4f), " "evaluating %d held-out tasks",
+            delta_composite_in,
+            len(held_out_tasks),
         )
 
         baseline_ho_report, candidate_ho_report = await self._run_split(
-            task_ids=held_out_tasks,
-            baseline=baseline,
-            candidate=candidate,
-            repeats=repeats,
+            task_ids=held_out_tasks, baseline=baseline, candidate=candidate, repeats=repeats
         )
 
         delta_composite_ho = (
@@ -285,10 +268,7 @@ class RegressionGate:
             )
             logger.warning(reason)
             return PromotionDecision(
-                accepted=False,
-                delta_in=delta_in,
-                delta_ho=delta_ho,
-                reason=reason,
+                accepted=False, delta_in=delta_in, delta_ho=delta_ho, reason=reason
             )
 
         if delta_composite_in <= 0 and delta_composite_ho <= 0:
@@ -298,10 +278,7 @@ class RegressionGate:
             )
             logger.info(reason)
             return PromotionDecision(
-                accepted=False,
-                delta_in=delta_in,
-                delta_ho=delta_ho,
-                reason=reason,
+                accepted=False, delta_in=delta_in, delta_ho=delta_ho, reason=reason
             )
 
         reason = (
@@ -313,21 +290,12 @@ class RegressionGate:
             f"(Δ_composite={delta_composite_ho:+.4f})"
         )
         logger.info("RegressionGate: %s", reason)
-        return PromotionDecision(
-            accepted=True,
-            delta_in=delta_in,
-            delta_ho=delta_ho,
-            reason=reason,
-        )
+        return PromotionDecision(accepted=True, delta_in=delta_in, delta_ho=delta_ho, reason=reason)
 
     # ── Internal: run one split (held-in or held-out) ──────────────
 
     async def _run_split(
-        self,
-        task_ids: list[str],
-        baseline: Any,
-        candidate: Any,
-        repeats: int,
+        self, task_ids: list[str], baseline: Any, candidate: Any, repeats: int
     ) -> tuple[TaskRunReport, TaskRunReport]:
         """Run both baseline and candidate on *task_ids*, return reports.
 
@@ -352,12 +320,8 @@ class RegressionGate:
             results = await self._task_runner(task_ids, candidate)
             all_candidate_results.extend(results)
 
-        baseline_report = TaskRunReport.from_results(
-            all_baseline_results, weights=self._weights,
-        )
-        candidate_report = TaskRunReport.from_results(
-            all_candidate_results, weights=self._weights,
-        )
+        baseline_report = TaskRunReport.from_results(all_baseline_results, weights=self._weights)
+        candidate_report = TaskRunReport.from_results(all_candidate_results, weights=self._weights)
 
         # ── Code quality fast-reject check ────────────────────────
         if self._code_quality_signal is not None:
@@ -369,8 +333,7 @@ class RegressionGate:
                     output = str(r.get("trace", r.get("error", r.get("task_id", ""))))
                     try:
                         reject = await self._code_quality_signal.fast_reject(
-                            task_prompt=r.get("task_id", ""),
-                            agent_output=output,
+                            task_prompt=r.get("task_id", ""), agent_output=output
                         )
                         if reject:
                             poor_quality += 1
@@ -380,7 +343,8 @@ class RegressionGate:
             if total_checked > 0 and poor_quality > total_checked // 2:
                 logger.debug(
                     "CodeQualitySignal: fast-reject (%d/%d failed tasks poor quality)",
-                    poor_quality, total_checked,
+                    poor_quality,
+                    total_checked,
                 )
                 candidate_report.fast_rejected = True
 

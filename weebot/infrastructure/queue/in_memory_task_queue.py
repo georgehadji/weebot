@@ -3,19 +3,14 @@
 Default queue backend for ``TaskRunner``.  Non-durable — items are
 lost on process restart.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable
 
-from weebot.application.abstractions import BaseFlow
 from weebot.domain.models.session import Session
-from weebot.application.ports.task_queue_port import (
-    TaskQueuePort,
-    QueuedSession,
-    FlowFactory,
-)
+from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSession, FlowFactory
 
 logger = logging.getLogger(__name__)
 
@@ -31,15 +26,12 @@ class InMemoryTaskQueue(TaskQueuePort):
         self._queue: asyncio.PriorityQueue[QueuedSession] = asyncio.PriorityQueue(maxsize=maxsize)
         self._closed = False
 
-    async def enqueue(
-        self,
-        session: Session,
-        flow_factory: FlowFactory,
-        priority: int = 5,
-    ) -> None:
+    async def enqueue(self, session: Session, flow_factory: FlowFactory, priority: int = 5) -> None:
         if self._closed:
             raise RuntimeError("TaskQueue is closed")
-        await self._queue.put(QueuedSession(priority=priority, session=session, flow_factory=flow_factory))
+        await self._queue.put(
+            QueuedSession(priority=priority, session=session, flow_factory=flow_factory)
+        )
 
     async def dequeue(self) -> QueuedSession | None:
         while not self._closed:
@@ -47,7 +39,7 @@ class InMemoryTaskQueue(TaskQueuePort):
                 # Use wait_for with a short timeout so we periodically
                 # check the closed flag.
                 return await asyncio.wait_for(self._queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
         # Drain remaining items
         try:

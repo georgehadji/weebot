@@ -11,15 +11,13 @@ cache preserved. A mid-session write is visible on the very next step.
 
 Entry delimiter: § (section sign, rare in natural text).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
-from weebot.infrastructure.persistence.filesystem_memory import (
-    DELIMITER,
-    FileSystemMemoryAdapter,
-)
+from weebot.infrastructure.persistence.filesystem_memory import DELIMITER, FileSystemMemoryAdapter
 from weebot.application.ports.memory_port import MemoryPort
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -87,8 +85,8 @@ class PersistentMemoryTool(BaseTool):
 
     def __init__(
         self,
-        memory: Optional[MemoryPort] = None,
-        state_repo: Optional["StateRepositoryPort"] = None,
+        memory: MemoryPort | None = None,
+        state_repo: StateRepositoryPort | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the persistent memory tool.
@@ -104,11 +102,12 @@ class PersistentMemoryTool(BaseTool):
             **kwargs: Passed through to BaseTool.
         """
         super().__init__(**kwargs)
-        self._salience_repo: Optional["StateRepositoryPort"] = state_repo
+        self._salience_repo: StateRepositoryPort | None = state_repo
         self._salience_warned = False
         if memory is None:
             import importlib as _il
             from weebot.application.ports.state_repo_port import StateRepositoryPort as _SRP
+
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
             memory = _c.get(FileSystemMemoryAdapter)
@@ -123,8 +122,8 @@ class PersistentMemoryTool(BaseTool):
         self,
         action: Literal["add", "replace", "remove", "read"],
         file: Literal["agent", "user"] = "agent",
-        entry: Optional[str] = None,
-        match: Optional[str] = None,
+        entry: str | None = None,
+        match: str | None = None,
         **_: Any,
     ) -> ToolResult:
         if action == "read":
@@ -135,7 +134,9 @@ class PersistentMemoryTool(BaseTool):
             return await self._add(file, entry)
         if action == "replace":
             if not entry or not match:
-                return ToolResult.error_result("'entry' and 'match' are required for action='replace'")
+                return ToolResult.error_result(
+                    "'entry' and 'match' are required for action='replace'"
+                )
             return await self._replace(file, match, entry)
         if action == "remove":
             if not match:
@@ -155,14 +156,16 @@ class PersistentMemoryTool(BaseTool):
         """
         try:
             import hashlib
+
             if self._salience_repo is None:
                 from weebot.config.settings import SESSIONS_DB
-                from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+                from weebot.infrastructure.persistence.sqlite_state_repo import (
+                    SQLiteStateRepository,
+                )
+
                 self._salience_repo = SQLiteStateRepository(db_path=SESSIONS_DB)
             entry_hash = hashlib.sha256(entry_text.encode()).hexdigest()[:16]
-            await self._salience_repo.upsert_memory_metadata(
-                entry_hash, entry_text[:500], source,
-            )
+            await self._salience_repo.upsert_memory_metadata(entry_hash, entry_text[:500], source)
         except Exception as exc:
             if not self._salience_warned:
                 logger.warning("PersistentMemoryTool: salience tracking failed: %s", exc)
@@ -179,8 +182,7 @@ class PersistentMemoryTool(BaseTool):
             )
         formatted = "\n\n".join(f"[{i + 1}] {e}" for i, e in enumerate(entries))
         return ToolResult.success_result(
-            output=formatted,
-            data={"entries": entries, "count": len(entries)},
+            output=formatted, data={"entries": entries, "count": len(entries)}
         )
 
     async def _add(self, file: str, entry: str) -> ToolResult:
@@ -228,8 +230,7 @@ class PersistentMemoryTool(BaseTool):
         entries = [new_entry if e == matches[0] else e for e in entries]
         await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Replaced 1 entry in {file.upper()}.md.",
-            data={"replaced": 1},
+            output=f"Replaced 1 entry in {file.upper()}.md.", data={"replaced": 1}
         )
 
     async def _remove(self, file: str, match: str) -> ToolResult:
@@ -253,14 +254,13 @@ class PersistentMemoryTool(BaseTool):
         entries = [e for e in entries if e != matches[0]]
         await self._memory.write_entries(file, entries)
         return ToolResult.success_result(
-            output=f"Removed 1 entry from {file.upper()}.md.",
-            data={"removed": matches},
+            output=f"Removed 1 entry from {file.upper()}.md.", data={"removed": matches}
         )
 
     # ── system prompt snapshot ────────────────────────────────────────────
 
     @classmethod
-    async def load_snapshot(cls, memory: Optional[MemoryPort] = None) -> str:
+    async def load_snapshot(cls, memory: MemoryPort | None = None) -> str:
         """Return a formatted snapshot of both memory files for system prompt injection.
 
         Returns empty string if both files are empty or missing. Re-read from
@@ -282,6 +282,7 @@ class PersistentMemoryTool(BaseTool):
         """
         port = memory if memory is not None else FileSystemMemoryAdapter()
         from weebot.config.feature_flags import is_enabled
+
         if not is_enabled("MEMORY_SNAPSHOT_CAP_ENABLED"):
             return await port.read_snapshot()
         return await cls._capped_snapshot(port)
@@ -318,9 +319,7 @@ class PersistentMemoryTool(BaseTool):
             ]
             if hidden:
                 body_lines.append(f"[{hidden} of {total} memory entries hidden]")
-            body_lines.append(
-                "\n\n".join(f"[{i + 1}] {e}" for i, e in enumerate(kept))
-            )
+            body_lines.append("\n\n".join(f"[{i + 1}] {e}" for i, e in enumerate(kept)))
             parts.append("## Agent Knowledge\n" + "\n".join(body_lines))
 
         if not parts:

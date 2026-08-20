@@ -6,6 +6,7 @@ any object with ``async def push(event: ActivityEvent) -> None`` and
 ``async def flush() -> None`` works.  The canonical interface is
 :class:`~weebot.application.ports.analytics_port.AnalyticsSinkPort`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,7 @@ import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, DefaultDict, Deque, Dict, List, Optional
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ _log = logging.getLogger(__name__)
 @dataclass
 class ActivityEvent:
     project_id: str
-    kind: str           # job / exec / read / write / tool / message / etc.
+    kind: str  # job / exec / read / write / tool / message / etc.
     message: str
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -43,15 +44,11 @@ class ActivityStream:
         sinks: Optional list of analytics sink objects (duck-typed).
     """
 
-    def __init__(
-        self,
-        max_size: int = 200,
-        sinks: Optional[List[Any]] = None,
-    ) -> None:
+    def __init__(self, max_size: int = 200, sinks: list[Any] | None = None) -> None:
         self._max_size = max_size
-        self._buffer: Deque[ActivityEvent] = deque(maxlen=max_size)
-        self._by_project: DefaultDict[str, Deque[ActivityEvent]] = defaultdict(deque)
-        self._sinks: List[Any] = list(sinks) if sinks else []
+        self._buffer: deque[ActivityEvent] = deque(maxlen=max_size)
+        self._by_project: defaultdict[str, deque[ActivityEvent]] = defaultdict(deque)
+        self._sinks: list[Any] = list(sinks) if sinks else []
 
     def add_sink(self, sink: Any) -> None:
         """Register an analytics sink to receive all future events."""
@@ -88,9 +85,7 @@ class ActivityStream:
             await sink.push(event)
         except Exception:
             _log.warning(
-                "Analytics sink %s failed on push — swallowing",
-                type(sink).__name__,
-                exc_info=True,
+                "Analytics sink %s failed on push — swallowing", type(sink).__name__, exc_info=True
             )
 
     async def flush_sinks(self) -> None:
@@ -109,8 +104,7 @@ class ActivityStream:
                     exc_info=True,
                 )
 
-    def recent(self, n: int = 50,
-               project_id: Optional[str] = None) -> List[ActivityEvent]:
+    def recent(self, n: int = 50, project_id: str | None = None) -> list[ActivityEvent]:
         """Return up to n most recent events, optionally filtered by project_id."""
         if project_id is not None:
             return list(self._by_project[project_id])[:n]

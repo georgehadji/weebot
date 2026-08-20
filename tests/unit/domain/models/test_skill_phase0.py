@@ -1,17 +1,12 @@
 """Phase 0 unit tests — trust model, provenance, and lifecycle events."""
+
 from __future__ import annotations
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 
-from weebot.domain.models.skill import (
-    Skill,
-    SkillMetadata,
-    SkillProvenance,
-    TrustTier,
-)
+from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance, TrustTier
 from weebot.domain.models.event import SkillDistilled, SkillPromoted
-
 
 # ── SkillProvenance ────────────────────────────────────────────────────────────
 
@@ -154,10 +149,7 @@ class TestSkillDistilledEvent:
 class TestSkillPromotedEvent:
     def test_fields(self):
         ev = SkillPromoted(
-            skill_name="my-skill",
-            from_tier="quarantined",
-            to_tier="candidate",
-            positive_uses=0,
+            skill_name="my-skill", from_tier="quarantined", to_tier="candidate", positive_uses=0
         )
         assert ev.type == "skill_promoted"
         assert ev.from_tier == "quarantined"
@@ -165,10 +157,7 @@ class TestSkillPromotedEvent:
 
     def test_candidate_to_trusted(self):
         ev = SkillPromoted(
-            skill_name="x",
-            from_tier="candidate",
-            to_tier="trusted",
-            positive_uses=3,
+            skill_name="x", from_tier="candidate", to_tier="trusted", positive_uses=3
         )
         assert ev.positive_uses == 3
 

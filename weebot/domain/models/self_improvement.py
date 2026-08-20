@@ -5,10 +5,10 @@ Contains:
 - ImprovementStrategy: cross-domain transfer of meta-improvement knowledge
   (HyperAgents Enhancement 6)
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -18,34 +18,30 @@ class SelfImprovementPatch(BaseModel):
 
     Each patch goes through: propose → validate → apply (or revert).
     """
+
     id: str = Field(default="", description="Unique patch identifier")
     target_file: str = Field(
-        default="",
-        description="Relative path from weebot root (e.g. config/contracts/bash.yaml)",
+        default="", description="Relative path from weebot root (e.g. config/contracts/bash.yaml)"
     )
     target_type: str = Field(
-        default="skill",
-        description="'skill' | 'contract' | 'rule' | 'harness'",
+        default="skill", description="'skill' | 'contract' | 'rule' | 'harness'"
     )
     diff: str = Field(default="", description="Unified diff of the change")
     validation_score: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Score from validation against test tasks",
+        default=0.0, ge=0.0, le=1.0, description="Score from validation against test tasks"
     )
     validation_tasks: list[str] = Field(
-        default_factory=list,
-        description="Validation task descriptions that were run",
+        default_factory=list, description="Validation task descriptions that were run"
     )
     applied: bool = Field(default=False, description="Whether this patch was applied")
     reverted: bool = Field(default=False, description="Whether this patch was later reverted")
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
-    applied_at: Optional[datetime] = Field(default=None)
-    reverted_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    applied_at: datetime | None = Field(default=None)
+    reverted_at: datetime | None = Field(default=None)
 
 
 # ── HyperAgents Enhancement 6 ────────────────────────────────────────────────
+
 
 class ImprovementStrategy(BaseModel):
     """A meta-level improvement strategy learned from one domain.
@@ -57,13 +53,11 @@ class ImprovementStrategy(BaseModel):
 
     strategy_id: str = Field(default="")
     source_domain: str = Field(default="")
-    target_domain: Optional[str] = Field(default=None)
+    target_domain: str | None = Field(default=None)
     meta_agent_prompt_snippet: str = Field(default="")
     effectiveness_score: float = Field(default=0.0)
     transfer_count: int = Field(default=0)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def composite_score(self) -> float:

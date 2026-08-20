@@ -8,6 +8,7 @@ Usage:
     python -m cli.main mcp login <name>
     python -m cli.main mcp reload
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,6 +60,7 @@ def mcp_list() -> None:
 
     # Also show raw server configs
     from weebot.config.settings import WeebotSettings
+
     settings = WeebotSettings()
 
     table = Table(title="MCP Servers")
@@ -74,28 +76,34 @@ def mcp_list() -> None:
         return
 
     for server, tool_count in stats["per_server"].items():
-        table.add_row(
-            server,
-            "configured",
-            "registered",
-            str(tool_count),
-            "0",
-        )
+        table.add_row(server, "configured", "registered", str(tool_count), "0")
 
     console.print(table)
-    console.print(f"\n[dim]Total: {stats['servers']} server(s), {stats['total_tools']} tool(s)[/dim]")
+    console.print(
+        f"\n[dim]Total: {stats['servers']} server(s), {stats['total_tools']} tool(s)[/dim]"
+    )
 
 
 @mcp.command("add")
 @click.argument("name")
-@click.option("--transport", type=click.Choice(["stdio", "http", "sse", "streamable-http"]),
-              default="stdio", help="Transport protocol")
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "http", "sse", "streamable-http"]),
+    default="stdio",
+    help="Transport protocol",
+)
 @click.option("--command", default=None, help="Executable path (stdio transport)")
 @click.option("--url", default=None, help="Server URL (http/sse transport)")
 @click.option("--env", multiple=True, help="ENV_VAR=value pairs for stdio transport")
 @click.option("--enable/--disable", default=True, help="Enable on startup")
-def mcp_add(name: str, transport: str, command: str | None, url: str | None,
-            env: tuple[str, ...], enable: bool) -> None:
+def mcp_add(
+    name: str,
+    transport: str,
+    command: str | None,
+    url: str | None,
+    env: tuple[str, ...],
+    enable: bool,
+) -> None:
     """Add a new MCP server configuration.
 
     NAME is a unique identifier for the server (alphanumeric, dashes/underscores allowed).
@@ -104,7 +112,9 @@ def mcp_add(name: str, transport: str, command: str | None, url: str | None,
 
     # Validate name
     if not name.replace("-", "").replace("_", "").isalnum():
-        console.print(f"[red]Invalid server name: {name}. Use alphanumeric with dashes/underscores.[/red]")
+        console.print(
+            f"[red]Invalid server name: {name}. Use alphanumeric with dashes/underscores.[/red]"
+        )
         return
 
     # Interactive mode for missing args
@@ -130,11 +140,7 @@ def mcp_add(name: str, transport: str, command: str | None, url: str | None,
             env_dict[key] = val
 
     # Validate
-    config_data = {
-        "name": name,
-        "transport": transport,
-        "enabled": enable,
-    }
+    config_data = {"name": name, "transport": transport, "enabled": enable}
     if command:
         config_data["command"] = command
         config_data["args"] = args
@@ -163,7 +169,7 @@ def mcp_add(name: str, transport: str, command: str | None, url: str | None,
 
 @mcp.command("remove")
 @click.argument("name")
-@click.confirmation_option(prompt=f"Are you sure?")
+@click.confirmation_option(prompt="Are you sure?")
 def mcp_remove(name: str) -> None:
     """Remove an MCP server configuration."""
     configs = _load_server_configs()
@@ -196,7 +202,9 @@ def mcp_configure(name: str) -> None:
 
     if current.get("transport") == "stdio":
         current["command"] = Prompt.ask("Command", default=current.get("command", ""))
-        args_str = Prompt.ask("Arguments (space-separated)", default=" ".join(current.get("args", [])))
+        args_str = Prompt.ask(
+            "Arguments (space-separated)", default=" ".join(current.get("args", []))
+        )
         current["args"] = args_str.split() if args_str else []
     else:
         current["url"] = Prompt.ask("URL", default=current.get("url", ""))
@@ -211,6 +219,7 @@ def mcp_configure(name: str) -> None:
 def mcp_login(name: str, force: bool) -> None:
     """Authenticate with an MCP server (OAuth flow)."""
     from weebot.config.settings import WeebotSettings
+
     settings = WeebotSettings()
 
     configs = _load_server_configs()
@@ -270,6 +279,7 @@ def mcp_config_path() -> None:
 def _get_config_path() -> Path:
     """Get the path to the MCP servers config file."""
     from weebot.config.settings import WeebotSettings
+
     settings = WeebotSettings()
     config_path = settings.mcp_servers_config_path
     if config_path:
@@ -290,11 +300,13 @@ def _load_server_configs() -> dict:
         raw = path.read_text(encoding="utf-8")
         if path.suffix in (".yaml", ".yml"):
             import yaml
+
             servers = yaml.safe_load(raw) or {}
         else:
             servers = json.loads(raw) or {}
         # Expand env vars in all string values
         from weebot.infrastructure.mcp.config_loader import expand_env
+
         return expand_env(servers)
     except Exception as exc:
         logger.warning("Failed to load MCP config from %s: %s", path, exc)
@@ -307,6 +319,7 @@ def _save_all_server_configs(configs: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix in (".yaml", ".yml"):
         import yaml
+
         raw = yaml.dump(configs, default_flow_style=False)
     else:
         raw = json.dumps(configs, indent=2)
@@ -314,7 +327,7 @@ def _save_all_server_configs(configs: dict) -> None:
     logger.info("Saved MCP config to %s (%d servers)", path, len(configs))
 
 
-def _save_server_config(config: "MCPServerConfig") -> None:
+def _save_server_config(config: MCPServerConfig) -> None:
     """Append a single server config to the config file."""
     configs = _load_server_configs()
     configs[config.name] = config.model_dump(exclude_none=True)
@@ -328,13 +341,16 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
     claiming we open a browser.  Falls back to paste-token for other servers.
     """
     from weebot.config.settings import WeebotSettings
+
     settings = WeebotSettings()
     token_dir = Path(settings.mcp_token_dir)
     token_dir.mkdir(parents=True, exist_ok=True)
     token_path = token_dir / f"{name}_token.json"
 
     if token_path.exists() and not force:
-        console.print(f"[green]Already authenticated for {name}. Use --force to re-authenticate.[/green]")
+        console.print(
+            f"[green]Already authenticated for {name}. Use --force to re-authenticate.[/green]"
+        )
         return
 
     auth_config = server_config.get("auth", {})
@@ -345,23 +361,25 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
     # X MCP servers delegate OAuth to xurl
     if "xurl" in command or name in ("xapi", "x-docs"):
         console.print()
-        console.print(Panel.fit(
-            "[bold]X (Twitter) MCP — OAuth via xurl[/bold]\n\n"
-            "weebot delegates OAuth to the xurl CLI.  Run this once outside weebot:\n\n"
-            "  [bold]xurl auth oauth2 --headless[/bold]\n\n"
-            "This caches your token in ~/.xurl so weebot's stdio connection\n"
-            "reuses it without opening a browser on subsequent starts.\n\n"
-            "For Path A (read-only), set X_BEARER in your .env instead of using OAuth.\n"
-            "For Path B (writes), after pre-auth, use this config in your MCP servers file:\n\n"
-            "  [dim]{\n"
-            '    "transport": "stdio",\n'
-            '    "command": "npx",\n'
-            '    "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],\n'
-            '    "env": { "CLIENT_ID": "${X_CLIENT_ID}", "CLIENT_SECRET": "${X_CLIENT_SECRET}" },\n'
-            '    "timeout_seconds": 300\n'
-            "  }[/dim]",
-            style="bold cyan",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold]X (Twitter) MCP — OAuth via xurl[/bold]\n\n"
+                "weebot delegates OAuth to the xurl CLI.  Run this once outside weebot:\n\n"
+                "  [bold]xurl auth oauth2 --headless[/bold]\n\n"
+                "This caches your token in ~/.xurl so weebot's stdio connection\n"
+                "reuses it without opening a browser on subsequent starts.\n\n"
+                "For Path A (read-only), set X_BEARER in your .env instead of using OAuth.\n"
+                "For Path B (writes), after pre-auth, use this config in your MCP servers file:\n\n"
+                "  [dim]{\n"
+                '    "transport": "stdio",\n'
+                '    "command": "npx",\n'
+                '    "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],\n'
+                '    "env": { "CLIENT_ID": "${X_CLIENT_ID}", "CLIENT_SECRET": "${X_CLIENT_SECRET}" },\n'
+                '    "timeout_seconds": 300\n'
+                "  }[/dim]",
+                style="bold cyan",
+            )
+        )
         console.print()
         return
 
@@ -371,7 +389,9 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
         console.print("  Use 'mcp configure' to set one, or paste your token manually.")
         token = Prompt.ask("Paste OAuth token", password=True)
         if token:
-            token_path.write_text(json.dumps({"access_token": token, "type": "manual"}), encoding="utf-8")
+            token_path.write_text(
+                json.dumps({"access_token": token, "type": "manual"}), encoding="utf-8"
+            )
             token_path.chmod(0o600)
             console.print(f"[green]Token saved to {token_path}[/green]")
         return
@@ -382,12 +402,16 @@ def _do_oauth_login(name: str, server_config: dict, force: bool) -> None:
     if scopes:
         console.print(f"  Scopes: {', '.join(scopes)}")
     console.print()
-    console.print("[dim]For headless environments, pre-authenticate out-of-band.\n"
-                  "Paste your token below after completing the browser flow.[/dim]")
+    console.print(
+        "[dim]For headless environments, pre-authenticate out-of-band.\n"
+        "Paste your token below after completing the browser flow.[/dim]"
+    )
 
     token = Prompt.ask("Paste OAuth token", password=True)
     if token:
-        token_path.write_text(json.dumps({"access_token": token, "type": "oauth"}), encoding="utf-8")
+        token_path.write_text(
+            json.dumps({"access_token": token, "type": "oauth"}), encoding="utf-8"
+        )
         token_path.chmod(0o600)
         console.print(f"[green]Token saved to {token_path} (permissions: 0o600)[/green]")
 

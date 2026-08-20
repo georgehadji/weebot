@@ -7,12 +7,13 @@ Optional compress_to_budget parameter rewrites the middle turns (using
 ConversationCompressor) before export so the trajectory fits within a target
 token budget — useful for creating fine-tuning datasets.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -36,8 +37,8 @@ class TrajectoryExporter:
         self,
         session_id: str,
         output_path: str | Path,
-        compress_to_budget: Optional[int] = None,
-        llm: Optional[LLMPort] = None,
+        compress_to_budget: int | None = None,
+        llm: LLMPort | None = None,
     ) -> int:
         """Export a single session as JSONL.
 
@@ -73,21 +74,16 @@ class TrajectoryExporter:
                 fh.write(json.dumps(row, default=str, ensure_ascii=False) + "\n")
                 written += 1
 
-        logger.info(
-            "Exported %d events from session %s → %s",
-            written,
-            session_id,
-            output_path,
-        )
+        logger.info("Exported %d events from session %s → %s", written, session_id, output_path)
         return written
 
     async def export_all(
         self,
         user_id: str,
         output_dir: str | Path,
-        compress_to_budget: Optional[int] = None,
-        llm: Optional[LLMPort] = None,
-    ) -> Dict[str, int]:
+        compress_to_budget: int | None = None,
+        llm: LLMPort | None = None,
+    ) -> dict[str, int]:
         """Export all sessions for *user_id* as separate JSONL files.
 
         Args:
@@ -103,33 +99,25 @@ class TrajectoryExporter:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         sessions = await self._repo.list_sessions(user_id=user_id)
-        results: Dict[str, int] = {}
+        results: dict[str, int] = {}
 
         for session in sessions:
             safe_id = session.id.replace("/", "_").replace("\\", "_")
             dest = output_dir / f"{safe_id}.jsonl"
             try:
                 count = await self.export_session(
-                    session.id,
-                    dest,
-                    compress_to_budget=compress_to_budget,
-                    llm=llm,
+                    session.id, dest, compress_to_budget=compress_to_budget, llm=llm
                 )
                 results[session.id] = count
             except Exception as exc:
                 logger.warning("Failed to export session %s: %s", session.id, exc)
                 results[session.id] = -1
 
-        logger.info(
-            "Exported %d sessions for user %r to %s",
-            len(results),
-            user_id,
-            output_dir,
-        )
+        logger.info("Exported %d sessions for user %r to %s", len(results), user_id, output_dir)
         return results
 
     @staticmethod
-    def _event_to_dict(event: Any) -> Dict[str, Any]:
+    def _event_to_dict(event: Any) -> dict[str, Any]:
         """Serialize an AgentEvent to a JSON-safe dict."""
         try:
             return event.model_dump()
@@ -137,11 +125,8 @@ class TrajectoryExporter:
             return {"type": getattr(event, "type", "unknown"), "raw": str(event)}
 
     async def _compress_events(
-        self,
-        events: List[Any],
-        budget_tokens: int,
-        llm: LLMPort,
-    ) -> List[Any]:
+        self, events: list[Any], budget_tokens: int, llm: LLMPort
+    ) -> list[Any]:
         """Drop middle events to fit within *budget_tokens* while preserving type fidelity.
 
         Uses the same head/tail protection as ConversationCompressor (KEEP_HEAD=3,

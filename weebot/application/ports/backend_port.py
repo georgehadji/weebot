@@ -6,10 +6,10 @@ constructing subprocess calls directly.
 
 Implementations must be fail-open: return error results on any exception.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.backend_results import (
     EditResult,
@@ -42,35 +42,24 @@ class BackendPort(ABC):
 
     @abstractmethod
     async def edit(
-        self,
-        file_path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
+        self, file_path: str, old_string: str, new_string: str, replace_all: bool = False
     ) -> EditResult:
         """Perform exact string replacement in an existing file."""
         ...
 
     @abstractmethod
-    async def glob(self, pattern: str, path: Optional[str] = None) -> GlobResult:
+    async def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         """Find files matching a glob pattern."""
         ...
 
     @abstractmethod
     async def grep(
-        self,
-        pattern: str,
-        path: Optional[str] = None,
-        glob_filter: Optional[str] = None,
+        self, pattern: str, path: str | None = None, glob_filter: str | None = None
     ) -> GrepResult:
         """Search for literal text pattern in files."""
         ...
 
     @abstractmethod
-    async def execute(
-        self,
-        command: str,
-        timeout: Optional[int] = None,
-    ) -> ExecuteResult:
+    async def execute(self, command: str, timeout: int | None = None) -> ExecuteResult:
         """Execute a shell command."""
         ...

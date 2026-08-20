@@ -1,4 +1,5 @@
 """CLI commands for HyperAgent multi-agent workflows."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ from weebot.infrastructure.adapters.sub_agent_cost_tracker import SubAgentCostTr
 from weebot.domain.models.session import Session
 from weebot.application.flows.hyper_agent_flow import HyperAgentFlow
 from weebot.config.model_refs import MODEL_BUDGET
+
 console = Console()
 
 
@@ -34,9 +36,11 @@ def hyper():
 @click.option("--model", default=None, help="Override default LLM model")
 @click.option("--max-concurrency", default=4, help="Max parallel sub-agents")
 @click.option("--budget", default=0.50, help="Cost budget in USD")
-def hyper_run(prompt: str, session_id: str | None, model: str | None,
-              max_concurrency: int, budget: float):
+def hyper_run(
+    prompt: str, session_id: str | None, model: str | None, max_concurrency: int, budget: float
+):
     """Run a multi-agent HyperAgent workflow with the given prompt."""
+
     async def _run() -> None:
         container = Container()
         container.configure_defaults()
@@ -48,11 +52,7 @@ def hyper_run(prompt: str, session_id: str | None, model: str | None,
         cost_tracker = SubAgentCostTracker(budget_usd=budget)
         run_session_id = session_id or str(uuid.uuid4())
 
-        session = Session(
-            id=run_session_id,
-            user_id="cli",
-            agent_id="hyper_agent",
-        )
+        session = Session(id=run_session_id, user_id="cli", agent_id="hyper_agent")
 
         flow = HyperAgentFlow(
             llm=llm,
@@ -82,9 +82,11 @@ def hyper_run(prompt: str, session_id: str | None, model: str | None,
 
         print()
         cost_info = cost_tracker.summary()
-        console.print(f"[dim]Budget: ${cost_info['budget_usd']:.2f} | "
-                      f"Spent: ${cost_info['total_spent_usd']:.3f} | "
-                      f"Remaining: ${cost_info['remaining_usd']:.3f}[/dim]")
+        console.print(
+            f"[dim]Budget: ${cost_info['budget_usd']:.2f} | "
+            f"Spent: ${cost_info['total_spent_usd']:.3f} | "
+            f"Remaining: ${cost_info['remaining_usd']:.3f}[/dim]"
+        )
 
     asyncio.run(_run())
 
@@ -93,6 +95,7 @@ def hyper_run(prompt: str, session_id: str | None, model: str | None,
 @click.option("--session-id", default=None, help="Filter by session")
 def hyper_list_costs(session_id: str | None):
     """List completed HyperAgent workflows and their costs."""
+
     async def _run() -> None:
         container = Container()
         container.configure_defaults()
@@ -104,11 +107,7 @@ def hyper_list_costs(session_id: str | None):
         table.add_column("Title", style="green")
 
         for s in sessions:
-            table.add_row(
-                s.id[:20],
-                s.status.value,
-                (s.title or "")[:40],
-            )
+            table.add_row(s.id[:20], s.status.value, (s.title or "")[:40])
         console.print(table)
 
     asyncio.run(_run())

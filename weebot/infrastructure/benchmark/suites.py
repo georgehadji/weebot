@@ -6,16 +6,19 @@ produce a 0..10 score without requiring an evaluator model.
 
 Suites are designed to be fast and cheap (≤10 items each, short prompts).
 """
+
 from __future__ import annotations
 
 import re
 
 # ── Shared pattern helpers ─────────────────────────────────────────
 
+
 def _has_all(text: str, *keywords: str) -> bool:
     """Return True if all *keywords appear in *text* (case-insensitive)."""
     lower = text.lower()
     return all(kw.lower() in lower for kw in keywords)
+
 
 def _count_matches(text: str, *patterns: str) -> int:
     """Count how many *patterns* appear in *text* (pre-compiled or string)."""
@@ -33,6 +36,7 @@ def _count_matches(text: str, *patterns: str) -> int:
 
 # ── Suite type ──────────────────────────────────────────────────────
 
+
 class BenchmarkItem:
     """A single benchmark probe.
 
@@ -42,12 +46,8 @@ class BenchmarkItem:
         rubric_score: Score (0..10) assigned when *all* expected keywords
             are present.  Defaults to 10 (full credit).
     """
-    def __init__(
-        self,
-        prompt: str,
-        expected: list[str],
-        rubric_score: float = 10.0,
-    ) -> None:
+
+    def __init__(self, prompt: str, expected: list[str], rubric_score: float = 10.0) -> None:
         self.prompt = prompt
         self.expected = expected
         self.rubric_score = rubric_score
@@ -75,12 +75,9 @@ class BenchmarkSuite:
         items: List of ``BenchmarkItem`` instances.
         version: Suite version string for cache-busting.
     """
+
     def __init__(
-        self,
-        name: str,
-        axis: str,
-        items: list[BenchmarkItem],
-        version: str = "1.0",
+        self, name: str, axis: str, items: list[BenchmarkItem], version: str = "1.0"
     ) -> None:
         self.name = name
         self.axis = axis
@@ -125,8 +122,7 @@ REASONING_SUITE = BenchmarkSuite(
             expected=["5", "cent", "0.05", "5¢"],
         ),
         BenchmarkItem(
-            "You have a 3-gallon jug and a 5-gallon jug. "
-            "How can you measure exactly 4 gallons?",
+            "You have a 3-gallon jug and a 5-gallon jug. " "How can you measure exactly 4 gallons?",
             expected=["3", "5", "fill", "pour"],
         ),
     ],
@@ -138,8 +134,7 @@ CODING_SUITE = BenchmarkSuite(
     version="1.0",
     items=[
         BenchmarkItem(
-            "Write a Python function to reverse a linked list in place. "
-            "Return the new head.",
+            "Write a Python function to reverse a linked list in place. " "Return the new head.",
             expected=["def", "reverse", "next", "prev", "head"],
         ),
         BenchmarkItem(
@@ -160,8 +155,7 @@ WRITING_SUITE = BenchmarkSuite(
     version="1.0",
     items=[
         BenchmarkItem(
-            'Fix the grammar: "He go to school yesterday."',
-            expected=["went", "to school"],
+            'Fix the grammar: "He go to school yesterday."', expected=["went", "to school"]
         ),
         BenchmarkItem(
             "Write one short sentence that means the same as: "
@@ -177,17 +171,10 @@ MATH_SUITE = BenchmarkSuite(
     axis="math",
     version="1.0",
     items=[
+        BenchmarkItem("What is 15 × 37?", expected=["555"]),
+        BenchmarkItem("Solve for x: 3x + 7 = 22", expected=["5", "x = 5"]),
         BenchmarkItem(
-            "What is 15 × 37?",
-            expected=["555"],
-        ),
-        BenchmarkItem(
-            "Solve for x: 3x + 7 = 22",
-            expected=["5", "x = 5"],
-        ),
-        BenchmarkItem(
-            "What is the probability of rolling a sum of 7 "
-            "with two fair six-sided dice?",
+            "What is the probability of rolling a sum of 7 " "with two fair six-sided dice?",
             expected=["1/6", "1 in 6", "16.67%", "0.1667", "16.7%"],
         ),
     ],
@@ -201,15 +188,12 @@ LONG_CONTEXT_SUITE = BenchmarkSuite(
         BenchmarkItem(
             "Summarise the following text in one sentence: "
             '"The quick brown fox jumps over the lazy dog. '
-            'It was a sunny day in the forest, and all the animals '
-            'were out enjoying the weather. The fox, being quick and '
+            "It was a sunny day in the forest, and all the animals "
+            "were out enjoying the weather. The fox, being quick and "
             'brown, easily cleared the fence and continued his journey."',
             expected=["fox", "jump", "dog"],
         ),
-        BenchmarkItem(
-            "From the text above, what colour was the fox?",
-            expected=["brown"],
-        ),
+        BenchmarkItem("From the text above, what colour was the fox?", expected=["brown"]),
     ],
 )
 
@@ -219,8 +203,7 @@ TOOL_USE_SUITE = BenchmarkSuite(
     version="1.0",
     items=[
         BenchmarkItem(
-            "You have a web_search tool. "
-            "How would you find the current population of Tokyo?",
+            "You have a web_search tool. " "How would you find the current population of Tokyo?",
             expected=["web_search", "Tokyo", "population"],
         ),
         BenchmarkItem(
@@ -242,6 +225,4 @@ ALL_SUITES: list[BenchmarkSuite] = [
     TOOL_USE_SUITE,
 ]
 
-SUITES_BY_AXIS: dict[str, BenchmarkSuite] = {
-    s.axis: s for s in ALL_SUITES
-}
+SUITES_BY_AXIS: dict[str, BenchmarkSuite] = {s.axis: s for s in ALL_SUITES}

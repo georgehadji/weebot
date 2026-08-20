@@ -8,17 +8,18 @@ Layer: this module sits at the boundary of Application and Infrastructure.
 It imports Application ports (via container) and Infrastructure (scheduler).
 It does NOT import from Interfaces.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time as _time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.domain.models.event import ScheduledJobEvent, SessionStalenessEvent
+from weebot.domain.models.event import SessionStalenessEvent
 from weebot.domain.models.session import SessionStatus
 from weebot.infrastructure.observability import metrics
 
@@ -34,10 +35,11 @@ BACKUP_DEST_DIR_ENV = "WEEBOT_BACKUP_DIR"
 
 # ── Job implementations ──────────────────────────────────────────────
 
+
 async def _session_health_job(state_repo: StateRepositoryPort, event_bus: EventBusPort) -> None:
     """Scan all RUNNING sessions and publish SessionStalenessEvent for stale ones."""
     sessions = await state_repo.list_sessions()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_count = 0
 
     for session in sessions:
@@ -49,19 +51,23 @@ async def _session_health_job(state_repo: StateRepositoryPort, event_bus: EventB
         # Normalize to UTC (SQLite may return naive datetimes)
         updated = session.updated_at
         if updated.tzinfo is None:
-            updated = updated.replace(tzinfo=timezone.utc)
+            updated = updated.replace(tzinfo=UTC)
         staleness = (now - updated).total_seconds() / 60
         if staleness > STALE_THRESHOLD_MINUTES:
-            await event_bus.publish(SessionStalenessEvent(
-                session_id=session.id,
-                staleness_minutes=staleness,
-                status=session.status.value,
-            ))
+            await event_bus.publish(
+                SessionStalenessEvent(
+                    session_id=session.id, staleness_minutes=staleness, status=session.status.value
+                )
+            )
             stale_count += 1
 
     metrics.session_stale_count.set(stale_count)
-    logger.info("Session health check: %d sessions checked, %d stale (threshold=%d min)",
-                len(sessions), stale_count, STALE_THRESHOLD_MINUTES)
+    logger.info(
+        "Session health check: %d sessions checked, %d stale (threshold=%d min)",
+        len(sessions),
+        stale_count,
+        STALE_THRESHOLD_MINUTES,
+    )
 
 
 async def _memory_compact_job(state_repo: StateRepositoryPort) -> None:
@@ -116,6 +122,7 @@ async def _database_backup_job() -> None:
     from pathlib import Path
 
     import weebot.config.settings as _settings
+
     settings = _settings.WeebotSettings()
     db_path = settings.sessions_db_path or os.environ.get("WEEBOT_SESSIONS_DB")
     backup_dir = os.environ.get("WEEBOT_BACKUP_DIR")
@@ -129,27 +136,34 @@ async def _database_backup_job() -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     import asyncio
+
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(Path(__file__).resolve().parent.parent.parent / "scripts" / "backup.py"),
-            "--db", str(db_file),
-            "--dest", str(dest_dir),
-            "--label", "weebot_sessions",
-            "--retention", "30",
+            "--db",
+            str(db_file),
+            "--dest",
+            str(dest_dir),
+            "--label",
+            "weebot_sessions",
+            "--retention",
+            "30",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
     except OSError as exc:
         logger.error(
             "Database backup failed to start: %s (executable=%s, db=%s)",
-            exc, sys.executable, db_file,
+            exc,
+            sys.executable,
+            db_file,
         )
         return
 
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()  # prevent zombie
         logger.error("Database backup timed out after 300s")
@@ -158,7 +172,9 @@ async def _database_backup_job() -> None:
     if proc.returncode == 0:
         logger.info("Database backup completed: %s", stdout.decode()[:500].strip())
     else:
-        logger.error("Database backup FAILED (exit %d): %s", proc.returncode, stderr.decode()[:2000].strip())
+        logger.error(
+            "Database backup FAILED (exit %d): %s", proc.returncode, stderr.decode()[:2000].strip()
+        )
 
 
 async def _memory_salience_sweep_job(state_repo: StateRepositoryPort) -> None:
@@ -166,10 +182,7 @@ async def _memory_salience_sweep_job(state_repo: StateRepositoryPort) -> None:
     from weebot.application.services.memory_lifecycle_service import MemoryLifecycleService
 
     stats = await MemoryLifecycleService().sweep(repo=state_repo)
-    logger.info(
-        "Memory salience sweep: checked=%d, evicted=%d",
-        stats["checked"], stats["evicted"],
-    )
+    logger.info("Memory salience sweep: checked=%d, evicted=%d", stats["checked"], stats["evicted"])
 
 
 async def _commitment_heartbeat_job(state_repo: StateRepositoryPort) -> None:
@@ -179,7 +192,9 @@ async def _commitment_heartbeat_job(state_repo: StateRepositoryPort) -> None:
     stats = await CommitmentEngine(state_repo=state_repo).heartbeat()
     logger.info(
         "Commitment heartbeat: checked=%d, overdue=%d, pending=%d",
-        stats["checked"], stats["marked_overdue"], stats["active_pending"],
+        stats["checked"],
+        stats["marked_overdue"],
+        stats["active_pending"],
     )
 
 
@@ -189,8 +204,7 @@ async def _behavioral_consolidation_job(state_repo: StateRepositoryPort) -> None
 
     profile = await UserModelConsolidator(state_repo=state_repo).consolidate()
     logger.info(
-        "User-model consolidation: profile (%d chars, %d words)",
-        len(profile), len(profile.split()),
+        "User-model consolidation: profile (%d chars, %d words)", len(profile), len(profile.split())
     )
 
 
@@ -204,8 +218,7 @@ async def _integrity_check_job() -> None:
     try:
         result = await asyncio.to_thread(
             lambda: subprocess.run(
-                ["git", "status", "--porcelain"],
-                capture_output=True, text=True, timeout=10,
+                ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10
             )
         )
         if result.stdout.strip():
@@ -221,6 +234,7 @@ async def _integrity_check_job() -> None:
 
 
 # ── ScheduledJobEvent wrapper ────────────────────────────────────────
+
 
 def _with_job_metrics(job_id: str, job_name: str, callable: Any):
     """Wrap a job callable with ScheduledJobEvent emission and Prometheus counters."""
@@ -247,6 +261,7 @@ def _with_job_metrics(job_id: str, job_name: str, callable: Any):
 
 # ── Registration ─────────────────────────────────────────────────────
 
+
 async def register_default_jobs(scheduler: Any, container: Any) -> None:
     """Register and create the default cron/interval jobs.
 
@@ -260,75 +275,98 @@ async def register_default_jobs(scheduler: Any, container: Any) -> None:
     state_repo = container.get(StateRepositoryPort)
     event_bus = container.get(EventBusPort)
     from weebot.application.ports.llm_port import LLMPort
+
     llm_port = container._maybe_get(LLMPort)
 
     # ── Register callables ──────────────────────────
     scheduler.register_callable(
         "weebot_session_health",
         _with_job_metrics(
-            "weebot_session_health", "Session Health Snapshot",
+            "weebot_session_health",
+            "Session Health Snapshot",
             lambda: _session_health_job(state_repo, event_bus),
         ),
     )
     scheduler.register_callable(
         "weebot_memory_compact",
         _with_job_metrics(
-            "weebot_memory_compact", "Memory Compaction",
-            lambda: _memory_compact_job(state_repo),
+            "weebot_memory_compact", "Memory Compaction", lambda: _memory_compact_job(state_repo)
         ),
     )
     scheduler.register_callable(
         "weebot_skill_curation",
         _with_job_metrics(
-            "weebot_skill_curation", "Skill Curation",
-            lambda: _skill_curation_job(llm_port),
+            "weebot_skill_curation", "Skill Curation", lambda: _skill_curation_job(llm_port)
         ),
     )
     scheduler.register_callable(
         "weebot_database_backup",
         _with_job_metrics(
-            "weebot_database_backup", "Database Backup",
-            lambda: _database_backup_job(),
+            "weebot_database_backup", "Database Backup", lambda: _database_backup_job()
         ),
     )
 
     # ── Callables for the jobs declared in config/jobs.yaml ──────────
     for _job_id, _job_name, _job_call in (
-        ("memory_salience_sweep", "Memory Salience Sweep",
-         lambda: _memory_salience_sweep_job(state_repo)),
-        ("commitment_heartbeat", "Commitment Heartbeat",
-         lambda: _commitment_heartbeat_job(state_repo)),
-        ("behavioral_consolidation", "Behavioural Rule Consolidation",
-         lambda: _behavioral_consolidation_job(state_repo)),
-        ("integrity_check", "Self Integrity Check",
-         _integrity_check_job),
+        (
+            "memory_salience_sweep",
+            "Memory Salience Sweep",
+            lambda: _memory_salience_sweep_job(state_repo),
+        ),
+        (
+            "commitment_heartbeat",
+            "Commitment Heartbeat",
+            lambda: _commitment_heartbeat_job(state_repo),
+        ),
+        (
+            "behavioral_consolidation",
+            "Behavioural Rule Consolidation",
+            lambda: _behavioral_consolidation_job(state_repo),
+        ),
+        ("integrity_check", "Self Integrity Check", _integrity_check_job),
     ):
-        scheduler.register_callable(
-            _job_id, _with_job_metrics(_job_id, _job_name, _job_call),
-        )
+        scheduler.register_callable(_job_id, _with_job_metrics(_job_id, _job_name, _job_call))
 
     # ── Create jobs (idempotent) ────────────────────
-    await _create_if_absent(scheduler, "weebot_session_health", name="Session Health Snapshot",
-                            trigger_type="interval",
-                            trigger_config={"hours": HEALTH_INTERVAL_HOURS},
-                            callable_name="weebot_session_health",
-                            description="Scan sessions for staleness every 12 hours")
+    await _create_if_absent(
+        scheduler,
+        "weebot_session_health",
+        name="Session Health Snapshot",
+        trigger_type="interval",
+        trigger_config={"hours": HEALTH_INTERVAL_HOURS},
+        callable_name="weebot_session_health",
+        description="Scan sessions for staleness every 12 hours",
+    )
 
-    await _create_if_absent(scheduler, "weebot_memory_compact", name="Memory Compaction",
-                            trigger_type="interval",
-                            trigger_config={"hours": COMPACT_INTERVAL_HOURS},
-                            callable_name="weebot_memory_compact",
-                            description="Compact long-running session buffers every 4 hours")
+    await _create_if_absent(
+        scheduler,
+        "weebot_memory_compact",
+        name="Memory Compaction",
+        trigger_type="interval",
+        trigger_config={"hours": COMPACT_INTERVAL_HOURS},
+        callable_name="weebot_memory_compact",
+        description="Compact long-running session buffers every 4 hours",
+    )
 
-    await _create_if_absent(scheduler, "weebot_skill_curation", name="Skill Curation",
-                            trigger_type="cron", trigger_config={"hour": 2, "minute": 0},
-                            callable_name="weebot_skill_curation",
-                            description="Classify and review stale skills daily at 02:00")
+    await _create_if_absent(
+        scheduler,
+        "weebot_skill_curation",
+        name="Skill Curation",
+        trigger_type="cron",
+        trigger_config={"hour": 2, "minute": 0},
+        callable_name="weebot_skill_curation",
+        description="Classify and review stale skills daily at 02:00",
+    )
 
-    await _create_if_absent(scheduler, "weebot_database_backup", name="Database Backup",
-                            trigger_type="cron", trigger_config={"hour": 3, "minute": 0},
-                            callable_name="weebot_database_backup",
-                            description="Online backup of sessions database daily at 03:00")
+    await _create_if_absent(
+        scheduler,
+        "weebot_database_backup",
+        name="Database Backup",
+        trigger_type="cron",
+        trigger_config={"hour": 3, "minute": 0},
+        callable_name="weebot_database_backup",
+        description="Online backup of sessions database daily at 03:00",
+    )
 
     # ── Jobs declared in config/jobs.yaml ────────────
     # Disabled entries are persisted but never scheduled.

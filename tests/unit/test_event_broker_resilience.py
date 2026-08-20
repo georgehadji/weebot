@@ -5,6 +5,7 @@ These tests target the three black-swan failure modes identified in the stress t
   2. A stalled subscriber queue blocking delivery to all other subscribers.
   3. Lock contention with 10 concurrent subscribers, half cancelled mid-flight.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -80,8 +81,7 @@ class TestEventBrokerResilience:
 
         # publish() must complete quickly despite the stalled slow_queue
         await asyncio.wait_for(
-            broker.publish("ping", "agent_1", {}),
-            timeout=7.0,  # 5 s put-timeout + margin
+            broker.publish("ping", "agent_1", {}), timeout=7.0  # 5 s put-timeout + margin
         )
 
         # The fast subscriber must still receive its event
@@ -120,7 +120,7 @@ class TestEventBrokerResilience:
         for t in tasks:
             try:
                 await asyncio.wait_for(t, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # Surviving (even-indexed) subscribers should each have received one event

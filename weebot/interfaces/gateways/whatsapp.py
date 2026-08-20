@@ -6,9 +6,9 @@ Supports text, image, document, and interactive message types.
 Requires WHATSAPP_BUSINESS_API_TOKEN and WHATSAPP_BUSINESS_PHONE_NUMBER_ID
 in .env configuration.
 """
+
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import logging
@@ -18,11 +18,7 @@ import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import (
-    GatewayAdapter,
-    GatewayMessage,
-    GatewayResponse,
-)
+from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +46,7 @@ class WhatsAppAdapter(GatewayAdapter):
         self._state_repo = state_repo
         self._llm = llm
         self._profile_name = profile_name
-        self._headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
+        self._headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         self._running = False
 
     async def start(self) -> None:
@@ -72,6 +65,7 @@ class WhatsAppAdapter(GatewayAdapter):
         ``WHATSAPP_ALLOW_UNSIGNED_WEBHOOKS`` is explicitly enabled for local dev.
         """
         from weebot.config.settings import WeebotSettings
+
         _settings = WeebotSettings()
         if not self._app_secret:
             if _settings.whatsapp_allow_unsigned_webhooks:
@@ -87,9 +81,9 @@ class WhatsAppAdapter(GatewayAdapter):
             return False
         if not signature.startswith("sha256="):
             return False
-        expected = "sha256=" + hmac.new(
-            self._app_secret.encode("utf-8"), body, hashlib.sha256
-        ).hexdigest()
+        expected = (
+            "sha256=" + hmac.new(self._app_secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        )
         return hmac.compare_digest(expected, signature)
 
     async def process_message(self, message: GatewayMessage) -> str:
@@ -100,8 +94,7 @@ class WhatsAppAdapter(GatewayAdapter):
         """
         if not self.is_authorized("whatsapp", message.external_id):
             logger.warning(
-                "WhatsApp message rejected by gateway allowlist: from=%s",
-                message.external_id,
+                "WhatsApp message rejected by gateway allowlist: from=%s", message.external_id
             )
             return ""
 
@@ -116,9 +109,7 @@ class WhatsAppAdapter(GatewayAdapter):
 
         session_id = f"whatsapp-{message.external_id}-{uuid.uuid4().hex[:6]}"
         session = Session(
-            id=session_id,
-            user_id=f"whatsapp-{message.external_id}",
-            agent_id="whatsapp-agent",
+            id=session_id, user_id=f"whatsapp-{message.external_id}", agent_id="whatsapp-agent"
         )
 
         tools = await build_tools(role="admin")
@@ -156,7 +147,9 @@ class WhatsAppAdapter(GatewayAdapter):
                 async with session.post(url, json=payload) as resp:
                     if resp.status not in (200, 201):
                         error_body = await resp.text()
-                        logger.warning("WhatsApp send failed (HTTP %d): %s", resp.status, error_body[:200])
+                        logger.warning(
+                            "WhatsApp send failed (HTTP %d): %s", resp.status, error_body[:200]
+                        )
                         return False
                     return True
         except Exception as exc:
@@ -198,18 +191,22 @@ class WhatsAppAdapter(GatewayAdapter):
                         if msg.get("type") == "text":
                             msg_text = msg.get("text", {}).get("body", "")
                         elif msg.get("type") == "interactive":
-                            msg_text = msg.get("interactive", {}).get("button_reply", {}).get("title", "")
+                            msg_text = (
+                                msg.get("interactive", {}).get("button_reply", {}).get("title", "")
+                            )
                         if msg_text and msg_from:
-                            messages.append(GatewayMessage(
-                                platform="whatsapp",
-                                external_id=msg_from,
-                                text=msg_text.strip(),
-                                metadata={
-                                    "message_id": msg.get("id"),
-                                    "msg_type": msg.get("type"),
-                                    "timestamp": msg.get("timestamp"),
-                                },
-                            ))
+                            messages.append(
+                                GatewayMessage(
+                                    platform="whatsapp",
+                                    external_id=msg_from,
+                                    text=msg_text.strip(),
+                                    metadata={
+                                        "message_id": msg.get("id"),
+                                        "msg_type": msg.get("type"),
+                                        "timestamp": msg.get("timestamp"),
+                                    },
+                                )
+                            )
         except Exception as exc:
             logger.error("Failed to parse WhatsApp webhook: %s", exc)
 

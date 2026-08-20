@@ -17,18 +17,14 @@ def test_simple_assignment() -> None:
 def test_string_method() -> None:
     parameters = {"name": "alice"}
     result = {}
-    evaluate_migration_script(
-        'result["greet"] = parameters["name"].upper()', parameters, result
-    )
+    evaluate_migration_script('result["greet"] = parameters["name"].upper()', parameters, result)
     assert result["greet"] == "ALICE"
 
 
 def test_len_function() -> None:
     parameters = {"items": [1, 2, 3]}
     result = {}
-    evaluate_migration_script(
-        'result["count"] = len(parameters["items"])', parameters, result
-    )
+    evaluate_migration_script('result["count"] = len(parameters["items"])', parameters, result)
     assert result["count"] == 3
 
 

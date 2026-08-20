@@ -4,6 +4,7 @@ Pure domain model: no imports from Application or Infrastructure.
 Presets are selected by the pre-router based on task complexity and
 injected into PlanActFlowConfig at flow construction time.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ class AuditDepth(IntEnum):
     ACCEPTANCE and FULL_AUDIT are progressively more expensive and are what
     the preset actually gates.
     """
+
     EVIDENCE_ONLY = 0
     ACCEPTANCE = 1
     FULL_AUDIT = 2
@@ -38,6 +40,7 @@ class TaskPreset:
         audit_depth:        How deep step verification goes (LongHorizon-Harness E5).
         notes:              Human-readable rationale (not used at runtime).
     """
+
     name: str
     enable_premortem: bool = False
     enable_step_validation: bool = True

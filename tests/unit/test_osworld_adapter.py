@@ -3,6 +3,7 @@
 These run without a VM or network: the LLM is a stub returning canned text.
 They lock down the exact interface OSWorld's ``run_single_example`` depends on.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -32,6 +33,7 @@ def _obs(screenshot=b"\x89PNG_fake", a11y="tag\tname\tbutton\tOK"):
 
 # ── parse_pyautogui_code ────────────────────────────────────────────
 
+
 def test_parse_fenced_python_block():
     resp = "Here is the step:\n```python\npyautogui.click(100, 200)\n```"
     assert parse_pyautogui_code(resp) == ["pyautogui.click(100, 200)"]
@@ -58,6 +60,7 @@ def test_parse_empty_returns_empty_list():
 
 
 # ── predict contract ────────────────────────────────────────────────
+
 
 def test_predict_returns_response_and_action_list():
     llm = _StubLLM("```python\npyautogui.click(10, 20)\n```")
@@ -99,6 +102,7 @@ def test_predict_includes_a11y_tree_text():
 
 # ── reset contract ──────────────────────────────────────────────────
 
+
 def test_reset_accepts_logger_and_vm_ip():
     agent = WeebotOSWorldAgent(llm=_StubLLM("WAIT"))
     agent.predict("step", _obs())
@@ -121,6 +125,7 @@ def test_reset_without_args_also_works():
 
 # ── trajectory accumulation ─────────────────────────────────────────
 
+
 def test_trajectory_accumulates_and_is_bounded_in_prompt():
     llm = _StubLLM("```python\npyautogui.scroll(-3)\n```")
     agent = WeebotOSWorldAgent(llm=llm, max_trajectory_length=2)
@@ -137,6 +142,7 @@ def test_trajectory_accumulates_and_is_bounded_in_prompt():
 
 
 # ── action space guard ──────────────────────────────────────────────
+
 
 def test_rejects_unsupported_action_space():
     with pytest.raises(ValueError):

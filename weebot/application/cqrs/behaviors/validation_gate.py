@@ -4,9 +4,11 @@ Intercepts ApplySkillEditsCommand results and runs the candidate
 skill through a validation gate.  If validation fails, the command
 result is replaced with a failure.
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from weebot.application.cqrs.base import Command, CommandResult, IPipelineBehavior, Query
 from weebot.application.cqrs.commands.skill_edit_commands import ApplySkillEditsCommand
@@ -31,11 +33,7 @@ class ValidationGateBehavior(IPipelineBehavior):
     def set_runner(self, validation_runner) -> None:
         self._runner = validation_runner
 
-    async def handle(
-        self,
-        request: Command | Query,
-        next_callable: Callable[[], Any],
-    ) -> Any:
+    async def handle(self, request: Command | Query, next_callable: Callable[[], Any]) -> Any:
         result = await next_callable()
 
         # Only gate ApplySkillEditsCommand results — use isinstance

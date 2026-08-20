@@ -1,10 +1,11 @@
 """Session domain model — tracks a conversation/task lifecycle."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
@@ -27,6 +28,7 @@ class FactSource(str, Enum):
     EXECUTOR facts are unverified claims made during a step; AUDIT facts
     have passed StepEvidenceAuditor; USER facts came from the human.
     """
+
     EXECUTOR = "executor"
     AUDIT = "audit"
     USER = "user"
@@ -39,11 +41,12 @@ class Fact(BaseModel):
     consumers that only care about the value keep using ``get_fact``/
     ``get_facts``, which unwrap this transparently.
     """
+
     model_config = ConfigDict(frozen=True)
 
     value: Any
     source: FactSource = FactSource.EXECUTOR
-    verified_by: Optional[str] = None
+    verified_by: str | None = None
 
 
 class SessionContext(BaseModel):
@@ -57,33 +60,33 @@ class SessionContext(BaseModel):
     The ``trace_id`` field stores a unique identifier for distributed
     tracing across agents, workflows, and log entries.
     """
+
     skill_name: str = ""
     skill_content: str = ""
     skill_version: int = 0
     original_task: str = Field(default="", alias="_original_task")
     last_prompt: str = ""
-    facts: Dict[str, Fact] = Field(default_factory=dict)
+    facts: dict[str, Fact] = Field(default_factory=dict)
     archived: bool = False
-    archived_at: Optional[str] = None
+    archived_at: str | None = None
     archive_ttl_days: int = 30
     trace_id: str = Field(
         default="",
         description="Distributed trace ID propagated through StructuredLogger for observability (C3)",
     )
     detected_language: str = Field(
-        default="",
-        description="ISO 639-1 language code detected from user input (Enhancement 7)",
+        default="", description="ISO 639-1 language code detected from user input (Enhancement 7)"
     )
     meta_notes: list[str] = Field(
         default_factory=list,
         description="Post-task meta-analysis notes injected into future planning cycles (HyperAgents Enhancement 1)",
     )
-    extra: Dict[str, Any] = Field(default_factory=dict)
+    extra: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(populate_by_name=True)
 
     @staticmethod
-    def _cap_facts_dict(facts: Dict[str, Any]) -> Dict[str, Any]:
+    def _cap_facts_dict(facts: dict[str, Any]) -> dict[str, Any]:
         """Evict oldest entries when facts exceed the 100-entry limit."""
         max_facts = 100
         if len(facts) > max_facts:
@@ -123,10 +126,22 @@ class SessionContext(BaseModel):
             return data
         if not isinstance(data, dict):
             return data
-        known = {"skill_name", "skill_content", "skill_version", "_original_task",
-                 "original_task", "last_prompt", "facts",
-                 "archived", "archived_at", "archive_ttl_days",
-                 "trace_id", "detected_language", "meta_notes", "extra"}
+        known = {
+            "skill_name",
+            "skill_content",
+            "skill_version",
+            "_original_task",
+            "original_task",
+            "last_prompt",
+            "facts",
+            "archived",
+            "archived_at",
+            "archive_ttl_days",
+            "trace_id",
+            "detected_language",
+            "meta_notes",
+            "extra",
+        }
         result: dict[str, Any] = {}
         # Preserve any pre-existing extra dict (from a roundtrip dump)
         existing_extra = data.get("extra", {}) if isinstance(data.get("extra"), dict) else {}
@@ -178,7 +193,7 @@ class SessionContext(BaseModel):
     def __contains__(self, key: str) -> bool:
         return key in self._field_names or key in self.extra
 
-    def copy(self) -> "SessionContext":
+    def copy(self) -> SessionContext:
         """Return a deep copy (used by old dict-style code)."""
         return self.model_copy(deep=True)
 
@@ -190,11 +205,11 @@ class Session(BaseModel):
     user_id: str = Field(default="")
     agent_id: str = Field(default="")
     status: SessionStatus = Field(default=SessionStatus.PENDING)
-    title: Optional[str] = Field(default=None)
-    events: List[AgentEvent] = Field(default_factory=list)
+    title: str | None = Field(default=None)
+    events: list[AgentEvent] = Field(default_factory=list)
     context: SessionContext = Field(default_factory=SessionContext)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     _memory_index: SessionMemory = PrivateAttr(default_factory=SessionMemory)
 
@@ -227,13 +242,10 @@ class Session(BaseModel):
             data["context"] = {}
         return data
 
-    def add_event(self, event: AgentEvent) -> "Session":
+    def add_event(self, event: AgentEvent) -> Session:
         events = list(self.events)
         events.append(event)
-        new_session = self.model_copy(update={
-            "events": events,
-            "updated_at": datetime.now(timezone.utc),
-        })
+        new_session = self.model_copy(update={"events": events, "updated_at": datetime.now(UTC)})
         # Pydantic v2 model_copy() resets PrivateAttr to its default_factory
         # (a fresh empty SessionMemory), discarding the accumulated index.
         # Manually carry forward the existing index so get_last_plan() can use
@@ -242,7 +254,7 @@ class Session(BaseModel):
         new_session._memory_index.index_event(len(events) - 1, event)
         return new_session
 
-    def replace_events(self, events: List[AgentEvent]) -> "Session":
+    def replace_events(self, events: list[AgentEvent]) -> Session:
         """Return a new session with *events* wholesale-replaced (e.g. compaction).
 
         Unlike ``add_event``, the new event list is not a suffix of the old one —
@@ -252,22 +264,16 @@ class Session(BaseModel):
         ``get_last_plan()`` / ``has_unresolved_wait_event()`` reading stale
         positions into the new, shorter list).
         """
-        new_session = self.model_copy(update={
-            "events": events,
-            "updated_at": datetime.now(timezone.utc),
-        })
+        new_session = self.model_copy(update={"events": events, "updated_at": datetime.now(UTC)})
         new_session._memory_index = SessionMemory()
         for i, event in enumerate(events):
             new_session._memory_index.index_event(i, event)
         return new_session
 
-    def set_status(self, status: SessionStatus) -> "Session":
-        return self.model_copy(update={
-            "status": status,
-            "updated_at": datetime.now(timezone.utc),
-        })
+    def set_status(self, status: SessionStatus) -> Session:
+        return self.model_copy(update={"status": status, "updated_at": datetime.now(UTC)})
 
-    def get_last_plan(self) -> Optional[Plan]:
+    def get_last_plan(self) -> Plan | None:
         plan = self._memory_index.find_last_plan(self.events)
         if plan is not None:
             return plan
@@ -276,6 +282,7 @@ class Session(BaseModel):
         # after the last PlanEvent.
         from .event import PlanEvent, StepEvent
         from .plan import Plan, StepStatus as PS
+
         last_plan = None
         last_plan_idx = -1
         for i, event in enumerate(self.events):
@@ -289,7 +296,7 @@ class Session(BaseModel):
             return None
 
         # Apply step statuses from StepEvents after the last plan
-        for event in self.events[last_plan_idx + 1:]:
+        for event in self.events[last_plan_idx + 1 :]:
             if isinstance(event, StepEvent) and event.step_id:
                 status_map = {
                     "started": PS.RUNNING,
@@ -297,7 +304,7 @@ class Session(BaseModel):
                     "completed": PS.COMPLETED,
                     "failed": PS.FAILED,
                 }
-                new_status = status_map.get(event.status, None)
+                new_status = status_map.get(event.status)
                 if new_status is not None:
                     last_plan = last_plan.update_step_status(event.step_id, new_status)
 
@@ -306,11 +313,12 @@ class Session(BaseModel):
     def has_unresolved_wait_event(self) -> bool:
         return self._memory_index.has_unresolved_wait_event(self.events)
 
-    def set_title(self, title: str) -> "Session":
+    def set_title(self, title: str) -> Session:
         return self.model_copy(update={"title": title})
 
-    def add_user_message(self, text: str) -> "Session":
+    def add_user_message(self, text: str) -> Session:
         from .event import MessageEvent
+
         return self.add_event(MessageEvent(role="user", message=text))
 
     def is_completable(self) -> bool:
@@ -333,7 +341,7 @@ class Session(BaseModel):
         """Return True if the session has a plan awaiting user approval."""
         return bool(self.context.get("plan_pending_approval"))
 
-    def add_meta_note(self, note: str) -> "Session":
+    def add_meta_note(self, note: str) -> Session:
         """Append a meta-analysis note for future planning cycles."""
         notes = list(self.context.meta_notes)
         notes.append(note)
@@ -349,8 +357,8 @@ class Session(BaseModel):
         value: Any,
         *,
         source: FactSource = FactSource.EXECUTOR,
-        verified_by: Optional[str] = None,
-    ) -> "Session":
+        verified_by: str | None = None,
+    ) -> Session:
         facts = dict(self.context.facts)
         facts[key] = Fact(value=value, source=source, verified_by=verified_by)
         SessionContext._cap_facts_dict(facts)
@@ -367,7 +375,7 @@ class Session(BaseModel):
             return default
         return self._unwrap_fact(self.context.facts[key])
 
-    def get_fact_source(self, key: str) -> Optional[FactSource]:
+    def get_fact_source(self, key: str) -> FactSource | None:
         raw = self.context.facts.get(key)
         return raw.source if isinstance(raw, Fact) else None
 

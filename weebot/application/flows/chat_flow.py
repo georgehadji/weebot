@@ -7,16 +7,18 @@ CQRS delegate pattern: ProcessMessageHandler owns the ChatAgent call.
 The flow state consumes serialised events from CommandResult.data["events"].
 When no mediator is configured, falls back to direct agent call.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
-from weebot.domain.models.event import AgentEvent, MessageEvent
+from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 
 if TYPE_CHECKING:
@@ -35,10 +37,10 @@ class ChatFlow(BaseFlow):
         self,
         llm: LLMPort,
         session: Session,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
-        mediator: Optional[Mediator] = None,
-        state_repo: Optional[StateRepositoryPort] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
+        mediator: Mediator | None = None,
+        state_repo: StateRepositoryPort | None = None,
     ):
         self._llm = llm
         self._session = session
@@ -63,6 +65,7 @@ class ChatFlow(BaseFlow):
         """Resolve session persistence adapter lazily."""
         if self._persistence_adapter is None:
             from weebot.application.di import Container
+
             c = Container()
             try:
                 self._persistence_adapter = c.get("session_persistence")
@@ -103,12 +106,14 @@ class ChatFlow(BaseFlow):
 
                 # Detect final states
                 from weebot.domain.models.event import DoneEvent
+
                 if isinstance(event, DoneEvent):
                     self._done = True
                     break
 
                 # On WaitForUserEvent, transition to idle
                 from weebot.domain.models.event import WaitForUserEvent
+
                 if isinstance(event, WaitForUserEvent):
                     self.set_state(IdleState())
                     break
@@ -128,5 +133,6 @@ class ChatFlow(BaseFlow):
                 await self._state_repo.save_session(self._session)
 
         from weebot.domain.models.event import DoneEvent
+
         yield DoneEvent()
         self._done = True

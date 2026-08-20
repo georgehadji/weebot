@@ -9,6 +9,7 @@ The pool uses an asyncio.Semaphore to cap concurrent in-flight LLM calls.
 Every LLM adapter acquires a token before making a request and releases it
 afterward.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,17 +42,16 @@ class LLMPool:
         """Number of available concurrency slots (exact, no race)."""
         return self._available
 
-    async def __aenter__(self) -> "LLMPool":
+    async def __aenter__(self) -> LLMPool:
         """Acquire a concurrency slot, waiting if all slots are in use.
 
         Raises asyncio.TimeoutError if not acquired within 120 seconds.
         """
         try:
             await asyncio.wait_for(self._semaphore.acquire(), timeout=120.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
-                "LLMPool timeout: all %d slots busy for 120s — possible deadlock",
-                self._max,
+                "LLMPool timeout: all %d slots busy for 120s — possible deadlock", self._max
             )
             raise
         self._available -= 1

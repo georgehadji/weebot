@@ -1,4 +1,5 @@
 """Agent capability profiles — static registry of what each role can do."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field

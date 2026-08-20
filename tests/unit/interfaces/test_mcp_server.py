@@ -9,6 +9,7 @@ Coverage:
 - Activity stream logging after tool calls
 - MCP resource reads
 """
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,6 @@ from weebot.mcp.resources import (
 )
 from weebot.mcp.server import WeebotMCPServer
 from weebot.tools.base import ToolResult
-
 
 # ─── Resource builder unit tests (no MCP protocol) ───────────────────────────
 
@@ -235,8 +235,7 @@ class TestMCPToolCalls:
             new=AsyncMock(return_value=ToolResult(output="replaced")),
         ):
             result = await server.mcp.call_tool(
-                "file_str_replace",
-                {"path": "test.txt", "old_str": "hello", "new_str": "hi"},
+                "file_str_replace", {"path": "test.txt", "old_str": "hello", "new_str": "hi"}
             )
         assert isinstance(result, CallToolResult)
         assert not result.isError
@@ -250,8 +249,7 @@ class TestMCPToolCalls:
             new=AsyncMock(return_value=ToolResult(output="legacy result")),
         ):
             result = await server.mcp.call_tool(
-                "file_editor",
-                {"command": "view", "path": "test.txt"},
+                "file_editor", {"command": "view", "path": "test.txt"}
             )
         assert isinstance(result, CallToolResult)
         assert not result.isError
@@ -283,17 +281,17 @@ class TestMCPToolCalls:
     @pytest.mark.asyncio
     async def test_composite_analyze_and_edit_runs_sub_tools(self) -> None:
         server = WeebotMCPServer()
-        with patch(
-            "weebot.tools.file_editor.StrReplaceEditorTool.execute",
-            new=AsyncMock(
-                side_effect=[
-                    ToolResult(output="1 | old line"),
-                    ToolResult(output="replaced"),
-                ]
+        with (
+            patch(
+                "weebot.tools.file_editor.StrReplaceEditorTool.execute",
+                new=AsyncMock(
+                    side_effect=[ToolResult(output="1 | old line"), ToolResult(output="replaced")]
+                ),
             ),
-        ), patch(
-            "weebot.tools.python_tool.PythonExecuteTool.execute",
-            new=AsyncMock(return_value=ToolResult(output="syntax ok")),
+            patch(
+                "weebot.tools.python_tool.PythonExecuteTool.execute",
+                new=AsyncMock(return_value=ToolResult(output="syntax ok")),
+            ),
         ):
             result = await server.mcp.call_tool(
                 "analyze_and_edit",
@@ -445,9 +443,7 @@ class TestLiveResources:
         from weebot.domain.models.session import SessionStatus
 
         session1 = type("S", (), {"session_id": "p1", "status": SessionStatus.COMPLETED})()
-        mock_repo = type(
-            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
-        )()
+        mock_repo = type("Repo", (), {"list_sessions": AsyncMock(return_value=[session1])})()
         data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "idle"
 
@@ -456,18 +452,14 @@ class TestLiveResources:
             def to_dict(self):
                 return {"job_id": "j1", "name": "backup", "status": "active"}
 
-        mock_sched = type(
-            "Sched", (), {"list_jobs": lambda self: [FakeJob()]}
-        )()
+        mock_sched = type("Sched", (), {"list_jobs": lambda self: [FakeJob()]})()
         data = json.loads(build_schedule_json(scheduler=mock_sched))
         assert data["total"] == 1
         assert data["jobs"][0]["job_id"] == "j1"
 
     def test_schedule_json_error_in_scheduler_returns_empty_jobs(self) -> None:
         mock_sched = type(
-            "Sched",
-            (),
-            {"list_jobs": lambda self: (_ for _ in ()).throw(RuntimeError("db error"))},
+            "Sched", (), {"list_jobs": lambda self: (_ for _ in ()).throw(RuntimeError("db error"))}
         )()
         data = json.loads(build_schedule_json(scheduler=mock_sched))
         assert data["jobs"] == []
@@ -475,9 +467,7 @@ class TestLiveResources:
 
     def test_state_json_error_is_sanitized(self) -> None:
         mock_repo = type(
-            "Repo",
-            (),
-            {"list_sessions": AsyncMock(side_effect=RuntimeError("DB password leaked"))},
+            "Repo", (), {"list_sessions": AsyncMock(side_effect=RuntimeError("DB password leaked"))}
         )()
         data = json.loads(build_state_json(state_repo=mock_repo))
         assert data["status"] == "error"
@@ -493,9 +483,7 @@ class TestLiveResources:
         from weebot.domain.models.session import SessionStatus
 
         session1 = type("S", (), {"session_id": "live", "status": SessionStatus.RUNNING})()
-        mock_repo = type(
-            "Repo", (), {"list_sessions": AsyncMock(return_value=[session1])}
-        )()
+        mock_repo = type("Repo", (), {"list_sessions": AsyncMock(return_value=[session1])})()
         server = WeebotMCPServer(state_manager=mock_repo)
         contents = await server.mcp.read_resource("weebot://state")
         data = json.loads(contents[0].content)

@@ -7,6 +7,7 @@ AI image generation. Uses DuckDuckGo Images — free, no API key required.
 The tool degrades gracefully when the optional ``duckduckgo_search``
 package is not installed (returns a clear error message).
 """
+
 from __future__ import annotations
 
 import logging
@@ -141,35 +142,29 @@ class ImageSearchTool(BaseTool):
 
             images = []
             for r in raw_results:
-                images.append({
-                    "title": r.get("title", ""),
-                    "image_url": r.get("image", ""),
-                    "thumbnail_url": r.get("thumbnail", ""),
-                    "source_url": r.get("url", ""),
-                    "width": r.get("width", 0),
-                    "height": r.get("height", 0),
-                })
+                images.append(
+                    {
+                        "title": r.get("title", ""),
+                        "image_url": r.get("image", ""),
+                        "thumbnail_url": r.get("thumbnail", ""),
+                        "source_url": r.get("url", ""),
+                        "width": r.get("width", 0),
+                        "height": r.get("height", 0),
+                    }
+                )
 
-            logger.info(
-                "Image search returned %d results for query=%r",
-                len(images), query,
-            )
+            logger.info("Image search returned %d results for query=%r", len(images), query)
 
             return ToolResult.success_result(
                 output=f"Found {len(images)} images for '{query}'.",
-                data={
-                    "images": images,
-                    "query": query,
-                    "count": len(images),
-                },
+                data={"images": images, "query": query, "count": len(images)},
                 execution_time_ms=0,
             )
 
         except Exception as exc:
             logger.warning("Image search failed for query=%r: %s", query, exc)
             return ToolResult.error_result(
-                error=f"Image search failed: {exc}",
-                data={"images": [], "query": query, "count": 0},
+                error=f"Image search failed: {exc}", data={"images": [], "query": query, "count": 0}
             )
 
     async def health_check(self) -> bool:

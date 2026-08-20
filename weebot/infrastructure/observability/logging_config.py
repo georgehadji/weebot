@@ -17,6 +17,7 @@ Dependencies
 ------------
 - ``structlog>=25.1.0`` (already in requirements.txt)
 """
+
 from __future__ import annotations
 
 import logging

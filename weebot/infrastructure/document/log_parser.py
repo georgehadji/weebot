@@ -7,6 +7,7 @@ escalation ladder (deterministic fixers → LLM patch → strategy switch) acts 
 The parser is engine-agnostic (works for xelatex/lualatex/pdflatex logs) and
 pure — it takes log text and returns models, with no file or process I/O.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,7 +26,9 @@ _RE_UNDEF_CITE = re.compile(r"Citation '([^']+)' on page \d+ undefined")
 _RE_OVERFULL = re.compile(r"Overfull \\hbox \(([\d.]+)pt too wide\)")
 _RE_FILELINE = re.compile(r"^(.+?):(\d+): (.+)$")  # -file-line-error style
 _RE_BIBLATEX = re.compile(r"Package biblatex (Warning|Error): (.+)")
-_RE_MINTED = re.compile(r"you must invoke (?:LaTeX|latex) with the -shell-escape flag|Package minted Error")
+_RE_MINTED = re.compile(
+    r"you must invoke (?:LaTeX|latex) with the -shell-escape flag|Package minted Error"
+)
 
 
 def _categorize_fatal(message: str) -> CompileErrorCategory:
@@ -59,13 +62,7 @@ def parse_log(log_text: str) -> list[CompileError]:
         m = _RE_FATAL.match(line)
         if m:
             msg = m.group(1).strip()
-            add(
-                CompileError(
-                    category=_categorize_fatal(msg),
-                    message=msg,
-                    fatal=True,
-                )
-            )
+            add(CompileError(category=_categorize_fatal(msg), message=msg, fatal=True))
             continue
 
         for gm in _RE_MISSING_GLYPH.finditer(line):

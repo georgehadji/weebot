@@ -1,6 +1,6 @@
 """Tests for Phase 3: Per-tool timeouts and health checks."""
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.application.models.tool_collection import ToolCollection
@@ -8,6 +8,7 @@ from weebot.application.models.tool_collection import ToolCollection
 
 class _HealthyTool(BaseTool):
     """Tool that always reports healthy."""
+
     name: str = "healthy_tool"
     description: str = "Healthy test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -22,6 +23,7 @@ class _HealthyTool(BaseTool):
 
 class _UnhealthyTool(BaseTool):
     """Tool that reports unhealthy."""
+
     name: str = "unhealthy_tool"
     description: str = "Unhealthy test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -35,6 +37,7 @@ class _UnhealthyTool(BaseTool):
 
 class _TimeoutTool(BaseTool):
     """Tool with a specific timeout."""
+
     name: str = "timeout_tool"
     description: str = "Timeout test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -100,6 +103,7 @@ async def test_per_tool_timeout_attribute():
         name: str = "default"
         description: str = "Default timeout"
         parameters: dict = {"type": "object", "properties": {}}
+
         async def execute(self, **kwargs) -> ToolResult:
             return ToolResult.success_result(output="OK")
 
@@ -110,10 +114,7 @@ async def test_per_tool_timeout_attribute():
 @pytest.mark.asyncio
 async def test_check_health_returns_dict():
     """check_health() returns a dict of tool_name -> bool."""
-    tools = ToolCollection(
-        _HealthyTool(),
-        _UnhealthyTool(),
-    )
+    tools = ToolCollection(_HealthyTool(), _UnhealthyTool())
     health = await tools.check_health()
     assert isinstance(health, dict)
     assert health["healthy_tool"] is True

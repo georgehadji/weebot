@@ -9,17 +9,14 @@ state changes are durable.
 This replaces the ad-hoc save_session() calls in PlanActFlow._emit() and
 ChatFlow._emit(), providing a single, consistent persistence policy.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
-from weebot.application.cqrs.base import (
-    Command,
-    CommandResult,
-    IPipelineBehavior,
-    Query,
-)
+from weebot.application.cqrs.base import Command, CommandResult, IPipelineBehavior, Query
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 
 logger = logging.getLogger(__name__)
@@ -40,11 +37,7 @@ class SavePolicyBehavior(IPipelineBehavior):
         self._state_repo = state_repo
         self._warned: bool = False
 
-    async def handle(
-        self,
-        request: Command | Query,
-        next_callable: Callable[[], Any],
-    ) -> Any:
+    async def handle(self, request: Command | Query, next_callable: Callable[[], Any]) -> Any:
         """Execute the next behavior in the pipeline, then persist."""
         result = await next_callable()
 
@@ -75,8 +68,6 @@ class SavePolicyBehavior(IPipelineBehavior):
             if session is not None:
                 await self._state_repo.save_session(session)
         except Exception:
-            logger.exception(
-                "SavePolicyBehavior: failed to persist session %s", session_id
-            )
+            logger.exception("SavePolicyBehavior: failed to persist session %s", session_id)
 
         return result

@@ -8,16 +8,15 @@ and conversation prefixes.
 Only applies to Anthropic models that support prompt caching
 (Claude 3.5+ Haiku/Sonnet, Claude 3 Opus, Claude 4+).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.llm_response import LLMResponse
-from weebot.infrastructure.adapters.llm.anthropic_caching_adapter import (
-    AnthropicCachingAdapter,
-)
+from weebot.infrastructure.adapters.llm.anthropic_caching_adapter import AnthropicCachingAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +24,9 @@ logger = logging.getLogger(__name__)
 # Prompt caching started with Claude 3.5 (Haiku, Sonnet) and Claude 3 Opus.
 # Claude 4+ also supports it. Conservative list to avoid false positives.
 _CACHING_MODEL_MARKERS: tuple[str, ...] = (
-    "claude-3-5",      # 3.5 Haiku, 3.5 Sonnet, and future 3.5.x models
-    "claude-3-opus",   # 3 Opus
-    "claude-4",        # 4 Sonnet, 4 Opus, and future 4.x models
+    "claude-3-5",  # 3.5 Haiku, 3.5 Sonnet, and future 3.5.x models
+    "claude-3-opus",  # 3 Opus
+    "claude-4",  # 4 Sonnet, 4 Opus, and future 4.x models
 )
 
 
@@ -65,25 +64,20 @@ class CachingLLMAdapter(LLMPort):
         enabled: Whether prompt-caching breakpoint injection is active.
     """
 
-    def __init__(
-        self,
-        inner_adapter: LLMPort,
-        model: str,
-        enabled: bool = False,
-    ) -> None:
+    def __init__(self, inner_adapter: LLMPort, model: str, enabled: bool = False) -> None:
         self._inner = inner_adapter
         self._model = model
         self._caching_adapter = AnthropicCachingAdapter(enabled=enabled)
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """Inject cache breakpoints, then delegate to inner adapter.
 
@@ -100,8 +94,7 @@ class CachingLLMAdapter(LLMPort):
         if self._caching_adapter.enabled and supports_prompt_caching(effective_model):
             messages = self._caching_adapter.prepare_messages(messages)
             logger.debug(
-                "CachingLLMAdapter: injected cache_control breakpoints for %s",
-                effective_model,
+                "CachingLLMAdapter: injected cache_control breakpoints for %s", effective_model
             )
 
         response = await self._inner.chat(

@@ -9,6 +9,7 @@ Covers:
 - ProfileManager.switch() writes active marker
 - CLI commands are registered
 """
+
 import pytest
 
 
@@ -21,8 +22,7 @@ class TestProfileManager:
         from weebot.application.services.profile_manager import ProfileManager
 
         monkeypatch.setattr(
-            "weebot.application.services.profile_manager._PROFILES_ROOT",
-            tmp_path / "profiles",
+            "weebot.application.services.profile_manager._PROFILES_ROOT", tmp_path / "profiles"
         )
         return ProfileManager(profiles_root=tmp_path / "profiles")
 
@@ -90,7 +90,7 @@ class TestProfileManager:
         mgr.create("research")
         p = mgr.switch("research")
         assert p is not None
-        from pathlib import Path
+
         marker = mgr.profiles_root.parent / ".active_profile"
         assert marker.exists()
         assert marker.read_text() == "research"
@@ -98,6 +98,7 @@ class TestProfileManager:
     def test_active_profile_name_default(self, mgr):
         """active_profile_name returns 'default' when no marker exists."""
         from weebot.application.services.profile_manager import ProfileManager
+
         assert ProfileManager.active_profile_name(mgr.profiles_root) == "default"
 
     def test_active_profile_name_after_switch(self, mgr):
@@ -105,6 +106,7 @@ class TestProfileManager:
         mgr.create("research")
         mgr.switch("research")
         from weebot.application.services.profile_manager import ProfileManager
+
         assert ProfileManager.active_profile_name(mgr.profiles_root) == "research"
 
 
@@ -114,11 +116,13 @@ class TestProfileCLI:
     def test_profile_group_registered(self):
         """The profile command group exists."""
         from cli.main import cli
+
         assert "profile" in cli.commands
 
     def test_profile_subcommands(self):
         """All profile subcommands exist."""
         from cli.main import cli
+
         profile_group = cli.commands.get("profile")
         assert profile_group is not None
         for cmd in ("create", "list", "switch", "delete"):

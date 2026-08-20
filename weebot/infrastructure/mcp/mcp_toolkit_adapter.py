@@ -1,7 +1,8 @@
 """Adapter that exposes MCP tools as Weebot BaseTool instances."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
 from weebot.tools.base import BaseTool, ToolResult
@@ -10,12 +11,10 @@ from weebot.tools.base import BaseTool, ToolResult
 class MCPToolAdapter(BaseTool):
     """Wraps a single MCP tool as a Weebot BaseTool."""
 
-    def __init__(self, name: str, description: str, parameters: Dict[str, Any], manager: MCPClientManager):
-        super().__init__(
-            name=name,
-            description=description,
-            parameters=parameters,
-        )
+    def __init__(
+        self, name: str, description: str, parameters: dict[str, Any], manager: MCPClientManager
+    ):
+        super().__init__(name=name, description=description, parameters=parameters)
         self._manager = manager
 
     async def execute(self, **kwargs: Any) -> ToolResult:
@@ -29,11 +28,11 @@ class MCPToolAdapter(BaseTool):
 class MCPToolkitAdapter:
     """Facades MCPClientManager into a list of Weebot BaseTools."""
 
-    def __init__(self, manager: Optional[MCPClientManager] = None):
+    def __init__(self, manager: MCPClientManager | None = None):
         self._manager = manager or MCPClientManager()
-        self._tools: List[BaseTool] = []
+        self._tools: list[BaseTool] = []
 
-    async def initialize(self, config: Optional[Dict[str, Any]] = None) -> None:
+    async def initialize(self, config: dict[str, Any] | None = None) -> None:
         if config:
             self._manager = MCPClientManager(config)
         await self._manager.initialize()
@@ -50,7 +49,7 @@ class MCPToolkitAdapter:
                 )
             )
 
-    def get_tools(self) -> List[BaseTool]:
+    def get_tools(self) -> list[BaseTool]:
         return list(self._tools)
 
     async def cleanup(self) -> None:

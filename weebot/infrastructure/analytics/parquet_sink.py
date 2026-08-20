@@ -5,12 +5,13 @@ Partitions output by project_id and date so queries over DuckDB/Polars are fast.
 
 Gracefully degrades to a no-op when ``pyarrow`` is not installed.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,7 @@ _PARQUET_AVAILABLE = False
 try:
     import pyarrow as pa
     import pyarrow.parquet as pq
+
     _PARQUET_AVAILABLE = True
 except ImportError:
     pass
@@ -46,14 +48,8 @@ class ParquetActivitySink(AnalyticsSinkPort):
 
     _SCHEMA = None  # lazily built from pyarrow
 
-    def __init__(
-        self,
-        output_dir: str | None = None,
-        flush_interval_s: int = 300,
-    ) -> None:
-        self._dir = Path(
-            output_dir or os.getenv("WEEBOT_ANALYTICS_DIR", "./analytics")
-        )
+    def __init__(self, output_dir: str | None = None, flush_interval_s: int = 300) -> None:
+        self._dir = Path(output_dir or os.getenv("WEEBOT_ANALYTICS_DIR", "./analytics"))
         self._flush_interval = int(
             os.getenv("WEEBOT_ANALYTICS_FLUSH_INTERVAL", str(flush_interval_s))
         )
@@ -67,16 +63,19 @@ class ParquetActivitySink(AnalyticsSinkPort):
     def _setup_schema(self) -> None:
         """Define the Parquet schema (lazy, only if pyarrow is available)."""
         import pyarrow as pa
-        ParquetActivitySink._SCHEMA = pa.schema([
-            ("project_id", pa.string()),
-            ("kind", pa.string()),
-            ("message", pa.string()),
-            ("timestamp", pa.timestamp("us", tz="UTC")),
-        ])
+
+        ParquetActivitySink._SCHEMA = pa.schema(
+            [
+                ("project_id", pa.string()),
+                ("kind", pa.string()),
+                ("message", pa.string()),
+                ("timestamp", pa.timestamp("us", tz="UTC")),
+            ]
+        )
 
     # ── AnalyticsSinkPort implementation ─────────────────────────────
 
-    async def push(self, event: "ActivityEvent") -> None:
+    async def push(self, event: ActivityEvent) -> None:
         """Buffer an event for later flush."""
         if not _PARQUET_AVAILABLE:
             return
@@ -126,7 +125,7 @@ class ParquetActivitySink(AnalyticsSinkPort):
                 pass
         await self.flush()
 
-    async def __aenter__(self) -> "ParquetActivitySink":
+    async def __aenter__(self) -> ParquetActivitySink:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -150,7 +149,7 @@ class ParquetActivitySink(AnalyticsSinkPort):
                 if isinstance(ts, datetime):
                     date_str = ts.strftime("%Y-%m-%d")
                 else:
-                    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
 
                 part_dir = self._dir / pid / f"date={date_str}"
                 part_dir.mkdir(parents=True, exist_ok=True)

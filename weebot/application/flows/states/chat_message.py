@@ -4,13 +4,15 @@ Uses the CQRS delegate pattern: dispatches ProcessMessageCommand through
 the mediator, consumes serialised events from CommandResult.data["events"].
 Falls back to direct ChatAgent call when no mediator is configured.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 from weebot.application.flows.states.base import FlowState
-from weebot.domain.models.event import AgentEvent, ErrorEvent, MessageEvent
+from weebot.domain.models.event import AgentEvent, ErrorEvent
 
 if TYPE_CHECKING:
     from weebot.application.flows.chat_flow import ChatFlow
@@ -25,16 +27,15 @@ class ChatMessageState(FlowState):
     mediator (or ChatAgent directly) and yields the response as events.
     """
 
-    async def execute(
-        self, context: ChatFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: ChatFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         if not prompt:
             return
 
         # ── Inject pending commitment summary ──────────────────
-        if context._state_repo and hasattr(context._state_repo, 'get_pending_commitments'):
+        if context._state_repo and hasattr(context._state_repo, "get_pending_commitments"):
             try:
                 from weebot.domain.services.commitment_engine import CommitmentEngine
+
                 engine = CommitmentEngine(state_repo=context._state_repo)
                 summary = await engine.get_pending_summary()
                 if summary:
@@ -47,7 +48,8 @@ class ChatMessageState(FlowState):
             from weebot.application.cqrs.commands import ProcessMessageCommand
 
             history_events = [
-                e for e in context._session.events
+                e
+                for e in context._session.events
                 if e.type == "message" and getattr(e, "role", "") in ("user", "assistant")
             ]
 
@@ -67,6 +69,7 @@ class ChatMessageState(FlowState):
             # Consume events from the mediator result.
             # Consume events via shared reconstructor.
             from weebot.application.cqrs.event_reconstructor import reconstruct_events
+
             for event in reconstruct_events(cmd_result.data.get("events", [])):
                 yield event
 
@@ -74,14 +77,11 @@ class ChatMessageState(FlowState):
             # Fallback: direct agent call
             from weebot.application.agents.chat_agent import ChatAgent
 
-            agent = ChatAgent(
-                llm=context._llm,
-                event_bus=context._event_bus,
-                model=context._model,
-            )
+            agent = ChatAgent(llm=context._llm, event_bus=context._event_bus, model=context._model)
             # Build history from session events
             history = [
-                e for e in context._session.events
+                e
+                for e in context._session.events
                 if e.type == "message" and getattr(e, "role", "") in ("user", "assistant")
             ]
             async for event in agent.respond(prompt, history):

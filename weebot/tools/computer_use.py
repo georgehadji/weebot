@@ -1,20 +1,21 @@
 """Computer use tools: mouse, keyboard, OCR, element detection."""
+
 from __future__ import annotations
 
 import asyncio
 import base64
-import time
 from io import BytesIO
-from typing import ClassVar, Literal, Optional
+from typing import ClassVar
 
 try:
     import pyautogui
+
     _PYAUTOGUI_AVAILABLE = True
 except ImportError:
     pyautogui = None  # type: ignore[assignment]
     _PYAUTOGUI_AVAILABLE = False
 
-from PIL import Image, ImageDraw
+from PIL import ImageDraw
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -76,10 +77,7 @@ class ComputerUseTool(BaseTool):
                 "enum": ["left", "right", "middle"],
                 "description": "Mouse button (default: left)",
             },
-            "text": {
-                "type": "string",
-                "description": "Text to type",
-            },
+            "text": {"type": "string", "description": "Text to type"},
             "key": {
                 "type": "string",
                 "description": "Key name (e.g., 'enter', 'tab', 'backspace', 'ctrl', 'shift')",
@@ -88,10 +86,7 @@ class ComputerUseTool(BaseTool):
                 "type": "number",
                 "description": "Duration in seconds (for drag, key hold)",
             },
-            "interval": {
-                "type": "number",
-                "description": "Interval between key presses (seconds)",
-            },
+            "interval": {"type": "number", "description": "Interval between key presses (seconds)"},
             "modifiers": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -111,13 +106,43 @@ class ComputerUseTool(BaseTool):
 
     # Safe key names (prevent injection) - letters a-z, numbers 0-9, and special keys
     SAFE_KEYS: ClassVar[set[str]] = {
-        "enter", "return", "tab", "backspace", "delete", "escape",
-        "up", "down", "left", "right",
-        "home", "end", "pageup", "pagedown",
-        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-        "insert", "space", "pause", "printscreen",
-        "ctrl", "shift", "alt", "win", "command", "option",
-        *[chr(i) for i in range(ord('a'), ord('z') + 1)],  # a-z
+        "enter",
+        "return",
+        "tab",
+        "backspace",
+        "delete",
+        "escape",
+        "up",
+        "down",
+        "left",
+        "right",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+        "insert",
+        "space",
+        "pause",
+        "printscreen",
+        "ctrl",
+        "shift",
+        "alt",
+        "win",
+        "command",
+        "option",
+        *[chr(i) for i in range(ord("a"), ord("z") + 1)],  # a-z
         *[str(i) for i in range(10)],  # 0-9
     }
 
@@ -125,11 +150,14 @@ class ComputerUseTool(BaseTool):
         """Check if pyautogui is available."""
         try:
             import pyautogui  # noqa: F401
+
             return True
         except ImportError:
             return False
 
-    def _scale(self, x: Optional[int], y: Optional[int], dpi_scale: float = 1.0) -> tuple[Optional[int], Optional[int]]:
+    def _scale(
+        self, x: int | None, y: int | None, dpi_scale: float = 1.0
+    ) -> tuple[int | None, int | None]:
         """Scale logical coordinates to physical pixels.
 
         OSWorld VMs typically run at 1.0 DPI while the host may be at 1.25-2.0.
@@ -144,17 +172,17 @@ class ComputerUseTool(BaseTool):
     async def execute(
         self,
         action: str,
-        x: Optional[int] = None,
-        y: Optional[int] = None,
+        x: int | None = None,
+        y: int | None = None,
         button: str = "left",
-        text: Optional[str] = None,
-        key: Optional[str] = None,
+        text: str | None = None,
+        key: str | None = None,
         duration: float = 0.5,
         interval: float = 0.05,
-        modifiers: Optional[list[str]] = None,
+        modifiers: list[str] | None = None,
         dpi_scale: float = 1.0,
-        require_window: Optional[str] = None,
-        window_title: Optional[str] = None,
+        require_window: str | None = None,
+        window_title: str | None = None,
         **_,
     ) -> ToolResult:
         """Execute computer control action.
@@ -177,6 +205,7 @@ class ComputerUseTool(BaseTool):
             if require_window and action in ("type", "press_key", "key_down", "key_up"):
                 try:
                     import pygetwindow as gw
+
                     active = gw.getActiveWindow()
                     active_title = active.title if active else ""
                     if require_window.lower() not in active_title.lower():
@@ -214,12 +243,9 @@ class ComputerUseTool(BaseTool):
                     return ToolResult(output="", error="x and y required for drag")
                 start_x, start_y = pyautogui.position()
                 await asyncio.to_thread(
-                    pyautogui.drag, sx - start_x, sy - start_y,
-                    duration=duration, button=button
+                    pyautogui.drag, sx - start_x, sy - start_y, duration=duration, button=button
                 )
-                return ToolResult(
-                    output=f"Dragged from ({start_x}, {start_y}) to ({sx}, {sy})"
-                )
+                return ToolResult(output=f"Dragged from ({start_x}, {start_y}) to ({sx}, {sy})")
 
             elif action == "type":
                 if text is None:
@@ -234,11 +260,11 @@ class ComputerUseTool(BaseTool):
                         asyncio.to_thread(pyautogui.write, text, interval=interval),
                         timeout=timeout_secs,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return ToolResult(
                         output="",
                         error=f"type action timed out after {timeout_secs:.0f}s "
-                              f"(typed {len(text)} chars at {interval}s interval)",
+                        f"(typed {len(text)} chars at {interval}s interval)",
                     )
                 return ToolResult(output=f"Typed: {text[:50]}...")
 
@@ -280,6 +306,7 @@ class ComputerUseTool(BaseTool):
                 """Return the title of the currently active (foreground) window."""
                 try:
                     import pygetwindow as gw
+
                     win = gw.getActiveWindow()
                     title = win.title if win else "(no active window)"
                     return ToolResult(output=f"Active window: {title}")
@@ -293,9 +320,12 @@ class ComputerUseTool(BaseTool):
                     return ToolResult(output="", error="window_title required for focus_window")
                 try:
                     import pygetwindow as gw
+
                     matches = gw.getWindowsWithTitle(window_title)
                     if not matches:
-                        return ToolResult(output="", error=f"No window found matching: {window_title}")
+                        return ToolResult(
+                            output="", error=f"No window found matching: {window_title}"
+                        )
                     target = matches[0]
                     await asyncio.to_thread(target.activate)
                     return ToolResult(output=f"Focused window: {target.title}")
@@ -312,20 +342,19 @@ class ComputerUseTool(BaseTool):
                 # Capture screenshot
                 try:
                     import mss
+
                     with mss.mss() as sct:
                         monitor = sct.monitors[0]
                         shot = sct.grab(monitor)
                         from PIL import Image as _PIL
+
                         img = _PIL.frombytes("RGB", shot.size, shot.rgb)
                         buf = BytesIO()
                         img.save(buf, format="PNG")
                         b64 = base64.b64encode(buf.getvalue()).decode()
                 except Exception:
                     b64 = None
-                return ToolResult(
-                    output=f"Hovering at ({sx}, {sy})",
-                    base64_image=b64,
-                )
+                return ToolResult(output=f"Hovering at ({sx}, {sy})", base64_image=b64)
 
             else:
                 return ToolResult(output="", error=f"Unknown action: {action}")
@@ -379,7 +408,7 @@ class ScreenshotWithOCRTool(BaseTool):
 
     async def execute(
         self,
-        region: Optional[dict] = None,
+        region: dict | None = None,
         extract_text: bool = False,
         highlight_text: bool = False,
         **_,
@@ -406,6 +435,7 @@ class ScreenshotWithOCRTool(BaseTool):
             if extract_text:
                 try:
                     import pytesseract
+
                     text_output = pytesseract.image_to_string(screenshot)
                 except ImportError:
                     text_output = "[OCR not available - install pytesseract]"
@@ -416,6 +446,7 @@ class ScreenshotWithOCRTool(BaseTool):
             if highlight_text and extract_text:
                 try:
                     import pytesseract
+
                     details = pytesseract.image_to_data(screenshot, output_type="dict")
                     img_copy = screenshot.copy()
                     draw = ImageDraw.Draw(img_copy)
@@ -468,12 +499,7 @@ class ElementDetectorTool(BaseTool):
         "required": [],
     }
 
-    async def execute(
-        self,
-        element_type: str = "all",
-        screenshot: bool = True,
-        **_,
-    ) -> ToolResult:
+    async def execute(self, element_type: str = "all", screenshot: bool = True, **_) -> ToolResult:
         """Detect clickable elements on screen."""
         try:
             import pytesseract
@@ -491,7 +517,7 @@ class ElementDetectorTool(BaseTool):
             top_list = details.get("top", [])
             width_list = details.get("width", [])
             height_list = details.get("height", [])
-            
+
             for i, text in enumerate(details.get("text", [])):
                 if not text.strip():
                     continue
@@ -504,7 +530,12 @@ class ElementDetectorTool(BaseTool):
                     continue
 
                 # Guard against mismatched position data
-                if i >= len(left_list) or i >= len(top_list) or i >= len(width_list) or i >= len(height_list):
+                if (
+                    i >= len(left_list)
+                    or i >= len(top_list)
+                    or i >= len(width_list)
+                    or i >= len(height_list)
+                ):
                     continue
                 x = left_list[i]
                 y = top_list[i]

@@ -14,11 +14,11 @@ Singleton-like design — all members are class methods so importers never
 need an instance.  The underlying source is ``os.environ``, but in the
 future this could check a vault, a keyring, or a secrets manager.
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +26,33 @@ logger = logging.getLogger(__name__)
 
 # Keys whose values are logged in plaintext (non-secret config).
 _NON_SECRET_SUFFIXES = (
-    "DIR", "URL", "HOST", "PORT", "MODE", "TIMEOUT",
-    "_DIR", "_URL", "_HOST", "_PORT", "_MODE", "_TIMEOUT",
+    "DIR",
+    "URL",
+    "HOST",
+    "PORT",
+    "MODE",
+    "TIMEOUT",
+    "_DIR",
+    "_URL",
+    "_HOST",
+    "_PORT",
+    "_MODE",
+    "_TIMEOUT",
 )
 _NON_SECRET_KEYS: set[str] = {
-    "WEEBOT_WORKSPACE", "WEEBOT_LOGS_DIR", "WEEBOT_SESSIONS_DB",
-    "WEEBOT_HOST", "WEEBOT_PORT", "WEEBOT_CORS_ORIGIN",
-    "SANDBOX_MODE", "BASH_TIMEOUT", "PYTHON_TIMEOUT",
-    "SANDBOX_MAX_OUTPUT_BYTES", "SANDBOX_ALLOW_NETWORK",
-    "DAILY_AI_BUDGET", "WEEBOT_WEB_REQUIRE_AUTH",
+    "WEEBOT_WORKSPACE",
+    "WEEBOT_LOGS_DIR",
+    "WEEBOT_SESSIONS_DB",
+    "WEEBOT_HOST",
+    "WEEBOT_PORT",
+    "WEEBOT_CORS_ORIGIN",
+    "SANDBOX_MODE",
+    "BASH_TIMEOUT",
+    "PYTHON_TIMEOUT",
+    "SANDBOX_MAX_OUTPUT_BYTES",
+    "SANDBOX_ALLOW_NETWORK",
+    "DAILY_AI_BUDGET",
+    "WEEBOT_WEB_REQUIRE_AUTH",
 }
 _REDACTED = "<REDACTED>"
 
@@ -82,7 +100,7 @@ class SecretAccessor:
     # ------------------------------------------------------------------
 
     @classmethod
-    def get(cls, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get(cls, key: str, default: str | None = None) -> str | None:
         """Return the value for *key*, or *default* if not set.
 
         Logs a DEBUG message for every read for auditability.
@@ -92,7 +110,7 @@ class SecretAccessor:
         return value
 
     @classmethod
-    def get_unredacted(cls, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get_unredacted(cls, key: str, default: str | None = None) -> str | None:
         """Return the value for *key* without redaction in logs.
 
         Use sparingly — only for non-sensitive config that needs to be
@@ -137,7 +155,9 @@ class SecretAccessor:
         try:
             return float(raw)
         except (ValueError, TypeError):
-            logger.warning("SecretAccessor: %s is not a valid float, using default %f", key, default)
+            logger.warning(
+                "SecretAccessor: %s is not a valid float, using default %f", key, default
+            )
             return default
 
     @classmethod
@@ -146,8 +166,7 @@ class SecretAccessor:
         value = cls.get(key)
         if value is None:
             raise ValueError(
-                f"Required environment variable {key!r} is not set. "
-                f"Check your .env file."
+                f"Required environment variable {key!r} is not set. " f"Check your .env file."
             )
         return value
 

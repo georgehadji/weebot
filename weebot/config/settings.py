@@ -1,4 +1,5 @@
 """Configuration and constants for weebot Agent."""
+
 import os
 from pathlib import Path
 from pydantic import Field, field_validator
@@ -19,8 +20,16 @@ HEADLESS = False
 MODEL_NAME = "x-ai/grok-build-0.1"  # kept for legacy compat; see model_refs.MODEL_DI_DEFAULT
 TEMPERATURE = 0.2
 POWERSHELL_PRIORITY_KEYWORDS = [
-    "file", "delete", "copy", "move", "directory",
-    "process", "kill", "system", "registry", "download"
+    "file",
+    "delete",
+    "copy",
+    "move",
+    "directory",
+    "process",
+    "kill",
+    "system",
+    "registry",
+    "download",
 ]
 
 
@@ -41,12 +50,7 @@ class WeebotSettings(BaseSettings):
 
     @classmethod
     def settings_customise_sources(
-        cls,
-        settings_cls,
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
     ):
         """Order sources so explicit constructor kwargs always win, then
         .env overrides system environment (the documented intent).
@@ -58,48 +62,46 @@ class WeebotSettings(BaseSettings):
         environment as originally intended.
         """
         return (
-            init_settings,        # constructor kwargs — highest priority
-            dotenv_settings,      # .env file — overrides system environment
-            env_settings,         # system environment
-            file_secret_settings, # secrets dir
+            init_settings,  # constructor kwargs — highest priority
+            dotenv_settings,  # .env file — overrides system environment
+            env_settings,  # system environment
+            file_secret_settings,  # secrets dir
         )
 
     # AI API Keys (at least one required)
     kimi_api_key: str | None = None
     deepseek_api_key: str | None = None
-    xai_api_key: str | None = None          # env: XAI_API_KEY
+    xai_api_key: str | None = None  # env: XAI_API_KEY
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
-    openrouter_api_key: str | None = None   # env: OPENROUTER_API_KEY
+    openrouter_api_key: str | None = None  # env: OPENROUTER_API_KEY
 
     # Reasoner API Settings
     reasoner_api_url: str = "http://localhost:8003"  # env: REASONER_API_URL
-    reasoner_api_key: str | None = None              # env: REASONER_API_KEY
+    reasoner_api_key: str | None = None  # env: REASONER_API_KEY
     reasoner_dir: str = "E:\\Documents\\Vibe-Coding\\Reasoner"  # env: REASONER_DIR
 
     # Berb Research API Settings
-    berb_api_url: str = "http://localhost:8004"      # env: BERB_API_URL
-    berb_api_key: str | None = None                  # env: BERB_API_KEY
+    berb_api_url: str = "http://localhost:8004"  # env: BERB_API_URL
+    berb_api_key: str | None = None  # env: BERB_API_KEY
     berb_dir: str = "E:\\Documents\\Vibe-Coding\\Berb"  # env: BERB_DIR
 
     # Scraper (Spacescraper) API Settings
     scraper_api_url: str = "http://localhost:8000"  # env: SCRAPER_API_URL
-    scraper_api_key: str | None = None              # env: SCRAPER_API_KEY
+    scraper_api_key: str | None = None  # env: SCRAPER_API_KEY
     scraper_dir: str = "E:\\Documents\\Vibe-Coding\\Scraper"  # env: SCRAPER_DIR
 
     # Web API Auth
-    weebot_api_key: str | None = None       # env: WEEBOT_API_KEY
+    weebot_api_key: str | None = None  # env: WEEBOT_API_KEY
     web_require_auth: bool = Field(
         default=True,
         description="When True and no weebot_api_key is set, refuse non-loopback requests.",
     )
     web_host: str = Field(
-        default="127.0.0.1",
-        description="Web API bind address (default loopback for security).",
+        default="127.0.0.1", description="Web API bind address (default loopback for security)."
     )
     webhook_api_key: str | None = Field(
-        default=None,
-        description="Independent API key for the /api/webhook/run endpoint.",
+        default=None, description="Independent API key for the /api/webhook/run endpoint."
     )
     webhook_allow_exec_tools: bool = Field(
         default=False,
@@ -107,8 +109,8 @@ class WeebotSettings(BaseSettings):
     )
 
     # Discord (optional)
-    discord_public_key: str | None = None      # env: DISCORD_PUBLIC_KEY
-    discord_bot_token: str | None = None       # env: DISCORD_BOT_TOKEN
+    discord_public_key: str | None = None  # env: DISCORD_PUBLIC_KEY
+    discord_bot_token: str | None = None  # env: DISCORD_BOT_TOKEN
     discord_application_id: str | None = None  # env: DISCORD_APPLICATION_ID
 
     # Notifications (optional)
@@ -118,58 +120,58 @@ class WeebotSettings(BaseSettings):
 
     # Slack gateway (Events API) — required to run weebot from Slack.
     # Distinct from slack_webhook_url above (outbound notifications only).
-    slack_bot_token: str | None = None       # env: SLACK_BOT_TOKEN
+    slack_bot_token: str | None = None  # env: SLACK_BOT_TOKEN
     slack_signing_secret: str | None = None  # env: SLACK_SIGNING_SECRET
 
     # WhatsApp gateway (Business Cloud API)
-    whatsapp_business_api_token: str | None = None        # env: WHATSAPP_BUSINESS_API_TOKEN
-    whatsapp_business_phone_number_id: str | None = None   # env: WHATSAPP_BUSINESS_PHONE_NUMBER_ID
-    whatsapp_webhook_verify_token: str | None = None       # env: WHATSAPP_WEBHOOK_VERIFY_TOKEN
-    whatsapp_app_secret: str | None = None                 # env: WHATSAPP_APP_SECRET (optional, enables signature verification)
+    whatsapp_business_api_token: str | None = None  # env: WHATSAPP_BUSINESS_API_TOKEN
+    whatsapp_business_phone_number_id: str | None = None  # env: WHATSAPP_BUSINESS_PHONE_NUMBER_ID
+    whatsapp_webhook_verify_token: str | None = None  # env: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+    whatsapp_app_secret: str | None = (
+        None  # env: WHATSAPP_APP_SECRET (optional, enables signature verification)
+    )
     whatsapp_allow_unsigned_webhooks: bool = Field(
-        default=False,
-        description="Allow unsigned WhatsApp webhooks (dev only).",
+        default=False, description="Allow unsigned WhatsApp webhooks (dev only)."
     )
 
     # Stripe webhook
-    stripe_webhook_secret: str | None = None               # env: STRIPE_WEBHOOK_SECRET
+    stripe_webhook_secret: str | None = None  # env: STRIPE_WEBHOOK_SECRET
     stripe_allow_unsigned_webhooks: bool = Field(
-        default=False,
-        description="Allow unsigned Stripe webhooks (dev only).",
+        default=False, description="Allow unsigned Stripe webhooks (dev only)."
     )
 
     # Signal gateway (signal-cli REST API — requires a local signal-cli instance)
-    signal_cli_rest_url: str = "http://localhost:8080"     # env: SIGNAL_CLI_REST_URL
-    signal_account_number: str | None = None               # env: SIGNAL_ACCOUNT_NUMBER
+    signal_cli_rest_url: str = "http://localhost:8080"  # env: SIGNAL_CLI_REST_URL
+    signal_account_number: str | None = None  # env: SIGNAL_ACCOUNT_NUMBER
 
     # Email gateway (IMAP polling + SMTP send)
-    email_imap_server: str = "imap.gmail.com"              # env: EMAIL_IMAP_SERVER
-    email_imap_user: str | None = None                     # env: EMAIL_IMAP_USER
-    email_imap_password: str | None = None                 # env: EMAIL_IMAP_PASSWORD
-    email_smtp_server: str = "smtp.gmail.com"              # env: EMAIL_SMTP_SERVER
-    email_smtp_port: int = 587                             # env: EMAIL_SMTP_PORT
-    email_from_address: str | None = None                  # env: EMAIL_FROM_ADDRESS
-    email_poll_interval_seconds: float = 30.0              # env: EMAIL_POLL_INTERVAL_SECONDS
+    email_imap_server: str = "imap.gmail.com"  # env: EMAIL_IMAP_SERVER
+    email_imap_user: str | None = None  # env: EMAIL_IMAP_USER
+    email_imap_password: str | None = None  # env: EMAIL_IMAP_PASSWORD
+    email_smtp_server: str = "smtp.gmail.com"  # env: EMAIL_SMTP_SERVER
+    email_smtp_port: int = 587  # env: EMAIL_SMTP_PORT
+    email_from_address: str | None = None  # env: EMAIL_FROM_ADDRESS
+    email_poll_interval_seconds: float = 30.0  # env: EMAIL_POLL_INTERVAL_SECONDS
 
     # Budget
     daily_ai_budget: float = 10.0
 
     # SkillHub — remote skill registry index
     skillhub_index_url: str = (
-        "https://raw.githubusercontent.com/weebot-community/skillhub/main/index.json"
-    )  # env: SKILLHUB_INDEX_URL — JSON index of community-contributed skills
+        "https://raw.githubusercontent.com/weebot-community/skillhub/main/index.json"  # env: SKILLHUB_INDEX_URL — JSON index of community-contributed skills
+    )
 
     # awesome-agent-skills — curated GitHub index (heilcheng/awesome-agent-skills)
     awesome_agent_skills_index_url: str = (
-        "https://raw.githubusercontent.com/heilcheng/awesome-agent-skills/main/README.md"
-    )  # env: AWESOME_AGENT_SKILLS_INDEX_URL
+        "https://raw.githubusercontent.com/heilcheng/awesome-agent-skills/main/README.md"  # env: AWESOME_AGENT_SKILLS_INDEX_URL
+    )
 
     # Sandbox / code execution
     sandbox_mode: str = "auto"  # env: SANDBOX_MODE — "auto"|"native"|"docker"|"wsl2"
-    bash_timeout: int = 30                  # env: BASH_TIMEOUT
-    python_timeout: int = 30               # env: PYTHON_TIMEOUT
+    bash_timeout: int = 30  # env: BASH_TIMEOUT
+    python_timeout: int = 30  # env: PYTHON_TIMEOUT
     sandbox_max_output_bytes: int = 65_536  # env: SANDBOX_MAX_OUTPUT_BYTES (64 KB)
-    sandbox_allow_network: bool = False    # env: SANDBOX_ALLOW_NETWORK
+    sandbox_allow_network: bool = False  # env: SANDBOX_ALLOW_NETWORK
 
     @field_validator("daily_ai_budget")
     @classmethod
@@ -203,13 +205,8 @@ class WeebotSettings(BaseSettings):
     @classmethod
     def validate_max_output(cls, v: int) -> int:
         if v < 1024:
-            raise ValueError(
-                f"sandbox_max_output_bytes must be >= 1024 bytes (got {v})."
-            )
+            raise ValueError(f"sandbox_max_output_bytes must be >= 1024 bytes (got {v}).")
         return v
-
-
-
 
     # ========================================================================
     # DRIFT MONITORING SETTINGS (v2.4.0+)
@@ -225,14 +222,14 @@ class WeebotSettings(BaseSettings):
     drift_detection_interval_minutes: int = 5
 
     # Performance drift thresholds (multipliers of baseline)
-    latency_p95_warning_multiplier: float = 1.20   # 20% increase
+    latency_p95_warning_multiplier: float = 1.20  # 20% increase
     latency_p95_critical_multiplier: float = 1.50  # 50% increase
-    memory_warning_multiplier: float = 1.30         # 30% increase
-    memory_critical_multiplier: float = 1.50         # 50% increase
+    memory_warning_multiplier: float = 1.30  # 30% increase
+    memory_critical_multiplier: float = 1.50  # 50% increase
 
     # Error rate drift thresholds (multipliers of baseline)
-    error_rate_warning_multiplier: float = 2.0       # 2x baseline
-    error_rate_critical_multiplier: float = 5.0        # 5x baseline
+    error_rate_warning_multiplier: float = 2.0  # 2x baseline
+    error_rate_critical_multiplier: float = 5.0  # 5x baseline
 
     # Data distribution drift thresholds (KL divergence)
     kl_divergence_warning: float = 0.5
@@ -279,8 +276,7 @@ class WeebotSettings(BaseSettings):
         description="Directory for OAuth token cache (relative to workspace root or absolute).",
     )
     mcp_sampling_enabled: bool = Field(
-        default=True,
-        description="Allow MCP servers to request sampling/createMessage.",
+        default=True, description="Allow MCP servers to request sampling/createMessage."
     )
     mcp_scoped_aggregation: bool = Field(
         default=True,
@@ -293,8 +289,7 @@ class WeebotSettings(BaseSettings):
     mcp_composite_tools_enabled: bool = Field(
         default=True,
         description=(
-            "Expose composite workflow tools and hide covered atomic tools "
-            "on the MCP surface."
+            "Expose composite workflow tools and hide covered atomic tools " "on the MCP surface."
         ),
     )
 
@@ -303,8 +298,7 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     ponytail_mode: str = Field(
-        default="off",
-        description="Ponytail lazy-senior-dev intensity: off | lite | full | ultra",
+        default="off", description="Ponytail lazy-senior-dev intensity: off | lite | full | ultra"
     )
 
     @field_validator("ponytail_mode")
@@ -325,8 +319,7 @@ class WeebotSettings(BaseSettings):
         description="TTL for gateway sessions before auto-close.",
     )
     gateway_max_sessions_per_platform: int = Field(
-        default=100,
-        description="Max active sessions per platform (0 = unlimited).",
+        default=100, description="Max active sessions per platform (0 = unlimited)."
     )
     gateway_allowed_platforms: list[str] = Field(
         default_factory=lambda: ["telegram", "discord", "slack"],
@@ -350,24 +343,20 @@ class WeebotSettings(BaseSettings):
         description="Context engine type: 'lossy' (compression), 'none' (pass-through).",
     )
     context_compression_threshold: int = Field(
-        default=12000,
-        description="Token count threshold that triggers compression.",
+        default=12000, description="Token count threshold that triggers compression."
     )
     context_compression_target_ratio: float = Field(
         default=0.5,
         description="Target compression ratio (e.g. 0.5 = compress to 50% of threshold).",
     )
     context_compression_protect_last_n: int = Field(
-        default=6,
-        description="Preserve the last N messages when compressing.",
+        default=6, description="Preserve the last N messages when compressing."
     )
     prompt_caching_enabled: bool = Field(
-        default=False,
-        description="Enable Anthropic/OpenRouter prompt caching breakpoints.",
+        default=False, description="Enable Anthropic/OpenRouter prompt caching breakpoints."
     )
     prompt_caching_ttl_seconds: int = Field(
-        default=300,
-        description="TTL for cached prompt breakpoints.",
+        default=300, description="TTL for cached prompt breakpoints."
     )
 
     # =======================================================================
@@ -375,16 +364,13 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     cron_agent_jobs_enabled: bool = Field(
-        default=False,
-        description="Enable cron agent task execution.",
+        default=False, description="Enable cron agent task execution."
     )
     cron_agent_max_runtime_seconds: int = Field(
-        default=300,
-        description="Max runtime for a single cron agent job.",
+        default=300, description="Max runtime for a single cron agent job."
     )
     cron_agent_default_model: str | None = Field(
-        default=None,
-        description="Default model override for cron agent sessions.",
+        default=None, description="Default model override for cron agent sessions."
     )
 
     # Feature flags (migrated from os.getenv — see Phase 3c)
@@ -397,9 +383,7 @@ class WeebotSettings(BaseSettings):
         description="Enable plan-review pause before execution.",
     )
     cove_enabled: bool = Field(
-        default=True,
-        alias="WEEBOT_COVE_ENABLED",
-        description="Enable Chain-of-Verification step.",
+        default=True, alias="WEEBOT_COVE_ENABLED", description="Enable Chain-of-Verification step."
     )
     cove_max_questions: int = Field(
         default=3,
@@ -412,12 +396,10 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     skills_hub_catalog_url: str | None = Field(
-        default=None,
-        description="URL for remote skills hub catalog.",
+        default=None, description="URL for remote skills hub catalog."
     )
     skill_blueprints_enabled: bool = Field(
-        default=False,
-        description="Enable skill blueprint auto-suggestion.",
+        default=False, description="Enable skill blueprint auto-suggestion."
     )
 
     # =======================================================================
@@ -429,29 +411,27 @@ class WeebotSettings(BaseSettings):
     # =======================================================================
 
     llm_max_concurrent_requests: int = Field(
-        default=12,
-        ge=1,
-        le=100,
-        description="Max concurrent LLM API requests across all sessions.",
+        default=12, ge=1, le=100, description="Max concurrent LLM API requests across all sessions."
     )
     financial_tools_always_ask: bool = Field(
-        default=True,
-        description="Financial/payment tools always require user approval.",
+        default=True, description="Financial/payment tools always require user approval."
     )
     secret_redaction_enabled: bool = Field(
-        default=True,
-        description="Redact secrets (PANs, API keys) in tool output and logs.",
+        default=True, description="Redact secrets (PANs, API keys) in tool output and logs."
     )
     secret_redaction_entropy_threshold: float = Field(
-        default=3.5,
-        description="Shannon entropy threshold for secret detection.",
+        default=3.5, description="Shannon entropy threshold for secret detection."
     )
 
     def validate_at_least_one_key(self) -> None:
         """Raise error if no API keys configured."""
-        keys = [self.kimi_api_key, self.deepseek_api_key,
-                self.anthropic_api_key, self.openai_api_key,
-                self.openrouter_api_key]
+        keys = [
+            self.kimi_api_key,
+            self.deepseek_api_key,
+            self.anthropic_api_key,
+            self.openai_api_key,
+            self.openrouter_api_key,
+        ]
         if not any(keys):
             raise ValueError(
                 "❌ weebot requires at least one AI API key.\n"
@@ -486,6 +466,7 @@ def ensure_workspace() -> None:
 # OSWorld Settings (sandbox adapters for desktop automation benchmark)
 # ========================================================================
 
+
 class OSWorldSettings(BaseSettings):
     """Configuration for the OSWorld sandbox environment.
 
@@ -502,67 +483,39 @@ class OSWorldSettings(BaseSettings):
     osworld_sandbox_type: str = Field(
         default="docker",
         description=(
-            "Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), "
-            "or 'remote' (HTTP API)"
+            "Sandbox backend: 'kvm' (QEMU/libvirt), 'docker' (container), " "or 'remote' (HTTP API)"
         ),
     )
 
     # Connection
-    osworld_host: str = Field(
-        default="localhost",
-        description="OSWorld VM host address",
-    )
-    osworld_port: int = Field(
-        default=8080,
-        description="OSWorld VM API port",
-    )
+    osworld_host: str = Field(default="localhost", description="OSWorld VM host address")
+    osworld_port: int = Field(default=8080, description="OSWorld VM API port")
     osworld_vm_id: str = Field(
-        default="osworld-ubuntu-1",
-        description="OSWorld VM instance identifier",
+        default="osworld-ubuntu-1", description="OSWorld VM instance identifier"
     )
-    osworld_api_token: str = Field(
-        default="",
-        description="Auth token for OSWorld API",
-    )
+    osworld_api_token: str = Field(default="", description="Auth token for OSWorld API")
 
     # Timeouts
     osworld_connect_timeout: int = Field(
-        default=30,
-        ge=1,
-        description="Connection timeout in seconds",
+        default=30, ge=1, description="Connection timeout in seconds"
     )
     osworld_action_timeout: int = Field(
-        default=15,
-        ge=1,
-        description="Per-action timeout in seconds (click, type, screenshot)",
+        default=15, ge=1, description="Per-action timeout in seconds (click, type, screenshot)"
     )
     osworld_boot_timeout: int = Field(
-        default=120,
-        ge=10,
-        description="VM boot/wait timeout in seconds",
+        default=120, ge=10, description="VM boot/wait timeout in seconds"
     )
     osworld_max_retries: int = Field(
-        default=3,
-        ge=0,
-        description="Max retries on transient failures",
+        default=3, ge=0, description="Max retries on transient failures"
     )
 
     # Screen calibration
-    osworld_screen_width: int = Field(
-        default=1920,
-        ge=640,
-        description="VM screen width in pixels",
-    )
+    osworld_screen_width: int = Field(default=1920, ge=640, description="VM screen width in pixels")
     osworld_screen_height: int = Field(
-        default=1080,
-        ge=480,
-        description="VM screen height in pixels",
+        default=1080, ge=480, description="VM screen height in pixels"
     )
     osworld_dpi_scale: float = Field(
-        default=1.0,
-        ge=0.5,
-        le=4.0,
-        description="DPI scaling factor (1.0 = 96dpi)",
+        default=1.0, ge=0.5, le=4.0, description="DPI scaling factor (1.0 = 96dpi)"
     )
 
     @property

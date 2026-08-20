@@ -5,6 +5,7 @@ This module provides notification delivery implementations:
 - SSEAdapter: Server-Sent Events for web clients
 - TelegramAdapter: Telegram bot notifications
 """
+
 from weebot.application.ports.notification_port import (
     Notification,
     NotificationBus,
@@ -24,12 +25,14 @@ from weebot.infrastructure.notifications.windows_toast import (
 
 try:
     from weebot.infrastructure.notifications.sse_adapter import SSEAdapter
+
     SSE_AVAILABLE = True
 except ImportError:
     SSE_AVAILABLE = False
 
 try:
     from weebot.infrastructure.notifications.telegram_adapter import TelegramAdapter
+
     TELEGRAM_AVAILABLE = True
 except ImportError:
     TELEGRAM_AVAILABLE = False

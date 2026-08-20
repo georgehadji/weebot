@@ -19,17 +19,14 @@ Usage:
         # Process findings as they arrive
         cluster.add(msg.payload)
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Optional
 
 from weebot.domain.models.inter_agent import InterAgentMessage
-from weebot.application.ports.swarm_event_bus_port import (
-    SwarmEventBusPort,
-    SwarmEventHandler,
-)
+from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort, SwarmEventHandler
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +65,7 @@ class SwarmEventBus(SwarmEventBusPort):
         for q in self._queues[message.topic]:
             await q.put(message)
 
-    def subscribe(
-        self,
-        topic: str,
-        replay_history: bool = True,
-    ) -> "SwarmSubscription":
+    def subscribe(self, topic: str, replay_history: bool = True) -> SwarmSubscription:
         """Return an async-iterable subscription to *topic*.
 
         Args:
@@ -137,18 +130,13 @@ class SwarmSubscription:
     the context manager or async for loop exits.
     """
 
-    def __init__(
-        self,
-        queue: asyncio.Queue[InterAgentMessage],
-        topic: str,
-        unsubscribe_fn,
-    ) -> None:
+    def __init__(self, queue: asyncio.Queue[InterAgentMessage], topic: str, unsubscribe_fn) -> None:
         self._queue = queue
         self._topic = topic
         self._unsubscribe_fn = unsubscribe_fn
         self._closed = False
 
-    def __aiter__(self) -> "SwarmSubscription":
+    def __aiter__(self) -> SwarmSubscription:
         return self
 
     async def __anext__(self) -> InterAgentMessage:
@@ -156,7 +144,7 @@ class SwarmSubscription:
             raise StopAsyncIteration
         try:
             return await asyncio.wait_for(self._queue.get(), timeout=300.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.close()
             raise StopAsyncIteration
 
@@ -165,7 +153,7 @@ class SwarmSubscription:
             self._closed = True
             self._unsubscribe_fn(self._topic, self._queue)
 
-    async def __aenter__(self) -> "SwarmSubscription":
+    async def __aenter__(self) -> SwarmSubscription:
         return self
 
     async def __aexit__(self, *args) -> None:

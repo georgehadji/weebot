@@ -5,11 +5,11 @@ databases without changing the call sites.  Each entity type maps to
 a specific database path, and the router is the single source of truth
 for those mappings.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
 
 
 class DatabaseRouterPort(ABC):

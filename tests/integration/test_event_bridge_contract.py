@@ -7,11 +7,11 @@ AsyncEventBus.
 These are integration tests that exercise the actual bridge adapter
 with a running event bus, not mocks.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import AgentEvent, NotificationEvent, FactDiscovered
 from weebot.infrastructure.event_bus import AsyncEventBus
 from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
@@ -33,8 +33,11 @@ def adapter(event_bus: AsyncEventBus) -> EventBrokerAdapter:
 # Test 1: EventBrokerAdapter.publish → AsyncEventBus receives the event
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
-async def test_publish_delivers_to_async_event_bus(adapter: EventBrokerAdapter, event_bus: AsyncEventBus):
+async def test_publish_delivers_to_async_event_bus(
+    adapter: EventBrokerAdapter, event_bus: AsyncEventBus
+):
     """Publishing through EventBrokerAdapter must deliver to AsyncEventBus subscribers."""
     received: list[AgentEvent] = []
 
@@ -61,8 +64,11 @@ async def test_publish_delivers_to_async_event_bus(adapter: EventBrokerAdapter, 
 # Test 2: Unknown event types map to NotificationEvent
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
-async def test_unknown_event_type_maps_to_notification(adapter: EventBrokerAdapter, event_bus: AsyncEventBus):
+async def test_unknown_event_type_maps_to_notification(
+    adapter: EventBrokerAdapter, event_bus: AsyncEventBus
+):
     """Unknown event types should be converted to NotificationEvent (catch-all)."""
     received: list[AgentEvent] = []
 
@@ -72,22 +78,25 @@ async def test_unknown_event_type_maps_to_notification(adapter: EventBrokerAdapt
     event_bus.subscribe(handler)
 
     await adapter.publish(
-        event_type="custom_unknown_type",
-        agent_id="test-agent",
-        data={"msg": "hello"},
+        event_type="custom_unknown_type", agent_id="test-agent", data={"msg": "hello"}
     )
 
     assert len(received) == 1
     event = received[0]
-    assert isinstance(event, NotificationEvent), f"expected NotificationEvent, got {type(event).__name__}"
+    assert isinstance(
+        event, NotificationEvent
+    ), f"expected NotificationEvent, got {type(event).__name__}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Test 3: EventBrokerAdapter.subscribe receives type-filtered events
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
-async def test_subscribe_by_type_filters_correctly(adapter: EventBrokerAdapter, event_bus: AsyncEventBus):
+async def test_subscribe_by_type_filters_correctly(
+    adapter: EventBrokerAdapter, event_bus: AsyncEventBus
+):
     """subscribe() with event_type must only receive matching events."""
     received: list[AgentEvent] = []
 
@@ -110,8 +119,11 @@ async def test_subscribe_by_type_filters_correctly(adapter: EventBrokerAdapter, 
 # Test 4: Multiple subscribers on different types
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
-async def test_multiple_subscribers_different_types(adapter: EventBrokerAdapter, event_bus: AsyncEventBus):
+async def test_multiple_subscribers_different_types(
+    adapter: EventBrokerAdapter, event_bus: AsyncEventBus
+):
     """Multiple subscribers each should only receive their registered type."""
     fact_events: list[AgentEvent] = []
 
@@ -130,6 +142,7 @@ async def test_multiple_subscribers_different_types(adapter: EventBrokerAdapter,
 # ═════════════════════════════════════════════════════════════════════════════
 # Test 5: AsyncEventBus.subscribe_by_type works without adapter
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_subscribe_by_type_direct(event_bus: AsyncEventBus):
@@ -152,20 +165,21 @@ async def test_subscribe_by_type_direct(event_bus: AsyncEventBus):
 # Test 6: All known event type strings map correctly
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_all_known_event_types_map(adapter: EventBrokerAdapter, event_bus: AsyncEventBus):
     """Verify that all known event type strings in _convert produce correct types."""
-    test_cases = [
-        ("fact_discovered", FactDiscovered),
-    ]
+    test_cases = [("fact_discovered", FactDiscovered)]
 
     for event_type, expected_cls in test_cases:
         received: list[AgentEvent] = []
+
         async def capture(e: AgentEvent) -> None:
             received.append(e)
+
         event_bus.subscribe(capture)
         await adapter.publish(event_type, "agent-1", {"session_id": "s1"})
         assert len(received) >= 1, f"no event received for {event_type}"
-        assert isinstance(received[-1], expected_cls), (
-            f"{event_type}: expected {expected_cls.__name__}, got {type(received[-1]).__name__}"
-        )
+        assert isinstance(
+            received[-1], expected_cls
+        ), f"{event_type}: expected {expected_cls.__name__}, got {type(received[-1]).__name__}"

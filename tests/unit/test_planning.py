@@ -1,10 +1,10 @@
 """Unit tests for PlanActFlow (replaces deprecated PlanningTool/PlanningFlow)."""
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.tools.base import BaseTool, ToolCollection, ToolResult
-
+from weebot.tools.base import ToolCollection
 
 # ---------------------------------------------------------------------------
 # PlanActFlow — replaces deprecated PlanningTool + PlanningFlow
@@ -38,20 +38,14 @@ async def _make_wired_flow(llm, session):
     """
     from weebot.application.cqrs.mediator import Mediator
     from weebot.application.cqrs.handlers import register_default_handlers
-    from weebot.infrastructure.persistence.in_memory_state_repo import (
-        InMemoryStateRepository,
-    )
+    from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 
     repo = InMemoryStateRepository()
     await repo.save_session(session)
     mediator = Mediator()
     register_default_handlers(mediator, repo, llm=llm)
     return PlanActFlow(
-        llm=llm,
-        tools=ToolCollection(),
-        session=session,
-        mediator=mediator,
-        state_repo=repo,
+        llm=llm, tools=ToolCollection(), session=session, mediator=mediator, state_repo=repo
     )
 
 
@@ -67,7 +61,7 @@ async def test_plan_act_flow_creates_plan():
     async for event in flow.run("test task"):
         events.append(event)
     assert len(events) > 0
-    assert any(e.type == "plan" for e in events if hasattr(e, 'type'))
+    assert any(e.type == "plan" for e in events if hasattr(e, "type"))
 
 
 @pytest.mark.asyncio
@@ -80,6 +74,6 @@ async def test_plan_act_flow_multiple_events():
     flow = await _make_wired_flow(llm, session)
     event_types = set()
     async for event in flow.run("another task"):
-        if hasattr(event, 'type'):
+        if hasattr(event, "type"):
             event_types.add(event.type)
     assert "plan" in event_types

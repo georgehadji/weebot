@@ -10,13 +10,13 @@ Based on the paper "Fundamentals of Building Autonomous LLM Agents"
 This module produces ``PlanCandidate`` objects.  The companion module
 ``plan_merger.py`` merges them into a final ``Plan``.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import re
-from typing import Any, Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.plan import Plan, Step, StepStatus, PlanStatus
@@ -25,13 +25,12 @@ logger = logging.getLogger(__name__)
 
 # ── Data model ───────────────────────────────────────────────────────────
 
+
 class SubtaskDefinition:
     """A single subtask with multiple planning alternatives."""
+
     def __init__(
-        self,
-        title: str,
-        description: str,
-        candidates: list[list[dict[str, str]]] | None = None,
+        self, title: str, description: str, candidates: list[list[dict[str, str]]] | None = None
     ) -> None:
         self.title = title
         self.description = description
@@ -44,12 +43,13 @@ class SubtaskDefinition:
 
 class PlanCandidate:
     """A single complete plan produced by DPPM."""
+
     def __init__(
         self,
         title: str,
         steps: list[Step],
         score: float = 0.0,
-        source_subtasks: Optional[list[str]] = None,
+        source_subtasks: list[str] | None = None,
     ) -> None:
         self.title = title
         self.steps = steps
@@ -57,17 +57,14 @@ class PlanCandidate:
         self.source_subtasks = source_subtasks or []
 
     def to_plan(self) -> Plan:
-        return Plan(
-            title=self.title,
-            steps=self.steps,
-            status=PlanStatus.CREATED,
-        )
+        return Plan(title=self.title, steps=self.steps, status=PlanStatus.CREATED)
 
     def __repr__(self) -> str:
         return f"PlanCandidate({self.title!r}, {len(self.steps)} steps, score={self.score:.2f})"
 
 
 # ── Parallel planner ─────────────────────────────────────────────────────
+
 
 class ParallelPlanner:
     """Generates multiple plan candidates by decomposing and planning in parallel.
@@ -85,11 +82,7 @@ class ParallelPlanner:
     def __init__(self, llm: LLMPort) -> None:
         self._llm = llm
 
-    async def generate(
-        self,
-        prompt: str,
-        num_alternatives: int = 2,
-    ) -> list[PlanCandidate]:
+    async def generate(self, prompt: str, num_alternatives: int = 2) -> list[PlanCandidate]:
         """Generate multiple plan candidates using DPPM.
 
         Args:
@@ -106,10 +99,9 @@ class ParallelPlanner:
 
         # Step 2: For each subtask, generate alternatives concurrently
         for subtask in subtasks:
-            candidates = await asyncio.gather(*[
-                self._plan_subtask(subtask, i + 1)
-                for i in range(num_alternatives)
-            ])
+            candidates = await asyncio.gather(
+                *[self._plan_subtask(subtask, i + 1) for i in range(num_alternatives)]
+            )
             subtask.candidates = [c for c in candidates if c is not None]
 
         # Step 3: Merge into complete candidates
@@ -123,8 +115,8 @@ class ParallelPlanner:
             "You are a task decomposition expert. Break the following task into "
             "3-6 subtasks. Each subtask must have a title and a one-sentence description.\n\n"
             f"Task: {prompt}\n\n"
-            "Respond with JSON: {\"subtasks\": ["
-            "{\"title\": \"short title\", \"description\": \"what to do\"}, ..."
+            'Respond with JSON: {"subtasks": ['
+            '{"title": "short title", "description": "what to do"}, ...'
             "]}\n"
             "Rules:\n"
             "- At most 6 subtasks.\n"
@@ -133,8 +125,7 @@ class ParallelPlanner:
         )
         try:
             response = await self._llm.chat(
-                messages=[{"role": "user", "content": sys_prompt}],
-                max_tokens=1000,
+                messages=[{"role": "user", "content": sys_prompt}], max_tokens=1000
             )
             text = response.content.strip()
             if text.startswith("```"):
@@ -144,24 +135,23 @@ class ParallelPlanner:
             subtasks_data = data.get("subtasks", [])
             return [
                 SubtaskDefinition(title=s.get("title", ""), description=s.get("description", ""))
-                for s in subtasks_data if s.get("title") and s.get("description")
+                for s in subtasks_data
+                if s.get("title") and s.get("description")
             ]
         except Exception as exc:
             logger.warning("DPPM decomposition failed: %s", exc)
             return []
 
     async def _plan_subtask(
-        self,
-        subtask: SubtaskDefinition,
-        alternative_index: int,
-    ) -> Optional[list[dict[str, str]]]:
+        self, subtask: SubtaskDefinition, alternative_index: int
+    ) -> list[dict[str, str]] | None:
         """LLM call: generate one alternative plan for a subtask."""
         sys_prompt = (
             "You are a planning expert. Given a subtask, generate a sequence of "
             f"2-5 concrete actions to complete it (alternative #{alternative_index}).\n\n"
             f"Subtask: {subtask.title}: {subtask.description}\n\n"
-            "Respond with JSON: {\"steps\": ["
-            "{\"action\": \"do something\", \"tool\": \"tool_name\"}, ..."
+            'Respond with JSON: {"steps": ['
+            '{"action": "do something", "tool": "tool_name"}, ...'
             "]}\n"
             "Rules:\n"
             "- Each action is 3-15 words.\n"
@@ -172,8 +162,7 @@ class ParallelPlanner:
         )
         try:
             response = await self._llm.chat(
-                messages=[{"role": "user", "content": sys_prompt}],
-                max_tokens=800,
+                messages=[{"role": "user", "content": sys_prompt}], max_tokens=800
             )
             text = response.content.strip()
             if text.startswith("```"):
@@ -186,9 +175,7 @@ class ParallelPlanner:
             return None
 
     def _assemble_candidates(
-        self,
-        subtasks: list[SubtaskDefinition],
-        prompt: str,
+        self, subtasks: list[SubtaskDefinition], prompt: str
     ) -> list[PlanCandidate]:
         """Combine subtask alternatives into complete plan candidates.
 
@@ -218,30 +205,28 @@ class ParallelPlanner:
                     tool = action.get("tool", "")
                     if tool:
                         desc = f"[{tool}] {desc}"
-                    steps.append(Step(
-                        id=f"dppm-{step_id}",
-                        description=desc,
-                        status=StepStatus.PENDING,
-                    ))
+                    steps.append(
+                        Step(id=f"dppm-{step_id}", description=desc, status=StepStatus.PENDING)
+                    )
 
-            candidates.append(PlanCandidate(
-                title=f"DPPM plan (variant {alt_idx + 1})",
-                steps=steps,
-                score=0.9 - (alt_idx * 0.1),  # Score decreases for later variants
-                source_subtasks=sources,
-            ))
+            candidates.append(
+                PlanCandidate(
+                    title=f"DPPM plan (variant {alt_idx + 1})",
+                    steps=steps,
+                    score=0.9 - (alt_idx * 0.1),  # Score decreases for later variants
+                    source_subtasks=sources,
+                )
+            )
 
         if not candidates:
             # Fallback: one-step placeholder
-            candidates.append(PlanCandidate(
-                title=prompt[:80],
-                steps=[Step(
-                    id="dppm-1",
-                    description=prompt[:200],
-                    status=StepStatus.PENDING,
-                )],
-                score=0.5,
-            ))
+            candidates.append(
+                PlanCandidate(
+                    title=prompt[:80],
+                    steps=[Step(id="dppm-1", description=prompt[:200], status=StepStatus.PENDING)],
+                    score=0.5,
+                )
+            )
 
         return candidates
 

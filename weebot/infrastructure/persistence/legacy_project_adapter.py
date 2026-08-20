@@ -6,15 +6,15 @@ StateManager can migrate to the Clean Architecture persistence layer
 without a full rewrite.  It maps ProjectState/Task/Checkpoint concepts
 onto Session/Event/Plan equivalents.
 """
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.domain.models.event import MessageEvent
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session
 
 
 class LegacyProjectAdapter:
@@ -31,9 +31,7 @@ class LegacyProjectAdapter:
 
     # ── project lifecycle ──────────────────────────────────────────
 
-    async def create_project(
-        self, project_id: str, description: str
-    ) -> dict[str, Any]:
+    async def create_project(self, project_id: str, description: str) -> dict[str, Any]:
         """Create a new project as a Session with legacy metadata."""
         session = Session(
             id=project_id,
@@ -59,11 +57,15 @@ class LegacyProjectAdapter:
         if session is None:
             session = Session(id=project_id, user_id="legacy", agent_id="legacy")
         session = session.model_copy(
-            update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "legacy_state": state}})}
+            update={
+                "context": session.context.model_copy(
+                    update={"extra": {**session.context.extra, "legacy_state": state}}
+                )
+            }
         )
         await self._repo.save_session(session)
 
-    async def load_state(self, project_id: str) -> Optional[dict[str, Any]]:
+    async def load_state(self, project_id: str) -> dict[str, Any] | None:
         """Load project state from session context."""
         session = await self._repo.load_session(project_id)
         if session is None:
@@ -83,19 +85,18 @@ class LegacyProjectAdapter:
         result: list[dict[str, Any]] = []
         for s in sessions:
             if s.context.get("legacy_project"):
-                result.append({
-                    "project_id": s.id,
-                    "status": s.status.value,
-                    "description": s.context.get("description", ""),
-                    "updated_at": s.updated_at.isoformat(),
-                })
+                result.append(
+                    {
+                        "project_id": s.id,
+                        "status": s.status.value,
+                        "description": s.context.get("description", ""),
+                        "updated_at": s.updated_at.isoformat(),
+                    }
+                )
         return result
 
     async def add_checkpoint(
-        self,
-        project_id: str,
-        description: str,
-        input_prompt: Optional[str] = None,
+        self, project_id: str, description: str, input_prompt: str | None = None
     ) -> str:
         """Add a checkpoint as a WaitForUserEvent in the session."""
         session = await self._repo.load_session(project_id)
@@ -108,22 +109,22 @@ class LegacyProjectAdapter:
                 "context": {
                     **session.context.extra,
                     "checkpoints": session.context.get("checkpoints", [])
-                    + [{
-                        "id": chk_id,
-                        "description": description,
-                        "input_prompt": input_prompt,
-                        "resolved": False,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }],
+                    + [
+                        {
+                            "id": chk_id,
+                            "description": description,
+                            "input_prompt": input_prompt,
+                            "resolved": False,
+                            "created_at": datetime.now(UTC).isoformat(),
+                        }
+                    ],
                 }
             }
         )
         await self._repo.save_session(session)
         return chk_id
 
-    async def resolve_checkpoint(
-        self, checkpoint_id: str, user_response: str
-    ) -> None:
+    async def resolve_checkpoint(self, checkpoint_id: str, user_response: str) -> None:
         """Mark a checkpoint as resolved."""
         sessions = await self._repo.list_sessions()
         for session in sessions:
@@ -133,14 +134,16 @@ class LegacyProjectAdapter:
                     chk["resolved"] = True
                     chk["user_response"] = user_response
                     session = session.model_copy(
-                        update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "checkpoints": chks}})}
+                        update={
+                            "context": session.context.model_copy(
+                                update={"extra": {**session.context.extra, "checkpoints": chks}}
+                            )
+                        }
                     )
                     await self._repo.save_session(session)
                     return
 
-    async def get_pending_checkpoints(
-        self, project_id: str
-    ) -> list[dict[str, Any]]:
+    async def get_pending_checkpoints(self, project_id: str) -> list[dict[str, Any]]:
         """Get unresolved checkpoints for a project."""
         session = await self._repo.load_session(project_id)
         if session is None:

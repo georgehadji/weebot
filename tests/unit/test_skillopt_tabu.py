@@ -4,6 +4,7 @@ Before this, the validation gate rejected an edit and nothing recorded the
 rejection — the optimizer was structurally free to re-propose the identical
 edit on every subsequent step of the run.
 """
+
 from __future__ import annotations
 
 from weebot.application.flows.skill_opt_flow import SkillOptFlow

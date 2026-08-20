@@ -1,4 +1,5 @@
 """Verify vendored atomicmail public API surface is intact."""
+
 from __future__ import annotations
 
 import atomicmail

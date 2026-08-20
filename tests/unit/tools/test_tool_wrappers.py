@@ -1,10 +1,10 @@
 """Unit tests for PowerShellTool and ScreenCaptureBaseTool wrappers."""
+
 import pytest
 from unittest.mock import patch
 
 from weebot.tools.powershell_tool import PowerShellTool
 from weebot.tools.screen_tool import ScreenCaptureBaseTool
-
 
 # ---------------------------------------------------------------------------
 # PowerShellTool
@@ -28,9 +28,13 @@ class TestPowerShellTool:
         tool = PowerShellTool()
         with patch.object(tool._sandbox, "execute_shell") as mock:
             from weebot.application.ports.sandbox_port import SandboxResult, SandboxType
+
             mock.return_value = SandboxResult(
-                stdout="Hello", stderr="", returncode=0,
-                elapsed_ms=1.0, sandbox_type=SandboxType.NATIVE_WINDOWS,
+                stdout="Hello",
+                stderr="",
+                returncode=0,
+                elapsed_ms=1.0,
+                sandbox_type=SandboxType.NATIVE_WINDOWS,
             )
             result = await tool.execute(command="echo Hello")
         assert not result.is_error
@@ -41,9 +45,13 @@ class TestPowerShellTool:
         tool = PowerShellTool()
         with patch.object(tool._sandbox, "execute_shell") as mock:
             from weebot.application.ports.sandbox_port import SandboxResult, SandboxType
+
             mock.return_value = SandboxResult(
-                stdout="", stderr="sandbox violation", returncode=1,
-                elapsed_ms=1.0, sandbox_type=SandboxType.NATIVE_WINDOWS,
+                stdout="",
+                stderr="sandbox violation",
+                returncode=1,
+                elapsed_ms=1.0,
+                sandbox_type=SandboxType.NATIVE_WINDOWS,
             )
             result = await tool.execute(command="bad command")
         assert result.is_error
@@ -92,6 +100,7 @@ class TestScreenCaptureBaseTool:
         assert result.base64_image is not None
         # Verify it's valid base64 by decoding it back
         import base64
+
         decoded = base64.b64decode(result.base64_image)
         assert decoded == fake_png
 

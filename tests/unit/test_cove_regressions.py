@@ -11,6 +11,7 @@ Fix #2  Playwright process leak — missing stop() + race   (advanced_browser.py
 Fix #3  pyautogui blocking the asyncio event loop         (computer_use.py)
 Fix #4  APScheduler double-execution race                 (scheduler.py)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,10 +26,10 @@ import weebot.tools.advanced_browser as _ab_mod
 from weebot.scheduling.scheduler import ScheduledJob, SchedulingManager
 from weebot.tools.computer_use import ComputerUseTool
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _tmp_db():
     """Return (db_path, tmpdir_path) for an isolated SQLite database."""
@@ -51,6 +52,7 @@ def _cleanup(d: Path) -> None:
 #   • permanent RUNNING status in SQLite (state never updated)
 #   • the original error silently discarded
 # ===========================================================================
+
 
 @pytest.mark.skip(reason="ResumableTask is deprecated — removed with state_manager.py")
 class TestResumableTaskDoubleException:
@@ -85,7 +87,7 @@ class TestResumableTaskDoubleException:
             with patch.object(sm, "save_state", side_effect=side_effect):
                 with pytest.raises(RuntimeError, match="ORIGINAL_ERROR"):
                     async with ResumableTask(sm, "p1", "task1"):
-                        flag[0] = True           # aenter done; aexit will fail
+                        flag[0] = True  # aenter done; aexit will fail
                         raise RuntimeError("ORIGINAL_ERROR")
         finally:
             _cleanup(d)
@@ -103,7 +105,7 @@ class TestResumableTaskDoubleException:
             end_calls: list[str] = []
 
             def tracking_end(project_id, name, status="completed"):
-                end_calls.append(status)    # record only; don't call original
+                end_calls.append(status)  # record only; don't call original
 
             with patch.object(sm, "save_state", side_effect=side_effect):
                 with patch.object(sm, "end_sub_session", side_effect=tracking_end):
@@ -113,9 +115,7 @@ class TestResumableTaskDoubleException:
                     except Exception:
                         pass
 
-            assert len(end_calls) >= 1, (
-                "end_sub_session must be called even when save_state fails"
-            )
+            assert len(end_calls) >= 1, "end_sub_session must be called even when save_state fails"
         finally:
             _cleanup(d)
 
@@ -144,9 +144,9 @@ class TestResumableTaskDoubleException:
                         pass
 
             assert len(end_statuses) >= 1, "end_sub_session must always be called"
-            assert end_statuses[0] == "failed", (
-                f"status must be 'failed' when body raised, got: {end_statuses[0]!r}"
-            )
+            assert (
+                end_statuses[0] == "failed"
+            ), f"status must be 'failed' when body raised, got: {end_statuses[0]!r}"
         finally:
             _cleanup(d)
 
@@ -163,12 +163,10 @@ class TestResumableTaskDoubleException:
             with patch.object(sm, "save_state", side_effect=side_effect):
                 try:
                     async with ResumableTask(sm, "p1", "task1"):
-                        flag[0] = True    # aenter done; aexit saves will fail
+                        flag[0] = True  # aenter done; aexit saves will fail
                         # body succeeds — no exception raised
                 except OSError:
-                    pytest.fail(
-                        "save_state() failure must NOT propagate when body succeeded"
-                    )
+                    pytest.fail("save_state() failure must NOT propagate when body succeeded")
         finally:
             _cleanup(d)
 
@@ -202,6 +200,7 @@ class TestResumableTaskDoubleException:
 #   the atexit handler double-stopped the already-broken instance.
 # ===========================================================================
 
+
 class TestPlaywrightProcessLeak:
 
     @pytest.mark.asyncio
@@ -225,9 +224,9 @@ class TestPlaywrightProcessLeak:
         _ab_mod._playwright_instance = AsyncMock()
         try:
             await _ab_mod.AdvancedBrowserTool()._close_browser()
-            assert _ab_mod._playwright_instance is None, (
-                "_playwright_instance must be None after _close_browser()"
-            )
+            assert (
+                _ab_mod._playwright_instance is None
+            ), "_playwright_instance must be None after _close_browser()"
         finally:
             _ab_mod._playwright_instance = None
 
@@ -237,8 +236,8 @@ class TestPlaywrightProcessLeak:
         Concurrent agent 'close' actions both call this; the second must be
         a safe no-op, not an AttributeError on an already-None global."""
         tool = _ab_mod.AdvancedBrowserTool()
-        await tool._close_browser()   # nothing to close
-        await tool._close_browser()   # must not raise
+        await tool._close_browser()  # nothing to close
+        await tool._close_browser()  # must not raise
 
     @pytest.mark.asyncio
     async def test_global_zeroed_before_await_when_stop_raises(self):
@@ -258,7 +257,7 @@ class TestPlaywrightProcessLeak:
             try:
                 await _ab_mod.AdvancedBrowserTool()._close_browser()
             except Exception:
-                pass   # stop() raising is allowed
+                pass  # stop() raising is allowed
             assert _ab_mod._playwright_instance is None, (
                 "Global must be zeroed before await — "
                 "stops atexit from double-calling stop() after a failed close"
@@ -282,9 +281,7 @@ class TestPlaywrightProcessLeak:
                 await _ab_mod.AdvancedBrowserTool()._close_browser()
             except Exception:
                 pass
-            assert _ab_mod._page is None, (
-                "_page must be None even when page.close() raises"
-            )
+            assert _ab_mod._page is None, "_page must be None even when page.close() raises"
         finally:
             _ab_mod._page = None
 
@@ -298,6 +295,7 @@ class TestPlaywrightProcessLeak:
         _ab_mod._playwright_instance = mock_pw
         try:
             from weebot.tools.advanced_browser import _atexit_cleanup_playwright
+
             _atexit_cleanup_playwright()
             mock_pw.stop.assert_called_once()
             assert _ab_mod._playwright_instance is None
@@ -316,9 +314,11 @@ class TestPlaywrightProcessLeak:
 
 try:
     import pyautogui as _pyautogui  # noqa: F401
+
     _PYAUTOGUI_AVAILABLE = True
 except ImportError:
     _PYAUTOGUI_AVAILABLE = False
+
 
 @pytest.mark.skipif(not _PYAUTOGUI_AVAILABLE, reason="pyautogui not installed")
 class TestPyautoguiEventLoopBlocking:
@@ -339,9 +339,9 @@ class TestPyautoguiEventLoopBlocking:
             with patch("pyautogui.moveTo"):
                 await tool.execute(action="move_mouse", x=10, y=20)
 
-        assert any("moveTo" in name for name in offloaded), (
-            "move_mouse must use asyncio.to_thread() — direct call blocks event loop"
-        )
+        assert any(
+            "moveTo" in name for name in offloaded
+        ), "move_mouse must use asyncio.to_thread() — direct call blocks event loop"
 
     @pytest.mark.asyncio
     async def test_click_offloaded_to_thread(self):
@@ -358,9 +358,7 @@ class TestPyautoguiEventLoopBlocking:
             with patch("pyautogui.click"):
                 await tool.execute(action="click", x=10, y=20)
 
-        assert any("click" in name for name in offloaded), (
-            "click must use asyncio.to_thread()"
-        )
+        assert any("click" in name for name in offloaded), "click must use asyncio.to_thread()"
 
     @pytest.mark.asyncio
     async def test_type_action_uses_wait_for(self):
@@ -379,9 +377,9 @@ class TestPyautoguiEventLoopBlocking:
             with patch("pyautogui.write"):
                 await tool.execute(action="type", text="hello")
 
-        assert wait_for_timeouts, (
-            "type action must use asyncio.wait_for() — no timeout = permanent block risk"
-        )
+        assert (
+            wait_for_timeouts
+        ), "type action must use asyncio.wait_for() — no timeout = permanent block risk"
 
     @pytest.mark.asyncio
     async def test_type_returns_tool_error_on_timeout(self):
@@ -392,15 +390,15 @@ class TestPyautoguiEventLoopBlocking:
 
         async def instant_timeout(coro, timeout):
             coro.close()
-            raise asyncio.TimeoutError
+            raise TimeoutError
 
         with patch("asyncio.wait_for", side_effect=instant_timeout):
             result = await tool.execute(action="type", text="hello")
 
         assert result.is_error, "TimeoutError must produce a ToolResult error, not propagate"
-        assert "timed out" in result.error.lower(), (
-            f"Error message must mention timeout, got: {result.error!r}"
-        )
+        assert (
+            "timed out" in result.error.lower()
+        ), f"Error message must mention timeout, got: {result.error!r}"
 
     @pytest.mark.asyncio
     async def test_type_timeout_proportional_to_text_length(self):
@@ -424,9 +422,9 @@ class TestPyautoguiEventLoopBlocking:
 
         assert len(timeouts) == 2
         assert timeouts[0] >= 10.0, f"Short-text timeout too small: {timeouts[0]}"
-        assert timeouts[1] > timeouts[0], (
-            f"Long-text timeout ({timeouts[1]}) must exceed short-text ({timeouts[0]})"
-        )
+        assert (
+            timeouts[1] > timeouts[0]
+        ), f"Long-text timeout ({timeouts[1]}) must exceed short-text ({timeouts[0]})"
 
     @pytest.mark.asyncio
     async def test_move_mouse_duration_passed_as_keyword(self):
@@ -453,6 +451,7 @@ class TestPyautoguiEventLoopBlocking:
 # set as a secondary execution guard inside _execute_job().
 # ===========================================================================
 
+
 class TestSchedulerExecutionGuard:
 
     @pytest.mark.asyncio
@@ -464,15 +463,19 @@ class TestSchedulerExecutionGuard:
         try:
             mgr = SchedulingManager(db_path=db)
             with patch.object(mgr.scheduler, "add_job") as mock_add:
-                await mgr._schedule_job(ScheduledJob(
-                    job_id="j1", name="Test",
-                    trigger_type="interval", trigger_config={"seconds": 60},
-                    callable_name="test",
-                ))
+                await mgr._schedule_job(
+                    ScheduledJob(
+                        job_id="j1",
+                        name="Test",
+                        trigger_type="interval",
+                        trigger_config={"seconds": 60},
+                        callable_name="test",
+                    )
+                )
             kw = mock_add.call_args.kwargs
-            assert kw.get("max_instances") == 1, (
-                f"max_instances must be 1, got {kw.get('max_instances')!r}"
-            )
+            assert (
+                kw.get("max_instances") == 1
+            ), f"max_instances must be 1, got {kw.get('max_instances')!r}"
         finally:
             _cleanup(d)
 
@@ -485,15 +488,17 @@ class TestSchedulerExecutionGuard:
         try:
             mgr = SchedulingManager(db_path=db)
             with patch.object(mgr.scheduler, "add_job") as mock_add:
-                await mgr._schedule_job(ScheduledJob(
-                    job_id="j1", name="Test",
-                    trigger_type="interval", trigger_config={"seconds": 60},
-                    callable_name="test",
-                ))
+                await mgr._schedule_job(
+                    ScheduledJob(
+                        job_id="j1",
+                        name="Test",
+                        trigger_type="interval",
+                        trigger_config={"seconds": 60},
+                        callable_name="test",
+                    )
+                )
             kw = mock_add.call_args.kwargs
-            assert kw.get("coalesce") is True, (
-                f"coalesce must be True, got {kw.get('coalesce')!r}"
-            )
+            assert kw.get("coalesce") is True, f"coalesce must be True, got {kw.get('coalesce')!r}"
         finally:
             _cleanup(d)
 
@@ -538,19 +543,21 @@ class TestSchedulerExecutionGuard:
 
             mgr.register_callable("counter", counter)
             await mgr.create_job(
-                job_id="j1", name="Counter",
-                trigger_type="cron", trigger_config={},
+                job_id="j1",
+                name="Counter",
+                trigger_type="cron",
+                trigger_config={},
                 callable_name="counter",
             )
 
             await mgr._execute_job("j1")
-            assert "j1" not in mgr._running_jobs, (
-                "job_id must be removed from _running_jobs after success"
-            )
-            await mgr._execute_job("j1")   # would be skipped if set not cleared
-            assert call_count[0] == 2, (
-                f"Job ran {call_count[0]} times; expected 2 (second run was skipped)"
-            )
+            assert (
+                "j1" not in mgr._running_jobs
+            ), "job_id must be removed from _running_jobs after success"
+            await mgr._execute_job("j1")  # would be skipped if set not cleared
+            assert (
+                call_count[0] == 2
+            ), f"Job ran {call_count[0]} times; expected 2 (second run was skipped)"
         finally:
             _cleanup(d)
 
@@ -570,19 +577,21 @@ class TestSchedulerExecutionGuard:
 
             mgr.register_callable("fn", fail_then_succeed)
             await mgr.create_job(
-                job_id="j2", name="Fail-then-succeed",
-                trigger_type="cron", trigger_config={},
+                job_id="j2",
+                name="Fail-then-succeed",
+                trigger_type="cron",
+                trigger_config={},
                 callable_name="fn",
             )
 
-            await mgr._execute_job("j2")   # first call — fails
-            assert "j2" not in mgr._running_jobs, (
-                "job_id must be cleared from _running_jobs even after failure"
-            )
-            await mgr._execute_job("j2")   # second call — must NOT be skipped
-            assert call_count[0] == 2, (
-                "Job must run again after failure — second call was blocked by stale guard"
-            )
+            await mgr._execute_job("j2")  # first call — fails
+            assert (
+                "j2" not in mgr._running_jobs
+            ), "job_id must be cleared from _running_jobs even after failure"
+            await mgr._execute_job("j2")  # second call — must NOT be skipped
+            assert (
+                call_count[0] == 2
+            ), "Job must run again after failure — second call was blocked by stale guard"
         finally:
             _cleanup(d)
 
@@ -594,15 +603,13 @@ class TestSchedulerExecutionGuard:
         db, d = _tmp_db()
         try:
             mgr = SchedulingManager(db_path=db)
-            assert hasattr(mgr, "_running_jobs"), (
-                "_running_jobs attribute is missing from SchedulingManager"
-            )
-            assert isinstance(mgr._running_jobs, set), (
-                f"_running_jobs must be a set, got: {type(mgr._running_jobs)}"
-            )
-            assert len(mgr._running_jobs) == 0, (
-                "_running_jobs must be empty on initialization"
-            )
+            assert hasattr(
+                mgr, "_running_jobs"
+            ), "_running_jobs attribute is missing from SchedulingManager"
+            assert isinstance(
+                mgr._running_jobs, set
+            ), f"_running_jobs must be a set, got: {type(mgr._running_jobs)}"
+            assert len(mgr._running_jobs) == 0, "_running_jobs must be empty on initialization"
         finally:
             _cleanup(d)
 
@@ -622,19 +629,18 @@ class TestSchedulerExecutionGuard:
 
             async def slow_callable():
                 execution_count[0] += 1
-                await asyncio.sleep(0)   # yield to let the concurrent call attempt
+                await asyncio.sleep(0)  # yield to let the concurrent call attempt
 
             mgr.register_callable("slow", slow_callable)
             await mgr.create_job(
-                job_id="j3", name="Concurrent",
-                trigger_type="cron", trigger_config={},
+                job_id="j3",
+                name="Concurrent",
+                trigger_type="cron",
+                trigger_config={},
                 callable_name="slow",
             )
 
-            await asyncio.gather(
-                mgr._execute_job("j3"),
-                mgr._execute_job("j3"),
-            )
+            await asyncio.gather(mgr._execute_job("j3"), mgr._execute_job("j3"))
 
             assert execution_count[0] == 1, (
                 f"Job executed {execution_count[0]} times with concurrent invocations; "

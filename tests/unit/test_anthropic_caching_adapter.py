@@ -1,7 +1,7 @@
 """Unit tests for AnthropicCachingAdapter — tool-call JSON normalizer."""
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.infrastructure.adapters.llm.anthropic_caching_adapter import (
     AnthropicCachingAdapter,
@@ -9,8 +9,8 @@ from weebot.infrastructure.adapters.llm.anthropic_caching_adapter import (
     _normalize_json_string,
 )
 
-
 # ── _normalize_json_string ───────────────────────────────────────────────────
+
 
 class TestNormalizeJsonString:
     def test_valid_json_sorted_keys(self):
@@ -77,6 +77,7 @@ class TestNormalizeJsonString:
 
 # ── normalize_tool_call_arguments ────────────────────────────────────────────
 
+
 class TestNormalizeToolCallArguments:
     def test_single_tool_call(self):
         """Single tool_call with unsorted arguments."""
@@ -110,10 +111,7 @@ class TestNormalizeToolCallArguments:
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {
-                            "name": "search",
-                            "arguments": '{"z": 1, "a": 2}',
-                        },
+                        "function": {"name": "search", "arguments": '{"z": 1, "a": 2}'},
                     },
                     {
                         "id": "call_2",
@@ -173,10 +171,7 @@ class TestNormalizeToolCallArguments:
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {
-                            "name": "test",
-                            "arguments": '{"a":1,"b":2}',
-                        },
+                        "function": {"name": "test", "arguments": '{"a":1,"b":2}'},
                     }
                 ],
             }
@@ -195,10 +190,7 @@ class TestNormalizeToolCallArguments:
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {
-                            "name": "test",
-                            "arguments": '{"z": 1, "a": 2}',
-                        },
+                        "function": {"name": "test", "arguments": '{"z": 1, "a": 2}'},
                     }
                 ],
             }
@@ -218,10 +210,7 @@ class TestNormalizeToolCallArguments:
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {
-                            "name": "test",
-                            "arguments": "not-json-at-all",
-                        },
+                        "function": {"name": "test", "arguments": "not-json-at-all"},
                     }
                 ],
             }
@@ -240,10 +229,7 @@ class TestNormalizeToolCallArguments:
                     {
                         "id": "call_1",
                         "type": "function",
-                        "function": {
-                            "name": "test",
-                            "arguments": "",
-                        },
+                        "function": {"name": "test", "arguments": ""},
                     }
                 ],
             }
@@ -263,6 +249,7 @@ class TestNormalizeToolCallArguments:
 
 
 # ── Integration: normalizer inside prepare_messages ──────────────────────────
+
 
 class TestPrepareMessagesWithNormalizer:
     """Verifies that prepare_messages calls the normalizer when enabled."""

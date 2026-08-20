@@ -1,14 +1,11 @@
 """Unit tests for agentskills.io Compatibility (Hermes M9)."""
-import pytest
 
 
 class TestAgentskillsAdapter:
     """Validates AgentskillsIndexAdapter."""
 
     def test_parse_agentskills_skill(self):
-        from weebot.infrastructure.adapters.agentskills_index import (
-            _parse_agentskills_skill,
-        )
+        from weebot.infrastructure.adapters.agentskills_index import _parse_agentskills_skill
 
         raw = {
             "name": "web-research",

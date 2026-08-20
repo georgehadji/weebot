@@ -1,7 +1,8 @@
 """Tests for ComputerUseTool DPI scaling logic."""
+
 import pytest
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 # Mock pyautogui before importing the tool
 if "pyautogui" not in sys.modules:
@@ -66,13 +67,16 @@ class TestDPIScaling:
         assert x == 100
         assert y == 100
 
-    @pytest.mark.parametrize("dpi,in_x,in_y,exp_x,exp_y", [
-        (1.0, 1920, 1080, 1920, 1080),
-        (1.25, 125, 250, 100, 200),
-        (1.5, 150, 300, 100, 200),
-        (2.0, 200, 400, 100, 200),
-        (0.5, 50, 100, 100, 200),  # DPI < 1 scales up
-    ])
+    @pytest.mark.parametrize(
+        "dpi,in_x,in_y,exp_x,exp_y",
+        [
+            (1.0, 1920, 1080, 1920, 1080),
+            (1.25, 125, 250, 100, 200),
+            (1.5, 150, 300, 100, 200),
+            (2.0, 200, 400, 100, 200),
+            (0.5, 50, 100, 100, 200),  # DPI < 1 scales up
+        ],
+    )
     def test_scale_parametrized(self, tool, dpi, in_x, in_y, exp_x, exp_y):
         """Parametrized DPI scaling across common values."""
         x, y = tool._scale(in_x, in_y, dpi_scale=dpi)

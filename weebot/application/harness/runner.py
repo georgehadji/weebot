@@ -5,13 +5,15 @@ never imports PlanActFlow directly, keeping the dependency direction clean:
 Application harness → Domain models only. PlanActFlow is injected by the DI
 container (same pattern as SkillOptFlow._target_flow_factory).
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
+from collections.abc import Callable
 
 from weebot.domain.models.benchmark_task import WeebotTask
 from weebot.domain.models.session import Session
@@ -24,14 +26,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BenchmarkResult:
     """Result of running one (task, sample) pair."""
+
     task_id: str
     sample_idx: int
     score: float
     passed: bool
-    answer: Optional[str] = None
-    error: Optional[str] = None
+    answer: str | None = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "sample_idx": self.sample_idx,
@@ -56,7 +59,7 @@ class BenchmarkRunner:
     def __init__(
         self,
         flow_factory: Callable,
-        scorer: Optional[TaskScorer] = None,
+        scorer: TaskScorer | None = None,
         skill_name: str = "general",
         skill_version: int = 0,
     ) -> None:
@@ -65,11 +68,7 @@ class BenchmarkRunner:
         self._skill_name = skill_name
         self._skill_version = skill_version
 
-    async def run_task(
-        self,
-        task: WeebotTask,
-        sample_idx: int = 0,
-    ) -> BenchmarkResult:
+    async def run_task(self, task: WeebotTask, sample_idx: int = 0) -> BenchmarkResult:
         """Run one sample from *task* and return a scored BenchmarkResult."""
         if sample_idx >= len(task.samples):
             return BenchmarkResult(
@@ -86,10 +85,7 @@ class BenchmarkRunner:
             id=session_id,
             user_id="benchmark",
             agent_id="benchmark-runner",
-            context={
-                "skill_name": self._skill_name,
-                "skill_version": self._skill_version,
-            },
+            context={"skill_name": self._skill_name, "skill_version": self._skill_version},
         )
 
         try:
@@ -99,11 +95,7 @@ class BenchmarkRunner:
         except Exception as exc:
             logger.warning("Flow failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
             return BenchmarkResult(
-                task_id=task.task_id,
-                sample_idx=sample_idx,
-                score=0.0,
-                passed=False,
-                error=str(exc),
+                task_id=task.task_id, sample_idx=sample_idx, score=0.0, passed=False, error=str(exc)
             )
 
         # PlanActFlow updates its own _session immutably — use that for scoring.
@@ -112,7 +104,9 @@ class BenchmarkRunner:
         try:
             score = await self._scorer.score(completed_session, task, sample_idx)
         except Exception as exc:
-            logger.warning("Scoring failed for task %s sample %d: %s", task.task_id, sample_idx, exc)
+            logger.warning(
+                "Scoring failed for task %s sample %d: %s", task.task_id, sample_idx, exc
+            )
             score = 0.0
 
         answer = TaskScorer._extract_answer(completed_session)
@@ -125,10 +119,8 @@ class BenchmarkRunner:
         )
 
     async def run_batch(
-        self,
-        tasks: List[WeebotTask],
-        concurrency: int = 4,
-    ) -> List[BenchmarkResult]:
+        self, tasks: list[WeebotTask], concurrency: int = 4
+    ) -> list[BenchmarkResult]:
         """Run all samples from all *tasks* with bounded concurrency.
 
         Args:
@@ -144,18 +136,10 @@ class BenchmarkRunner:
             async with semaphore:
                 return await self.run_task(task, idx)
 
-        coros = [
-            _run_one(task, idx)
-            for task in tasks
-            for idx in range(len(task.samples))
-        ]
+        coros = [_run_one(task, idx) for task in tasks for idx in range(len(task.samples))]
         return list(await asyncio.gather(*coros))
 
-    async def run_to_trajectory(
-        self,
-        task: WeebotTask,
-        sample_idx: int = 0,
-    ) -> TrajectorySummary:
+    async def run_to_trajectory(self, task: WeebotTask, sample_idx: int = 0) -> TrajectorySummary:
         """Run one sample and return a TrajectorySummary for the optimizer."""
         result = await self.run_task(task, sample_idx)
 

@@ -14,14 +14,14 @@ Usage:
     if not ok:
         # session was dead-lettered — notify the user
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 import aiofiles
 
@@ -34,10 +34,7 @@ logger = logging.getLogger(__name__)
 # Default retry configuration for session persistence:
 # Short delays (sub-second) to avoid blocking the event loop,
 # with 3 attempts before dead-lettering.
-PERSISTENCE_RETRY_CONFIG = BackoffConfig(
-    delays=[0.5, 1.0, 2.0],
-    jitter=0.25,
-)
+PERSISTENCE_RETRY_CONFIG = BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25)
 
 
 class SessionPersistenceAdapter:
@@ -59,8 +56,8 @@ class SessionPersistenceAdapter:
     def __init__(
         self,
         repo: StateRepositoryPort,
-        retry: Optional[RetryWithBackoff] = None,
-        dead_letter_dir: Optional[Path] = None,
+        retry: RetryWithBackoff | None = None,
+        dead_letter_dir: Path | None = None,
     ) -> None:
         self._repo = repo
         self._retry = retry or RetryWithBackoff(PERSISTENCE_RETRY_CONFIG)
@@ -84,9 +81,7 @@ class SessionPersistenceAdapter:
             return True
         except Exception as exc:
             logger.error(
-                "Session %s persistence failed after retries — dead-lettering: %s",
-                session.id,
-                exc,
+                "Session %s persistence failed after retries — dead-lettering: %s", session.id, exc
             )
             await self._write_dead_letter(session, exc)
             self._increment_failure_metric()
@@ -99,14 +94,14 @@ class SessionPersistenceAdapter:
         The file contains the full session model dump plus error metadata
         so an operator can diagnose and replay.
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         # Sanitize session.id for filesystem use (defense in depth)
         safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", session.id)
         filename = f"{safe_id}_{timestamp}.json"
         filepath = self._dead_letter_dir / filename
 
         payload = {
-            "dead_lettered_at": datetime.now(timezone.utc).isoformat(),
+            "dead_lettered_at": datetime.now(UTC).isoformat(),
             "error": str(error),
             "error_type": type(error).__name__,
             "session": session.model_dump(mode="json"),
@@ -117,11 +112,7 @@ class SessionPersistenceAdapter:
                 await f.write(json.dumps(payload, indent=2, default=str))
             logger.info("Session %s dead-lettered to %s", session.id, filepath)
         except Exception as write_exc:
-            logger.critical(
-                "Failed to write dead-letter for session %s: %s",
-                session.id,
-                write_exc,
-            )
+            logger.critical("Failed to write dead-letter for session %s: %s", session.id, write_exc)
 
     @staticmethod
     def _increment_failure_metric() -> None:
@@ -149,7 +140,7 @@ class SessionPersistenceAdapter:
 
         for filepath in sorted(self._dead_letter_dir.glob("*.json")):
             try:
-                async with aiofiles.open(filepath, "r", encoding="utf-8") as f:
+                async with aiofiles.open(filepath, encoding="utf-8") as f:
                     content = await f.read()
                 payload = json.loads(content)
                 session_data = payload.get("session", {})
@@ -160,11 +151,7 @@ class SessionPersistenceAdapter:
                 logger.info("Replayed dead-letter session %s", session.id)
             except Exception as exc:
                 failed += 1
-                logger.warning(
-                    "Failed to replay dead-letter %s: %s",
-                    filepath.name,
-                    exc,
-                )
+                logger.warning("Failed to replay dead-letter %s: %s", filepath.name, exc)
 
         return replayed, failed
 

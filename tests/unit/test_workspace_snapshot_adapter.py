@@ -4,19 +4,15 @@ The guard's whole value is that it fails closed: a drift check that could
 not run must never read as "the workspace is clean". Several tests below
 exist only to pin that distinction.
 """
+
 from __future__ import annotations
 
 import asyncio
 
 import pytest
 
-from weebot.application.ports.workspace_snapshot_port import (
-    WorkspaceDrift,
-    WorkspaceSnapshot,
-)
-from weebot.infrastructure.adapters.workspace_snapshot_adapter import (
-    LocalWorkspaceSnapshotAdapter,
-)
+from weebot.application.ports.workspace_snapshot_port import WorkspaceDrift, WorkspaceSnapshot
+from weebot.infrastructure.adapters.workspace_snapshot_adapter import LocalWorkspaceSnapshotAdapter
 
 
 @pytest.fixture
@@ -51,6 +47,7 @@ async def _none():
 
 
 # ── Happy paths ──────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_untouched_workspace_reports_clean(workspace):
@@ -121,6 +118,7 @@ async def test_nested_files_are_covered(workspace):
 
 # ── Fail-closed paths ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_missing_workspace_root_yields_unavailable_not_clean(tmp_path):
     """A workspace that cannot be scanned is UNKNOWN, never CLEAN."""
@@ -172,6 +170,7 @@ async def test_workspace_deleted_between_snapshot_and_diff(workspace):
 
 
 # ── Bounds ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_manifest_is_capped_and_marked_truncated(tmp_path):
@@ -255,6 +254,7 @@ async def test_a_file_named_like_a_skip_dir_is_kept(monkeypatch, tmp_path):
 
 
 # ── WorkspaceDrift semantics ─────────────────────────────────────────
+
 
 def test_unavailable_drift_is_not_clean_even_with_no_paths():
     """The single most important line in this feature."""

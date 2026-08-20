@@ -1,7 +1,5 @@
 """Tests for H6 sandbox env scrubbing."""
 
-import os
-import pytest
 from weebot.infrastructure.sandbox.native_windows import _build_child_env
 from weebot.application.ports.sandbox_port import SandboxConfig
 

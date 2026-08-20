@@ -1,4 +1,5 @@
 """Unit tests for OCR tools."""
+
 import importlib.util
 import pytest
 from unittest.mock import patch
@@ -7,8 +8,7 @@ from PIL import Image
 from io import BytesIO
 
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("pytesseract") is None,
-    reason="pytesseract not installed",
+    importlib.util.find_spec("pytesseract") is None, reason="pytesseract not installed"
 )
 
 from weebot.tools.ocr import OCRTool, StructuredOCRTool

@@ -1,4 +1,5 @@
 """Base classes + CompositeTermination for termination conditions."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -16,6 +17,7 @@ class TerminationContext:
         elapsed_seconds: Wall-clock time since flow started.
         last_messages: Last N message dicts from the conversation buffer.
     """
+
     iteration: int = 0
     total_tokens: int = 0
     elapsed_seconds: float = 0.0
@@ -25,6 +27,7 @@ class TerminationContext:
 @dataclass(frozen=True)
 class TerminationResult:
     """Result of a termination condition check."""
+
     should_terminate: bool
     reason: str = ""
 
@@ -43,10 +46,10 @@ class TerminationCondition(ABC):
     @abstractmethod
     def check(self, ctx: TerminationContext) -> TerminationResult: ...
 
-    def __or__(self, other: "TerminationCondition") -> "CompositeTermination":
+    def __or__(self, other: TerminationCondition) -> CompositeTermination:
         return CompositeTermination([self, other], mode="any")
 
-    def __and__(self, other: "TerminationCondition") -> "CompositeTermination":
+    def __and__(self, other: TerminationCondition) -> CompositeTermination:
         return CompositeTermination([self, other], mode="all")
 
 
@@ -59,11 +62,7 @@ class CompositeTermination(TerminationCondition):
               ``"all"`` for AND (all conditions must trigger).
     """
 
-    def __init__(
-        self,
-        conditions: list[TerminationCondition],
-        mode: str = "any",
-    ) -> None:
+    def __init__(self, conditions: list[TerminationCondition], mode: str = "any") -> None:
         if mode not in ("any", "all"):
             raise ValueError(f"mode must be 'any' or 'all', got {mode!r}")
         self._conditions = list(conditions)

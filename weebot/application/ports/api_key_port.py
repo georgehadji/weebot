@@ -3,11 +3,11 @@
 Decouples credential storage (SQLite, files, cloud) from the auth middleware
 so multi-principal identity can be swapped without touching HTTP logic.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, UTC
 
 
 class ApiKeyRecord:
@@ -54,8 +54,8 @@ class ApiKeyRecord:
         if self.expires_at is not None:
             expires = self.expires_at
             if expires.tzinfo is not None:
-                from datetime import timezone
-                now = datetime.now(timezone.utc)
+
+                now = datetime.now(UTC)
             if now > expires:
                 return False
         return True
@@ -65,10 +65,16 @@ class ApiKeyPort(ABC):
     """Abstract interface for API key lifecycle management."""
 
     @abstractmethod
-    async def save(self, key_id: str, principal_id: str,
-                   lookup_hash: str, key_hash: str, salt: str,
-                   scopes: list[str] | None = None,
-                   expires_at: datetime | None = None) -> None:
+    async def save(
+        self,
+        key_id: str,
+        principal_id: str,
+        lookup_hash: str,
+        key_hash: str,
+        salt: str,
+        scopes: list[str] | None = None,
+        expires_at: datetime | None = None,
+    ) -> None:
         """Store a new API key record.
 
         Args:
@@ -83,7 +89,7 @@ class ApiKeyPort(ABC):
         ...
 
     @abstractmethod
-    async def load_by_lookup_hash(self, lookup_hash: str) -> Optional[ApiKeyRecord]:
+    async def load_by_lookup_hash(self, lookup_hash: str) -> ApiKeyRecord | None:
         """Look up an API key record by its SHA-256 lookup hash.
 
         Returns None if no matching key exists.
@@ -91,7 +97,7 @@ class ApiKeyPort(ABC):
         ...
 
     @abstractmethod
-    async def load(self, key_id: str) -> Optional[ApiKeyRecord]:
+    async def load(self, key_id: str) -> ApiKeyRecord | None:
         """Load a key record by its ID."""
         ...
 

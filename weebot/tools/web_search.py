@@ -5,6 +5,7 @@ Supports optional cross-encoder reranking via ``RerankPort``.  When a reranker
 is injected, search results from all engines are deduplicated and reranked
 against the original query before being returned.
 """
+
 from __future__ import annotations
 import logging
 import os
@@ -89,42 +90,30 @@ class WebSearchTool(BaseTool):
             errors.append(f"Bing: {e}")
 
         if not all_results:
-            return ToolResult(
-                output="",
-                error=f"All search engines failed: {'; '.join(errors)}",
-            )
+            return ToolResult(output="", error=f"All search engines failed: {'; '.join(errors)}")
 
         # ── Rerank against the query (or keep engine order) ─────
         if self._rerank is not None and len(all_results) > num_results:
             try:
                 from weebot.config.model_refs import RERANK_MODEL_FAST
+
                 documents = [
-                    f"{r.get('title', '')}: {r.get('snippet', '')[:300]}"
-                    for r in all_results
+                    f"{r.get('title', '')}: {r.get('snippet', '')[:300]}" for r in all_results
                 ]
                 reranked = await self._rerank.rerank(
-                    query=query,
-                    documents=documents,
-                    model=RERANK_MODEL_FAST,
-                    top_n=num_results,
+                    query=query, documents=documents, model=RERANK_MODEL_FAST, top_n=num_results
                 )
-                results = [
-                    all_results[rr.index]
-                    for rr in reranked
-                    if rr.index < len(all_results)
-                ][:num_results]
-                logger.debug(
-                    "Search reranked: %d results → top %d", len(all_results), len(results)
-                )
+                results = [all_results[rr.index] for rr in reranked if rr.index < len(all_results)][
+                    :num_results
+                ]
+                logger.debug("Search reranked: %d results → top %d", len(all_results), len(results))
                 return ToolResult(output=self._format(results))
             except Exception as exc:
                 logger.warning("Search rerank failed, using engine order: %s", exc)
 
         return ToolResult(output=self._format(all_results[:num_results]))
 
-    async def _search_perplexity(
-        self, query: str, num_results: int
-    ) -> list[dict[str, str]]:
+    async def _search_perplexity(self, query: str, num_results: int) -> list[dict[str, str]]:
         """Search via Perplexity Sonar on OpenRouter.
 
         Calls the OpenRouter chat completions API with ``perplexity/sonar``,
@@ -137,23 +126,18 @@ class WebSearchTool(BaseTool):
             raise ValueError("OPENROUTER_API_KEY not set — cannot use Perplexity Sonar")
 
         url = f"{OPENROUTER_API_BASE}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         payload = {
             "model": MODEL_SEARCH_PERPLEXITY_SONAR,
             "messages": [{"role": "user", "content": query}],
             "max_tokens": 512,
         }
 
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.post(
-                url,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                data = await resp.json()
+        async with (
+            aiohttp.ClientSession(headers=headers) as session,
+            session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp,
+        ):
+            data = await resp.json()
 
         if resp.status != 200:
             raise ValueError(
@@ -166,11 +150,13 @@ class WebSearchTool(BaseTool):
         search_results = data.get("search_results")
         if isinstance(search_results, list):
             for sr in search_results[:num_results]:
-                results.append({
-                    "title": sr.get("title", ""),
-                    "url": sr.get("url", ""),
-                    "snippet": sr.get("snippet", ""),
-                })
+                results.append(
+                    {
+                        "title": sr.get("title", ""),
+                        "url": sr.get("url", ""),
+                        "snippet": sr.get("snippet", ""),
+                    }
+                )
 
         # ── Fallback: parse citations array ──────────────────────
         if not results:
@@ -186,17 +172,16 @@ class WebSearchTool(BaseTool):
                     snippet = ""
                     if content:
                         # Look for bracketed citation references like [1], [2]
-                        snippet_match = re.search(
-                            rf"\[{i + 1}\][^\n]{{0,200}}",
-                            content,
-                        )
+                        snippet_match = re.search(rf"\[{i + 1}\][^\n]{{0,200}}", content)
                         if snippet_match:
                             snippet = snippet_match.group(0).strip()
-                    results.append({
-                        "title": url.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").title(),
-                        "url": url,
-                        "snippet": snippet,
-                    })
+                    results.append(
+                        {
+                            "title": url.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").title(),
+                            "url": url,
+                            "snippet": snippet,
+                        }
+                    )
 
         if not results:
             raise ValueError("No search results or citations returned from Perplexity Sonar")
@@ -204,62 +189,56 @@ class WebSearchTool(BaseTool):
         logger.debug("Perplexity Sonar: %d results for query %r", len(results), query[:80])
         return results[:num_results]
 
-    async def _search_duckduckgo(
-        self, query: str, num_results: int
-    ) -> list[dict[str, str]]:
+    async def _search_duckduckgo(self, query: str, num_results: int) -> list[dict[str, str]]:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.post(
-                _DDG_URL,
-                data={"q": query},
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                html = await resp.text()
+        async with (
+            aiohttp.ClientSession(headers=headers) as session,
+            session.post(
+                _DDG_URL, data={"q": query}, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp,
+        ):
+            html = await resp.text()
 
         results: list[dict[str, str]] = []
-        link_pattern = re.compile(
-            r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>'
-        )
-        snippet_pattern = re.compile(
-            r'<a[^>]+class="result__snippet"[^>]*>([^<]+)</a>'
-        )
+        link_pattern = re.compile(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)</a>')
+        snippet_pattern = re.compile(r'<a[^>]+class="result__snippet"[^>]*>([^<]+)</a>')
         links = link_pattern.findall(html)
         snippets = [m.strip() for m in snippet_pattern.findall(html)]
 
         for i, (url, title) in enumerate(links[:num_results]):
-            results.append({
-                "title": title.strip(),
-                "url": url,
-                "snippet": snippets[i] if i < len(snippets) else "",
-            })
+            results.append(
+                {
+                    "title": title.strip(),
+                    "url": url,
+                    "snippet": snippets[i] if i < len(snippets) else "",
+                }
+            )
 
         if not results:
             raise ValueError("No results parsed from DuckDuckGo HTML")
         return results
 
-    async def _search_bing(
-        self, query: str, num_results: int
-    ) -> list[dict[str, str]]:
+    async def _search_bing(self, query: str, num_results: int) -> list[dict[str, str]]:
         key = os.getenv("BING_API_KEY")
         if not key:
             raise ValueError("BING_API_KEY not set")
         headers = {"Ocp-Apim-Subscription-Key": key}
         params = {"q": query, "count": num_results, "mkt": "en-US"}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(
-                _BING_URL,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                data = await resp.json()
+        async with (
+            aiohttp.ClientSession(headers=headers) as session,
+            session.get(_BING_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp,
+        ):
+            data = await resp.json()
 
         results = []
         for item in data.get("webPages", {}).get("value", [])[:num_results]:
-            results.append({
-                "title": item.get("name", ""),
-                "url": item.get("url", ""),
-                "snippet": item.get("snippet", ""),
-            })
+            results.append(
+                {
+                    "title": item.get("name", ""),
+                    "url": item.get("url", ""),
+                    "snippet": item.get("snippet", ""),
+                }
+            )
         if not results:
             raise ValueError("No results from Bing")
         return results

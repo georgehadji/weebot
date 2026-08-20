@@ -1,4 +1,5 @@
 """Flow CLI commands — PlanActFlow orchestration (new architecture)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,13 +33,13 @@ def _run_async(coro_factory) -> None:
     and failure paths) ensures the process always exits cleanly, even when a
     query raises (e.g. a corrupt database).
     """
+
     async def _wrapper() -> None:
         try:
             await coro_factory()
         finally:
-            from weebot.infrastructure.persistence.connection_pool import (
-                close_all_pools,
-            )
+            from weebot.infrastructure.persistence.connection_pool import close_all_pools
+
             await close_all_pools()
 
     asyncio.run(_wrapper())
@@ -71,14 +72,18 @@ def flow() -> None:
 @click.option("--model", default=None, help="Override default LLM model")
 def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
     """Run a one-shot PlanActFlow with the given prompt."""
+
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(model or MODEL_BUDGET)
         state_repo = _get_state_repo()
         mediator = _get_mediator()
         run_session_id = session_id or str(uuid.uuid4())
-        runner = AgentRunner(llm=llm, state_repo=state_repo, mediator=mediator, model=model, use_rich=False)
+        runner = AgentRunner(
+            llm=llm, state_repo=state_repo, mediator=mediator, model=model, use_rich=False
+        )
         subscriber = CLIEventSubscriber(use_rich=True)
 
         async for event in runner.run_prompt(prompt, session_id=run_session_id):
@@ -97,8 +102,10 @@ def flow_run(prompt: str, session_id: str | None, model: str | None) -> None:
 @click.argument("answer")
 def flow_resume(session_id: str, answer: str) -> None:
     """Resume a waiting session with a user answer."""
+
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
@@ -116,8 +123,10 @@ def flow_resume(session_id: str, answer: str) -> None:
 @click.option("--user-id", default=None, help="Filter by user ID")
 def flow_list(user_id: str | None) -> None:
     """List active/waiting sessions."""
+
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
@@ -139,8 +148,10 @@ def flow_list(user_id: str | None) -> None:
 @click.argument("session_id")
 def flow_cancel(session_id: str) -> None:
     """Cancel a running session."""
+
     async def _run() -> None:
         from weebot.config.model_refs import MODEL_BUDGET
+
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_BUDGET)
         state_repo = _get_state_repo()
@@ -162,12 +173,14 @@ def flow_retry(session_id: str) -> None:
     Re-enters the session at the last saved state with a full retry budget.
     Only works for sessions in FAILED status.
     """
+
     async def _run() -> None:
         global _container
         if _container is None:
             _container = Container()
             _container.configure_defaults()
         from weebot.application.services.task_runner import TaskRunner
+
         runner = _container.get(TaskRunner)
         ok = await runner.rerun_failed_session(session_id)
         if ok:
@@ -185,6 +198,7 @@ def flow_retry(session_id: str) -> None:
 @click.argument("session_id")
 def flow_undo(session_id: str) -> None:
     """Undo the last plan mutation for a session."""
+
     async def _run() -> None:
         model_service = ModelSelectionService()
         llm = model_service.create_llm_adapter(MODEL_COMMAND_DEFAULT)
@@ -205,9 +219,14 @@ def flow_undo(session_id: str) -> None:
 @click.option("--steps", default=5, help="Steps per epoch")
 @click.option("--batch", default=40, help="Batch size")
 @click.option("--output", default="best_skill.md", help="Output skill file path")
-@click.option("--planning/--no-planning", default=False, help="Enable SIA-inspired pre-reflect planning")
-def flow_skillopt(skill_name: str, epochs: int, steps: int, batch: int, output: str, planning: bool) -> None:
+@click.option(
+    "--planning/--no-planning", default=False, help="Enable SIA-inspired pre-reflect planning"
+)
+def flow_skillopt(
+    skill_name: str, epochs: int, steps: int, batch: int, output: str, planning: bool
+) -> None:
     """Run SkillOptFlow — optimize a skill through rollout → reflect → merge → validate."""
+
     async def _run() -> None:
         container = Container()
         container.configure_defaults()
@@ -247,8 +266,7 @@ def flow_skillopt(skill_name: str, epochs: int, steps: int, batch: int, output: 
             elif event_type == "skill_edit_rejected":
                 e = event
                 console.print(
-                    f"    [red]✗ rejected[/red]  "
-                    f"{e.skill_name}  drop={e.score_drop:.3f}"
+                    f"    [red]✗ rejected[/red]  " f"{e.skill_name}  drop={e.score_drop:.3f}"
                 )
             elif event_type == "done":
                 console.print(f"\n[bold green]SkillOpt complete → {output}[/bold green]")
@@ -260,8 +278,15 @@ def flow_skillopt(skill_name: str, epochs: int, steps: int, batch: int, output: 
 
 @flow.command("export")
 @click.argument("session_id")
-@click.option("--output", default=None, help="Output .jsonl file path (default: <session_id>.jsonl)")
-@click.option("--compress", default=None, type=int, help="Compress middle turns to fit this token budget before export")
+@click.option(
+    "--output", default=None, help="Output .jsonl file path (default: <session_id>.jsonl)"
+)
+@click.option(
+    "--compress",
+    default=None,
+    type=int,
+    help="Compress middle turns to fit this token budget before export",
+)
 def flow_export(session_id: str, output: str | None, compress: int | None) -> None:
     """Export session events to JSONL for analysis or fine-tuning."""
     from weebot.application.services.trajectory_exporter import TrajectoryExporter
@@ -282,9 +307,11 @@ def flow_export(session_id: str, output: str | None, compress: int | None) -> No
 @click.option("--limit", default=10, type=int, help="Max results")
 def cmd_flow_search(query: str, limit: int) -> None:
     """Full-text search with goal→match→resolution bookends."""
+
     async def _run() -> None:
         state_repo = _get_state_repo()
         from weebot.application.services.session_search_service import SessionSearchService
+
         svc = SessionSearchService(state_repo=state_repo)
         results = await svc.search(query, limit=limit)
 
@@ -316,6 +343,7 @@ def cmd_flow_search(query: str, limit: int) -> None:
 @click.argument("session_id")
 def cmd_flow_decisions(session_id: str) -> None:
     """List product decisions logged for a session."""
+
     async def _run() -> None:
         from rich.panel import Panel
 
@@ -326,30 +354,37 @@ def cmd_flow_decisions(session_id: str) -> None:
             console.print(f"[red]✗[/red] Session not found: {session_id}")
             return
 
-        decisions = [
-            e for e in session.events
-            if getattr(e, "type", "") == "product_decision"
-        ]
+        decisions = [e for e in session.events if getattr(e, "type", "") == "product_decision"]
 
         if not decisions:
             console.print("[dim]No product decisions logged for this session.[/dim]")
             return
 
         for d in decisions:
-            console.print(Panel.fit(
-                f"[bold]Decision:[/bold] {d.title}\n"
-                f"[bold]Date:[/bold] {d.timestamp.isoformat()[:10] if hasattr(d, 'timestamp') else 'N/A'}\n"
-                f"[bold]Problem:[/bold] {d.problem[:200]}\n"
-                f"[bold]Why now:[/bold] {d.why_now[:200]}\n"
-                f"[bold]Choice:[/bold] {d.choice[:200]}\n"
-                f"[bold]Reversibility:[/bold] {'🔴 One-way door' if d.reversibility == 'one-way' else '🟢 Two-way door'}\n"
-                f"[bold]Success metric:[/bold] {d.success_metric[:200]}\n"
-                + (f"[bold]Revisit trigger:[/bold] {d.revisit_trigger[:200]}\n" if d.revisit_trigger else "")
-                + (f"[bold]Options considered:[/bold] {', '.join(d.options_considered[:5])}\n" if d.options_considered else "")
-                + f"[bold]Session:[/bold] {d.session_id[:20]}",
-                title="📋 Product Decision",
-                border_style="blue",
-            ))
+            console.print(
+                Panel.fit(
+                    f"[bold]Decision:[/bold] {d.title}\n"
+                    f"[bold]Date:[/bold] {d.timestamp.isoformat()[:10] if hasattr(d, 'timestamp') else 'N/A'}\n"
+                    f"[bold]Problem:[/bold] {d.problem[:200]}\n"
+                    f"[bold]Why now:[/bold] {d.why_now[:200]}\n"
+                    f"[bold]Choice:[/bold] {d.choice[:200]}\n"
+                    f"[bold]Reversibility:[/bold] {'🔴 One-way door' if d.reversibility == 'one-way' else '🟢 Two-way door'}\n"
+                    f"[bold]Success metric:[/bold] {d.success_metric[:200]}\n"
+                    + (
+                        f"[bold]Revisit trigger:[/bold] {d.revisit_trigger[:200]}\n"
+                        if d.revisit_trigger
+                        else ""
+                    )
+                    + (
+                        f"[bold]Options considered:[/bold] {', '.join(d.options_considered[:5])}\n"
+                        if d.options_considered
+                        else ""
+                    )
+                    + f"[bold]Session:[/bold] {d.session_id[:20]}",
+                    title="📋 Product Decision",
+                    border_style="blue",
+                )
+            )
 
         console.print(f"\n[dim]{len(decisions)} decision(s) found[/dim]")
 

@@ -4,10 +4,10 @@ Extends ROLE_MODEL_CONFIG with optional tools_override, excluded_tools,
 extra_middleware, and rubric_prompt. Falls back to the simple model list
 for backward compatibility.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -21,8 +21,9 @@ class RoleProfile:
         extra_middleware: Additional middleware class names for this role.
         rubric_prompt: Optional response-grading rubric for this role's model.
     """
+
     models: list[str] = field(default_factory=list)
-    tools_override: Optional[list[str]] = None
+    tools_override: list[str] | None = None
     excluded_tools: list[str] = field(default_factory=list)
     extra_middleware: list[str] = field(default_factory=list)
-    rubric_prompt: Optional[str] = None
+    rubric_prompt: str | None = None

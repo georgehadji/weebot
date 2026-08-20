@@ -6,11 +6,11 @@ gets a purpose-tuned model instead of the one-size-fits-all cascade.
 
 Never uses qwen3-coder for non-coding tasks.
 """
+
 from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Optional
 
 
 class TaskCategory(Enum):
@@ -43,63 +43,113 @@ CATEGORY_MODEL: dict[TaskCategory, str] = {
 
 _PATTERNS: dict[TaskCategory, list[re.Pattern]] = {
     TaskCategory.CODING: [
-        re.compile(r"\b(code|coding|refactor|implement|debug|fix|patch|rewrite|overhaul|convert)\b", re.I),
-        re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)?\s*(html|css|js|javascript|python|typescript|react|vue|svelte|node|django|flask|fastapi|sql|database|schema|migration|docker|kubernetes|terraform|app|api|endpoint|route|component|page|site|script|function|class|module)\b", re.I),
+        re.compile(
+            r"\b(code|coding|refactor|implement|debug|fix|patch|rewrite|overhaul|convert)\b", re.I
+        ),
+        re.compile(
+            r"\b(write|build|create|generate|develop|design)\s+(a|the|new)?\s*(html|css|js|javascript|python|typescript|react|vue|svelte|node|django|flask|fastapi|sql|database|schema|migration|docker|kubernetes|terraform|app|api|endpoint|route|component|page|site|script|function|class|module)\b",
+            re.I,
+        ),
         re.compile(r"\b(write|build|create|generate|develop|design)\s+(a|the|new)\s", re.I),
-        re.compile(r"\b(create|build|implement|develop|write)\s+.{0,25}(endpoint|route|api|function|class|module|component|service|script)\b", re.I),
+        re.compile(
+            r"\b(create|build|implement|develop|write)\s+.{0,25}(endpoint|route|api|function|class|module|component|service|script)\b",
+            re.I,
+        ),
     ],
     TaskCategory.FILE_OPS: [
         # Merged from duplicate definitions — includes all unique patterns
-        re.compile(r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b", re.I),
+        re.compile(
+            r"\b(view|list|read|open|cat|ls|dir|show|display)\s+(the\s+)?.*(file|directory|folder|path|dir|workspace|tasks|content)\b",
+            re.I,
+        ),
         re.compile(r"\b(create|write|make)\s+(a|the|new)?\s*(file|directory|folder|dir)\b", re.I),
         re.compile(r"\b(create|make)\s+.*(directory|folder|dir)\b", re.I),
         re.compile(r"\b(list|count|scan|enumerate)\s+(all|every)\s+(python\s+)?files?\b", re.I),
         re.compile(r"\b(str_replace|insert|edit|rename|copy|move|delete|remove)\b", re.I),
-        re.compile(r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b", re.I),
+        re.compile(
+            r"\b(check|see|verify|confirm)\s+(if|whether|that)\s+(.*file|.*exists|.*created|.*written|.*saved)\b",
+            re.I,
+        ),
         re.compile(r"\b(get-childitem|get-content|ls\s+-la|dir\s+/|find\s+\.)\b", re.I),
     ],
     TaskCategory.RESEARCH: [
-        re.compile(r"\b(research|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I),
-        re.compile(r"\b(search|find|look\s+(up|into))\s+(for|the|a|an|relevant|information|papers?|articles?)\b", re.I),
+        re.compile(
+            r"\b(research|investigate|explore|discover|gather|collect|scrape|crawl|browse)\b", re.I
+        ),
+        re.compile(
+            r"\b(search|find|look\s+(up|into))\s+(for|the|a|an|relevant|information|papers?|articles?)\b",
+            re.I,
+        ),
         re.compile(r"\b(web[\s_]search|web_search|curl|fetch|http)\b", re.I),
         re.compile(r"\b(compare|analyze|synthesize|benchmark|competitor|market|trend)\b", re.I),
     ],
     TaskCategory.BROWSER: [
         re.compile(r"\b(browser_navigator|advanced_browser|web_scraper|browser_inspector)\b", re.I),
         re.compile(r"\b(navigate|goto|go\s+to|open|launch)\s+(to\s+)?(https?://|www\.)\b", re.I),
-        re.compile(r"\b(click|tap|press)\s+(on|the|a)\s+(button|link|element|selector|box|input|field)\b", re.I),
-        re.compile(r"\b(fill|type|enter)\s+(in|the|a)\s+(form|field|input|box|textbox|textarea)\b", re.I),
+        re.compile(
+            r"\b(click|tap|press)\s+(on|the|a)\s+(button|link|element|selector|box|input|field)\b",
+            re.I,
+        ),
+        re.compile(
+            r"\b(fill|type|enter)\s+(in|the|a)\s+(form|field|input|box|textbox|textarea)\b", re.I
+        ),
         re.compile(r"\b(screenshot|capture|save\s+screenshot|take\s+(a\s+)?screenshot)\b", re.I),
         re.compile(r"\b(login|log\s*in|sign\s*in|authenticate|post|publish|compose)\b", re.I),
         re.compile(r"\b(scrape|extract|parse|crawl)\s+", re.I),
-        re.compile(r"\b(linkedin|facebook|twitter|github)\s+(post|article|page|profile|feed)\b", re.I),
+        re.compile(
+            r"\b(linkedin|facebook|twitter|github)\s+(post|article|page|profile|feed)\b", re.I
+        ),
     ],
     TaskCategory.REVIEW: [
         # Merged from duplicate definitions — includes all unique patterns
         re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\b", re.I),
-        re.compile(r"\b(review|audit|critique|inspect|evaluate|assess)\s+(the|this|code|for|security|quality)\b", re.I),
-        re.compile(r"\b(code\s*review|security\s*(audit|review)|quality\s*(check|review)|best\s*practice|convention|standard)\b", re.I),
-        re.compile(r"\b(find\s+(bugs|issues|vulnerabilities|problems)|identify\s+(issues|problems|bugs))\b", re.I),
+        re.compile(
+            r"\b(review|audit|critique|inspect|evaluate|assess)\s+(the|this|code|for|security|quality)\b",
+            re.I,
+        ),
+        re.compile(
+            r"\b(code\s*review|security\s*(audit|review)|quality\s*(check|review)|best\s*practice|convention|standard)\b",
+            re.I,
+        ),
+        re.compile(
+            r"\b(find\s+(bugs|issues|vulnerabilities|problems)|identify\s+(issues|problems|bugs))\b",
+            re.I,
+        ),
         re.compile(r"\b(unit\s*test|integration\s*test|e2e\s*test|test\s+coverage)\b", re.I),
     ],
     TaskCategory.PLANNING: [
         # Deduplicated — both definitions were identical
-        re.compile(r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b", re.I),
-        re.compile(r"\b(create\s+(plan|roadmap|strategy)|task\s*(breakdown|decomposition))\b", re.I),
+        re.compile(
+            r"\b(plan|design|architecture|blueprint|outline|structure|define|spec|specification|brief)\b",
+            re.I,
+        ),
+        re.compile(
+            r"\b(create\s+(plan|roadmap|strategy)|task\s*(breakdown|decomposition))\b", re.I
+        ),
     ],
     TaskCategory.SECURITY: [
         # Merged from duplicate definitions — includes all unique patterns
-        re.compile(r"\b(security|vulnerability|exploit|injection|xss|csrf|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential|sanitize|escape)\b", re.I),
-        re.compile(r"\b(sandbox|isolate|quarantine|block|deny|allow|policy|guard|validate|sanitize|escape)\b", re.I),
+        re.compile(
+            r"\b(security|vulnerability|exploit|injection|xss|csrf|auth|authentication|authorization|permission|encrypt|decrypt|hash|token|api\s*key|secret|password|credential|sanitize|escape)\b",
+            re.I,
+        ),
+        re.compile(
+            r"\b(sandbox|isolate|quarantine|block|deny|allow|policy|guard|validate|sanitize|escape)\b",
+            re.I,
+        ),
     ],
     TaskCategory.SUMMARIZATION: [
         re.compile(r"\b(summarize|summary|recap|wrap\s*up|conclusion|report)\b", re.I),
-        re.compile(r"\b(provide\s+a?\s*(summary|recap|overview|report)|what\s+(was|happened|did|we))\b", re.I),
+        re.compile(
+            r"\b(provide\s+a?\s*(summary|recap|overview|report)|what\s+(was|happened|did|we))\b",
+            re.I,
+        ),
     ],
 }
 
 
 # ── Classify ────────────────────────────────────────────────────────
+
 
 def classify_step(description: str) -> TaskCategory:
     """Classify *description* into the best-matching TaskCategory.

@@ -12,37 +12,25 @@ ArchiveSessionHandler and CancelSessionHandler were removed in the
 registered on the mediator but had no dispatch site anywhere in the
 codebase, so these tests were their only consumer.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from weebot.application.cqrs.commands import (
-    CreatePlanCommand,
-    UpdatePlanCommand,
-)
-from weebot.application.cqrs.commands.harness_edit_commands import (
-    ApplyHarnessEditsCommand,
-)
-from weebot.application.cqrs.handlers.create_plan_handler import (
-    CreatePlanHandler,
-)
-from weebot.application.cqrs.handlers.harness_edit_handler import (
-    ApplyHarnessEditsHandler,
-)
-from weebot.application.cqrs.handlers.update_plan_handler import (
-    UpdatePlanHandler,
-)
-from weebot.infrastructure.persistence.in_memory_state_repo import (
-    InMemoryStateRepository,
-)
+from weebot.application.cqrs.commands import CreatePlanCommand, UpdatePlanCommand
+from weebot.application.cqrs.commands.harness_edit_commands import ApplyHarnessEditsCommand
+from weebot.application.cqrs.handlers.create_plan_handler import CreatePlanHandler
+from weebot.application.cqrs.handlers.harness_edit_handler import ApplyHarnessEditsHandler
+from weebot.application.cqrs.handlers.update_plan_handler import UpdatePlanHandler
+from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 from weebot.domain.models.session import Session, SessionStatus
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Fixtures
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def state_repo() -> InMemoryStateRepository:
@@ -89,20 +77,15 @@ async def saved_session(state_repo: InMemoryStateRepository) -> Session:
 # CreatePlanHandler
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class TestCreatePlanHandler:
 
     @pytest.mark.asyncio
     async def test_session_not_found_returns_error(
         self, state_repo: InMemoryStateRepository, mock_llm: AsyncMock
     ):
-        handler = CreatePlanHandler(
-            state_repo=state_repo,
-            llm=mock_llm,
-        )
-        cmd = CreatePlanCommand(
-            session_id="nonexistent",
-            prompt="do something",
-        )
+        handler = CreatePlanHandler(state_repo=state_repo, llm=mock_llm)
+        cmd = CreatePlanCommand(session_id="nonexistent", prompt="do something")
         result = await handler.handle(cmd)
         assert not result.success
         assert result.error_code == "SESSION_NOT_FOUND"
@@ -113,14 +96,9 @@ class TestCreatePlanHandler:
     ):
         """Meta notes are passed to the planner — verified by checking
         the handler does not reject them."""
-        handler = CreatePlanHandler(
-            state_repo=state_repo,
-            llm=mock_llm,
-        )
+        handler = CreatePlanHandler(state_repo=state_repo, llm=mock_llm)
         cmd = CreatePlanCommand(
-            session_id="test-session-1",
-            prompt="do something",
-            meta_notes=["avoid x", "prefer y"],
+            session_id="test-session-1", prompt="do something", meta_notes=["avoid x", "prefer y"]
         )
         # We already saved a session above via fixture — but use a fresh one here
         # to avoid fixture complexity.  Session-not-found is the expected baseline.
@@ -135,20 +113,16 @@ class TestCreatePlanHandler:
 # UpdatePlanHandler
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class TestUpdatePlanHandler:
 
     @pytest.mark.asyncio
     async def test_session_not_found_returns_error(
         self, state_repo: InMemoryStateRepository, mock_llm: AsyncMock
     ):
-        handler = UpdatePlanHandler(
-            state_repo=state_repo,
-            llm=mock_llm,
-        )
+        handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
         cmd = UpdatePlanCommand(
-            session_id="nonexistent",
-            updates={"reason": "retry"},
-            reason="retry",
+            session_id="nonexistent", updates={"reason": "retry"}, reason="retry"
         )
         result = await handler.handle(cmd)
         assert not result.success
@@ -159,12 +133,11 @@ class TestUpdatePlanHandler:
 # ApplyHarnessEditsHandler
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 class TestApplyHarnessEditsHandler:
 
     @pytest.mark.asyncio
-    async def test_full_pipeline_applies_edits(
-        self, mock_harness_target: MagicMock
-    ):
+    async def test_full_pipeline_applies_edits(self, mock_harness_target: MagicMock):
         """End-to-end: target returns a candidate → handler forwards it."""
         mock_candidate = MagicMock()
         mock_candidate.version = 2
@@ -185,9 +158,7 @@ class TestApplyHarnessEditsHandler:
         )
 
     @pytest.mark.asyncio
-    async def test_auto_loads_when_not_loaded(
-        self, mock_harness_target: MagicMock
-    ):
+    async def test_auto_loads_when_not_loaded(self, mock_harness_target: MagicMock):
         """When target.is_loaded is False, handler calls load() first."""
         mock_candidate = MagicMock()
         mock_candidate.version = 1

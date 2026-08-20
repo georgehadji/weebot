@@ -9,12 +9,13 @@ Useful for measuring whether a skill actually improves agent output.
 
 Inspired by revfactory/harness Phase 6-3 with-skill vs without-skill testing.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from weebot.domain.models.session import Session
 from weebot.application.harness.scorer import TaskScorer
@@ -25,12 +26,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComparisonResult:
     """Result of a single with-vs-without comparison."""
-    run_with: str = ""        # Agent output WITH the skill
-    run_without: str = ""     # Agent output WITHOUT the skill
+
+    run_with: str = ""  # Agent output WITH the skill
+    run_without: str = ""  # Agent output WITHOUT the skill
     score_with: float = 0.0
     score_without: float = 0.0
-    delta: float = 0.0        # score_with - score_without
-    passed: bool = False      # True if delta > 0 or both >= same
+    delta: float = 0.0  # score_with - score_without
+    passed: bool = False  # True if delta > 0 or both >= same
 
     @property
     def improvement(self) -> str:
@@ -49,6 +51,7 @@ class ComparisonResult:
 @dataclass
 class ComparisonReport:
     """Full report across all test prompts."""
+
     skill_name: str
     results: list[ComparisonResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -89,18 +92,12 @@ class ComparisonRunner:
             skills into context; when empty, runs without skill context.
     """
 
-    def __init__(
-        self,
-        flow_factory: Callable[..., Any],
-    ) -> None:
+    def __init__(self, flow_factory: Callable[..., Any]) -> None:
         self._flow_factory = flow_factory
         self._scorer = TaskScorer()
 
     async def evaluate(
-        self,
-        skill_name: str,
-        test_prompts: list[str],
-        expected: Optional[list[str]] = None,
+        self, skill_name: str, test_prompts: list[str], expected: list[str] | None = None
     ) -> ComparisonReport:
         """Run A/B comparison across test prompts.
 
@@ -117,9 +114,7 @@ class ComparisonRunner:
         for i, prompt in enumerate(test_prompts):
             try:
                 result = await self._compare_single(
-                    skill_name=skill_name,
-                    prompt=prompt,
-                    expected=expected[i] if expected else None,
+                    skill_name=skill_name, prompt=prompt, expected=expected[i] if expected else None
                 )
                 report.results.append(result)
             except Exception as exc:
@@ -129,10 +124,7 @@ class ComparisonRunner:
         return report
 
     async def _compare_single(
-        self,
-        skill_name: str,
-        prompt: str,
-        expected: Optional[str] = None,
+        self, skill_name: str, prompt: str, expected: str | None = None
     ) -> ComparisonResult:
         """Run one prompt with and without the skill, then compare."""
         # Run WITH skill
@@ -155,29 +147,21 @@ class ComparisonRunner:
     async def _run_with_skill(self, skill_name: str, prompt: str) -> str:
         """Run the prompt with the skill loaded."""
         import uuid
+
         session = Session(
-            id=f"ab-with-{uuid.uuid4().hex[:8]}",
-            user_id="ab-eval",
-            agent_id="ab-agent",
+            id=f"ab-with-{uuid.uuid4().hex[:8]}", user_id="ab-eval", agent_id="ab-agent"
         )
-        flow = self._flow_factory(
-            session=session,
-            skill_names=[skill_name],
-        )
+        flow = self._flow_factory(session=session, skill_names=[skill_name])
         return await self._collect_output(flow, session, prompt)
 
     async def _run_without_skill(self, prompt: str) -> str:
         """Run the prompt without any skill loaded."""
         import uuid
+
         session = Session(
-            id=f"ab-without-{uuid.uuid4().hex[:8]}",
-            user_id="ab-eval",
-            agent_id="ab-agent",
+            id=f"ab-without-{uuid.uuid4().hex[:8]}", user_id="ab-eval", agent_id="ab-agent"
         )
-        flow = self._flow_factory(
-            session=session,
-            skill_names=[],
-        )
+        flow = self._flow_factory(session=session, skill_names=[])
         return await self._collect_output(flow, session, prompt)
 
     async def _collect_output(self, flow: Any, session: Session, prompt: str) -> str:
@@ -193,7 +177,7 @@ class ComparisonRunner:
         completed_session = getattr(flow, "_session", session)
         return TaskScorer._extract_answer(completed_session) or ""
 
-    async def _score_output(self, output: str, expected: Optional[str]) -> float:
+    async def _score_output(self, output: str, expected: str | None) -> float:
         """Score *output* against *expected* using TaskScorer."""
         if expected is None:
             # Without expected answer, score by output length heuristic

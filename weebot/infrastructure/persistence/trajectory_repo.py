@@ -4,25 +4,18 @@ Also stores FailureSignature rows for the Self-Harness Weakness Mining
 stage.  Uses the same SQLite connection pool as SQLiteStateRepository
 to avoid a second database connection.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from typing import Optional
 
-from weebot.application.ports.event_store_port import EventStorePort
-from weebot.domain.models.failure_signature import (
-    EvidenceBundle,
-    FailureCluster,
-    FailureSignature,
-)
-from weebot.domain.models.trajectory import TrajectorySummary, TrajectoryHealth
+from weebot.domain.models.failure_signature import FailureCluster, FailureSignature
+from weebot.domain.models.trajectory import TrajectorySummary
 from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
-from weebot.infrastructure.persistence.connection_pool import (
-    get_or_create_pool,
-)
+from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +31,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
     async def _get_pool(self):
         if self._pool is None:
             self._pool = await get_or_create_pool(
-                self._db_path,
-                max_read_connections=5,
-                enable_wal=True,
+                self._db_path, max_read_connections=5, enable_wal=True
             )
             if not self._initialized:
                 await self._ensure_schema()
@@ -50,8 +41,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
     async def _ensure_schema(self):
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
+            await conn.execute("""
                 CREATE TABLE IF NOT EXISTS trajectories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_id TEXT NOT NULL,
@@ -71,20 +61,15 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     expected_answer TEXT,
                     created_at TEXT NOT NULL
                 )
-                """
-            )
-            await conn.execute(
-                """
+                """)
+            await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_trajectories_skill
                 ON trajectories(skill_name, skill_version)
-                """
-            )
-            await conn.execute(
-                """
+                """)
+            await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_trajectories_session
                 ON trajectories(session_id)
-                """
-            )
+                """)
             logger.debug("Trajectory table schema ensured")
 
         await self._ensure_failure_signatures_schema(pool)
@@ -92,8 +77,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
     async def _ensure_failure_signatures_schema(self, pool) -> None:
         """Create the failure_signatures table and indices."""
         async with pool.acquire_write() as conn:
-            await conn.execute(
-                """
+            await conn.execute("""
                 CREATE TABLE IF NOT EXISTS failure_signatures (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     session_id TEXT NOT NULL UNIQUE,
@@ -107,26 +91,19 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     model_id TEXT NOT NULL DEFAULT '',
                     extracted_at TEXT NOT NULL
                 )
-                """
-            )
-            await conn.execute(
-                """
+                """)
+            await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_fs_session
                 ON failure_signatures(session_id)
-                """
-            )
-            await conn.execute(
-                """
+                """)
+            await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_fs_cluster
                 ON failure_signatures(terminal_cause, agent_behavior, mechanism)
-                """
-            )
-            await conn.execute(
-                """
+                """)
+            await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_fs_lookback
                 ON failure_signatures(extracted_at)
-                """
-            )
+                """)
             logger.debug("Failure signatures table schema ensured")
 
     async def save(self, trajectory: TrajectorySummary) -> None:
@@ -162,15 +139,12 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     "trajectory_text": trajectory.trajectory_text,
                     "answer": trajectory.answer,
                     "expected_answer": trajectory.expected_answer,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                 },
             )
 
     async def get_by_skill(
-        self,
-        skill_name: str,
-        skill_version: int,
-        limit: int = 200,
+        self, skill_name: str, skill_version: int, limit: int = 200
     ) -> list[TrajectorySummary]:
         """Retrieve trajectories for a specific skill version."""
         pool = await self._get_pool()
@@ -185,9 +159,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
         )
         return [self._row_to_trajectory(r) for r in rows]
 
-    async def get_by_session(
-        self, session_id: str
-    ) -> list[TrajectorySummary]:
+    async def get_by_session(self, session_id: str) -> list[TrajectorySummary]:
         """Retrieve all trajectories for a session."""
         pool = await self._get_pool()
         rows = await pool.execute_read(
@@ -240,15 +212,14 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
 
         async with pool.acquire_write() as conn:
             placeholders = ",".join("?" for _ in delete_ids)
-            await conn.execute(
-                f"DELETE FROM trajectories WHERE id IN ({placeholders})",
-                delete_ids,
-            )
+            await conn.execute(f"DELETE FROM trajectories WHERE id IN ({placeholders})", delete_ids)
 
         logger.info(
             "Trajectory consolidation for '%s': %d trajectories collapsed "
             "to %d canonical entry/entries",
-            skill_name, len(trajectories), len(keep_ids),
+            skill_name,
+            len(trajectories),
+            len(keep_ids),
         )
         return len(delete_ids)
 
@@ -300,7 +271,9 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                     "terminal_cause": signature.terminal_cause,
                     "agent_behavior": signature.agent_behavior,
                     "mechanism": signature.mechanism,
-                    "trajectory_health": signature.trajectory_health.value if signature.trajectory_health else None,
+                    "trajectory_health": (
+                        signature.trajectory_health.value if signature.trajectory_health else None
+                    ),
                     "actionability_score": signature.actionability_score,
                     "harness_version": signature.harness_version,
                     "model_id": signature.model_id,
@@ -321,7 +294,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
         Returns clusters ordered by (count × mean_actionability) descending.
         """
         pool = await self._get_pool()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).isoformat()
 
         where_clauses = ["extracted_at >= :cutoff"]
         params: dict[str, object] = {"cutoff": cutoff}
@@ -376,23 +349,17 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
 
         return clusters
 
-    async def count_trajectories(
-        self, lookback_days: int = 7,
-    ) -> int:
+    async def count_trajectories(self, lookback_days: int = 7) -> int:
         """Count total trajectories within the lookback window."""
         pool = await self._get_pool()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).isoformat()
         rows = await pool.execute_read(
-            "SELECT COUNT(*) as cnt FROM trajectories WHERE created_at >= ?",
-            (cutoff,),
+            "SELECT COUNT(*) as cnt FROM trajectories WHERE created_at >= ?", (cutoff,)
         )
         return rows[0]["cnt"] if rows else 0
 
     async def get_sessions_without_signature(
-        self,
-        lookback_days: int = 7,
-        max_sessions: int = 200,
-        force_reprocess: bool = False,
+        self, lookback_days: int = 7, max_sessions: int = 200, force_reprocess: bool = False
     ) -> list[tuple[str, str | None, str | None, str | None]]:
         """Return (session_id, task_id, trajectory_text, failure_modes_json)
         for trajectories that lack a failure_signature entry.
@@ -400,7 +367,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
         Used by BatchExtractSignaturesHandler for bootstrapping.
         """
         pool = await self._get_pool()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).isoformat()
         if force_reprocess:
             rows = await pool.execute_read(
                 """
@@ -428,8 +395,7 @@ class TrajectoryRepository(TrajectoryRepositoryPort):
                 {"cutoff": cutoff, "limit": max_sessions},
             )
         return [
-            (r["session_id"], r["task_id"], r["trajectory_text"], r["failure_modes"])
-            for r in rows
+            (r["session_id"], r["task_id"], r["trajectory_text"], r["failure_modes"]) for r in rows
         ]
 
     async def close(self):

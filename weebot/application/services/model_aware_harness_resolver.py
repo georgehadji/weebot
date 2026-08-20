@@ -22,20 +22,18 @@ Usage::
     block = resolver.resolve_instruction_block("qwen/qwen3-35b")
     # Returns assembled instruction block for the resolved config
 """
+
 from __future__ import annotations
 
 import fnmatch
 import logging
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
 from weebot.config.harness.schema import HarnessConfig
 from weebot.domain.models.harness_instructions import InstructionConfig
-from weebot.application.services.harness_prompt_assembler import (
-    HarnessPromptAssembler,
-)
+from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
 
 logger = logging.getLogger(__name__)
 
@@ -80,17 +78,12 @@ class ModelAwareHarnessResolver:
                     data = yaml.safe_load(f)
                 pattern = data.pop("model_pattern", fpath.stem)
                 self._overlays[pattern] = data
-                logger.debug(
-                    "Loaded overlay %s → pattern %r", fpath.name, pattern,
-                )
+                logger.debug("Loaded overlay %s → pattern %r", fpath.name, pattern)
             except Exception as exc:
                 logger.warning("Failed to load overlay %s: %s", fpath.name, exc)
 
         self._loaded = True
-        logger.info(
-            "Loaded %d harness overlays from %s",
-            len(self._overlays), self._overlays_dir,
-        )
+        logger.info("Loaded %d harness overlays from %s", len(self._overlays), self._overlays_dir)
 
     def resolve(self, model_id: str) -> HarnessConfig:
         """Resolve the harness config for a given model ID.
@@ -112,14 +105,12 @@ class ModelAwareHarnessResolver:
 
         # Filter overlay keys to only valid InstructionConfig fields
         valid_fields = set(InstructionConfig.model_fields.keys())
-        filtered = {
-            k: v for k, v in overlay_instructions.items()
-            if k in valid_fields
-        }
+        filtered = {k: v for k, v in overlay_instructions.items() if k in valid_fields}
         if not filtered:
             logger.warning(
                 "Overlay for %s has no valid instruction fields (got: %s)",
-                model_id, list(overlay_instructions.keys()),
+                model_id,
+                list(overlay_instructions.keys()),
             )
             return self._base
 
@@ -127,13 +118,12 @@ class ModelAwareHarnessResolver:
         merged_instructions = {**current_instructions, **filtered}
 
         try:
-            return self._base.model_copy(update={
-                "instructions": InstructionConfig(**merged_instructions),
-            })
+            return self._base.model_copy(
+                update={"instructions": InstructionConfig(**merged_instructions)}
+            )
         except Exception as exc:
             logger.warning(
-                "Failed to merge overlay for %s: %s — returning base config",
-                model_id, exc,
+                "Failed to merge overlay for %s: %s — returning base config", model_id, exc
             )
             return self._base
 

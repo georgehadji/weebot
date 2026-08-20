@@ -5,6 +5,7 @@ Provides the three endpoints from Enhancement 4:
 - GET /api/sessions/{session_id}/plan-viz
 - GET /api/costs/summary
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,8 +21,7 @@ router = APIRouter(prefix="/api", tags=["operations"])
 
 @router.get("/sessions/active")
 async def list_active_sessions(
-    http_request: Request,
-    limit: int = Query(default=100, ge=1, le=500),
+    http_request: Request, limit: int = Query(default=100, ge=1, le=500)
 ) -> dict:
     """List currently running sessions owned by the current user."""
     current_user = get_current_user_id(http_request)
@@ -76,9 +76,7 @@ async def get_plan_visualization(session_id: str, http_request: Request) -> dict
 
 
 @router.get("/costs/summary")
-async def get_cost_summary(
-    window_hours: int = Query(default=24, ge=1, le=720),
-) -> dict:
+async def get_cost_summary(window_hours: int = Query(default=24, ge=1, le=720)) -> dict:
     """Return cost and model cascade statistics for the given time window.
 
     Returns total decisions, per-tier success/failure/circuit_open counts,

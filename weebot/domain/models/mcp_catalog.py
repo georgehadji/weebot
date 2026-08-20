@@ -1,4 +1,5 @@
 """MCP tool catalog models for scoped (per-request) tool retrieval."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -14,7 +15,6 @@ class MCPToolCatalogIndex(BaseModel):
     description: str = Field(default="", description="Tool description from the server")
     server_name: str = Field(description="Originating server name")
     embedding: list[float] | None = Field(
-        default=None,
-        description="Vector embedding of description",
+        default=None, description="Vector embedding of description"
     )
     metadata: dict[str, Any] = Field(default_factory=dict)

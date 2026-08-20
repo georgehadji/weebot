@@ -1,4 +1,5 @@
 """Tests for RecursiveWeebotAgent browser tool execution."""
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -20,8 +21,14 @@ async def test_browser_tool_uses_async_path():
     }
 
     with patch.object(agent.heuristic_router, "analyze_task", return_value=routing):
-        with patch.object(agent.browser_tool, "_arun", new=AsyncMock(return_value="ok")) as arun_mock:
-            with patch.object(agent.browser_tool, "_run", side_effect=AssertionError("sync run should not be called")):
+        with patch.object(
+            agent.browser_tool, "_arun", new=AsyncMock(return_value="ok")
+        ) as arun_mock:
+            with patch.object(
+                agent.browser_tool,
+                "_run",
+                side_effect=AssertionError("sync run should not be called"),
+            ):
                 result = await agent.execute_task("visit example.com")
 
     assert result["status"] == "success"

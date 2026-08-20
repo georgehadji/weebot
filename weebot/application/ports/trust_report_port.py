@@ -2,6 +2,7 @@
 
 Pure computation: implementations must not call LLMs.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -20,7 +21,6 @@ class TrustReportPort(ABC):
     async def compute(
         self,
         session_id: str,
-        plan_steps: list[Any],   # list[Step]
+        plan_steps: list[Any],  # list[Step]
         session_events: list[Any],  # list[AgentEvent]
-    ) -> TrustReport:
-        ...
+    ) -> TrustReport: ...

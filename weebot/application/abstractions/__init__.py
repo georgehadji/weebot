@@ -4,10 +4,11 @@ Extracted from ``weebot/application/flows/base_flow.py`` to break the
 circular dependency between ``services/`` and ``flows/``.
 Services depend on this abstraction; flows implement it.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable
 
 from weebot.domain.models.event import AgentEvent
 
@@ -72,9 +73,7 @@ class FlowRegistry:
         factory = self._factories.get(name)
         if factory is None:
             available = ", ".join(self._factories.keys())
-            raise KeyError(
-                f"Unknown flow type: {name!r}. Available: {available}"
-            )
+            raise KeyError(f"Unknown flow type: {name!r}. Available: {available}")
         return factory(**kwargs)
 
     def list_types(self) -> list[str]:

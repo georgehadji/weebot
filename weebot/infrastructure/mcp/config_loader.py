@@ -11,6 +11,7 @@ Usage::
     raw = json.loads(path.read_text())
     servers = expand_env(raw)
 """
+
 from __future__ import annotations
 
 import os
@@ -28,6 +29,7 @@ class ConfigError(Exception):
         - Environment variable referenced in config is not set.
         - Config file cannot be parsed.
     """
+
     pass
 
 
@@ -64,7 +66,9 @@ def _expand_string(s: str) -> str:
     for braced, simple in remaining:
         var_name = braced or simple
         if var_name and os.environ.get(var_name) is None:
-            if re.search(re.escape(f"${{{var_name}}}") + r"|" + re.escape(f"${var_name}"), expanded):
+            if re.search(
+                re.escape(f"${{{var_name}}}") + r"|" + re.escape(f"${var_name}"), expanded
+            ):
                 raise ConfigError(
                     f"Environment variable ${var_name} is required but not set. "
                     f"Set it in your .env file or shell before starting weebot."

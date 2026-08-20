@@ -4,10 +4,11 @@ Created during architecture remediation (step-10) to replace direct
 ``from weebot.config.settings import WeebotSettings`` across all layers.
 Injected via the DI container.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 
 class ConfigPort(ABC):
@@ -52,7 +53,7 @@ class ConfigPort(ABC):
 
     @property
     @abstractmethod
-    def default_model(self) -> Optional[str]:
+    def default_model(self) -> str | None:
         """Return the default model identifier."""
         ...
 

@@ -13,6 +13,7 @@ Usage:
     redactor = SecretRedactor()
     safe_text = redactor.redact(suspicious_text)
 """
+
 from __future__ import annotations
 
 import math
@@ -37,15 +38,10 @@ class SecretRedactor:
         r"(?:sk_live|rk_live|whsec|whsec_|sk_test|rk_test)_[A-Za-z0-9]{24,}"
     )
     _AWS_KEY_RE = re.compile(r"AKIA[0-9A-Z]{16}")
-    _JWT_RE = re.compile(
-        r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
-    )
-    _BEARER_RE = re.compile(
-        r"Bearer\s+[A-Za-z0-9._\-+/=]{20,}", re.IGNORECASE
-    )
+    _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
+    _BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9._\-+/=]{20,}", re.IGNORECASE)
     _PASSWORD_RE = re.compile(
-        r'(?:password|passwd|pwd|secret)\s*[:=]\s*["\']?([^\s"\'&|;]{4,})["\']?',
-        re.IGNORECASE,
+        r'(?:password|passwd|pwd|secret)\s*[:=]\s*["\']?([^\s"\'&|;]{4,})["\']?', re.IGNORECASE
     )
     _API_KEY_GENERIC = re.compile(
         r"(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*[\"']?([A-Za-z0-9_\-]{16,})[\"']?",
@@ -57,7 +53,7 @@ class SecretRedactor:
         self._entropy_threshold = entropy_threshold
 
     @classmethod
-    def from_settings(cls) -> "SecretRedactor":
+    def from_settings(cls) -> SecretRedactor:
         """Create from WeebotSettings."""
         try:
             settings = WeebotSettings()
@@ -176,9 +172,11 @@ class SecretRedactor:
                 result[key] = self.redact_dict(value)
             elif isinstance(value, list):
                 result[key] = [
-                    self.redact_dict(v) if isinstance(v, dict)
-                    else self.redact(v) if isinstance(v, str)
-                    else v
+                    (
+                        self.redact_dict(v)
+                        if isinstance(v, dict)
+                        else self.redact(v) if isinstance(v, str) else v
+                    )
                     for v in value
                 ]
             else:

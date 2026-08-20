@@ -7,9 +7,11 @@ whether the underlying provider can stream — they check once
 (``isinstance(adapter, StreamingLLMPort)``), wrap if not, and always call
 ``.stream()``.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
+from collections.abc import AsyncIterator
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.domain.models.llm_response import LLMChunk
@@ -26,12 +28,12 @@ class NonStreamingLLMAdapter:
 
     async def stream(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[LLMChunk]:
         response = await self._inner.chat(
             messages=messages,
@@ -50,7 +52,7 @@ class NonStreamingLLMAdapter:
         )
 
 
-def as_streaming(llm: LLMPort) -> Union[LLMPort, "StreamingLLMPort"]:
+def as_streaming(llm: LLMPort) -> Union[LLMPort, StreamingLLMPort]:
     """Return *llm* unchanged if it already streams, else wrap it.
 
     The single call site every caller should use instead of hand-rolling

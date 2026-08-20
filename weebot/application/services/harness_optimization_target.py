@@ -11,12 +11,12 @@ Version mapping:
   - The counter is stored as the patch component of the YAML version
     (e.g. ``"0.2.5"`` after 5 edit cycles)
 """
+
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -49,6 +49,7 @@ class HarnessOptimizationTarget(OptimizationTarget):
         self._model_id = model_id
         if model_id:
             from weebot.config.model_refs import sanitize_model_id
+
             safe_name = sanitize_model_id(model_id)
             models_dir = Path("weebot/config/harness/models")
             models_dir.mkdir(parents=True, exist_ok=True)
@@ -58,13 +59,11 @@ class HarnessOptimizationTarget(OptimizationTarget):
                 default = Path("weebot/config/harness/v0.2.0.yaml")
                 if default.exists():
                     import shutil
+
                     shutil.copy(default, harness_path)
             output_dir = output_dir or models_dir / f"{safe_name}_evolved"
         self._harness_path = Path(harness_path)
-        self._output_dir = (
-            Path(output_dir) if output_dir
-            else self._harness_path.parent / "evolved"
-        )
+        self._output_dir = Path(output_dir) if output_dir else self._harness_path.parent / "evolved"
         self._current: HarnessConfig | None = None
         self._version: int = 0  # integer counter, bumped on save
         self._base_version_str: str = "0.0.0"
@@ -108,37 +107,34 @@ class HarnessOptimizationTarget(OptimizationTarget):
         parts.append(f"- failure_recovery: {ic.failure_recovery or '(empty)'}")
 
         rc = self._current.runtime_control
-        parts.extend([
-            "",
-            "### Runtime Control",
-            f"- enabled: {rc.enabled}",
-            f"- max_recent_tool_errors: {rc.max_recent_tool_errors}",
-            f"- max_total_tool_messages: {rc.max_total_tool_messages}",
-        ])
+        parts.extend(
+            [
+                "",
+                "### Runtime Control",
+                f"- enabled: {rc.enabled}",
+                f"- max_recent_tool_errors: {rc.max_recent_tool_errors}",
+                f"- max_total_tool_messages: {rc.max_total_tool_messages}",
+            ]
+        )
 
         sk = self._current.skill_retrieval
-        parts.extend([
-            "",
-            "### Skill Retrieval",
-            f"- enabled: {sk.enabled}",
-            f"- top_k: {sk.top_k}",
-        ])
+        parts.extend(
+            ["", "### Skill Retrieval", f"- enabled: {sk.enabled}", f"- top_k: {sk.top_k}"]
+        )
 
         tr = self._current.trajectory
-        parts.extend([
-            "",
-            "### Trajectory Regulation",
-            f"- repetition_threshold: {tr.repetition_threshold}",
-            f"- stagnation_window: {tr.stagnation_window}",
-        ])
+        parts.extend(
+            [
+                "",
+                "### Trajectory Regulation",
+                f"- repetition_threshold: {tr.repetition_threshold}",
+                f"- stagnation_window: {tr.stagnation_window}",
+            ]
+        )
 
         ss = self._current.skill_selection
         if ss.active_skills:
-            parts.extend([
-                "",
-                "### Active Skills",
-                f"- {', '.join(ss.active_skills)}",
-            ])
+            parts.extend(["", "### Active Skills", f"- {', '.join(ss.active_skills)}"])
 
         return "\n".join(parts)
 
@@ -147,9 +143,7 @@ class HarnessOptimizationTarget(OptimizationTarget):
     async def load(self) -> HarnessConfig:
         """Load the current harness from its YAML file."""
         if not self._harness_path.exists():
-            raise FileNotFoundError(
-                f"Harness config not found: {self._harness_path}"
-            )
+            raise FileNotFoundError(f"Harness config not found: {self._harness_path}")
 
         cfg = HarnessConfig.load(self._harness_path)
         self._current = cfg
@@ -165,9 +159,7 @@ class HarnessOptimizationTarget(OptimizationTarget):
         logger.info("Loaded harness %s (v=%d)", cfg.version, self._version)
         return cfg
 
-    async def apply_edits(
-        self, edits: list[dict[str, Any]],
-    ) -> HarnessConfig:
+    async def apply_edits(self, edits: list[dict[str, Any]]) -> HarnessConfig:
         """Apply edits to the current harness config.
 
         Each edit dict must have:
@@ -195,7 +187,11 @@ class HarnessOptimizationTarget(OptimizationTarget):
                 if prefix == "middleware.add":
                     if "middleware" not in data:
                         data["middleware"] = []
-                    entry = value if isinstance(value, dict) else {"name": name, "trigger": str(value), "action": str(value)}
+                    entry = (
+                        value
+                        if isinstance(value, dict)
+                        else {"name": name, "trigger": str(value), "action": str(value)}
+                    )
                     data["middleware"].append(entry)
                     logger.info("Applied structural edit: added middleware '%s'", name)
                 elif prefix == "subagents.add":
@@ -221,9 +217,7 @@ class HarnessOptimizationTarget(OptimizationTarget):
                 if leaf in current:
                     old_val = current[leaf]
                     current[leaf] = value
-                    logger.info(
-                        "Applied edit: %s = %r → %r", target, old_val, value,
-                    )
+                    logger.info("Applied edit: %s = %r → %r", target, old_val, value)
                 else:
                     logger.warning("Field %s not found in %s — skipping", leaf, target)
 
@@ -236,10 +230,12 @@ class HarnessOptimizationTarget(OptimizationTarget):
         """
         self._version += 1
         new_version = self._bump_patch(candidate.version)
-        candidate = candidate.model_copy(update={
-            "version": new_version,
-            "evolved_from": self._current.version if self._current else None,
-        })
+        candidate = candidate.model_copy(
+            update={
+                "version": new_version,
+                "evolved_from": self._current.version if self._current else None,
+            }
+        )
 
         self._output_dir.mkdir(parents=True, exist_ok=True)
         out_path = self._output_dir / f"v{new_version}.yaml"

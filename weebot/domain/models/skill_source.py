@@ -4,6 +4,7 @@ Unified converter handles 5 formats: Weebot (native), Manus (SKILL.md + YAML
 frontmatter), OpenClaw (same as Manus), MyManus (plugin.json), AgenticSeek
 (.txt with XML tags).
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -13,12 +14,13 @@ from pydantic import BaseModel, Field
 
 class SourceFormat(str, Enum):
     """Detected source skill format."""
-    WEEBOT = "weebot"             # Native: manifest.json + prompt.md
-    MANUS = "manus"               # SKILL.md with YAML frontmatter
-    OPENCLAW = "openclaw"         # Same as MANUS
-    MYMANUS = "mymanus"           # plugin.json + SKILL.md
-    AGENTICSEEK = "agenticseek"   # .txt with <agent_loop> or <system_capability> tags
-    UNKNOWN = "unknown"           # Cannot determine format
+
+    WEEBOT = "weebot"  # Native: manifest.json + prompt.md
+    MANUS = "manus"  # SKILL.md with YAML frontmatter
+    OPENCLAW = "openclaw"  # Same as MANUS
+    MYMANUS = "mymanus"  # plugin.json + SKILL.md
+    AGENTICSEEK = "agenticseek"  # .txt with <agent_loop> or <system_capability> tags
+    UNKNOWN = "unknown"  # Cannot determine format
 
 
 class SkillSource(BaseModel):

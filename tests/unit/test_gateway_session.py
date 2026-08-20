@@ -1,17 +1,12 @@
 """Unit tests for gateway session domain models and services."""
+
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import pytest
 
-from weebot.domain.models.gateway_session import (
-    GatewaySession,
-    GatewaySessionKey,
-    GatewayPlatform,
-    GatewayChatType,
-)
+from weebot.domain.models.gateway_session import GatewaySession, GatewaySessionKey
 from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
 from weebot.application.services.gateway_command_dispatcher import (
     GatewayCommandDispatcher,
@@ -35,7 +30,9 @@ class TestGatewaySessionKey:
         assert key.composite_key() == "telegram:private:12345"
 
     def test_composite_key_with_thread(self):
-        key = GatewaySessionKey(platform="discord", chat_type="thread", chat_id="67890", thread_id="42")
+        key = GatewaySessionKey(
+            platform="discord", chat_type="thread", chat_id="67890", thread_id="42"
+        )
         assert key.composite_key() == "discord:thread:67890:42"
 
     def test_from_composite_key(self):
@@ -75,6 +72,7 @@ class TestGatewaySession:
 
     def test_touch_updates_timestamp(self):
         import time
+
         key = GatewaySessionKey(platform="telegram", chat_type="private", chat_id="123")
         session = GatewaySession(key=key, flow_session_id="flow-abc")
         old = session.last_activity_at
@@ -90,12 +88,8 @@ class TestGatewaySession:
 
     def test_is_expired(self):
         key = GatewaySessionKey(platform="telegram", chat_type="private", chat_id="123")
-        old_time = datetime.now(timezone.utc) - timedelta(days=14)
-        session = GatewaySession(
-            key=key,
-            flow_session_id="flow-abc",
-            last_activity_at=old_time,
-        )
+        old_time = datetime.now(UTC) - timedelta(days=14)
+        session = GatewaySession(key=key, flow_session_id="flow-abc", last_activity_at=old_time)
         assert session.is_expired(ttl_seconds=7 * 24 * 60 * 60) is True
 
     def test_not_expired(self):
@@ -104,7 +98,9 @@ class TestGatewaySession:
         assert session.is_expired(ttl_seconds=7 * 24 * 60 * 60) is False
 
     def test_full_session(self):
-        key = GatewaySessionKey(platform="discord", chat_type="group", chat_id="456", thread_id="789")
+        key = GatewaySessionKey(
+            platform="discord", chat_type="group", chat_id="456", thread_id="789"
+        )
         session = GatewaySession(
             key=key,
             flow_session_id="flow-xyz",
@@ -192,7 +188,7 @@ class TestGatewayCommandDispatcher:
         assert "Current model" in result
 
     def test_model_set_command(self):
-        result = self.dispatcher.dispatch('/model set gpt-4')
+        result = self.dispatcher.dispatch("/model set gpt-4")
         assert result == "OK_SET_MODEL:gpt-4"
 
     def test_unknown_command(self):
@@ -240,7 +236,8 @@ class TestGatewayAuth:
     """GatewayAuth access control."""
 
     def setup_method(self):
-        import tempfile, os
+        import tempfile
+
         self._tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
         self._tmp.close()
         self.auth = GatewayAuth(config_path=self._tmp.name)
@@ -300,6 +297,7 @@ class TestGatewayAuth:
 
     def teardown_method(self):
         import os
+
         try:
             os.unlink(self._tmp.name)
         except (OSError, AttributeError):
@@ -345,8 +343,5 @@ class InMemorySessionStore:
 
     async def cleanup_expired(self, ttl_seconds: int) -> int:
         before = len(self._sessions)
-        self._sessions = {
-            k: s for k, s in self._sessions.items()
-            if not s.is_expired(ttl_seconds)
-        }
+        self._sessions = {k: s for k, s in self._sessions.items() if not s.is_expired(ttl_seconds)}
         return before - len(self._sessions)

@@ -2,10 +2,12 @@
 
 Extends BaseFlow with session management and event publishing.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -38,8 +40,8 @@ class HyperAgentFlow(BaseFlow):
         swarm_bus: SwarmEventBusPort,
         sub_agent_factory: SubAgentFactoryPort,
         cost_tracker: SubAgentCostTrackerPort,
-        model: Optional[str] = None,
-        mediator: Optional["Mediator"] = None,
+        model: str | None = None,
+        mediator: Mediator | None = None,
         max_concurrency: int = 4,
     ) -> None:
         self._session = session
@@ -64,10 +66,7 @@ class HyperAgentFlow(BaseFlow):
 
         try:
             swarm_result = await self._hyper.execute(prompt)
-            event = MessageEvent(
-                role="assistant",
-                message=swarm_result.synthesis,
-            )
+            event = MessageEvent(role="assistant", message=swarm_result.synthesis)
             self._session = self._session.add_event(event)
             if self._event_bus:
                 await self._event_bus.publish(event)

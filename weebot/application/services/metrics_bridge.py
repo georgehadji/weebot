@@ -10,6 +10,7 @@ Usage:
     if m:
         m.flow_step_duration_seconds.labels(state=...).observe(...)
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,9 +33,8 @@ def get_metrics():
             # application layer keeps no static edge into infrastructure — this
             # bridge IS the single, optional, failure-tolerant crossing point.
             import importlib
-            _metrics_module = importlib.import_module(
-                "weebot.infrastructure.observability.metrics"
-            )
+
+            _metrics_module = importlib.import_module("weebot.infrastructure.observability.metrics")
         except Exception:
             _metrics_module = False  # sentinel — metrics unavailable
             _log.debug("Prometheus metrics unavailable", exc_info=True)

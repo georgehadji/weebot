@@ -18,10 +18,11 @@ Gate order matters: capability and context checks are cheap lookups; the
 availability check is potentially more expensive and runs last so cheap
 filtering happens first.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from weebot.config.model_registry import get_model_info
 from weebot.domain.models.capability import TaskRequirement
@@ -72,10 +73,7 @@ class ConstraintChecker:
         return get_model_info(alt)
 
     def eligible(
-        self,
-        candidates: list[str],
-        requirement: TaskRequirement,
-        context_tokens: int = 0,
+        self, candidates: list[str], requirement: TaskRequirement, context_tokens: int = 0
     ) -> list[str]:
         """Return the subset of *candidates* that pass all hard gates.
 
@@ -115,7 +113,9 @@ class ConstraintChecker:
                 if effective_ctx > info.max_input_tokens:
                     logger.debug(
                         "ConstraintChecker: %s max_input=%d < required=%d — excluding",
-                        model_id, info.max_input_tokens, effective_ctx,
+                        model_id,
+                        info.max_input_tokens,
+                        effective_ctx,
                     )
                     continue
                 ctx_gated.append(model_id)
@@ -134,8 +134,7 @@ class ConstraintChecker:
                     continue
             except Exception:
                 logger.debug(
-                    "ConstraintChecker: is_tripped probe failed for %s — "
-                    "keeping (fail-open)",
+                    "ConstraintChecker: is_tripped probe failed for %s — " "keeping (fail-open)",
                     model_id,
                 )
             avail_gated.append(model_id)

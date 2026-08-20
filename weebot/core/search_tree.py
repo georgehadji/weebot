@@ -8,14 +8,15 @@ Structure:
     SearchNode — a single state in the tree
     LatsSearcher — MCTS loop controlling exploration vs exploitation
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import math
-import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +35,15 @@ class SearchNode:
         terminal: Whether this node represents a terminal state.
         tool_call: The tool + args that produced this node (for traceability).
     """
+
     state: str
-    parent: Optional["SearchNode"] = None
-    children: list["SearchNode"] = field(default_factory=list)
+    parent: SearchNode | None = None
+    children: list[SearchNode] = field(default_factory=list)
     visits: int = 0
     value: float = 0.0
     depth: int = 0
     terminal: bool = False
-    tool_call: Optional[dict[str, Any]] = None
+    tool_call: dict[str, Any] | None = None
 
     def ucb1(self, exploration_constant: float = 1.41) -> float:
         """Upper Confidence Bound for Trees — balances explore vs exploit.
@@ -59,19 +61,14 @@ class SearchNode:
         )
         return exploitation + exploration
 
-    def best_child(self, exploration_constant: float = 1.41) -> Optional["SearchNode"]:
+    def best_child(self, exploration_constant: float = 1.41) -> SearchNode | None:
         """Select the child with the highest UCB1 score."""
         if not self.children:
             return None
         return max(self.children, key=lambda c: c.ucb1(exploration_constant))
 
-    def add_child(self, state: str, **kwargs: Any) -> "SearchNode":
-        child = SearchNode(
-            state=state,
-            parent=self,
-            depth=self.depth + 1,
-            **kwargs,
-        )
+    def add_child(self, state: str, **kwargs: Any) -> SearchNode:
+        child = SearchNode(state=state, parent=self, depth=self.depth + 1, **kwargs)
         self.children.append(child)
         return child
 

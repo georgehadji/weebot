@@ -1,12 +1,12 @@
 """Event bus port — abstract interface for publishing and subscribing to events."""
+
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any, Callable, Awaitable, Union
+from abc import abstractmethod
+from collections.abc import Callable, Awaitable
 
 from weebot.domain.models.event import AgentEvent, DomainEvent
 from weebot.application.ports.event_publisher_port import EventPublisherPort
-
 
 EventHandler = Callable[[AgentEvent], Awaitable[None]]
 DomainEventHandler = Callable[[DomainEvent], Awaitable[None]]

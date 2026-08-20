@@ -1,4 +1,5 @@
 """Unit tests for the MCP tool catalog index builder."""
+
 from __future__ import annotations
 
 import pytest
@@ -52,10 +53,7 @@ class TestBuildIndex:
             build_index(tools, embeddings=[[0.1], [0.2]])
 
     def test_build_index_preserves_order(self):
-        tools = [
-            self._make_tool("z", "last"),
-            self._make_tool("a", "first"),
-        ]
+        tools = [self._make_tool("z", "last"), self._make_tool("a", "first")]
         index = build_index(tools)
 
         assert [i.original_name for i in index] == ["z", "a"]

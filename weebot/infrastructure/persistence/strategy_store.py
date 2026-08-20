@@ -3,6 +3,7 @@
 Implements Enhancement 6 from the HyperAgents plan: stores meta-level
 improvement strategies for cross-domain transfer.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,6 @@ import logging
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from weebot.domain.models.self_improvement import ImprovementStrategy
 
@@ -61,7 +61,8 @@ class StrategyStore:
                         transfer_count, created_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        sid, strategy.source_domain,
+                        sid,
+                        strategy.source_domain,
                         strategy.target_domain,
                         strategy.meta_agent_prompt_snippet,
                         strategy.effectiveness_score,
@@ -74,15 +75,13 @@ class StrategyStore:
         return await asyncio.to_thread(_insert)
 
     async def get_for_domain(
-        self,
-        target_domain: str,
-        min_score: float = 0.7,
-        limit: int = 5,
+        self, target_domain: str, min_score: float = 0.7, limit: int = 5
     ) -> list[ImprovementStrategy]:
         """Return strategies from DIFFERENT domains applicable to target_domain.
 
         Ordered by composite score: effectiveness_score × (1 + transfer_count).
         """
+
         def _query() -> list[dict]:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
@@ -121,15 +120,12 @@ class StrategyStore:
 
         await asyncio.to_thread(_update)
 
-    async def get_by_id(
-        self, strategy_id: str
-    ) -> Optional[ImprovementStrategy]:
+    async def get_by_id(self, strategy_id: str) -> ImprovementStrategy | None:
         def _query() -> dict | None:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute(
-                    "SELECT * FROM improvement_strategies WHERE strategy_id = ?",
-                    (strategy_id,),
+                    "SELECT * FROM improvement_strategies WHERE strategy_id = ?", (strategy_id,)
                 ).fetchone()
             return dict(row) if row else None
 

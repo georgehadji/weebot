@@ -4,9 +4,10 @@ Any object that implements ``execute_hooks`` with this signature can be wired
 into ``PlanActFlowConfig.hooks``.  ``weebot.templates.hooks.HookRegistry``
 satisfies this protocol structurally without any import change.
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -28,9 +29,7 @@ class HookRegistryPort(Protocol):
       post_complete     — flow completed  (session_id, plan, tool_count, error_count, total_elapsed_ms, plan_fingerprint)
     """
 
-    async def execute_hooks(
-        self, stage: str, context: Dict[str, Any]
-    ) -> Dict[str, Any]: ...
+    async def execute_hooks(self, stage: str, context: dict[str, Any]) -> dict[str, Any]: ...
 
     def get_valid_stages(self) -> frozenset[str]: ...
 

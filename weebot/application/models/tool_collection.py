@@ -5,6 +5,7 @@ ToolCollection is a pure orchestration concept with no hard
 infrastructure dependencies.  It imports BaseTool/ToolResult from
 the tools layer as the stable tool contract.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,21 +51,26 @@ def _truncate(output: str, limit: int, strategy: str) -> str:
     # "head" (default)
     return output[:limit] + f"\n...[{removed} chars omitted]"
 
+
 from weebot.domain.models.base_tool import BaseTool
 from weebot.domain.models.tool_result import ToolResult
 
 # Phase 5: Optional result cache (lazy import to avoid circular deps)
 _cache_module = None
+
+
 def _get_cache():
     global _cache_module
     if _cache_module is None:
         try:
             from weebot.application.services.tool_result_cache import ToolResultCache as _c
+
             _cache_module = _c
         except Exception as _exc:
             logger.warning("ToolResultCache unavailable — caching disabled: %s", _exc)
             _cache_module = False
     return _cache_module if _cache_module is not False else None
+
 
 # Prometheus metrics — lazy import to avoid hard infrastructure coupling
 _metrics_module = None
@@ -78,11 +84,11 @@ class ToolCollection:
 
     # Phase 1: Retry defaults for transient tool failures
     DEFAULT_MAX_RETRIES: int = 2
-    RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
-        OSError, TimeoutError, ConnectionError,
-    )
+    RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (OSError, TimeoutError, ConnectionError)
 
-    def __init__(self, *tools: BaseTool, canonicalizer=None, contract_loader=None, cache=None) -> None:
+    def __init__(
+        self, *tools: BaseTool, canonicalizer=None, contract_loader=None, cache=None
+    ) -> None:
         self._tools: dict[str, BaseTool] = {t.name: t for t in tools}
         # Action Canonicalizer (Tier 1.1) — validates + corrects tool calls
         self._canonicalizer = canonicalizer
@@ -116,7 +122,9 @@ class ToolCollection:
                 try:
                     await svc.shutdown()
                 except Exception:
-                    logger.debug("Error shutting down service for tool %r", tool.name, exc_info=True)
+                    logger.debug(
+                        "Error shutting down service for tool %r", tool.name, exc_info=True
+                    )
 
     async def check_health(self) -> dict[str, bool]:
         """Run health checks for all tools; cache results for this session.
@@ -124,13 +132,9 @@ class ToolCollection:
         Returns a dict of tool_name -> health_status.
         """
         results = await asyncio.gather(
-            *[t.health_check() for t in self._tools.values()],
-            return_exceptions=True,
+            *[t.health_check() for t in self._tools.values()], return_exceptions=True
         )
-        self._healthy = {
-            name: (r is True)
-            for name, r in zip(self._tools.keys(), results)
-        }
+        self._healthy = {name: (r is True) for name, r in zip(self._tools.keys(), results)}
         return dict(self._healthy)
 
     def to_params(self) -> list[dict]:
@@ -157,16 +161,14 @@ class ToolCollection:
                 _name = fuzzy_name
             else:
                 return ToolResult.error_result(
-                    error=f"Unknown tool: {_name!r}",
-                    execution_time_ms=0.0,
-                    retry_count=0,
+                    error=f"Unknown tool: {_name!r}", execution_time_ms=0.0, retry_count=0
                 )
 
         # Phase 3: Block execution of unhealthy tools (if health check has run)
         if self._healthy is not None and not self._healthy.get(_name, True):
             return ToolResult.error_result(
                 error=f"Tool '{_name}' is unavailable (health check failed). "
-                      "Its runtime dependencies may not be installed.",
+                "Its runtime dependencies may not be installed.",
                 execution_time_ms=0.0,
                 retry_count=0,
                 tool_name=_name,
@@ -199,7 +201,7 @@ class ToolCollection:
         # Phase 2: Lazy semaphore for concurrency-capped tools
         _tool_semaphore = None
         if limit > 0:
-            if not hasattr(self, '_semaphores'):
+            if not hasattr(self, "_semaphores"):
                 self._semaphores: dict[str, asyncio.Semaphore] = {}
             if _name not in self._semaphores:
                 self._semaphores[_name] = asyncio.Semaphore(limit)
@@ -247,7 +249,9 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="true").inc()
                     except Exception:
-                        logger.debug("Failed to increment tool call metric for %s", _name, exc_info=True)
+                        logger.debug(
+                            "Failed to increment tool call metric for %s", _name, exc_info=True
+                        )
 
                 # Phase 5: Cache store (after successful execution)
                 if self._cache is not None and not result.is_error:
@@ -277,7 +281,9 @@ class ToolCollection:
                     try:
                         m.tool_calls_total.labels(tool=_name, success="false").inc()
                     except Exception:
-                        logger.debug("Failed to increment tool error metric for %s", _name, exc_info=True)
+                        logger.debug(
+                            "Failed to increment tool error metric for %s", _name, exc_info=True
+                        )
 
                 retry_count += 1
 
@@ -291,4 +297,4 @@ class ToolCollection:
                     )
 
                 # Capped exponential backoff before retry
-                await asyncio.sleep(min(0.1 * (2 ** retry_count), 5.0))
+                await asyncio.sleep(min(0.1 * (2**retry_count), 5.0))

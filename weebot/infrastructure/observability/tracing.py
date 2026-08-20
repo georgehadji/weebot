@@ -14,10 +14,11 @@ and ``opentelemetry-sdk`` installed.  When neither is present, ``get_tracer``
 returns the no-op ``opentelemetry-api`` default (``NoOpTracer``), which is a
 zero-cost abstraction.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ try:
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
         OTLPSpanExporter as _OTLPSpanExporter,
     )
+
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
@@ -40,9 +42,7 @@ except ImportError:
 
 
 def init_tracing(
-    service_name: str = "weebot",
-    otlp_endpoint: Optional[str] = None,
-    console_debug: bool = False,
+    service_name: str = "weebot", otlp_endpoint: str | None = None, console_debug: bool = False
 ) -> None:
     """Initialise the OpenTelemetry tracer provider.
 
@@ -87,6 +87,7 @@ def get_tracer(module_name: str = __name__) -> Any:
 
 # ── No-op fallback when OTEL is absent ────────────────────────────────
 
+
 class _NoOpSpan:
     """Minimal span that satisfies the context manager protocol without OTEL.
 
@@ -107,7 +108,7 @@ class _NoOpSpan:
     def end(self) -> None:
         pass
 
-    def __enter__(self) -> "_NoOpSpan":
+    def __enter__(self) -> _NoOpSpan:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -130,6 +131,7 @@ class _NoOpTracer:
 def _register_noop_span() -> None:
     try:
         from weebot.application.ports.tracing_port import Span
+
         Span.register(_NoOpSpan)
     except Exception:
         pass

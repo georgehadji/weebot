@@ -1,5 +1,5 @@
 """Unit tests for ScreenCaptureTool."""
-import pytest
+
 from unittest.mock import patch, MagicMock
 from weebot.tools.screen_tool import ScreenCaptureTool
 
@@ -9,9 +9,7 @@ class TestListScreens:
         mock_mss = MagicMock()
         mock_mss.return_value.__enter__ = MagicMock(return_value=mock_mss.return_value)
         mock_mss.return_value.__exit__ = MagicMock(return_value=False)
-        mock_mss.return_value.monitors = [
-            {"left": 0, "top": 0, "width": 1920, "height": 1080}
-        ]
+        mock_mss.return_value.monitors = [{"left": 0, "top": 0, "width": 1920, "height": 1080}]
         with patch("weebot.tools.screen_tool.mss", mock_mss):
             tool = ScreenCaptureTool()
             result = tool.list_screens()
@@ -21,9 +19,7 @@ class TestListScreens:
         mock_mss = MagicMock()
         mock_mss.return_value.__enter__ = MagicMock(return_value=mock_mss.return_value)
         mock_mss.return_value.__exit__ = MagicMock(return_value=False)
-        mock_mss.return_value.monitors = [
-            {"left": 0, "top": 0, "width": 1920, "height": 1080}
-        ]
+        mock_mss.return_value.monitors = [{"left": 0, "top": 0, "width": 1920, "height": 1080}]
         with patch("weebot.tools.screen_tool.mss", mock_mss):
             tool = ScreenCaptureTool()
             screens = tool.list_screens()

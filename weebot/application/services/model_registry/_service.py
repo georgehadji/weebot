@@ -4,10 +4,10 @@ Extracted from ``model_selection.py`` during WP-2 god module decomposition.
 This module references the catalog data from ``_catalog.py`` and the
 selection strategies from ``_strategies.py``.
 """
+
 from __future__ import annotations
 
 import os
-from typing import List, Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.services.model_registry._catalog import MODELS
@@ -21,26 +21,15 @@ class ModelSelectionService:
 
     MODELS: dict[str, ModelConfig] = MODELS  # Reference the catalog
 
-    def available_models(self) -> List[str]:
+    def available_models(self) -> list[str]:
         """Return model IDs for which the API key is configured."""
-        return [
-            model_id
-            for model_id, cfg in self.MODELS.items()
-            if os.getenv(cfg.api_key_env)
-        ]
+        return [model_id for model_id, cfg in self.MODELS.items() if os.getenv(cfg.api_key_env)]
 
     def select_model(
-        self,
-        strategy: ModelSelectionStrategy,
-        task_type: TaskType,
-        budget: Optional[float] = None,
+        self, strategy: ModelSelectionStrategy, task_type: TaskType, budget: float | None = None
     ) -> str:
         """Select a model using the provided strategy."""
-        candidates = [
-            (mid, cfg)
-            for mid, cfg in self.MODELS.items()
-            if os.getenv(cfg.api_key_env)
-        ]
+        candidates = [(mid, cfg) for mid, cfg in self.MODELS.items() if os.getenv(cfg.api_key_env)]
         if not candidates:
             raise ValueError("No API keys configured for any supported provider")
         return strategy.select(candidates, task_type, budget)

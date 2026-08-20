@@ -1,4 +1,5 @@
 """Unit tests for ToolCallWeebotAgent (ReAct loop)."""
+
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -108,10 +109,10 @@ def test_agent_initial_state():
 
 
 def _make_two_tool_call_response(
-    tool1: str, args1: dict, id1: str,
-    tool2: str, args2: dict, id2: str,
+    tool1: str, args1: dict, id1: str, tool2: str, args2: dict, id2: str
 ):
     """OpenAI-like response with two tool calls (parallel)."""
+
     def _tc(name, args, cid):
         tc = MagicMock()
         tc.id = cid
@@ -139,10 +140,14 @@ async def test_act_executes_two_tool_calls_concurrently():
     class SlowTool(BaseTool):
         name: str = "slow"
         description: str = "Slow tool"
-        parameters: dict = {"type": "object", "properties": {"tag": {"type": "string"}}, "required": ["tag"]}
+        parameters: dict = {
+            "type": "object",
+            "properties": {"tag": {"type": "string"}},
+            "required": ["tag"],
+        }
 
         async def execute(self, tag: str, **_) -> ToolResult:
-            await asyncio.sleep(0)   # yield to event loop
+            await asyncio.sleep(0)  # yield to event loop
             execution_order.append(tag)
             return ToolResult(output=f"done-{tag}")
 
@@ -158,6 +163,7 @@ async def test_act_executes_two_tool_calls_concurrently():
 
     # Both tool results must be in memory (as TOOL messages)
     from weebot.domain.models import Role
+
     tool_msgs = [m for m in agent.memory.messages if m.role == Role.TOOL]
     assert len(tool_msgs) == 2
     ids = {m.tool_call_id for m in tool_msgs}

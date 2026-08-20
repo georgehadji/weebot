@@ -4,9 +4,10 @@ Each GatewaySession maps a platform-specific chat (Telegram chat, Discord channe
 Slack channel, etc.) to a Weebot flow session, allowing conversations to span
 multiple messages without losing context.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any
 
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class GatewayPlatform(str, Enum):
     """Supported gateway platforms."""
+
     TELEGRAM = "telegram"
     DISCORD = "discord"
     SLACK = "slack"
@@ -26,6 +28,7 @@ class GatewayPlatform(str, Enum):
 
 class GatewayChatType(str, Enum):
     """Type of chat/conversation on a gateway platform."""
+
     PRIVATE = "private"
     GROUP = "group"
     CHANNEL = "channel"
@@ -38,10 +41,15 @@ class GatewaySessionKey(BaseModel):
     Composes platform + chat type + chat ID + optional thread ID into
     a composite key that can be used for session lookup and storage.
     """
+
     platform: str = Field(description="Platform identifier (telegram, discord, slack, etc.)")
-    chat_type: str = Field(default="private", description="Type of chat: private, group, channel, thread")
+    chat_type: str = Field(
+        default="private", description="Type of chat: private, group, channel, thread"
+    )
     chat_id: str = Field(description="Platform-specific chat/conversation ID")
-    thread_id: str | None = Field(default=None, description="Thread ID within the chat (if applicable)")
+    thread_id: str | None = Field(
+        default=None, description="Thread ID within the chat (if applicable)"
+    )
 
     @field_validator("platform")
     @classmethod
@@ -77,7 +85,7 @@ class GatewaySessionKey(BaseModel):
         return ":".join(parts)
 
     @classmethod
-    def from_composite_key(cls, key: str) -> "GatewaySessionKey":
+    def from_composite_key(cls, key: str) -> GatewaySessionKey:
         """Parse a composite key back into a session key object."""
         parts = key.split(":")
         if len(parts) < 3:
@@ -96,24 +104,29 @@ class GatewaySession(BaseModel):
     Created when a gateway receives a message and no existing session is found.
     Updated on every received message (last_activity_at).
     """
+
     key: GatewaySessionKey = Field(description="Composite key identifying the conversation")
-    flow_session_id: str = Field(description="Weebot flow/session ID associated with this gateway session")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_activity_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    flow_session_id: str = Field(
+        description="Weebot flow/session ID associated with this gateway session"
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_activity_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     title: str | None = Field(default=None, description="Conversation title (if available)")
     user_id: str | None = Field(default=None, description="Platform-specific user ID")
     is_active: bool = Field(default=True, description="Whether the session is active")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Extra platform-specific metadata")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Extra platform-specific metadata"
+    )
 
-    def touch(self) -> "GatewaySession":
+    def touch(self) -> GatewaySession:
         """Update last_activity_at to now."""
-        return self.model_copy(update={"last_activity_at": datetime.now(timezone.utc)})
+        return self.model_copy(update={"last_activity_at": datetime.now(UTC)})
 
-    def close(self) -> "GatewaySession":
+    def close(self) -> GatewaySession:
         """Mark the session as inactive."""
-        return self.model_copy(update={"is_active": False, "last_activity_at": datetime.now(timezone.utc)})
+        return self.model_copy(update={"is_active": False, "last_activity_at": datetime.now(UTC)})
 
     def is_expired(self, ttl_seconds: int) -> bool:
         """Check if the session has expired based on TTL."""
-        elapsed = (datetime.now(timezone.utc) - self.last_activity_at).total_seconds()
+        elapsed = (datetime.now(UTC) - self.last_activity_at).total_seconds()
         return elapsed > ttl_seconds

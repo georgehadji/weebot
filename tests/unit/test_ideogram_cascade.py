@@ -9,18 +9,16 @@ These tests verify the bug discovered in the proactive audit:
     an undefined ``logger`` name, causing ``NameError`` on the Ideogram
     failure path.  The cascade then crashes instead of trying the next model.
 """
+
 from __future__ import annotations
 
 import asyncio
-import os
-from unittest.mock import patch, AsyncMock, MagicMock
-
-import pytest
-
+from unittest.mock import patch, AsyncMock
 
 # ══════════════════════════════════════════════════════════════════════
 # F1: _execute_ideogram_direct must not raise NameError on failure
 # ══════════════════════════════════════════════════════════════════════
+
 
 def test_ideogram_direct_failure_does_not_nameerror():
     """_execute_ideogram_direct with an invalid key must return None, not raise NameError.
@@ -89,6 +87,7 @@ def test_ideogram_direct_http_failure_returns_none():
 # F1b: _execute_openrouter cascade must survive ideogram/* model failures
 # ══════════════════════════════════════════════════════════════════════
 
+
 def test_openrouter_cascade_survives_ideogram_failure():
     """When an ideogram/* model fails, the cascade must NOT crash.
 
@@ -114,9 +113,17 @@ def test_openrouter_cascade_survives_ideogram_failure():
         # Also mock the OpenRouter HTTP call to avoid real network
         mock_response = AsyncMock()
         mock_response.status = 200
-        mock_response.json = AsyncMock(return_value={
-            "choices": [{"message": {"images": [{"image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}]}}]
-        })
+        mock_response.json = AsyncMock(
+            return_value={
+                "choices": [
+                    {
+                        "message": {
+                            "images": [{"image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}]
+                        }
+                    }
+                ]
+            }
+        )
         mock_session = AsyncMock()
         mock_session.post = AsyncMock(return_value=mock_response)
         mock_session.get = AsyncMock()
@@ -148,6 +155,7 @@ def test_openrouter_cascade_survives_ideogram_failure():
 # F1 regression: verify logger exists in the module
 # ══════════════════════════════════════════════════════════════════════
 
+
 def test_image_gen_tool_module_has_logger():
     """The image_gen_tool module must have a callable logger.info."""
     import weebot.tools.image_gen_tool as igt
@@ -156,7 +164,5 @@ def test_image_gen_tool_module_has_logger():
         "image_gen_tool module has no 'logger'.  "
         "Add: import logging; logger = logging.getLogger(__name__)"
     )
-    logger = getattr(igt, "logger")
-    assert callable(logger.info), (
-        "image_gen_tool.logger is not a valid logger (no .info method)"
-    )
+    logger = igt.logger
+    assert callable(logger.info), "image_gen_tool.logger is not a valid logger (no .info method)"

@@ -4,13 +4,13 @@ WI-03 added ``status``, ``limit``, and ``offset`` parameters to
 ``list_sessions()`` on the port. These tests exercise the in-memory
 adapter specifically to confirm the parameters are wired correctly.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
-from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 
@@ -20,8 +20,10 @@ def repo() -> InMemoryStateRepository:
     return InMemoryStateRepository()
 
 
-def _make_session(sid: str, user: str = "u1", status: SessionStatus = SessionStatus.PENDING) -> Session:
-    now = datetime.now(timezone.utc)
+def _make_session(
+    sid: str, user: str = "u1", status: SessionStatus = SessionStatus.PENDING
+) -> Session:
+    now = datetime.now(UTC)
     return Session(id=sid, user_id=user, status=status, created_at=now, updated_at=now)
 
 

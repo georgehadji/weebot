@@ -2,13 +2,13 @@
 
 Extracted from PlanActFlow during architecture remediation (Step 2.2.2).
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.flows.mcp_scope import apply_mcp_tool_scope
 from weebot.application.flows.mcp_scope_config import McpScopeConfig
-from weebot.domain.models.session import Session
 from weebot.tools.tool_registry import RoleBasedToolRegistry
 
 
@@ -35,12 +35,7 @@ class ToolAssembler:
         self._agent_role = agent_role
         self._logger = logger
 
-    async def assemble(
-        self,
-        effective_prompt: str,
-        tools: Any,
-        executor: Any | None = None,
-    ) -> Any:
+    async def assemble(self, effective_prompt: str, tools: Any, executor: Any | None = None) -> Any:
         """Assemble and optionally scope tools for the current step.
 
         If MCP scoping is configured, applies dynamic tool scoping

@@ -12,10 +12,11 @@ Classification mirrors BehavioralLearner's LLM-with-heuristic-fallback
 strategy: an LLM call when available (accurate, costs tokens), a cheap
 length-ratio heuristic otherwise (free, coarse).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_PRECISE
 from weebot.domain.models.correction import CorrectionRecord
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 _VALID_CATEGORIES = frozenset({"tone", "format", "scope", "accuracy", "missing_info"})
 
 # Length-ratio bands for heuristic classification (corrected / original).
-_SCOPE_SHRINK_RATIO = 0.7    # corrected is significantly shorter → over-scoped original
+_SCOPE_SHRINK_RATIO = 0.7  # corrected is significantly shorter → over-scoped original
 _MISSING_INFO_GROW_RATIO = 1.5  # corrected is significantly longer → original was thin
 
 
@@ -42,17 +43,13 @@ class CorrectionTracker:
 
     PATTERN_THRESHOLD = 3
 
-    def __init__(self, state_repo: Any, llm: Optional[Any] = None) -> None:
+    def __init__(self, state_repo: Any, llm: Any | None = None) -> None:
         self._state_repo = state_repo
         self._llm = llm
 
     async def record_correction(
-        self,
-        session_id: str,
-        step: Step,
-        original_output: str,
-        corrected_output: str,
-    ) -> Optional[CorrectionRecord]:
+        self, session_id: str, step: Step, original_output: str, corrected_output: str
+    ) -> CorrectionRecord | None:
         """Record a correction; return the record if its category just hit threshold.
 
         Returns None while the category's count remains below
@@ -75,8 +72,7 @@ class CorrectionTracker:
         count = await self._state_repo.count_corrections_by_category(category)
         if count == self.PATTERN_THRESHOLD:
             logger.info(
-                "Recurring correction pattern detected: category=%s count=%d",
-                category, count,
+                "Recurring correction pattern detected: category=%s count=%d", category, count
             )
             return record
         return None
@@ -105,7 +101,10 @@ class CorrectionTracker:
         )
         response = await self._llm.chat(
             messages=[
-                {"role": "system", "content": "You classify edits between two text versions into one category word."},
+                {
+                    "role": "system",
+                    "content": "You classify edits between two text versions into one category word.",
+                },
                 {"role": "user", "content": prompt},
             ],
             max_tokens=MAX_TOKENS_TINY,

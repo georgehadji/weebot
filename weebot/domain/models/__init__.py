@@ -1,4 +1,5 @@
 """Weebot domain models."""
+
 import warnings
 
 from weebot.domain.models.task_type import TaskType

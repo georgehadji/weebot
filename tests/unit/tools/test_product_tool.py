@@ -1,4 +1,5 @@
 """Tests for ProductTool (product backlog and PRD generator)."""
+
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ def pt(tmp_path):
 # ---------------------------------------------------------------------------
 # add_requirement
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_add_requirement_returns_req_id(pt):
@@ -50,10 +52,7 @@ async def test_add_requirement_missing_title_is_error(pt):
 @pytest.mark.asyncio
 async def test_add_requirement_invalid_category_is_error(pt):
     result = await pt.execute(
-        action="add_requirement",
-        project_id="proj-1",
-        title="Test",
-        category="wishlist",
+        action="add_requirement", project_id="proj-1", title="Test", category="wishlist"
     )
     assert result.is_error
     assert "category" in result.error.lower() or "Invalid" in result.error
@@ -70,6 +69,7 @@ async def test_add_requirement_default_status_is_draft(pt):
 # ---------------------------------------------------------------------------
 # list_requirements
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_list_requirements_returns_all(pt):
@@ -110,6 +110,7 @@ async def test_list_requirements_sorted_by_priority(pt):
 # update_status
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_update_status_changes_status(pt):
     add = await pt.execute(action="add_requirement", project_id="p", title="Feat")
@@ -148,6 +149,7 @@ async def test_update_status_missing_req_id_is_error(pt):
 # generate_prd
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_generate_prd_returns_markdown(pt):
     await pt.execute(
@@ -182,6 +184,7 @@ async def test_generate_prd_no_requirements_is_error(pt):
 # get_roadmap
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_roadmap_returns_json(pt):
     await pt.execute(action="add_requirement", project_id="p", title="F1", category="feature")
@@ -205,6 +208,7 @@ async def test_get_roadmap_missing_project_id_is_error(pt):
 # ---------------------------------------------------------------------------
 # unknown action
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_unknown_action_is_error(pt):

@@ -4,13 +4,13 @@ Stores in:
   ~/.weebot/memory/AGENT.md  — agent-accumulated knowledge and observations
   ~/.weebot/memory/USER.md   — user preferences, workflow habits, and profile
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional
 
 from weebot.application.ports.memory_port import MemoryPort
 
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 DELIMITER = "§"
 import os as _os
+
 DEFAULT_MEMORY_DIR = Path(
     _os.environ.get("WEEBOT_MEMORY_DIR", str(Path.home() / ".weebot" / "memory"))
 )
@@ -32,16 +33,16 @@ _INJECTION_RE = re.compile(
 class FileSystemMemoryAdapter(MemoryPort):
     """MemoryPort that reads/writes §-delimited entries in flat .md files."""
 
-    def __init__(self, memory_dir: Optional[Path] = None) -> None:
+    def __init__(self, memory_dir: Path | None = None) -> None:
         self._dir = memory_dir or DEFAULT_MEMORY_DIR
 
     # ── MemoryPort implementation ─────────────────────────────────────
 
-    async def read_entries(self, file: str) -> List[str]:
+    async def read_entries(self, file: str) -> list[str]:
         path = self._resolve(file)
         return await asyncio.to_thread(self._sync_load_entries, path)
 
-    async def write_entries(self, file: str, entries: List[str]) -> None:
+    async def write_entries(self, file: str, entries: list[str]) -> None:
         path = self._resolve(file)
         await asyncio.to_thread(self._sync_save_entries, path, entries)
 
@@ -72,18 +73,15 @@ class FileSystemMemoryAdapter(MemoryPort):
         return self._dir / f"{file.upper()}.md"
 
     @staticmethod
-    def _sync_load_entries(path: Path) -> List[str]:
+    def _sync_load_entries(path: Path) -> list[str]:
         if not path.exists():
             return []
         text = path.read_text(encoding="utf-8")
         return [e.strip() for e in text.split(DELIMITER) if e.strip()]
 
     @staticmethod
-    def _sync_save_entries(path: Path, entries: List[str]) -> None:
-        path.write_text(
-            ("\n" + DELIMITER + "\n").join(entries),
-            encoding="utf-8",
-        )
+    def _sync_save_entries(path: Path, entries: list[str]) -> None:
+        path.write_text(("\n" + DELIMITER + "\n").join(entries), encoding="utf-8")
 
     # ── Utilities ──────────────────────────────────────────────────────
 

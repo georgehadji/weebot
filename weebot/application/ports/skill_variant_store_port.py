@@ -3,10 +3,10 @@
 Implements the Dependency Inversion Principle: Application layer defines
 the contract, Infrastructure layer provides the SQLite adapter.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.skill_variant import SkillVariant
 
@@ -19,15 +19,11 @@ class SkillVariantStorePort(ABC):
         """Persist a variant and return its variant_id."""
 
     @abstractmethod
-    async def get_by_domain(
-        self, domain: str, limit: int = 50
-    ) -> list[SkillVariant]:
+    async def get_by_domain(self, domain: str, limit: int = 50) -> list[SkillVariant]:
         """Return all variants for a domain, ordered by score descending."""
 
     @abstractmethod
-    async def get_by_id(
-        self, variant_id: str
-    ) -> Optional[SkillVariant]:
+    async def get_by_id(self, variant_id: str) -> SkillVariant | None:
         """Return a single variant by ID."""
 
     @abstractmethod
@@ -39,7 +35,5 @@ class SkillVariantStorePort(ABC):
         """Increment the children_count for a parent variant."""
 
     @abstractmethod
-    async def get_parent_candidates(
-        self, domain: str, top_k: int = 10
-    ) -> list[SkillVariant]:
+    async def get_parent_candidates(self, domain: str, top_k: int = 10) -> list[SkillVariant]:
         """Return top variants for parent selection in a domain."""

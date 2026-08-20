@@ -3,12 +3,11 @@
 Called during ``Container.configure_defaults()`` and from the ``weebot health``
 CLI command.  Skips if ``WEEBOT_SKIP_MODEL_CHECK=1`` is set.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from typing import Optional
 
 from weebot.config.constants import MAX_TOKENS_PROBE, TEMPERATURE_DETERMINISTIC
 
@@ -17,6 +16,7 @@ from weebot.config.secret_accessor import SecretAccessor
 logger = logging.getLogger(__name__)
 
 # ── Public API ──────────────────────────────────────────────────────
+
 
 async def check_default_model(llm, model_id: str, timeout: float = 10.0) -> bool:
     """Ping *model_id* with a minimal message to verify it's reachable.
@@ -44,13 +44,11 @@ async def check_default_model(llm, model_id: str, timeout: float = 10.0) -> bool
             timeout=timeout,
         )
         if resp and resp.content:
-            logger.info(
-                "Model health check PASSED: %s (response: %r)", model_id, resp.content[:50]
-            )
+            logger.info("Model health check PASSED: %s (response: %r)", model_id, resp.content[:50])
             return True
         logger.warning("Model health check: %s returned empty response", model_id)
         return False
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Model health check TIMED OUT after %.1fs: %s", timeout, model_id)
         return False
     except Exception as exc:
@@ -66,9 +64,7 @@ async def check_default_model(llm, model_id: str, timeout: float = 10.0) -> bool
         return False
 
 
-async def check_model_cascade(
-    llm, models: list[str], timeout: float = 10.0
-) -> dict[str, bool]:
+async def check_model_cascade(llm, models: list[str], timeout: float = 10.0) -> dict[str, bool]:
     """Check every model in *models* and return per-model results.
 
     Args:

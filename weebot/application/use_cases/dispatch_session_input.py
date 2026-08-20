@@ -13,10 +13,12 @@ Each strategy is a thin orchestration function — the actual behavior
 is unchanged from the pre-existing dedicated endpoints; this module
 only decides *which* of them applies.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable, Dict, Optional
+from typing import TYPE_CHECKING
+from collections.abc import Awaitable, Callable
 
 from weebot.domain.models.session import Session, SessionStatus
 
@@ -36,28 +38,30 @@ class SessionInputContext:
     a container reference — keeps every strategy function unit-testable
     without a DI container or FastAPI request in scope.
     """
+
     session: Session
     text: str
-    state_repo: "StateRepositoryPort"
-    task_runner: "TaskRunnerPort"
-    llm: "LLMPort"
-    event_bus: "EventBusPort"
-    steering: "SteeringPort"
+    state_repo: StateRepositoryPort
+    task_runner: TaskRunnerPort
+    llm: LLMPort
+    event_bus: EventBusPort
+    steering: SteeringPort
     build_tools: Callable[[], Awaitable[object]]
-    build_chat_flow: Callable[[Session, Optional[str]], object]
-    model: Optional[str] = None
-    client_msg_id: Optional[str] = None
-    ponytail_mode: Optional[str] = None
+    build_chat_flow: Callable[[Session, str | None], object]
+    model: str | None = None
+    client_msg_id: str | None = None
+    ponytail_mode: str | None = None
 
 
 @dataclass
 class SessionInputResult:
     """What happened, for the response body."""
+
     session: Session
     verb: str  # "start" | "resume" | "steer" | "chat"
 
 
-def _with_prompt(session: Session, text: str, model: Optional[str]) -> Session:
+def _with_prompt(session: Session, text: str, model: str | None) -> Session:
     """Return a copy of *session* with ``context.last_prompt`` (and optionally
     ``context.model``) set — ``SessionContext`` is a typed Pydantic model, not
     a plain dict, so this goes through its own copy/``__setitem__`` rather
@@ -126,7 +130,7 @@ async def _chat(ctx: SessionInputContext) -> SessionInputResult:
     return SessionInputResult(session=session, verb="chat")
 
 
-_STRATEGIES: Dict[SessionStatus, Callable[[SessionInputContext], Awaitable[SessionInputResult]]] = {
+_STRATEGIES: dict[SessionStatus, Callable[[SessionInputContext], Awaitable[SessionInputResult]]] = {
     SessionStatus.PENDING: _start_task,
     SessionStatus.FAILED: _start_task,
     SessionStatus.WAITING: _resume,

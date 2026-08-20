@@ -4,6 +4,7 @@ The textual learning rate L_t (paper §3.4) limits how many edits are applied
 per step.  Starts with larger budgets for coarse improvements and decays
 toward smaller budgets for consolidation.
 """
+
 from __future__ import annotations
 
 import math
@@ -16,12 +17,7 @@ class LearningRateScheduler:
     the SkillOpt paper's design space (Table 2e).
     """
 
-    def __init__(
-        self,
-        initial: int = 8,
-        floor: int = 2,
-        schedule: str = "cosine",
-    ):
+    def __init__(self, initial: int = 8, floor: int = 2, schedule: str = "cosine"):
         self.initial = initial
         self.floor = floor
         self.schedule = schedule
@@ -47,9 +43,7 @@ class LearningRateScheduler:
 
         if self.schedule == "cosine":
             # Cosine decay: slow start, fast middle, slow end
-            lr = self.floor + 0.5 * (self.initial - self.floor) * (
-                1 + math.cos(math.pi * progress)
-            )
+            lr = self.floor + 0.5 * (self.initial - self.floor) * (1 + math.cos(math.pi * progress))
             return max(self.floor, int(round(lr)))
 
         if self.schedule == "linear":

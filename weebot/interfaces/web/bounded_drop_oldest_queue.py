@@ -11,6 +11,7 @@ not a port adapter, and interfaces must not import infrastructure
 directly (see .importlinter's "Interfaces must not depend on
 infrastructure adapters directly" contract).
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,5 @@
 """Chat REST API schemas — request and response Pydantic models."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     """Request to send a chat message."""
+
     message: str = Field(min_length=1, max_length=10000)
     model: str = Field(default="", description="Model to use (empty = session default)")
     session_id: str | None = Field(default=None, description="Resume an existing session")
@@ -13,6 +15,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     """Response from a chat message turn."""
+
     session_id: str
     message: str
     role: str = "assistant"
@@ -24,6 +27,7 @@ class ChatResponse(BaseModel):
 
 class ChatSessionSummary(BaseModel):
     """Summary of a chat session for listing."""
+
     id: str
     status: str
     message_count: int
@@ -34,5 +38,6 @@ class ChatSessionSummary(BaseModel):
 
 class ChatSessionList(BaseModel):
     """List of chat sessions."""
+
     sessions: list[ChatSessionSummary]
     total: int

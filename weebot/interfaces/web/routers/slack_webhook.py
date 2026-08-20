@@ -16,6 +16,7 @@ Returns:
 - ``503`` if the DI container (or Slack credentials) is not configured.
 - ``200`` on every valid, authenticated event.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,8 +50,7 @@ async def slack_events(request: Request):
     adapter = _get_or_create_adapter(request)
     if adapter is None:
         return JSONResponse(
-            status_code=503,
-            content={"error": "Slack adapter not configured (missing credentials)"},
+            status_code=503, content={"error": "Slack adapter not configured (missing credentials)"}
         )
 
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
@@ -103,8 +103,7 @@ def _get_or_create_adapter(request: Request):
 
     if not settings.slack_signing_secret or not settings.slack_bot_token:
         logger.warning(
-            "Slack adapter not configured: set SLACK_BOT_TOKEN "
-            "and SLACK_SIGNING_SECRET in .env"
+            "Slack adapter not configured: set SLACK_BOT_TOKEN " "and SLACK_SIGNING_SECRET in .env"
         )
         return None
 

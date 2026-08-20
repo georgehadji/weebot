@@ -1,4 +1,5 @@
 """Tests for vendored atomicmail JWT utilities (offline, no network)."""
+
 from __future__ import annotations
 
 import base64
@@ -32,12 +33,8 @@ def test_is_jwt_expired_respects_margin(monkeypatch) -> None:
     monkeypatch.setattr("time.time", lambda: 1_700_000_000.0)
     now_sec = int(1_700_000_000.0)
 
-    safely_valid = make_jwt(
-        {"exp": now_sec + ((SESSION_SAFETY_MARGIN_MS + 500) // 1000) + 1}
-    )
-    within_margin = make_jwt(
-        {"exp": now_sec + max(0, ((SESSION_SAFETY_MARGIN_MS - 500) // 1000))}
-    )
+    safely_valid = make_jwt({"exp": now_sec + ((SESSION_SAFETY_MARGIN_MS + 500) // 1000) + 1})
+    within_margin = make_jwt({"exp": now_sec + max(0, ((SESSION_SAFETY_MARGIN_MS - 500) // 1000))})
 
     assert is_jwt_expired(safely_valid, SESSION_SAFETY_MARGIN_MS) is False
     assert is_jwt_expired(within_margin, SESSION_SAFETY_MARGIN_MS) is True

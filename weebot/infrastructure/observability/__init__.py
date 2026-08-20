@@ -4,12 +4,7 @@ Provides health checks, metrics collection, and monitoring capabilities
 for production deployments.
 """
 
-from .health_checks import (
-    HealthCheckService,
-    HealthReport,
-    ComponentHealth,
-    HealthStatus,
-)
+from .health_checks import HealthCheckService, HealthReport, ComponentHealth, HealthStatus
 from weebot.infrastructure.observability.metrics import (
     llm_calls_total,
     tool_calls_total,

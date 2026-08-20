@@ -3,6 +3,7 @@
 Uses a temporary SQLite database to verify that flows properly persist
 all emitted events and that sessions can be reloaded with correct status.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -86,8 +87,7 @@ async def test_session_status_persisted(tmp_db: StateRepositoryPort):
     # Reload and verify
     loaded = await tmp_db.load_session("test-status")
     assert loaded is not None
-    assert loaded.status == SessionStatus.COMPLETED, \
-        "COMPLETED status must survive save/load"
+    assert loaded.status == SessionStatus.COMPLETED, "COMPLETED status must survive save/load"
 
 
 @pytest.mark.asyncio

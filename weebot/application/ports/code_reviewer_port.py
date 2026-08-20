@@ -1,4 +1,5 @@
 """CodeReviewerPort — abstract interface for per-step code review."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

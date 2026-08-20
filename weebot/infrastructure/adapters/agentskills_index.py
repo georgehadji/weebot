@@ -24,16 +24,15 @@ The agentskills.io format:
       ]
     }
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 import httpx
 
 from weebot.application.ports.skill_index_port import RemoteSkill, SkillIndexPort
-from weebot.infrastructure.adapters.skill_index_github import _parse_skill
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class AgentskillsIndexAdapter(SkillIndexPort):
     def __init__(
         self,
         index_url: str = "https://agentskills.io/api/v1/index.json",
-        http_client: Optional[httpx.AsyncClient] = None,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._index_url = index_url
         self._client = http_client or httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
@@ -103,7 +102,6 @@ class AgentskillsIndexAdapter(SkillIndexPort):
         import hashlib
         import tarfile
         import tempfile
-        from pathlib import Path
 
         try:
             resp = await self._client.get(skill.download_url)

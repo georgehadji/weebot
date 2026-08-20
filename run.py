@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """run.py - Main entry point for weebot Agent Framework."""
+
 import os
 import sys
 import asyncio
@@ -19,6 +20,7 @@ from weebot.config.settings import WeebotSettings
 
 # Clear stale bytecode cache to prevent import errors from old .pyc files
 import shutil as _shutil
+
 _root = Path(__file__).parent
 _count = 0
 for _pyc in _root.rglob("__pycache__"):
@@ -47,6 +49,7 @@ structlog.configure(
 # Clear the adapter cache on every startup so stale model names
 # and expired API keys are never reused from a previous run.
 from weebot.infrastructure.adapters.llm import adapter_factory as _af
+
 _af.get_adapter_factory().clear_cache()
 _af._default_factory = None
 
@@ -59,12 +62,15 @@ def validate_environment() -> None:
     """
     settings = WeebotSettings()
     settings.validate_at_least_one_key()
-    print(f"weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}")
+    print(
+        f"weebot initialized with {len(settings.available_providers())} AI provider(s): {', '.join(settings.available_providers())}"
+    )
 
 
 def run_cli() -> None:
     """Run the Click CLI interface."""
     from cli.main import cli
+
     cli()
 
 
@@ -142,8 +148,10 @@ def run_interactive(
         model_service = ModelSelectionService()
         # Use a free model by default. Override with --model or env DEFAULT_MODEL.
         import os as _os
+
         # Default model from centralized definition
         from weebot.config.model_refs import MODEL_BUDGET
+
         _default = _os.environ.get("DEFAULT_MODEL", MODEL_BUDGET)
         llm = model_service.create_llm_adapter(model or _default)
         _container = Container()
@@ -152,6 +160,7 @@ def run_interactive(
 
         # ── Phase 5: Steering — wire up mid-execution input channel ──
         from weebot.application.ports.steering_port import SteeringPort
+
         steering = _container.get(SteeringPort)
 
         subscriber = CLIEventSubscriber(use_rich=True)
@@ -160,8 +169,10 @@ def run_interactive(
         print("Type '>>' followed by a message to steer the agent mid-execution.")
         print("Enter 'quit' to exit.\n")
 
-        session_id = input("Session ID (default: interactive_session): ").strip() or "interactive_session"
-        
+        session_id = (
+            input("Session ID (default: interactive_session): ").strip() or "interactive_session"
+        )
+
         # Check if session exists and show status
         session = await state_repo.load_session(session_id)
         if session:
@@ -172,16 +183,24 @@ def run_interactive(
                 print(f"  Current Plan: {plan.title} ({done}/{len(plan.steps)} steps complete)")
 
         from weebot.application.cqrs.mediator import Mediator
+
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, model=model,
-            use_rich=False, skill_prompt=skill_prompt,
+            llm=llm,
+            state_repo=state_repo,
+            model=model,
+            use_rich=False,
+            skill_prompt=skill_prompt,
             steering=steering,
             mediator=_container.get(Mediator),
         )
 
         while True:
             # More conversational prompt
-            prompt_text = "Task / Answer: " if session and session.status == SessionStatus.WAITING else "Task description: "
+            prompt_text = (
+                "Task / Answer: "
+                if session and session.status == SessionStatus.WAITING
+                else "Task description: "
+            )
             raw = input(f"\n{prompt_text}").strip()
 
             # ">>" prefix sends a steering message mid-execution (no new task)
@@ -200,13 +219,13 @@ def run_interactive(
                     raw = "continue"
                 else:
                     continue
-            
+
             # Recursive prompt handler for HITL
             current_prompt = raw
             while True:
                 is_hitl = False
                 hitl_question = ""
-                
+
                 # Execute (either run_prompt for new/starting or resume for waiting)
                 # Note: run_prompt handles both if session exists.
                 async for event in runner.run_prompt(current_prompt, session_id=session_id):
@@ -216,14 +235,16 @@ def run_interactive(
                         hitl_question = event.question
                         # We break the async for to get the next answer from user
                         break
-                
+
                 # Update our local session state to check status
                 session = await state_repo.load_session(session_id)
-                
+
                 if is_hitl:
-                    current_prompt = input(f"\n[weebot asks] {hitl_question}\nYour answer: ").strip()
+                    current_prompt = input(
+                        f"\n[weebot asks] {hitl_question}\nYour answer: "
+                    ).strip()
                     if not current_prompt:
-                        current_prompt = "yes" # default to affirmative
+                        current_prompt = "yes"  # default to affirmative
                 else:
                     # No more HITL, go back to main task description prompt
                     break
@@ -245,7 +266,6 @@ async def _run_skillopt_pass() -> None:
     Uses 1 epoch × 2 steps to keep cost low.  Full training runs
     are available via ``python -m cli.main flow skillopt <name>``.
     """
-    import os as _os
     from weebot.application.di import Container
 
     container = Container()
@@ -259,6 +279,7 @@ async def _run_skillopt_pass() -> None:
 
     # Discover available skills
     from weebot.application.skills.skill_registry import SkillRegistry
+
     registry = SkillRegistry()
     registry.load_all()
     skills = registry.list_names()
@@ -307,17 +328,23 @@ if __name__ == "__main__":
     parser.add_argument("--diagnostic", action="store_true", help="Run diagnostics")
     parser.add_argument("--interactive", action="store_true", help="Interactive mode")
     parser.add_argument("--cli", action="store_true", help="Run CLI (default)")
-    parser.add_argument("--flow", default="plan_act", help="Flow type for interactive mode (default: plan_act)")
-    parser.add_argument("--model", default=None, help="Override default LLM model")
-    parser.add_argument("--skill", default=None, help="Load a skill file from weebot/skills/<name>.md")
     parser.add_argument(
-        "--skillopt", action="store_true",
-        default=os.environ.get("WEEBOT_SKILLOPT", "0") == "1",
-        help="Run SkillOptFlow learning pass after interactive session "
-             "(set WEEBOT_SKILLOPT=1 in .env to enable by default)",
+        "--flow", default="plan_act", help="Flow type for interactive mode (default: plan_act)"
+    )
+    parser.add_argument("--model", default=None, help="Override default LLM model")
+    parser.add_argument(
+        "--skill", default=None, help="Load a skill file from weebot/skills/<name>.md"
     )
     parser.add_argument(
-        "--harness-version", default=os.environ.get("WEEBOT_HARNESS_VERSION"),
+        "--skillopt",
+        action="store_true",
+        default=os.environ.get("WEEBOT_SKILLOPT", "0") == "1",
+        help="Run SkillOptFlow learning pass after interactive session "
+        "(set WEEBOT_SKILLOPT=1 in .env to enable by default)",
+    )
+    parser.add_argument(
+        "--harness-version",
+        default=os.environ.get("WEEBOT_HARNESS_VERSION"),
         help="Select harness version (YAML file name in config/harness/)",
     )
     args = parser.parse_args()
@@ -332,6 +359,8 @@ if __name__ == "__main__":
         ok = run_diagnostic()
         sys.exit(0 if ok else 1)
     elif args.interactive:
-        run_interactive(flow_type=args.flow, model=args.model, skill=args.skill, skillopt=args.skillopt)
+        run_interactive(
+            flow_type=args.flow, model=args.model, skill=args.skill, skillopt=args.skillopt
+        )
     else:
         run_cli()

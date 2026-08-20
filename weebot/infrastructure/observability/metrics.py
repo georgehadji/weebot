@@ -3,13 +3,12 @@
 Replaces the in-process MetricsCollector with structured,
 exportable metric counters and histograms.
 """
+
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, REGISTRY
 
 # ── LLM calls ──
 llm_calls_total = Counter(
-    "weebot_llm_calls_total",
-    "Total LLM API calls",
-    ["model", "provider", "status"],
+    "weebot_llm_calls_total", "Total LLM API calls", ["model", "provider", "status"]
 )
 llm_call_duration_seconds = Histogram(
     "weebot_llm_duration_seconds",
@@ -19,11 +18,7 @@ llm_call_duration_seconds = Histogram(
 )
 
 # ── Tool calls ──
-tool_calls_total = Counter(
-    "weebot_tool_calls_total",
-    "Total tool executions",
-    ["tool", "success"],
-)
+tool_calls_total = Counter("weebot_tool_calls_total", "Total tool executions", ["tool", "success"])
 tool_call_duration_seconds = Histogram(
     "weebot_tool_duration_seconds",
     "Tool execution duration",
@@ -38,32 +33,17 @@ flow_step_duration_seconds = Histogram(
     ["flow_type", "state"],
     buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0),
 )
-session_active = Gauge(
-    "weebot_sessions_active",
-    "Currently active sessions",
-)
-session_total = Counter(
-    "weebot_sessions_total",
-    "Total sessions created",
-)
+session_active = Gauge("weebot_sessions_active", "Currently active sessions")
+session_total = Counter("weebot_sessions_total", "Total sessions created")
 
 # ── Event bus ──
 events_published_total = Counter(
-    "weebot_events_published_total",
-    "Total events published",
-    ["event_type"],
+    "weebot_events_published_total", "Total events published", ["event_type"]
 )
-events_pending = Gauge(
-    "weebot_events_pending",
-    "Currently pending events in bus",
-)
+events_pending = Gauge("weebot_events_pending", "Currently pending events in bus")
 
 # ── Exceptions ──
-exceptions_total = Counter(
-    "weebot_exceptions_total",
-    "Total exceptions raised",
-    ["exception_type"],
-)
+exceptions_total = Counter("weebot_exceptions_total", "Total exceptions raised", ["exception_type"])
 
 # ── MCP server ──
 mcp_connections_total = Counter(
@@ -72,9 +52,7 @@ mcp_connections_total = Counter(
     ["transport"],  # "stdio" | "sse"
 )
 mcp_rate_limits_hit_total = Counter(
-    "weebot_mcp_rate_limits_hit_total",
-    "Total MCP rate limit rejections",
-    ["tool"],
+    "weebot_mcp_rate_limits_hit_total", "Total MCP rate limit rejections", ["tool"]
 )
 
 # ── Security ──
@@ -92,8 +70,7 @@ session_persistence_failures_total = Counter(
 
 # ── Scheduling ──
 scheduled_jobs_active = Gauge(
-    "weebot_scheduled_jobs_active",
-    "Number of scheduled jobs currently executing",
+    "weebot_scheduled_jobs_active", "Number of scheduled jobs currently executing"
 )
 scheduled_jobs_runs_total = Counter(
     "weebot_scheduled_jobs_runs_total",
@@ -115,16 +92,11 @@ harness_metric_delta = Gauge(
 
 # ── Monitors / Heartbeat ──
 session_stale_count = Gauge(
-    "weebot_sessions_stale_count",
-    "RUNNING sessions with no update beyond the staleness threshold",
+    "weebot_sessions_stale_count", "RUNNING sessions with no update beyond the staleness threshold"
 )
-memory_rss_mb = Gauge(
-    "weebot_memory_rss_mb",
-    "Process RSS memory in megabytes",
-)
+memory_rss_mb = Gauge("weebot_memory_rss_mb", "Process RSS memory in megabytes")
 memory_percent = Gauge(
-    "weebot_memory_percent",
-    "Process memory as a percentage of the configured limit",
+    "weebot_memory_percent", "Process memory as a percentage of the configured limit"
 )
 
 
@@ -135,7 +107,7 @@ def metrics_text() -> str:
 
 def clear_metrics() -> None:
     """Reset all metrics (for testing)."""
-    from prometheus_client import CollectorRegistry
+
     for collector in list(REGISTRY._collector_to_names):
         try:
             REGISTRY.unregister(collector)

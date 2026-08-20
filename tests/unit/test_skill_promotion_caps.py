@@ -6,17 +6,14 @@ drift. Both promoters withhold the trust-tier bump once the per-run cap
 is reached, while still recording the underlying signal (SkillReview /
 positive_uses) that earned it.
 """
+
 from __future__ import annotations
 
-from typing import Optional
-
-import pytest
 
 from weebot.application.cqrs.handlers.validation_handler import ValidateSkillHandler
 from weebot.application.cqrs.commands.validation_commands import ValidateSkillCommand
 from weebot.application.services.skill_review_gate import SkillReviewGate
 from weebot.domain.models.skill import Skill, SkillMetadata, SkillProvenance
-
 
 _TOPICS = {
     "a": "diagnose flaky pytest fixtures by isolating shared mutable state",
@@ -42,8 +39,7 @@ def _candidate_skill(name: str, positive_uses: int = 2) -> Skill:
         description="does a thing",
         content="# steps\n1. do the thing",
         metadata=SkillMetadata(
-            trust="candidate",
-            provenance=SkillProvenance(positive_uses=positive_uses),
+            trust="candidate", provenance=SkillProvenance(positive_uses=positive_uses)
         ),
     )
 
@@ -51,7 +47,7 @@ def _candidate_skill(name: str, positive_uses: int = 2) -> Skill:
 class _FakeSkillStore:
     """Minimal in-memory SkillStorePort stub — no SkillStorePort ABC needed."""
 
-    def __init__(self, skills: Optional[dict[str, Skill]] = None) -> None:
+    def __init__(self, skills: dict[str, Skill] | None = None) -> None:
         self._skills = dict(skills or {})
         self.saved: list[Skill] = []
 
@@ -59,7 +55,7 @@ class _FakeSkillStore:
         self._skills[skill.name] = skill
         self.saved.append(skill)
 
-    async def load(self, name: str) -> Optional[Skill]:
+    async def load(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
     async def list_names(self) -> list[str]:
@@ -117,34 +113,34 @@ class TestValidateSkillHandlerPromotionCap:
     async def test_promotes_under_cap(self):
         store = _FakeSkillStore({"a": _candidate_skill("a", positive_uses=2)})
         handler = ValidateSkillHandler(
-            _FakeValidationRunner(passed=True), skill_store=store, max_promotions_per_run=2,
+            _FakeValidationRunner(passed=True), skill_store=store, max_promotions_per_run=2
         )
         result = await handler.handle(
-            ValidateSkillCommand(
-                skill_name="a", candidate_content="x", validation_task_ids=["t1"],
-            )
+            ValidateSkillCommand(skill_name="a", candidate_content="x", validation_task_ids=["t1"])
         )
         assert result.success
         saved = await store.load("a")
         assert saved.metadata.trust == "trusted"
 
     async def test_withholds_promotion_once_cap_reached(self):
-        store = _FakeSkillStore({
-            "a": _candidate_skill("a", positive_uses=2),
-            "b": _candidate_skill("b", positive_uses=2),
-        })
+        store = _FakeSkillStore(
+            {
+                "a": _candidate_skill("a", positive_uses=2),
+                "b": _candidate_skill("b", positive_uses=2),
+            }
+        )
         handler = ValidateSkillHandler(
-            _FakeValidationRunner(passed=True), skill_store=store, max_promotions_per_run=1,
+            _FakeValidationRunner(passed=True), skill_store=store, max_promotions_per_run=1
         )
 
-        await handler.handle(ValidateSkillCommand(
-            skill_name="a", candidate_content="x", validation_task_ids=["t1"],
-        ))
+        await handler.handle(
+            ValidateSkillCommand(skill_name="a", candidate_content="x", validation_task_ids=["t1"])
+        )
         assert (await store.load("a")).metadata.trust == "trusted"
 
-        await handler.handle(ValidateSkillCommand(
-            skill_name="b", candidate_content="x", validation_task_ids=["t1"],
-        ))
+        await handler.handle(
+            ValidateSkillCommand(skill_name="b", candidate_content="x", validation_task_ids=["t1"])
+        )
         skill_b = await store.load("b")
         # positive_uses still recorded, but the trust bump was withheld by the cap.
         assert skill_b.metadata.trust == "candidate"

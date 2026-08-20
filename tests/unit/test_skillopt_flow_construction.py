@@ -19,6 +19,7 @@ A third instance was in ``_create_optimizer_agent``, which passed
 
 These tests exist so that class of drift fails in CI instead of in production.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -132,15 +133,11 @@ def test_di_call_site_supplies_every_required_param() -> None:
 
     sig = inspect.signature(SkillOptFlow.__init__)
     required = {
-        n
-        for n, p in sig.parameters.items()
-        if n != "self" and p.default is inspect.Parameter.empty
+        n for n, p in sig.parameters.items() if n != "self" and p.default is inspect.Parameter.empty
     }
     missing = required - _di_call_kwargs()
 
-    assert not missing, (
-        f"DI never passes required SkillOptFlow params: {sorted(missing)}."
-    )
+    assert not missing, f"DI never passes required SkillOptFlow params: {sorted(missing)}."
 
 
 def test_flow_constructs_with_di_kwargs() -> None:
@@ -191,11 +188,7 @@ def test_build_skill_opt_flow_does_not_raise(container: Container) -> None:
     """The full DI path — register_skillopt_handlers + SkillOptFlow — must
     construct without TypeError. This is the call CLI entry points make."""
     flow = container.build_skill_opt_flow(
-        skill_name="demo",
-        train_tasks=["task-1"],
-        epochs=1,
-        steps_per_epoch=1,
-        batch_size=1,
+        skill_name="demo", train_tasks=["task-1"], epochs=1, steps_per_epoch=1, batch_size=1
     )
 
     from weebot.application.flows.skill_opt_flow import SkillOptFlow
@@ -213,11 +206,7 @@ def test_build_skill_opt_flow_registers_skillopt_handlers(container: Container) 
     from weebot.application.cqrs.commands.transfer_commands import ValidateTransferCommand
 
     flow = container.build_skill_opt_flow(
-        skill_name="demo",
-        train_tasks=["task-1"],
-        epochs=1,
-        steps_per_epoch=1,
-        batch_size=1,
+        skill_name="demo", train_tasks=["task-1"], epochs=1, steps_per_epoch=1, batch_size=1
     )
 
     mediator = flow._mediator
@@ -227,29 +216,19 @@ def test_build_skill_opt_flow_registers_skillopt_handlers(container: Container) 
     assert mediator.is_command_registered(ValidateTransferCommand)
 
 
-def test_build_skill_opt_flow_registers_harness_edit_handler(
-    container: Container,
-) -> None:
+def test_build_skill_opt_flow_registers_harness_edit_handler(container: Container) -> None:
     """ApplyHarnessEditsCommand is registered once harness_optimization_target
     is resolvable — it was never registered with any mediator before."""
-    from weebot.application.cqrs.commands.harness_edit_commands import (
-        ApplyHarnessEditsCommand,
-    )
+    from weebot.application.cqrs.commands.harness_edit_commands import ApplyHarnessEditsCommand
 
     flow = container.build_skill_opt_flow(
-        skill_name="demo",
-        train_tasks=["task-1"],
-        epochs=1,
-        steps_per_epoch=1,
-        batch_size=1,
+        skill_name="demo", train_tasks=["task-1"], epochs=1, steps_per_epoch=1, batch_size=1
     )
 
     assert flow._mediator.is_command_registered(ApplyHarnessEditsCommand)
 
 
-def test_trajectory_builder_registered_as_instance_not_factory(
-    container: Container,
-) -> None:
+def test_trajectory_builder_registered_as_instance_not_factory(container: Container) -> None:
     """trajectory_builder must be registered via register_instance(), not
     register(). register() treats the stored value as a zero-arg factory and
     calls it — a plain TrajectoryBuilder instance is not callable, so a
@@ -257,11 +236,7 @@ def test_trajectory_builder_registered_as_instance_not_factory(
     from weebot.application.services.trajectory_builder import TrajectoryBuilder
 
     container.build_skill_opt_flow(
-        skill_name="demo",
-        train_tasks=["task-1"],
-        epochs=1,
-        steps_per_epoch=1,
-        batch_size=1,
+        skill_name="demo", train_tasks=["task-1"], epochs=1, steps_per_epoch=1, batch_size=1
     )
 
     resolved = container.get("trajectory_builder")

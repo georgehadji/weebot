@@ -1,14 +1,12 @@
 """CLI runner for the new Clean Architecture agent flows."""
+
 from __future__ import annotations
 
-import asyncio
-import atexit
 import logging
 import uuid
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
-from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -22,7 +20,10 @@ _log = logging.getLogger(__name__)
 
 def _get_task_runner():
     import importlib as _il
+
     return _il.import_module("weebot.application.services.task_runner").TaskRunner
+
+
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.interfaces.cli.event_logger import CLIEventSubscriber
 from weebot.interfaces.factories import build_tools, create_flow, route_and_create_flow
@@ -35,15 +36,15 @@ class AgentRunner:
         self,
         llm: LLMPort,
         state_repo: StateRepositoryPort,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
         role: str = "admin",
-        mcp_config: Optional[dict] = None,
+        mcp_config: dict | None = None,
         use_rich: bool = True,
-        mediator = None,
-        skill_prompt: Optional[str] = None,
-        steering = None,  # SteeringPort (Phase 5)
-        router: Optional[TaskRouterPort] = None,  # Enhancement 6 — Neural Task Router
+        mediator=None,
+        skill_prompt: str | None = None,
+        steering=None,  # SteeringPort (Phase 5)
+        router: TaskRouterPort | None = None,  # Enhancement 6 — Neural Task Router
     ) -> None:
         self._llm = llm
         self._state_repo = state_repo
@@ -56,10 +57,11 @@ class AgentRunner:
         self._steering = steering
         self._router = router  # Enhancement 6
         self._task_runner = _get_task_runner()(state_repo=state_repo, event_bus=event_bus)
-        self._tools: Optional[ToolCollection] = None
+        self._tools: ToolCollection | None = None
         self._retention_agent = None
         try:
             from weebot.application.di import Container
+
             _c = Container()
             _c.configure_defaults()
             self._retention_agent = _c.get("retention_agent")
@@ -72,15 +74,11 @@ class AgentRunner:
     async def _ensure_tools(self) -> ToolCollection:
         if self._tools is None:
             self._tools = await build_tools(
-                role=self._role,
-                mcp_config=self._mcp_config,
-                llm_port=self._llm,
+                role=self._role, mcp_config=self._mcp_config, llm_port=self._llm
             )
         return self._tools
 
-    async def _run_retention(
-        self, session_id: str, session_summary: str,
-    ) -> None:
+    async def _run_retention(self, session_id: str, session_summary: str) -> None:
         """Run RetentionAgent as a background task — never blocks."""
         if self._retention_agent is None:
             return
@@ -94,7 +92,9 @@ class AgentRunner:
             )
             _log.info(
                 "RetentionReview %s: %s — %s",
-                session_id, review.verdict.value, review.reasoning[:120],
+                session_id,
+                review.verdict.value,
+                review.reasoning[:120],
             )
         except Exception:
             _log.debug("RetentionReview background task failed", exc_info=True)
@@ -102,12 +102,13 @@ class AgentRunner:
     async def run_prompt(
         self,
         prompt: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         user_id: str = "cli-user",
         agent_id: str = "weebot-cli",
     ) -> AsyncGenerator[AgentEvent, None]:
         # ── Enhancement 7: Detect language ──
         import importlib as _il
+
         _lang_mod = _il.import_module("weebot.application.services.language_detector")
         lang = _lang_mod.LanguageDetector.detect(prompt)
         if lang != "en":
@@ -115,41 +116,42 @@ class AgentRunner:
         else:
             language_injection = ""
         """Run a prompt through PlanActFlow, yielding events."""
-        session: Optional[Session] = None
+        session: Session | None = None
         if session_id:
             session = await self._state_repo.load_session(session_id)
 
         # ── RetentionReview for stale pending sessions ──────────────
-        if session is not None and session.status in (
-            SessionStatus.PENDING, SessionStatus.WAITING,
-        ):
+        if session is not None and session.status in (SessionStatus.PENDING, SessionStatus.WAITING):
             import time as _time
-            if hasattr(session.updated_at, 'timestamp'):
+
+            if hasattr(session.updated_at, "timestamp"):
                 age_hours = (_time.time() - session.updated_at.timestamp()) / 3600
                 if age_hours > 24 and self._retention_agent:
                     import asyncio as _aio
+
                     _session_summary = session.title or session.id
                     _aio.ensure_future(self._run_retention(session.id, _session_summary))
 
         if session is None:
             session = Session(
-                id=session_id or str(uuid.uuid4()),
-                user_id=user_id,
-                agent_id=agent_id,
+                id=session_id or str(uuid.uuid4()), user_id=user_id, agent_id=agent_id
             )
-            session = session.model_copy(update={"context": session.context.model_copy(update={"last_prompt": prompt})})
+            session = session.model_copy(
+                update={"context": session.context.model_copy(update={"last_prompt": prompt})}
+            )
             await self._state_repo.save_session(session)
         else:
-            session = session.model_copy(update={"context": session.context.model_copy(update={"last_prompt": prompt})})
-        
+            session = session.model_copy(
+                update={"context": session.context.model_copy(update={"last_prompt": prompt})}
+            )
+
         # Start behavior tracking for this session
         from weebot.core.behavior_integration import start_session_tracking_async
+
         behavior_tracker = await start_session_tracking_async(
-            session_id=session.id,
-            working_dir=Path.cwd(),
-            user_id=user_id
+            session_id=session.id, working_dir=Path.cwd(), user_id=user_id
         )
-        
+
         if behavior_tracker:
             self._print_behavior_notice(session.id)
 
@@ -176,15 +178,19 @@ class AgentRunner:
                 state_repo=self._state_repo,
             )
             # Store the route in session context for audit and traceability
-            session = session.model_copy(update={
-                "context": session.context.model_copy(update={
-                    "extra": {
-                        **session.context.extra,
-                        "task_route": task_route.category.value,
-                        "task_complexity": task_route.complexity.value,
-                    }
-                })
-            })
+            session = session.model_copy(
+                update={
+                    "context": session.context.model_copy(
+                        update={
+                            "extra": {
+                                **session.context.extra,
+                                "task_route": task_route.category.value,
+                                "task_complexity": task_route.complexity.value,
+                            }
+                        }
+                    )
+                }
+            )
         else:
             flow = create_flow(
                 flow_type="plan_act",
@@ -217,26 +223,25 @@ class AgentRunner:
         if flow_session is not None:
             # The flow's session is the canonical state after execution
             session = flow_session
-        
+
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
         elif not session.status == SessionStatus.WAITING:
             # If not done and not explicitly waiting for HITL, assume it finished
             # its current loop and is waiting for the next task description.
             session = session.set_status(SessionStatus.WAITING)
-            
+
         await self._state_repo.save_session(session)
-        
+
         # Stop behavior tracking and show final report
         from weebot.core.behavior_integration import stop_session_tracking_async
+
         final_stats = await stop_session_tracking_async(session.id, generate_report=True)
         if final_stats:
             self._print_behavior_summary(final_stats)
 
     async def resume_session(
-        self,
-        session_id: str,
-        answer: str,
+        self, session_id: str, answer: str
     ) -> AsyncGenerator[AgentEvent, None]:
         """Resume a waiting session by injecting a user answer.
 
@@ -257,6 +262,7 @@ class AgentRunner:
 
         # Sanitize credentials from the user's answer before persisting
         from weebot.core.credential_sanitizer import sanitize
+
         answer = sanitize(answer)
 
         session = session.add_user_message(answer)
@@ -293,17 +299,17 @@ class AgentRunner:
         if flow_session is not None:
             # The flow's session is the canonical state after execution
             session = flow_session
-            
+
         if flow.is_done():
             session = session.set_status(SessionStatus.COMPLETED)
         elif not session.status == SessionStatus.WAITING:
             # If not done and not explicitly waiting for HITL, assume it finished
             # its current loop and is waiting for the next task description.
             session = session.set_status(SessionStatus.WAITING)
-            
+
         await self._state_repo.save_session(session)
 
-    async def list_sessions(self, user_id: Optional[str] = None) -> list[Session]:
+    async def list_sessions(self, user_id: str | None = None) -> list[Session]:
         """List persisted sessions."""
         return await self._state_repo.list_sessions(user_id=user_id)
 
@@ -327,7 +333,13 @@ class AgentRunner:
         previous = flow.undo()
         if previous is None:
             return False
-        session = session.model_copy(update={"context": session.context.model_copy(update={"extra": {**session.context.extra, "plan_undo": True}})})
+        session = session.model_copy(
+            update={
+                "context": session.context.model_copy(
+                    update={"extra": {**session.context.extra, "plan_undo": True}}
+                )
+            }
+        )
         await self._state_repo.save_session(session)
         return True
 
@@ -335,50 +347,57 @@ class AgentRunner:
         """Cancel a running session."""
         # Stop behavior tracking on cancel
         from weebot.core.behavior_integration import stop_session_tracking_async
+
         await stop_session_tracking_async(session_id, generate_report=False)
         return await self._task_runner.cancel_session(session_id)
-    
+
     def _print_behavior_notice(self, session_id: str) -> None:
         """Print notice that behavior tracking is active."""
         try:
             from rich.console import Console
             from rich.panel import Panel
+
             console = Console()
-            console.print(Panel(
-                f"[Behavior] Tracking active for session: {session_id[:8]}...\n"
-                f"   All file changes are being recorded to ~/.weebot/ledger/",
-                style="dim",
-                border_style="blue"
-            ))
+            console.print(
+                Panel(
+                    f"[Behavior] Tracking active for session: {session_id[:8]}...\n"
+                    f"   All file changes are being recorded to ~/.weebot/ledger/",
+                    style="dim",
+                    border_style="blue",
+                )
+            )
         except Exception:
             try:
                 print(f"\n🔍 Behavior tracking active: {session_id[:8]}...")
-                print(f"   Recording to ~/.weebot/ledger/\n")
+                print("   Recording to ~/.weebot/ledger/\n")
             except UnicodeEncodeError:
                 print(f"\n[Behavior] Tracking active for session: {session_id[:8]}...")
-                print(f"   Recording to ~/.weebot/ledger/\n")
-    
+                print("   Recording to ~/.weebot/ledger/\n")
+
     def _print_behavior_summary(self, stats: dict) -> None:
         """Print behavior tracking summary."""
         try:
             from rich.console import Console
             from rich.panel import Panel
+
             console = Console()
-            
-            trust = stats.get('trust_score', 100)
-            total = stats.get('trust_details', {}).get('total_actions', 0)
-            
+
+            trust = stats.get("trust_score", 100)
+            total = stats.get("trust_details", {}).get("total_actions", 0)
+
             style = "green" if trust >= 90 else "yellow" if trust >= 70 else "red"
-            
-            console.print(Panel(
-                f"📊 Session Behavior Report\n"
-                f"   Trust Score: {trust}% | Total Actions: {total}",
-                style=style,
-                border_style=style
-            ))
+
+            console.print(
+                Panel(
+                    f"📊 Session Behavior Report\n"
+                    f"   Trust Score: {trust}% | Total Actions: {total}",
+                    style=style,
+                    border_style=style,
+                )
+            )
         except Exception:
-            trust = stats.get('trust_score', 100)
-            total = stats.get('trust_details', {}).get('total_actions', 0)
+            trust = stats.get("trust_score", 100)
+            total = stats.get("trust_details", {}).get("total_actions", 0)
             try:
                 print(f"\n📊 Behavior Report: Trust={trust}%, Actions={total}\n")
             except UnicodeEncodeError:

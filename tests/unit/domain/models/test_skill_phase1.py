@@ -1,16 +1,16 @@
 """Phase 1 unit tests — LLM-backed skill distillation."""
+
 from __future__ import annotations
 
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from weebot.application.services.autonomous_learning import (
     AutonomousSkillCreator,
     _parse_distiller_response,
 )
-from weebot.domain.models.skill import Skill, TrustTier
-
+from weebot.domain.models.skill import Skill
 
 # ── _parse_distiller_response ─────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ class TestParseDistillerResponse:
         assert len(name) <= 50
 
     def test_json_embedded_in_text(self):
-        raw = 'Here is the analysis:\n' + self._make_json() + '\nEnd.'
+        raw = "Here is the analysis:\n" + self._make_json() + "\nEnd."
         result = _parse_distiller_response(raw)
         assert result is not None
 
@@ -111,24 +111,28 @@ class TestAnalyzeSession:
         tracker = ProposalTracker(suppression_threshold=100)
         return AutonomousSkillCreator(llm=llm, skill_store=store, proposal_tracker=tracker), store
 
-    GOOD_TRAJECTORY = "\n".join([
-        "Task: Deploy microservice to production Kubernetes cluster",
-        "Steps completed: 5, tool calls: 8",
-        "  - [s1] Built Docker image with multi-stage build to reduce final image size",
-        "  - [s2] Pushed image to private container registry with appropriate tags",
-        "  - [s3] Updated Kubernetes deployment manifest with new image tag and resource limits",
-        "  - [s4] Applied manifest via kubectl apply, verified rollout began successfully",
-        "  - [s5] Verified rollout status via kubectl rollout status, confirmed 3/3 replicas ready",
-        "  - [s6] Checked application logs to confirm no startup errors",
-        "  - [s7] Updated deployment documentation with new image version and release notes",
-    ])
+    GOOD_TRAJECTORY = "\n".join(
+        [
+            "Task: Deploy microservice to production Kubernetes cluster",
+            "Steps completed: 5, tool calls: 8",
+            "  - [s1] Built Docker image with multi-stage build to reduce final image size",
+            "  - [s2] Pushed image to private container registry with appropriate tags",
+            "  - [s3] Updated Kubernetes deployment manifest with new image tag and resource limits",
+            "  - [s4] Applied manifest via kubectl apply, verified rollout began successfully",
+            "  - [s5] Verified rollout status via kubectl rollout status, confirmed 3/3 replicas ready",
+            "  - [s6] Checked application logs to confirm no startup errors",
+            "  - [s7] Updated deployment documentation with new image version and release notes",
+        ]
+    )
 
-    GOOD_LLM_RESPONSE = json.dumps({
-        "worth_creating": True,
-        "name": "k8s-deploy-microservice",
-        "description": "Deploy a microservice to Kubernetes via Docker.",
-        "content": "## When to Use\nWhen deploying to Kubernetes.\n## Procedure\n1. Build\n2. Push\n3. Deploy\n## Notes\n- Use kubectl",
-    })
+    GOOD_LLM_RESPONSE = json.dumps(
+        {
+            "worth_creating": True,
+            "name": "k8s-deploy-microservice",
+            "description": "Deploy a microservice to Kubernetes via Docker.",
+            "content": "## When to Use\nWhen deploying to Kubernetes.\n## Procedure\n1. Build\n2. Push\n3. Deploy\n## Notes\n- Use kubectl",
+        }
+    )
 
     @pytest.mark.asyncio
     async def test_returns_quarantined_skill(self):
@@ -177,7 +181,9 @@ class TestAnalyzeSession:
 
     @pytest.mark.asyncio
     async def test_not_worth_creating_returns_none(self):
-        not_worth = json.dumps({"worth_creating": False, "name": "", "description": "", "content": ""})
+        not_worth = json.dumps(
+            {"worth_creating": False, "name": "", "description": "", "content": ""}
+        )
         creator, store = self._make_creator(not_worth)
         skill = await creator.analyze_session("sess-001", self.GOOD_TRAJECTORY)
         assert skill is None
@@ -199,11 +205,12 @@ class TestConfigField:
     def test_plan_act_flow_config_has_skill_distiller(self):
         import dataclasses
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+
         fields = {f.name for f in dataclasses.fields(PlanActFlowConfig)}
         assert "skill_distiller" in fields
 
     def test_plan_act_flow_stores_skill_distiller(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
         from weebot.domain.models.session import Session
@@ -211,10 +218,7 @@ class TestConfigField:
         session = Session(id="test-session")
         distiller = MagicMock()
         cfg = PlanActFlowConfig(
-            llm=MagicMock(),
-            tools=None,
-            session=session,
-            skill_distiller=distiller,
+            llm=MagicMock(), tools=None, session=session, skill_distiller=distiller
         )
         flow = PlanActFlow(cfg)
         assert flow._skill_distiller is distiller

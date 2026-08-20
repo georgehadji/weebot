@@ -4,18 +4,18 @@ Each domain gets its own connection pool so a schema migration for one
 domain never locks the others.  All pools use the same PostgreSQL server
 but different database names (or schemas).
 """
+
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 _DEFAULT_DSN = os.environ.get(
-    "WEEBOT_PG_DSN",
-    "postgresql://weebot:weebot@localhost:5432/weebot_sessions",
+    "WEEBOT_PG_DSN", "postgresql://weebot:weebot@localhost:5432/weebot_sessions"
 )
 
 # Per-domain database names (appended to base DSN)
@@ -32,6 +32,7 @@ _pools: dict[str, Any] = {}
 def _build_dsn(base_dsn: str, domain_db: str) -> str:
     """Replace the database name in *base_dsn* with *domain_db*."""
     import re
+
     # Replace last path segment (the database name)
     return re.sub(r"/([^/]+)$", f"/{domain_db}", base_dsn)
 
@@ -51,10 +52,7 @@ async def get_pool(domain: str = "sessions", min_size: int = 2, max_size: int = 
 
     dsn = _build_dsn(_DEFAULT_DSN, _DOMAIN_DATABASES[domain])
     pool = await asyncpg.create_pool(
-        dsn=dsn,
-        min_size=min_size,
-        max_size=max_size,
-        command_timeout=30,
+        dsn=dsn, min_size=min_size, max_size=max_size, command_timeout=30
     )
     _pools[domain] = pool
     return pool

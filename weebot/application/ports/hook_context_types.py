@@ -5,20 +5,21 @@ and hook authors know exactly what keys are guaranteed.
 
 Architecture: Application layer (pure Python typing, no I/O, no framework).
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 
 class PreExecuteContext(TypedDict):
     session_id: str
     prompt: str
-    plan: Optional[Any]  # None on first call
+    plan: Any | None  # None on first call
 
 
 class PostExecuteContext(TypedDict):
     session_id: str
-    plan: Optional[Any]
+    plan: Any | None
     status: str
     elapsed_ms: float
     total_tokens: int
@@ -46,21 +47,21 @@ class OnErrorContext(TypedDict):
     step_id: str
     error: str
     error_type: str
-    plan: Optional[Any]
+    plan: Any | None
 
 
 class PreToolCallContext(TypedDict):
     session_id: str
     step_id: str
     tool_name: str
-    tool_args: Dict[str, Any]
+    tool_args: dict[str, Any]
 
 
 class PostToolCallContext(TypedDict):
     session_id: str
     step_id: str
     tool_name: str
-    tool_args: Dict[str, Any]
+    tool_args: dict[str, Any]
     result: Any
     elapsed_ms: float
     success: bool
@@ -90,14 +91,14 @@ class PostBashGuardContext(TypedDict):
 
 class PostVerificationContext(TypedDict):
     session_id: str
-    scores: Dict[str, int]
-    gate_failures: List[str]
+    scores: dict[str, int]
+    gate_failures: list[str]
     inconsistency_count: int
 
 
 class PostCompleteContext(TypedDict):
     session_id: str
-    plan: Optional[Any]
+    plan: Any | None
     tool_count: int
     error_count: int
     total_elapsed_ms: float

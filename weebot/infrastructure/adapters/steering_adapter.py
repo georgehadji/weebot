@@ -4,10 +4,10 @@ Each session gets an asyncio.Queue.  send() puts a message; poll()
 gets it non-blocking.  Thread-safe for send() from a stdin listener
 thread via call_soon_threadsafe.
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from weebot.application.ports.steering_port import SteeringPort
 
@@ -18,7 +18,7 @@ class InMemorySteeringAdapter(SteeringPort):
     def __init__(self) -> None:
         self._queues: dict[str, asyncio.Queue[str]] = {}
 
-    async def poll(self, session_id: str) -> Optional[str]:
+    async def poll(self, session_id: str) -> str | None:
         """Return the next pending steering message, or None."""
         q = self._queues.get(session_id)
         if q is None or q.empty():

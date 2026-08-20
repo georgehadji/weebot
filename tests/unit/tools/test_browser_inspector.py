@@ -5,21 +5,20 @@ Playwright is mocked — no real browser is launched. Tests verify:
 - Error handling (no browser session, missing selector, bad action)
 - Integration with advanced_browser module-level state
 """
+
 from __future__ import annotations
 
 import base64
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from weebot.tools.browser_inspector import BrowserInspectorTool
-from weebot.tools.base import ToolResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_page(url: str = "https://example.com") -> MagicMock:
     """Return a MagicMock standing in for a Playwright Page."""
@@ -45,6 +44,7 @@ def _make_mock_browser(page: MagicMock) -> MagicMock:
 # ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
+
 
 class TestBrowserInspectorMetadata:
     def test_tool_name(self):
@@ -72,6 +72,7 @@ class TestBrowserInspectorMetadata:
 # No browser session guard
 # ---------------------------------------------------------------------------
 
+
 class TestNoBrowserSession:
     @pytest.mark.asyncio
     async def test_returns_error_when_no_page(self):
@@ -92,6 +93,7 @@ class TestNoBrowserSession:
 # ---------------------------------------------------------------------------
 # extract_design_tokens
 # ---------------------------------------------------------------------------
+
 
 class TestExtractDesignTokens:
     @pytest.mark.asyncio
@@ -125,6 +127,7 @@ class TestExtractDesignTokens:
 # ---------------------------------------------------------------------------
 # inspect_element
 # ---------------------------------------------------------------------------
+
 
 class TestInspectElement:
     @pytest.mark.asyncio
@@ -175,13 +178,28 @@ class TestInspectElement:
 # enumerate_assets
 # ---------------------------------------------------------------------------
 
+
 class TestEnumerateAssets:
     @pytest.mark.asyncio
     async def test_returns_asset_list(self):
         page = _make_mock_page()
         page.evaluate.return_value = [
-            {"type": "img", "src": "https://example.com/hero.png", "alt": "Hero", "width": 800, "height": 400, "position": {"x": 0, "y": 0}},
-            {"type": "inline-svg", "id": "logo", "viewBox": "0 0 24 24", "width": 24, "height": 24, "position": {"x": 10, "y": 10}},
+            {
+                "type": "img",
+                "src": "https://example.com/hero.png",
+                "alt": "Hero",
+                "width": 800,
+                "height": 400,
+                "position": {"x": 0, "y": 0},
+            },
+            {
+                "type": "inline-svg",
+                "id": "logo",
+                "viewBox": "0 0 24 24",
+                "width": 24,
+                "height": 24,
+                "position": {"x": 10, "y": 10},
+            },
         ]
         tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
@@ -196,7 +214,14 @@ class TestEnumerateAssets:
     async def test_resolves_relative_urls(self):
         page = _make_mock_page(url="https://example.com/page")
         page.evaluate.return_value = [
-            {"type": "img", "src": "/images/hero.png", "alt": "", "width": 100, "height": 100, "position": {"x": 0, "y": 0}},
+            {
+                "type": "img",
+                "src": "/images/hero.png",
+                "alt": "",
+                "width": 100,
+                "height": 100,
+                "position": {"x": 0, "y": 0},
+            }
         ]
         tool = BrowserInspectorTool(browser=_make_mock_browser(page))
         with patch("weebot.tools.advanced_browser._page", page):
@@ -220,6 +245,7 @@ class TestEnumerateAssets:
 # get_structure
 # ---------------------------------------------------------------------------
 
+
 class TestGetStructure:
     @pytest.mark.asyncio
     async def test_returns_structure_and_title(self):
@@ -231,8 +257,22 @@ class TestGetStructure:
             "text_preview": "",
             "bounding_box": {"x": 0, "y": 0, "width": 1440, "height": 4000},
             "children": [
-                {"tag": "header", "id": None, "classes": ["site-header"], "text_preview": "Logo", "bounding_box": {"x": 0, "y": 0, "width": 1440, "height": 80}, "children": []},
-                {"tag": "main", "id": None, "classes": [], "text_preview": "", "bounding_box": {"x": 0, "y": 80, "width": 1440, "height": 3800}, "children": []},
+                {
+                    "tag": "header",
+                    "id": None,
+                    "classes": ["site-header"],
+                    "text_preview": "Logo",
+                    "bounding_box": {"x": 0, "y": 0, "width": 1440, "height": 80},
+                    "children": [],
+                },
+                {
+                    "tag": "main",
+                    "id": None,
+                    "classes": [],
+                    "text_preview": "",
+                    "bounding_box": {"x": 0, "y": 80, "width": 1440, "height": 3800},
+                    "children": [],
+                },
             ],
         }
         tool = BrowserInspectorTool(browser=_make_mock_browser(page))
@@ -248,6 +288,7 @@ class TestGetStructure:
 # ---------------------------------------------------------------------------
 # screenshot
 # ---------------------------------------------------------------------------
+
 
 class TestScreenshot:
     @pytest.mark.asyncio
@@ -277,6 +318,7 @@ class TestScreenshot:
 # ---------------------------------------------------------------------------
 # navigate action
 # ---------------------------------------------------------------------------
+
 
 class TestNavigateAction:
     @pytest.mark.asyncio

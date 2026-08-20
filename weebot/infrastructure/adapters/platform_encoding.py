@@ -8,8 +8,8 @@ Usage:
     from weebot.infrastructure.adapters.platform_encoding import safe_decode
     decoded = safe_decode(stdout_bytes)
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 # Fallback chain: UTF-8 is the standard; CP-1252 / CP-850 handle Windows
 # PowerShell output; latin-1 never fails (maps all 256 bytes).

@@ -1,10 +1,12 @@
 """Screen capture tool using mss."""
+
 import io
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from mss import mss as _mss_class
     import mss.tools as _mss_tools
+
     _MSS_AVAILABLE = True
     mss = _mss_class  # avoid shadowing by mss package import
 except ImportError:
@@ -13,6 +15,7 @@ except ImportError:
 
 try:
     from PIL import Image
+
     _PIL_AVAILABLE = True
 except ImportError:
     _PIL_AVAILABLE = False
@@ -22,18 +25,23 @@ except ImportError:
 class ScreenCaptureTool:
     """Capture screenshots of any connected monitor."""
 
-    def list_screens(self) -> List[Dict[str, Any]]:
+    def list_screens(self) -> list[dict[str, Any]]:
         """Return metadata for each connected monitor."""
         if not _MSS_AVAILABLE:
             return []
         with mss() as sct:
             return [
-                {"index": i, "width": m["width"], "height": m["height"],
-                 "left": m["left"], "top": m["top"]}
+                {
+                    "index": i,
+                    "width": m["width"],
+                    "height": m["height"],
+                    "left": m["left"],
+                    "top": m["top"],
+                }
                 for i, m in enumerate(sct.monitors)
             ]
 
-    def capture(self, monitor_index: int = 0, save_path: Optional[str] = None) -> Dict[str, Any]:
+    def capture(self, monitor_index: int = 0, save_path: str | None = None) -> dict[str, Any]:
         """
         Capture a screenshot.
 
@@ -63,6 +71,7 @@ class ScreenCaptureTool:
                     png_bytes = buf.getvalue()
                 else:
                     import mss.tools as _mss_tools
+
                     png_bytes = _mss_tools.to_png(screenshot.rgb, screenshot.size)
 
                 if save_path:
@@ -118,16 +127,12 @@ class ScreenCaptureBaseTool(_WeebotBaseTool):
         self._inner = ScreenCaptureTool()
 
     async def execute(  # type: ignore[override]
-        self,
-        monitor_index: int = 0,
-        save_path: str | None = None,
-        **_,
+        self, monitor_index: int = 0, save_path: str | None = None, **_
     ) -> _ToolResult:
         import asyncio
+
         result = await asyncio.to_thread(
-            self._inner.capture, 
-            monitor_index=monitor_index, 
-            save_path=save_path
+            self._inner.capture, monitor_index=monitor_index, save_path=save_path
         )
         if not result["success"]:
             return _ToolResult(output="", error=result["output"])

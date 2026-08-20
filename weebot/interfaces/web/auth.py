@@ -10,14 +10,14 @@ Supports two auth modes (``WEEBOT_AUTH_MODE``):
 - ``store`` — multi-principal.  Keys are stored in the ``api_keys`` table
   as salted scrypt hashes.  Identity resolves to the actual ``principal_id``.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import os
-from typing import Optional
 
-from fastapi import HTTPException, Request, Depends
+from fastapi import HTTPException, Request
 
 from weebot.application.ports.api_key_port import ApiKeyPort
 from weebot.interfaces.web.error_codes import ErrorCode
@@ -72,8 +72,7 @@ def get_current_user_id(request: Request) -> str:
 
 
 async def get_current_user_id_async(
-    request: Request,
-    api_key_port: ApiKeyPort | None = None,
+    request: Request, api_key_port: ApiKeyPort | None = None
 ) -> str:
     """Async version that resolves through the ``ApiKeyPort``.
 
@@ -94,6 +93,7 @@ async def get_current_user_id_async(
         _lookup_hash,
         _verify_key,
     )
+
     lookup = _lookup_hash(api_key)
     store = SQLiteApiKeyStore()
     try:
@@ -119,10 +119,7 @@ async def get_current_user_id_async(
     return "anonymous"
 
 
-async def verify_session_ownership(
-    request: Request,
-    session_user_id: str | None,
-) -> None:
+async def verify_session_ownership(request: Request, session_user_id: str | None) -> None:
     """Raise ``HTTPException(404)`` if the current user does not own the session.
 
     Returns silently when:
@@ -141,10 +138,7 @@ async def verify_session_ownership(
     current_user = await _resolve_user(request)
 
     if not session_user_id:
-        logger.debug(
-            "Session has no user_id — skipping ownership check (user=%s)",
-            current_user,
-        )
+        logger.debug("Session has no user_id — skipping ownership check (user=%s)", current_user)
         return
 
     if current_user == session_user_id:
@@ -198,6 +192,7 @@ async def _resolve_user(request: Request) -> str:
         _lookup_hash,
         _verify_key,
     )
+
     lookup = _lookup_hash(api_key)
     store = SQLiteApiKeyStore()
     try:

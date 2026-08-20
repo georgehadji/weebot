@@ -9,11 +9,11 @@ Implements the 4-step CoVe method from Dhuliawala et al. (2023):
 Core insight: answering verification questions WITHOUT the baseline context
 (factored) yields higher accuracy than joint methods.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import (
@@ -22,7 +22,6 @@ from weebot.config.constants import (
     MAX_TOKENS_STANDARD,
     TEMPERATURE_PRECISE,
 )
-from weebot.domain.models.event import AgentEvent, MessageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +114,7 @@ def _extract_json_array(text: str) -> list[str]:
     text = text.strip()
     try:
         import json
+
         result = json.loads(text)
         if isinstance(result, list):
             return [str(item) for item in result]
@@ -128,6 +128,7 @@ def _extract_json_array(text: str) -> list[str]:
 def _extract_json_object(text: str) -> dict:
     """Extract a JSON object from *text*, stripping markdown fences."""
     import json
+
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -151,10 +152,7 @@ class ChainOfVerificationService:
         self._llm = llm
 
     async def verify(
-        self,
-        query: str,
-        response: str,
-        max_questions: int = 5,
+        self, query: str, response: str, max_questions: int = 5
     ) -> tuple[str, list[dict]]:
         """Run the full CoVe pipeline.
 
@@ -178,26 +176,19 @@ class ChainOfVerificationService:
         qa_pairs = await self._execute_verifications(questions)
 
         # ── Step 4: Cross-check and final verified response ──
-        corrected, inconsistencies = await self._cross_check(
-            query, response, qa_pairs
-        )
+        corrected, inconsistencies = await self._cross_check(query, response, qa_pairs)
 
         logger.info(
-            "CoVe: %d questions, %d inconsistencies found",
-            len(questions), len(inconsistencies),
+            "CoVe: %d questions, %d inconsistencies found", len(questions), len(inconsistencies)
         )
         return corrected, inconsistencies
 
     async def _plan_verifications(self, query: str, response: str) -> list[str]:
         """Step 2: Generate verification questions from query + baseline."""
-        prompt = _fmt(_PLAN_VERIFICATIONS_PROMPT,
-            query=query, response=response
-        )
+        prompt = _fmt(_PLAN_VERIFICATIONS_PROMPT, query=query, response=response)
         try:
             llm_response = await self._llm.chat(
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=MAX_TOKENS_SHORT,
                 temperature=TEMPERATURE_PRECISE,
             )
@@ -206,9 +197,7 @@ class ChainOfVerificationService:
             logger.warning("CoVe plan-verifications failed: %s", exc)
             return []
 
-    async def _execute_verifications(
-        self, questions: list[str],
-    ) -> list[dict]:
+    async def _execute_verifications(self, questions: list[str]) -> list[dict]:
         """Step 3: Answer each question independently (factored).
 
         Each question gets its own LLM call with NO baseline context.
@@ -220,7 +209,7 @@ class ChainOfVerificationService:
             try:
                 resp = await self._llm.chat(
                     messages=[
-                        {"role": "user", "content": _fmt(_ANSWER_VERIFICATION_PROMPT, question=q)},
+                        {"role": "user", "content": _fmt(_ANSWER_VERIFICATION_PROMPT, question=q)}
                     ],
                     max_tokens=MAX_TOKENS_CRISP,
                     temperature=TEMPERATURE_PRECISE,
@@ -233,21 +222,14 @@ class ChainOfVerificationService:
         return list(results)
 
     async def _cross_check(
-        self, query: str, response: str, qa_pairs: list[dict],
+        self, query: str, response: str, qa_pairs: list[dict]
     ) -> tuple[str, list[dict]]:
         """Step 4: Cross-check answers against baseline, produce corrected response."""
-        qa_text = "\n".join(
-            f"Q: {p['question']}\nA: {p['answer']}"
-            for p in qa_pairs
-        )
-        prompt = _fmt(_CROSS_CHECK_PROMPT,
-            query=query, response=response, verification_qa=qa_text,
-        )
+        qa_text = "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in qa_pairs)
+        prompt = _fmt(_CROSS_CHECK_PROMPT, query=query, response=response, verification_qa=qa_text)
         try:
             llm_response = await self._llm.chat(
-                messages=[
-                    {"role": "user", "content": prompt},
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=MAX_TOKENS_STANDARD,
                 temperature=TEMPERATURE_PRECISE,
             )

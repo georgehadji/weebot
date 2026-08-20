@@ -1,9 +1,9 @@
 """Port interface for tool data persistence.
 Replaces raw sqlite3.connect() calls in the tools layer.
 """
+
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Optional
 
 
 class ToolRepositoryPort(ABC):
@@ -16,19 +16,18 @@ class ToolRepositoryPort(ABC):
     async def query_notes(self, search: str = "", limit: int = 20) -> list[dict]: ...
 
     @abstractmethod
-    async def get_note(self, note_id: str) -> Optional[dict]:
+    async def get_note(self, note_id: str) -> dict | None:
         """Return a single note by ID, or None if not found."""
         ...
 
     @abstractmethod
     async def save_note(
-        self, title: str, content: str, tags: Optional[list[str]] = None,
-        project_id: str = "",
+        self, title: str, content: str, tags: list[str] | None = None, project_id: str = ""
     ) -> str: ...
 
     @abstractmethod
     async def list_notes(
-        self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
+        self, project_id: str = "", tags: list[str] | None = None, limit: int = 50
     ) -> list[dict]: ...
 
     @abstractmethod
@@ -37,28 +36,23 @@ class ToolRepositoryPort(ABC):
     # ── Video sources ────────────────────────────────────────────────
 
     @abstractmethod
-    async def get_video_sources(
-        self, project_id: str = "", limit: int = 50
-    ) -> list[dict]: ...
+    async def get_video_sources(self, project_id: str = "", limit: int = 50) -> list[dict]: ...
 
     @abstractmethod
     async def save_video_source(
-        self, url: str, title: str = "",
-        project_id: str = "", metadata: Optional[dict] = None,
+        self, url: str, title: str = "", project_id: str = "", metadata: dict | None = None
     ) -> str: ...
 
     # ── Requirements ─────────────────────────────────────────────────
 
     @abstractmethod
     async def get_requirements(
-        self, project_id: str = "", status: Optional[str] = None,
-        priority: Optional[str] = None,
+        self, project_id: str = "", status: str | None = None, priority: str | None = None
     ) -> list[dict]: ...
 
     @abstractmethod
     async def save_requirement(
-        self, title: str, description: str, priority: str = "medium",
-        project_id: str = "",
+        self, title: str, description: str, priority: str = "medium", project_id: str = ""
     ) -> str: ...
 
     @abstractmethod

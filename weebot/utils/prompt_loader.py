@@ -3,6 +3,7 @@
 Single source of truth for prompt loading.  All agents use this instead of
 hardcoding inline prompts.
 """
+
 from __future__ import annotations
 
 import logging

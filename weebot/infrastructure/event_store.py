@@ -9,6 +9,7 @@ Provides persistent storage for agent events, enabling:
 - Performance monitoring
 - Session export for sharing
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.event_store_port import EventStorePort
 
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 class Event:
     """A logged event in the system."""
 
-    id: Optional[int]
+    id: int | None
     timestamp: datetime
     session_id: str
     event_type: str
@@ -52,6 +53,7 @@ class Event:
 @dataclass
 class CostSummary:
     """Summary of costs for a session."""
+
     total_cost: float
     total_tokens: int
     model_breakdown: dict[str, dict[str, float]]
@@ -67,11 +69,12 @@ class CostSummary:
 @dataclass
 class SessionInfo:
     """Information about a session."""
+
     id: str
     started_at: datetime
-    ended_at: Optional[datetime]
+    ended_at: datetime | None
     status: str
-    user_id: Optional[str]
+    user_id: str | None
     total_cost: float
     total_tokens: int
 
@@ -103,15 +106,14 @@ class AsyncEventStore(EventStorePort):
     def __init__(self, db_path: str = "~/.weebot/events.db"):
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._pool: Optional["SQLiteConnectionPool"] = None  # noqa: F821
+        self._pool: SQLiteConnectionPool | None = None  # noqa: F821
 
     async def _get_pool(self):
         """Lazy-init connection pool."""
         if self._pool is None:
             from weebot.infrastructure.persistence.connection_pool import get_or_create_pool
-            pool = await get_or_create_pool(
-                self.db_path, max_read_connections=3, enable_wal=True,
-            )
+
+            pool = await get_or_create_pool(self.db_path, max_read_connections=3, enable_wal=True)
             await self._ensure_schema(pool)
             self._pool = pool  # only assign after schema is confirmed ready
         return self._pool
@@ -119,8 +121,7 @@ class AsyncEventStore(EventStorePort):
     async def _ensure_schema(self, pool) -> None:
         """Create tables if they don't exist."""
         async with pool.acquire_write() as conn:
-            await conn.executescript(
-                """
+            await conn.executescript("""
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -153,8 +154,7 @@ class AsyncEventStore(EventStorePort):
                     ON sessions(status);
                 CREATE INDEX IF NOT EXISTS idx_sessions_user
                     ON sessions(user_id);
-                """
-            )
+                """)
 
     # ── EventStorePort async implementation ─────────────────────────
 
@@ -195,9 +195,7 @@ class AsyncEventStore(EventStorePort):
             return cursor.lastrowid
 
     async def get_session_events(
-        self,
-        session_id: str,
-        event_type: str | None = None,
+        self, session_id: str, event_type: str | None = None
     ) -> list[dict[str, Any]]:
         """Get all events for a session, optionally filtered by type."""
         pool = await self._get_pool()
@@ -253,9 +251,7 @@ class AsyncEventStore(EventStorePort):
         ).to_dict()
 
     async def query_recent_events(
-        self,
-        event_type: str | None = None,
-        limit: int = 50,
+        self, event_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
         """Query recent events across all sessions."""
         events = await self.query_events(event_type=event_type, limit=limit)
@@ -263,7 +259,7 @@ class AsyncEventStore(EventStorePort):
 
     # ── Additional public methods ───────────────────────────────────
 
-    async def start_session(self, session_id: str, user_id: Optional[str] = None) -> None:
+    async def start_session(self, session_id: str, user_id: str | None = None) -> None:
         """Record a new session."""
         pool = await self._get_pool()
         async with pool.acquire_write() as conn:
@@ -285,11 +281,11 @@ class AsyncEventStore(EventStorePort):
                 (status, session_id),
             )
 
-    async def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
+    async def get_session_info(self, session_id: str) -> SessionInfo | None:
         """Get information about a session."""
         pool = await self._get_pool()
         row = await pool.execute_read(
-            "SELECT * FROM sessions WHERE id = ?", (session_id,), fetch_all=False,
+            "SELECT * FROM sessions WHERE id = ?", (session_id,), fetch_all=False
         )
         if not row:
             return None
@@ -297,8 +293,8 @@ class AsyncEventStore(EventStorePort):
 
     async def list_sessions(
         self,
-        user_id: Optional[str] = None,
-        status: Optional[str] = None,
+        user_id: str | None = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[SessionInfo]:
@@ -320,10 +316,10 @@ class AsyncEventStore(EventStorePort):
 
     async def query_events(
         self,
-        event_type: Optional[str] = None,
-        session_id: Optional[str] = None,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
+        event_type: str | None = None,
+        session_id: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
         limit: int = 100,
     ) -> list[Event]:
         """Query events with filters."""
@@ -360,11 +356,16 @@ class AsyncEventStore(EventStorePort):
         summary_obj = CostSummary(**summary) if isinstance(summary, dict) else summary
 
         if format == "json":
-            return json.dumps({
-                "session": session_info.to_dict() if session_info else None,
-                "cost_summary": summary_obj.to_dict() if hasattr(summary_obj, "to_dict") else summary,
-                "events": [e.to_dict() for e in events],
-            }, indent=2)
+            return json.dumps(
+                {
+                    "session": session_info.to_dict() if session_info else None,
+                    "cost_summary": (
+                        summary_obj.to_dict() if hasattr(summary_obj, "to_dict") else summary
+                    ),
+                    "events": [e.to_dict() for e in events],
+                },
+                indent=2,
+            )
 
         elif format == "markdown":
             lines = [f"# Session Log: {session_id}", "", "## Summary"]
@@ -393,8 +394,7 @@ class AsyncEventStore(EventStorePort):
         """Get raw Event objects (internal helper for export)."""
         pool = await self._get_pool()
         rows = await pool.execute_read(
-            "SELECT * FROM events WHERE session_id = ? ORDER BY timestamp",
-            (session_id,),
+            "SELECT * FROM events WHERE session_id = ? ORDER BY timestamp", (session_id,)
         )
         return [self._row_to_event(r) for r in rows]
 
@@ -420,8 +420,7 @@ class AsyncEventStore(EventStorePort):
                 (modifier,),
             )
             cursor = await conn.execute(
-                "DELETE FROM sessions WHERE started_at < datetime('now', ?)",
-                (modifier,),
+                "DELETE FROM sessions WHERE started_at < datetime('now', ?)", (modifier,)
             )
             return cursor.rowcount
 
@@ -430,10 +429,10 @@ class AsyncEventStore(EventStorePort):
         pool = await self._get_pool()
 
         session_count_row = await pool.execute_read(
-            "SELECT COUNT(*) as count FROM sessions", fetch_all=False,
+            "SELECT COUNT(*) as count FROM sessions", fetch_all=False
         )
         event_count_row = await pool.execute_read(
-            "SELECT COUNT(*) as count FROM events", fetch_all=False,
+            "SELECT COUNT(*) as count FROM events", fetch_all=False
         )
         total_row = await pool.execute_read(
             "SELECT SUM(total_cost) as total, SUM(total_tokens) as tokens FROM sessions",

@@ -1,14 +1,20 @@
 """Unit tests for domain models: Task/Project and Message/Memory/AgentState."""
-import pytest
-from weebot.domain.models import (
-    Task, Project, TaskStatus, ProjectStatus,
-    Role, Message, Memory, AgentState, ToolCallSpec,
-)
 
+from weebot.domain.models import (
+    Task,
+    Project,
+    TaskStatus,
+    Role,
+    Message,
+    Memory,
+    AgentState,
+    ToolCallSpec,
+)
 
 # ---------------------------------------------------------------------------
 # Task / Project tests
 # ---------------------------------------------------------------------------
+
 
 def test_task_creation():
     task = Task(name="analyze", description="Analyze data", prompt="Analyze this dataset")
@@ -50,6 +56,7 @@ def test_task_mark_running():
 # ---------------------------------------------------------------------------
 # Message / Memory / AgentState tests
 # ---------------------------------------------------------------------------
+
 
 def test_message_user():
     msg = Message(role=Role.USER, content="hello")

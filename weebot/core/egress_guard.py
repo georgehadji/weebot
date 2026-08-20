@@ -16,17 +16,17 @@ spoofing variant.
 
 Set WEEBOT_EGRESS_ENFORCE=false to run in detect-only mode (logs but doesn't block).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.config.secret_accessor import SecretAccessor
 
@@ -36,6 +36,7 @@ _log = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
+
 def is_enforcing() -> bool:
     """Return True when a blocking decision should actually block the call.
 
@@ -44,11 +45,15 @@ def is_enforcing() -> bool:
     """
     return SecretAccessor.get("WEEBOT_EGRESS_ENFORCE", "true").lower() not in ("false", "0", "no")
 
+
 # Allowlist file location (reuses the existing persistence dir convention)
-_ALLOWLIST_PATH: Path = Path(SecretAccessor.get(
-    "WEEBOT_EGRESS_ALLOWLIST",
-    str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json"),
-) or str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json"))
+_ALLOWLIST_PATH: Path = Path(
+    SecretAccessor.get(
+        "WEEBOT_EGRESS_ALLOWLIST",
+        str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json"),
+    )
+    or str(Path(__file__).parent.parent.parent / "weebot_egress_allowlist.json")
+)
 
 # ---------------------------------------------------------------------------
 # Sensitive-payload patterns (extends AgentMemorySanitizer credential patterns)
@@ -59,16 +64,16 @@ _SENSITIVE_PATTERNS: list[re.Pattern] = [
     re.compile(r'secret["\s:=]+[A-Za-z0-9_\-]{20,}', re.IGNORECASE),
     re.compile(r'password["\s:=]+\S{8,}', re.IGNORECASE),
     re.compile(r'token["\s:=]+[A-Za-z0-9_\-\.]{20,}', re.IGNORECASE),
-    re.compile(r'Bearer\s+[A-Za-z0-9_\-\.]+', re.IGNORECASE),
-    re.compile(r'ghp_[A-Za-z0-9]{36}', re.IGNORECASE),
-    re.compile(r'sk-[A-Za-z0-9]{48,}', re.IGNORECASE),
+    re.compile(r"Bearer\s+[A-Za-z0-9_\-\.]+", re.IGNORECASE),
+    re.compile(r"ghp_[A-Za-z0-9]{36}", re.IGNORECASE),
+    re.compile(r"sk-[A-Za-z0-9]{48,}", re.IGNORECASE),
     # AWS-specific
-    re.compile(r'AKIA[A-Z0-9]{16}', re.IGNORECASE),
-    re.compile(r'-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----'),
+    re.compile(r"AKIA[A-Z0-9]{16}", re.IGNORECASE),
+    re.compile(r"-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----"),
     # DB connection strings
     re.compile(r'(?:postgres|mysql|mongodb|redis|valkey)://[^\s<>"]+', re.IGNORECASE),
     # Bulk PII heuristic: CSV-ish row with email + number combo repeated ≥5 times
-    re.compile(r'(?:[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[,;\t][^\n]{0,80}\n){5,}'),
+    re.compile(r"(?:[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}[,;\t][^\n]{0,80}\n){5,}"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -106,23 +111,30 @@ _BASH_EGRESS_RE = re.compile(
 )
 
 # browser tools indicating form-submit or navigation with POST data
-_BROWSER_EGRESS_TOOLS: frozenset[str] = frozenset({
-    "advanced_browser",
-    "browser_tool",
-    "computer_use",
-})
-_BROWSER_EGRESS_ACTIONS: frozenset[str] = frozenset({
-    "submit", "click_submit", "navigate_post", "fill_and_submit",
-    "form_submit", "post", "send_form",
-})
+_BROWSER_EGRESS_TOOLS: frozenset[str] = frozenset(
+    {"advanced_browser", "browser_tool", "computer_use"}
+)
+_BROWSER_EGRESS_ACTIONS: frozenset[str] = frozenset(
+    {
+        "submit",
+        "click_submit",
+        "navigate_post",
+        "fill_and_submit",
+        "form_submit",
+        "post",
+        "send_form",
+    }
+)
 
 # notification / messaging tools that always send outbound
-_NOTIFICATION_TOOLS: frozenset[str] = frozenset({
-    "telegram_send",
-    "windows_toast",
-    "notification",
-    "schedule_tool",   # can dispatch external webhooks
-})
+_NOTIFICATION_TOOLS: frozenset[str] = frozenset(
+    {
+        "telegram_send",
+        "windows_toast",
+        "notification",
+        "schedule_tool",  # can dispatch external webhooks
+    }
+)
 
 # atomic_mail JMAP presets that only read. Deliberately an allowlist of reads
 # rather than a denylist of sends: ops_file resolves absolute and
@@ -136,6 +148,7 @@ _JMAP_READ_PRESETS: frozenset[str] = frozenset({"list_inbox"})
 # Decision types
 # ---------------------------------------------------------------------------
 
+
 class EgressReason(Enum):
     SENSITIVE_PAYLOAD = "sensitive_payload"
     FIRST_TIME_RECIPIENT = "first_time_recipient"
@@ -147,7 +160,7 @@ class EgressDecision:
     is_egress: bool = False
     requires_approval: bool = False
     reasons: list[EgressReason] = field(default_factory=list)
-    recipient: Optional[str] = None
+    recipient: str | None = None
     tool_name: str = ""
     detected_patterns: list[str] = field(default_factory=list)
 
@@ -166,6 +179,7 @@ class EgressDecision:
 # ---------------------------------------------------------------------------
 # Allowlist (persisted as JSON, keyed on stable IDs)
 # ---------------------------------------------------------------------------
+
 
 class RecipientAllowlist:
     """Persistent allowlist of previously approved egress recipients.
@@ -208,6 +222,7 @@ class RecipientAllowlist:
 # Main guard
 # ---------------------------------------------------------------------------
 
+
 class EgressGuard:
     """Classifies a pending tool call and decides whether it needs approval.
 
@@ -217,14 +232,11 @@ class EgressGuard:
             return ToolResult.error_result(...)
     """
 
-    def __init__(self, allowlist: Optional[RecipientAllowlist] = None) -> None:
+    def __init__(self, allowlist: RecipientAllowlist | None = None) -> None:
         self._allowlist = allowlist or RecipientAllowlist()
 
     def classify(
-        self,
-        tool_name: str,
-        args: dict[str, Any],
-        untrusted_context_active: bool = False,
+        self, tool_name: str, args: dict[str, Any], untrusted_context_active: bool = False
     ) -> EgressDecision:
         """Return an EgressDecision for the proposed tool call.
 
@@ -278,9 +290,7 @@ class EgressGuard:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _detect_egress(
-        self, tool_name: str, args: dict[str, Any]
-    ) -> tuple[Optional[str], bool]:
+    def _detect_egress(self, tool_name: str, args: dict[str, Any]) -> tuple[str | None, bool]:
         """Return (stable_recipient_id, is_egress)."""
 
         # Bash / powershell / terminal: check command string (case-insensitive)
@@ -351,12 +361,12 @@ class EgressGuard:
                 matched.append(p.pattern[:60])
         return matched
 
-    def _extract_host_from_cmd(self, cmd: str) -> Optional[str]:
+    def _extract_host_from_cmd(self, cmd: str) -> str | None:
         url_re = re.compile(r'https?://([^/\s"\']+)', re.IGNORECASE)
         m = url_re.search(cmd)
         return m.group(1).lower() if m else None
 
-    def _normalize_host(self, url: str) -> Optional[str]:
+    def _normalize_host(self, url: str) -> str | None:
         m = re.match(r'https?://([^/\s"\']+)', url, re.IGNORECASE)
         return m.group(1).lower() if m else (url.lower() or None)
 

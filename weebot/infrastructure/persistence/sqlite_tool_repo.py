@@ -12,12 +12,13 @@ Schema creation happens synchronously in ``__init__`` (one-time, low-cost)
 using the stdlib ``sqlite3`` module so that no async bootstrap is required.
 All runtime queries use ``aiosqlite``.
 """
+
 from __future__ import annotations
 
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import aiosqlite
 
@@ -99,27 +100,24 @@ class SQLiteToolRepository(ToolRepositoryPort):
                 rows = await cursor.fetchall()
             else:
                 cursor = await conn.execute(
-                    "SELECT * FROM kb_notes ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
+                    "SELECT * FROM kb_notes ORDER BY created_at DESC LIMIT ?", (limit,)
                 )
                 rows = await cursor.fetchall()
             return [dict(r) for r in rows]
         finally:
             await conn.close()
 
-    async def get_note(self, note_id: str) -> Optional[dict]:
+    async def get_note(self, note_id: str) -> dict | None:
         conn = await self._connect()
         try:
-            cursor = await conn.execute(
-                "SELECT * FROM kb_notes WHERE id = ?", (note_id,)
-            )
+            cursor = await conn.execute("SELECT * FROM kb_notes WHERE id = ?", (note_id,))
             row = await cursor.fetchone()
             return dict(row) if row else None
         finally:
             await conn.close()
 
     async def list_notes(
-        self, project_id: str = "", tags: Optional[list[str]] = None, limit: int = 50
+        self, project_id: str = "", tags: list[str] | None = None, limit: int = 50
     ) -> list[dict]:
         conn = await self._connect()
         try:
@@ -141,8 +139,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
             await conn.close()
 
     async def save_note(
-        self, title: str, content: str, tags: Optional[list[str]] = None,
-        project_id: str = "",
+        self, title: str, content: str, tags: list[str] | None = None, project_id: str = ""
     ) -> str:
         tags_json = json.dumps(tags or [])
         conn = await self._connect()
@@ -167,9 +164,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
     async def delete_note(self, note_id: str) -> bool:
         conn = await self._connect()
         try:
-            cursor = await conn.execute(
-                "DELETE FROM kb_notes WHERE id = ?", (note_id,)
-            )
+            cursor = await conn.execute("DELETE FROM kb_notes WHERE id = ?", (note_id,))
             await conn.commit()
             return cursor.rowcount > 0
         finally:
@@ -187,8 +182,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
                 )
             else:
                 cursor = await conn.execute(
-                    "SELECT * FROM video_sources ORDER BY ingested_at DESC LIMIT ?",
-                    (limit,),
+                    "SELECT * FROM video_sources ORDER BY ingested_at DESC LIMIT ?", (limit,)
                 )
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
@@ -196,8 +190,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
             await conn.close()
 
     async def save_video_source(
-        self, url: str, title: str = "",
-        project_id: str = "", metadata: Optional[dict] = None,
+        self, url: str, title: str = "", project_id: str = "", metadata: dict | None = None
     ) -> str:
         meta_json = json.dumps(metadata or {})
         conn = await self._connect()
@@ -218,8 +211,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
     # ── Requirements ─────────────────────────────────────────────────
 
     async def get_requirements(
-        self, project_id: str = "",
-        status: Optional[str] = None, priority: Optional[str] = None,
+        self, project_id: str = "", status: str | None = None, priority: str | None = None
     ) -> list[dict]:
         conn = await self._connect()
         try:
@@ -242,8 +234,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
             await conn.close()
 
     async def save_requirement(
-        self, title: str, description: str, priority: str = "medium",
-        project_id: str = "",
+        self, title: str, description: str, priority: str = "medium", project_id: str = ""
     ) -> str:
         conn = await self._connect()
         try:
@@ -260,8 +251,7 @@ class SQLiteToolRepository(ToolRepositoryPort):
         conn = await self._connect()
         try:
             cursor = await conn.execute(
-                "UPDATE requirements SET status = ? WHERE id = ?",
-                (new_status, req_id),
+                "UPDATE requirements SET status = ? WHERE id = ?", (new_status, req_id)
             )
             await conn.commit()
             return cursor.rowcount > 0

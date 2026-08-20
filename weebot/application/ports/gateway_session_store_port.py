@@ -3,6 +3,7 @@
 Allows gateway sessions to survive process restarts and enables session
 lookup, listing, and lifecycle management across multiple gateway platforms.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -27,10 +28,7 @@ class IGatewaySessionStorePort(Protocol):
         ...
 
     async def list(
-        self,
-        platform: str | None = None,
-        user_id: str | None = None,
-        active_only: bool = True,
+        self, platform: str | None = None, user_id: str | None = None, active_only: bool = True
     ) -> list[GatewaySession]:
         """List sessions, optionally filtered by platform or user.
 
@@ -66,21 +64,15 @@ class AbstractGatewaySessionStore(ABC):
     """
 
     @abstractmethod
-    async def get(self, key: GatewaySessionKey) -> GatewaySession | None:
-        ...
+    async def get(self, key: GatewaySessionKey) -> GatewaySession | None: ...
 
     @abstractmethod
-    async def upsert(self, session: GatewaySession) -> None:
-        ...
+    async def upsert(self, session: GatewaySession) -> None: ...
 
     @abstractmethod
     async def list(
-        self,
-        platform: str | None = None,
-        user_id: str | None = None,
-        active_only: bool = True,
-    ) -> list[GatewaySession]:
-        ...
+        self, platform: str | None = None, user_id: str | None = None, active_only: bool = True
+    ) -> list[GatewaySession]: ...
 
     async def close_session(self, key: GatewaySessionKey) -> None:
         """Default: retrieve, mark inactive, and save."""

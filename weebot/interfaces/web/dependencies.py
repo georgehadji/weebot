@@ -4,6 +4,7 @@ Functions here may import from ``weebot.infrastructure`` because they are
 part of the composition root (the outermost layer of the application).
 The ``interfaces-no-infra`` import-linter contract exempts this file.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,10 +17,7 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 logger = logging.getLogger(__name__)
 
 
-def build_deletion_orchestrator(
-    request: Request,
-    state_repo: StateRepositoryPort,
-) -> Any:
+def build_deletion_orchestrator(request: Request, state_repo: StateRepositoryPort) -> Any:
     """Build a SessionDeletionOrchestrator with all available stores.
 
     May import from infrastructure — this is a composition-root function
@@ -35,6 +33,7 @@ def build_deletion_orchestrator(
     # Event store
     try:
         from weebot.application.ports.event_bus_port import EventStorePort
+
         event_store = container.get(EventStorePort)
         if hasattr(event_store, "delete_session"):
             orch.add_store("event_store", event_store, "delete_session")
@@ -43,9 +42,8 @@ def build_deletion_orchestrator(
 
     # Checkpoint store
     try:
-        from weebot.infrastructure.persistence.checkpoint_store import (
-            SQLiteCheckpointStore,
-        )
+        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+
         checkpoint_store = container.get(SQLiteCheckpointStore)
         if hasattr(checkpoint_store, "delete"):
             orch.add_store("checkpoint_store", checkpoint_store, "delete")
@@ -57,6 +55,7 @@ def build_deletion_orchestrator(
         from weebot.infrastructure.persistence.gateway_session_store import (
             SQLiteGatewaySessionStore,
         )
+
         gateway_store = container.get(SQLiteGatewaySessionStore)
         orch.add_store("gateway_session_store", gateway_store, "delete_by_session_id")
     except (KeyError, Exception):
@@ -65,9 +64,8 @@ def build_deletion_orchestrator(
     # Knowledge graph
     try:
         import importlib as _kg_il
-        _kg_mod = _kg_il.import_module(
-            "weebot.infrastructure.persistence.sqlite_knowledge_graph"
-        )
+
+        _kg_mod = _kg_il.import_module("weebot.infrastructure.persistence.sqlite_knowledge_graph")
         _kg_cls = getattr(_kg_mod, "SQLiteKnowledgeGraph", None)
         if _kg_cls is not None:
             kg = container.get(_kg_cls)

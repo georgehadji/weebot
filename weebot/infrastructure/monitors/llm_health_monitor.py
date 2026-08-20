@@ -4,12 +4,10 @@ Wraps ``HealthCheckService.check_all()`` and filters to LLM components.
 No API quota is consumed — ``HealthCheckService`` does lightweight
 connectivity checks (import verification), not generation calls.
 """
+
 from __future__ import annotations
 
-from weebot.infrastructure.observability.health_checks import (
-    HealthCheckService,
-    HealthStatus,
-)
+from weebot.infrastructure.observability.health_checks import HealthCheckService, HealthStatus
 from .base import Monitor, MonitorReport, MonitorState
 
 
@@ -31,17 +29,13 @@ class LLMHealthMonitor(Monitor):
         report = await self._health.check_all()
 
         llm_components = [
-            c for c in report.components
-            if "llm" in c.name.lower()
-            or "openrouter" in c.name.lower()
-            or "xai" in c.name.lower()
+            c
+            for c in report.components
+            if "llm" in c.name.lower() or "openrouter" in c.name.lower() or "xai" in c.name.lower()
         ]
 
         if not llm_components:
-            return MonitorReport(
-                MonitorState.HEALTHY,
-                "No LLM components registered",
-            )
+            return MonitorReport(MonitorState.HEALTHY, "No LLM components registered")
 
         unhealthy = [c for c in llm_components if c.status == HealthStatus.UNHEALTHY]
         degraded = [c for c in llm_components if c.status == HealthStatus.DEGRADED]
@@ -58,7 +52,4 @@ class LLMHealthMonitor(Monitor):
                 f"{len(degraded)} LLM provider(s) degraded",
                 metadata={"degraded": [c.name for c in degraded]},
             )
-        return MonitorReport(
-            MonitorState.HEALTHY,
-            "All LLM providers healthy",
-        )
+        return MonitorReport(MonitorState.HEALTHY, "All LLM providers healthy")

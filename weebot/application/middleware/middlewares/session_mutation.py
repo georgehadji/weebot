@@ -1,4 +1,5 @@
 """Session mutation middleware — applies event to in-memory session."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -3,6 +3,7 @@
 Must never raise — the adapter is guaranteed to return a string
 for any byte sequence, including random binary and malicious payloads.
 """
+
 from __future__ import annotations
 
 import os
@@ -14,7 +15,7 @@ from weebot.infrastructure.adapters.platform_encoding import safe_decode
 def test_safe_decode_utf8():
     """Standard UTF-8 must decode correctly."""
     assert safe_decode(b"hello") == "hello"
-    assert safe_decode("héllo wörld".encode("utf-8")) == "héllo wörld"
+    assert safe_decode("héllo wörld".encode()) == "héllo wörld"
 
 
 def test_safe_decode_cp1252():
@@ -29,7 +30,7 @@ def test_safe_decode_cp1252():
 def test_safe_decode_empty():
     """Empty bytes must return empty string."""
     assert safe_decode(b"") == ""
-    assert safe_decode(None if hasattr(None, 'decode') else b"") == ""
+    assert safe_decode(None if hasattr(None, "decode") else b"") == ""
 
 
 def test_safe_decode_random_bytes():
@@ -52,11 +53,7 @@ def test_safe_decode_all_256_bytes():
 def test_safe_decode_mixed_encodings():
     """Mixed UTF-8 + CP-1252 content common in Windows logs."""
     # UTF-8 text followed by CP-1252 smart quotes
-    parts = [
-        "normal text ".encode("utf-8"),
-        b"\x93",  # CP-1252 left double quote
-        "more text".encode("utf-8"),
-    ]
+    parts = [b"normal text ", b"\x93", b"more text"]  # CP-1252 left double quote
     data = b"".join(parts)
     result = safe_decode(data)
     assert isinstance(result, str)

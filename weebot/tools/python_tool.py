@@ -1,12 +1,11 @@
 """PythonExecuteTool — run Python code in an isolated subprocess."""
+
 from __future__ import annotations
 
-import sys
-from typing import Optional
 
 from pydantic import ConfigDict, PrivateAttr
 
-from weebot.application.ports.sandbox_port import SandboxPort, SandboxResult
+from weebot.application.ports.sandbox_port import SandboxPort
 from weebot.config.tool_config import ToolConfig
 from weebot.core.approval_policy import ExecApprovalPolicy
 from weebot.core.bash_guard import BashGuard
@@ -51,14 +50,8 @@ class PythonExecuteTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "code": {
-                "type": "string",
-                "description": "Python source code to execute",
-            },
-            "timeout": {
-                "type": "number",
-                "description": "Timeout in seconds (default 30)",
-            },
+            "code": {"type": "string", "description": "Python source code to execute"},
+            "timeout": {"type": "number", "description": "Timeout in seconds (default 30)"},
         },
         "required": ["code"],
     }
@@ -69,23 +62,26 @@ class PythonExecuteTool(BaseTool):
     _bash_guard: BashGuard = PrivateAttr(default=None)
     _default_timeout: float = PrivateAttr(default=30.0)
     _sandbox: SandboxPort = PrivateAttr(default=None)
-    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+    _tool_config: ToolConfig | None = PrivateAttr(default=None)
 
     @staticmethod
     def _make_prometheus_counter():
         """Build the on_security_event callback that increments Prometheus counter."""
         try:
             from weebot.application.services.metrics_bridge import get_metrics
+
             _m = get_metrics()
             if _m is None:
                 return None
+
             def _counter(risk_level):
                 _m.bash_guard_events_total.labels(risk_level=risk_level.value).inc()
+
             return _counter
         except Exception:
             return None
 
-    def __init__(self, sandbox: Optional[SandboxPort] = None):
+    def __init__(self, sandbox: SandboxPort | None = None):
         """Initialise with a sandbox port instance (injected by DI).
 
         Args:
@@ -93,12 +89,14 @@ class PythonExecuteTool(BaseTool):
                 When None, resolves from the DI container.
         """
         import logging as _logging
+
         super().__init__()
         if sandbox is None:
             # No sandbox injected — fall back to the environment default so the
             # tool is usable when constructed directly (registry, MCP, tests).
             try:
                 from weebot.infrastructure.sandbox.factory import create_default_sandbox
+
                 sandbox = create_default_sandbox()
             except Exception as exc:
                 _logging.getLogger(__name__).warning(
@@ -109,9 +107,7 @@ class PythonExecuteTool(BaseTool):
                 )
         self._sandbox = sandbox
         self._policy = ExecApprovalPolicy()
-        self._bash_guard = BashGuard(
-            on_security_event=self._make_prometheus_counter(),
-        )
+        self._bash_guard = BashGuard(on_security_event=self._make_prometheus_counter())
 
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig for settings."""
@@ -119,10 +115,7 @@ class PythonExecuteTool(BaseTool):
         self._default_timeout = float(config.python_timeout)
 
     async def execute(  # type: ignore[override]
-        self,
-        code: str,
-        timeout: Optional[float] = None,
-        **_: object,
+        self, code: str, timeout: float | None = None, **_: object
     ) -> ToolResult:
         """Run *code* in a child Python process and return its output.
 
@@ -154,46 +147,34 @@ class PythonExecuteTool(BaseTool):
 
         # --- Defense-in-depth: BashGuard catches shell injection ---
         from weebot.core.bash_guard import RiskLevel as BashRiskLevel
+
         risk, checks = self._bash_guard.evaluate(code)
         if risk == BashRiskLevel.BLOCKED:
             reasons = [c.description for c in checks if c.description]
-            return ToolResult(
-                output="",
-                error=f"Code blocked by BashGuard: {'; '.join(reasons)}",
-            )
+            return ToolResult(output="", error=f"Code blocked by BashGuard: {'; '.join(reasons)}")
 
         # --- Safety gate (ExecApprovalPolicy) ---
         approval = self._policy.evaluate(code)
         if not approval.approved:
-            return ToolResult(
-                output="",
-                error=f"Code denied by policy: {approval.reason}",
-            )
+            return ToolResult(output="", error=f"Code denied by policy: {approval.reason}")
         if approval.requires_confirmation:
             hint = _contextual_hint(code, approval.undo_hint)
             return ToolResult(
                 output="",
-                error=(
-                    f"Code requires user confirmation before execution. "
-                    f"Hint: {hint}"
-                ),
+                error=(f"Code requires user confirmation before execution. " f"Hint: {hint}"),
             )
 
         # --- Run in isolated subprocess (always via SandboxPort) ---
         result = await self._sandbox.execute_python(
-            code=code,
-            timeout=effective_timeout,
-            memory_limit_mb=256,
+            code=code, timeout=effective_timeout, memory_limit_mb=256
         )
 
         if result.timed_out:
             return ToolResult(
-                output="",
-                error=f"Python code timed out after {effective_timeout:.0f}s",
+                output="", error=f"Python code timed out after {effective_timeout:.0f}s"
             )
         if not result.success:
             return ToolResult(
-                output=result.stdout,
-                error=result.stderr or f"Exit code {result.returncode}",
+                output=result.stdout, error=result.stderr or f"Exit code {result.returncode}"
             )
         return ToolResult(output=result.combined_output)

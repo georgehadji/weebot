@@ -7,15 +7,16 @@ SessionPresenceEvent on the global channel (about_session_id set,
 session_id left empty so the broadcaster routes it globally, not to one
 session's own socket — see SessionPresenceEvent's docstring).
 """
+
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from weebot.application.services.task_runner import TaskRunner
 from weebot.domain.models.event import DoneEvent, SessionPresenceEvent
-from weebot.domain.models.session import Session, SessionStatus
+from weebot.domain.models.session import Session
 
 
 class _StubFlow:
@@ -56,7 +57,8 @@ async def test_start_direct_publishes_running_presence():
     await runner.start_session(session, lambda s: flow)
 
     presence_calls = [
-        c.args[0] for c in event_bus.publish.await_args_list
+        c.args[0]
+        for c in event_bus.publish.await_args_list
         if isinstance(c.args[0], SessionPresenceEvent)
     ]
     assert any(p.status == "running" and p.about_session_id == "s1" for p in presence_calls)
@@ -76,7 +78,8 @@ async def test_successful_flow_publishes_completed_presence():
     await runner._tasks["s2"]  # wait for the background task to finish
 
     presence_calls = [
-        c.args[0] for c in event_bus.publish.await_args_list
+        c.args[0]
+        for c in event_bus.publish.await_args_list
         if isinstance(c.args[0], SessionPresenceEvent)
     ]
     assert any(p.status == "completed" for p in presence_calls)
@@ -96,7 +99,8 @@ async def test_crashed_flow_publishes_failed_presence():
         await task
 
     presence_calls = [
-        c.args[0] for c in event_bus.publish.await_args_list
+        c.args[0]
+        for c in event_bus.publish.await_args_list
         if isinstance(c.args[0], SessionPresenceEvent)
     ]
     assert any(p.status == "failed" for p in presence_calls)

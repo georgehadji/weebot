@@ -10,6 +10,7 @@ This module provides:
 - Real-time anomaly detection based on audit patterns
 - Immutable audit log with tamper detection
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,13 +22,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
 class AuditEventType(Enum):
     """Types of audit events."""
+
     # Agent lifecycle
     AGENT_START = "agent_start"
     AGENT_STOP = "agent_stop"
@@ -64,33 +66,34 @@ class AuditEventType(Enum):
 @dataclass
 class AuditEvent:
     """Single audit event record."""
+
     event_id: str
     event_type: AuditEventType
     timestamp: datetime
     agent_id: str
     session_id: str
-    user_id: Optional[str]
+    user_id: str | None
 
     # Event details
     action: str
-    target: Optional[str]
+    target: str | None
     result: str  # success, failure, denied, pending
 
     # Context
-    decision_reasoning: Optional[str] = None
-    tool_used: Optional[str] = None
-    confidence_score: Optional[float] = None
+    decision_reasoning: str | None = None
+    tool_used: str | None = None
+    confidence_score: float | None = None
 
     # Security context
     risk_level: str = "low"  # low, medium, high, critical
-    ip_address: Optional[str] = None
+    ip_address: str | None = None
 
     # Chain for tamper detection
-    previous_hash: Optional[str] = None
-    event_hash: Optional[str] = None
+    previous_hash: str | None = None
+    event_hash: str | None = None
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Generate event hash for tamper detection."""
@@ -108,6 +111,7 @@ class AuditEvent:
 
 class AnomalyType(Enum):
     """Types of anomalies that can be detected."""
+
     RAPID_TOOL_USAGE = "rapid_tool_usage"  # Too many tools in short time
     UNUSUAL_COMMAND_PATTERN = "unusual_command_pattern"
     DATA_ACCESS_SPIKE = "data_access_spike"
@@ -120,11 +124,12 @@ class AnomalyType(Enum):
 @dataclass
 class AnomalyAlert:
     """Anomaly detection alert."""
+
     anomaly_type: AnomalyType
     severity: str  # low, medium, high, critical
     agent_id: str
     description: str
-    evidence: Dict[str, Any]
+    evidence: dict[str, Any]
     recommended_action: str
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -157,7 +162,7 @@ class SecurityAuditLogger:
 
     def __init__(
         self,
-        log_file: Optional[str] = None,
+        log_file: str | None = None,
         enable_anomaly_detection: bool = True,
         enable_file_persistence: bool = True,
         max_events_in_memory: int = 10000,
@@ -168,14 +173,14 @@ class SecurityAuditLogger:
         self._max_events_in_memory = max_events_in_memory
 
         # In-memory event storage
-        self._events: List[AuditEvent] = []
+        self._events: list[AuditEvent] = []
         self._events_lock = threading.Lock()
 
         # Anomaly detection state
-        self._agent_event_counts: Dict[str, List[datetime]] = defaultdict(list)
-        self._agent_tool_usage: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        self._agent_data_access: Dict[str, int] = defaultdict(int)
-        self._last_anomaly_check: Dict[str, datetime] = {}
+        self._agent_event_counts: dict[str, list[datetime]] = defaultdict(list)
+        self._agent_tool_usage: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._agent_data_access: dict[str, int] = defaultdict(int)
+        self._last_anomaly_check: dict[str, datetime] = {}
 
         # Anomaly thresholds
         self._thresholds = {
@@ -200,14 +205,14 @@ class SecurityAuditLogger:
         action: str,
         result: str,
         session_id: str = "default",
-        user_id: Optional[str] = None,
-        target: Optional[str] = None,
-        decision_reasoning: Optional[str] = None,
-        tool_used: Optional[str] = None,
-        confidence_score: Optional[float] = None,
+        user_id: str | None = None,
+        target: str | None = None,
+        decision_reasoning: str | None = None,
+        tool_used: str | None = None,
+        confidence_score: float | None = None,
         risk_level: str = "low",
-        ip_address: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        ip_address: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AuditEvent:
         """
         Log an audit event.
@@ -261,7 +266,7 @@ class SecurityAuditLogger:
         with self._events_lock:
             self._events.append(event)
             if len(self._events) > self._max_events_in_memory:
-                self._events = self._events[-self._max_events_in_memory:]
+                self._events = self._events[-self._max_events_in_memory :]
 
         # Persist to file
         if self._enable_file_persistence and self._log_file:
@@ -281,11 +286,11 @@ class SecurityAuditLogger:
 
     def get_events(
         self,
-        agent_id: Optional[str] = None,
-        event_type: Optional[AuditEventType] = None,
-        since: Optional[datetime] = None,
+        agent_id: str | None = None,
+        event_type: AuditEventType | None = None,
+        since: datetime | None = None,
         limit: int = 100,
-    ) -> List[AuditEvent]:
+    ) -> list[AuditEvent]:
         """
         Query audit events.
 
@@ -310,7 +315,7 @@ class SecurityAuditLogger:
 
         return filtered[-limit:]
 
-    def verify_chain_integrity(self) -> Dict[str, Any]:
+    def verify_chain_integrity(self) -> dict[str, Any]:
         """
         Verify the integrity of the audit chain.
 
@@ -333,16 +338,12 @@ class SecurityAuditLogger:
 
             # Verify chain linkage
             if i > 0:
-                if event.previous_hash != events[i-1].event_hash:
+                if event.previous_hash != events[i - 1].event_hash:
                     broken.append({"index": i, "event_id": event.event_id, "issue": "chain_broken"})
 
-        return {
-            "valid": len(broken) == 0,
-            "event_count": len(events),
-            "broken_links": broken,
-        }
+        return {"valid": len(broken) == 0, "event_count": len(events), "broken_links": broken}
 
-    def check_anomalies(self, agent_id: str) -> List[AnomalyAlert]:
+    def check_anomalies(self, agent_id: str) -> list[AnomalyAlert]:
         """
         Check for anomalies for a specific agent.
 
@@ -354,7 +355,7 @@ class SecurityAuditLogger:
         """
         return self._check_agent_anomalies(agent_id)
 
-    def get_agent_statistics(self, agent_id: str) -> Dict[str, Any]:
+    def get_agent_statistics(self, agent_id: str) -> dict[str, Any]:
         """
         Get statistics for an agent.
 
@@ -414,7 +415,7 @@ class SecurityAuditLogger:
             cutoff = now - timedelta(minutes=1)
             # Reset if too old (simplified)
 
-    def _check_agent_anomalies(self, agent_id: str) -> List[AnomalyAlert]:
+    def _check_agent_anomalies(self, agent_id: str) -> list[AnomalyAlert]:
         """Check for anomalies for a specific agent."""
         alerts = []
         now = datetime.now()
@@ -422,40 +423,49 @@ class SecurityAuditLogger:
         # Check event rate
         recent_events = self._agent_event_counts.get(agent_id, [])
         if len(recent_events) > self._thresholds["max_events_per_minute"]:
-            alerts.append(AnomalyAlert(
-                anomaly_type=AnomalyType.RAPID_TOOL_USAGE,
-                severity="high",
-                agent_id=agent_id,
-                description=f"Agent generated {len(recent_events)} events in the last minute",
-                evidence={"event_count": len(recent_events), "threshold": self._thresholds["max_events_per_minute"]},
-                recommended_action="Temporarily pause agent and review activity",
-            ))
+            alerts.append(
+                AnomalyAlert(
+                    anomaly_type=AnomalyType.RAPID_TOOL_USAGE,
+                    severity="high",
+                    agent_id=agent_id,
+                    description=f"Agent generated {len(recent_events)} events in the last minute",
+                    evidence={
+                        "event_count": len(recent_events),
+                        "threshold": self._thresholds["max_events_per_minute"],
+                    },
+                    recommended_action="Temporarily pause agent and review activity",
+                )
+            )
 
         # Check data access rate
         data_access_count = self._agent_data_access.get(agent_id, 0)
         if data_access_count > self._thresholds["max_data_access_per_minute"]:
-            alerts.append(AnomalyAlert(
-                anomaly_type=AnomalyType.DATA_ACCESS_SPIKE,
-                severity="medium",
-                agent_id=agent_id,
-                description=f"Agent accessed data {data_access_count} times in the last minute",
-                evidence={"access_count": data_access_count},
-                recommended_action="Monitor agent data access patterns",
-            ))
+            alerts.append(
+                AnomalyAlert(
+                    anomaly_type=AnomalyType.DATA_ACCESS_SPIKE,
+                    severity="medium",
+                    agent_id=agent_id,
+                    description=f"Agent accessed data {data_access_count} times in the last minute",
+                    evidence={"access_count": data_access_count},
+                    recommended_action="Monitor agent data access patterns",
+                )
+            )
 
         # Check for suspicious tool combinations
         tool_usage = self._agent_tool_usage.get(agent_id, {})
         if tool_usage:
             # Check for file deletion + network access (potential exfiltration)
             if tool_usage.get("bash", 0) > 10 and tool_usage.get("web_search", 0) > 5:
-                alerts.append(AnomalyAlert(
-                    anomaly_type=AnomalyType.DATA_EXFILTRATION,
-                    severity="critical",
-                    agent_id=agent_id,
-                    description="Suspicious pattern: heavy bash usage combined with web access",
-                    evidence={"tool_usage": dict(tool_usage)},
-                    recommended_action="Immediately quarantine agent and review",
-                ))
+                alerts.append(
+                    AnomalyAlert(
+                        anomaly_type=AnomalyType.DATA_EXFILTRATION,
+                        severity="critical",
+                        agent_id=agent_id,
+                        description="Suspicious pattern: heavy bash usage combined with web access",
+                        evidence={"tool_usage": dict(tool_usage)},
+                        recommended_action="Immediately quarantine agent and review",
+                    )
+                )
 
         return alerts
 
@@ -488,25 +498,30 @@ class SecurityAuditLogger:
         try:
             Path(self._log_file).parent.mkdir(parents=True, exist_ok=True)
             with open(self._log_file, "a") as f:
-                f.write(json.dumps({
-                    "event_id": event.event_id,
-                    "event_type": event.event_type.value,
-                    "timestamp": event.timestamp.isoformat(),
-                    "agent_id": event.agent_id,
-                    "session_id": event.session_id,
-                    "user_id": event.user_id,
-                    "action": event.action,
-                    "target": event.target,
-                    "result": event.result,
-                    "decision_reasoning": event.decision_reasoning,
-                    "tool_used": event.tool_used,
-                    "confidence_score": event.confidence_score,
-                    "risk_level": event.risk_level,
-                    "ip_address": event.ip_address,
-                    "previous_hash": event.previous_hash,
-                    "event_hash": event.event_hash,
-                    "metadata": event.metadata,
-                }) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "event_id": event.event_id,
+                            "event_type": event.event_type.value,
+                            "timestamp": event.timestamp.isoformat(),
+                            "agent_id": event.agent_id,
+                            "session_id": event.session_id,
+                            "user_id": event.user_id,
+                            "action": event.action,
+                            "target": event.target,
+                            "result": event.result,
+                            "decision_reasoning": event.decision_reasoning,
+                            "tool_used": event.tool_used,
+                            "confidence_score": event.confidence_score,
+                            "risk_level": event.risk_level,
+                            "ip_address": event.ip_address,
+                            "previous_hash": event.previous_hash,
+                            "event_hash": event.event_hash,
+                            "metadata": event.metadata,
+                        }
+                    )
+                    + "\n"
+                )
         except Exception as e:
             _log.error(f"Failed to persist audit event: {e}")
 
@@ -516,7 +531,7 @@ class SecurityAuditLogger:
             return
 
         try:
-            with open(self._log_file, "r") as f:
+            with open(self._log_file) as f:
                 for line in f:
                     try:
                         data = json.loads(line)
@@ -549,7 +564,7 @@ class SecurityAuditLogger:
 
 
 # Singleton instance
-_logger: Optional[SecurityAuditLogger] = None
+_logger: SecurityAuditLogger | None = None
 
 
 def get_security_logger() -> SecurityAuditLogger:

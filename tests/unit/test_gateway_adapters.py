@@ -1,4 +1,5 @@
 """Unit tests for WhatsApp, Signal, and Email gateway adapters."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,22 +26,23 @@ class TestWhatsAppAdapter:
 
     def setup_method(self):
         self.adapter = WhatsAppAdapter(
-            token="test-token",
-            phone_number_id="123456789",
-            state_repo=AsyncMock(),
-            llm=MagicMock(),
+            token="test-token", phone_number_id="123456789", state_repo=AsyncMock(), llm=MagicMock()
         )
 
     @pytest.mark.asyncio
     async def test_send_response_failure_returns_false(self):
         """send_response with success=False should return False."""
-        resp = GatewayResponse(text="Hello", platform="whatsapp", external_id="5551234", success=False)
+        resp = GatewayResponse(
+            text="Hello", platform="whatsapp", external_id="5551234", success=False
+        )
         result = await self.adapter.send_response(resp)
         assert result is False
 
     @pytest.mark.asyncio
     async def test_verify_webhook_valid(self):
-        verified, challenge = self.adapter.verify_webhook("subscribe", "weebot-verify", "challenge123")
+        verified, challenge = self.adapter.verify_webhook(
+            "subscribe", "weebot-verify", "challenge123"
+        )
         assert verified is True
         assert challenge == "challenge123"
 
@@ -56,18 +58,24 @@ class TestWhatsAppAdapter:
 
     def test_parse_incoming_text_message(self):
         body = {
-            "entry": [{
-                "changes": [{
-                    "value": {
-                        "messages": [{
-                            "from": "5551234",
-                            "id": "msg_1",
-                            "type": "text",
-                            "text": {"body": "Hello from WhatsApp"},
-                        }],
-                    },
-                }],
-            }],
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "messages": [
+                                    {
+                                        "from": "5551234",
+                                        "id": "msg_1",
+                                        "type": "text",
+                                        "text": {"body": "Hello from WhatsApp"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
         }
         messages = self.adapter.parse_incoming(body)
         assert len(messages) == 1
@@ -125,13 +133,16 @@ class TestEmailAdapter:
 
     @pytest.mark.asyncio
     async def test_send_response_failure_returns_false(self):
-        resp = GatewayResponse(text="Hi", platform="email", external_id="user@test.com", success=False)
+        resp = GatewayResponse(
+            text="Hi", platform="email", external_id="user@test.com", success=False
+        )
         result = await self.adapter.send_response(resp)
         assert result is False
 
     def test_get_text_body_plain(self):
         """Extract plain text body from a simple email."""
         import email
+
         msg = email.message_from_string("Subject: Test\n\nHello World")
         body = self.adapter._get_text_body(msg)
         assert body == "Hello World"
@@ -139,6 +150,7 @@ class TestEmailAdapter:
     def test_get_text_body_multipart(self):
         """Extract text from multipart email."""
         import email
+
         raw = (
             "Content-Type: multipart/alternative; boundary=boundary\n\n"
             "--boundary\n"
@@ -156,6 +168,7 @@ class TestEmailAdapter:
     def test_get_text_body_empty(self):
         """Empty message returns empty string."""
         import email
+
         msg = email.message_from_string("Subject: Empty\n\n")
         body = self.adapter._get_text_body(msg)
         assert body == ""

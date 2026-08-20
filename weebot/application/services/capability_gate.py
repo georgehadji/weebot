@@ -6,16 +6,13 @@ Enforces four tiers:
 - RESTRICTED: Requires explicit user approval per usage
 - PRIVILEGED: Requires operator override token
 """
+
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from weebot.domain.models.capability_tier import (
-    AnticipatorySimulationResult,
-    CapabilityTier,
-)
+from weebot.domain.models.capability_tier import AnticipatorySimulationResult, CapabilityTier
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +26,7 @@ class CapabilityGate:
     def __init__(
         self,
         default_tier: CapabilityTier = CapabilityTier.PUBLIC,
-        operator_token: Optional[str] = None,
+        operator_token: str | None = None,
     ) -> None:
         """Initialize the gate.
 
@@ -41,9 +38,7 @@ class CapabilityGate:
         self._default_tier = default_tier
         self._operator_token = operator_token
 
-    def check(
-        self, tier: CapabilityTier, context: dict[str, Any]
-    ) -> tuple[bool, str]:
+    def check(self, tier: CapabilityTier, context: dict[str, Any]) -> tuple[bool, str]:
         """Check whether the current context allows this tier.
 
         Deterministic check — no I/O, no LLM calls.
@@ -97,9 +92,7 @@ class CapabilityGate:
 
         return True, f"Unknown tier '{tier}' — defaulting to allowed"
 
-    def simulate(
-        self, skill_name: str, manifest: dict[str, Any]
-    ) -> AnticipatorySimulationResult:
+    def simulate(self, skill_name: str, manifest: dict[str, Any]) -> AnticipatorySimulationResult:
         """Preview consequences of executing a privileged skill.
 
         This is a lightweight simulation based on the manifest metadata
@@ -162,6 +155,7 @@ class CapabilityGate:
         except ValueError:
             logger.warning(
                 "Unknown tier '%s' in manifest, defaulting to %s",
-                tier_str, self._default_tier.value,
+                tier_str,
+                self._default_tier.value,
             )
             return self._default_tier

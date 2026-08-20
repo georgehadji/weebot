@@ -4,6 +4,7 @@ Responsible for executing individual tool calls and batches, managing
 pre/post hooks, timeouts, and end-of-step summarization.  Extracted
 from the original ExecutorAgent god class.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -88,15 +89,16 @@ class ToolExecutor:
             return self._egress_guard
         self._egress_guard_resolved = True
         from weebot.core.egress_guard import EgressGuard
+
         try:
             from weebot.application.di import Container
+
             container = Container()
             container.configure_defaults()
             self._egress_guard = container.get(EgressGuard)
         except Exception:
             logger.warning(
-                "egress_guard: DI resolution failed — constructing directly",
-                exc_info=True,
+                "egress_guard: DI resolution failed — constructing directly", exc_info=True
             )
             try:
                 self._egress_guard = EgressGuard()
@@ -110,9 +112,7 @@ class ToolExecutor:
 
     # ── Batch execution ────────────────────────────────────────────
 
-    async def execute_tool_batch(
-        self, tool_calls: list[dict],
-    ) -> list[ToolResult]:
+    async def execute_tool_batch(self, tool_calls: list[dict]) -> list[ToolResult]:
         """Execute tool calls concurrently; return results in declared order.
 
         Per-tool concurrency capping (``max_concurrent``) is enforced by
@@ -130,7 +130,7 @@ class ToolExecutor:
     # ── Single tool execution ──────────────────────────────────────
 
     async def execute_tool(
-        self, name: str, arguments: str | dict[str, Any] | None = None,
+        self, name: str, arguments: str | dict[str, Any] | None = None
     ) -> ToolResult:
         """Execute a single tool call by name and arguments.
 
@@ -181,12 +181,15 @@ class ToolExecutor:
 
         # Pre-tool hook
         if self._hooks is not None:
-            await self._hooks.execute_hooks("pre_tool_call", {
-                "session_id": self._current_session_id,
-                "step_id": self._get_step_id(),
-                "tool_name": name,
-                "tool_args": args,
-            })
+            await self._hooks.execute_hooks(
+                "pre_tool_call",
+                {
+                    "session_id": self._current_session_id,
+                    "step_id": self._get_step_id(),
+                    "tool_name": name,
+                    "tool_args": args,
+                },
+            )
 
         # Gate outbound sends before they execute: payloads carrying secrets,
         # first-time recipients, and any egress from a session that has already
@@ -194,25 +197,24 @@ class ToolExecutor:
         guard = self._get_egress_guard()
         if guard is not None:
             decision = guard.classify(
-                name, args, untrusted_context_active=self._untrusted_context_active,
+                name, args, untrusted_context_active=self._untrusted_context_active
             )
             if decision.requires_approval:
                 if is_enforcing():
                     logger.warning(
-                        "egress_guard: blocked outbound tool call — %s", decision.summary,
+                        "egress_guard: blocked outbound tool call — %s", decision.summary
                     )
                     return _egress_blocked_result(name, decision)
-                logger.warning(
-                    "egress_guard: detect-only mode, allowing — %s", decision.summary,
-                )
+                logger.warning("egress_guard: detect-only mode, allowing — %s", decision.summary)
 
         import time as _timer
+
         _t0 = _timer.monotonic()
         try:
             result = await asyncio.wait_for(
-                self._tools.execute(_name=name, **args), timeout=timeout,
+                self._tools.execute(_name=name, **args), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Tool %s timed out after %.0fs", name, timeout)
             return ToolResult.error_result(
                 error=f"Tool '{name}' timed out after {int(timeout)}s.",
@@ -224,15 +226,18 @@ class ToolExecutor:
 
         # Post-tool hook
         if self._hooks is not None:
-            await self._hooks.execute_hooks("post_tool_call", {
-                "session_id": self._current_session_id,
-                "step_id": self._get_step_id(),
-                "tool_name": name,
-                "tool_args": args,
-                "result": result,
-                "elapsed_ms": _elapsed,
-                "success": not isinstance(result, Exception),
-            })
+            await self._hooks.execute_hooks(
+                "post_tool_call",
+                {
+                    "session_id": self._current_session_id,
+                    "step_id": self._get_step_id(),
+                    "tool_name": name,
+                    "tool_args": args,
+                    "result": result,
+                    "elapsed_ms": _elapsed,
+                    "success": not isinstance(result, Exception),
+                },
+            )
 
         # External content has now entered the session; taint it so later egress
         # needs approval even to an already-known recipient. Errors carry no
@@ -244,7 +249,7 @@ class ToolExecutor:
     async def _execute_single_tool_call(self, tc: dict[str, Any]) -> ToolResult:
         """Thin wrapper: parse tool call dict and delegate to execute_tool."""
         return await self.execute_tool(
-            tc["function"]["name"], tc["function"].get("arguments", "{}"),
+            tc["function"]["name"], tc["function"].get("arguments", "{}")
         )
 
     # ── Summarization ──────────────────────────────────────────────
@@ -261,16 +266,11 @@ class ToolExecutor:
             if has_error
             else "Provide a concise summary of what was accomplished."
         )
-        self._conversation_buffer.append({
-            "role": "user",
-            "content": summary_prompt,
-        })
+        self._conversation_buffer.append({"role": "user", "content": summary_prompt})
         system_prompt = self._system_prompt or _load_executor_system_prompt()
         messages = [{"role": "system", "content": system_prompt}] + list(self._conversation_buffer)
         response = await self._llm.chat(
-            messages=messages,
-            model=self._model,
-            temperature=TEMPERATURE_BALANCED,
+            messages=messages, model=self._model, temperature=TEMPERATURE_BALANCED
         )
         yield MessageEvent(role="assistant", message=response.content or "Done.")
 
@@ -278,6 +278,7 @@ class ToolExecutor:
 def _load_executor_system_prompt() -> str:
     """Load the executor system prompt from package or inline fallback."""
     import importlib.resources as pkg_resources
+
     try:
         return pkg_resources.read_text("weebot.config", "executor_system_prompt.txt")
     except Exception:

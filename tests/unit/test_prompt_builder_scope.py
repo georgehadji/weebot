@@ -3,6 +3,7 @@
 Covers: Step.context_scope roundtrip, and build_executor_prompt honoring
 scope by including/excluding sources per the _SCOPE_SOURCES table.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -134,9 +135,13 @@ async def test_full_scope_backward_compat_includes_everything():
         profile_name="default",
     )
     for marker in (
-        "BASE_PROMPT_MARKER", "HARNESS_MARKER", "INJECTED_SKILL_MARKER",
-        "SKILL_CONTENT_MARKER_TEXT", "BEHAVIORAL_RULE_MARKER_TEXT",
-        "USER_PROFILE_MARKER_TEXT", "PERSONALITY_MARKER_TEXT",
+        "BASE_PROMPT_MARKER",
+        "HARNESS_MARKER",
+        "INJECTED_SKILL_MARKER",
+        "SKILL_CONTENT_MARKER_TEXT",
+        "BEHAVIORAL_RULE_MARKER_TEXT",
+        "USER_PROFILE_MARKER_TEXT",
+        "PERSONALITY_MARKER_TEXT",
     ):
         assert marker in prompt
 

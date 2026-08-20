@@ -2,11 +2,11 @@
 
 Extracted from ``model_selection.py`` during WP-2 god module decomposition.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
 
 from weebot.domain.models.task_type import TaskType
 
@@ -24,7 +24,7 @@ class ModelConfig:
     provider: str
     cost_per_1k_tokens: float
     context_window: int
-    strengths: List[TaskType]
+    strengths: list[TaskType]
     tier: ModelTier
     api_key_env: str
     tool_use_score: int = 5

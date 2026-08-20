@@ -9,12 +9,12 @@ have been tried 3+ times without success.
 This prevents the step-repetition loop that currently plagues the executor
 when it retries the same failed approach.
 """
+
 from __future__ import annotations
 
 from collections import Counter
-from typing import List, Optional
 
-from weebot.domain.models.plan import Plan, Step
+from weebot.domain.models.plan import Plan
 
 
 class PlanNoveltyTracker:
@@ -48,11 +48,7 @@ class PlanNoveltyTracker:
         unique = len(set(all_descriptions))
         return unique / len(all_descriptions)
 
-    def frequent_approaches(
-        self,
-        plans: list[Plan],
-        min_count: int | None = None,
-    ) -> list[str]:
+    def frequent_approaches(self, plans: list[Plan], min_count: int | None = None) -> list[str]:
         """Return step descriptions that appear frequently across plans.
 
         Args:
@@ -71,16 +67,9 @@ class PlanNoveltyTracker:
             for step in plan.steps:
                 counter[step.description.lower().strip()] += 1
 
-        return [
-            desc for desc, count in counter.most_common()
-            if count >= min_count
-        ]
+        return [desc for desc, count in counter.most_common() if count >= min_count]
 
-    def avoidance_prompt(
-        self,
-        plans: list[Plan],
-        min_count: int | None = None,
-    ) -> str:
+    def avoidance_prompt(self, plans: list[Plan], min_count: int | None = None) -> str:
         """Generate a prompt fragment listing approaches to avoid.
 
         Args:
@@ -95,9 +84,7 @@ class PlanNoveltyTracker:
         if not frequent:
             return ""
 
-        lines = [
-            "\n\n## Approaches to AVOID (tried multiple times without success):"
-        ]
+        lines = ["\n\n## Approaches to AVOID (tried multiple times without success):"]
         for desc in frequent[:5]:  # Cap at 5 to avoid prompt bloat
             lines.append(f"- {desc}")
         lines.append(

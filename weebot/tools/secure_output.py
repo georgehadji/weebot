@@ -3,6 +3,7 @@
 Prevents LLM read-back of sensitive output by writing to a file with
 0o600 permissions and optionally registering for cleanup.
 """
+
 from __future__ import annotations
 
 import os
@@ -60,7 +61,7 @@ class SecureOutputFile:
     def path(self) -> Path | None:
         return self._path
 
-    def __enter__(self) -> "SecureOutputFile":
+    def __enter__(self) -> SecureOutputFile:
         return self
 
     def __exit__(self, *args: Any) -> None:

@@ -11,6 +11,7 @@ Configuration (in .env):
     EMAIL_SMTP_PORT=587
     EMAIL_FROM=user@gmail.com
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,17 +19,11 @@ import email
 import logging
 import re
 from email.mime.text import MIMEText
-from typing import Any
 
-import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
-from weebot.interfaces.gateways.base import (
-    GatewayAdapter,
-    GatewayMessage,
-    GatewayResponse,
-)
+from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +85,7 @@ class EmailAdapter(GatewayAdapter):
                         if text:
                             await self.send_response(
                                 GatewayResponse(
-                                    text=text, platform="email", external_id=msg.external_id,
+                                    text=text, platform="email", external_id=msg.external_id
                                 )
                             )
                     except Exception as exc:
@@ -130,11 +125,7 @@ class EmailAdapter(GatewayAdapter):
         from weebot.interfaces.factories import build_tools, create_flow
 
         session_id = f"email-{sender}-{uuid.uuid4().hex[:6]}"
-        session = Session(
-            id=session_id,
-            user_id=f"email-{sender}",
-            agent_id="email-agent",
-        )
+        session = Session(id=session_id, user_id=f"email-{sender}", agent_id="email-agent")
 
         tools = await build_tools(role="admin")
         flow = create_flow(
@@ -167,6 +158,7 @@ class EmailAdapter(GatewayAdapter):
             # Use asyncio subprocess for SMTP (smtplib is blocking)
             import smtplib
             import ssl
+
             loop = asyncio.get_event_loop()
 
             def _send():
@@ -194,6 +186,7 @@ class EmailAdapter(GatewayAdapter):
             return messages
 
         import imaplib
+
         loop = asyncio.get_event_loop()
 
         def _fetch():
@@ -216,21 +209,23 @@ class EmailAdapter(GatewayAdapter):
                                 body = self._get_text_body(parsed)
 
                                 # Extract email address from "Name <email>" format
-                                email_match = re.search(r'<([^>]+)>', sender)
+                                email_match = re.search(r"<([^>]+)>", sender)
                                 if email_match:
                                     sender = email_match.group(1)
 
                                 if sender and body:
-                                    result.append(GatewayMessage(
-                                        platform="email",
-                                        external_id=sender.strip(),
-                                        text=body.strip()[:2000],
-                                        metadata={
-                                            "subject": subject,
-                                            "message_id": parsed.get("Message-Id", ""),
-                                            "in_reply_to": parsed.get("In-Reply-To", ""),
-                                        },
-                                    ))
+                                    result.append(
+                                        GatewayMessage(
+                                            platform="email",
+                                            external_id=sender.strip(),
+                                            text=body.strip()[:2000],
+                                            metadata={
+                                                "subject": subject,
+                                                "message_id": parsed.get("Message-Id", ""),
+                                                "in_reply_to": parsed.get("In-Reply-To", ""),
+                                            },
+                                        )
+                                    )
             except Exception as exc:
                 logger.debug("Email fetch error: %s", exc)
             return result

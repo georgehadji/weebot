@@ -11,131 +11,152 @@ Runtime Safety:
     - Timeout protection on entropy calculations
     - Graceful degradation if analysis fails
 """
+
 from __future__ import annotations
 
 import re
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Set, Tuple, Optional
 
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC
 
 
 class CommandRiskLevel(Enum):
     """Risk classification for commands."""
-    SAFE = "safe"           # No issues detected
+
+    SAFE = "safe"  # No issues detected
     SUSPICIOUS = "suspicious"  # Requires confirmation
-    DANGEROUS = "dangerous"    # Blocked unless explicitly allowed
+    DANGEROUS = "dangerous"  # Blocked unless explicitly allowed
 
 
 @dataclass
 class SecurityAssessment:
     """Result of security analysis."""
+
     risk_level: CommandRiskLevel
     layer_triggered: int
     reason: str
-    details: Optional[dict] = None
+    details: dict | None = None
 
 
 class CommandSecurityAnalyzer:
     """Multi-layer security analyzer for shell commands.
-    
+
     This analyzer implements defense in depth:
     1. Pattern matching for known attack vectors
     2. Behavioral analysis for download+execute chains
     3. Entropy analysis for encoded payloads
     4. Semantic structure validation
-    
+
     Each layer can independently flag a command as dangerous.
     All layers must pass for a command to be considered safe.
     """
-    
+
     # Layer 1: Known dangerous patterns (extended from BashTool)
-    _DANGEROUS_PATTERNS: List[Tuple[str, str]] = [
+    _DANGEROUS_PATTERNS: list[tuple[str, str]] = [
         # Encoded command execution
-        (r'base64\s+(-d|--decode)\s*\|', "base64 decode pipe"),
-        (r'base64\s+(-d|--decode)\s+<<<', "base64 here-string decode"),
-        (r'eval\s*\$\(', "eval command substitution"),
-        (r'eval\s*`', "eval backticks"),
-        (r'`.*base64.*`', "backticks with base64"),
-        (r'\$\(.*base64.*\)', "command substitution with base64"),
-        (r'echo\s+[A-Za-z0-9+/]{40,}.*\|', "echo base64 to pipe"),
-        (r'\b(echo|printf)\s+.*\|\s*(bash|sh|zsh)', "pipe to shell"),
-        (r'<\(.*\)', "process substitution"),
-
+        (r"base64\s+(-d|--decode)\s*\|", "base64 decode pipe"),
+        (r"base64\s+(-d|--decode)\s+<<<", "base64 here-string decode"),
+        (r"eval\s*\$\(", "eval command substitution"),
+        (r"eval\s*`", "eval backticks"),
+        (r"`.*base64.*`", "backticks with base64"),
+        (r"\$\(.*base64.*\)", "command substitution with base64"),
+        (r"echo\s+[A-Za-z0-9+/]{40,}.*\|", "echo base64 to pipe"),
+        (r"\b(echo|printf)\s+.*\|\s*(bash|sh|zsh)", "pipe to shell"),
+        (r"<\(.*\)", "process substitution"),
         # Remote code execution vectors
-        (r'\b(curl|wget|Invoke-WebRequest|iwr)\s+.*[\|\;\&]\s*\b(bash|sh|zsh|cmd|powershell|pwsh)',
-         "download pipe to shell"),
-        (r'\b(curl|wget)\s+.*\s+-o\s*-\s*\|', "curl/wget output to pipe"),
-        (r'\b(source|\.)\s*<\(', "source process substitution"),
-        (r'\bexec\s+\b(bash|sh|zsh)', "exec to new shell"),
-
+        (
+            r"\b(curl|wget|Invoke-WebRequest|iwr)\s+.*[\|\;\&]\s*\b(bash|sh|zsh|cmd|powershell|pwsh)",
+            "download pipe to shell",
+        ),
+        (r"\b(curl|wget)\s+.*\s+-o\s*-\s*\|", "curl/wget output to pipe"),
+        (r"\b(source|\.)\s*<\(", "source process substitution"),
+        (r"\bexec\s+\b(bash|sh|zsh)", "exec to new shell"),
         # Obfuscation techniques
-        (r'\\x[0-9a-fA-F]{2}', "hex escape sequences"),
-        (r'\$\{.*:#.*\}', "parameter expansion obfuscation"),
+        (r"\\x[0-9a-fA-F]{2}", "hex escape sequences"),
+        (r"\$\{.*:#.*\}", "parameter expansion obfuscation"),
         # Backtick is PowerShell's escape character (`n=newline, `t=tab).
         # Single-char escapes are syntax, not injection.  Only flag
         # backtick groups with 3+ chars of substantive content as potential
         # injection — this allows PowerShell batch commands with embedded
         # newlines while still blocking real backtick-based command injection.
-        (r'`[^`]{3,}`[^`]*`[^`]{3,}`', "nested backtick injection"),
-        (r'\$\(\$\(', "nested command substitution"),
-
+        (r"`[^`]{3,}`[^`]*`[^`]{3,}`", "nested backtick injection"),
+        (r"\$\(\$\(", "nested command substitution"),
         # ── PowerShell-specific injection vectors ────────────────────
         # These patterns cover PowerShell constructs that are NOT matched
         # by the POSIX/bash patterns above but are equally dangerous.
-        (r'\bInvoke-Expression\b', "PowerShell Invoke-Expression (arbitrary code exec)"),
-        (r'\biex\s+', "PowerShell iex alias (arbitrary code exec)"),
-        (r'Net\.WebClient.*\.DownloadString', "PowerShell remote download+exec"),
-        (r'Start-Process\s+-WindowStyle\s+Hidden', "PowerShell hidden window execution"),
-        (r'New-Object\s+System\.Net\.Sockets\.TCPClient', "PowerShell reverse shell"),
-        (r'\[System\.Reflection\.Assembly\]::Load', "PowerShell reflective assembly load"),
-        (r'\bIWR?\s+.*\|.*iex', "PowerShell Invoke-WebRequest pipe to iex"),
-        (r'curl.*\.ps1.*\|.*iex', "PowerShell curl-to-iex (malware delivery)"),
+        (r"\bInvoke-Expression\b", "PowerShell Invoke-Expression (arbitrary code exec)"),
+        (r"\biex\s+", "PowerShell iex alias (arbitrary code exec)"),
+        (r"Net\.WebClient.*\.DownloadString", "PowerShell remote download+exec"),
+        (r"Start-Process\s+-WindowStyle\s+Hidden", "PowerShell hidden window execution"),
+        (r"New-Object\s+System\.Net\.Sockets\.TCPClient", "PowerShell reverse shell"),
+        (r"\[System\.Reflection\.Assembly\]::Load", "PowerShell reflective assembly load"),
+        (r"\bIWR?\s+.*\|.*iex", "PowerShell Invoke-WebRequest pipe to iex"),
+        (r"curl.*\.ps1.*\|.*iex", "PowerShell curl-to-iex (malware delivery)"),
     ]
-    
+
     # Layer 2: Behavioral indicators
-    _DOWNLOAD_TOOLS: Set[str] = {
-        'curl', 'wget', 'Invoke-WebRequest', 'iwr', 'Invoke-RestMethod',
-        'irm', 'fetch', 'aria2c', 'axel'
+    _DOWNLOAD_TOOLS: set[str] = {
+        "curl",
+        "wget",
+        "Invoke-WebRequest",
+        "iwr",
+        "Invoke-RestMethod",
+        "irm",
+        "fetch",
+        "aria2c",
+        "axel",
     }
-    
-    _EXECUTION_TARGETS: Set[str] = {
-        'bash', 'sh', 'zsh', 'fish', 'ksh', 'cmd', 'powershell', 'pwsh',
-        'python', 'python3', 'ruby', 'perl', 'node'
+
+    _EXECUTION_TARGETS: set[str] = {
+        "bash",
+        "sh",
+        "zsh",
+        "fish",
+        "ksh",
+        "cmd",
+        "powershell",
+        "pwsh",
+        "python",
+        "python3",
+        "ruby",
+        "perl",
+        "node",
     }
-    
-    _SUSPICIOUS_COMBINATIONS: List[Tuple[Set[str], Set[str], str]] = [
+
+    _SUSPICIOUS_COMBINATIONS: list[tuple[set[str], set[str], str]] = [
         # (indicators, targets, description)
-        ({'curl', 'wget', 'Invoke-WebRequest', 'iwr'}, 
-         {'bash', 'sh', 'zsh', '|', 'chmod'}, 
-         "download to shell execution"),
-        ({'base64', 'openssl'}, 
-         {'eval', 'exec', 'source', '.'}, 
-         "decode to execution"),
-        ({'temp', 'tmp', 'mktemp'}, 
-         {'chmod', '+x', 'execute'}, 
-         "temp file execution"),
+        (
+            {"curl", "wget", "Invoke-WebRequest", "iwr"},
+            {"bash", "sh", "zsh", "|", "chmod"},
+            "download to shell execution",
+        ),
+        ({"base64", "openssl"}, {"eval", "exec", "source", "."}, "decode to execution"),
+        ({"temp", "tmp", "mktemp"}, {"chmod", "+x", "execute"}, "temp file execution"),
     ]
-    
+
     # Layer 3: Entropy thresholds
-    _HIGH_ENTROPY_THRESHOLD: float = 4.0  # Shannon entropy per char (adjusted based on actual base64 entropy)
+    _HIGH_ENTROPY_THRESHOLD: float = (
+        4.0  # Shannon entropy per char (adjusted based on actual base64 entropy)
+    )
     _BASE64_MIN_LENGTH: int = 20  # Reduced to catch shorter base64 strings
-    
+
     # Layer 4: Semantic validation
-    _MAX_COMMAND_CHAIN_LENGTH: int = 5  # Max operators for non-PowerShell commands; PowerShell threshold is 20 (was 8 — PowerShell pipes are normal)
-    _DANGEROUS_OPERATORS: Set[str] = {';', '&&', '||', '|', '|&'}
+    _MAX_COMMAND_CHAIN_LENGTH: int = (
+        5  # Max operators for non-PowerShell commands; PowerShell threshold is 20 (was 8 — PowerShell pipes are normal)
+    )
+    _DANGEROUS_OPERATORS: set[str] = {";", "&&", "||", "|", "|&"}
 
     # PowerShell patterns that are safe despite high operator count
     _SAFE_POWERSHELL_PATTERNS: list = [
-        r'Get-ChildItem.*\|.*Select-Object.*\|.*Format-',    # file listing
-        r'Get-ChildItem.*\|.*Where-Object.*\|.*Select-',     # filtered search
-        r'Get-Content.*\|.*ForEach-Object',                   # content processing
-        r'Get-ChildItem.*\|.*Select-String',                  # grep equivalent
-        r'Get-Item.*\|.*Select-Object',                       # file stat
+        r"Get-ChildItem.*\|.*Select-Object.*\|.*Format-",  # file listing
+        r"Get-ChildItem.*\|.*Where-Object.*\|.*Select-",  # filtered search
+        r"Get-Content.*\|.*ForEach-Object",  # content processing
+        r"Get-ChildItem.*\|.*Select-String",  # grep equivalent
+        r"Get-Item.*\|.*Select-Object",  # file stat
     ]
-    
+
     def analyze(self, command: str) -> SecurityAssessment:
         """Perform multi-layer security analysis.
 
@@ -176,6 +197,7 @@ class CommandSecurityAnalyzer:
 
         try:
             from weebot.application.services.model_selection import ModelSelectionService, TaskType
+
             router = ModelSelectionService()
 
             system_prompt = (
@@ -188,7 +210,7 @@ class CommandSecurityAnalyzer:
                 "4. Network exfiltration attempts\n"
                 "5. Evasion of security patterns (e.g., using variable expansion to hide keywords)\n\n"
                 "Reply ONLY with a JSON object in this format:\n"
-                "{\"risk_level\": \"safe\"|\"suspicious\"|\"dangerous\", \"reason\": \"string\", \"confidence\": float}"
+                '{"risk_level": "safe"|"suspicious"|"dangerous", "reason": "string", "confidence": float}'
             )
 
             prompt = f"Analyze this command: {command}"
@@ -198,7 +220,7 @@ class CommandSecurityAnalyzer:
                 prompt=f"{system_prompt}\n\n{prompt}",
                 task_type=TaskType.ANALYSIS,
                 use_cache=True,
-                temperature=TEMPERATURE_DETERMINISTIC
+                temperature=TEMPERATURE_DETERMINISTIC,
             )
 
             content = response.get("content", "{}")
@@ -206,8 +228,9 @@ class CommandSecurityAnalyzer:
             try:
                 # Find JSON if mixed with text
                 import json
-                start = content.find('{')
-                end = content.rfind('}') + 1
+
+                start = content.find("{")
+                end = content.rfind("}") + 1
                 if start != -1 and end != 0:
                     result = json.loads(content[start:end])
 
@@ -224,7 +247,7 @@ class CommandSecurityAnalyzer:
                         risk_level=risk_level,
                         layer_triggered=4,
                         reason=f"Semantic detection: {reason}",
-                        details=result
+                        details=result,
                     )
             except Exception:
                 # If parsing fails, fall back to structural
@@ -232,7 +255,10 @@ class CommandSecurityAnalyzer:
 
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f"LLM Security Analysis failed: {e}. Falling back to structural.")
+
+            logging.getLogger(__name__).warning(
+                f"LLM Security Analysis failed: {e}. Falling back to structural."
+            )
 
         return structural
 
@@ -244,23 +270,26 @@ class CommandSecurityAnalyzer:
                     risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=1,
                     reason=f"Dangerous pattern detected: {description}",
-                    details={"pattern": pattern, "match": re.search(pattern, command, re.IGNORECASE).group(0)}
+                    details={
+                        "pattern": pattern,
+                        "match": re.search(pattern, command, re.IGNORECASE).group(0),
+                    },
                 )
         return SecurityAssessment(CommandRiskLevel.SAFE, 1, "No dangerous patterns")
-    
+
     def _layer2_behavioral_analysis(self, command: str) -> SecurityAssessment:
         """Detect suspicious behavior combinations."""
         cmd_lower = command.lower()
 
         # Look for download-execute patterns
         download_execute_patterns = [
-            r'(curl|wget|Invoke-WebRequest|iwr).*(&&|\||;).*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b',
-            r'\b(bash|sh|zsh|python|python3|perl|ruby|node)\b.*(&&|\||;).*\b(curl|wget|Invoke-WebRequest|iwr)\b',
-            r'(curl|wget|Invoke-WebRequest|iwr).*\|\s*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b',
-            r'\b(download|fetch|get-content|get).*\s+.*\s+.*\|\s*\b(execute|run|start|bash|sh|zsh)\b',
-            r'(chmod\s+\+x|\.\/|\./).*(&&|\||;).*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b',
+            r"(curl|wget|Invoke-WebRequest|iwr).*(&&|\||;).*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b",
+            r"\b(bash|sh|zsh|python|python3|perl|ruby|node)\b.*(&&|\||;).*\b(curl|wget|Invoke-WebRequest|iwr)\b",
+            r"(curl|wget|Invoke-WebRequest|iwr).*\|\s*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b",
+            r"\b(download|fetch|get-content|get).*\s+.*\s+.*\|\s*\b(execute|run|start|bash|sh|zsh)\b",
+            r"(chmod\s+\+x|\.\/|\./).*(&&|\||;).*\b(bash|sh|zsh|python|python3|perl|ruby|node|cmd|powershell|pwsh)\b",
             # download -> chmod+x -> execute (no explicit shell name required)
-            r'(curl|wget|Invoke-WebRequest|iwr).+(&&|\|).+(chmod\s+\+x).+(&&|\|).+(\./|\w+\.sh)',
+            r"(curl|wget|Invoke-WebRequest|iwr).+(&&|\|).+(chmod\s+\+x).+(&&|\|).+(\./|\w+\.sh)",
         ]
 
         for pattern in download_execute_patterns:
@@ -269,15 +298,12 @@ class CommandSecurityAnalyzer:
                     risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=2,
                     reason="Suspicious download-execute pattern detected",
-                    details={
-                        "pattern_matched": pattern,
-                        "command": command
-                    }
+                    details={"pattern_matched": pattern, "command": command},
                 )
 
         # Tokenize command (simple approach)
-        tokens = set(re.findall(r'\b[a-zA-Z][a-zA-Z0-9_-]*\b', cmd_lower))
-        operators = set(re.findall(r'[;&|]+', command))
+        tokens = set(re.findall(r"\b[a-zA-Z][a-zA-Z0-9_-]*\b", cmd_lower))
+        operators = set(re.findall(r"[;&|]+", command))
 
         for indicators, targets, description in self._SUSPICIOUS_COMBINATIONS:
             has_indicator = bool(tokens & indicators)
@@ -290,16 +316,16 @@ class CommandSecurityAnalyzer:
                     reason=f"Suspicious behavior: {description}",
                     details={
                         "indicators_found": list(tokens & indicators),
-                        "targets_found": list((tokens | set(['|', '&&', '||'])) & targets)
-                    }
+                        "targets_found": list((tokens | set(["|", "&&", "||"])) & targets),
+                    },
                 )
 
         return SecurityAssessment(CommandRiskLevel.SAFE, 2, "No suspicious behavior")
-    
+
     def _layer3_entropy_analysis(self, command: str) -> SecurityAssessment:
         """Detect high-entropy encoded payloads."""
         # Find potential base64 strings
-        base64_pattern = r'[A-Za-z0-9+/]{40,}={0,2}'
+        base64_pattern = r"[A-Za-z0-9+/]{40,}={0,2}"
         matches = re.findall(base64_pattern, command)
 
         for match in matches:
@@ -309,17 +335,24 @@ class CommandSecurityAnalyzer:
                     # Try to decode
                     try:
                         import base64
-                        decoded = base64.b64decode(match).decode('utf-8', errors='ignore')
-                        shell_keywords = ['bash', 'sh', 'exec', 'eval', 'rm -rf', 'format', 'cmd', 'powershell']
+
+                        decoded = base64.b64decode(match).decode("utf-8", errors="ignore")
+                        shell_keywords = [
+                            "bash",
+                            "sh",
+                            "exec",
+                            "eval",
+                            "rm -rf",
+                            "format",
+                            "cmd",
+                            "powershell",
+                        ]
                         if any(kw in decoded.lower() for kw in shell_keywords):
                             return SecurityAssessment(
                                 risk_level=CommandRiskLevel.DANGEROUS,
                                 layer_triggered=3,
                                 reason="High-entropy encoded shell command detected",
-                                details={
-                                    "entropy": entropy,
-                                    "decoded_preview": decoded[:100]
-                                }
+                                details={"entropy": entropy, "decoded_preview": decoded[:100]},
                             )
                     except Exception:
                         pass
@@ -330,23 +363,22 @@ class CommandSecurityAnalyzer:
         tokens = command.split()
         for token in tokens:
             # Remove quotes and other delimiters
-            clean_token = re.sub(r'[\'\"`]', '', token)
-            if len(clean_token) >= self._BASE64_MIN_LENGTH and re.match(r'^[A-Za-z0-9+/=]+$', clean_token):
+            clean_token = re.sub(r"[\'\"`]", "", token)
+            if len(clean_token) >= self._BASE64_MIN_LENGTH and re.match(
+                r"^[A-Za-z0-9+/=]+$", clean_token
+            ):
                 entropy = self._calculate_entropy(clean_token)
                 if entropy > self._HIGH_ENTROPY_THRESHOLD:
                     return SecurityAssessment(
                         risk_level=CommandRiskLevel.DANGEROUS,
                         layer_triggered=3,
                         reason="High-entropy encoded payload detected",
-                        details={
-                            "entropy": entropy,
-                            "token": clean_token[:50]
-                        }
+                        details={"entropy": entropy, "token": clean_token[:50]},
                     )
-        
+
         # Check for base64-like strings anywhere in the command (not just as tokens)
         # This catches cases like 'echo "payload"' where the payload is inside quotes
-        all_possible_strings = re.findall(r'[A-Za-z0-9+/=]{40,}', command)
+        all_possible_strings = re.findall(r"[A-Za-z0-9+/=]{40,}", command)
         for possible_string in all_possible_strings:
             entropy = self._calculate_entropy(possible_string)
             if entropy > self._HIGH_ENTROPY_THRESHOLD:
@@ -354,53 +386,54 @@ class CommandSecurityAnalyzer:
                     risk_level=CommandRiskLevel.DANGEROUS,
                     layer_triggered=3,
                     reason="High-entropy encoded payload detected",
-                    details={
-                        "entropy": entropy,
-                        "token": possible_string[:50]
-                    }
+                    details={"entropy": entropy, "token": possible_string[:50]},
                 )
 
         return SecurityAssessment(CommandRiskLevel.SAFE, 3, "No encoded payloads")
-    
+
     def _layer4_semantic_analysis(self, command: str) -> SecurityAssessment:
         """Validate command structure."""
         # PowerShell heuristic: if command contains PowerShell cmdlets or starts with "$",
         # use a much higher operator threshold (20 vs 8).
         _powershell_cmdlet_re = re.compile(
-            r'\b(Get-|Write-|ForEach-Object|Select-Object|Sort-Object|Where-Object|'
-            r'New-Item|Test-Path|Remove-Item|Set-Content|Add-Content|Out-File|'
-            r'Format-Table|Format-List|Measure-Object)\b',
+            r"\b(Get-|Write-|ForEach-Object|Select-Object|Sort-Object|Where-Object|"
+            r"New-Item|Test-Path|Remove-Item|Set-Content|Add-Content|Out-File|"
+            r"Format-Table|Format-List|Measure-Object)\b",
             re.IGNORECASE,
         )
-        _powershell_threshold = 20 if (_powershell_cmdlet_re.search(command) or command.strip().startswith('$')) else self._MAX_COMMAND_CHAIN_LENGTH
+        _powershell_threshold = (
+            20
+            if (_powershell_cmdlet_re.search(command) or command.strip().startswith("$"))
+            else self._MAX_COMMAND_CHAIN_LENGTH
+        )
 
         # Allowlist: known-safe PowerShell patterns skip chain-length check
         for pattern in self._SAFE_POWERSHELL_PATTERNS:
             if re.search(pattern, command, re.IGNORECASE):
                 return SecurityAssessment(CommandRiskLevel.SAFE, 4, "Known-safe PowerShell pattern")
         # Check command chain length (PowerShell-aware threshold)
-        chain_count = len(re.findall(r'[;|&]', command))
+        chain_count = len(re.findall(r"[;|&]", command))
         if chain_count > _powershell_threshold:
             return SecurityAssessment(
                 risk_level=CommandRiskLevel.SUSPICIOUS,
                 layer_triggered=4,
                 reason=f"Complex command chain ({chain_count} operators)",
-                details={"chain_length": chain_count}
+                details={"chain_length": chain_count},
             )
-        
+
         # Check for URL-like strings (potential downloads)
         url_pattern = r'https?://[^\s"\']+'
         urls = re.findall(url_pattern, command)
-        if urls and any(op in command for op in ['|', '&&', '||']):
+        if urls and any(op in command for op in ["|", "&&", "||"]):
             return SecurityAssessment(
                 risk_level=CommandRiskLevel.SUSPICIOUS,
                 layer_triggered=4,
                 reason="URL with command chaining detected",
-                details={"urls_found": urls}
+                details={"urls_found": urls},
             )
-        
+
         return SecurityAssessment(CommandRiskLevel.SAFE, 4, "Structure valid")
-    
+
     def _calculate_entropy(self, data: str) -> float:
         """Calculate Shannon entropy of string."""
         if not data:
@@ -440,7 +473,7 @@ class CommandSecurityAnalyzer:
             return False
 
         # Check if string contains only base64 characters
-        base64_chars = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+        base64_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
         if not all(c in base64_chars for c in data):
             return False
 
@@ -449,14 +482,14 @@ class CommandSecurityAnalyzer:
         # Pure-lowercase strings (filepaths, variable names) fail this.
         has_upper = any(c.isupper() for c in data)
         has_digit = any(c.isdigit() for c in data)
-        has_plus = '+' in data
-        has_padding = data.endswith('=')
+        has_plus = "+" in data
+        has_padding = data.endswith("=")
 
         return has_upper or has_digit or has_plus or has_padding
 
 
 # Singleton instance for reuse
-_analyzer: Optional[CommandSecurityAnalyzer] = None
+_analyzer: CommandSecurityAnalyzer | None = None
 
 
 def get_security_analyzer() -> CommandSecurityAnalyzer:

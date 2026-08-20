@@ -7,11 +7,11 @@ Create Date: 2026-07-21 08:30:00.000000
 Add ON DELETE CASCADE foreign keys for referential integrity when
 sessions are deleted.
 """
-from typing import Sequence, Union
+
+from typing import Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 revision: str = "e1a2b3c4d5f6"
 down_revision: Union[str, Sequence[str], None] = "548511c41c39"
@@ -105,8 +105,7 @@ def upgrade() -> None:
     # retry dies on "table behavioral_rules_new already exists" instead of
     # reporting the real error.
     op.execute("DROP TABLE IF EXISTS behavioral_rules_new")
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE behavioral_rules_new (
             id TEXT PRIMARY KEY,
             rule_text TEXT NOT NULL,
@@ -118,14 +117,11 @@ def upgrade() -> None:
             last_applied_at TEXT,
             FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
         )
-        """
-    )
+        """)
     _copy_rows(bind, "behavioral_rules", "behavioral_rules_new")
     op.execute("DROP TABLE behavioral_rules")
     op.execute("ALTER TABLE behavioral_rules_new RENAME TO behavioral_rules")
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_rules_src ON behavioral_rules(source_session_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS idx_rules_src ON behavioral_rules(source_session_id)")
     op.execute("PRAGMA foreign_keys = ON")
 
     # ── commitments ──────────────────────────────────────────────────
@@ -134,8 +130,7 @@ def upgrade() -> None:
     if _table_exists(bind, "commitments"):
         op.execute("PRAGMA foreign_keys = OFF")
         op.execute("DROP TABLE IF EXISTS commitments_new")
-        op.execute(
-            """
+        op.execute("""
             CREATE TABLE commitments_new (
                 id TEXT PRIMARY KEY,
                 promise_text TEXT NOT NULL,
@@ -149,8 +144,7 @@ def upgrade() -> None:
                 failure_reason TEXT,
                 FOREIGN KEY (source_session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
-            """
-        )
+            """)
         _copy_rows(bind, "commitments", "commitments_new")
         op.execute("DROP TABLE commitments")
         op.execute("ALTER TABLE commitments_new RENAME TO commitments")
@@ -171,8 +165,7 @@ def downgrade() -> None:
     # ── behavioral_rules ─────────────────────────────────────────────
     op.execute("PRAGMA foreign_keys = OFF")
     op.execute("DROP TABLE IF EXISTS behavioral_rules_old")
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE behavioral_rules_old (
             id TEXT PRIMARY KEY,
             rule_text TEXT NOT NULL,
@@ -183,22 +176,18 @@ def downgrade() -> None:
             applied_count INTEGER NOT NULL DEFAULT 0,
             last_applied_at TEXT
         )
-        """
-    )
+        """)
     _copy_rows(bind, "behavioral_rules", "behavioral_rules_old")
     op.execute("DROP TABLE behavioral_rules")
     op.execute("ALTER TABLE behavioral_rules_old RENAME TO behavioral_rules")
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_rules_src ON behavioral_rules(source_session_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS idx_rules_src ON behavioral_rules(source_session_id)")
     op.execute("PRAGMA foreign_keys = ON")
 
     # ── commitments ──────────────────────────────────────────────────
     if _table_exists(bind, "commitments"):
         op.execute("PRAGMA foreign_keys = OFF")
         op.execute("DROP TABLE IF EXISTS commitments_old")
-        op.execute(
-            """
+        op.execute("""
             CREATE TABLE commitments_old (
                 id TEXT PRIMARY KEY,
                 promise_text TEXT NOT NULL,
@@ -211,8 +200,7 @@ def downgrade() -> None:
                 updated_at TEXT NOT NULL,
                 failure_reason TEXT
             )
-            """
-        )
+            """)
         _copy_rows(bind, "commitments", "commitments_old")
         op.execute("DROP TABLE commitments")
         op.execute("ALTER TABLE commitments_old RENAME TO commitments")

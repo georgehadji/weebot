@@ -4,6 +4,7 @@
 the dependencies ``apply_mcp_tool_scope`` needs, replacing the previous
 untyped ``PlanActFlow`` duck-typing via ``getattr``.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

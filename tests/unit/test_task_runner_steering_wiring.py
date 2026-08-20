@@ -6,6 +6,7 @@ plan_act_flow.py). The only gap was create_plan_act_factory silently
 dropping any steering argument — this test proves the factory now passes
 it through, so the /sessions/{id}/steer endpoint has somewhere to deliver.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

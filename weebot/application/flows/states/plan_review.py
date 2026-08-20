@@ -10,10 +10,12 @@ Control flow:
      routes to ExecutingState (approve) or PlanningState (modify).
   3. This state is NOT re-entered on resume — the routing is done by run().
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 from weebot.config.settings import WeebotSettings
 
@@ -25,10 +27,23 @@ from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanReviewEvent, 
 
 _log = logging.getLogger(__name__)
 
-_APPROVE_TOKENS = frozenset({
-    "approve", "approved", "yes", "ok", "proceed", "continue",
-    "go", "go ahead", "run", "start", "lgtm", "y", "do it",
-})
+_APPROVE_TOKENS = frozenset(
+    {
+        "approve",
+        "approved",
+        "yes",
+        "ok",
+        "proceed",
+        "continue",
+        "go",
+        "go ahead",
+        "run",
+        "start",
+        "lgtm",
+        "y",
+        "do it",
+    }
+)
 
 
 def next_state_after_plan(min_steps: int = 1):
@@ -53,9 +68,7 @@ class PlanReviewState(FlowState):
     def __init__(self, min_steps: int = 1) -> None:
         self._min_steps = min_steps
 
-    async def execute(
-        self, context: "PlanActFlow", prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.executing import ExecutingState
 
         if context._plan is None:
@@ -69,20 +82,15 @@ class PlanReviewState(FlowState):
         if len(plan.steps) < self._min_steps:
             _log.debug(
                 "Plan review: auto-approving %d-step plan (min_steps=%d)",
-                len(plan.steps), self._min_steps,
+                len(plan.steps),
+                self._min_steps,
             )
             context.set_state(ExecutingState())
             return
 
-        _log.info(
-            "Plan review: presenting %d-step plan '%s' to user",
-            len(plan.steps), plan.title,
-        )
+        _log.info("Plan review: presenting %d-step plan '%s' to user", len(plan.steps), plan.title)
 
-        yield PlanReviewEvent(
-            plan_data=plan.model_dump(mode="json"),
-            step_count=len(plan.steps),
-        )
+        yield PlanReviewEvent(plan_data=plan.model_dump(mode="json"), step_count=len(plan.steps))
 
         # Mark plan as pending approval in session context (extra dict)
         _new_extra = {**context._session.context.extra, "plan_pending_approval": True}
@@ -96,6 +104,7 @@ class PlanReviewState(FlowState):
         # event publisher pipeline which caches a stale session reference,
         # so we bypass it and save to the state repo directly.
         from weebot.domain.models.session import SessionStatus
+
         context._session = context._session.set_status(SessionStatus.WAITING)
 
         wait_event = WaitForUserEvent(

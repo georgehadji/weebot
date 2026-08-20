@@ -4,19 +4,20 @@ Most tests mock handle_tool_call so no network or credentials are needed.
 One real-integration test (test_help_real_vendored) exercises the actual
 vendored handle_tool_call to guard the import + shared-assets seam in CI.
 """
+
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from weebot.tools.atomic_mail_tool import AtomicMailTool, _BREAKER, _BREAKER_ID
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _success_response(text: str = "ok") -> dict:
     return {"content": [{"text": text}], "isError": False}
@@ -60,9 +61,7 @@ async def test_missing_action_returns_error(tool):
 @pytest.mark.asyncio
 async def test_jmap_both_ops_and_ops_file_returns_error(tool):
     result = await tool.execute(
-        action="jmap_request",
-        ops='[["Email/get", {}, "0"]]',
-        ops_file="list_inbox",
+        action="jmap_request", ops='[["Email/get", {}, "0"]]', ops_file="list_inbox"
     )
     assert result.is_error
     assert "mutually exclusive" in result.error
@@ -94,10 +93,7 @@ async def test_help_with_topic_passes_topic_through(tool):
         captured["args"] = args
         return _success_response("help text")
 
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fake_handle,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fake_handle):
         await tool.execute(action="help", topic="presets")
 
     assert captured["name"] == "help"
@@ -129,10 +125,7 @@ async def test_register_passes_username_and_forced(tool):
         captured.update({"name": name, "args": args})
         return _success_response("{}")
 
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fake_handle,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fake_handle):
         await tool.execute(action="register", username="myagent", forced=True)
 
     assert captured["args"]["username"] == "myagent"
@@ -164,10 +157,7 @@ async def test_jmap_request_with_ops_file(tool):
         captured.update({"name": name, "args": args})
         return _success_response('{"methodResponses": []}')
 
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fake_handle,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fake_handle):
         result = await tool.execute(action="jmap_request", ops_file="list_inbox")
 
     assert not result.is_error
@@ -184,10 +174,7 @@ async def test_jmap_request_with_inline_ops(tool):
         return _success_response("{}")
 
     ops_json = '[["Email/query", {}, "0"]]'
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fake_handle,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fake_handle):
         await tool.execute(action="jmap_request", ops=ops_json)
 
     assert captured["args"]["ops"] == ops_json
@@ -223,16 +210,13 @@ async def test_execute_does_not_block_event_loop(tool):
 
     main_thread_id = threading.current_thread().ident
 
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fake_handle,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fake_handle):
         await tool.execute(action="help")
 
     assert call_thread_ids, "handle_tool_call was never called"
-    assert call_thread_ids[0] != main_thread_id, (
-        "handle_tool_call ran on the event-loop thread — blocking detected"
-    )
+    assert (
+        call_thread_ids[0] != main_thread_id
+    ), "handle_tool_call ran on the event-loop thread — blocking detected"
 
 
 # ---------------------------------------------------------------------------
@@ -268,10 +252,7 @@ async def test_circuit_opens_after_repeated_failures(tool):
     def fail(name, args):
         return _error_response("Service unavailable")
 
-    with patch(
-        "weebot.tools.atomic_mail_tool._load_handle_tool_call",
-        return_value=fail,
-    ):
+    with patch("weebot.tools.atomic_mail_tool._load_handle_tool_call", return_value=fail):
         for _ in range(3):
             await tool.execute(action="help")
 
@@ -305,33 +286,42 @@ async def test_circuit_open_blocks_immediately(tool):
 
 
 def test_build_args_register_excludes_jmap_keys(tool):
-    args = tool._build_args("register", {
-        "username": "bot",
-        "ops_file": "list_inbox",  # not relevant to register
-        "topic": "jmap",           # not relevant to register
-    })
+    args = tool._build_args(
+        "register",
+        {
+            "username": "bot",
+            "ops_file": "list_inbox",  # not relevant to register
+            "topic": "jmap",  # not relevant to register
+        },
+    )
     assert "username" in args
     assert "ops_file" not in args
     assert "topic" not in args
 
 
 def test_build_args_help_excludes_register_keys(tool):
-    args = tool._build_args("help", {
-        "topic": "presets",
-        "username": "bot",  # not relevant to help
-        "ops": "[...]",      # not relevant to help
-    })
+    args = tool._build_args(
+        "help",
+        {
+            "topic": "presets",
+            "username": "bot",  # not relevant to help
+            "ops": "[...]",  # not relevant to help
+        },
+    )
     assert "topic" in args
     assert "username" not in args
     assert "ops" not in args
 
 
 def test_build_args_jmap_excludes_register_keys(tool):
-    args = tool._build_args("jmap_request", {
-        "ops_file": "list_inbox",
-        "username": "bot",  # not relevant to jmap
-        "topic": "x",       # not relevant to jmap
-    })
+    args = tool._build_args(
+        "jmap_request",
+        {
+            "ops_file": "list_inbox",
+            "username": "bot",  # not relevant to jmap
+            "topic": "x",  # not relevant to jmap
+        },
+    )
     assert "ops_file" in args
     assert "username" not in args
     assert "topic" not in args

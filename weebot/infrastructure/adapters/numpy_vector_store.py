@@ -7,9 +7,9 @@ where index construction overhead outweighs search time.
 Not persistent — data is lost on process exit.  For persistent storage
 use a future ``ZvecVectorStore`` or similar backend.
 """
+
 from __future__ import annotations
 
-from typing import Optional
 
 import numpy as np
 
@@ -27,16 +27,13 @@ class NumpyVectorStore(VectorStorePort):
     def __init__(self, dim: int) -> None:
         self._dim = dim
         self._ids: list[str] = []
-        self._vectors: Optional[np.ndarray] = None  # shape (N, dim)
+        self._vectors: np.ndarray | None = None  # shape (N, dim)
         self._metadata: list[dict] = []
 
     # ── VectorStorePort implementation ─────────────────────────────
 
     async def upsert(
-        self,
-        ids: list[str],
-        vectors: np.ndarray,
-        metadata: Optional[list[dict]] = None,
+        self, ids: list[str], vectors: np.ndarray, metadata: list[dict] | None = None
     ) -> None:
         """Replace all stored documents with the given batch.
 
@@ -47,23 +44,15 @@ class NumpyVectorStore(VectorStorePort):
         the port contract.
         """
         if vectors.ndim != 2 or vectors.shape[1] != self._dim:
-            raise ValueError(
-                f"Expected vectors shape (N, {self._dim}), got {vectors.shape}"
-            )
+            raise ValueError(f"Expected vectors shape (N, {self._dim}), got {vectors.shape}")
         if len(ids) != vectors.shape[0]:
-            raise ValueError(
-                f"ids length ({len(ids)}) != vectors rows ({vectors.shape[0]})"
-            )
+            raise ValueError(f"ids length ({len(ids)}) != vectors rows ({vectors.shape[0]})")
 
         self._ids = list(ids)
         self._vectors = vectors.copy()
         self._metadata = list(metadata) if metadata else [{} for _ in range(len(ids))]
 
-    async def query(
-        self,
-        vector: np.ndarray,
-        top_k: int = 10,
-    ) -> list[tuple[str, float, dict]]:
+    async def query(self, vector: np.ndarray, top_k: int = 10) -> list[tuple[str, float, dict]]:
         """Brute-force cosine similarity via dot product on L2-normalized vectors.
 
         Args:

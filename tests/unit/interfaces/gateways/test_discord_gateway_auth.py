@@ -5,6 +5,7 @@ Covers:
 - Non-allowlisted channels receive a denial response.
 - User-level allowlist narrowing blocks specific users.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,6 +19,7 @@ class TestDiscordGatewayAuth:
     def _mock_safety(self, mocker):
         """Mock SafetyChecker to avoid ChatOpenAI dependency."""
         import weebot.interfaces.gateways.base as gw_base
+
         mocker.patch.object(gw_base, "SafetyChecker")
 
     @pytest.fixture
@@ -50,6 +52,7 @@ class TestDiscordGatewayAuth:
         """Authorized channel calls build_tools, create_flow, and flow.run."""
         with patch.object(adapter, "is_authorized", return_value=True):
             with patch.object(adapter, "handle", return_value="/ask question: hello"):
+
                 async def _fake_run():
                     yield MagicMock(type="message", message="Hello")
 
@@ -58,12 +61,10 @@ class TestDiscordGatewayAuth:
 
                 with (
                     patch(
-                        "weebot.interfaces.factories.build_tools",
-                        return_value=AsyncMock(),
+                        "weebot.interfaces.factories.build_tools", return_value=AsyncMock()
                     ) as mock_build_tools,
                     patch(
-                        "weebot.interfaces.factories.create_flow",
-                        return_value=mock_flow,
+                        "weebot.interfaces.factories.create_flow", return_value=mock_flow
                     ) as mock_create_flow,
                 ):
                     result = await adapter.process_interaction(valid_payload)
@@ -89,7 +90,7 @@ class TestDiscordGatewayAuth:
                 "content": (
                     "This channel isn't authorized to use this bot. "
                     "Ask an admin to add it to the allowlist."
-                ),
+                )
             },
         }
         mock_build_tools.assert_not_called()

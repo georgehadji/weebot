@@ -1,26 +1,28 @@
 """User-friendly error message translation system."""
+
 from __future__ import annotations
 
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Optional
 
 from weebot.core.error_system_base import WeebotError, ErrorCode, ErrorSeverity
 
 
 class UserErrorCategory(Enum):
     """Categories of errors from user perspective."""
-    INPUT_PROBLEM = auto()      # User input issue
+
+    INPUT_PROBLEM = auto()  # User input issue
     PERMISSION_DENIED = auto()  # Access control
-    RESOURCE_MISSING = auto()   # File/API not found
-    SERVICE_ISSUE = auto()      # External service problem
-    SYSTEM_ERROR = auto()       # Internal error
-    SECURITY_CONCERN = auto()   # Security violation
+    RESOURCE_MISSING = auto()  # File/API not found
+    SERVICE_ISSUE = auto()  # External service problem
+    SYSTEM_ERROR = auto()  # Internal error
+    SECURITY_CONCERN = auto()  # Security violation
 
 
 @dataclass
 class UserErrorMessage:
     """Structured user error message."""
+
     title: str
     message: str
     suggestion: str
@@ -32,14 +34,14 @@ class UserErrorMessage:
 class ErrorTranslator:
     """
     Translates technical errors into user-friendly messages.
-    
+
     Handles:
     - Stripping sensitive information
     - Appropriate technical detail level
     - Localization preparation
     - Retry guidance
     """
-    
+
     # Mapping of error codes to user messages
     ERROR_TEMPLATES: dict[ErrorCode, tuple[str, str, str, UserErrorCategory, bool]] = {
         # General errors
@@ -57,7 +59,6 @@ class ErrorTranslator:
             UserErrorCategory.SERVICE_ISSUE,
             True,
         ),
-        
         # Validation errors
         ErrorCode.VALIDATION_ERROR: (
             "Invalid input",
@@ -80,7 +81,6 @@ class ErrorTranslator:
             UserErrorCategory.INPUT_PROBLEM,
             True,
         ),
-        
         # Security errors
         ErrorCode.SECURITY_VIOLATION: (
             "Security alert",
@@ -110,7 +110,6 @@ class ErrorTranslator:
             UserErrorCategory.INPUT_PROBLEM,
             True,
         ),
-        
         # Resource errors
         ErrorCode.RESOURCE_NOT_FOUND: (
             "Not found",
@@ -133,7 +132,6 @@ class ErrorTranslator:
             UserErrorCategory.SERVICE_ISSUE,
             True,
         ),
-        
         # API errors
         ErrorCode.API_ERROR: (
             "Service error",
@@ -163,7 +161,6 @@ class ErrorTranslator:
             UserErrorCategory.SERVICE_ISSUE,
             True,
         ),
-        
         # Tool errors
         ErrorCode.TOOL_EXECUTION_FAILED: (
             "Action failed",
@@ -187,26 +184,24 @@ class ErrorTranslator:
             True,
         ),
     }
-    
+
     @classmethod
     def translate(
-        cls,
-        error: WeebotError,
-        include_technical_details: bool = False,
+        cls, error: WeebotError, include_technical_details: bool = False
     ) -> UserErrorMessage:
         """
         Translate a WeebotError to a user-friendly message.
-        
+
         Args:
             error: The error to translate
             include_technical_details: Whether to include technical info
-            
+
         Returns:
             UserErrorMessage with appropriate detail level
         """
         # Get template for error code
         template = cls.ERROR_TEMPLATES.get(error.code)
-        
+
         if template:
             title, message, suggestion, category, can_retry = template
         else:
@@ -216,11 +211,11 @@ class ErrorTranslator:
             suggestion = error.remediation or "Please try again or contact support."
             category = UserErrorCategory.SYSTEM_ERROR
             can_retry = error.severity not in (ErrorSeverity.FATAL, ErrorSeverity.CRITICAL)
-        
+
         # Override with error's specific remediation if available
         if error.remediation:
             suggestion = error.remediation
-        
+
         return UserErrorMessage(
             title=title,
             message=message,
@@ -229,77 +224,75 @@ class ErrorTranslator:
             can_retry=can_retry,
             support_reference=error.context.error_id,
         )
-    
+
     @classmethod
     def to_string(cls, error: WeebotError, is_developer: bool = False) -> str:
         """
         Convert error to formatted string.
-        
+
         Args:
             error: The error to format
             is_developer: Whether to include technical details
-            
+
         Returns:
             Formatted error message
         """
         if is_developer:
             return error._developer_message()
-        
+
         user_msg = cls.translate(error, include_technical_details=False)
-        
+
         lines = [
             f"{user_msg.title}",
-            f"",
+            "",
             f"{user_msg.message}",
-            f"",
+            "",
             f"Suggestion: {user_msg.suggestion}",
-            f"",
+            "",
             f"Reference: {user_msg.support_reference}",
         ]
-        
+
         if user_msg.can_retry:
             lines.append("You can try this operation again.")
-        
+
         return "\n".join(lines)
 
 
-def get_user_message(
-    error: Exception,
-    is_developer: bool = False,
-) -> str:
+def get_user_message(error: Exception, is_developer: bool = False) -> str:
     """
     Get user-appropriate message from any exception.
-    
+
     This is the main entry point for error message translation.
-    
+
     Args:
         error: Any exception
         is_developer: Whether to include technical details
-        
+
     Returns:
         Formatted error message appropriate for the audience
     """
     if isinstance(error, WeebotError):
         return ErrorTranslator.to_string(error, is_developer)
-    
+
     # Handle standard exceptions
     if isinstance(error, FileNotFoundError):
         return f"File not found: {error.filename}\nPlease check the path and try again."
-    
+
     if isinstance(error, PermissionError):
         return "Permission denied. You don't have access to this resource."
-    
+
     if isinstance(error, TimeoutError):
         return "The operation timed out. Please try again."
-    
+
     if isinstance(error, ValueError):
         return f"Invalid value: {str(error)}\nPlease check your input and try again."
-    
+
     # Generic fallback
     if is_developer:
         import traceback
+
         return f"Error: {type(error).__name__}: {str(error)}\n\n{traceback.format_exc()}"
-    
+
     return (
         "An unexpected error occurred.\n"
         "Please try again. If the problem persists, contact support."
@@ -309,7 +302,7 @@ def get_user_message(
 def format_error_for_json(error: WeebotError) -> dict:
     """Format error as JSON-serializable dictionary."""
     user_msg = ErrorTranslator.translate(error)
-    
+
     return {
         "success": False,
         "error": {
@@ -319,5 +312,5 @@ def format_error_for_json(error: WeebotError) -> dict:
             "suggestion": user_msg.suggestion,
             "can_retry": user_msg.can_retry,
             "reference": user_msg.support_reference,
-        }
+        },
     }

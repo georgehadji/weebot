@@ -1,4 +1,5 @@
 """CLI support utilities for init/doctor/hooks/upgrade/implement flows."""
+
 from __future__ import annotations
 
 import json
@@ -9,10 +10,11 @@ import sqlite3
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 from weebot.config.settings import WeebotSettings, WORKSPACE_ROOT, LOGS_DIR
 from weebot.templates.parser import TemplateParser
+
 # TemplateMarketplace is imported lazily inside the two functions that use it —
 # it pulls in `requests`, which every other CLI command would otherwise pay for.
 
@@ -22,14 +24,14 @@ from weebot.templates.parser import TemplateParser
 # ---------------------------------------------------------------------------
 
 
-def detect_platform(root: Path, override: Optional[str] = None) -> Tuple[str, str, List[str]]:
+def detect_platform(root: Path, override: str | None = None) -> tuple[str, str, list[str]]:
     """Detect platform and tier based on repo signals."""
     if override:
         platform = override
         tier = "full"
         return platform, tier, [f"override:{override}"]
 
-    signals: List[str] = []
+    signals: list[str] = []
     platform = "generic"
 
     if (root / "AGENTS.md").exists():
@@ -48,8 +50,8 @@ def detect_platform(root: Path, override: Optional[str] = None) -> Tuple[str, st
 
 def init_project(
     root: Path,
-    platform: Optional[str] = None,
-    tier: Optional[str] = None,
+    platform: str | None = None,
+    tier: str | None = None,
     force: bool = False,
     create_env: bool = True,
 ) -> Path:
@@ -91,13 +93,13 @@ def init_project(
 # ---------------------------------------------------------------------------
 
 
-def init_hooks(root: Path) -> List[Path]:
+def init_hooks(root: Path) -> list[Path]:
     """Create local hooks directory with example configs."""
     root = root.resolve()
     hooks_dir = root / ".weebot" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    created: List[Path] = []
+    created: list[Path] = []
 
     readme = hooks_dir / "README.md"
     if not readme.exists():
@@ -133,11 +135,8 @@ def init_hooks(root: Path) -> List[Path]:
 
 
 def install_hooks(
-    root: Path,
-    target: Path,
-    force: bool = False,
-    allow_outside: bool = False,
-) -> List[Path]:
+    root: Path, target: Path, force: bool = False, allow_outside: bool = False
+) -> list[Path]:
     """Install hooks into a target directory inside the project by default."""
     root = root.resolve()
     target = target.resolve()
@@ -147,10 +146,12 @@ def install_hooks(
         raise FileNotFoundError("Hooks not initialized. Run `weebot hooks init` first.")
 
     if not allow_outside and not str(target).startswith(str(root)):
-        raise ValueError("Refusing to install hooks outside project root. Use --allow-outside to override.")
+        raise ValueError(
+            "Refusing to install hooks outside project root. Use --allow-outside to override."
+        )
 
     target.mkdir(parents=True, exist_ok=True)
-    installed: List[Path] = []
+    installed: list[Path] = []
 
     for item in hooks_dir.iterdir():
         if not item.is_file():
@@ -174,12 +175,13 @@ class DoctorCheck:
     name: str
     status: str  # ok | warn | error
     details: str
-    data: Dict[str, Any] | None = None
+    data: dict[str, Any] | None = None
 
 
 @dataclass
 class RepairResult:
     """Result of an auto-repair attempt."""
+
     check_name: str
     repaired: bool
     message: str
@@ -187,11 +189,11 @@ class RepairResult:
 
 @dataclass
 class DoctorReport:
-    checks: List[DoctorCheck]
-    repairs: List[RepairResult] | None = None
+    checks: list[DoctorCheck]
+    repairs: list[RepairResult] | None = None
 
     @property
-    def summary(self) -> Dict[str, int]:
+    def summary(self) -> dict[str, int]:
         counts = {"ok": 0, "warn": 0, "error": 0}
         for c in self.checks:
             if c.status in counts:
@@ -202,12 +204,8 @@ class DoctorReport:
     def ok(self) -> bool:
         return self.summary.get("error", 0) == 0
 
-    def as_dict(self) -> Dict[str, Any]:
-        return {
-            "ok": self.ok,
-            "summary": self.summary,
-            "checks": [asdict(c) for c in self.checks],
-        }
+    def as_dict(self) -> dict[str, Any]:
+        return {"ok": self.ok, "summary": self.summary, "checks": [asdict(c) for c in self.checks]}
 
 
 def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
@@ -218,7 +216,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
         fix: When True, attempt to auto-repair warnings (e.g. create missing
              directories, initialize missing databases).
     """
-    checks: List[DoctorCheck] = []
+    checks: list[DoctorCheck] = []
     root = root.resolve()
 
     # API keys / settings
@@ -237,18 +235,12 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
         else:
             checks.append(
                 DoctorCheck(
-                    name="ai_providers",
-                    status="error",
-                    details="No AI API keys configured",
+                    name="ai_providers", status="error", details="No AI API keys configured"
                 )
             )
     except Exception as exc:
         checks.append(
-            DoctorCheck(
-                name="ai_providers",
-                status="error",
-                details=f"Settings error: {exc}",
-            )
+            DoctorCheck(name="ai_providers", status="error", details=f"Settings error: {exc}")
         )
 
     # Workspace & logs
@@ -271,36 +263,22 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
     db_path = root / "projects.db"
     if not db_path.exists():
         checks.append(
-            DoctorCheck(
-                name="projects_db",
-                status="warn",
-                details="projects.db not found",
-            )
+            DoctorCheck(name="projects_db", status="warn", details="projects.db not found")
         )
     else:
         try:
             with sqlite3.connect(db_path) as conn:
                 conn.execute("SELECT name FROM sqlite_master LIMIT 1")
-            checks.append(
-                DoctorCheck(
-                    name="projects_db",
-                    status="ok",
-                    details=str(db_path),
-                )
-            )
+            checks.append(DoctorCheck(name="projects_db", status="ok", details=str(db_path)))
         except Exception as exc:
             checks.append(
-                DoctorCheck(
-                    name="projects_db",
-                    status="error",
-                    details=f"DB open failed: {exc}",
-                )
+                DoctorCheck(name="projects_db", status="error", details=f"DB open failed: {exc}")
             )
 
     # Templates validation
     parser = TemplateParser()
     builtin_dir = root / "weebot" / "templates" / "builtin"
-    template_errors: List[str] = []
+    template_errors: list[str] = []
     template_count = 0
     if builtin_dir.exists():
         for tmpl in builtin_dir.glob("*.yaml"):
@@ -321,9 +299,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
     else:
         checks.append(
             DoctorCheck(
-                name="templates",
-                status="ok",
-                details=f"{template_count} templates validated",
+                name="templates", status="ok", details=f"{template_count} templates validated"
             )
         )
 
@@ -333,6 +309,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
     # locates the module without running it.
     def _has_module(name: str) -> bool:
         import importlib.util
+
         try:
             return importlib.util.find_spec(name) is not None
         except (ImportError, ValueError):
@@ -392,36 +369,24 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
                         conn.commit()
                     check.status = "ok"
                     check.details = f"{db_path_fix} (created)"
-                    repairs.append(RepairResult(check.name, True, "Created projects.db with schema"))
+                    repairs.append(
+                        RepairResult(check.name, True, "Created projects.db with schema")
+                    )
                 except Exception as exc:
                     repairs.append(RepairResult(check.name, False, str(exc)))
 
             elif check.name == "browser_use":
-                repairs.append(
-                    RepairResult(
-                        check.name,
-                        False,
-                        "Run: pip install browser-use",
-                    )
-                )
+                repairs.append(RepairResult(check.name, False, "Run: pip install browser-use"))
 
             elif check.name == "playwright":
                 repairs.append(
                     RepairResult(
-                        check.name,
-                        False,
-                        "Run: pip install playwright && playwright install",
+                        check.name, False, "Run: pip install playwright && playwright install"
                     )
                 )
 
             elif check.name == "mcp":
-                repairs.append(
-                    RepairResult(
-                        check.name,
-                        False,
-                        "Run: pip install 'mcp>=1.5'",
-                    )
-                )
+                repairs.append(RepairResult(check.name, False, "Run: pip install 'mcp>=1.5'"))
 
     return DoctorReport(checks=checks, repairs=repairs if repairs else None)
 
@@ -435,9 +400,9 @@ _BULLET_RE = re.compile(r"^\s*(?:-|\*|\d+\.)\s+(.*)$")
 _HEADING_RE = re.compile(r"^\s*#{1,6}\s+(.*)$")
 
 
-def extract_steps(text: str) -> List[str]:
+def extract_steps(text: str) -> list[str]:
     """Extract task steps from markdown-ish text."""
-    steps: List[str] = []
+    steps: list[str] = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
@@ -460,14 +425,14 @@ def _slugify(text: str) -> str:
     return text[:40] if text else ""
 
 
-def build_plan_from_spec(spec_text: str, task_type: str = "chat") -> List[Dict[str, Any]]:
+def build_plan_from_spec(spec_text: str, task_type: str = "chat") -> list[dict[str, Any]]:
     """Build a JSON plan list from spec content."""
     steps = extract_steps(spec_text)
     if not steps:
         snippet = spec_text.strip().splitlines()[0][:120] if spec_text.strip() else "spec_task"
         steps = [snippet]
 
-    plan: List[Dict[str, Any]] = []
+    plan: list[dict[str, Any]] = []
     seen_names: set[str] = set()
     for i, step in enumerate(steps, start=1):
         base = _slugify(step) or f"step_{i}"
@@ -477,14 +442,7 @@ def build_plan_from_spec(spec_text: str, task_type: str = "chat") -> List[Dict[s
             suffix += 1
             name = f"{base}_{suffix}"
         seen_names.add(name)
-        plan.append(
-            {
-                "name": name,
-                "type": task_type,
-                "description": step,
-                "prompt": step,
-            }
-        )
+        plan.append({"name": name, "type": task_type, "description": step, "prompt": step})
     return plan
 
 
@@ -495,7 +453,8 @@ def build_plan_from_spec(spec_text: str, task_type: str = "chat") -> List[Dict[s
 
 def compare_versions(a: str, b: str) -> int:
     """Compare semantic versions without external dependencies."""
-    def _normalize(v: str) -> Tuple[int, int, int, str]:
+
+    def _normalize(v: str) -> tuple[int, int, int, str]:
         main, *_ = v.split("-", 1)
         parts = main.split(".")
         nums = [int(p) if p.isdigit() else 0 for p in parts[:3]]
@@ -512,9 +471,9 @@ def compare_versions(a: str, b: str) -> int:
     return 0
 
 
-def _local_templates(builtin_dir: Path) -> List[Dict[str, str]]:
+def _local_templates(builtin_dir: Path) -> list[dict[str, str]]:
     parser = TemplateParser()
-    templates: List[Dict[str, str]] = []
+    templates: list[dict[str, str]] = []
     for yaml_file in builtin_dir.glob("*.yaml"):
         try:
             template = parser.parse_file(yaml_file)
@@ -532,12 +491,11 @@ def _local_templates(builtin_dir: Path) -> List[Dict[str, str]]:
 
 
 def check_template_updates(
-    root: Path,
-    marketplace_url: Optional[str] = None,
-    template_filter: Optional[str] = None,
-) -> Dict[str, Any]:
+    root: Path, marketplace_url: str | None = None, template_filter: str | None = None
+) -> dict[str, Any]:
     """Check marketplace for newer template versions."""
     from weebot.templates.marketplace import TemplateMarketplace
+
     market = TemplateMarketplace(marketplace_url=marketplace_url)
     builtin_dir = root / "weebot" / "templates" / "builtin"
     local = _local_templates(builtin_dir)
@@ -551,7 +509,7 @@ def check_template_updates(
     remote_list = market.search(query="")
     remote_map = {t.id: t for t in remote_list}
 
-    updates: List[Dict[str, str]] = []
+    updates: list[dict[str, str]] = []
     for tmpl in local:
         remote = remote_map.get(tmpl["id"])
         if not remote:
@@ -571,20 +529,21 @@ def check_template_updates(
 
 def upgrade_templates(
     root: Path,
-    marketplace_url: Optional[str] = None,
-    template_filter: Optional[str] = None,
+    marketplace_url: str | None = None,
+    template_filter: str | None = None,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Upgrade templates to latest from marketplace."""
     from weebot.templates.marketplace import TemplateMarketplace
+
     market = TemplateMarketplace(marketplace_url=marketplace_url)
     result = check_template_updates(root, marketplace_url, template_filter)
 
     if result["status"] != "online":
         return result
 
-    upgraded: List[str] = []
-    failed: List[str] = []
+    upgraded: list[str] = []
+    failed: list[str] = []
     if not dry_run:
         for item in result["updates"]:
             try:

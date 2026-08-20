@@ -13,15 +13,15 @@ deliberately as the audit substrate for mechanism-selection decisions (Phase 3
 of tasks/specs/bilevel_autoresearch_implementation_plan.md).  It currently has
 no writer.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class MetaImprovementLog:
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         edit_id,
-                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(UTC).isoformat(),
                         editor,
                         target_file,
                         change_summary,
@@ -107,12 +107,12 @@ class MetaImprovementLog:
 
     async def get_recent(self, limit: int = 20) -> list[dict]:
         """Return the most recent meta-edits."""
+
         def _query() -> list[dict]:
             with sqlite3.connect(str(self._db_path)) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    "SELECT * FROM meta_edits ORDER BY timestamp DESC LIMIT ?",
-                    (limit,),
+                    "SELECT * FROM meta_edits ORDER BY timestamp DESC LIMIT ?", (limit,)
                 ).fetchall()
             return [dict(r) for r in rows]
 

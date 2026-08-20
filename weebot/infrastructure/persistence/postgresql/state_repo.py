@@ -3,10 +3,11 @@
 Requires ``WEEBOT_DB_BACKEND=postgresql`` environment variable to activate.
 SQLite remains the default.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.domain.models.session import Session, SessionStatus
@@ -70,23 +71,21 @@ class PostgreSQLStateRepository(StateRepositoryPort):
                 session.updated_at,
             )
             # Delete and re-insert events (idempotent)
-            await conn.execute(
-                "DELETE FROM session_events WHERE session_id = $1", session.id
-            )
+            await conn.execute("DELETE FROM session_events WHERE session_id = $1", session.id)
             for idx, event in enumerate(session.events):
                 await conn.execute(
                     """INSERT INTO session_events (session_id, idx, event_type, event_data)
                        VALUES ($1, $2, $3, $4::jsonb)""",
-                    session.id, idx, type(event).__name__,
+                    session.id,
+                    idx,
+                    type(event).__name__,
                     event.model_dump_json(),
                 )
 
-    async def load_session(self, session_id: str) -> Optional[Session]:
+    async def load_session(self, session_id: str) -> Session | None:
         pool = await get_pool("sessions")
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM sessions WHERE id = $1", session_id
-            )
+            row = await conn.fetchrow("SELECT * FROM sessions WHERE id = $1", session_id)
             if row is None:
                 return None
             # Load events
@@ -107,8 +106,9 @@ class PostgreSQLStateRepository(StateRepositoryPort):
             return Session.model_validate(data)
 
     async def list_sessions(
-        self, user_id: Optional[str] = None,
-        status: Optional[str] = None,
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list:
@@ -126,7 +126,9 @@ class PostgreSQLStateRepository(StateRepositoryPort):
             where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
             rows = await conn.fetch(
                 f"SELECT * FROM sessions{where_clause} ORDER BY updated_at DESC LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}",
-                *params, limit, offset,
+                *params,
+                limit,
+                offset,
             )
             return [Session.model_validate(dict(r)) for r in rows]
 
@@ -135,7 +137,8 @@ class PostgreSQLStateRepository(StateRepositoryPort):
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2",
-                status.value, session_id,
+                status.value,
+                session_id,
             )
 
     async def delete_session(self, session_id: str) -> None:
@@ -155,7 +158,8 @@ class PostgreSQLStateRepository(StateRepositoryPort):
                    WHERE search_vector @@ plainto_tsquery('english', $1)
                    ORDER BY score DESC
                    LIMIT $2""",
-                query, limit,
+                query,
+                limit,
             )
             return [
                 {
@@ -167,8 +171,6 @@ class PostgreSQLStateRepository(StateRepositoryPort):
                 for r in rows
             ]
 
-    async def get_low_salience_entries(
-        self, threshold: float = 0.3, limit: int = 50
-    ) -> list[dict]:
+    async def get_low_salience_entries(self, threshold: float = 0.3, limit: int = 50) -> list[dict]:
         """Stub — PostgreSQL low-salience eviction not yet implemented."""
         return []

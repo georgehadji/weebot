@@ -9,12 +9,12 @@ site anywhere in the codebase. They were removed along with their
 handlers. What remains are the three Operations Console queries, which
 are dispatched by ``interfaces/web/routers/ops_router.py``.
 """
+
 from __future__ import annotations
 
 from pydantic import Field
 
 from weebot.application.cqrs.base import Query
-
 
 # ── Operations Console queries (Enhancement 4) ────────────────────────
 
@@ -24,6 +24,7 @@ class GetActiveSessionsQuery(Query):
 
     Used by the operations console dashboard (GET /api/sessions/active).
     """
+
     user_id: str | None = None
     limit: int = 100
 
@@ -39,6 +40,7 @@ class GetPlanVisualizationQuery(Query):
 
     Used by the plan visualizer (GET /api/sessions/{id}/plan-viz).
     """
+
     session_id: str = Field(min_length=1)
 
 
@@ -47,6 +49,7 @@ class GetCostSummaryQuery(Query):
 
     Used by the cost dashboard (GET /api/costs/summary).
     """
+
     window_hours: int = 24
 
     def validate(self) -> None:

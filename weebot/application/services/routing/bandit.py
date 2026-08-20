@@ -20,11 +20,11 @@ so silent model upgrades are re-learned.
 Exploration budget: caps the fraction of selections that may choose a
 non-top-utility model per category per window.
 """
+
 from __future__ import annotations
 
 import logging
 import random
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -102,13 +102,12 @@ class BanditSelector:
             utility = utility_scores.get(model_id, cand.score) if utility_scores else cand.score
 
             if is_explore:
-                thompson = self._sample_thompson(
-                    model_id,
-                    posteriors.get(model_id, (5.0, 1.0)),
-                )
+                thompson = self._sample_thompson(model_id, posteriors.get(model_id, (5.0, 1.0)))
                 # Premium model dampening
                 if model_id in premium_models:
-                    blend_factor = min(self._premium_explore_frac / max(self._explore_frac, 0.01), 1.0)
+                    blend_factor = min(
+                        self._premium_explore_frac / max(self._explore_frac, 0.01), 1.0
+                    )
                 else:
                     blend_factor = 1.0
                 blended = (1 - 0.3 * blend_factor) * utility + 0.3 * blend_factor * thompson
@@ -121,11 +120,7 @@ class BanditSelector:
         return [cand for _, cand in scored]
 
     def record_outcome(
-        self,
-        category: str,
-        model_id: str,
-        success: bool,
-        posterior_repo=None,
+        self, category: str, model_id: str, success: bool, posterior_repo=None
     ) -> None:
         """Record an outcome to the posterior repository (if available).
 
@@ -142,19 +137,14 @@ class BanditSelector:
         if posterior_repo is not None:
             try:
                 import anyio
-                anyio.from_thread.run(
-                    posterior_repo.record_outcome, category, model_id, success,
-                )
+
+                anyio.from_thread.run(posterior_repo.record_outcome, category, model_id, success)
             except Exception:
                 logger.debug("Bandit: failed to record outcome (non-blocking)")
 
     # ── Internal ────────────────────────────────────────────────────
 
-    def _sample_thompson(
-        self,
-        model_id: str,
-        posterior: tuple[float, float],
-    ) -> float:
+    def _sample_thompson(self, model_id: str, posterior: tuple[float, float]) -> float:
         """Draw a sample θ ∼ Beta(α, β) from the posterior.
 
         Uses the selector's own seeded generator (``self._rng``).  This was

@@ -10,11 +10,11 @@ evaluation.
 From RQGM §5.1: adding a cheap learned evaluator signal saved 1.35×-1.72×
 search tokens by guiding the search toward quality without full re-execution.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 
@@ -54,11 +54,7 @@ class CodeQualitySignal:
         self._llm = llm
         self._threshold = threshold
 
-    async def score(
-        self,
-        task_prompt: str,
-        agent_output: str,
-    ) -> dict[str, float]:
+    async def score(self, task_prompt: str, agent_output: str) -> dict[str, float]:
         """Score a single task's output on three quality dimensions.
 
         Args:
@@ -71,13 +67,14 @@ class CodeQualitySignal:
         """
         try:
             response = await self._llm.chat(
-                messages=[{
-                    "role": "user",
-                    "content": _CODE_QUALITY_PROMPT.format(
-                        task_prompt=task_prompt[:2000],
-                        agent_output=agent_output[:3000],
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": _CODE_QUALITY_PROMPT.format(
+                            task_prompt=task_prompt[:2000], agent_output=agent_output[:3000]
+                        ),
+                    }
+                ],
                 response_format={"type": "json_object"},
                 temperature=0.0,
                 max_tokens=200,
@@ -91,9 +88,15 @@ class CodeQualitySignal:
             parsed = json.loads(raw)
 
             return {
-                "artifact_presence": max(0.0, min(1.0, float(parsed.get("artifact_presence", 0.0)))),
-                "verification_evidence": max(0.0, min(1.0, float(parsed.get("verification_evidence", 0.0)))),
-                "structure_quality": max(0.0, min(1.0, float(parsed.get("structure_quality", 0.0)))),
+                "artifact_presence": max(
+                    0.0, min(1.0, float(parsed.get("artifact_presence", 0.0)))
+                ),
+                "verification_evidence": max(
+                    0.0, min(1.0, float(parsed.get("verification_evidence", 0.0)))
+                ),
+                "structure_quality": max(
+                    0.0, min(1.0, float(parsed.get("structure_quality", 0.0)))
+                ),
                 "composite": 0.0,  # computed below
             }
 
@@ -109,11 +112,7 @@ class CodeQualitySignal:
             + scores.get("structure_quality", 0.0)
         ) / 3.0
 
-    async def fast_reject(
-        self,
-        task_prompt: str,
-        agent_output: str,
-    ) -> bool:
+    async def fast_reject(self, task_prompt: str, agent_output: str) -> bool:
         """Return True if this output should be rejected without full evaluation.
 
         A rejection means the output's composite score is below the threshold
@@ -125,7 +124,8 @@ class CodeQualitySignal:
         if composite < self._threshold:
             logger.debug(
                 "CodeQualitySignal: fast-reject (composite=%.3f < threshold=%.2f)",
-                composite, self._threshold,
+                composite,
+                self._threshold,
             )
             return True
         return False

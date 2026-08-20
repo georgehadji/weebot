@@ -12,6 +12,7 @@ Features:
 - Full-text BM25 search
 - Document retrieval by ID or path
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,8 +22,7 @@ import os
 import subprocess
 import threading
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Union
 
 _log = logging.getLogger(__name__)
 
@@ -30,59 +30,62 @@ _log = logging.getLogger(__name__)
 @dataclass
 class QMDDocument:
     """A document from QMD search results."""
+
     docid: str  # e.g., "#abc123"
     file: str
     score: float
-    content: Optional[str] = None
-    line_number: Optional[int] = None
-    collection: Optional[str] = None
+    content: str | None = None
+    line_number: int | None = None
+    collection: str | None = None
 
     @property
     def doc_id(self) -> str:
         """Get the doc ID without the # prefix."""
-        return self.docid.lstrip('#')
+        return self.docid.lstrip("#")
 
 
 @dataclass
 class QMDCollection:
     """A QMD collection configuration."""
+
     name: str
     path: str
     pattern: str
-    context: Dict[str, str] = field(default_factory=dict)
+    context: dict[str, str] = field(default_factory=dict)
     include_by_default: bool = True
 
 
 @dataclass
 class QMDContext:
     """A QMD context definition."""
+
     path: str
     description: str
-    collection: Optional[str] = None
+    collection: str | None = None
 
 
 class QMDMCPClient:
     """
     Client for QMD MCP Server.
-    
+
     Connects to QMD's MCP server to search local document collections.
     Supports both stdio and HTTP transport modes.
 
     Usage:
         client = QMDMCPClient()
-        
+
         # Search with query expansion (recommended)
         results = await client.search("how to configure weebot", collection="notes")
-        
+
         # Vector similarity search
         results = await client.vsearch("security settings")
-        
+
         # Full-text search (BM25)
         results = await client.search_bm25("authentication")
-        
+
         # Get document by ID
         doc = await client.get_document("#abc123")
-        
+
         # List collections
         collections = await client.list_collections()
     """
@@ -93,7 +96,7 @@ class QMDMCPClient:
 
     def __init__(
         self,
-        qmd_path: Optional[str] = None,
+        qmd_path: str | None = None,
         transport: str = "http",  # "stdio" or "http"
         port: int = DEFAULT_MCP_PORT,
         host: str = "localhost",
@@ -101,7 +104,7 @@ class QMDMCPClient:
     ):
         """
         Initialize QMD MCP client.
-        
+
         Args:
             qmd_path: Path to qmd executable (auto-detected if not provided)
             transport: Transport mode ("stdio" or "http")
@@ -114,10 +117,10 @@ class QMDMCPClient:
         self._port = port
         self._host = host
         self._timeout = timeout
-        
-        self._process: Optional[subprocess.Popen] = None
+
+        self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
-        
+
         # Check if QMD is available
         self._qmd_available = self._check_qmd()
 
@@ -130,21 +133,17 @@ class QMDMCPClient:
             "/usr/bin/qmd",
             "qmd",  # In PATH
         ]
-        
+
         for path in possible_paths:
             if os.path.exists(path) or self._which(path):
                 return path
-        
+
         return "qmd"  # Fallback to PATH
 
     def _which(self, cmd: str) -> bool:
         """Check if command exists in PATH."""
         try:
-            result = subprocess.run(
-                ["which", cmd],
-                capture_output=True,
-                timeout=5,
-            )
+            result = subprocess.run(["which", cmd], capture_output=True, timeout=5)
             return result.returncode == 0
         except Exception:
             return False
@@ -153,13 +152,9 @@ class QMDMCPClient:
         """Check if QMD is available."""
         if not self._qmd_path:
             return False
-            
+
         try:
-            result = subprocess.run(
-                [self._qmd_path, "status"],
-                capture_output=True,
-                timeout=10,
-            )
+            result = subprocess.run([self._qmd_path, "status"], capture_output=True, timeout=10)
             return result.returncode == 0
         except Exception as e:
             _log.warning(f"QMD not available: {e}")
@@ -169,41 +164,33 @@ class QMDMCPClient:
         """Start QMD MCP server in stdio mode."""
         if self._process is not None:
             return
-            
+
         cmd = [self._qmd_path, "mcp"]
-        
+
         try:
             self._process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             _log.info("QMD MCP server started (stdio)")
         except Exception as e:
             _log.error(f"Failed to start QMD MCP: {e}")
             raise
 
-    async def _call_mcp(self, method: str, params: Optional[Dict] = None) -> Any:
+    async def _call_mcp(self, method: str, params: dict | None = None) -> Any:
         """Call QMD MCP server method."""
         if self._transport == "http":
             return await self._call_http(method, params)
         else:
             return await self._call_stdio(method, params)
 
-    async def _call_http(self, method: str, params: Optional[Dict] = None) -> Any:
+    async def _call_http(self, method: str, params: dict | None = None) -> Any:
         """Call QMD MCP via HTTP."""
         import aiohttp
-        
+
         url = f"http://{self._host}:{self._port}/mcp"
-        
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params or {},
-        }
-        
+
+        payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
+
         try:
             timeout = aiohttp.ClientTimeout(total=self._timeout, connect=10.0)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -223,42 +210,33 @@ class QMDMCPClient:
                     result = await resp.json()
                     return result.get("result")
 
-    async def _call_stdio(self, method: str, params: Optional[Dict] = None) -> Any:
+    async def _call_stdio(self, method: str, params: dict | None = None) -> Any:
         """Call QMD MCP via stdio."""
         await self._start_mcp_stdio()
-        
+
         if self._process is None:
             raise RuntimeError("MCP process not started")
-        
-        request = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params or {},
-        })
-        
+
+        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}})
+
         self._process.stdin.write(request + "\n")
         self._process.stdin.flush()
-        
+
         # Read response
         response = self._process.stdout.readline()
         result = json.loads(response)
-        
+
         if "error" in result:
             raise RuntimeError(f"MCP error: {result['error']}")
-        
+
         return result.get("result")
 
     async def _start_mcp_http(self) -> None:
         """Start QMD MCP server in HTTP mode."""
         cmd = [self._qmd_path, "mcp", "--http", "--port", str(self._port)]
-        
+
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             # Wait for server to start
             await asyncio.sleep(2)
             _log.info(f"QMD MCP server started on port {self._port}")
@@ -270,35 +248,34 @@ class QMDMCPClient:
     # Collection Management
     # =========================================================================
 
-    async def list_collections(self) -> List[QMDCollection]:
+    async def list_collections(self) -> list[QMDCollection]:
         """List all QMD collections."""
         try:
             result = await self._call_mcp("qmd/collection_list")
-            
+
             collections = []
             for name, config in result.get("collections", {}).items():
-                collections.append(QMDCollection(
-                    name=name,
-                    path=config.get("path", ""),
-                    pattern=config.get("pattern", "**/*.md"),
-                    context=config.get("context", {}),
-                    include_by_default=config.get("includeByDefault", True),
-                ))
-            
+                collections.append(
+                    QMDCollection(
+                        name=name,
+                        path=config.get("path", ""),
+                        pattern=config.get("pattern", "**/*.md"),
+                        context=config.get("context", {}),
+                        include_by_default=config.get("includeByDefault", True),
+                    )
+                )
+
             return collections
         except Exception as e:
             _log.warning(f"Failed to list collections: {e}")
             return []
 
     async def add_collection(
-        self,
-        path: str,
-        name: Optional[str] = None,
-        pattern: str = "**/*.md",
+        self, path: str, name: str | None = None, pattern: str = "**/*.md"
     ) -> bool:
         """
         Add a new collection.
-        
+
         Note: Per QMD docs, this should be run manually, not automatically.
         """
         _log.warning("Manual action required: qmd collection add")
@@ -309,115 +286,102 @@ class QMDMCPClient:
     # =========================================================================
 
     async def search(
-        self,
-        query: str,
-        collection: Optional[str] = None,
-        n: int = 10,
-        min_score: float = 0.1,
-    ) -> List[QMDDocument]:
+        self, query: str, collection: str | None = None, n: int = 10, min_score: float = 0.1
+    ) -> list[QMDDocument]:
         """
         Search with query expansion + reranking (recommended).
-        
+
         This is QMD's recommended search method as it uses:
         - Query expansion with local LLM
         - Reciprocal Rank Fusion (RRF)
         - Reranking
         """
-        params = {
-            "query": query,
-            "n": n,
-        }
-        
+        params = {"query": query, "n": n}
+
         if collection:
             params["collection"] = collection
-        
+
         if min_score > 0:
             params["minScore"] = min_score
-        
+
         try:
             result = await self._call_mcp("qmd/query", params)
-            
+
             documents = []
             for item in result.get("results", []):
-                documents.append(QMDDocument(
-                    docid=item.get("docid", ""),
-                    file=item.get("file", ""),
-                    score=item.get("score", 0.0),
-                    collection=item.get("collection"),
-                ))
-            
+                documents.append(
+                    QMDDocument(
+                        docid=item.get("docid", ""),
+                        file=item.get("file", ""),
+                        score=item.get("score", 0.0),
+                        collection=item.get("collection"),
+                    )
+                )
+
             return documents
         except Exception as e:
             _log.error(f"Search failed: {e}")
             return []
 
     async def search_bm25(
-        self,
-        query: str,
-        collection: Optional[str] = None,
-        n: int = 10,
-    ) -> List[QMDDocument]:
+        self, query: str, collection: str | None = None, n: int = 10
+    ) -> list[QMDDocument]:
         """
         Full-text keyword search using BM25.
-        
+
         Faster than query search but no reranking.
         """
-        params = {
-            "query": query,
-            "n": n,
-        }
-        
+        params = {"query": query, "n": n}
+
         if collection:
             params["collection"] = collection
-        
+
         try:
             result = await self._call_mcp("qmd/search", params)
-            
+
             documents = []
             for item in result.get("results", []):
-                documents.append(QMDDocument(
-                    docid=item.get("docid", ""),
-                    file=item.get("file", ""),
-                    score=item.get("score", 0.0),
-                    collection=item.get("collection"),
-                ))
-            
+                documents.append(
+                    QMDDocument(
+                        docid=item.get("docid", ""),
+                        file=item.get("file", ""),
+                        score=item.get("score", 0.0),
+                        collection=item.get("collection"),
+                    )
+                )
+
             return documents
         except Exception as e:
             _log.error(f"BM25 search failed: {e}")
             return []
 
     async def vsearch(
-        self,
-        query: str,
-        collection: Optional[str] = None,
-        n: int = 10,
-    ) -> List[QMDDocument]:
+        self, query: str, collection: str | None = None, n: int = 10
+    ) -> list[QMDDocument]:
         """
         Vector similarity search.
-        
+
         Uses embeddings for semantic similarity.
         """
-        params = {
-            "query": query,
-            "n": n,
-        }
-        
+        params = {"query": query, "n": n}
+
         if collection:
             params["collection"] = collection
-        
+
         try:
             result = await self._call_mcp("qmd/vsearch", params)
-            
+
             documents = []
             for item in result.get("results", []):
-                documents.append(QMDDocument(
-                    docid=item.get("docid", ""),
-                    file=item.get("file", ""),
-                    score=item.get("score", 0.0),
-                    collection=item.get("collection"),
-                ))
-            
+                documents.append(
+                    QMDDocument(
+                        docid=item.get("docid", ""),
+                        file=item.get("file", ""),
+                        score=item.get("score", 0.0),
+                        collection=item.get("collection"),
+                    )
+                )
+
             return documents
         except Exception as e:
             _log.error(f"Vector search failed: {e}")
@@ -428,35 +392,30 @@ class QMDMCPClient:
     # =========================================================================
 
     async def get_document(
-        self,
-        docid: str,
-        full: bool = False,
-        line_numbers: bool = False,
-    ) -> Optional[QMDDocument]:
+        self, docid: str, full: bool = False, line_numbers: bool = False
+    ) -> QMDDocument | None:
         """
         Get document by docid or path.
-        
+
         Args:
             docid: Document ID (with or without # prefix) or file path
             full: Return full content
             line_numbers: Include line numbers
         """
         # Remove # prefix if present
-        docid = docid.lstrip('#')
-        
-        params = {
-            "docid": docid,
-        }
-        
+        docid = docid.lstrip("#")
+
+        params = {"docid": docid}
+
         if full:
             params["full"] = True
-        
+
         if line_numbers:
             params["lineNumbers"] = True
-        
+
         try:
             result = await self._call_mcp("qmd/get", params)
-            
+
             return QMDDocument(
                 docid=result.get("docid", ""),
                 file=result.get("file", ""),
@@ -470,14 +429,11 @@ class QMDMCPClient:
             return None
 
     async def multi_get(
-        self,
-        docids: Union[str, List[str]],
-        max_lines: int = 100,
-        max_bytes: int = 10240,
-    ) -> List[QMDDocument]:
+        self, docids: Union[str, list[str]], max_lines: int = 100, max_bytes: int = 10240
+    ) -> list[QMDDocument]:
         """
         Get multiple documents by docids or glob pattern.
-        
+
         Args:
             docids: Comma-separated docids or glob pattern
             max_lines: Maximum lines per file
@@ -485,26 +441,24 @@ class QMDMCPClient:
         """
         if isinstance(docids, list):
             docids = ", ".join(docids)
-        
-        params = {
-            "pattern": docids,
-            "maxLines": max_lines,
-            "maxBytes": max_bytes,
-        }
-        
+
+        params = {"pattern": docids, "maxLines": max_lines, "maxBytes": max_bytes}
+
         try:
             result = await self._call_mcp("qmd/multi_get", params)
-            
+
             documents = []
             for item in result.get("results", []):
-                documents.append(QMDDocument(
-                    docid=item.get("docid", ""),
-                    file=item.get("file", ""),
-                    score=1.0,
-                    content=item.get("content"),
-                    collection=item.get("collection"),
-                ))
-            
+                documents.append(
+                    QMDDocument(
+                        docid=item.get("docid", ""),
+                        file=item.get("file", ""),
+                        score=1.0,
+                        content=item.get("content"),
+                        collection=item.get("collection"),
+                    )
+                )
+
             return documents
         except Exception as e:
             _log.error(f"Multi-get failed: {e}")
@@ -514,11 +468,11 @@ class QMDMCPClient:
     # Context Management
     # =========================================================================
 
-    async def list_contexts(self) -> List[QMDContext]:
+    async def list_contexts(self) -> list[QMDContext]:
         """List all QMD contexts."""
         try:
             result = await self._call_mcp("qmd/context_list")
-            
+
             contexts = []
             for path, description in result.get("contexts", {}).items():
                 # Parse collection from path if qmd:// prefix
@@ -526,13 +480,11 @@ class QMDMCPClient:
                 if path.startswith("qmd://"):
                     parts = path[6:].split("/", 1)
                     collection = parts[0] if parts else None
-                
-                contexts.append(QMDContext(
-                    path=path,
-                    description=description,
-                    collection=collection,
-                ))
-            
+
+                contexts.append(
+                    QMDContext(path=path, description=description, collection=collection)
+                )
+
             return contexts
         except Exception as e:
             _log.warning(f"Failed to list contexts: {e}")
@@ -547,7 +499,7 @@ class QMDMCPClient:
     # Utility Methods
     # =========================================================================
 
-    async def status(self) -> Dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Get QMD status."""
         try:
             result = await self._call_mcp("qmd/status")
@@ -568,14 +520,14 @@ class QMDMCPClient:
 
 
 # Singleton instance
-_client: Optional[QMDMCPClient] = None
+_client: QMDMCPClient | None = None
 _client_lock = threading.Lock()
 
 
 def get_qmd_client(**kwargs) -> QMDMCPClient:
     """Get singleton QMDMCPClient instance."""
     global _client
-    
+
     with _client_lock:
         if _client is None:
             _client = QMDMCPClient(**kwargs)

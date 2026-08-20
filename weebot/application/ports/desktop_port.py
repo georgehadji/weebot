@@ -4,16 +4,17 @@ Defines a platform-agnostic abstraction for desktop companion features:
 system tray icon with status indication, global hotkey listener, and
 a quick-prompt overlay window.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class DesktopStatus(Enum):
     """Runtime status reflected in the system tray icon."""
+
     CONNECTED = "connected"
     CONNECTING = "connecting"
     DISCONNECTED = "disconnected"
@@ -23,13 +24,15 @@ class DesktopStatus(Enum):
 @dataclass
 class DesktopPrompt:
     """A prompt submitted from the desktop overlay."""
+
     text: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 @dataclass
 class DesktopResponse:
     """A response to display in the desktop overlay."""
+
     text: str
     success: bool = True
     tool_calls: int = 0
@@ -71,7 +74,7 @@ class DesktopPort(ABC):
         ...
 
     @abstractmethod
-    async def show_overlay(self) -> Optional[DesktopPrompt]:
+    async def show_overlay(self) -> DesktopPrompt | None:
         """Open the quick-prompt overlay and wait for user input.
 
         Returns:

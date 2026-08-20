@@ -1,10 +1,7 @@
 """Tests for Enhancement 5 — MisalignmentJournal."""
+
 from __future__ import annotations
 
-import asyncio
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -67,10 +64,13 @@ class TestSQLiteMisalignmentJournal:
     async def test_limit_respected(self, db_path):
         j = SQLiteMisalignmentJournal(db_path)
         for i in range(10):
-            await j.record(MisalignmentEntry(
-                project_path="/proj", symptom="constraint_violation",
-                step_description=f"step {i}"
-            ))
+            await j.record(
+                MisalignmentEntry(
+                    project_path="/proj",
+                    symptom="constraint_violation",
+                    step_description=f"step {i}",
+                )
+            )
         results = await j.get_recent("/proj", 3)
         assert len(results) == 3
 
@@ -89,13 +89,15 @@ class TestSQLiteMisalignmentJournal:
     @pytest.mark.asyncio
     async def test_newest_first_ordering(self, db_path):
         j = SQLiteMisalignmentJournal(db_path)
-        await j.record(MisalignmentEntry(
-            project_path="/proj", symptom="constraint_violation",
-            step_description="first"
-        ))
-        await j.record(MisalignmentEntry(
-            project_path="/proj", symptom="user_correction",
-            step_description="second"
-        ))
+        await j.record(
+            MisalignmentEntry(
+                project_path="/proj", symptom="constraint_violation", step_description="first"
+            )
+        )
+        await j.record(
+            MisalignmentEntry(
+                project_path="/proj", symptom="user_correction", step_description="second"
+            )
+        )
         results = await j.get_recent("/proj", 5)
         assert results[0].step_description == "second"  # newest first

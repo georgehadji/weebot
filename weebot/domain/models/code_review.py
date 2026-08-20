@@ -1,7 +1,8 @@
 """CodeReviewResult — immutable result of a per-step code review."""
+
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +12,7 @@ class CodeReviewResult(BaseModel):
     Mirrors PlanCritique in shape but is scoped to one step's output
     rather than an entire plan.
     """
+
     step_id: str = Field(default="", description="The step that was reviewed")
     verdict: Literal["approved", "revise", "reject"] = Field(
         default="approved",
@@ -29,7 +31,9 @@ class CodeReviewResult(BaseModel):
         description="Actionable improvement instruction injected into step description on revise",
     )
     confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0,
+        default=1.0,
+        ge=0.0,
+        le=1.0,
         description="Reviewer confidence in the verdict (lower = more uncertain)",
     )
     severity: Literal["info", "warning", "error"] = Field(

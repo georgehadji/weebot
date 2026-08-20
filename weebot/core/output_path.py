@@ -5,6 +5,7 @@ Introduced to fix path inconsistency across tool calls.  Different tools
 directories, causing files to be written outside the project or in
 double-nested directories.
 """
+
 from __future__ import annotations
 
 import os

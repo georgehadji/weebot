@@ -3,14 +3,13 @@
 Extracted from the original ExecutorAgent god class to isolate error
 classification and recovery routing from step orchestration.
 """
+
 from __future__ import annotations
 
 import logging
 from collections import deque
-from typing import Any, Optional
+from typing import Any
 from dataclasses import dataclass, field
-
-from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +17,13 @@ logger = logging.getLogger(__name__)
 # Module-level helpers (no self or instance state needed)
 # These were originally static methods on ExecutorAgent.
 
+
 def normalize_text(text: str) -> str:
     """Collapse whitespace and lowercase for comparison."""
     return " ".join(text.lower().split())
 
 
-_FILE_TOOLS: frozenset = frozenset({
-    "file_editor", "write_file", "create_file", "edit_file",
-})
+_FILE_TOOLS: frozenset = frozenset({"file_editor", "write_file", "create_file", "edit_file"})
 
 
 def tool_signature(tool_name: str, raw_arguments: str) -> str:
@@ -37,6 +35,7 @@ def tool_signature(tool_name: str, raw_arguments: str) -> str:
     so ``path`` is preserved for those tools.
     """
     import json
+
     try:
         args = json.loads(raw_arguments) if raw_arguments else {}
     except (json.JSONDecodeError, TypeError):
@@ -57,7 +56,10 @@ def follow_up_like(text: str) -> bool:
         return True
     if any(t.startswith(p) for p in ("i don", "i do not", "i cannot", "i'm not", "i am not")):
         return True
-    if any(t.startswith(p) for p in ("ok", "okay", "sure", "got it", "understood", "let me", "i'll", "i will")):
+    if any(
+        t.startswith(p)
+        for p in ("ok", "okay", "sure", "got it", "understood", "let me", "i'll", "i will")
+    ):
         return True
     if len(t) < 20:
         return True
@@ -67,6 +69,7 @@ def follow_up_like(text: str) -> bool:
 def parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
     """Parse tool arguments dict for event emission (safe)."""
     import json
+
     try:
         args = json.loads(raw_arguments) if raw_arguments else {}
         if isinstance(args, dict):
@@ -81,14 +84,22 @@ def parse_args_for_event(raw_arguments: str) -> dict[str, Any]:
 # make failing tests pass, so a pytest failure during those phases means
 # the implementation is still broken, not an expected outcome. Treating it
 # as "expected" would let the executor silently accept broken code.
-_TDD_EXPECTED_FAILURE_MARKERS: frozenset = frozenset({
-    "RED-VERIFY", "red-verify",
-    "[RED]", "[RED-VERIFY]",
-    "tests fail", "confirm all tests FAIL",
-    "tests should fail", "expected failure",
-    "ImportError expected", "NameError expected",
-    "deliberate", "DELIBERATELY",
-})
+_TDD_EXPECTED_FAILURE_MARKERS: frozenset = frozenset(
+    {
+        "RED-VERIFY",
+        "red-verify",
+        "[RED]",
+        "[RED-VERIFY]",
+        "tests fail",
+        "confirm all tests FAIL",
+        "tests should fail",
+        "expected failure",
+        "ImportError expected",
+        "NameError expected",
+        "deliberate",
+        "DELIBERATELY",
+    }
+)
 
 
 def is_expected_failure(step_description: str) -> bool:
@@ -108,7 +119,7 @@ def is_expected_failure(step_description: str) -> bool:
     return False
 
 
-def classify_tool_error(error_output: str) -> Optional[str]:
+def classify_tool_error(error_output: str) -> str | None:
     """Classify a tool error into a stable error-class key, or None if no match.
 
     Uses exact same logic as the original ExecutorAgent._classify_tool_error
@@ -158,8 +169,10 @@ def classify_failure_severity(error_output: str, tool_name: str = "") -> str:
     # Security enforcement and tool-policy denial are always full replan.
     # Use compound-keyword matching to avoid false positives on common
     # words like "security.txt" or "privacy policy document".
-    if any(kw in lo for kw in (
-        "denied by policy", "command blocked", "security violation", "security error")):
+    if any(
+        kw in lo
+        for kw in ("denied by policy", "command blocked", "security violation", "security error")
+    ):
         return "full_replan"
     # Timeouts are MINOR_FIX — the step may work with a retry
     if "timed out" in lo:
@@ -181,14 +194,16 @@ def classify_failure_severity(error_output: str, tool_name: str = "") -> str:
 
 # ── Instance-based error state for stuck-loop detection ─────────────────
 
+
 @dataclass
 class ExecutionLoopState:
     """Tracks the current step's execution loop state for stuck detection."""
-    last_tool_signature: Optional[str] = None
+
+    last_tool_signature: str | None = None
     recent_tool_signatures: deque[str] = field(default_factory=lambda: deque(maxlen=6))
     same_tool_repeat_count: int = 0
     follow_up_count: int = 0
-    loop_error: Optional[str] = None
+    loop_error: str | None = None
 
     def record_tool_call(self, tool_name: str, raw_arguments: str) -> str:
         """Record a tool call and return its stable signature."""
@@ -208,12 +223,8 @@ class ExecutionLoopState:
 
 # ── Stuck-error builder ────────────────────────────────────────────────
 
-def build_stuck_error(
-    step: Any,
-    reason: str,
-    recent_signatures: list[str],
-    max_steps: int,
-) -> str:
+
+def build_stuck_error(step: Any, reason: str, recent_signatures: list[str], max_steps: int) -> str:
     """Build a human-readable stuck-loop error message."""
     recent = list(recent_signatures)[-3:]
     recent_block = " | ".join(recent) if recent else "none"

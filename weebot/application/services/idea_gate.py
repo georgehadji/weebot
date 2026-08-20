@@ -3,10 +3,10 @@
 Pure orchestrator: no LLM calls.  Chains IntentReviewPort and MainReviewPort
 for each contract, returning only those approved_for_coder with verdicts set.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.intent_review_port import IntentReviewPort
 from weebot.application.ports.main_review_port import MainReviewPort
@@ -23,11 +23,7 @@ class IdeaGate:
     Only contracts with MainVerdict.APPROVED_FOR_CODER are returned.
     """
 
-    def __init__(
-        self,
-        intent_reviewer: IntentReviewPort,
-        main_reviewer: MainReviewPort,
-    ) -> None:
+    def __init__(self, intent_reviewer: IntentReviewPort, main_reviewer: MainReviewPort) -> None:
         self._intent_reviewer = intent_reviewer
         self._main_reviewer = main_reviewer
 
@@ -43,15 +39,13 @@ class IdeaGate:
                 logger.info("IdeaGate NOT_READY %s: %s", contract.id, intent.reasoning[:120])
                 continue
             main = await self._main_reviewer.review(contract, intent)
-            contract = contract.model_copy(update={
-                "intent_verdict": intent.verdict,
-                "main_verdict": main.verdict,
-            })
+            contract = contract.model_copy(
+                update={"intent_verdict": intent.verdict, "main_verdict": main.verdict}
+            )
             if main.verdict == MainVerdict.APPROVED_FOR_CODER:
                 approved.append(contract)
             else:
                 logger.info(
-                    "IdeaGate %s for %s: %s",
-                    main.verdict.value, contract.id, main.rationale[:120],
+                    "IdeaGate %s for %s: %s", main.verdict.value, contract.id, main.rationale[:120]
                 )
         return approved

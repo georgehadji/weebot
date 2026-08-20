@@ -9,11 +9,11 @@ generates a structured HarnessEdit proposal.  Edits target one of:
 
 Each edit is validated against regression tasks before acceptance.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.application.agents.layer_diagnostics_agent import FailureLayer
 from weebot.application.ports.llm_port import LLMPort
@@ -25,13 +25,7 @@ logger = logging.getLogger(__name__)
 class HarnessEdit:
     """A single proposed edit to the harness."""
 
-    def __init__(
-        self,
-        layer: FailureLayer,
-        target: str,
-        change: str,
-        evidence: str,
-    ):
+    def __init__(self, layer: FailureLayer, target: str, change: str, evidence: str):
         self.layer = layer
         self.target = target
         self.change = change
@@ -72,8 +66,8 @@ class LayerEditorAgent:
         task: str,
         trajectory_summary: str,
         current_harness_summary: str = "",
-        model: Optional[str] = None,
-    ) -> Optional[HarnessEdit]:
+        model: str | None = None,
+    ) -> HarnessEdit | None:
         """Generate a harness edit for a diagnosed failure.
 
         Args:

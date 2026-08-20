@@ -1,4 +1,5 @@
 """Tests for vendored atomicmail proof-of-work (offline, no network)."""
+
 from __future__ import annotations
 
 import pytest
@@ -20,9 +21,7 @@ def test_solve_pow_matches_shared_fixture_vectors() -> None:
     fixture = read_shared_json("fixtures/pow_vectors.json")
     for vector in fixture["vectors"]:
         solved = solve_pow(
-            challenge=vector["challenge"],
-            difficulty=vector["difficulty"],
-            salt=vector["salt"],
+            challenge=vector["challenge"], difficulty=vector["difficulty"], salt=vector["salt"]
         )
         assert solved.nonce == vector["nonce"]
         assert solved.powHex == vector["powHex"]
@@ -34,10 +33,7 @@ def test_shared_pow_vectors_satisfy_difficulty() -> None:
 
     fixture = read_shared_json("fixtures/pow_vectors.json")
     for vector in fixture["vectors"]:
-        digest = scrypt_hash(
-            f'{vector["challenge"]}:{vector["nonce"]}',
-            vector["salt"],
-        )
+        digest = scrypt_hash(f'{vector["challenge"]}:{vector["nonce"]}', vector["salt"])
         assert has_leading_zero_bits(digest, vector["difficulty"])
 
 
@@ -53,10 +49,7 @@ def test_progress_callback_fires(monkeypatch) -> None:
 
     monkeypatch.setattr("atomicmail.pow.scrypt_hash", fake_scrypt_hash)
     solution = solve_pow(
-        challenge="fixture-progress",
-        difficulty=1,
-        salt=salt,
-        on_progress=progress_nonces.append,
+        challenge="fixture-progress", difficulty=1, salt=salt, on_progress=progress_nonces.append
     )
 
     assert solution.nonce == "64"

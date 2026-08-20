@@ -3,6 +3,7 @@
 Wraps the selected context engine (e.g., LossyContextCompressor) and
 hooks into PlanActFlow turn boundaries to manage the token budget.
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,11 +33,7 @@ class ContextManager:
         # Then make the LLM call with messages
     """
 
-    def __init__(
-        self,
-        engine: IContextEnginePort,
-        budget: ContextBudget | None = None,
-    ) -> None:
+    def __init__(self, engine: IContextEnginePort, budget: ContextBudget | None = None) -> None:
         self._engine = engine
         self._budget = budget or self._budget_from_settings()
         self._compression_count = 0
@@ -54,10 +51,7 @@ class ContextManager:
         except Exception:
             return ContextBudget()
 
-    async def prepare(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> dict[str, Any] | None:
+    async def prepare(self, messages: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Prepare messages for an LLM call — may compress if over budget.
 
         Args:
@@ -100,7 +94,8 @@ class ContextManager:
 
         logger.info(
             "ContextManager: compressed %d→%d tokens (count: %d)",
-            result.original_token_count, result.compressed_token_count,
+            result.original_token_count,
+            result.compressed_token_count,
             self._compression_count,
         )
 

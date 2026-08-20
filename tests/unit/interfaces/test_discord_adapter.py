@@ -7,9 +7,9 @@ Covers:
 - Response sending (success, failure)
 - Webhook router (initialization, auth failure)
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-
 
 # A known Ed25519 keypair for testing.
 # Generated with: nacl.signing.SigningKey.generate()
@@ -35,6 +35,7 @@ class TestDiscordAdapter:
         replaces the reference *after* the module is in ``sys.modules``.
         """
         import weebot.interfaces.gateways.base as gw_base
+
         mocker.patch.object(gw_base, "SafetyChecker")
 
     @pytest.fixture
@@ -62,9 +63,7 @@ class TestDiscordAdapter:
         """Tampered body/signature returns False."""
         from nacl.exceptions import BadSignatureError
 
-        adapter._verify_key.verify = MagicMock(
-            side_effect=BadSignatureError("bad sig")
-        )
+        adapter._verify_key.verify = MagicMock(side_effect=BadSignatureError("bad sig"))
         assert adapter.verify_signature(b'{"test":1}', "badbadbad", "1700000000") is False
 
     def test_verify_empty_components(self, adapter):
@@ -82,10 +81,7 @@ class TestDiscordAdapter:
         """Type 2 (APPLICATION_COMMAND) returns GatewayMessage with text."""
         payload = {
             "type": 2,
-            "data": {
-                "name": "ask",
-                "options": [{"name": "question", "value": "Hello world"}],
-            },
+            "data": {"name": "ask", "options": [{"name": "question", "value": "Hello world"}]},
             "channel_id": "123",
             "guild_id": "456",
             "member": {"user": {"id": "789", "username": "TestUser"}},
@@ -111,12 +107,7 @@ class TestDiscordAdapter:
             "type": 2,
             "data": {
                 "name": "deploy",
-                "options": [
-                    {
-                        "name": "service",
-                        "options": [{"name": "name", "value": "api"}],
-                    }
-                ],
+                "options": [{"name": "service", "options": [{"name": "name", "value": "api"}]}],
             },
             "channel_id": "1",
             "member": {"user": {"id": "2", "username": "Dev"}},
@@ -259,6 +250,7 @@ class TestDiscordAdapterLifecycle:
     def _mock_safety(self, mocker):
         """Mock SafetyChecker to avoid ChatOpenAI dependency."""
         import weebot.interfaces.gateways.base as gw_base
+
         mocker.patch.object(gw_base, "SafetyChecker")
 
     @pytest.fixture

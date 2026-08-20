@@ -1,13 +1,9 @@
 """Tests for trust_boundary — wrap_untrusted and is_untrusted_tool."""
+
 from __future__ import annotations
 
-import pytest
 
-from weebot.core.trust_boundary import (
-    UNTRUSTED_OUTPUT_TOOLS,
-    is_untrusted_tool,
-    wrap_untrusted,
-)
+from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
 
 
 class TestIsUntrustedTool:

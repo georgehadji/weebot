@@ -6,9 +6,10 @@ associated :class:`~weebot.domain.models.plan.Plan`.
 
 Pure application-layer service — no infrastructure dependencies.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -30,15 +31,15 @@ class FlowSerializer:
 
     # ── Mermaid ───────────────────────────────────────────────────────
 
-    def to_mermaid(self, session: "Session", plan: "Plan") -> str:
+    def to_mermaid(self, session: Session, plan: Plan) -> str:
         """Produce a Mermaid ``stateDiagram-v2`` or ``flowchart`` diagram.
 
         Returns a markdown-fenced Mermaid diagram showing the flow states
         and step transitions with status annotations.
         """
         lines = ["```mermaid", "stateDiagram-v2"]
-        lines.append(f"    [*] --> Planning")
-        lines.append(f"    Planning --> Executing : plan created")
+        lines.append("    [*] --> Planning")
+        lines.append("    Planning --> Executing : plan created")
 
         for i, step in enumerate(plan.steps):
             step_id = step.id or f"step_{i}"
@@ -46,26 +47,23 @@ class FlowSerializer:
             label = (step.description or step_id)[:40]
             # Sanitize for Mermaid: remove special chars
             label = label.replace('"', "'").replace("\n", " ")
-            status_icon = {
-                "completed": "✓",
-                "failed": "✗",
-                "running": "●",
-                "pending": "○",
-            }.get(status, "?")
+            status_icon = {"completed": "✓", "failed": "✗", "running": "●", "pending": "○"}.get(
+                status, "?"
+            )
             lines.append(f"    Executing --> {step_id} : {status_icon} {label}")
             if status == "completed":
                 lines.append(f"    {step_id} --> Executing : done")
             elif status == "failed":
                 lines.append(f"    {step_id} --> Updating : failed")
 
-        lines.append(f"    Executing --> Updating : plan needs revision")
-        lines.append(f"    Updating --> Executing : plan revised")
-        lines.append(f"    Executing --> Summarizing : all steps done")
-        lines.append(f"    Summarizing --> [*] : session complete")
+        lines.append("    Executing --> Updating : plan needs revision")
+        lines.append("    Updating --> Executing : plan revised")
+        lines.append("    Executing --> Summarizing : all steps done")
+        lines.append("    Summarizing --> [*] : session complete")
         lines.append("```")
         return "\n".join(lines)
 
-    def to_mermaid_flowchart(self, session: "Session", plan: "Plan") -> str:
+    def to_mermaid_flowchart(self, session: Session, plan: Plan) -> str:
         """Produce a Mermaid ``flowchart TD`` with richer step detail.
 
         Preferred for documentation and PR descriptions.
@@ -86,7 +84,7 @@ class FlowSerializer:
                 "running": ":::running",
                 "pending": ":::pending",
             }.get(status, "")
-            lines.append(f"    {node_id}[\"{desc}\"]{style}")
+            lines.append(f'    {node_id}["{desc}"]{style}')
 
             if i == 0:
                 lines.append(f"    plan --> {node_id}")
@@ -107,10 +105,7 @@ class FlowSerializer:
     # ── JSON Trace ────────────────────────────────────────────────────
 
     def to_json_trace(
-        self,
-        session: "Session",
-        plan: "Plan",
-        events: list["AgentEvent"],
+        self, session: Session, plan: Plan, events: list[AgentEvent]
     ) -> dict[str, Any]:
         """Produce a chronological JSON execution trace.
 
@@ -177,7 +172,7 @@ class FlowSerializer:
 
         return {
             "session_id": session_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "plan": plan_data,
             "trace": trace,
             "stats": {
@@ -190,7 +185,7 @@ class FlowSerializer:
 
     # ── LangGraph ─────────────────────────────────────────────────────
 
-    def to_langgraph(self, session: "Session") -> dict[str, Any]:
+    def to_langgraph(self, session: Session) -> dict[str, Any]:
         """Produce a LangGraph-compatible ``StateGraph`` definition.
 
         Returns a dict that can be passed to ``StateGraph.__init__()`` or

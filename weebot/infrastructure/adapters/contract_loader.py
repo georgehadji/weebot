@@ -9,6 +9,7 @@ to a tool's description before it reaches the LLM.
 A missing or empty contracts directory is not an error: tools without a
 contract file simply get their description back unchanged.
 """
+
 from __future__ import annotations
 
 import logging

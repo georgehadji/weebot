@@ -2,9 +2,10 @@
 
 Requires pip install openai-whisper.  Returns clean error when missing.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.speech_port import SpeechPort
 from weebot.tools.base import BaseTool, ToolResult
@@ -24,10 +25,7 @@ class VoiceInputTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "audio_path": {
-                "type": "string",
-                "description": "Path to audio file (wav, mp3, m4a).",
-            },
+            "audio_path": {"type": "string", "description": "Path to audio file (wav, mp3, m4a)."},
             "language": {
                 "type": "string",
                 "description": "Optional language code (e.g., 'en', 'el').",
@@ -36,12 +34,13 @@ class VoiceInputTool(BaseTool):
         "required": ["audio_path"],
     }
 
-    _speech: Optional[SpeechPort] = None
+    _speech: SpeechPort | None = None
 
-    def __init__(self, speech: Optional[SpeechPort] = None, **data: Any) -> None:
+    def __init__(self, speech: SpeechPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if speech is None:
             import importlib as _il
+
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
             speech = _c.get(SpeechPort)
@@ -51,6 +50,7 @@ class VoiceInputTool(BaseTool):
         """Check if speech transcription dependencies are available."""
         try:
             import whisper  # noqa: F401
+
             return True
         except ImportError:
             return False
@@ -58,17 +58,13 @@ class VoiceInputTool(BaseTool):
     async def execute(self, audio_path: str, language: str = "", **_: Any) -> ToolResult:
 
         try:
-            text = await self._speech.transcribe(
-                audio_path, language=language or None
-            )
+            text = await self._speech.transcribe(audio_path, language=language or None)
             if not text:
                 return ToolResult.success_result(
-                    output="(no speech detected)",
-                    data={"text": "", "audio_path": audio_path},
+                    output="(no speech detected)", data={"text": "", "audio_path": audio_path}
                 )
             return ToolResult.success_result(
-                output=text,
-                data={"text": text, "audio_path": audio_path},
+                output=text, data={"text": text, "audio_path": audio_path}
             )
         except RuntimeError as exc:
             return ToolResult.error_result(str(exc))

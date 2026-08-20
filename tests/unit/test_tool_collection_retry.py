@@ -1,6 +1,6 @@
 """Tests for Phase 1: Retry activation in ToolCollection."""
+
 import pytest
-from unittest.mock import AsyncMock, patch
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.application.models.tool_collection import ToolCollection
@@ -8,6 +8,7 @@ from weebot.application.models.tool_collection import ToolCollection
 
 class _RetryableTool(BaseTool):
     """Tool that raises OSError on first call, succeeds on second."""
+
     name: str = "test_retry"
     description: str = "Test tool for retry"
     parameters: dict = {"type": "object", "properties": {}}
@@ -22,6 +23,7 @@ class _RetryableTool(BaseTool):
 
 class _NonRetryableTool(BaseTool):
     """Tool that raises ValueError — should NOT be retried."""
+
     name: str = "test_non_retry"
     description: str = "Non-retryable test tool"
     parameters: dict = {"type": "object", "properties": {}}

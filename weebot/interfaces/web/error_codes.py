@@ -9,6 +9,7 @@ Usage::
         headers={"X-Error-Code": ErrorCode.SESSION_NOT_FOUND},
     )
 """
+
 from __future__ import annotations
 
 

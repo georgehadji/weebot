@@ -4,12 +4,13 @@ Each ``RegressionTask`` has a unique ID, a prompt (the task description),
 and an ``oracle`` — a deterministic checker that verifies whether the
 agent's output is correct.
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 from pydantic import BaseModel, Field
-
 
 OracleFn = Callable[[dict[str, Any]], bool]
 """Type alias for an oracle function.
@@ -43,12 +44,11 @@ class RegressionTask(BaseModel):
     id: str = Field(..., description="Unique task identifier")
     prompt: str = Field(..., description="Task prompt sent to the agent")
     expected_summary: str = Field(
-        default="",
-        description="Human-readable summary of correct output",
+        default="", description="Human-readable summary of correct output"
     )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    _oracle: Optional[OracleFn] = None
+    _oracle: OracleFn | None = None
 
     def evaluate(self, context: dict[str, Any]) -> OracleResult:
         """Evaluate the agent's output against this task's oracle.
@@ -68,11 +68,7 @@ class RegressionTask(BaseModel):
         try:
             passed = self._oracle(context)
             return OracleResult(
-                passed=passed,
-                detail="Oracle check passed" if passed else "Oracle check failed",
+                passed=passed, detail="Oracle check passed" if passed else "Oracle check failed"
             )
         except Exception as exc:
-            return OracleResult(
-                passed=False,
-                detail=f"Oracle raised {type(exc).__name__}: {exc}",
-            )
+            return OracleResult(passed=False, detail=f"Oracle raised {type(exc).__name__}: {exc}")

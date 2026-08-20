@@ -1,13 +1,19 @@
 """Windows toast notification subscriber for the event bus."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 import logging
 
 from weebot.application.ports.event_bus_port import EventBusPort
-from weebot.domain.models.event import AgentEvent, DoneEvent, ErrorEvent, StepEvent, WaitForUserEvent
+from weebot.domain.models.event import (
+    AgentEvent,
+    DoneEvent,
+    ErrorEvent,
+    StepEvent,
+    WaitForUserEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,24 +21,30 @@ logger = logging.getLogger(__name__)
 class WindowsToastSubscriber:
     """Subscribes to agent events and shows Windows toast notifications for key milestones."""
 
-    def __init__(self, app_name: str = "weebot", channel: Optional[object] = None) -> None:
+    def __init__(self, app_name: str = "weebot", channel: object | None = None) -> None:
         self._app_name = app_name
         self._channel = channel
         if self._channel is None:
             try:
                 from weebot.infrastructure.notifications.notifications import WindowsToastChannel
+
                 self._channel = WindowsToastChannel(app_name=app_name)
             except Exception:
-                logger.debug("WindowsToastChannel unavailable — toast notifications disabled", exc_info=True)
+                logger.debug(
+                    "WindowsToastChannel unavailable — toast notifications disabled", exc_info=True
+                )
 
     async def on_event(self, event: AgentEvent) -> None:
         """Handle an agent event and show a toast if relevant."""
         if self._channel is None:
             return
 
-        from weebot.infrastructure.notifications.notifications import Notification, NotificationLevel
+        from weebot.infrastructure.notifications.notifications import (
+            Notification,
+            NotificationLevel,
+        )
 
-        notification: Optional[Notification] = None
+        notification: Notification | None = None
 
         if isinstance(event, ErrorEvent):
             notification = Notification(

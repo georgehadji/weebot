@@ -8,12 +8,13 @@ the improvement loop: every completed task feeds back into the planner.
 Implements Enhancement 1 from the HyperAgents plan:
 docs/plans/hyperagents-enhancement-plan.md
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_BUDGET
@@ -68,12 +69,8 @@ class MetaCritiqueResult:
         return " | ".join(parts) if parts else "No actionable insights"
 
     @classmethod
-    def empty(cls) -> "MetaCritiqueResult":
-        return cls(
-            what_worked=[],
-            what_failed=[],
-            strategy_change="",
-        )
+    def empty(cls) -> MetaCritiqueResult:
+        return cls(what_worked=[], what_failed=[], strategy_change="")
 
 
 class MetaCritic:
@@ -112,8 +109,8 @@ class MetaCritic:
         """
         # Truncate step results to keep the prompt small
         truncated_steps: list[str] = []
-        for step_id, result in step_results[-self._MAX_STEP_RESULTS:]:
-            short = result[:self._CHARS_PER_STEP_RESULT]
+        for step_id, result in step_results[-self._MAX_STEP_RESULTS :]:
+            short = result[: self._CHARS_PER_STEP_RESULT]
             truncated_steps.append(f"  {step_id}: {short}")
 
         user_prompt = _META_CRITIC_USER_TEMPLATE.format(

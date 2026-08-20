@@ -9,6 +9,7 @@ calling the tool.
 
 Maps to LIFE-HARNESS "Environment Contract Layer" (Tier 3.2).
 """
+
 from __future__ import annotations
 
 from typing import Any

@@ -4,10 +4,10 @@ Phase C1 transitional implementation: all entities map to the same
 ``weebot_sessions.db``.  When the DB split is activated, each entity
 type will get its own file (e.g. ``weebot_memory.db``).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from weebot.application.ports.database_router_port import DatabaseRouterPort
 

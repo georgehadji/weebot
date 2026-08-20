@@ -1,4 +1,5 @@
 """RetentionAgentPort — abstract interface for session retention review."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -18,9 +19,8 @@ class RetentionAgentPort(ABC):
     async def review(
         self,
         session_id: str,
-        session_summary: str,           # plan title + first 5 step descriptions
+        session_summary: str,  # plan title + first 5 step descriptions
         trust_report: dict[str, Any] | None,  # serialised TrustReport or None
         error_count: int,
         tool_count: int,
-    ) -> RetentionReview:
-        ...
+    ) -> RetentionReview: ...

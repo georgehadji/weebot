@@ -3,10 +3,10 @@
 Each harness (direct chat, Codex, Claude Code) implements this port to
 produce benchmark-native scores and failure analysis for trajectory evidence.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.event import TrajectoryScored
 from weebot.domain.models.session import Session
@@ -20,11 +20,7 @@ class ScoringPort(ABC):
     """
 
     @abstractmethod
-    async def score(
-        self,
-        session: Session,
-        expected_answer: Optional[str] = None,
-    ) -> TrajectoryScored:
+    async def score(self, session: Session, expected_answer: str | None = None) -> TrajectoryScored:
         """Score a completed session and return a TrajectoryScored event.
 
         Args:

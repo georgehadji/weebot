@@ -1,4 +1,5 @@
 """Concrete termination conditions."""
+
 from __future__ import annotations
 
 from weebot.application.termination.base import (
@@ -18,9 +19,7 @@ class MaxIterationTermination(TerminationCondition):
 
     def check(self, ctx: TerminationContext) -> TerminationResult:
         if ctx.iteration >= self._max:
-            return TerminationResult(
-                True, f"max iterations ({self._max}) reached",
-            )
+            return TerminationResult(True, f"max iterations ({self._max}) reached")
         return TerminationResult(False)
 
 
@@ -44,9 +43,7 @@ class TokenBudgetTermination(TerminationCondition):
     def check(self, ctx: TerminationContext) -> TerminationResult:
         if ctx.total_tokens >= self._max:
             return TerminationResult(
-                True,
-                f"token budget ({self._max:,}) exhausted "
-                f"(used {ctx.total_tokens:,})",
+                True, f"token budget ({self._max:,}) exhausted " f"(used {ctx.total_tokens:,})"
             )
         return TerminationResult(False)
 
@@ -60,9 +57,7 @@ class WallClockTermination(TerminationCondition):
 
     def __init__(self, max_seconds: float) -> None:
         if max_seconds <= 0:
-            raise ValueError(
-                f"max_seconds must be > 0, got {max_seconds}"
-            )
+            raise ValueError(f"max_seconds must be > 0, got {max_seconds}")
         self._max = max_seconds
 
     def check(self, ctx: TerminationContext) -> TerminationResult:
@@ -85,19 +80,14 @@ class TextMentionTermination(TerminationCondition):
 
     def __init__(self, text: str, scan_last_n: int = 5) -> None:
         if scan_last_n < 1:
-            raise ValueError(
-                f"scan_last_n must be >= 1, got {scan_last_n}"
-            )
+            raise ValueError(f"scan_last_n must be >= 1, got {scan_last_n}")
         self._text = text.lower()
         self._scan_last_n = scan_last_n
 
     def check(self, ctx: TerminationContext) -> TerminationResult:
         if ctx.last_messages:
-            for msg in ctx.last_messages[-self._scan_last_n:]:
+            for msg in ctx.last_messages[-self._scan_last_n :]:
                 content = str(msg.get("content", "")).lower()
                 if self._text in content:
-                    return TerminationResult(
-                        True,
-                        f"text '{self._text}' mentioned in output",
-                    )
+                    return TerminationResult(True, f"text '{self._text}' mentioned in output")
         return TerminationResult(False)

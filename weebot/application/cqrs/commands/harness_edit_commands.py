@@ -3,6 +3,7 @@
 Commands:
   - ApplyHarnessEditsCommand: validate and apply bounded edits to HarnessConfig.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,17 +19,16 @@ class ApplyHarnessEditsCommand(Command):
     The edits are first validated via the RegressionGate (Phase 4).
     If they pass, the harness YAML is updated and version is bumped.
     """
+
     edits: list[dict[str, Any]] = Field(
         default_factory=list,
         description="List of edit dicts with 'target', 'value', 'mechanism' keys",
     )
     harness_version: str = Field(
-        default="",
-        description="Base harness version to apply edits to (empty = use loaded)",
+        default="", description="Base harness version to apply edits to (empty = use loaded)"
     )
     validation_tasks: list[str] = Field(
-        default_factory=list,
-        description="Task IDs for regression testing",
+        default_factory=list, description="Task IDs for regression testing"
     )
 
     def validate(self) -> None:

@@ -22,10 +22,11 @@ Usage::
                 return Error()
             await page.goto(url)
 """
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
 
 class AsyncSafeAdapter:
@@ -45,7 +46,7 @@ class AsyncSafeAdapter:
         super().__init__(*args, **kwargs)
         self._state_lock = asyncio.Lock()
 
-    async def _snapshot(self, attr_name: str) -> Optional[Any]:
+    async def _snapshot(self, attr_name: str) -> Any | None:
         """Atomically read an instance attribute under the lock.
 
         Use this to capture a nullable ref that might be concurrently

@@ -15,11 +15,12 @@ Supported commands:
     /mcp       — Show MCP server status
     /compress  — Force context compression
 """
+
 from __future__ import annotations
 
 import logging
 import shlex
-from typing import Any, Callable
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class GatewayCommandDispatcher:
         parts = shlex.split(text)
         cmd = parts[0][1:].lower()  # Strip leading /
         args = parts[1:] if len(parts) > 1 else []
-        raw_rest = text[len(parts[0]):].strip()
+        raw_rest = text[len(parts[0]) :].strip()
         return (cmd, args, raw_rest)
 
     def list_commands(self) -> dict[str, str]:
@@ -163,6 +164,7 @@ def build_default_dispatcher() -> GatewayCommandDispatcher:
         if args and args[0] == "set" and len(args) > 1:
             return f"OK_SET_MODEL:{args[1]}"
         from weebot.config.model_refs import MODEL_DI_DEFAULT
+
         return f"Current model: {MODEL_DI_DEFAULT}"
 
     @dispatcher.register("tools")

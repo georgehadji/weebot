@@ -1,4 +1,5 @@
 """Unit tests validating V7 defect hunt suspicions on adaptive concurrency and memory mixin."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,20 +8,21 @@ import pytest
 from weebot.core.memory_monitor import MemoryAwareMixin, MemoryStats
 from weebot.core.adaptive_concurrency import AdaptiveConcurrencyController, AdaptiveSemaphore
 
-
 # =====================================================================
 # D1 Trigger Test: MemoryAwareMixin task orphaning
 # =====================================================================
 
+
 @pytest.mark.asyncio
 async def test_D1_memory_aware_mixin_orphaning():
     """Trigger D1: MemoryAwareMixin replaces semaphore, orphaning waiters."""
+
     class TestService(MemoryAwareMixin):
         def __init__(self):
             super().__init__(max_workers=1)
 
     service = TestService()
-    
+
     # Task 1: Acquires the only slot
     task1_acquired = asyncio.Event()
     task1_finish = asyncio.Event()
@@ -64,7 +66,9 @@ async def test_D1_memory_aware_mixin_orphaning():
     await asyncio.sleep(0.01)  # allow task2 and task3 to block on the old semaphore
 
     # Simulate critical memory event triggering scale down (semaphore replacement)
-    stats = MemoryStats(rss_mb=100.0, python_current_mb=10.0, python_peak_mb=10.0, max_mb=1000, percent=80.0)
+    stats = MemoryStats(
+        rss_mb=100.0, python_current_mb=10.0, python_peak_mb=10.0, max_mb=1000, percent=80.0
+    )
     service._on_memory_event("critical", stats)
 
     # Now, let Task 1 finish. It releases the OLD semaphore.
@@ -91,10 +95,12 @@ async def test_D1_memory_aware_mixin_orphaning():
     # Under max_workers=1, we can have multiple tasks running concurrently because of the semaphore replacement!
 
     # Let's write a test that verifies that replacing the semaphore allows exceeding max_workers!
-    
+
+
 @pytest.mark.asyncio
 async def test_D1_memory_aware_mixin_concurrency_overflow():
     """Trigger D1 (Overflow): Semaphore replacement violates max_workers limits."""
+
     class TestService(MemoryAwareMixin):
         def __init__(self):
             super().__init__(max_workers=1)
@@ -117,12 +123,15 @@ async def test_D1_memory_aware_mixin_concurrency_overflow():
     await task1_acquired.wait()
 
     # Trigger a critical event, which replaces the semaphore with a new one (capacity 1).
-    stats = MemoryStats(rss_mb=100.0, python_current_mb=10.0, python_peak_mb=10.0, max_mb=1000, percent=80.0)
+    stats = MemoryStats(
+        rss_mb=100.0, python_current_mb=10.0, python_peak_mb=10.0, max_mb=1000, percent=80.0
+    )
     service._on_memory_event("critical", stats)
 
     # Now, Task 2 tries to acquire. Since the new semaphore has capacity 1,
     # Task 2 will acquire it IMMEDIATELY, even though Task 1 is still running!
     task2_acquired = False
+
     async def run_task2():
         nonlocal task2_acquired
         async with service.memory_slot():
@@ -140,23 +149,23 @@ async def test_D1_memory_aware_mixin_concurrency_overflow():
     await t1
     await t2
 
-    assert is_overflow is False, "VERIFIED: MemoryAwareMixin allowed concurrency overflow due to semaphore replacement!"
+    assert (
+        is_overflow is False
+    ), "VERIFIED: MemoryAwareMixin allowed concurrency overflow due to semaphore replacement!"
 
 
 # =====================================================================
 # D2 Trigger Test: AdaptiveConcurrencyController fails to throttle
 # =====================================================================
 
+
 @pytest.mark.asyncio
 async def test_D2_adaptive_concurrency_no_throttle():
     """Trigger D2: Controller fails to throttle concurrency to current_workers."""
     ctrl = AdaptiveConcurrencyController(
-        min_workers=1,
-        max_workers=5,
-        cpu_threshold=100.0,
-        memory_threshold=100.0,
+        min_workers=1, max_workers=5, cpu_threshold=100.0, memory_threshold=100.0
     )
-    
+
     # Manually override current_workers to 1 (representing a scale-down)
     ctrl.current_workers = 1
 
@@ -166,6 +175,7 @@ async def test_D2_adaptive_concurrency_no_throttle():
     # Tries to acquire 2nd slot. Since current_workers=1, this SHOULD block.
     # But because of D2, the underlying semaphore has capacity 5, so it allows it immediately.
     task2_acquired = False
+
     async def try_acquire_second():
         nonlocal task2_acquired
         await ctrl.acquire()
@@ -179,8 +189,10 @@ async def test_D2_adaptive_concurrency_no_throttle():
         # which means current_workers=1 was NOT enforced!
         ctrl.release()  # release the 1st slot we held
         assert task2_acquired is True
-        pytest.fail("VERIFIED: AdaptiveConcurrencyController allowed 2 concurrent tasks when current_workers = 1!")
-    except asyncio.TimeoutError:
+        pytest.fail(
+            "VERIFIED: AdaptiveConcurrencyController allowed 2 concurrent tasks when current_workers = 1!"
+        )
+    except TimeoutError:
         # Task blocked correctly as expected under true concurrency limiting
         ctrl.release()  # release first
         await t  # let second finish
@@ -191,6 +203,7 @@ async def test_D2_adaptive_concurrency_no_throttle():
 # =====================================================================
 # D3 Trigger Test: AdaptiveSemaphore ignores initial value
 # =====================================================================
+
 
 @pytest.mark.asyncio
 async def test_D3_adaptive_semaphore_ignores_initial():
@@ -203,6 +216,7 @@ async def test_D3_adaptive_semaphore_ignores_initial():
     # Tries to acquire 2nd slot. Since initial/current_value=1, this SHOULD block.
     # But because of D3, it allows up to max_value (5) immediately.
     task2_acquired = False
+
     async def try_acquire_second():
         nonlocal task2_acquired
         await sem.acquire()
@@ -215,8 +229,10 @@ async def test_D3_adaptive_semaphore_ignores_initial():
         # If we got here, we successfully acquired a 2nd slot concurrently
         sem.release()  # release the 1st slot
         assert task2_acquired is True
-        pytest.fail("VERIFIED: AdaptiveSemaphore allowed concurrent acquisition exceeding its initial limit!")
-    except asyncio.TimeoutError:
+        pytest.fail(
+            "VERIFIED: AdaptiveSemaphore allowed concurrent acquisition exceeding its initial limit!"
+        )
+    except TimeoutError:
         sem.release()
         await t
         pass

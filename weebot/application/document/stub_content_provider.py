@@ -5,6 +5,7 @@ with a small, valid Greek LaTeX placeholder that still exercises math and
 cross-references. The production provider (LLM-backed, Opus 4.8 / AUTHORING
 profile) satisfies the same port.
 """
+
 from __future__ import annotations
 
 from weebot.application.document.ports import ContentProvider  # noqa: F401 (documents intent)

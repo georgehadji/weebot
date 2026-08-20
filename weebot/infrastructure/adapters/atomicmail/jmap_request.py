@@ -9,24 +9,17 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
+from collections.abc import Callable, Mapping, Sequence
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .credentials import CredentialStore
 from .credentials import try_read_credentials
-from .session import (
-    AgentSession,
-    JMAP_BLOB_URN,
-    create_agent_session,
-    inbox_id_to_mailbox_email,
-)
+from .session import AgentSession, JMAP_BLOB_URN, create_agent_session, inbox_id_to_mailbox_email
 from .shared_assets import shared_dir, try_read_shared_json
 
-DEFAULT_JMAP_USING = [
-    "urn:ietf:params:jmap:core",
-    "urn:ietf:params:jmap:mail",
-]
+DEFAULT_JMAP_USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"]
 BUNDLED_OPS_PRESET_NAMES = [
     "list_inbox.json",
     "reply.json",
@@ -85,11 +78,7 @@ def _error(key: str, fallback: str) -> str:
     return _ERRORS.get(key, fallback)
 
 
-def _error_template(
-    key: str,
-    fallback: str,
-    values: Mapping[str, str | int],
-) -> str:
+def _error_template(key: str, fallback: str, values: Mapping[str, str | int]) -> str:
     out = _ERRORS.get(key, fallback)
     for name, value in values.items():
         out = out.replace(f"{{{name}}}", str(value))
@@ -136,9 +125,7 @@ def _read_ops_file(credential_dir: str, ops_file: str) -> str:
 
 
 def _parse_jmap_envelope(
-    raw: str,
-    default_using: Sequence[str],
-    source_label: str,
+    raw: str, default_using: Sequence[str], source_label: str
 ) -> dict[str, object]:
     try:
         value = json.loads(raw)
@@ -184,7 +171,9 @@ def _expand_upload_url(template: str, account_id: str) -> str:
     return template.replace("%7BaccountId%7D", account_id).replace("{accountId}", account_id)
 
 
-def _coerce_attachment_input(item: JmapAttachmentInput | Mapping[str, str], index: int) -> JmapAttachmentInput:
+def _coerce_attachment_input(
+    item: JmapAttachmentInput | Mapping[str, str], index: int
+) -> JmapAttachmentInput:
     if isinstance(item, JmapAttachmentInput):
         if not item.path:
             raise ValueError(f"Attachment at index {index} is missing path.")
@@ -210,8 +199,7 @@ def _attachment_absolute_path(path_base: str, attachment_path: str) -> Path:
 
 
 def _assert_attachment_bytes_within_blob_limit(
-    items: Sequence[tuple[str, int]],
-    limits: Mapping[str, int | None] | None,
+    items: Sequence[tuple[str, int]], limits: Mapping[str, int | None] | None
 ) -> None:
     if not limits:
         return
@@ -227,19 +215,13 @@ def _assert_attachment_bytes_within_blob_limit(
 
 
 def _post_binary_blob_upload(
-    upload_url_expanded: str,
-    capability_jwt: str,
-    content: bytes,
-    content_type: str,
+    upload_url_expanded: str, capability_jwt: str, content: bytes, content_type: str
 ) -> tuple[str, int]:
     req = Request(
         upload_url_expanded,
         method="POST",
         data=content,
-        headers={
-            "Authorization": f"Bearer {capability_jwt}",
-            "Content-Type": content_type,
-        },
+        headers={"Authorization": f"Bearer {capability_jwt}", "Content-Type": content_type},
     )
     try:
         with urlopen(req) as response:
@@ -316,7 +298,9 @@ def _build_vars_from_attachment_files(
         if creds:
             upload_template = creds.uploadUrl
     if not upload_template:
-        raise ValueError(_error("jmap_session_missing_upload_url", "JMAP session missing uploadUrl."))
+        raise ValueError(
+            _error("jmap_session_missing_upload_url", "JMAP session missing uploadUrl.")
+        )
     upload_url_expanded = _expand_upload_url(upload_template, account_id)
 
     prepared: list[tuple[bytes, str, str]] = []
@@ -337,8 +321,7 @@ def _build_vars_from_attachment_files(
         prepared.append((content, filename, content_type))
 
     _assert_attachment_bytes_within_blob_limit(
-        [(filename, len(content)) for content, filename, _ in prepared],
-        limits,
+        [(filename, len(content)) for content, filename, _ in prepared], limits
     )
 
     out: dict[str, str] = {}
@@ -375,10 +358,7 @@ def _fetch_inbox_mailbox_id(session: AgentSession) -> str:
         "methodCalls": [
             [
                 "Mailbox/query",
-                {
-                    "accountId": session.get_primary_mail_account_id(),
-                    "filter": {"role": "inbox"},
-                },
+                {"accountId": session.get_primary_mail_account_id(), "filter": {"role": "inbox"}},
                 "mq0",
             ]
         ],
@@ -396,17 +376,11 @@ def _fetch_inbox_mailbox_id(session: AgentSession) -> str:
         parsed = json.loads(outcome.bodyText)
     except json.JSONDecodeError as err:
         raise ValueError(
-            _error(
-                "mailbox_query_response_not_json",
-                "Mailbox/query response is not valid JSON.",
-            )
+            _error("mailbox_query_response_not_json", "Mailbox/query response is not valid JSON.")
         ) from err
     if not isinstance(parsed, dict):
         raise ValueError(
-            _error(
-                "mailbox_query_response_not_json",
-                "Mailbox/query response is not valid JSON.",
-            )
+            _error("mailbox_query_response_not_json", "Mailbox/query response is not valid JSON.")
         )
     method_responses = parsed.get("methodResponses")
     if not isinstance(method_responses, list) or not method_responses:
@@ -434,18 +408,13 @@ def _fetch_inbox_mailbox_id(session: AgentSession) -> str:
     ids = first[1].get("ids")
     if not isinstance(ids, list) or not ids or not isinstance(ids[0], str) or not ids[0]:
         raise ValueError(
-            _error(
-                "mailbox_query_missing_inbox_id",
-                "Mailbox/query returned no inbox mailbox id.",
-            )
+            _error("mailbox_query_missing_inbox_id", "Mailbox/query returned no inbox mailbox id.")
         )
     return ids[0]
 
 
 def _substitute_vars(
-    raw: str,
-    vars: Mapping[str, str] | None,
-    auto_resolvers: Mapping[str, Callable[[], str]],
+    raw: str, vars: Mapping[str, str] | None, auto_resolvers: Mapping[str, Callable[[], str]]
 ) -> str:
     names = _find_var_references(raw)
     if not names:
@@ -501,16 +470,15 @@ def _fallback_jmap_url_from_files(session: AgentSession, attr_name: str) -> str:
     return getattr(creds, attr_name)
 
 
-def _post_jmap(jmap_post_url: str, capability_jwt: str, envelope: dict[str, object]) -> JmapRequestResult:
+def _post_jmap(
+    jmap_post_url: str, capability_jwt: str, envelope: dict[str, object]
+) -> JmapRequestResult:
     body = json.dumps(envelope).encode("utf-8")
     req = Request(
         jmap_post_url,
         method="POST",
         data=body,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {capability_jwt}",
-        },
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {capability_jwt}"},
     )
     try:
         with urlopen(req) as response:
@@ -554,8 +522,7 @@ def _slice_octet_count(source_len: int, offset: object, length: object) -> int:
 
 
 def _try_compute_upload_data_octets(
-    data_unknown: object,
-    known_sizes: Mapping[str, int],
+    data_unknown: object, known_sizes: Mapping[str, int]
 ) -> int | None:
     if not isinstance(data_unknown, list):
         return 0
@@ -604,9 +571,7 @@ def _try_compute_upload_data_octets(
 
 
 def _resolve_create_sizes_for_one_blob_upload(
-    create: Mapping[str, Any],
-    limits: Mapping[str, int | None],
-    prior_sizes: Mapping[str, int],
+    create: Mapping[str, Any], limits: Mapping[str, int | None], prior_sizes: Mapping[str, int]
 ) -> dict[str, int]:
     merged = dict(prior_sizes)
     pending = set(create.keys())
@@ -652,8 +617,7 @@ def _resolve_create_sizes_for_one_blob_upload(
 
 
 def _assert_blob_upload_envelope_within_limits(
-    envelope: Mapping[str, object],
-    limits_by_account: Mapping[str, Mapping[str, int | None] | None],
+    envelope: Mapping[str, object], limits_by_account: Mapping[str, Mapping[str, int | None] | None]
 ) -> None:
     method_calls = envelope.get("methodCalls")
     if not isinstance(method_calls, list):
@@ -697,9 +661,7 @@ def _collect_blob_upload_account_ids(envelope: Mapping[str, object]) -> list[str
 
 
 def _enforce_jmap_blob_upload_limits_if_applicable(
-    *,
-    session: AgentSession,
-    envelope: Mapping[str, object],
+    *, session: AgentSession, envelope: Mapping[str, object]
 ) -> None:
     using = envelope.get("using")
     if not isinstance(using, list) or JMAP_BLOB_URN not in using:
@@ -707,7 +669,9 @@ def _enforce_jmap_blob_upload_limits_if_applicable(
     method_calls = envelope.get("methodCalls")
     if not isinstance(method_calls, list):
         return
-    if not any(isinstance(call, list) and call and call[0] == "Blob/upload" for call in method_calls):
+    if not any(
+        isinstance(call, list) and call and call[0] == "Blob/upload" for call in method_calls
+    ):
         return
 
     limits_by_account: dict[str, Mapping[str, int | None] | None] = {}
@@ -819,9 +783,7 @@ def run_jmap_request(
     merged_vars = dict(vars or {})
     if attachments:
         injected_vars = _build_vars_from_attachment_files(
-            session=session,
-            attachments=attachments,
-            path_base=attachment_path_base or os.getcwd(),
+            session=session, attachments=attachments, path_base=attachment_path_base or os.getcwd()
         )
         merged_vars = {**injected_vars, **merged_vars}
 
@@ -830,20 +792,14 @@ def run_jmap_request(
         "INBOX_MAILBOX_ID": lambda: _fetch_inbox_mailbox_id(session),
         "INBOX": lambda: _resolve_inbox_mailbox_email(session),
         "UPLOAD_URL": lambda: (
-            session.current_upload_url
-            or _fallback_jmap_url_from_files(session, "uploadUrl")
+            session.current_upload_url or _fallback_jmap_url_from_files(session, "uploadUrl")
         ),
         "DOWNLOAD_URL": lambda: (
-            session.current_download_url
-            or _fallback_jmap_url_from_files(session, "downloadUrl")
+            session.current_download_url or _fallback_jmap_url_from_files(session, "downloadUrl")
         ),
     }
 
-    substituted = _substitute_vars(
-        ops_json,
-        vars=merged_vars,
-        auto_resolvers=auto_resolvers,
-    )
+    substituted = _substitute_vars(ops_json, vars=merged_vars, auto_resolvers=auto_resolvers)
     envelope = _parse_jmap_envelope(substituted, using, source_label)
     _ensure_text_charset_on_email_set_blob_parts(envelope)
     _enforce_jmap_blob_upload_limits_if_applicable(session=session, envelope=envelope)
@@ -854,18 +810,15 @@ def run_jmap_request(
             ok=True,
             status=200,
             bodyText=json.dumps(
-                {"dryRun": True, "url": jmap_post_url, "envelope": envelope},
-                indent=2,
+                {"dryRun": True, "url": jmap_post_url, "envelope": envelope}, indent=2
             ),
         )
 
-    result = _post_jmap(
-        jmap_post_url,
-        session.get_capability_token(),
-        envelope,
-    )
+    result = _post_jmap(jmap_post_url, session.get_capability_token(), envelope)
     if result.ok:
-        return JmapRequestResult(ok=True, status=result.status, bodyText=_attach_next_hints(result.bodyText))
+        return JmapRequestResult(
+            ok=True, status=result.status, bodyText=_attach_next_hints(result.bodyText)
+        )
     return result
 
 
@@ -893,11 +846,7 @@ def jmap_request(
     if not ops and not ops_file:
         raise ValueError(_error("mcp_ops_required", "Provide either ops or ops_file."))
 
-    session = create_agent_session(
-        credentials_dir=credentials_dir,
-        env=env,
-        store=store,
-    )
+    session = create_agent_session(credentials_dir=credentials_dir, env=env, store=store)
 
     if ops_file:
         raw = _read_ops_file(session.credentialDir, ops_file)

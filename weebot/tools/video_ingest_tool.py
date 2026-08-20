@@ -14,14 +14,13 @@ Dependencies
   When present, chunking is token-accurate (cl100k_base).
   When absent, words (whitespace split) are used as a fallback.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import re
-import uuid
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import PrivateAttr
 
@@ -47,10 +46,12 @@ except ImportError:
 # Chunking helpers (pure functions, no DB)
 # ---------------------------------------------------------------------------
 
+
 def _try_tiktoken_encode(text: str) -> list[int] | None:
     """Return token ids using tiktoken, or None if not installed."""
     try:
         import tiktoken  # type: ignore
+
         enc = tiktoken.get_encoding("cl100k_base")
         return enc.encode(text)
     except Exception:
@@ -68,11 +69,10 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
     if tokens is not None:
         # Token-based chunking
         step = max(1, chunk_size - overlap)
-        raw_chunks = [
-            tokens[i: i + chunk_size] for i in range(0, len(tokens), step)
-        ]
+        raw_chunks = [tokens[i : i + chunk_size] for i in range(0, len(tokens), step)]
         try:
             import tiktoken
+
             enc = tiktoken.get_encoding("cl100k_base")
             decoded = [enc.decode(c) for c in raw_chunks]
         except Exception:
@@ -85,7 +85,7 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
     step = max(1, chunk_size - overlap)
     chunks: list[str] = []
     for i in range(0, len(words), step):
-        chunk_words = words[i: i + chunk_size]
+        chunk_words = words[i : i + chunk_size]
         if len(chunk_words) >= 20:
             chunks.append(" ".join(chunk_words))
     return chunks
@@ -94,6 +94,7 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
 # ---------------------------------------------------------------------------
 # YouTube helpers (pure functions, no DB)
 # ---------------------------------------------------------------------------
+
 
 def _extract_video_id(url: str) -> str | None:
     """Return the YouTube video ID from a URL, or None if unrecognised."""
@@ -138,7 +139,7 @@ def _fetch_transcript(video_id: str, language: str = "en") -> tuple[str, str]:
     except Exception as exc:
         raise ValueError(f"Failed to fetch transcript: {exc}") from exc
 
-    full_text = " ".join(s.text if hasattr(s, 'text') else s["text"] for s in segments)
+    full_text = " ".join(s.text if hasattr(s, "text") else s["text"] for s in segments)
     # Attempt to get video title via oEmbed (no API key needed).
     title = _fetch_title(video_id)
     return title, full_text
@@ -149,6 +150,7 @@ def _fetch_title(video_id: str) -> str:
     try:
         import urllib.request
         import urllib.parse
+
         oembed_url = (
             "https://www.youtube.com/oembed?url="
             + urllib.parse.quote(f"https://www.youtube.com/watch?v={video_id}")
@@ -164,6 +166,7 @@ def _fetch_title(video_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Tool
 # ---------------------------------------------------------------------------
+
 
 class VideoIngestTool(BaseTool):
     """Ingest YouTube videos into the persistent knowledge base.
@@ -220,10 +223,11 @@ class VideoIngestTool(BaseTool):
 
     _repo: ToolRepositoryPort = PrivateAttr()
 
-    def __init__(self, repo: Optional[ToolRepositoryPort] = None):
+    def __init__(self, repo: ToolRepositoryPort | None = None):
         super().__init__()
         if repo is None:
             import importlib as _il
+
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
             repo = _c.get(ToolRepositoryPort)  # type: ignore[assignment]
@@ -270,8 +274,10 @@ class VideoIngestTool(BaseTool):
         except (ImportError, ValueError) as exc:
             # Record the failed source so the user can see it in list_sources
             await self._repo.save_video_source(
-                url=url, title=f"[FAILED] {video_id}",
-                project_id=project_id, metadata={"error": str(exc)},
+                url=url,
+                title=f"[FAILED] {video_id}",
+                project_id=project_id,
+                metadata={"error": str(exc)},
             )
             return ToolResult(output="", error=str(exc))
 
@@ -281,14 +287,12 @@ class VideoIngestTool(BaseTool):
         for n, chunk in enumerate(chunks, start=1):
             note_title = f"{title} [chunk {n}/{total}]"
             await self._repo.save_note(
-                title=note_title,
-                content=chunk,
-                tags=["video", "youtube"],
-                project_id=project_id,
+                title=note_title, content=chunk, tags=["video", "youtube"], project_id=project_id
             )
 
         await self._repo.save_video_source(
-            url=url, title=title,
+            url=url,
+            title=title,
             project_id=project_id,
             metadata={"chunk_count": total, "video_id": video_id},
         )
@@ -311,10 +315,7 @@ class VideoIngestTool(BaseTool):
     async def _list_sources(self, kw: dict) -> ToolResult:
         project_id = kw.get("project_id") or None
 
-        rows = await self._repo.get_video_sources(
-            project_id=project_id or "",
-            limit=100,
-        )
+        rows = await self._repo.get_video_sources(project_id=project_id or "", limit=100)
         return ToolResult(output=json.dumps({"count": len(rows), "sources": rows}, indent=2))
 
     # ------------------------------------------------------------------
@@ -333,9 +334,10 @@ class VideoIngestTool(BaseTool):
         # Count already-written lines so we can resume after a crash.
         skipped = 0
         import asyncio
+
         try:
             lines = await asyncio.to_thread(
-                lambda: [line for line in open(output_path, "r", encoding="utf-8") if line.strip()]
+                lambda: [line for line in open(output_path, encoding="utf-8") if line.strip()]
             )
             skipped = len(lines)
         except FileNotFoundError:
@@ -354,6 +356,7 @@ class VideoIngestTool(BaseTool):
 
         exported = 0
         import aiofiles
+
         async with aiofiles.open(output_path, "a", encoding="utf-8") as fh:
             for row in to_write:
                 line = json.dumps(

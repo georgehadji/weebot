@@ -12,20 +12,20 @@ Features:
 
 Usage:
     from weebot.core.structured_logger import StructuredLogger, get_logger
-    
+
     logger = get_logger("agent.researcher")
-    
+
     # Basic logging
     logger.info("Starting research", topic="AI Ethics")
-    
+
     # With correlation ID
     with logger.correlation_id("workflow-123"):
         logger.info("Processing task", task_id="task-456")
-        
+
     # Performance tracking
     with logger.timer("database_query"):
         results = db.query()
-        
+
     # Error with categorization
     try:
         risky_operation()
@@ -37,6 +37,7 @@ Usage:
             exc_info=True
         )
 """
+
 from __future__ import annotations
 
 import functools
@@ -48,46 +49,47 @@ import traceback
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Callable, Generator
+from datetime import datetime, UTC
+from typing import Any
+from collections.abc import Callable, Generator
 
 # Context variables for correlation tracking
-_correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
-_agent_id: ContextVar[Optional[str]] = ContextVar("agent_id", default=None)
-_workflow_id: ContextVar[Optional[str]] = ContextVar("workflow_id", default=None)
+_correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
+_agent_id: ContextVar[str | None] = ContextVar("agent_id", default=None)
+_workflow_id: ContextVar[str | None] = ContextVar("workflow_id", default=None)
 
 
 def _utc_now() -> datetime:
     """Return timezone-aware UTC timestamp."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _utc_iso(ts: datetime) -> str:
     """Format datetime as UTC ISO-8601 with Z suffix."""
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     else:
-        ts = ts.astimezone(timezone.utc)
+        ts = ts.astimezone(UTC)
     return ts.isoformat().replace("+00:00", "Z")
 
 
 class StructuredLogRecord:
     """A structured log record that can be serialized to JSON."""
-    
+
     def __init__(
         self,
         level: str,
         message: str,
         logger_name: str,
-        timestamp: Optional[datetime] = None,
-        correlation_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        workflow_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        exc_info: Optional[str] = None,
-        error_type: Optional[str] = None,
-        error_category: Optional[str] = None,
-        performance_data: Optional[Dict[str, Any]] = None,
+        timestamp: datetime | None = None,
+        correlation_id: str | None = None,
+        agent_id: str | None = None,
+        workflow_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        exc_info: str | None = None,
+        error_type: str | None = None,
+        error_category: str | None = None,
+        performance_data: dict[str, Any] | None = None,
     ):
         self.level = level
         self.message = message
@@ -101,8 +103,8 @@ class StructuredLogRecord:
         self.error_type = error_type
         self.error_category = error_category
         self.performance_data = performance_data or {}
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
             "timestamp": _utc_iso(self.timestamp),
@@ -110,7 +112,7 @@ class StructuredLogRecord:
             "logger": self.logger_name,
             "message": self.message,
         }
-        
+
         # Add context IDs if present
         if self.correlation_id:
             result["correlation_id"] = self.correlation_id
@@ -118,11 +120,11 @@ class StructuredLogRecord:
             result["agent_id"] = self.agent_id
         if self.workflow_id:
             result["workflow_id"] = self.workflow_id
-        
+
         # Add metadata
         if self.metadata:
             result["metadata"] = self.metadata
-        
+
         # Add error information
         if self.error_type:
             result["error_type"] = self.error_type
@@ -130,13 +132,13 @@ class StructuredLogRecord:
             result["error_category"] = self.error_category
         if self.exc_info:
             result["stack_trace"] = self.exc_info
-        
+
         # Add performance data
         if self.performance_data:
             result["performance"] = self.performance_data
-        
+
         return result
-    
+
     def to_json(self) -> str:
         """Serialize to JSON string."""
         return json.dumps(self.to_dict(), default=str)
@@ -145,14 +147,14 @@ class StructuredLogRecord:
 class StructuredLogger:
     """
     Structured logger with correlation IDs and performance tracking.
-    
+
     This logger provides:
     - JSON-formatted output
     - Automatic correlation ID tracking
     - Performance timing context managers
     - Error categorization
     """
-    
+
     # Error categories for classification
     ERROR_CATEGORIES = {
         "CRITICAL": "System-critical errors requiring immediate attention",
@@ -164,7 +166,7 @@ class StructuredLogger:
         "PERMISSION": "Permission/access errors",
         "RESOURCE": "Resource exhaustion errors",
     }
-    
+
     def __init__(self, name: str, level: int = logging.INFO):
         self.name = name
         self.level = level
@@ -187,39 +189,39 @@ class StructuredLogger:
             handler.setLevel(level)
             handler.setFormatter(JSONLogFormatter())
             self._logger.addHandler(handler)
-    
-    def _get_context(self) -> Dict[str, Optional[str]]:
+
+    def _get_context(self) -> dict[str, str | None]:
         """Get current context from context variables."""
         return {
             "correlation_id": _correlation_id.get(),
             "agent_id": _agent_id.get(),
             "workflow_id": _workflow_id.get(),
         }
-    
+
     def _log(
         self,
         level: str,
         message: str,
         exc_info: bool = False,
-        error_type: Optional[str] = None,
-        error_category: Optional[str] = None,
-        **kwargs
+        error_type: str | None = None,
+        error_category: str | None = None,
+        **kwargs,
     ):
         """Internal logging method."""
         context = self._get_context()
-        
+
         # Capture exception info if requested
         exc_info_str = None
         if exc_info and sys.exc_info()[0]:
             exc_info_str = traceback.format_exc()
-        
+
         # Build performance data from kwargs
         performance_data = {}
         perf_keys = ["duration_ms", "start_time", "end_time", "rows_affected", "bytes_processed"]
         for key in perf_keys:
             if key in kwargs:
                 performance_data[key] = kwargs.pop(key)
-        
+
         record = StructuredLogRecord(
             level=level,
             message=message,
@@ -233,30 +235,30 @@ class StructuredLogger:
             error_category=error_category,
             performance_data=performance_data if performance_data else None,
         )
-        
+
         # Log via standard logging
         log_level = getattr(logging, level.upper())
         self._logger.log(log_level, record.to_json())
-    
+
     def debug(self, message: str, **kwargs):
         """Log debug message."""
         self._log("DEBUG", message, **kwargs)
-    
+
     def info(self, message: str, **kwargs):
         """Log info message."""
         self._log("INFO", message, **kwargs)
-    
+
     def warning(self, message: str, **kwargs):
         """Log warning message."""
         self._log("WARNING", message, error_category="WARNING", **kwargs)
-    
+
     def error(
         self,
         message: str,
-        error_type: Optional[str] = None,
+        error_type: str | None = None,
         error_category: str = "ERROR",
         exc_info: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """Log error message with categorization."""
         self._log(
@@ -265,15 +267,11 @@ class StructuredLogger:
             error_type=error_type,
             error_category=error_category,
             exc_info=exc_info,
-            **kwargs
+            **kwargs,
         )
-    
+
     def critical(
-        self,
-        message: str,
-        error_type: Optional[str] = None,
-        exc_info: bool = False,
-        **kwargs
+        self, message: str, error_type: str | None = None, exc_info: bool = False, **kwargs
     ):
         """Log critical message."""
         self._log(
@@ -282,14 +280,14 @@ class StructuredLogger:
             error_type=error_type,
             error_category="CRITICAL",
             exc_info=exc_info,
-            **kwargs
+            **kwargs,
         )
-    
+
     @contextmanager
-    def correlation_id(self, cid: Optional[str] = None) -> Generator[None, None, None]:
+    def correlation_id(self, cid: str | None = None) -> Generator[None, None, None]:
         """
         Context manager for correlation ID scope.
-        
+
         Args:
             cid: Correlation ID (auto-generated if not provided)
         """
@@ -298,7 +296,7 @@ class StructuredLogger:
             yield
         finally:
             _correlation_id.reset(token)
-    
+
     @contextmanager
     def agent_context(self, agent_id: str) -> Generator[None, None, None]:
         """Context manager for agent ID scope."""
@@ -307,7 +305,7 @@ class StructuredLogger:
             yield
         finally:
             _agent_id.reset(token)
-    
+
     @contextmanager
     def workflow_context(self, workflow_id: str) -> Generator[None, None, None]:
         """Context manager for workflow ID scope."""
@@ -316,20 +314,20 @@ class StructuredLogger:
             yield
         finally:
             _workflow_id.reset(token)
-    
+
     @contextmanager
     def timer(self, operation_name: str) -> Generator[None, None, None]:
         """
         Context manager for timing operations.
-        
+
         Automatically logs performance data when context exits.
         """
         start_time = time.time()
         start_iso = _utc_iso(_utc_now())
-        
+
         try:
             yield
-            
+
             # Success - log timing
             duration_ms = (time.time() - start_time) * 1000
             self.info(
@@ -338,7 +336,7 @@ class StructuredLogger:
                 duration_ms=round(duration_ms, 2),
                 start_time=start_iso,
                 end_time=_utc_iso(_utc_now()),
-                status="success"
+                status="success",
             )
         except Exception as e:
             # Failure - log timing and error
@@ -351,55 +349,52 @@ class StructuredLogger:
                 end_time=_utc_iso(_utc_now()),
                 status="failed",
                 error_type=type(e).__name__,
-                exc_info=True
+                exc_info=True,
             )
             raise
-    
+
     def log_execution(
-        self,
-        func: Optional[Callable] = None,
-        *,
-        log_args: bool = False,
-        log_result: bool = False
+        self, func: Callable | None = None, *, log_args: bool = False, log_result: bool = False
     ) -> Callable:
         """
         Decorator for logging function execution.
-        
+
         Args:
             func: Function to decorate
             log_args: Whether to log function arguments
             log_result: Whether to log function result
         """
+
         def decorator(f: Callable) -> Callable:
             @functools.wraps(f)
             def wrapper(*args, **kwargs):
                 func_name = f.__qualname__
-                
+
                 # Log entry
                 entry_data = {"function": func_name}
                 if log_args:
                     entry_data["args"] = str(args)
                     entry_data["kwargs"] = str(kwargs)
-                
+
                 self.info(f"Entering {func_name}", **entry_data)
-                
+
                 start_time = time.time()
                 try:
                     result = f(*args, **kwargs)
-                    
+
                     # Log success
                     duration_ms = (time.time() - start_time) * 1000
                     success_data = {
                         "function": func_name,
                         "duration_ms": round(duration_ms, 2),
-                        "status": "success"
+                        "status": "success",
                     }
                     if log_result:
                         success_data["result"] = str(result)
-                    
+
                     self.info(f"Completed {func_name}", **success_data)
                     return result
-                    
+
                 except Exception as e:
                     # Log failure
                     duration_ms = (time.time() - start_time) * 1000
@@ -409,12 +404,12 @@ class StructuredLogger:
                         duration_ms=round(duration_ms, 2),
                         status="failed",
                         error_type=type(e).__name__,
-                        exc_info=True
+                        exc_info=True,
                     )
                     raise
-            
+
             return wrapper
-        
+
         if func is None:
             return decorator
         return decorator(func)
@@ -422,7 +417,7 @@ class StructuredLogger:
 
 class JSONLogFormatter(logging.Formatter):
     """Formatter that outputs JSON-structured logs."""
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         # If the message is already a JSON string, pass it through
@@ -433,7 +428,7 @@ class JSONLogFormatter(logging.Formatter):
                 return record.msg
             except json.JSONDecodeError:
                 pass
-        
+
         # Otherwise, create a standard log record
         log_data = {
             "timestamp": _utc_iso(_utc_now()),
@@ -441,15 +436,15 @@ class JSONLogFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        
+
         if record.exc_info:
             log_data["stack_trace"] = self.formatException(record.exc_info)
-        
+
         return json.dumps(log_data)
 
 
 # Module-level logger cache
-_loggers: Dict[str, StructuredLogger] = {}
+_loggers: dict[str, StructuredLogger] = {}
 
 
 def get_logger(name: str) -> StructuredLogger:
@@ -481,7 +476,7 @@ def set_trace_id_from_session(session: Any) -> None:
         pass  # Session doesn't have trace_id yet — ignore gracefully
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Get current correlation ID."""
     return _correlation_id.get()
 

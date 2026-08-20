@@ -4,10 +4,10 @@ TrajectorySummary / OptimizationBatch are the input to the SkillOpt optimizer.
 TrajectoryHealth / TrajectoryDiagnosis are used by the TrajectoryMonitor (Tier 1.3)
 for real-time degenerate pattern detection during execution.
 """
+
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -37,18 +37,17 @@ class TrajectorySummary(BaseModel):
     total_tokens: int = Field(default=0, description="Total tokens consumed")
     total_cost: float = Field(default=0.0, description="Total cost in USD")
     trajectory_text: str = Field(
-        default="",
-        description="Compact natural-language trace for the optimizer model",
+        default="", description="Compact natural-language trace for the optimizer model"
     )
-    answer: Optional[str] = Field(default=None, description="Final answer produced")
-    expected_answer: Optional[str] = Field(
+    answer: str | None = Field(default=None, description="Final answer produced")
+    expected_answer: str | None = Field(
         default=None, description="Expected/gold answer for scoring"
     )
     actions: list[str] = Field(
         default_factory=list,
         description="Ordered tool_name sequence, for path-fidelity comparison "
-                    "against a reference trajectory (see trajectory_comparator.py). "
-                    "Empty for pre-existing rows — no backfill.",
+        "against a reference trajectory (see trajectory_comparator.py). "
+        "Empty for pre-existing rows — no backfill.",
     )
 
 
@@ -64,7 +63,7 @@ class OptimizationBatch(BaseModel):
     failure_count: int = Field(default=0)
     success_count: int = Field(default=0)
 
-    def add(self, t: TrajectorySummary) -> "OptimizationBatch":
+    def add(self, t: TrajectorySummary) -> OptimizationBatch:
         """Return a new batch with *t* appended, recomputing aggregates."""
         new_trajs = list(self.trajectories) + [t]
         total_score = sum(t.score for t in new_trajs)
@@ -82,12 +81,12 @@ class TrajectoryHealth(str, Enum):
     """Health classification of a trajectory after a step (Tier 1.3)."""
 
     HEALTHY = "healthy"
-    REPEATING = "repeating"          # Same tool call 4+ consecutive times
+    REPEATING = "repeating"  # Same tool call 4+ consecutive times
     SEMANTIC_LOOP = "semantic_loop"  # Different calls, identical output
-    STAGNATING = "stagnating"        # No progress across multiple steps
+    STAGNATING = "stagnating"  # No progress across multiple steps
     BUDGET_HOTSPOT = "budget_hotspot"  # One sub-goal consuming >40% budget
-    EXHAUSTED = "exhausted"          # Budget at 90%+ with no completion
-    TERMINAL = "terminal"            # All tool calls failing — stop immediately
+    EXHAUSTED = "exhausted"  # Budget at 90%+ with no completion
+    TERMINAL = "terminal"  # All tool calls failing — stop immediately
 
 
 class TrajectoryDiagnosis(BaseModel):
@@ -98,6 +97,6 @@ class TrajectoryDiagnosis(BaseModel):
     recovery_message: str | None = Field(
         default=None,
         description="Injected into the executor's conversation buffer. "
-                    "None when no recovery is possible (e.g. TERMINAL health).",
+        "None when no recovery is possible (e.g. TERMINAL health).",
     )
     affected_step_ids: list[str] = Field(default_factory=list)

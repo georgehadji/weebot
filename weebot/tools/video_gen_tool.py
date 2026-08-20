@@ -7,6 +7,7 @@ All video models are accessed through OpenRouter's chat completions API with
 modalities hinting for video output. The returned URL is downloaded and saved
 as an MP4 file.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,35 +15,30 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Optional
-from urllib.parse import urlparse
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from weebot.tools.base import BaseTool, ToolResult
 from weebot.config.api_endpoints import XAI_API_BASE
 
-
 logger = logging.getLogger(__name__)
 
 
 class VideoGenParams(BaseModel):
     """Parameters for video generation."""
-    prompt: str = Field(
-        default="",
-        description="Text description of the video to generate"
-    )
+
+    prompt: str = Field(default="", description="Text description of the video to generate")
     model: str = Field(
         default="",
-        description="OpenRouter video model ID. Leave empty to auto-select from cascade based on use_case."
+        description="OpenRouter video model ID. Leave empty to auto-select from cascade based on use_case.",
     )
     use_case: str = Field(
         default="general",
-        description="Use case for auto model selection: short, cinematic, product, brand, general"
+        description="Use case for auto model selection: short, cinematic, product, brand, general",
     )
     output_path: str = Field(
-        default="",
-        description="File path to write the MP4 to (e.g. 'Output/videos/demo.mp4')"
+        default="", description="File path to write the MP4 to (e.g. 'Output/videos/demo.mp4')"
     )
 
 
@@ -68,6 +64,7 @@ class VideoGenTool(BaseTool):
     3. Downloads the generated video from the returned URL
     4. Saves it as MP4 to the specified output path
     """
+
     default_timeout_seconds: int = 180
     name: str = "video_gen"
     description: str = (
@@ -83,20 +80,20 @@ class VideoGenTool(BaseTool):
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "Text description of the video to generate"
+                "description": "Text description of the video to generate",
             },
             "model": {
                 "type": "string",
-                "description": "OpenRouter video model ID. If omitted, auto-selects from the video cascade based on use_case."
+                "description": "OpenRouter video model ID. If omitted, auto-selects from the video cascade based on use_case.",
             },
             "use_case": {
                 "type": "string",
                 "enum": ["short", "cinematic", "product", "brand", "general"],
-                "description": "Use case for auto model selection. Cascade: short→seedance-fast, cinematic→sora/veo, product→wan/kling, brand→grok/veo, general→grok/kling/wan"
+                "description": "Use case for auto model selection. Cascade: short→seedance-fast, cinematic→sora/veo, product→wan/kling, brand→grok/veo, general→grok/kling/wan",
             },
             "output_path": {
                 "type": "string",
-                "description": "File path for the output MP4 file (required). E.g. 'Output/videos/demo.mp4'"
+                "description": "File path for the output MP4 file (required). E.g. 'Output/videos/demo.mp4'",
             },
         },
         "required": ["prompt", "output_path"],
@@ -105,11 +102,7 @@ class VideoGenTool(BaseTool):
     # ── Direct xAI video generation ──────────────────────────────────
 
     async def _execute_xai_direct(
-        self,
-        model: str,
-        prompt: str,
-        output_path: str,
-        xai_key: str,
+        self, model: str, prompt: str, output_path: str, xai_key: str
     ) -> ToolResult | None:
         """Call xAI's video generation endpoint directly.
 
@@ -121,41 +114,38 @@ class VideoGenTool(BaseTool):
         Returns:
             ToolResult on success, None on failure (caller should fall back).
         """
-        import asyncio as _asyncio
         import aiohttp
 
         xai_model = model.split("/", 1)[-1]  # "x-ai/grok-imagine-video" → "grok-imagine-video"
 
-        headers = {
-            "Authorization": f"Bearer {xai_key}",
-            "Content-Type": "application/json",
-        }
-        payload: dict = {
-            "model": xai_model,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        headers = {"Authorization": f"Bearer {xai_key}", "Content-Type": "application/json"}
+        payload: dict = {"model": xai_model, "messages": [{"role": "user", "content": prompt}]}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
                     f"{XAI_API_BASE}/chat/completions",
                     headers=headers,
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=180),
-                ) as resp:
-                    if resp.status != 200:
-                        error_text = await resp.text()
-                        logger.debug("xAI video gen failed: HTTP %s — %s", resp.status, error_text[:150])
-                        return None
+                ) as resp,
+            ):
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logger.debug(
+                        "xAI video gen failed: HTTP %s — %s", resp.status, error_text[:150]
+                    )
+                    return None
 
-                    result = await resp.json()
-                    video_url = self._extract_video_url(result)
-                    if not video_url:
-                        return None
+                result = await resp.json()
+                video_url = self._extract_video_url(result)
+                if not video_url:
+                    return None
 
-                    return await self._download_video(video_url, output_path, model, prompt)
+                return await self._download_video(video_url, output_path, model, prompt)
 
-        except _asyncio.TimeoutError:
+        except TimeoutError:
             return None
         except Exception:
             logger.info("xAI direct video gen failed", exc_info=True)
@@ -226,11 +216,7 @@ class VideoGenTool(BaseTool):
         return resolved
 
     async def _download_video(
-        self,
-        video_url: str,
-        output_path: str,
-        model: str,
-        prompt: str,
+        self, video_url: str, output_path: str, model: str, prompt: str
     ) -> ToolResult | None:
         """Download a video from a URL and save it to disk.
 
@@ -258,7 +244,8 @@ class VideoGenTool(BaseTool):
                         if total > _MAX_VIDEO_BYTES:
                             logger.warning(
                                 "Video download exceeded %d bytes from %s — aborting",
-                                _MAX_VIDEO_BYTES, video_url[:80],
+                                _MAX_VIDEO_BYTES,
+                                video_url[:80],
                             )
                             return None
                         chunks.append(chunk)
@@ -289,7 +276,6 @@ class VideoGenTool(BaseTool):
         3. Cascade based on use_case
         4. Generic fallback message
         """
-        import asyncio as _asyncio
         import aiohttp
 
         api_key = os.getenv("OPENROUTER_API_KEY", "")
@@ -306,6 +292,7 @@ class VideoGenTool(BaseTool):
             models_to_try = [params.model]
         else:
             from weebot.config.model_refs import VIDEO_CASCADE
+
             use_case = params.use_case or "general"
             cascade = VIDEO_CASCADE.get(use_case, VIDEO_CASCADE["general"])
             models_to_try = list(cascade)
@@ -329,10 +316,7 @@ class VideoGenTool(BaseTool):
             # ── Try xAI direct for x-ai/* models ───────────────────
             if model.startswith("x-ai/") and xai_key:
                 xai_result = await self._execute_xai_direct(
-                    model=model,
-                    prompt=prompt,
-                    output_path=output_path,
-                    xai_key=xai_key,
+                    model=model, prompt=prompt, output_path=output_path, xai_key=xai_key
                 )
                 if xai_result is not None:
                     return xai_result
@@ -342,38 +326,37 @@ class VideoGenTool(BaseTool):
                 continue
 
             # ── OpenRouter chat completion ─────────────────────────
-            payload: dict = {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-            }
+            payload: dict = {"model": model, "messages": [{"role": "user", "content": prompt}]}
 
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.post(
                         "https://openrouter.ai/api/v1/chat/completions",
                         headers=headers,
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=180),
-                    ) as resp:
-                        if resp.status != 200:
-                            error_text = await resp.text()
-                            last_error = f"{model}: HTTP {resp.status} — {error_text[:150]}"
-                            continue
+                    ) as resp,
+                ):
+                    if resp.status != 200:
+                        error_text = await resp.text()
+                        last_error = f"{model}: HTTP {resp.status} — {error_text[:150]}"
+                        continue
 
-                        result = await resp.json()
-                        video_url = self._extract_video_url(result)
-                        if not video_url:
-                            last_error = f"{model}: no video URL in response"
-                            continue
+                    result = await resp.json()
+                    video_url = self._extract_video_url(result)
+                    if not video_url:
+                        last_error = f"{model}: no video URL in response"
+                        continue
 
-                        download_result = await self._download_video(
-                            video_url, output_path, model, prompt,
-                        )
-                        if download_result is not None:
-                            return download_result
-                        last_error = f"{model}: download failed"
+                    download_result = await self._download_video(
+                        video_url, output_path, model, prompt
+                    )
+                    if download_result is not None:
+                        return download_result
+                    last_error = f"{model}: download failed"
 
-            except _asyncio.TimeoutError:
+            except TimeoutError:
                 last_error = f"{model}: timed out (180s)"
                 continue
             except Exception as exc:
@@ -381,9 +364,7 @@ class VideoGenTool(BaseTool):
                 continue
 
         # All models failed
-        fallback_msg = (
-            f"Video generation failed. All {len(models_to_try)} model(s) tried"
-        )
+        fallback_msg = f"Video generation failed. All {len(models_to_try)} model(s) tried"
         if last_error:
             fallback_msg += f". Last error: {last_error}"
         return ToolResult.error_result(fallback_msg)

@@ -1,20 +1,25 @@
 """Telemetry behavior for CQRS mediator."""
+
 import time
 import logging
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
-from weebot.application.cqrs.base import Command, Query, IPipelineBehavior, CommandResult, QueryResult
+from weebot.application.cqrs.base import (
+    Command,
+    Query,
+    IPipelineBehavior,
+    CommandResult,
+    QueryResult,
+)
 
 logger = logging.getLogger("weebot.telemetry")
+
 
 class TelemetryBehavior(IPipelineBehavior):
     """Pipeline behavior that tracks execution time and token usage."""
 
-    async def handle(
-        self,
-        request: Command | Query,
-        next_callable: Callable[[], Any],
-    ) -> Any:
+    async def handle(self, request: Command | Query, next_callable: Callable[[], Any]) -> Any:
         """Track telemetry for the request."""
         start_time = time.perf_counter()
         request_name = type(request).__name__

@@ -5,6 +5,7 @@ Covers:
 - SandboxFactory.create_default() mode redirection
 - DI container sandbox creation respects the setting
 """
+
 import pytest
 from pydantic import ValidationError
 
@@ -98,7 +99,6 @@ class TestSandboxFactoryMode:
     async def test_native_mode_creates_native_windows(self, mocker):
         """With mode='native', create NativeWindowsSandbox."""
         from weebot.infrastructure.sandbox.factory import SandboxFactory
-        from weebot.application.ports.sandbox_port import SandboxType
         from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
 
         factory = SandboxFactory()

@@ -3,11 +3,11 @@
 Reads the filesystem to detect which of the 5 supported formats a skill
 uses.  Returns a SkillSource with the detected format and confidence score.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from weebot.domain.models.skill_source import SkillSource, SourceFormat
 
@@ -46,13 +46,11 @@ class FormatDetector:
         if manifest.exists():
             try:
                 import json
+
                 data = json.loads(manifest.read_text(encoding="utf-8"))
                 name = data.get("name", path.name)
                 return SkillSource(
-                    path=str(path),
-                    format=SourceFormat.WEEBOT,
-                    name=name,
-                    confidence=1.0,
+                    path=str(path), format=SourceFormat.WEEBOT, name=name, confidence=1.0
                 )
             except Exception:
                 pass
@@ -62,13 +60,11 @@ class FormatDetector:
         if plugin.exists():
             try:
                 import json
+
                 data = json.loads(plugin.read_text(encoding="utf-8"))
                 name = data.get("name", data.get("id", path.name))
                 return SkillSource(
-                    path=str(path),
-                    format=SourceFormat.MYMANUS,
-                    name=name,
-                    confidence=0.95,
+                    path=str(path), format=SourceFormat.MYMANUS, name=name, confidence=0.95
                 )
             except Exception:
                 pass
@@ -79,14 +75,11 @@ class FormatDetector:
             content = skill_md.read_text(encoding="utf-8")
             if content.startswith("---"):
                 return SkillSource(
-                    path=str(path),
-                    format=SourceFormat.MANUS,
-                    name=path.name,
-                    confidence=0.9,
+                    path=str(path), format=SourceFormat.MANUS, name=path.name, confidence=0.9
                 )
 
         return SkillSource(
-            path=str(path), format=SourceFormat.UNKNOWN, name=path.name, confidence=0.0,
+            path=str(path), format=SourceFormat.UNKNOWN, name=path.name, confidence=0.0
         )
 
     @staticmethod
@@ -98,10 +91,7 @@ class FormatDetector:
             content = path.read_text(encoding="utf-8", errors="replace")
             if "<agent_loop>" in content or "<system_capability>" in content:
                 return SkillSource(
-                    path=str(path),
-                    format=SourceFormat.AGENTICSEEK,
-                    name=name,
-                    confidence=0.95,
+                    path=str(path), format=SourceFormat.AGENTICSEEK, name=name, confidence=0.95
                 )
         else:
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -109,12 +99,7 @@ class FormatDetector:
         # Single SKILL.md with frontmatter
         if path.name == "SKILL.md" and content.startswith("---"):
             return SkillSource(
-                path=str(path),
-                format=SourceFormat.MANUS,
-                name=path.parent.name,
-                confidence=0.9,
+                path=str(path), format=SourceFormat.MANUS, name=path.parent.name, confidence=0.9
             )
 
-        return SkillSource(
-            path=str(path), format=SourceFormat.UNKNOWN, name=name, confidence=0.0,
-        )
+        return SkillSource(path=str(path), format=SourceFormat.UNKNOWN, name=name, confidence=0.0)

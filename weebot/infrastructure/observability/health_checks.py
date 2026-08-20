@@ -1,4 +1,5 @@
 """Health check service for monitoring Weebot components."""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +17,7 @@ except ImportError:
 
 class HealthStatus(Enum):
     """Health status of a component."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -25,7 +27,7 @@ class HealthStatus(Enum):
 @dataclass
 class ComponentHealth:
     """Health status of a single component.
-    
+
     Attributes:
         name: Component name (e.g., "openai", "database")
         status: Health status enum
@@ -33,6 +35,7 @@ class ComponentHealth:
         latency_ms: Check latency in milliseconds
         metadata: Additional component-specific data
     """
+
     name: str
     status: HealthStatus
     message: str
@@ -43,16 +46,17 @@ class ComponentHealth:
 @dataclass
 class HealthReport:
     """Overall health report for all components.
-    
+
     Attributes:
         overall_status: Aggregate health status
         components: List of individual component health
         timestamp: When the report was generated
     """
+
     overall_status: HealthStatus
     components: list[ComponentHealth]
     timestamp: float = field(default_factory=time.time)
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary for serialization."""
         return {
@@ -73,11 +77,11 @@ class HealthReport:
 
 class HealthCheckService:
     """Service for checking health of Weebot components.
-    
+
     Example:
         service = HealthCheckService()
         report = await service.check_all()
-        
+
         if report.overall_status == HealthStatus.HEALTHY:
             print("All systems operational")
         else:
@@ -85,19 +89,19 @@ class HealthCheckService:
                 if comp.status != HealthStatus.HEALTHY:
                     print(f"{comp.name}: {comp.message}")
     """
-    
+
     def __init__(self) -> None:
         """Initialize the health check service."""
         self._check_timeout = 10.0  # seconds
-    
+
     async def check_all(self) -> HealthReport:
         """Check health of all components.
-        
+
         Returns:
             HealthReport with status of all components
         """
         start_time = time.monotonic()
-        
+
         # Run all checks concurrently
         results = await asyncio.gather(
             self.check_llm_ports(),
@@ -107,10 +111,10 @@ class HealthCheckService:
             self.check_sandbox(),
             return_exceptions=True,
         )
-        
+
         components: list[ComponentHealth] = []
         overall_status = HealthStatus.HEALTHY
-        
+
         for result in results:
             if isinstance(result, Exception):
                 # Handle check exceptions
@@ -127,26 +131,27 @@ class HealthCheckService:
                 # Aggregate status (worst wins)
                 if result.status == HealthStatus.UNHEALTHY:
                     overall_status = HealthStatus.UNHEALTHY
-                elif result.status == HealthStatus.DEGRADED and overall_status == HealthStatus.HEALTHY:
+                elif (
+                    result.status == HealthStatus.DEGRADED
+                    and overall_status == HealthStatus.HEALTHY
+                ):
                     overall_status = HealthStatus.DEGRADED
-        
-        return HealthReport(
-            overall_status=overall_status,
-            components=components,
-        )
-    
+
+        return HealthReport(overall_status=overall_status, components=components)
+
     async def check_llm_ports(self) -> ComponentHealth:
         """Check health of configured LLM providers.
-        
+
         Returns:
             ComponentHealth for LLM ports
         """
         start_time = time.monotonic()
-        
+
         try:
             from weebot.config.settings import WeebotSettings
+
             settings = WeebotSettings()
-            
+
             providers = settings.available_providers()
             if not providers:
                 latency = (time.monotonic() - start_time) * 1000
@@ -157,7 +162,7 @@ class HealthCheckService:
                     latency_ms=latency,
                     metadata={"configured": [], "available": []},
                 )
-            
+
             # Try to check each provider
             provider_status = {}
             for provider in providers:
@@ -165,24 +170,28 @@ class HealthCheckService:
                     # Import and check availability
                     if provider == "openai":
                         import openai
+
                         provider_status[provider] = "available"
                     elif provider == "claude":
                         import anthropic
+
                         provider_status[provider] = "available"
                     elif provider == "kimi":
                         # Kimi uses OpenAI client
                         import openai
+
                         provider_status[provider] = "available"
                     elif provider == "deepseek":
                         import openai
+
                         provider_status[provider] = "available"
                     else:
                         provider_status[provider] = "unknown"
                 except ImportError:
                     provider_status[provider] = "missing_dependency"
-            
+
             latency = (time.monotonic() - start_time) * 1000
-            
+
             # Determine overall status
             available_count = sum(1 for s in provider_status.values() if s == "available")
             if available_count == 0:
@@ -194,18 +203,15 @@ class HealthCheckService:
             else:
                 status = HealthStatus.HEALTHY
                 message = f"All {len(providers)} LLM providers available"
-            
+
             return ComponentHealth(
                 name="llm_providers",
                 status=status,
                 message=message,
                 latency_ms=latency,
-                metadata={
-                    "configured": providers,
-                    "provider_status": provider_status,
-                },
+                metadata={"configured": providers, "provider_status": provider_status},
             )
-            
+
         except Exception as e:
             latency = (time.monotonic() - start_time) * 1000
             return ComponentHealth(
@@ -224,7 +230,6 @@ class HealthCheckService:
         semantics: 3 consecutive failures → UNHEALTHY.
         """
         start_time = time.monotonic()
-        import os
 
         xai_key = os.getenv("XAI_API_KEY")
         if not xai_key:
@@ -248,8 +253,7 @@ class HealthCheckService:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    "https://api.x.ai/v1/models",
-                    headers={"Authorization": f"Bearer {xai_key}"},
+                    "https://api.x.ai/v1/models", headers={"Authorization": f"Bearer {xai_key}"}
                 )
             latency = (time.monotonic() - start_time) * 1000
 
@@ -290,34 +294,31 @@ class HealthCheckService:
 
     async def check_database(self) -> ComponentHealth:
         """Check health of the SQLite database.
-        
+
         Returns:
             ComponentHealth for database
         """
         start_time = time.monotonic()
-        
+
         try:
             from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
-            
+
             # Try to create a repository and execute a simple query
             repo = SQLiteStateRepository()
-            
+
             # Check if we can list sessions (should work even if empty)
             sessions = await repo.list_sessions()
-            
+
             latency = (time.monotonic() - start_time) * 1000
-            
+
             return ComponentHealth(
                 name="database",
                 status=HealthStatus.HEALTHY,
                 message="Database operational",
                 latency_ms=latency,
-                metadata={
-                    "type": "sqlite",
-                    "connection": "ok",
-                },
+                metadata={"type": "sqlite", "connection": "ok"},
             )
-            
+
         except Exception as e:
             latency = (time.monotonic() - start_time) * 1000
             return ComponentHealth(
@@ -326,33 +327,30 @@ class HealthCheckService:
                 message=f"Database check failed: {e}",
                 latency_ms=latency,
             )
-    
+
     async def check_browser(self) -> ComponentHealth:
         """Check health of browser automation.
-        
+
         Returns:
             ComponentHealth for browser
         """
         start_time = time.monotonic()
-        
+
         try:
             from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
-            
+
             adapter = PlaywrightAdapter()
             is_available = await adapter.is_available()
-            
+
             latency = (time.monotonic() - start_time) * 1000
-            
+
             if is_available:
                 return ComponentHealth(
                     name="browser",
                     status=HealthStatus.HEALTHY,
                     message="Browser automation available (Playwright)",
                     latency_ms=latency,
-                    metadata={
-                        "type": "playwright",
-                        "available": True,
-                    },
+                    metadata={"type": "playwright", "available": True},
                 )
             else:
                 return ComponentHealth(
@@ -360,12 +358,9 @@ class HealthCheckService:
                     status=HealthStatus.DEGRADED,
                     message="Browser automation not available (install playwright)",
                     latency_ms=latency,
-                    metadata={
-                        "type": "playwright",
-                        "available": False,
-                    },
+                    metadata={"type": "playwright", "available": False},
                 )
-            
+
         except Exception as e:
             latency = (time.monotonic() - start_time) * 1000
             return ComponentHealth(
@@ -374,24 +369,24 @@ class HealthCheckService:
                 message=f"Browser check failed: {e}",
                 latency_ms=latency,
             )
-    
+
     async def check_sandbox(self) -> ComponentHealth:
         """Check health of sandbox environment.
-        
+
         Returns:
             ComponentHealth for sandbox
         """
         start_time = time.monotonic()
-        
+
         try:
             from weebot.infrastructure.sandbox.native_windows import NativeWindowsSandbox
-            
+
             sandbox = NativeWindowsSandbox()
             is_available = await sandbox.is_available()
             capabilities = sandbox.get_capabilities()
-            
+
             latency = (time.monotonic() - start_time) * 1000
-            
+
             if is_available:
                 cap_names = [c.name for c in capabilities]
                 return ComponentHealth(
@@ -411,12 +406,9 @@ class HealthCheckService:
                     status=HealthStatus.DEGRADED,
                     message="Sandbox not available",
                     latency_ms=latency,
-                    metadata={
-                        "type": "native_windows",
-                        "available": False,
-                    },
+                    metadata={"type": "native_windows", "available": False},
                 )
-            
+
         except Exception as e:
             latency = (time.monotonic() - start_time) * 1000
             return ComponentHealth(

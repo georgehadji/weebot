@@ -5,6 +5,7 @@ string plus a ``refs.bib``. The project ``\\input``s ``preamble.tex`` — the
 locked preamble that the compiler materializes via ``prepare_project`` — so the
 assembled tree is location-independent and safe to copy into the sandbox.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -5,6 +5,7 @@ prompt/completion token counts into USD and EUR costs.
 
 Author: Georgios-Chrysovalantis Chatzivantsidis
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,13 +27,8 @@ class StepCost:
 
     @property
     def cost_usd(self) -> float:
-        in_rate, out_rate = CostLedger.PRICING.get(
-            self.model, CostLedger.PRICING["default"]
-        )
-        return (
-            self.input_tokens * in_rate / 1_000_000
-            + self.output_tokens * out_rate / 1_000_000
-        )
+        in_rate, out_rate = CostLedger.PRICING.get(self.model, CostLedger.PRICING["default"])
+        return self.input_tokens * in_rate / 1_000_000 + self.output_tokens * out_rate / 1_000_000
 
     @property
     def cost_eur(self) -> float:
@@ -54,13 +50,13 @@ class CostLedger:
 
     # (input $/1M tokens, output $/1M tokens)
     PRICING: dict[str, tuple[float, float]] = {
-        "claude-sonnet-4-6":  (3.00,  15.00),
-        "claude-opus-4-6":    (15.00, 75.00),
-        "claude-haiku-4-5":   (0.80,   4.00),
-        "gpt-4o":             (5.00,  15.00),
-        "gpt-4o-mini":        (0.15,   0.60),
-        "deepseek-chat":      (2.00,   8.00),
-        "default":            (3.00,  15.00),
+        "claude-sonnet-4-6": (3.00, 15.00),
+        "claude-opus-4-6": (15.00, 75.00),
+        "claude-haiku-4-5": (0.80, 4.00),
+        "gpt-4o": (5.00, 15.00),
+        "gpt-4o-mini": (0.15, 0.60),
+        "deepseek-chat": (2.00, 8.00),
+        "default": (3.00, 15.00),
     }
 
     EUR_RATE: float = 0.92
@@ -114,7 +110,7 @@ class CostLedger:
         if not self._steps:
             return
 
-        total_in  = sum(s.input_tokens  for s in self._steps)
+        total_in = sum(s.input_tokens for s in self._steps)
         total_out = sum(s.output_tokens for s in self._steps)
         total_tok = total_in + total_out
         total_usd = sum(s.cost_usd for s in self._steps)
@@ -124,8 +120,7 @@ class CostLedger:
         print("=" * 62)
         print(f"  COST REPORT -- {len(self._steps)} step(s)")
         print(
-            f"  {'STEP':<12} {'IN tok':>8} {'OUT tok':>8} "
-            f"{'TOTAL':>8} {'USD':>10} {'EUR':>10}"
+            f"  {'STEP':<12} {'IN tok':>8} {'OUT tok':>8} " f"{'TOTAL':>8} {'USD':>10} {'EUR':>10}"
         )
         print("  " + "-" * 60)
         for s in self._steps:

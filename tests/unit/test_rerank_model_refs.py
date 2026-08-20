@@ -1,5 +1,5 @@
 """Tests for rerank model reference constants and routing."""
-import pytest
+
 from weebot.config.model_refs import (
     RERANK_MODEL_FREE,
     RERANK_MODEL_PRO,
@@ -30,17 +30,17 @@ def test_rerank_model_free_is_distinct_from_pro_and_v35():
 def test_quality_cases_use_pro():
     """Quality-sensitive use cases still use RERANK_MODEL_PRO."""
     for case in ("research", "skills", "evaluation"):
-        assert get_rerank_model_for(case) == RERANK_MODEL_PRO, (
-            f"Expected {case} to use PRO model, got {get_rerank_model_for(case)}"
-        )
+        assert (
+            get_rerank_model_for(case) == RERANK_MODEL_PRO
+        ), f"Expected {case} to use PRO model, got {get_rerank_model_for(case)}"
 
 
 def test_throughput_cases_use_free():
     """High-throughput, low-criticality cases use RERANK_MODEL_FREE."""
     for case in ("search", "compressor", "memory", "knowledge"):
-        assert get_rerank_model_for(case) == RERANK_MODEL_FREE, (
-            f"Expected {case} to use FREE model, got {get_rerank_model_for(case)}"
-        )
+        assert (
+            get_rerank_model_for(case) == RERANK_MODEL_FREE
+        ), f"Expected {case} to use FREE model, got {get_rerank_model_for(case)}"
 
 
 def test_unknown_case_defaults_to_free():

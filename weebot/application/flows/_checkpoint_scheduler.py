@@ -1,8 +1,9 @@
 """Checkpoint scheduler for PlanActFlow — decoupled save logic."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.checkpoint import FlowCheckpoint, StepCheckpoint
 from weebot.domain.models.plan import Plan
@@ -18,15 +19,10 @@ class CheckpointScheduler:
     from the last completed step.
     """
 
-    def __init__(self, checkpoint_port: Optional[Any] = None):
+    def __init__(self, checkpoint_port: Any | None = None):
         self._checkpoint_port = checkpoint_port
 
-    async def maybe_save(
-        self,
-        session: Session,
-        plan: Plan,
-        current_state_name: str,
-    ) -> None:
+    async def maybe_save(self, session: Session, plan: Plan, current_state_name: str) -> None:
         """Save a checkpoint if the port is wired.
 
         Args:
@@ -63,6 +59,4 @@ class CheckpointScheduler:
             await self._checkpoint_port.save(checkpoint)
             logger.debug("Checkpoint saved for session %s", session.id)
         except Exception:
-            logger.warning(
-                "Failed to save checkpoint for session %s", session.id, exc_info=True,
-            )
+            logger.warning("Failed to save checkpoint for session %s", session.id, exc_info=True)

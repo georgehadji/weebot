@@ -1,4 +1,5 @@
 """Tests for M10 session ID validation."""
+
 from __future__ import annotations
 
 import pytest

@@ -7,18 +7,19 @@ latency, token count, and cost estimate.  Used by the cost dashboard, MCP
 Lives in ``core/`` so it can be imported without pulling in application or
 infrastructure layers.
 """
+
 from __future__ import annotations
 
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Deque, List, Optional
 
 
 class CascadeTier(str, Enum):
     """Model cost tier used in cascade routing."""
+
     FREE = "free"
     BUDGET = "budget"
     PREMIUM = "premium"
@@ -26,9 +27,10 @@ class CascadeTier(str, Enum):
 
 class CascadeOutcome(str, Enum):
     """Outcome of a cascade attempt at a given tier."""
+
     SUCCESS = "success"
-    FAILED = "failed"             # API error, timeout, etc.
-    CIRCUIT_OPEN = "circuit_open" # Circuit breaker prevented the attempt
+    FAILED = "failed"  # API error, timeout, etc.
+    CIRCUIT_OPEN = "circuit_open"  # Circuit breaker prevented the attempt
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class CascadeDecision:
        and *critic_score* added for Adaptive Capability Router (ACR).
        All are optional with safe defaults for backward compatibility.
     """
+
     model_name: str
     tier: CascadeTier
     outcome: CascadeOutcome
@@ -49,7 +52,7 @@ class CascadeDecision:
     token_count: int = 0
     cost_estimate: float = 0.0
     error_message: str = ""
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     # ── ACR enrichment (Phase P0) ───────────────────────────────────
     task_category: str = "general"
     json_valid: bool | None = None
@@ -86,10 +89,10 @@ class ModelCascadeTracker:
 
     def __init__(self, max_decisions: int = 500) -> None:
         self._max = max_decisions
-        self._buffer: Deque[CascadeDecision] = deque(maxlen=max_decisions)
+        self._buffer: deque[CascadeDecision] = deque(maxlen=max_decisions)
         self._lock = threading.Lock()
         # Ring-buffer per (category, model) for per-category stats
-        self._cat_buffer: Deque[CascadeDecision] = deque(maxlen=max_decisions)
+        self._cat_buffer: deque[CascadeDecision] = deque(maxlen=max_decisions)
         self._cat_lock = threading.Lock()
 
     # ── Recording ─────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ class ModelCascadeTracker:
 
     # ── Querying ──────────────────────────────────────────────────────
 
-    def recent(self, n: int = 50) -> List[CascadeDecision]:
+    def recent(self, n: int = 50) -> list[CascadeDecision]:
         """Return up to *n* most recent decisions (newest first)."""
         with self._lock:
             return list(self._buffer)[:n]
@@ -137,8 +140,7 @@ class ModelCascadeTracker:
 
         for d in decisions:
             tier_stats = per_tier.setdefault(
-                d.tier.value,
-                {"success": 0, "failed": 0, "circuit_open": 0, "total": 0},
+                d.tier.value, {"success": 0, "failed": 0, "circuit_open": 0, "total": 0}
             )
             tier_stats["total"] += 1
             if d.outcome == CascadeOutcome.SUCCESS:
@@ -191,13 +193,10 @@ class ModelCascadeTracker:
         stats: dict[str, dict[str, dict]] = {}
         for d in decisions:
             cat_stats = stats.setdefault(d.task_category, {})
-            model_stats = cat_stats.setdefault(d.model_name, {
-                "attempts": 0,
-                "successes": 0,
-                "failures": 0,
-                "latency_sum": 0.0,
-                "cost_sum": 0.0,
-            })
+            model_stats = cat_stats.setdefault(
+                d.model_name,
+                {"attempts": 0, "successes": 0, "failures": 0, "latency_sum": 0.0, "cost_sum": 0.0},
+            )
             model_stats["attempts"] += 1
             if d.outcome == CascadeOutcome.SUCCESS:
                 model_stats["successes"] += 1

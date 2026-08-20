@@ -11,6 +11,7 @@ Covers:
 NOTE: cli.main imports trigger langchain. To avoid hangs, we defer
 the import inside each test method rather than at module level.
 """
+
 import pytest
 from click.testing import CliRunner
 
@@ -56,13 +57,17 @@ class TestSkillListCLI:
 
         # Mock SkillRegistry to return empty so global skills don't leak in
         class FakeRegistry:
-            def load_all(self): pass
-            def list_skills(self): return []
-            def get_active_skills(self): return []
+            def load_all(self):
+                pass
+
+            def list_skills(self):
+                return []
+
+            def get_active_skills(self):
+                return []
 
         monkeypatch.setattr(
-            "weebot.application.skills.skill_registry.SkillRegistry",
-            lambda: FakeRegistry(),
+            "weebot.application.skills.skill_registry.SkillRegistry", lambda: FakeRegistry()
         )
 
         from cli.commands.skills import skill_list
@@ -81,9 +86,7 @@ class TestSkillInstallCLI:
         """Installing a Weebot SKILL.md copies it to .weebot/skills/."""
         source = tmp_path / "my-skill" / "SKILL.md"
         source.parent.mkdir()
-        source.write_text(
-            "---\nname: my-skill\ndescription: My custom skill\n---\n\nSkill content"
-        )
+        source.write_text("---\nname: my-skill\ndescription: My custom skill\n---\n\nSkill content")
 
         monkeypatch.chdir(tmp_path)
         from cli.commands.skills import skill_install
@@ -98,9 +101,7 @@ class TestSkillInstallCLI:
     def test_installs_weebot_skill_from_file(self, tmp_path, monkeypatch):
         """Installing from a SKILL.md file path works with --name."""
         source = tmp_path / "SKILL.md"
-        source.write_text(
-            "---\nname: file-skill\ndescription: From file\n---\n\nContent"
-        )
+        source.write_text("---\nname: file-skill\ndescription: From file\n---\n\nContent")
 
         monkeypatch.chdir(tmp_path)
         from cli.commands.skills import skill_install
@@ -125,14 +126,15 @@ class TestSkillInstallCLI:
         result = runner.invoke(skill_install, [str(unknown)])
 
         assert result.exit_code == 0
-        assert "Cannot determine format" in result.output or "cannot determine" in result.output.lower()
+        assert (
+            "Cannot determine format" in result.output
+            or "cannot determine" in result.output.lower()
+        )
 
     def test_install_with_custom_name(self, tmp_path, monkeypatch):
         """--name overrides the auto-detected skill name."""
         source = tmp_path / "SKILL.md"
-        source.write_text(
-            "---\nname: original-name\ndescription: Override test\n---\n\nContent"
-        )
+        source.write_text("---\nname: original-name\ndescription: Override test\n---\n\nContent")
 
         monkeypatch.chdir(tmp_path)
         from cli.commands.skills import skill_install
@@ -165,8 +167,10 @@ class TestSkillUpdateSourceRouting:
         class FakeAdapter:
             def __init__(self, *a, **kw):
                 captured["used"] = "agentskills"
+
             async def fetch_index(self):
                 return []
+
             async def close(self):
                 pass
 
@@ -192,14 +196,15 @@ class TestSkillUpdateSourceRouting:
         class FakeAdapter:
             def __init__(self, *a, **kw):
                 captured["used"] = "skillhub"
+
             async def fetch_index(self):
                 return []
+
             async def close(self):
                 pass
 
         monkeypatch.setattr(
-            "weebot.infrastructure.adapters.skill_index_github.GitHubSkillIndexAdapter",
-            FakeAdapter,
+            "weebot.infrastructure.adapters.skill_index_github.GitHubSkillIndexAdapter", FakeAdapter
         )
 
         from cli.commands.skills import skill_update
@@ -228,9 +233,7 @@ class TestSkillInstallBM25Rebuild:
         monkeypatch.setattr(skills_module, "_rebuild_bm25_index", fake_rebuild)
 
         source = tmp_path / "SKILL.md"
-        source.write_text(
-            "---\nname: test-skill\ndescription: A test\n---\n\nContent"
-        )
+        source.write_text("---\nname: test-skill\ndescription: A test\n---\n\nContent")
 
         monkeypatch.chdir(tmp_path)
         from cli.commands.skills import skill_install

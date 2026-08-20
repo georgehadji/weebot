@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +16,7 @@ class TestScraperTool:
     def test_scraper_tool_registry_registration(self):
         """Verify the spacescraper tool is discoverable in the registry and assigned to correct roles."""
         registry = RoleBasedToolRegistry()
-        
+
         # Verify it exists in classes
         class_map = registry.build_tool_class_map()
         assert "spacescraper" in class_map
@@ -60,7 +59,6 @@ class TestScraperTool:
     @patch("asyncio.create_subprocess_exec")
     async def test_scraper_tool_fallback_to_api_success(self, mock_subprocess, mock_post):
         """Verify that spacescraper tool automatically falls back to API (Method 2) if CLI execution fails."""
-        import httpx
 
         # Mock CLI execution failure
         mock_subprocess.side_effect = RuntimeError("Subprocess execution failed")
@@ -71,7 +69,7 @@ class TestScraperTool:
         mock_post_resp.json.return_value = {
             "status": "enqueued",
             "job_id": "api_ss_998877",
-            "url": "https://nspa.nato.int"
+            "url": "https://nspa.nato.int",
         }
         mock_post.return_value = mock_post_resp
 
@@ -108,17 +106,17 @@ class TestScraperTool:
         # Configure side effect for subprocess calls:
         # First call is CLI subprocess (RuntimeError side effect or mock_cli_proc)
         # Second call is docker-compose subprocess (returns mock_docker_proc)
-        mock_subprocess.side_effect = [RuntimeError("Subprocess execution failed"), mock_docker_proc]
+        mock_subprocess.side_effect = [
+            RuntimeError("Subprocess execution failed"),
+            mock_docker_proc,
+        ]
 
         # Configure side effect for HTTP calls:
         # First POST call fails (Connection refused/Timeout)
         # Second POST call (after Docker up) succeeds!
         mock_post_resp = MagicMock()
         mock_post_resp.status_code = 200
-        mock_post_resp.json.return_value = {
-            "status": "enqueued",
-            "job_id": "docker_ss_554433"
-        }
+        mock_post_resp.json.return_value = {"status": "enqueued", "job_id": "docker_ss_554433"}
         mock_post.side_effect = [httpx.ConnectError("Connection refused"), mock_post_resp]
 
         tool = ScraperTool()

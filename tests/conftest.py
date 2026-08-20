@@ -1,4 +1,5 @@
 """Shared fixtures and mock adapters for weebot test suite."""
+
 import os
 
 # browser_use defaults ANONYMIZED_TELEMETRY to True and phones home to
@@ -37,21 +38,21 @@ def _reset_weebot_logger_level():
     logging.getLogger("weebot").setLevel(logging.NOTSET)
     yield
     logging.getLogger("weebot").setLevel(logging.NOTSET)
-import tempfile
+
+
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Marker registration
 # ---------------------------------------------------------------------------
 
+
 def pytest_configure(config):
     """Register custom markers so --strict-markers doesn't warn."""
     config.addinivalue_line(
-        "markers",
-        "real_api: marks tests that require a real API key (skipped when key is not set)"
+        "markers", "real_api: marks tests that require a real API key (skipped when key is not set)"
     )
 
 
@@ -59,15 +60,24 @@ def pytest_configure(config):
 # Environment helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     """Strip real API keys from the environment for every test.
 
     Tests that need a key must set it explicitly via monkeypatch.
     """
-    for var in ("KIMI_API_KEY", "DEEPSEEK_API_KEY", "XAI_API_KEY",
-                "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY",
-                "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SLACK_WEBHOOK_URL"):
+    for var in (
+        "KIMI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "XAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "SLACK_WEBHOOK_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -89,6 +99,7 @@ def reset_connection_pool():
     """
     import asyncio
     import sys
+
     mod = sys.modules.get("weebot.infrastructure.persistence.connection_pool")
     if mod is not None:
         mod._pool_lock = None
@@ -114,6 +125,7 @@ def reset_settings_singletons():
     need a clean slate each time so the mock takes effect.
     """
     import sys
+
     for mod_name in ("weebot.tools.bash_tool", "weebot.tools.python_tool"):
         mod = sys.modules.get(mod_name)
         if mod is not None:
@@ -145,6 +157,7 @@ def with_all_keys(monkeypatch):
 # Temp filesystem helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def tmp_db(tmp_path) -> Path:
     """Return a path to a temporary SQLite database file."""
@@ -172,11 +185,13 @@ def workspace_editor(workspace_path, monkeypatch):
     """Configure StrReplaceEditorTool to use temporary workspace."""
     # Patch the settings module before importing the editor
     import weebot.config.settings as settings_module
+
     monkeypatch.setattr(settings_module, "WORKSPACE_ROOT", workspace_path)
     monkeypatch.setattr(settings_module, "REQUIRED_PATH_PREFIX", str(workspace_path))
 
     # Clear any cached imports
     import sys
+
     # Remove cached file_editor to force re-import with new settings
     if "weebot.tools.file_editor" in sys.modules:
         del sys.modules["weebot.tools.file_editor"]
@@ -189,6 +204,7 @@ def workspace_editor(workspace_path, monkeypatch):
 # ---------------------------------------------------------------------------
 # Mock AI provider
 # ---------------------------------------------------------------------------
+
 
 class MockModelProvider:
     """Fake IModelProvider that returns predictable responses without API calls."""
@@ -214,19 +230,21 @@ def mock_provider():
 # Mock LLM (for SafetyChecker / core.agent which use langchain ChatOpenAI)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_llm():
     """AsyncMock that simulates a LangChain LLM response."""
     llm = MagicMock()
-    llm.ainvoke = AsyncMock(return_value=MagicMock(
-        content='{"confirmation_required": "no", "plan_b": "no risk"}'
-    ))
+    llm.ainvoke = AsyncMock(
+        return_value=MagicMock(content='{"confirmation_required": "no", "plan_b": "no risk"}')
+    )
     return llm
 
 
 # ---------------------------------------------------------------------------
 # Mock notifier
 # ---------------------------------------------------------------------------
+
 
 class MockNotifier:
     """Collects notifications instead of sending them."""
@@ -235,11 +253,13 @@ class MockNotifier:
         self.sent: list[dict[str, Any]] = []
 
     async def notify(self, notification: Any) -> None:
-        self.sent.append({
-            "title": notification.title,
-            "message": notification.message,
-            "level": notification.level.value,
-        })
+        self.sent.append(
+            {
+                "title": notification.title,
+                "message": notification.message,
+                "level": notification.level.value,
+            }
+        )
 
     async def notify_project_start(self, project_id: str, description: str) -> None:
         self.sent.append({"event": "start", "project_id": project_id})

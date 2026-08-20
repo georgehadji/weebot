@@ -1,4 +1,5 @@
 """SkillCurator bindings mixin for Container."""
+
 from __future__ import annotations
 
 import logging
@@ -30,30 +31,30 @@ class SkillsMixin:
 
         # Phase 3: semantic (embedding-based) first stage
         if SEMANTIC_SKILL_RETRIEVAL_ENABLED:
-            from weebot.application.services.semantic_skill_retriever import (
-                SemanticSkillRetriever,
-            )
+            from weebot.application.services.semantic_skill_retriever import SemanticSkillRetriever
+
             base = SemanticSkillRetriever(registry)
             rerank = self._maybe_get(RerankPort)
             if rerank is not None:
                 from weebot.application.services.reranking_skill_retriever import (
                     RerankingSkillRetriever,
                 )
-                logger.info(
-                    "Skill retriever: semantic (all-MiniLM-L6-v2) + Cohere rerank"
-                )
+
+                logger.info("Skill retriever: semantic (all-MiniLM-L6-v2) + Cohere rerank")
                 return RerankingSkillRetriever(base, rerank)
             logger.info("Skill retriever: semantic (all-MiniLM-L6-v2)")
             return base
 
         # Default: BM25-based retrieval (unchanged)
         from weebot.application.services.bm25_skill_retriever import BM25SkillRetriever
+
         base = BM25SkillRetriever(registry)
         rerank = self._maybe_get(RerankPort)
         if rerank is not None:
             from weebot.application.services.reranking_skill_retriever import (
                 RerankingSkillRetriever,
             )
+
             logger.info("Skill retriever: BM25 + Cohere rerank")
             return RerankingSkillRetriever(base, rerank)
         logger.info("Skill retriever: BM25 only (RerankPort not configured)")
@@ -63,6 +64,7 @@ class SkillsMixin:
         from weebot.application.skills.skill_registry import SkillRegistry
         from weebot.application.services.skill_curator import SkillCurator
         from weebot.application.ports.llm_port import LLMPort
+
         registry = SkillRegistry()
         llm = self._maybe_get(LLMPort)
         if llm is None:

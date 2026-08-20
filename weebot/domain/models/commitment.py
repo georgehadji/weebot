@@ -4,23 +4,23 @@ Represents something the agent said it would do in the future
 (e.g. "I'll check back in 2 hours", "Let me monitor that for you").
 Used by the CommitmentEngine to track, fulfill, and surface promises.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Optional
 
 
 class CommitmentStatus(Enum):
     """Lifecycle of a commitment."""
 
-    PENDING = "pending"             # Extracted, awaiting due time
-    IN_PROGRESS = "in_progress"     # Due time has arrived, follow-up in progress
-    FULFILLED = "fulfilled"         # Successfully followed up / resolved
-    BROKEN = "broken"               # Due time passed without follow-up
-    CANCELLED = "cancelled"         # Explicitly cancelled by user or agent
-    OVERDUE = "overdue"             # Past due time, no action taken yet
+    PENDING = "pending"  # Extracted, awaiting due time
+    IN_PROGRESS = "in_progress"  # Due time has arrived, follow-up in progress
+    FULFILLED = "fulfilled"  # Successfully followed up / resolved
+    BROKEN = "broken"  # Due time passed without follow-up
+    CANCELLED = "cancelled"  # Explicitly cancelled by user or agent
+    OVERDUE = "overdue"  # Past due time, no action taken yet
 
 
 @dataclass
@@ -39,13 +39,14 @@ class Commitment:
         updated_at: When the commitment was last updated.
         failure_reason: Optional reason if BROKEN or CANCELLED.
     """
+
     id: str
     promise_text: str
     context: str
     source_session_id: str
-    source_event_id: Optional[str] = None
-    due_at: Optional[datetime] = None
+    source_event_id: str | None = None
+    due_at: datetime | None = None
     status: CommitmentStatus = CommitmentStatus.PENDING
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    failure_reason: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    failure_reason: str | None = None

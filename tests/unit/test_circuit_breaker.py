@@ -2,18 +2,14 @@
 
 Phase 2 Deliverable: 10+ tests for CircuitBreaker
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
 import pytest
-from datetime import datetime
 
-from weebot.core.circuit_breaker import (
-    CircuitBreaker,
-    BreakerState,
-    BreakerResult,
-)
+from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
 
 
 class TestCircuitBreakerBasics:
@@ -79,10 +75,7 @@ class TestCircuitBreakerStateMachine:
     @pytest.mark.asyncio
     async def test_open_to_half_open_transition(self):
         """OPEN -> HALF_OPEN after cooldown."""
-        cb = CircuitBreaker(
-            failure_threshold=1,
-            cooldown_seconds=0.1  # Short for testing
-        )
+        cb = CircuitBreaker(failure_threshold=1, cooldown_seconds=0.1)  # Short for testing
 
         # Open the circuit
         await cb.record_failure("entity")
@@ -99,11 +92,7 @@ class TestCircuitBreakerStateMachine:
     @pytest.mark.asyncio
     async def test_half_open_to_closed_on_success(self):
         """HALF_OPEN -> CLOSED on success threshold."""
-        cb = CircuitBreaker(
-            failure_threshold=1,
-            cooldown_seconds=0.1,
-            success_threshold=1
-        )
+        cb = CircuitBreaker(failure_threshold=1, cooldown_seconds=0.1, success_threshold=1)
 
         # Open then transition to HALF_OPEN
         await cb.record_failure("entity")
@@ -119,10 +108,7 @@ class TestCircuitBreakerStateMachine:
     @pytest.mark.asyncio
     async def test_half_open_to_open_on_failure(self):
         """HALF_OPEN -> OPEN on probe failure."""
-        cb = CircuitBreaker(
-            failure_threshold=1,
-            cooldown_seconds=0.1
-        )
+        cb = CircuitBreaker(failure_threshold=1, cooldown_seconds=0.1)
 
         # Open then transition to HALF_OPEN
         await cb.record_failure("entity")
@@ -207,11 +193,7 @@ class TestCircuitBreakerConfiguration:
     @pytest.mark.asyncio
     async def test_custom_thresholds(self):
         """Custom thresholds work correctly."""
-        cb = CircuitBreaker(
-            failure_threshold=5,
-            success_threshold=3,
-            cooldown_seconds=0.1
-        )
+        cb = CircuitBreaker(failure_threshold=5, success_threshold=3, cooldown_seconds=0.1)
 
         # Need 5 failures to open
         for i in range(4):
@@ -252,10 +234,7 @@ class TestCircuitBreakerResultDetails:
     @pytest.mark.asyncio
     async def test_result_includes_reason(self):
         """Result includes human-readable reason."""
-        cb = CircuitBreaker(
-            failure_threshold=1,
-            cooldown_seconds=60
-        )
+        cb = CircuitBreaker(failure_threshold=1, cooldown_seconds=60)
 
         await cb.record_failure("entity")
         result = await cb.evaluate("entity")
@@ -296,9 +275,7 @@ class TestCircuitBreakerConcurrency:
             await cb.record_failure("entity")
 
         # Concurrent evaluations should all see OPEN
-        results = await asyncio.gather(*[
-            cb.evaluate("entity") for _ in range(10)
-        ])
+        results = await asyncio.gather(*[cb.evaluate("entity") for _ in range(10)])
 
         assert all(r.state == BreakerState.OPEN for r in results)
         assert all(r.allowed is False for r in results)
@@ -314,17 +291,10 @@ class TestCircuitBreakerEventBroker:
 
         class MockEventBroker:
             async def publish(self, event_type, entity_id, data):
-                events.append({
-                    "event_type": event_type,
-                    "entity_id": entity_id,
-                    "data": data
-                })
+                events.append({"event_type": event_type, "entity_id": entity_id, "data": data})
 
         broker = MockEventBroker()
-        cb = CircuitBreaker(
-            failure_threshold=1,
-            event_broker=broker
-        )
+        cb = CircuitBreaker(failure_threshold=1, event_broker=broker)
 
         await cb.record_failure("entity")
 
@@ -406,11 +376,7 @@ async def test_circuit_breaker_performance():
 @pytest.mark.asyncio
 async def test_full_lifecycle_simulation():
     """Simulate realistic circuit breaker lifecycle."""
-    cb = CircuitBreaker(
-        failure_threshold=3,
-        cooldown_seconds=0.1,
-        success_threshold=2
-    )
+    cb = CircuitBreaker(failure_threshold=3, cooldown_seconds=0.1, success_threshold=2)
     entity = "api_service"
 
     # Phase 1: Normal operation
@@ -447,7 +413,9 @@ class TestV7DefectHuntCircuitBreakerFixes:
     @pytest.mark.asyncio
     async def test_D22_persist_state_no_longer_crashes(self):
         """D22: persist_state no longer raises NameError for Path."""
-        import tempfile, os
+        import tempfile
+        import os
+
         cb = CircuitBreaker(failure_threshold=1)
         await cb.record_failure("test_entity")
         tmp = os.path.join(tempfile.gettempdir(), "test_cb_v7.json")
@@ -461,7 +429,9 @@ class TestV7DefectHuntCircuitBreakerFixes:
     @pytest.mark.asyncio
     async def test_D22_restore_state_no_longer_crashes(self):
         """D22: restore_state no longer raises NameError for Path."""
-        import tempfile, os, json
+        import tempfile
+        import os
+
         cb = CircuitBreaker(failure_threshold=1)
         await cb.record_failure("test_entity")
         tmp = os.path.join(tempfile.gettempdir(), "test_cb_v7_restore.json")
@@ -478,7 +448,9 @@ class TestV7DefectHuntCircuitBreakerFixes:
     @pytest.mark.asyncio
     async def test_D22_roundtrip_preserves_state(self):
         """D22 regression: persist/restore roundtrip preserves circuit state."""
-        import tempfile, os
+        import tempfile
+        import os
+
         cb = CircuitBreaker(failure_threshold=2)
         await cb.record_failure("e1")
         await cb.record_failure("e1")

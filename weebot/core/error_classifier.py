@@ -6,18 +6,13 @@ Used by ResilientLLMAdapter to decide between:
   - fail fast (auth errors — no point retrying)
   - unknown (default retry behaviour preserved)
 """
+
 from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import List, Tuple
 
-
-__all__ = [
-    "ErrorCategory",
-    "RecoveryAction",
-    "ErrorClassifier",
-]
+__all__ = ["ErrorCategory", "RecoveryAction", "ErrorClassifier"]
 
 
 class ErrorCategory(Enum):
@@ -25,16 +20,17 @@ class ErrorCategory(Enum):
 
     Expanded from 7 to 11 categories to enable precise recovery routing.
     """
+
     RATE_LIMIT = "rate_limit"
     CONTEXT_LENGTH = "context_length"
     AUTH = "auth"
     MODEL_UNAVAILABLE = "model_unavailable"
     TOOL_ERROR = "tool_error"
     NETWORK = "network"
-    CONTENT_FILTER = "content_filter"       # NEW: content policy violations
-    BAD_REQUEST = "bad_request"             # NEW: malformed request (400)
-    SERVER_ERROR = "server_error"           # NEW: provider-side 5xx (distinct from network)
-    TIMEOUT = "timeout"                     # NEW: request timeout (distinct from network)
+    CONTENT_FILTER = "content_filter"  # NEW: content policy violations
+    BAD_REQUEST = "bad_request"  # NEW: malformed request (400)
+    SERVER_ERROR = "server_error"  # NEW: provider-side 5xx (distinct from network)
+    TIMEOUT = "timeout"  # NEW: request timeout (distinct from network)
     UNKNOWN = "unknown"
 
 
@@ -43,17 +39,18 @@ class RecoveryAction(Enum):
 
     Ordered by escalation level (least to most severe).
     """
-    COMPRESS = "compress"                   # Trigger context compression, then retry
-    RETRY = "retry"                        # Retry same model with backoff
-    BACKOFF = "backoff"                    # Retry with longer backoff (rate limit)
-    FALLBACK_MODEL = "fallback_model"       # Try a different model
-    FAIL_FAST = "fail_fast"                # Don't retry, raise immediately
-    ESCALATE = "escalate"                  # Don't retry, escalate to next handler
+
+    COMPRESS = "compress"  # Trigger context compression, then retry
+    RETRY = "retry"  # Retry same model with backoff
+    BACKOFF = "backoff"  # Retry with longer backoff (rate limit)
+    FALLBACK_MODEL = "fallback_model"  # Try a different model
+    FAIL_FAST = "fail_fast"  # Don't retry, raise immediately
+    ESCALATE = "escalate"  # Don't retry, escalate to next handler
 
 
 # ── Taxonomy: category → recovery action ────────────────────────────────────
 # First-match-wins. Order matters: more specific patterns before generic ones.
-_PATTERNS: List[Tuple[str, ErrorCategory]] = [
+_PATTERNS: list[tuple[str, ErrorCategory]] = [
     # Context length — must be before generic model errors
     (r"context.{0,30}(length|window|limit|exceed|too.long)", ErrorCategory.CONTEXT_LENGTH),
     (r"maximum.{0,20}token", ErrorCategory.CONTEXT_LENGTH),
@@ -61,16 +58,25 @@ _PATTERNS: List[Tuple[str, ErrorCategory]] = [
     # Rate limit
     (r"rate.?limit|too.many.request|429|quota.exceed", ErrorCategory.RATE_LIMIT),
     # Content filter — policy violations (won't succeed on retry)
-    (r"content.?policy|safety.?policy|inappropriate|harmful.?content|"
-     r"content.?filter|flagged|violat.+policy", ErrorCategory.CONTENT_FILTER),
+    (
+        r"content.?policy|safety.?policy|inappropriate|harmful.?content|"
+        r"content.?filter|flagged|violat.+policy",
+        ErrorCategory.CONTENT_FILTER,
+    ),
     # Auth / billing — fail fast, no point retrying
-    (r"api.?key|unauthorized|authentication|40[123]|invalid.?key|payment.?required", ErrorCategory.AUTH),
+    (
+        r"api.?key|unauthorized|authentication|40[123]|invalid.?key|payment.?required",
+        ErrorCategory.AUTH,
+    ),
     # Bad request — malformed payload (won't succeed on retry)
     (r"bad.request|invalid.request|invalid.parameter|400", ErrorCategory.BAD_REQUEST),
     # Timeout — distinct from general network
     (r"(gateway|request|connection|read|write).?timeout|timed.?out", ErrorCategory.TIMEOUT),
     # Model unavailable
-    (r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|503", ErrorCategory.MODEL_UNAVAILABLE),
+    (
+        r"model.{0,20}(not.found|unavailable|deprecated|overloaded)|503",
+        ErrorCategory.MODEL_UNAVAILABLE,
+    ),
     # Server error — provider-side 5xx (distinct from network flakiness)
     (r"50[0-2]|50[4-9]|internal.server.error|server.error", ErrorCategory.SERVER_ERROR),
     # Network / transient (catch-all for remaining network issues)
@@ -80,17 +86,17 @@ _PATTERNS: List[Tuple[str, ErrorCategory]] = [
 
 # ── Action ladder — category → recovery action ──────────────────────────────
 _RECOMMENDED_ACTION: dict[ErrorCategory, RecoveryAction] = {
-    ErrorCategory.CONTEXT_LENGTH:    RecoveryAction.COMPRESS,
-    ErrorCategory.RATE_LIMIT:        RecoveryAction.BACKOFF,
-    ErrorCategory.AUTH:              RecoveryAction.FAIL_FAST,
+    ErrorCategory.CONTEXT_LENGTH: RecoveryAction.COMPRESS,
+    ErrorCategory.RATE_LIMIT: RecoveryAction.BACKOFF,
+    ErrorCategory.AUTH: RecoveryAction.FAIL_FAST,
     ErrorCategory.MODEL_UNAVAILABLE: RecoveryAction.FALLBACK_MODEL,
-    ErrorCategory.TOOL_ERROR:        RecoveryAction.ESCALATE,
-    ErrorCategory.NETWORK:           RecoveryAction.RETRY,
-    ErrorCategory.CONTENT_FILTER:    RecoveryAction.ESCALATE,
-    ErrorCategory.BAD_REQUEST:       RecoveryAction.FAIL_FAST,
-    ErrorCategory.SERVER_ERROR:      RecoveryAction.RETRY,
-    ErrorCategory.TIMEOUT:           RecoveryAction.RETRY,
-    ErrorCategory.UNKNOWN:           RecoveryAction.RETRY,
+    ErrorCategory.TOOL_ERROR: RecoveryAction.ESCALATE,
+    ErrorCategory.NETWORK: RecoveryAction.RETRY,
+    ErrorCategory.CONTENT_FILTER: RecoveryAction.ESCALATE,
+    ErrorCategory.BAD_REQUEST: RecoveryAction.FAIL_FAST,
+    ErrorCategory.SERVER_ERROR: RecoveryAction.RETRY,
+    ErrorCategory.TIMEOUT: RecoveryAction.RETRY,
+    ErrorCategory.UNKNOWN: RecoveryAction.RETRY,
 }
 
 
@@ -136,8 +142,12 @@ class ErrorClassifier:
     def is_retryable(cls, exc: BaseException) -> bool:
         """True when the error can be retried (not fail-fast or escalate)."""
         action = cls.recommend_action(exc)
-        return action in (RecoveryAction.RETRY, RecoveryAction.BACKOFF,
-                          RecoveryAction.COMPRESS, RecoveryAction.FALLBACK_MODEL)
+        return action in (
+            RecoveryAction.RETRY,
+            RecoveryAction.BACKOFF,
+            RecoveryAction.COMPRESS,
+            RecoveryAction.FALLBACK_MODEL,
+        )
 
     @classmethod
     def is_path_error(cls, error_text: str) -> bool:
@@ -160,5 +170,3 @@ class ErrorClassifier:
             if re.search(pattern, combined):
                 return True
         return False
-
-

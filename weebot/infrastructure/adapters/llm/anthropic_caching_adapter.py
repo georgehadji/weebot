@@ -7,6 +7,7 @@ This adapter is a decorator/wrapper around any LLM provider that sends
 messages to Anthropic-compatible endpoints (direct Anthropic API or
 OpenRouter with Anthropic models).
 """
+
 from __future__ import annotations
 
 import ast
@@ -80,9 +81,7 @@ def _normalize_json_string(raw: str) -> str | None:
     try:
         parsed = ast.literal_eval(raw)
         if isinstance(parsed, dict):
-            normalized = json.dumps(
-                parsed, sort_keys=True, separators=(",", ":"), allow_nan=False,
-            )
+            normalized = json.dumps(parsed, sort_keys=True, separators=(",", ":"), allow_nan=False)
             return normalized
     except (ValueError, SyntaxError, MemoryError, TypeError):
         pass
@@ -107,19 +106,13 @@ class AnthropicCachingAdapter:
     """
 
     def __init__(
-        self,
-        enabled: bool = False,
-        ttl_seconds: int = 300,
-        max_cached_sections: int = 3,
+        self, enabled: bool = False, ttl_seconds: int = 300, max_cached_sections: int = 3
     ) -> None:
         self._enabled = enabled
         self._ttl_seconds = ttl_seconds
         self._max_cached_sections = max_cached_sections
 
-    def prepare_messages(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> list[dict[str, Any]]:
+    def prepare_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Prepare messages with cache_control breakpoints.
 
         If caching is disabled, returns messages unchanged.
@@ -138,7 +131,10 @@ class AnthropicCachingAdapter:
 
         # 1. Cache the last system message
         for i in range(len(result) - 1, -1, -1):
-            if result[i].get("role") == "system" and cache_markers_added < self._max_cached_sections:
+            if (
+                result[i].get("role") == "system"
+                and cache_markers_added < self._max_cached_sections
+            ):
                 result[i] = {**result[i], "cache_control": {"type": "ephemeral"}}
                 cache_markers_added += 1
                 break
@@ -153,14 +149,18 @@ class AnthropicCachingAdapter:
 
             if first_assistant > 0:
                 for i in range(first_assistant - 1, -1, -1):
-                    if result[i].get("role") == "user" and cache_markers_added < self._max_cached_sections:
+                    if (
+                        result[i].get("role") == "user"
+                        and cache_markers_added < self._max_cached_sections
+                    ):
                         result[i] = {**result[i], "cache_control": {"type": "ephemeral"}}
                         cache_markers_added += 1
                         break
 
         logger.debug(
             "AnthropicCachingAdapter: added %d cache_control markers (enabled=%s)",
-            cache_markers_added, self._enabled,
+            cache_markers_added,
+            self._enabled,
         )
         return result
 

@@ -1,10 +1,6 @@
 """Tests for H3 (denied basenames) and H4 (create extension restrictions)."""
 
-import pytest
-from weebot.infrastructure.security.security_validators import (
-    PathValidator,
-    ValidationResult,
-)
+from weebot.infrastructure.security.security_validators import PathValidator, ValidationResult
 
 
 class TestDeniedBasenames:

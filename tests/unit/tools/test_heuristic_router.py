@@ -1,4 +1,5 @@
 """Unit tests for HeuristicRouter task analysis."""
+
 import pytest
 from weebot.tools.heuristic_router import HeuristicRouter
 

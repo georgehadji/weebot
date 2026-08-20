@@ -3,10 +3,10 @@
 Extracted from PlanActFlow to isolate the model-selection concern into its own
 service with a single responsibility.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.event_bus_port import EventBusPort
@@ -32,21 +32,14 @@ class ContextSwitcher:
             planner = switcher.update_agents(new_model, ...)
     """
 
-    def __init__(
-        self,
-        llm: LLMPort,
-        event_bus: Optional[EventBusPort] = None,
-    ):
+    def __init__(self, llm: LLMPort, event_bus: EventBusPort | None = None):
         self._llm = llm
         self._event_bus = event_bus
         self._tokenizer = ContextTokenizer()
 
     def maybe_switch_model_for_context(
-        self,
-        session: Session,
-        current_model: Optional[str],
-        context_aware_enabled: bool = True,
-    ) -> Optional[str]:
+        self, session: Session, current_model: str | None, context_aware_enabled: bool = True
+    ) -> str | None:
         """Dynamically select model based on context size if enabled.
 
         Uses sparse-attention models for long contexts (50K+ tokens)
@@ -69,7 +62,9 @@ class ContextSwitcher:
         if config.id != current_model:
             logger.info(
                 "Context-aware model selection: %s -> %s for ~%d tokens",
-                current_model, config.id, estimated_tokens,
+                current_model,
+                config.id,
+                estimated_tokens,
             )
             return config.id
 
@@ -78,8 +73,8 @@ class ContextSwitcher:
     def update_agents_with_model(
         self,
         model: str,
-        skill_prompt: Optional[str] = None,
-        facts: Optional[list[str]] = None,
+        skill_prompt: str | None = None,
+        facts: list[str] | None = None,
         episodic_memory=None,
     ) -> PlannerAgent:
         """Rebuild the PlannerAgent with a new model.

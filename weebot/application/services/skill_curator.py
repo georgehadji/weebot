@@ -13,12 +13,12 @@ Strict invariants:
   - LLM recommendation is ARCHIVE, PIN, or KEEP (one word + one-sentence reason)
   - Uses cheap/budget model to keep curation cost negligible
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 from weebot.config.constants import MAX_TOKENS_TINY, TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
@@ -56,15 +56,13 @@ class SkillCurator:
     """
 
     def __init__(
-        self,
-        registry: SkillRegistry,
-        llm: LLMPort,
-        cheap_model: Optional[str] = None,
+        self, registry: SkillRegistry, llm: LLMPort, cheap_model: str | None = None
     ) -> None:
         self._registry = registry
         self._llm = llm
         if cheap_model is None:
             from weebot.config.model_refs import MODEL_BUDGET
+
             cheap_model = MODEL_BUDGET
         self._cheap_model = cheap_model
 
@@ -76,7 +74,7 @@ class SkillCurator:
         """
         self._registry.load_all()
         skills = self._registry.list_skills()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         results: dict[str, str] = {}
 
         for skill in skills:
@@ -105,14 +103,14 @@ class SkillCurator:
         if skill.evolution_log:
             last_ts = skill.evolution_log[-1].timestamp
             if last_ts.tzinfo is None:
-                last_ts = last_ts.replace(tzinfo=timezone.utc)
+                last_ts = last_ts.replace(tzinfo=UTC)
             age_days = (now - last_ts).days
         elif skill.versions:
             last_v = skill.versions[-1]
             if last_v.accepted_at:
                 ts = last_v.accepted_at
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+                    ts = ts.replace(tzinfo=UTC)
                 age_days = (now - ts).days
             else:
                 age_days = 999  # No timestamp → treat as very old
@@ -122,7 +120,7 @@ class SkillCurator:
             if skill.source_path:
                 try:
                     mtime = Path(skill.source_path).stat().st_mtime
-                    age_days = (now - datetime.fromtimestamp(mtime, tz=timezone.utc)).days
+                    age_days = (now - datetime.fromtimestamp(mtime, tz=UTC)).days
                 except OSError:
                     age_days = 999
             else:
@@ -134,9 +132,7 @@ class SkillCurator:
             return "stale"
         return "archive-candidate"
 
-    async def _review_and_log(
-        self, skill: Skill, classification: str, now: datetime
-    ) -> None:
+    async def _review_and_log(self, skill: Skill, classification: str, now: datetime) -> None:
         """Call LLM to review *skill* and append the result to its evolution_log."""
         prompt = (
             f"Skill name: {skill.name}\n"
@@ -177,9 +173,7 @@ class SkillCurator:
                 entry.epoch,
             )
         except Exception as exc:
-            logger.warning(
-                "Failed to update evolution_log for skill %r: %s", skill.name, exc
-            )
+            logger.warning("Failed to update evolution_log for skill %r: %s", skill.name, exc)
 
     # ── Overlap detection for consolidation ────────────────────────
 
@@ -212,34 +206,105 @@ class SkillCurator:
             for j in range(i + 1, len(names)):
                 overlap = _keyword_overlap(keywords_map[names[i]], keywords_map[names[j]])
                 if overlap >= 0.5:
-                    recommendations.append({
-                        "skill_a": names[i],
-                        "skill_b": names[j],
-                        "overlap": round(overlap, 2),
-                        "recommendation": "Consider merging these skills",
-                    })
+                    recommendations.append(
+                        {
+                            "skill_a": names[i],
+                            "skill_b": names[j],
+                            "overlap": round(overlap, 2),
+                            "recommendation": "Consider merging these skills",
+                        }
+                    )
 
         return recommendations
 
 
 # ── Helper functions for overlap detection ──────────────────────────
 
-_STOPWORDS: frozenset = frozenset({
-    "the", "a", "an", "in", "on", "at", "to", "for", "of", "with",
-    "and", "or", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would",
-    "can", "could", "shall", "should", "may", "might", "must",
-    "this", "that", "these", "those", "it", "its", "you", "your",
-    "i", "we", "they", "he", "she", "not", "no", "nor", "but",
-    "if", "then", "else", "when", "where", "why", "how", "all",
-    "each", "every", "both", "few", "more", "most", "some", "any",
-    "use", "using", "used", "set", "get", "make", "need", "take",
-})
+_STOPWORDS: frozenset = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "and",
+        "or",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "can",
+        "could",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "must",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "you",
+        "your",
+        "i",
+        "we",
+        "they",
+        "he",
+        "she",
+        "not",
+        "no",
+        "nor",
+        "but",
+        "if",
+        "then",
+        "else",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "some",
+        "any",
+        "use",
+        "using",
+        "used",
+        "set",
+        "get",
+        "make",
+        "need",
+        "take",
+    }
+)
 
 
 def _extract_keywords(text: str, max_keywords: int = 10) -> set[str]:
     """Extract significant keywords from *text* for overlap detection."""
     import re
+
     tokens = re.findall(r"[a-zA-Z]\w{3,}", text.lower())
     filtered = [t for t in tokens if t not in _STOPWORDS and not t.isdigit()]
     return set(filtered[:max_keywords])

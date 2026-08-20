@@ -1,8 +1,9 @@
 """Iteration context — mutable state snapshot for a single PlanActFlow iteration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.plan import Plan
 from weebot.domain.models.session import Session

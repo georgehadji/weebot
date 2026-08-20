@@ -1,8 +1,8 @@
 """MemoryPort — abstract storage for persistent cross-session memory."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
 
 
 class MemoryPort(ABC):
@@ -12,12 +12,12 @@ class MemoryPort(ABC):
     """
 
     @abstractmethod
-    async def read_entries(self, file: str) -> List[str]:
+    async def read_entries(self, file: str) -> list[str]:
         """Return all entries in *file*, or empty list if file doesn't exist."""
         ...
 
     @abstractmethod
-    async def write_entries(self, file: str, entries: List[str]) -> None:
+    async def write_entries(self, file: str, entries: list[str]) -> None:
         """Overwrite *file* with *entries*, joining with the § delimiter."""
         ...
 

@@ -10,25 +10,17 @@ Covers both sides of the gate:
 These exercise security-relevant code: inbound email is untrusted input and must
 not be acted on without explicit user approval.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import pytest
 
-from weebot.application.flows.states.executing import (
-    ExecutingState,
-    _step_fetched_inbound_mail,
-)
-from weebot.domain.models.event import (
-    MessageEvent,
-    ToolEvent,
-    ToolStatus,
-    WaitForUserEvent,
-)
+from weebot.application.flows.states.executing import ExecutingState, _step_fetched_inbound_mail
+from weebot.domain.models.event import MessageEvent, ToolEvent, ToolStatus, WaitForUserEvent
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session, SessionStatus
-
 
 # ---------------------------------------------------------------------------
 # WRITE side — _step_fetched_inbound_mail detection predicate
@@ -66,9 +58,7 @@ def test_help_action_is_not_gated():
 
 def test_calling_status_is_not_yet_complete():
     calling = ToolEvent(
-        tool_name="atomic_mail",
-        status=ToolStatus.CALLING,
-        function_args={"action": "jmap_request"},
+        tool_name="atomic_mail", status=ToolStatus.CALLING, function_args={"action": "jmap_request"}
     )
     assert _step_fetched_inbound_mail([calling]) is False
 

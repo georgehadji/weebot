@@ -7,16 +7,16 @@ dissent, and blind spots, producing a balanced DebateResult.
 
 Reuses Phase 1 swarm infrastructure (dispatch + synthesize pattern).
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Any
 
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
 from weebot.tools.base import BaseTool, ToolResult
-from weebot.domain.models.debate import DebateResult, Viewpoint
+from weebot.domain.models.debate import Viewpoint
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,7 @@ class DebateTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "question": {
-                "type": "string",
-                "description": "The question or proposal to debate.",
-            },
+            "question": {"type": "string", "description": "The question or proposal to debate."}
         },
         "required": ["question"],
     }
@@ -92,12 +89,7 @@ class DebateTool(BaseTool):
     _llm: Any = None
     _flow_factory: Any = None
 
-    def __init__(
-        self,
-        llm: Any = None,
-        flow_factory: Any = None,
-        **data: Any,
-    ) -> None:
+    def __init__(self, llm: Any = None, flow_factory: Any = None, **data: Any) -> None:
         super().__init__(**data)
         object.__setattr__(self, "_llm", llm)
         object.__setattr__(self, "_flow_factory", flow_factory)
@@ -111,13 +103,15 @@ class DebateTool(BaseTool):
         # 1. Dispatch three perspective agents
         tasks = []
         for p in _PERSPECTIVES:
-            tasks.append({
-                "task_id": f"debate-{p['role']}",
-                "description": (
-                    f"{p['framing']}\n\nResearch and analyze this question:\n\n{question}\n\n"
-                    f"Produce findings from your {p['role']} perspective. Be thorough."
-                ),
-            })
+            tasks.append(
+                {
+                    "task_id": f"debate-{p['role']}",
+                    "description": (
+                        f"{p['framing']}\n\nResearch and analyze this question:\n\n{question}\n\n"
+                        f"Produce findings from your {p['role']} perspective. Be thorough."
+                    ),
+                }
+            )
 
         from weebot.tools.dispatch_agents import DispatchAgentsTool
 
@@ -131,20 +125,13 @@ class DebateTool(BaseTool):
             role = r.get("task_id", "").replace("debate-", "")
             summary = r.get("summary", "")
             viewpoints.append(
-                Viewpoint(
-                    role=role,
-                    research_findings=summary,
-                    key_claims=[],
-                    confidence=0.7,
-                )
+                Viewpoint(role=role, research_findings=summary, key_claims=[], confidence=0.7)
             )
 
         # Build transcript for reconciler
         transcript_parts = []
         for v in viewpoints:
-            transcript_parts.append(
-                f"## {v.role.upper()}\n{v.research_findings[:2000]}"
-            )
+            transcript_parts.append(f"## {v.role.upper()}\n{v.research_findings[:2000]}")
         transcript = "\n\n".join(transcript_parts)
 
         try:
@@ -172,9 +159,7 @@ class DebateTool(BaseTool):
 
         synthesis = data.get(
             "synthesis",
-            "\n\n".join(
-                f"### {v.role.upper()}\n{v.research_findings}" for v in viewpoints
-            ),
+            "\n\n".join(f"### {v.role.upper()}\n{v.research_findings}" for v in viewpoints),
         )
 
         header = (

@@ -4,6 +4,7 @@ Plugs into the EventPipeline built in WP-4.  Each event is recorded
 with its type, model dump, and flow context before reaching the
 persistence layer.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -23,7 +24,7 @@ class AuditMiddleware(EventMiddleware):
     before it reaches persistent storage.
     """
 
-    def __init__(self, audit_log: "AuditLog | None" = None) -> None:
+    def __init__(self, audit_log: AuditLog | None = None) -> None:
         self._audit_log = audit_log or AuditLog()
 
     async def process(self, event: AgentEvent, context: dict[str, Any]) -> AgentEvent:

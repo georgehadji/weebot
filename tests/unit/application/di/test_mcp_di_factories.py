@@ -1,4 +1,5 @@
 """Unit tests for MCP-related DI factory wiring (H1 scoped aggregation)."""
+
 from __future__ import annotations
 
 import pytest
@@ -7,9 +8,7 @@ from weebot.application.di import Container
 from weebot.application.di._factories import FactoriesMixin
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.llm_port import LLMPort
-from weebot.application.services.mcp_tool_retrieval_service import (
-    McpToolRetrievalService,
-)
+from weebot.application.services.mcp_tool_retrieval_service import McpToolRetrievalService
 from weebot.config.constants import MCP_DEFAULT_SCOPE_K
 from weebot.domain.models.session import Session
 from weebot.tools.tool_registry import RoleBasedToolRegistry
@@ -52,15 +51,9 @@ def container(tmp_path, monkeypatch):
     # Avoid real LLM adapter construction and real MCP client / skill indexing.
     monkeypatch.setattr(c, "_create_llm", lambda _model=None: _DummyLLMPort())
     monkeypatch.setattr(
-        FactoriesMixin,
-        "_create_mcp_tool_retrieval_service",
-        lambda _self, _registry: None,
+        FactoriesMixin, "_create_mcp_tool_retrieval_service", lambda _self, _registry: None
     )
-    monkeypatch.setattr(
-        FactoriesMixin,
-        "_create_mcp_client",
-        lambda _self: None,
-    )
+    monkeypatch.setattr(FactoriesMixin, "_create_mcp_client", lambda _self: None)
 
     db_path = str(tmp_path / "sessions.db")
     c.configure_defaults(db_path=db_path, default_model="dummy")
@@ -85,18 +78,14 @@ class TestToolRegistrySharing:
         assert bridge._registry is registry
 
     def test_plan_act_flow_factory_receives_shared_registry_and_bridge(
-        self, container, monkeypatch,
+        self, container, monkeypatch
     ):
         # Build a lightweight tool collection so PlanActFlow init does not
         # instantiate the full admin tool catalog.
         registry = container.get("tool_registry")
         registry.role_mappings = {"admin": []}
         tools = ToolCollection()
-        monkeypatch.setattr(
-            registry,
-            "create_tool_collection",
-            lambda *args, **kwargs: tools,
-        )
+        monkeypatch.setattr(registry, "create_tool_collection", lambda *args, **kwargs: tools)
 
         bridge = _DummyBridge()
         container.register_instance("mcp_bridge", bridge)
@@ -115,10 +104,7 @@ class TestMcpToolRetrievalServiceFactory:
         class _SettingsOff:
             mcp_scoped_aggregation = False
 
-        monkeypatch.setattr(
-            "weebot.config.settings.WeebotSettings",
-            _SettingsOff,
-        )
+        monkeypatch.setattr("weebot.config.settings.WeebotSettings", _SettingsOff)
         c = Container()
         result = c._create_mcp_tool_retrieval_service(None)
         assert result is None
@@ -127,10 +113,7 @@ class TestMcpToolRetrievalServiceFactory:
         class _SettingsOn:
             mcp_scoped_aggregation = True
 
-        monkeypatch.setattr(
-            "weebot.config.settings.WeebotSettings",
-            _SettingsOn,
-        )
+        monkeypatch.setattr("weebot.config.settings.WeebotSettings", _SettingsOn)
         c = Container()
         registry = RoleBasedToolRegistry()
         service = c._create_mcp_tool_retrieval_service(registry)

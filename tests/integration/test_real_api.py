@@ -12,6 +12,7 @@ Usage:
     pytest tests/integration/test_real_api.py -v -m real_api
     pytest tests/integration/ -v -m "not real_api"  # CI-safe
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,6 @@ import pytest
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Skip marker
 # ═════════════════════════════════════════════════════════════════════════════
@@ -33,8 +33,7 @@ if not os.getenv("OPENROUTER_API_KEY"):
     _real_api_reason = "OPENROUTER_API_KEY not set"
 
 needs_router = pytest.mark.skipif(
-    _real_api_reason is not None,
-    reason=_real_api_reason or "OPENROUTER_API_KEY not set",
+    _real_api_reason is not None, reason=_real_api_reason or "OPENROUTER_API_KEY not set"
 )
 
 
@@ -86,7 +85,7 @@ def adapter(factory: AdapterFactory) -> LLMPort:
 @pytest.mark.asyncio
 async def test_simple_chat_returns_content(adapter: LLMPort):
     response = await adapter.chat(
-        messages=[{"role": "user", "content": "Say exactly: hello world"}],
+        messages=[{"role": "user", "content": "Say exactly: hello world"}]
     )
     assert isinstance(response, LLMResponse)
     assert response.content
@@ -146,9 +145,7 @@ async def test_json_response_mode(adapter: LLMPort):
 @needs_router
 @pytest.mark.asyncio
 async def test_usage_tokens_are_populated(adapter: LLMPort):
-    response = await adapter.chat(
-        messages=[{"role": "user", "content": "Count to 3: 1, 2, 3."}],
-    )
+    response = await adapter.chat(messages=[{"role": "user", "content": "Count to 3: 1, 2, 3."}])
     assert response.usage is not None
     assert response.usage.get("prompt_tokens", 0) > 0
     assert response.usage.get("completion_tokens", 0) > 0
@@ -171,7 +168,7 @@ async def test_adapter_caching():
 async def test_long_prompt_handled(adapter: LLMPort):
     long_text = "The quick brown fox jumps over the lazy dog. " * 50
     response = await adapter.chat(
-        messages=[{"role": "user", "content": f"Summarize in one sentence: {long_text}"}],
+        messages=[{"role": "user", "content": f"Summarize in one sentence: {long_text}"}]
     )
     assert response.content
     assert len(response.content) < len(long_text)

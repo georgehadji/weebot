@@ -1,8 +1,9 @@
 """LLM port — abstract interface for language model providers."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class LLMPort(ABC):
@@ -11,24 +12,20 @@ class LLMPort(ABC):
     @abstractmethod
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> "LLMResponse":
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
         """Send a chat completion request and return the response."""
         ...
 
     async def build_multimodal_message(
-        self,
-        role: str,
-        text: str,
-        image_base64: str,
-        media_type: str = "image/png",
-    ) -> Dict[str, Any]:
+        self, role: str, text: str, image_base64: str, media_type: str = "image/png"
+    ) -> dict[str, Any]:
         """Build a provider-neutral multimodal message dict carrying one image.
 
         Implementations may override for provider-specific shaping; the default
@@ -44,7 +41,7 @@ class LLMPort(ABC):
         Returns:
             A provider-neutral multimodal message dict.
         """
-        content: List[Dict[str, Any]] = []
+        content: list[dict[str, Any]] = []
         if text:
             content.append({"type": "text", "text": text})
         content.append({"type": "image", "data": image_base64, "media_type": media_type})

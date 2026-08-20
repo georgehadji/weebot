@@ -1,15 +1,16 @@
 """Phase 5 tests: ModelAwareHarnessResolver, HarnessPromptAssembler.assemble_from_config,
 dynamic per-step resolution, ExecutorAgent.set_harness_block."""
+
 from __future__ import annotations
 
 import yaml
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-
 # ── 1. ModelAwareHarnessResolver ─────────────────────────────────────────
+
 
 class TestModelAwareHarnessResolver:
     def test_resolve_no_overlay_returns_base(self, tmp_path):
@@ -19,10 +20,7 @@ class TestModelAwareHarnessResolver:
         from weebot.config.harness.schema import HarnessConfig
 
         base = HarnessConfig.load(Path("weebot/config/harness/v0.2.0.yaml"))
-        resolver = ModelAwareHarnessResolver(
-            base_config=base,
-            overlays_dir=str(tmp_path),
-        )
+        resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))
         resolved = resolver.resolve("gpt-4o")
         assert resolved.instructions.bootstrap == base.instructions.bootstrap
 
@@ -34,13 +32,17 @@ class TestModelAwareHarnessResolver:
 
         # Write an overlay
         overlay = tmp_path / "gpt-4o.yaml"
-        overlay.write_text(yaml.dump({
-            "model_pattern": "gpt-4o*",
-            "instructions": {
-                "bootstrap": "Analyze with tree first.",
-                "execution": "Write tested code.",
-            },
-        }))
+        overlay.write_text(
+            yaml.dump(
+                {
+                    "model_pattern": "gpt-4o*",
+                    "instructions": {
+                        "bootstrap": "Analyze with tree first.",
+                        "execution": "Write tested code.",
+                    },
+                }
+            )
+        )
 
         base = HarnessConfig.load(Path("weebot/config/harness/v0.2.0.yaml"))
         resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))
@@ -59,10 +61,9 @@ class TestModelAwareHarnessResolver:
         from weebot.config.harness.schema import HarnessConfig
 
         overlay = tmp_path / "gpt-4o.yaml"
-        overlay.write_text(yaml.dump({
-            "model_pattern": "gpt-4o*",
-            "instructions": {"bootstrap": "GPT only."},
-        }))
+        overlay.write_text(
+            yaml.dump({"model_pattern": "gpt-4o*", "instructions": {"bootstrap": "GPT only."}})
+        )
 
         base = HarnessConfig.load(Path("weebot/config/harness/v0.2.0.yaml"))
         resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))
@@ -78,15 +79,15 @@ class TestModelAwareHarnessResolver:
         base = HarnessConfig.default()
 
         # General GPT overlay
-        (tmp_path / "gpt.yaml").write_text(yaml.dump({
-            "model_pattern": "gpt-4o*",
-            "instructions": {"bootstrap": "General GPT."},
-        }))
+        (tmp_path / "gpt.yaml").write_text(
+            yaml.dump({"model_pattern": "gpt-4o*", "instructions": {"bootstrap": "General GPT."}})
+        )
         # More specific GPT-4o-mini overlay
-        (tmp_path / "gpt-mini.yaml").write_text(yaml.dump({
-            "model_pattern": "gpt-4o-mini*",
-            "instructions": {"bootstrap": "Mini-specific."},
-        }))
+        (tmp_path / "gpt-mini.yaml").write_text(
+            yaml.dump(
+                {"model_pattern": "gpt-4o-mini*", "instructions": {"bootstrap": "Mini-specific."}}
+            )
+        )
 
         resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))
         resolved = resolver.resolve("gpt-4o-mini-2024-07")
@@ -117,9 +118,7 @@ class TestModelAwareHarnessResolver:
         new_base = HarnessConfig(
             version="0.3.0",
             description="Evolved",
-            instructions=base.instructions.model_copy(
-                update={"bootstrap": "New bootstrap"},
-            ),
+            instructions=base.instructions.model_copy(update={"bootstrap": "New bootstrap"}),
         )
         resolver.set_base(new_base)
         resolved = resolver.resolve("any-model")
@@ -128,17 +127,15 @@ class TestModelAwareHarnessResolver:
 
 # ── 2. HarnessPromptAssembler.assemble_from_config ───────────────────────
 
+
 class TestAssembleFromConfig:
     def test_from_none(self):
-        from weebot.application.services.harness_prompt_assembler import (
-            HarnessPromptAssembler,
-        )
+        from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
+
         assert HarnessPromptAssembler.assemble_from_config(None) == ""
 
     def test_from_config(self):
-        from weebot.application.services.harness_prompt_assembler import (
-            HarnessPromptAssembler,
-        )
+        from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
         from weebot.config.harness.schema import HarnessConfig
 
         cfg = HarnessConfig.load(Path("weebot/config/harness/v0.2.0.yaml"))
@@ -147,9 +144,7 @@ class TestAssembleFromConfig:
         assert "**Execute:**" in block
 
     def test_from_empty_config(self):
-        from weebot.application.services.harness_prompt_assembler import (
-            HarnessPromptAssembler,
-        )
+        from weebot.application.services.harness_prompt_assembler import HarnessPromptAssembler
         from weebot.config.harness.schema import HarnessConfig
         from weebot.domain.models.harness_instructions import InstructionConfig
 
@@ -162,9 +157,9 @@ class TestAssembleFromConfig:
 
 # ── 3. ExecutorAgent.set_harness_block ───────────────────────────────────
 
+
 class TestExecutorSetHarnessBlock:
     def test_set_and_clear(self):
-        from unittest.mock import MagicMock
         from weebot.application.agents.executor._base import ExecutorAgent
 
         llm = MagicMock()
@@ -182,7 +177,6 @@ class TestExecutorSetHarnessBlock:
         assert executor._harness_instruction_block is None
 
     def test_set_empty_string(self):
-        from unittest.mock import MagicMock
         from weebot.application.agents.executor._base import ExecutorAgent
 
         executor = ExecutorAgent(llm=MagicMock(), tools=MagicMock())
@@ -192,9 +186,9 @@ class TestExecutorSetHarnessBlock:
 
 # ── 4. PlanActFlow per-step resolution ────────────────────────────────────
 
+
 class TestPlanActFlowHarnessResolution:
     def test_resolver_stored_in_init(self):
-        from weebot.config.harness.schema import HarnessConfig
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
 
         # Verify the PlanActFlowConfig accepts harness_config
@@ -205,13 +199,13 @@ class TestPlanActFlowHarnessResolution:
         from weebot.application.services.model_aware_harness_resolver import (
             ModelAwareHarnessResolver,
         )
-        from weebot.config.harness.schema import HarnessConfig
 
         resolver = ModelAwareHarnessResolver()
         assert resolver._base is not None
 
 
 # ── 5. Overlay file format ──────────────────────────────────────────────
+
 
 class TestOverlayLoading:
     @pytest.mark.asyncio
@@ -223,14 +217,18 @@ class TestOverlayLoading:
 
         # Write a realistic overlay
         overlay = tmp_path / "qwen3.yaml"
-        overlay.write_text(yaml.dump({
-            "model_pattern": "qwen/qwen3*",
-            "instructions": {
-                "bootstrap": "Check dependencies before starting.",
-                "execution": "Break tasks into small verifiable steps.",
-                "failure_recovery": "After 2 failures, switch to a different approach.",
-            },
-        }))
+        overlay.write_text(
+            yaml.dump(
+                {
+                    "model_pattern": "qwen/qwen3*",
+                    "instructions": {
+                        "bootstrap": "Check dependencies before starting.",
+                        "execution": "Break tasks into small verifiable steps.",
+                        "failure_recovery": "After 2 failures, switch to a different approach.",
+                    },
+                }
+            )
+        )
 
         base = HarnessConfig.load(Path("weebot/config/harness/v0.2.0.yaml"))
         resolver = ModelAwareHarnessResolver(base_config=base, overlays_dir=str(tmp_path))

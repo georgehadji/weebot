@@ -9,6 +9,7 @@ Middleware execute in declaration order, threading a state dict through.
 The chain is stateless — each call creates a fresh state dict, so
 middleware instances can be reused across steps safely.
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,10 +66,7 @@ class MiddlewareChain:
             (modified_messages, modified_tools).
         """
         request = MiddlewareRequest(
-            messages=messages,
-            tools=tools,
-            step_id=step_id,
-            step_description=step_description,
+            messages=messages, tools=tools, step_id=step_id, step_description=step_description
         )
         state: dict[str, Any] = {}
         for mw in self._middlewares:
@@ -121,11 +119,7 @@ class MiddlewareChain:
             Modified ToolCallResult.
         """
         result = ToolCallResult(
-            tool_name=tool_name,
-            arguments=arguments,
-            output=output,
-            error=error,
-            is_error=is_error,
+            tool_name=tool_name, arguments=arguments, output=output, error=error, is_error=is_error
         )
         state: dict[str, Any] = {}
         for mw in self._middlewares:

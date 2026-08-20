@@ -3,6 +3,7 @@
 Implemented by different compression strategies (e.g., lossy summarize,
 drop oldest) and wrapped by ContextManager which integrates into flows.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol
@@ -31,9 +32,7 @@ class IContextEnginePort(Protocol):
         ...
 
     async def compress(
-        self,
-        messages: list[dict[str, Any]],
-        budget: ContextBudget | None = None,
+        self, messages: list[dict[str, Any]], budget: ContextBudget | None = None
     ) -> CompressionResult:
         """Compress messages according to the budget.
 

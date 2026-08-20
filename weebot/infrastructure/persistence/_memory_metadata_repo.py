@@ -1,9 +1,9 @@
 """Memory metadata repository — salience scoring and eviction."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
 
@@ -17,11 +17,7 @@ class MemoryMetadataRepo:
         self._pool = pool
 
     async def upsert(
-        self,
-        entry_hash: str,
-        entry_text: str,
-        source: str = "agent",
-        salience: Optional[float] = None,
+        self, entry_hash: str, entry_text: str, source: str = "agent", salience: float | None = None
     ) -> None:
         """Insert or update a memory metadata entry with salience scoring.
 
@@ -31,7 +27,7 @@ class MemoryMetadataRepo:
         existing score on conflict, never lower it (a pinned high-value entry,
         e.g. the consolidated user profile, must not decay from routine reads).
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         insert_salience = 0.5 if salience is None else salience
         async with self._pool.acquire_write() as conn:
             await conn.execute(
@@ -60,7 +56,7 @@ class MemoryMetadataRepo:
                 },
             )
 
-    async def get_by_hash(self, entry_hash: str) -> Optional[dict]:
+    async def get_by_hash(self, entry_hash: str) -> dict | None:
         """Return a single memory metadata entry by hash, or None if absent."""
         rows = await self._pool.execute_read(
             """
@@ -73,9 +69,7 @@ class MemoryMetadataRepo:
         )
         return dict(rows[0]) if rows else None
 
-    async def get_low_salience(
-        self, threshold: float = 0.3, limit: int = 50
-    ) -> list[dict]:
+    async def get_low_salience(self, threshold: float = 0.3, limit: int = 50) -> list[dict]:
         """Get memory entries below the salience threshold (eviction candidates)."""
         rows = await self._pool.execute_read(
             """
@@ -97,15 +91,13 @@ class MemoryMetadataRepo:
         placeholders = ",".join("?" for _ in entry_hashes)
         async with self._pool.acquire_write() as conn:
             cursor = await conn.execute(
-                f"DELETE FROM memory_metadata WHERE entry_hash IN ({placeholders})",
-                entry_hashes,
+                f"DELETE FROM memory_metadata WHERE entry_hash IN ({placeholders})", entry_hashes
             )
             return cursor.rowcount if hasattr(cursor, "rowcount") else 0
 
     async def get_all(self, limit: int = 200) -> list[dict]:
         """Return all memory metadata entries (for bulk operations)."""
         rows = await self._pool.execute_read(
-            "SELECT * FROM memory_metadata ORDER BY salience DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM memory_metadata ORDER BY salience DESC LIMIT ?", (limit,)
         )
         return [dict(r) for r in rows]

@@ -11,20 +11,17 @@ between iterations — an unchanged signature set forces the loop to stop rather
 than retry the same fix forever. LLM authoring and fixers are injected ports, so
 this flow is fully testable without live model calls.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from pydantic import BaseModel, Field
 
 from weebot.application.document.book_assembler import write_project
-from weebot.application.document.ports import (
-    CompilerPort,
-    ContentProvider,
-    PreflightPort,
-)
+from weebot.application.document.ports import CompilerPort, ContentProvider, PreflightPort
 from weebot.domain.models.book import Book, CompileError, CompileResult
 
 logger = logging.getLogger(__name__)
@@ -41,8 +38,8 @@ def _null_fixer(_errors: list[CompileError], _project: Path) -> bool:
 
 class GenerationResult(BaseModel):
     ok: bool = Field(default=False)
-    pdf_path: Optional[str] = Field(default=None)
-    page_count: Optional[int] = Field(default=None)
+    pdf_path: str | None = Field(default=None)
+    page_count: int | None = Field(default=None)
     iterations: int = Field(default=0)
     preflight_ok: bool = Field(default=False)
     preflight_issues: list[str] = Field(default_factory=list)
@@ -91,18 +88,14 @@ class BookGenerationFlow:
         iterations = 0
 
         for iterations in range(1, self._max_iterations + 1):
-            result = self._compiler.compile(
-                project, "main.tex", shell_escape=self._shell_escape
-            )
+            result = self._compiler.compile(project, "main.tex", shell_escape=self._shell_escape)
             blocking = [e for e in result.errors if e.fatal or _is_blocking(e)]
             if result.ok and not blocking:
                 break
 
             sig = self._signatures(result.errors)
             if sig == last_sig:
-                logger.warning(
-                    "book-gen: no progress (identical error signatures) — stopping loop"
-                )
+                logger.warning("book-gen: no progress (identical error signatures) — stopping loop")
                 break
             last_sig = sig
 

@@ -1,8 +1,10 @@
 """Updating state for Plan-Act flow."""
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -12,13 +14,13 @@ from weebot.domain.models.plan import Plan, PlanStatus, StepStatus
 
 logger = logging.getLogger(__name__)
 
+
 class UpdatingState(FlowState):
     """Handles the updating of the execution plan after a step completes."""
+
     status = AgentStatus.UPDATING
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.executing import ExecutingState
 
         if context._plan is None:
@@ -27,7 +29,11 @@ class UpdatingState(FlowState):
 
         # Find the most recently completed or failed step
         last_step = next(
-            (s for s in reversed(context._plan.steps) if s.status in (StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.RUNNING)),
+            (
+                s
+                for s in reversed(context._plan.steps)
+                if s.status in (StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.RUNNING)
+            ),
             None,
         )
 
@@ -50,28 +56,26 @@ class UpdatingState(FlowState):
         _tot_alternative = ""
         if last_step.status == StepStatus.FAILED:
             try:
-                from weebot.application.services.tree_of_thoughts_scorer import (
-                    TreeOfThoughtsScorer,
-                )
+                from weebot.application.services.tree_of_thoughts_scorer import TreeOfThoughtsScorer
+
                 tot = TreeOfThoughtsScorer(llm=context._llm)
                 _tot_alternative = await tot.best_candidate(
                     step_description=last_step.description,
                     failure_context=str(last_step.result or ""),
                 )
                 if _tot_alternative and len(_tot_alternative) > 20:
-                    logger.info(
-                        "ToT generated alternative approach for step %s",
-                        last_step.id,
-                    )
+                    logger.info("ToT generated alternative approach for step %s", last_step.id)
             except Exception as exc:
                 logger.debug("ToT generation skipped: %s", exc)
 
         # --- CQRS: execute plan update through mediator ---
         if context._mediator:
             import time as _time
+
             _update_t0 = _time.monotonic()
             from weebot.application.cqrs.commands import UpdatePlanCommand
             from weebot.config.model_refs import MODEL_BUDGET
+
             # Inject ToT alternative into failure context if available
             _fc = str(last_step.result or "")
             if _tot_alternative:
@@ -79,17 +83,18 @@ class UpdatingState(FlowState):
 
             _completed_steps = context._plan.get_completed_steps()
             _completed_summary = (
-                "Already completed (DO NOT repeat): "
-                + "; ".join(f"[{s.id}] {s.description[:60]}" for s in _completed_steps)
-            ) if _completed_steps else ""
+                (
+                    "Already completed (DO NOT repeat): "
+                    + "; ".join(f"[{s.id}] {s.description[:60]}" for s in _completed_steps)
+                )
+                if _completed_steps
+                else ""
+            )
 
             cmd_result = await context._mediator.send(
                 UpdatePlanCommand(
                     session_id=context._session.id,
-                    updates={
-                        "last_step_id": last_step.id,
-                        "failure_context": _fc,
-                    },
+                    updates={"last_step_id": last_step.id, "failure_context": _fc},
                     reason=(
                         f"{_completed_summary}\n"
                         f"Step {last_step.id} {last_step.status.value}{failure_msg}. "
@@ -101,9 +106,7 @@ class UpdatingState(FlowState):
             )
             _update_elapsed = _time.monotonic() - _update_t0
             if not cmd_result.success:
-                yield ErrorEvent(
-                    error=f"Plan update rejected: {cmd_result.error}"
-                )
+                yield ErrorEvent(error=f"Plan update rejected: {cmd_result.error}")
                 context.set_state(ExecutingState())
                 return
 
@@ -111,6 +114,7 @@ class UpdatingState(FlowState):
             # Consume events from the mediator result.
             # Consume events via shared reconstructor.
             from weebot.application.cqrs.event_reconstructor import reconstruct_events
+
             for event in reconstruct_events(cmd_result.data.get("events", [])):
                 await context._emit(event)
                 yield event
@@ -119,13 +123,16 @@ class UpdatingState(FlowState):
                     update_success = True
                     # Hook: post_plan_updated
                     if getattr(context, "_hooks", None) is not None:
-                        await context._hooks.execute_hooks("post_plan_updated", {
-                            "session_id": context._session.id,
-                            "plan": context._plan,
-                            "step_count": len(context._plan.steps),
-                            "elapsed_ms": _update_elapsed * 1000,
-                            "reason": f"Step {last_step.id} {last_step.status.value}",
-                        })
+                        await context._hooks.execute_hooks(
+                            "post_plan_updated",
+                            {
+                                "session_id": context._session.id,
+                                "plan": context._plan,
+                                "step_count": len(context._plan.steps),
+                                "elapsed_ms": _update_elapsed * 1000,
+                                "reason": f"Step {last_step.id} {last_step.status.value}",
+                            },
+                        )
 
             # Also check for plan in result top-level
             if not update_success and cmd_result.data.get("plan"):
@@ -134,13 +141,16 @@ class UpdatingState(FlowState):
         else:
             # Fallback: direct agent call
             import warnings
+
             warnings.warn(
                 "UpdatingState: no mediator, using direct planner call. "
                 "Pipeline behaviors (logging, validation, telemetry) will NOT fire.",
-                DeprecationWarning, stacklevel=2,
+                DeprecationWarning,
+                stacklevel=2,
             )
             # ── HyperAgents Enhancement 3: inject avoidance prompt ──
             from weebot.domain.services.plan_novelty import PlanNoveltyTracker
+
             tracker = PlanNoveltyTracker()
             plans = context._plan_history.get_all()  # snapshot history
             avoidance = tracker.avoidance_prompt(plans) if plans else ""
@@ -150,7 +160,7 @@ class UpdatingState(FlowState):
                 fc = f"{fc}\n{avoidance}"
 
             async for event in context._planner.update_plan(
-                context._plan, last_step, failure_context=fc,
+                context._plan, last_step, failure_context=fc
             ):
                 await context._emit(event)
                 yield event
@@ -166,12 +176,15 @@ class UpdatingState(FlowState):
 
         # Mark the failing/running step as handled if we got an update
         if last_step and last_step.status in (StepStatus.FAILED, StepStatus.RUNNING):
-             context._plan = context._plan.update_step_status(last_step.id, StepStatus.COMPLETED, result="Handled by plan update")
+            context._plan = context._plan.update_step_status(
+                last_step.id, StepStatus.COMPLETED, result="Handled by plan update"
+            )
 
         # ── Phase 2: Post-revision critique (reuses CritiquingState logic) ──
         if context._plan_critic is not None and context._plan is not None:
             try:
                 from weebot.application.flows.states.critiquing import ConfidentThresholds
+
                 critique_context = {
                     "task": prompt,
                     "tools": (
@@ -180,9 +193,7 @@ class UpdatingState(FlowState):
                         else []
                     ),
                 }
-                critique = await context._plan_critic.critique(
-                    context._plan, critique_context,
-                )
+                critique = await context._plan_critic.critique(context._plan, critique_context)
                 if critique.overall_confidence < ConfidentThresholds.WARN_THRESHOLD:
                     context._plan_critique = critique
                     logger.info(

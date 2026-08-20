@@ -1,9 +1,9 @@
 """Tests for Enhancement 1 — ConstraintExtractor.check_step() (S3 fix)."""
+
 from __future__ import annotations
 
-import pytest
 
-from weebot.application.services.constraint_extractor import Constraint, ConstraintExtractor
+from weebot.application.services.constraint_extractor import ConstraintExtractor
 
 
 class TestConstraintExtractorCheckStep:

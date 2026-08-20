@@ -15,12 +15,13 @@ Usage:
     actors = registry.search("youtube transcript")
     tool   = registry.create_tool("supreme_coder/youtube-transcript-scraper", service)
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.infrastructure.adapters.apify.apify_service import ApifyService
@@ -32,14 +33,14 @@ logger = logging.getLogger(__name__)
 class ApifyActorRegistry:
     """In-memory catalog of Apify actors with search and tool-factory helpers."""
 
-    def __init__(self, apify_service: Optional["ApifyService"] = None) -> None:
+    def __init__(self, apify_service: ApifyService | None = None) -> None:
         self._service = apify_service
-        self._actors: List[Dict[str, Any]] = []
+        self._actors: list[dict[str, Any]] = []
 
     # ── construction ───────────────────────────────────────────────────────
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ApifyActorRegistry":
+    def from_file(cls, path: str | Path) -> ApifyActorRegistry:
         """Build registry from a local apify_actors.json file."""
         registry = cls()
         actors = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -65,8 +66,7 @@ class ApifyActorRegistry:
         if self._service is None:
             raise RuntimeError("ApifyActorRegistry requires an ApifyService for preload()")
         known_ids: set[str] = {
-            a.get("id") or f"{a.get('username','')}/{a.get('name','')}"
-            for a in self._actors
+            a.get("id") or f"{a.get('username','')}/{a.get('name','')}" for a in self._actors
         }
         resp = await self._service.execute("search_store", query=query, limit=limit)
         if not resp.success:
@@ -76,20 +76,22 @@ class ApifyActorRegistry:
         items = data.get("items", data) if isinstance(data, dict) else data
         if isinstance(items, list):
             new_items = [
-                a for a in items
+                a
+                for a in items
                 if (a.get("id") or f"{a.get('username','')}/{a.get('name','')}") not in known_ids
             ]
             self._actors.extend(new_items)
             logger.info(
                 "ApifyActorRegistry preloaded %d new actors (%d duplicates skipped)",
-                len(new_items), len(items) - len(new_items),
+                len(new_items),
+                len(items) - len(new_items),
             )
 
     # ── search ─────────────────────────────────────────────────────────────
 
     def search(
-        self, query: str, category: Optional[str] = None, limit: int = 20
-    ) -> List[Dict[str, Any]]:
+        self, query: str, category: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
         """Search cached actors by query string and optional category filter."""
         query_lower = query.lower()
         results = []
@@ -106,7 +108,7 @@ class ApifyActorRegistry:
                 break
         return results
 
-    def get(self, actor_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, actor_id: str) -> dict[str, Any] | None:
         """Return actor metadata by full ID (username/name)."""
         for actor in self._actors:
             aid = actor.get("id") or f"{actor.get('username','')}/{actor.get('name','')}"
@@ -117,11 +119,8 @@ class ApifyActorRegistry:
     # ── tool factory ───────────────────────────────────────────────────────
 
     def create_tool(
-        self,
-        actor_id: str,
-        service: "ApifyService",
-        run_input_schema: Optional[Dict[str, Any]] = None,
-    ) -> "ApifyActorTool":
+        self, actor_id: str, service: ApifyService, run_input_schema: dict[str, Any] | None = None
+    ) -> ApifyActorTool:
         """Instantiate an ApifyActorTool for the given actor ID."""
         from weebot.tools.apify_actor_tool import ApifyActorTool
 
@@ -131,10 +130,7 @@ class ApifyActorRegistry:
         schema = run_input_schema or {
             "type": "object",
             "properties": {
-                "run_input": {
-                    "type": "object",
-                    "description": "JSON input payload for the actor",
-                }
+                "run_input": {"type": "object", "description": "JSON input payload for the actor"}
             },
             "required": [],
         }

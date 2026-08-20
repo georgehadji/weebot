@@ -4,6 +4,7 @@ Verifies that CreatePlanHandler and UpdatePlanHandler append events
 to the session and persist via StateRepositoryPort, so the CQRS path
 does not silently diverge from PlanActFlow._emit().
 """
+
 from __future__ import annotations
 
 import json
@@ -17,10 +18,7 @@ from weebot.application.cqrs.handlers import CreatePlanHandler, UpdatePlanHandle
 from weebot.domain.models.event import PlanEvent, PlanStatus
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.session import Session
-from weebot.infrastructure.persistence.in_memory_state_repo import (
-    InMemoryStateRepository,
-)
-
+from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 
 # ── fixtures ────────────────────────────────────────────────────────
 
@@ -32,10 +30,7 @@ def state_repo():
 
 @pytest.fixture
 def sample_session():
-    return Session(
-        id="test-session-persist",
-        user_id="test-user",
-    )
+    return Session(id="test-session-persist", user_id="test-user")
 
 
 @dataclass
@@ -73,10 +68,7 @@ async def test_create_plan_handler_persists_events(state_repo, sample_session):
     mock_llm = _MockLLM()
     handler = CreatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
-    command = CreatePlanCommand(
-        session_id=sample_session.id,
-        prompt="Write a test plan",
-    )
+    command = CreatePlanCommand(session_id=sample_session.id, prompt="Write a test plan")
     result = await handler.handle(command)
 
     # Handler must return success
@@ -91,8 +83,7 @@ async def test_create_plan_handler_persists_events(state_repo, sample_session):
     persisted = await state_repo.load_session(sample_session.id)
     assert persisted is not None, "Session should exist after handler runs"
     assert len(persisted.events) > 0, (
-        f"Session should have events after CreatePlanHandler, "
-        f"got {len(persisted.events)}"
+        f"Session should have events after CreatePlanHandler, " f"got {len(persisted.events)}"
     )
 
     # At minimum a PlanEvent should be present
@@ -106,10 +97,7 @@ async def test_create_plan_handler_no_session(state_repo):
     mock_llm = _MockLLM()
     handler = CreatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
-    command = CreatePlanCommand(
-        session_id="nonexistent-session",
-        prompt="Write a plan",
-    )
+    command = CreatePlanCommand(session_id="nonexistent-session", prompt="Write a plan")
     result = await handler.handle(command)
 
     assert not result.success
@@ -147,8 +135,7 @@ async def test_update_plan_handler_persists_events(state_repo, sample_session):
     handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
     command = UpdatePlanCommand(
-        session_id=sample_session.id,
-        updates={"reason": "Step 1 completed, adding step 3"},
+        session_id=sample_session.id, updates={"reason": "Step 1 completed, adding step 3"}
     )
     result = await handler.handle(command)
 
@@ -176,8 +163,7 @@ async def test_update_plan_handler_no_plan(state_repo, sample_session):
     handler = UpdatePlanHandler(state_repo=state_repo, llm=mock_llm)
 
     command = UpdatePlanCommand(
-        session_id=sample_session.id,
-        updates={"reason": "No plan to update"},
+        session_id=sample_session.id, updates={"reason": "No plan to update"}
     )
     result = await handler.handle(command)
 
@@ -196,14 +182,10 @@ async def test_mediator_pipeline_persists_via_save_policy(state_repo, sample_ses
     mediator = Mediator()
     mediator.add_pipeline_behavior(SavePolicyBehavior(state_repo=state_repo))
     mediator.register_command_handler(
-        CreatePlanCommand,
-        CreatePlanHandler(state_repo=state_repo, llm=mock_llm),
+        CreatePlanCommand, CreatePlanHandler(state_repo=state_repo, llm=mock_llm)
     )
 
-    command = CreatePlanCommand(
-        session_id=sample_session.id,
-        prompt="Test via mediator",
-    )
+    command = CreatePlanCommand(session_id=sample_session.id, prompt="Test via mediator")
     result = await mediator.send(command)
 
     assert result.success, f"Mediator send failed: {result.error}"
@@ -211,6 +193,6 @@ async def test_mediator_pipeline_persists_via_save_policy(state_repo, sample_ses
     # Verify the session was persisted
     persisted = await state_repo.load_session(sample_session.id)
     assert persisted is not None
-    assert len(persisted.events) > 0, (
-        "After mediator.send, session must have events from handler + SavePolicyBehavior save"
-    )
+    assert (
+        len(persisted.events) > 0
+    ), "After mediator.send, session must have events from handler + SavePolicyBehavior save"

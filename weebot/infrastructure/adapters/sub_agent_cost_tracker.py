@@ -1,4 +1,5 @@
 """SubAgentCostTracker — concrete in-memory cost budget tracker."""
+
 from __future__ import annotations
 
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
@@ -7,9 +8,9 @@ from weebot.domain.models.sub_agent import AgentTier
 # Estimated cost per token per tier (USD).  These are rough upper bounds
 # used for budget gating, not for billing.
 _COST_PER_TOKEN: dict[AgentTier, float] = {
-    AgentTier.BUDGET: 0.0,       # FREE models
+    AgentTier.BUDGET: 0.0,  # FREE models
     AgentTier.STANDARD: 0.000003,  # ~$3/1M tokens
-    AgentTier.PREMIUM: 0.000015,   # ~$15/1M tokens
+    AgentTier.PREMIUM: 0.000015,  # ~$15/1M tokens
 }
 
 

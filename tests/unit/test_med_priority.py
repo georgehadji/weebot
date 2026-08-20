@@ -1,4 +1,5 @@
 """Integration + structural tests for MED-priority coverage gaps."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,9 +7,10 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.infrastructure.adapters.llm.anthropic_adapter import AnthropicAdapter
 from weebot.infrastructure.adapters.llm.openai_adapter import OpenAIAdapter
 from weebot.infrastructure.adapters.llm.deepseek_adapter import DeepSeekAdapter
-
+from datetime import UTC
 
 # ── CascadeExecutor all-models-tripped ──────────────────────────────────────
+
 
 class TestCascadeAllModelsTripped:
     async def test_all_models_tripped_raises(self):
@@ -19,23 +21,25 @@ class TestCascadeAllModelsTripped:
         mock_llm = MagicMock()
         mock_llm.chat = AsyncMock(side_effect=Exception("model down"))
         cascade = CascadeExecutor(
-            llm=mock_llm, tools=MagicMock(),
-            agent_role="test", model_provider=lambda d: "test-model",
+            llm=mock_llm,
+            tools=MagicMock(),
+            agent_role="test",
+            model_provider=lambda d: "test-model",
         )
         cascade._circuit_breaker_failures["test-model"] = 5
 
         with pytest.raises(AllModelsTrippedError):
-            await cascade.call_with_cascade(
-                [{"role": "user", "content": "hello"}], "test",
-            )
+            await cascade.call_with_cascade([{"role": "user", "content": "hello"}], "test")
 
     async def test_server_error_models_skipped(self):
         """Models with server errors are skipped in current cascade run."""
         from weebot.application.agents.executor._cascade import CascadeExecutor
 
         cascade = CascadeExecutor(
-            llm=MagicMock(), tools=MagicMock(),
-            agent_role="test", model_provider=lambda d: "test-model",
+            llm=MagicMock(),
+            tools=MagicMock(),
+            agent_role="test",
+            model_provider=lambda d: "test-model",
         )
         cascade._server_error_models.add("bad-model")
         assert "bad-model" in cascade._server_error_models
@@ -46,18 +50,18 @@ class TestCascadeAllModelsTripped:
         from weebot.domain.models.llm_response import LLMResponse
 
         mock_llm = MagicMock()
-        mock_llm.chat = AsyncMock(return_value=LLMResponse(
-            content="ok", tool_calls=None, model="test-model",
-        ))
+        mock_llm.chat = AsyncMock(
+            return_value=LLMResponse(content="ok", tool_calls=None, model="test-model")
+        )
         cascade = CascadeExecutor(
-            llm=mock_llm, tools=MagicMock(),
-            agent_role="test", model_provider=lambda d: "test-model",
+            llm=mock_llm,
+            tools=MagicMock(),
+            agent_role="test",
+            model_provider=lambda d: "test-model",
         )
         cascade._server_error_models.add("bad-model")
         try:
-            await cascade.call_with_cascade(
-                [{"role": "user", "content": "hi"}], "test",
-            )
+            await cascade.call_with_cascade([{"role": "user", "content": "hi"}], "test")
         except Exception:
             pass
         # After a run (successful or failed), the set is cleared
@@ -65,6 +69,7 @@ class TestCascadeAllModelsTripped:
 
 
 # ── LLMPort contract tests ──────────────────────────────────────────────────
+
 
 class TestLLMPortContract:
     def test_openai_adapter_implements_port(self):
@@ -86,21 +91,25 @@ class TestLLMPortContract:
             DeepSeekAdapter(api_key="k", default_model="deepseek-v4-flash"),
         ]
         for adapter in adapters:
-            assert hasattr(adapter, 'chat')
+            assert hasattr(adapter, "chat")
             assert callable(adapter.chat)
 
 
 # ── Commitment idempotency ──────────────────────────────────────────────────
 
+
 class TestCommitmentIdempotency:
     async def test_heartbeat_skips_already_overdue(self):
         from weebot.domain.services.commitment_engine import CommitmentEngine
         from weebot.domain.models.commitment import Commitment, CommitmentStatus
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         overdue = Commitment(
-            id="x", promise_text="test", context="", source_session_id="s1",
-            due_at=datetime.now(timezone.utc) - timedelta(hours=2),
+            id="x",
+            promise_text="test",
+            context="",
+            source_session_id="s1",
+            due_at=datetime.now(UTC) - timedelta(hours=2),
             status=CommitmentStatus.PENDING,
         )
         repo1 = MagicMock()
@@ -118,6 +127,7 @@ class TestCommitmentIdempotency:
 
     async def test_heartbeat_no_pending_commits(self):
         from weebot.domain.services.commitment_engine import CommitmentEngine
+
         repo = MagicMock()
         repo.list_commitments = AsyncMock(return_value=[])
         engine = CommitmentEngine(state_repo=repo)
@@ -127,9 +137,11 @@ class TestCommitmentIdempotency:
 
 # ── OpportunityEngine on empty DB ───────────────────────────────────────────
 
+
 class TestOpportunityEngineEmpty:
     async def test_empty_kg_returns_empty_list(self):
         from weebot.application.services.opportunity_engine import OpportunityEngine
+
         kg = MagicMock()
         kg.search = AsyncMock(return_value=[])
         kg.query = AsyncMock(return_value=[])
@@ -139,6 +151,7 @@ class TestOpportunityEngineEmpty:
 
     async def test_scan_does_not_crash(self):
         from weebot.application.services.opportunity_engine import OpportunityEngine
+
         kg = MagicMock()
         kg.search = AsyncMock(side_effect=Exception("KG unavailable"))
         engine = OpportunityEngine(knowledge_graph=kg, fts5_search=MagicMock())
@@ -147,6 +160,7 @@ class TestOpportunityEngineEmpty:
 
 
 # ── PersistentMemoryTool roundtrip ──────────────────────────────────────────
+
 
 class TestPersistentMemoryTool:
     @pytest.mark.asyncio

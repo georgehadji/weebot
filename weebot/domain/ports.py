@@ -1,8 +1,9 @@
 """Domain ports (interfaces) for weebot — zero external dependencies."""
+
 from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
-from weebot.domain.models import Project, Task
+from weebot.domain.models import Project
 
 
 @runtime_checkable
@@ -36,11 +37,7 @@ class INotifier(Protocol):
     """Port for multi-channel notifications."""
 
     async def notify(
-        self,
-        title: str,
-        message: str,
-        level: str = "info",
-        project_id: str | None = None,
+        self, title: str, message: str, level: str = "info", project_id: str | None = None
     ) -> None: ...
 
 
@@ -59,6 +56,7 @@ class ITool(Protocol):
 # events without depending on any outer-layer event bus implementation.
 # ---------------------------------------------------------------------------
 
+
 class EventPublisher(Protocol):
     """Protocol for publishing domain events.
 
@@ -68,10 +66,7 @@ class EventPublisher(Protocol):
     """
 
     async def publish(
-        self,
-        event_type: str,
-        agent_id: str,
-        data: dict[str, Any] | None = None,
+        self, event_type: str, agent_id: str, data: dict[str, Any] | None = None
     ) -> bool:
         """Publish a domain event.
 

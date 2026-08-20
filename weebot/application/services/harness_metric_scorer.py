@@ -9,11 +9,10 @@ Pure computation over:
 
 The scorer is stateless and testable — it takes data, returns metrics.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
 
 from weebot.domain.models.event import (
     AgentEvent,
@@ -40,8 +39,8 @@ class HarnessMetricScorer:
         cls,
         session: Session,
         task_passed: bool = True,
-        tool_call_data: Optional[dict] = None,
-        wall_clock_seconds: Optional[float] = None,
+        tool_call_data: dict | None = None,
+        wall_clock_seconds: float | None = None,
     ) -> HarnessMetrics:
         """Score a finished session across all six metrics.
 
@@ -63,9 +62,7 @@ class HarnessMetricScorer:
         tool_calls = cls._count_tool_calls(events)
         task_pass_rate = 1.0 if task_passed else 0.0
         trajectory_efficiency = cls._efficiency_score(
-            tool_calls=tool_calls,
-            wall_clock_seconds=wall_clock_seconds,
-            task_passed=task_passed,
+            tool_calls=tool_calls, wall_clock_seconds=wall_clock_seconds, task_passed=task_passed
         )
 
         # Verification strength: fraction of steps with a verification gate.
@@ -107,10 +104,7 @@ class HarnessMetricScorer:
 
     @classmethod
     def _efficiency_score(
-        cls,
-        tool_calls: int,
-        wall_clock_seconds: Optional[float],
-        task_passed: bool,
+        cls, tool_calls: int, wall_clock_seconds: float | None, task_passed: bool
     ) -> float:
         """Normalised trajectory efficiency.
 
@@ -125,10 +119,7 @@ class HarnessMetricScorer:
 
         # Time efficiency (faster = better)
         if wall_clock_seconds is not None and wall_clock_seconds > 0:
-            time_score = max(
-                0.0,
-                1.0 - (wall_clock_seconds / cls.DEFAULT_WALL_CLOCK_MAX_SECONDS),
-            )
+            time_score = max(0.0, 1.0 - (wall_clock_seconds / cls.DEFAULT_WALL_CLOCK_MAX_SECONDS))
         else:
             time_score = 0.5  # neutral if no time data
 
@@ -141,9 +132,7 @@ class HarnessMetricScorer:
         Approximated from the existing VerificationEvent type. Phase 3
         will enrich this with ActionEvidence.scope coverage data.
         """
-        verify_events = [
-            e for e in events if isinstance(e, VerificationEvent)
-        ]
+        verify_events = [e for e in events if isinstance(e, VerificationEvent)]
         if not events:
             return 0.0
         return min(1.0, len(verify_events) / max(1, len(events) * 0.2))
@@ -162,10 +151,7 @@ class HarnessMetricScorer:
                 total_errors += 1
                 # Look ahead 5 events for successful continuation
                 lookahead = events[i + 1 : i + 6]
-                recovered = any(
-                    not isinstance(e, (ErrorEvent, DoneEvent))
-                    for e in lookahead
-                )
+                recovered = any(not isinstance(e, (ErrorEvent, DoneEvent)) for e in lookahead)
                 if recovered:
                     errors_recovered += 1
 
@@ -178,11 +164,7 @@ class HarnessMetricScorer:
         """Fraction of events that carry full reconstructable data."""
         if not events:
             return 0.0
-        replayable = sum(
-            1
-            for e in events
-            if cls._is_replayable(e)
-        )
+        replayable = sum(1 for e in events if cls._is_replayable(e))
         return replayable / len(events)
 
     @classmethod

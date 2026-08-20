@@ -7,6 +7,7 @@ by the planner, verifier, and decision log.
 product-mode reference:
     https://github.com/sohaibt/product-mode
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -20,11 +21,9 @@ class ProductAssumption(BaseModel):
     Each assumption is tagged with whether it has been validated by data,
     reasonably assumed, or is unknown and needs verification.
     """
+
     text: str = Field(default="", description="The assumption statement")
-    status: str = Field(
-        default="unknown",
-        description="'validated' | 'assumed' | 'unknown'",
-    )
+    status: str = Field(default="unknown", description="'validated' | 'assumed' | 'unknown'")
 
 
 class ProductContext(BaseModel):
@@ -41,21 +40,13 @@ class ProductContext(BaseModel):
     """
 
     # ── Pre-flight checklist (product-mode Principles 1-5) ─────────
-    problem: str = Field(
-        default="",
-        description="Whose pain are we solving, in one sentence?",
-    )
+    problem: str = Field(default="", description="Whose pain are we solving, in one sentence?")
     why_now: str = Field(
-        default="",
-        description="What changed? Evidence, trigger, cost of waiting.",
+        default="", description="What changed? Evidence, trigger, cost of waiting."
     )
-    scope: str = Field(
-        default="",
-        description="Smallest change that tests the hypothesis.",
-    )
+    scope: str = Field(default="", description="Smallest change that tests the hypothesis.")
     success_metric: str = Field(
-        default="",
-        description="The one number or observable we expect to move.",
+        default="", description="The one number or observable we expect to move."
     )
     reversibility: Literal["one-way", "two-way"] = Field(
         default="two-way",
@@ -76,10 +67,6 @@ class ProductContext(BaseModel):
         description="LLM's confidence that the problem framing is correct.",
     )
     generated_at: str = Field(
-        default="",
-        description="ISO-8601 timestamp of when this context was created.",
+        default="", description="ISO-8601 timestamp of when this context was created."
     )
-    model_used: str = Field(
-        default="",
-        description="Model ID used to produce this analysis.",
-    )
+    model_used: str = Field(default="", description="Model ID used to produce this analysis.")

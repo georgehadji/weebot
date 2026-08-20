@@ -7,13 +7,12 @@ State machine that takes a domain description and produces:
 
 Follows the 6-phase approach from revfactory/harness.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Callable, Optional
 
 from weebot.domain.models.team_architecture import (
     AgentDefinition,
@@ -62,11 +61,7 @@ class HarnessGenerationFlow:
         ),
     }
 
-    def __init__(
-        self,
-        llm: Optional[object] = None,
-        output_dir: str = ".",
-    ) -> None:
+    def __init__(self, llm: object | None = None, output_dir: str = ".") -> None:
         self._llm = llm
         self._output_dir = Path(output_dir)
 
@@ -121,26 +116,20 @@ class HarnessGenerationFlow:
         for agent in arch.agents:
             agent_path = agents_dir / f"{agent.name}.md"
             agent_path.parent.mkdir(parents=True, exist_ok=True)
-            agent_path.write_text(
-                self._render_agent(agent), encoding="utf-8",
-            )
+            agent_path.write_text(self._render_agent(agent), encoding="utf-8")
             logger.info("Wrote agent: %s", agent_path)
 
         # Write skill files
         for skill in arch.skills:
             skill_path = skills_dir / skill.name / "SKILL.md"
             skill_path.parent.mkdir(parents=True, exist_ok=True)
-            skill_path.write_text(
-                self._render_skill(skill), encoding="utf-8",
-            )
+            skill_path.write_text(self._render_skill(skill), encoding="utf-8")
             logger.info("Wrote skill: %s", skill_path)
 
         # Write orchestrator skill
         orch_path = skills_dir / f"{arch.pattern.value}-orchestrator" / "SKILL.md"
         orch_path.parent.mkdir(parents=True, exist_ok=True)
-        orch_path.write_text(
-            self._render_orchestrator(arch), encoding="utf-8",
-        )
+        orch_path.write_text(self._render_orchestrator(arch), encoding="utf-8")
         logger.info("Wrote orchestrator: %s", orch_path)
 
         # Update CLAUDE.md pointer
@@ -203,11 +192,7 @@ class HarnessGenerationFlow:
 
     # ── Agent design ───────────────────────────────────────────────
 
-    def _design_agents(
-        self,
-        domain: str,
-        pattern: TeamPattern,
-    ) -> list[AgentDefinition]:
+    def _design_agents(self, domain: str, pattern: TeamPattern) -> list[AgentDefinition]:
         """Design agents for the given domain and pattern."""
         domain_lower = domain.lower()
 
@@ -358,10 +343,7 @@ class HarnessGenerationFlow:
     # ── Skill design ───────────────────────────────────────────────
 
     def _design_skills(
-        self,
-        domain: str,
-        agents: list[AgentDefinition],
-        pattern: TeamPattern,
+        self, domain: str, agents: list[AgentDefinition], pattern: TeamPattern
     ) -> list[SkillBlueprint]:
         """Design skills that agents will use."""
         skills = []
@@ -372,20 +354,24 @@ class HarnessGenerationFlow:
             for skill_name in agent.skills:
                 if skill_name not in all_skill_names:
                     all_skill_names.add(skill_name)
-                    skills.append(SkillBlueprint(
-                        name=f"{domain[:20].replace(' ', '-')}-{skill_name}".lower(),
-                        description=f"Execute {skill_name} tasks for {domain} domain",
-                        content=f"# {skill_name.capitalize()} for {domain}\n\n"
-                                f"Follow these steps when asked to perform "
-                                f"{skill_name} tasks in the {domain} domain.\n",
-                    ))
+                    skills.append(
+                        SkillBlueprint(
+                            name=f"{domain[:20].replace(' ', '-')}-{skill_name}".lower(),
+                            description=f"Execute {skill_name} tasks for {domain} domain",
+                            content=f"# {skill_name.capitalize()} for {domain}\n\n"
+                            f"Follow these steps when asked to perform "
+                            f"{skill_name} tasks in the {domain} domain.\n",
+                        )
+                    )
 
         if not skills:
-            skills.append(SkillBlueprint(
-                name=f"{domain[:20].replace(' ', '-')}-default".lower(),
-                description=f"Default skill for {domain} tasks",
-                content=f"# {domain} Tasks\n\nHandle tasks in the {domain} domain.\n",
-            ))
+            skills.append(
+                SkillBlueprint(
+                    name=f"{domain[:20].replace(' ', '-')}-default".lower(),
+                    description=f"Default skill for {domain} tasks",
+                    content=f"# {domain} Tasks\n\nHandle tasks in the {domain} domain.\n",
+                )
+            )
 
         return skills
 
@@ -397,7 +383,7 @@ class HarnessGenerationFlow:
         return (
             f"---\n"
             f"name: {agent.name}\n"
-            f"description: \"{agent.role}\"\n"
+            f'description: "{agent.role}"\n'
             f"---\n"
             f"\n"
             f"# {agent.name.capitalize()} — {agent.role}\n"
@@ -420,7 +406,7 @@ class HarnessGenerationFlow:
         return (
             f"---\n"
             f"name: {skill.name}\n"
-            f"description: \"{skill.description}\"\n"
+            f'description: "{skill.description}"\n'
             f"---\n"
             f"\n"
             f"{skill.content}\n"
@@ -428,14 +414,11 @@ class HarnessGenerationFlow:
 
     def _render_orchestrator(self, arch: TeamArchitecture) -> str:
         """Render the orchestrator skill."""
-        agent_table = "\n".join(
-            f"| {a.name} | {a.agent_type} | {a.role} |"
-            for a in arch.agents
-        )
+        agent_table = "\n".join(f"| {a.name} | {a.agent_type} | {a.role} |" for a in arch.agents)
         return (
             f"---\n"
             f"name: {arch.pattern.value}-orchestrator\n"
-            f"description: \"{arch.orchestrator_description}\"\n"
+            f'description: "{arch.orchestrator_description}"\n'
             f"---\n"
             f"\n"
             f"# {arch.domain} Orchestrator ({arch.pattern.value})\n"
@@ -458,10 +441,7 @@ class HarnessGenerationFlow:
     # ── Helpers ────────────────────────────────────────────────────
 
     def _build_rationale(
-        self,
-        domain: str,
-        pattern: TeamPattern,
-        agents: list[AgentDefinition],
+        self, domain: str, pattern: TeamPattern, agents: list[AgentDefinition]
     ) -> str:
         """Build a rationale explaining the architecture choices."""
         return (
@@ -470,11 +450,7 @@ class HarnessGenerationFlow:
             f"{self.PATTERN_DESCRIPTIONS.get(pattern, 'it fits the domain requirements.')}"
         )
 
-    def _build_orchestrator_description(
-        self,
-        domain: str,
-        pattern: TeamPattern,
-    ) -> str:
+    def _build_orchestrator_description(self, domain: str, pattern: TeamPattern) -> str:
         """Build the orchestrator skill's description field."""
         return (
             f"Orchestrate the {domain} agent team using {pattern.value} pattern. "
@@ -492,7 +468,7 @@ class HarnessGenerationFlow:
             f"**Pattern:** {arch.pattern.value}\n"
             f"**Agents:** {', '.join(a.name for a in arch.agents)}\n"
             f"**Trigger:** {arch.domain} tasks → use `{arch.pattern.value}-orchestrator` skill.\n"
-            f"**Generated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n"
+            f"**Generated:** {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}\n"
         )
 
         if "## Harness:" in existing:

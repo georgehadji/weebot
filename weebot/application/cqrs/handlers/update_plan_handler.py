@@ -7,9 +7,10 @@ plan revision. Not actually deprecated: it's an agent-calling handler
 here was inaccurate — see
 tasks/specs/pre_existing_architecture_debt_plan.md, RC-1.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
 
@@ -20,14 +21,12 @@ if TYPE_CHECKING:
 
 from weebot.application.cqrs.commands import UpdatePlanCommand
 
+
 class UpdatePlanHandler(CommandHandler):
     """Executes plan update through PlannerAgent and returns events."""
 
     def __init__(
-        self,
-        state_repo: StateRepositoryPort,
-        llm: LLMPort,
-        event_bus: EventBusPort | None = None,
+        self, state_repo: StateRepositoryPort, llm: LLMPort, event_bus: EventBusPort | None = None
     ):
         self._state_repo = state_repo
         self._llm = llm
@@ -36,34 +35,28 @@ class UpdatePlanHandler(CommandHandler):
     async def handle(self, command: UpdatePlanCommand) -> CommandResult:
         from weebot.application.agents.planner import PlannerAgent
         from weebot.domain.models.event import PlanEvent
-        from weebot.domain.models.plan import Plan
 
         try:
             session = await self._state_repo.load_session(command.session_id)
             if session is None:
                 return CommandResult.fail(
-                    error=f"Session {command.session_id} not found",
-                    error_code="SESSION_NOT_FOUND",
+                    error=f"Session {command.session_id} not found", error_code="SESSION_NOT_FOUND"
                 )
 
             plan = session.get_last_plan()
             if plan is None:
                 return CommandResult.fail(
-                    error="No plan exists for this session",
-                    error_code="NO_PLAN_FOUND",
+                    error="No plan exists for this session", error_code="NO_PLAN_FOUND"
                 )
 
             planner = PlannerAgent(
                 llm=self._llm,
                 event_bus=self._event_bus,
-                model=command.model if hasattr(command, 'model') else None,
+                model=command.model if hasattr(command, "model") else None,
             )
 
             # Find the last completed or failed step
-            last_step = next(
-                (s for s in reversed(plan.steps) if s.is_done()),
-                None,
-            )
+            last_step = next((s for s in reversed(plan.steps) if s.is_done()), None)
             if last_step is None and plan.steps:
                 last_step = plan.steps[0]
 
@@ -90,7 +83,4 @@ class UpdatePlanHandler(CommandHandler):
                 }
             )
         except Exception as exc:
-            return CommandResult.fail(
-                error=str(exc), error_code="PLAN_UPDATE_ERROR"
-            )
-
+            return CommandResult.fail(error=str(exc), error_code="PLAN_UPDATE_ERROR")

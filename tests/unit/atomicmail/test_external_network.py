@@ -11,6 +11,7 @@ so the test suite stays aware of the coverage gap without requiring a network.
 Usage:
   ATOMICMAIL_TEST_LIVE=1 pytest -m external tests/unit/atomicmail/test_external_network.py
 """
+
 from __future__ import annotations
 
 import os
@@ -39,7 +40,9 @@ def test_jmap_request_stub() -> None:
 @_SKIP
 def test_session_register_stub() -> None:
     """Port upstream test_session_register — full PoW registration flow."""
-    raise NotImplementedError("Port from atomic-mail-agentic-main/py/tests/test_session_register.py")
+    raise NotImplementedError(
+        "Port from atomic-mail-agentic-main/py/tests/test_session_register.py"
+    )
 
 
 @pytest.mark.external
@@ -60,4 +63,6 @@ def test_cli_adapter_stub() -> None:
 @_SKIP
 def test_langchain_atomicmail_stub() -> None:
     """Port upstream test_langchain_atomicmail — LangChain tool integration."""
-    raise NotImplementedError("Port from atomic-mail-agentic-main/py/tests/test_langchain_atomicmail.py")
+    raise NotImplementedError(
+        "Port from atomic-mail-agentic-main/py/tests/test_langchain_atomicmail.py"
+    )

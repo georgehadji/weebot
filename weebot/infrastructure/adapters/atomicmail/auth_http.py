@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -29,13 +29,10 @@ def fetch_challenge(auth_url: str) -> ChallengeResponse:
     base = auth_url.rstrip("/")
     status, text, headers = _http_post(f"{base}/api/v1/challenge")
     if status < 200 or status >= 300:
-        raise ValueError(
-            f"auth-service /api/v1/challenge returned {status}: {text}"
-        )
+        raise ValueError(f"auth-service /api/v1/challenge returned {status}: {text}")
 
     challenge_jwt = _read_bearer_token(
-        headers.get("Authorization"),
-        "Challenge response missing Authorization bearer token.",
+        headers.get("Authorization"), "Challenge response missing Authorization bearer token."
     )
     payload = decode_jwt_payload(challenge_jwt)
     challenge = payload.get("jti")
@@ -44,9 +41,7 @@ def fetch_challenge(auth_url: str) -> ChallengeResponse:
         raise ValueError("Challenge JWT payload malformed (missing jti or difficulty).")
 
     return ChallengeResponse(
-        challengeJWT=challenge_jwt,
-        challenge=challenge,
-        difficulty=int(difficulty),
+        challengeJWT=challenge_jwt, challenge=challenge, difficulty=int(difficulty)
     )
 
 
@@ -75,8 +70,7 @@ def exchange_session(
         raise ValueError(f"auth-service /api/v1/session returned {status}: {text}")
 
     session_jwt = _read_bearer_token(
-        headers.get("Authorization"),
-        "Session response missing Authorization bearer token.",
+        headers.get("Authorization"), "Session response missing Authorization bearer token."
     )
 
     data: dict[str, object] = {}
@@ -84,32 +78,27 @@ def exchange_session(
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError as err:
-            raise ValueError(
-                "auth-service /api/v1/session returned non-JSON body."
-            ) from err
+            raise ValueError("auth-service /api/v1/session returned non-JSON body.") from err
         if not isinstance(parsed, dict):
             raise ValueError("auth-service /api/v1/session returned non-JSON body.")
         data = parsed
 
     api_key_out = data.get("apiKey")
     return SessionResponse(
-        sessionJWT=session_jwt,
-        apiKey=api_key_out if isinstance(api_key_out, str) else None,
+        sessionJWT=session_jwt, apiKey=api_key_out if isinstance(api_key_out, str) else None
     )
 
 
 def fetch_capability(auth_url: str, session_jwt: str) -> str:
     base = auth_url.rstrip("/")
     status, text, headers = _http_post(
-        f"{base}/api/v1/capability",
-        headers={"Authorization": f"Bearer {session_jwt}"},
+        f"{base}/api/v1/capability", headers={"Authorization": f"Bearer {session_jwt}"}
     )
     if status < 200 or status >= 300:
         raise ValueError(f"auth-service /api/v1/capability returned {status}: {text}")
 
     return _read_bearer_token(
-        headers.get("Authorization"),
-        "Capability response missing Authorization bearer token.",
+        headers.get("Authorization"), "Capability response missing Authorization bearer token."
     )
 
 
@@ -154,10 +143,7 @@ def _read_bearer_token(header_value: str | None, missing_error: str) -> str:
 
 
 def _http_post(
-    url: str,
-    *,
-    headers: Mapping[str, str] | None = None,
-    json_body: object | None = None,
+    url: str, *, headers: Mapping[str, str] | None = None, json_body: object | None = None
 ) -> tuple[int, str, Mapping[str, str]]:
     req_headers = dict(headers or {})
     body_bytes: bytes | None = None
@@ -168,10 +154,6 @@ def _http_post(
     req = Request(url, data=body_bytes, headers=req_headers, method="POST")
     try:
         with urlopen(req) as response:
-            return (
-                int(response.getcode()),
-                response.read().decode("utf-8"),
-                response.headers,
-            )
+            return (int(response.getcode()), response.read().decode("utf-8"), response.headers)
     except HTTPError as err:
         return err.code, err.read().decode("utf-8", errors="replace"), err.headers

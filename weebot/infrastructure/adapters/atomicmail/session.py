@@ -5,22 +5,13 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Mapping
+from collections.abc import Mapping
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .auth_http import fetch_capability, perform_pow_and_session
-from .config import (
-    ResolvedAgentConfig,
-    expand_credential_dir_input,
-    resolve_agent_config_from_env,
-    resolve_credential_dir,
-)
-from .constants import (
-    DEFAULT_API_URL,
-    DEFAULT_AUTH_URL,
-    DEFAULT_POW_SCRYPT_SALT_HEX,
-)
+from .config import ResolvedAgentConfig, expand_credential_dir_input, resolve_agent_config_from_env
+from .constants import DEFAULT_API_URL, DEFAULT_AUTH_URL, DEFAULT_POW_SCRYPT_SALT_HEX
 from .credentials import (
     CredentialArtifacts,
     CredentialStore,
@@ -67,9 +58,7 @@ def inbox_local_part(inbox_id: str) -> str:
     return _normalize_username(inbox_id[:i])
 
 
-def inbox_id_to_mailbox_email(
-    inbox_id: str, env: Mapping[str, str] | None = None
-) -> str:
+def inbox_id_to_mailbox_email(inbox_id: str, env: Mapping[str, str] | None = None) -> str:
     trimmed = inbox_id.strip()
     if len(trimmed) == 0:
         return inbox_id
@@ -95,9 +84,7 @@ class AgentSession:
         self.credentialDir = cfg.credentialDir
         self.files = cfg.files
         self._store = cfg.store or (
-            FilesystemCredentialStore(cfg.files)
-            if cfg.files is not None
-            else None
+            FilesystemCredentialStore(cfg.files) if cfg.files is not None else None
         )
         if self._store is None:
             raise ValueError("AgentSessionConfig requires either store or files.")
@@ -183,9 +170,7 @@ class AgentSession:
             self.invalidate_jmap_session_cache()
 
         session = perform_pow_and_session(
-            auth_url=self._auth_url,
-            scrypt_salt=self._scrypt_salt,
-            username=username,
+            auth_url=self._auth_url, scrypt_salt=self._scrypt_salt, username=username
         )
         if not session.apiKey:
             raise ValueError("Signup did not return an apiKey - this indicates a server bug.")
@@ -212,17 +197,11 @@ class AgentSession:
             or not self._cached_download_url
             or not self._cached_jmap_post_url
         ):
-            raise ValueError(
-                "JMAP session did not provide uploadUrl, downloadUrl, or apiUrl."
-            )
+            raise ValueError("JMAP session did not provide uploadUrl, downloadUrl, or apiUrl.")
 
         self._store.save(self._current_credential_artifacts())
 
-        return RegisterResult(
-            inbox=self._inbox_id,
-            accountId=account_id,
-            apiKey=self._api_key,
-        )
+        return RegisterResult(inbox=self._inbox_id, accountId=account_id, apiKey=self._api_key)
 
     def login_with_api_key(self, api_key: str) -> RegisterResult:
         normalized_api_key = api_key.strip()
@@ -230,9 +209,7 @@ class AgentSession:
             raise ValueError("API key must be a non-empty string.")
 
         session = perform_pow_and_session(
-            auth_url=self._auth_url,
-            scrypt_salt=self._scrypt_salt,
-            api_key=normalized_api_key,
+            auth_url=self._auth_url, scrypt_salt=self._scrypt_salt, api_key=normalized_api_key
         )
         self._api_key = normalized_api_key
         self._session_jwt = session.sessionJWT
@@ -256,16 +233,11 @@ class AgentSession:
             or not self._cached_download_url
             or not self._cached_jmap_post_url
         ):
-            raise ValueError(
-                "JMAP session did not provide uploadUrl, downloadUrl, or apiUrl."
-            )
+            raise ValueError("JMAP session did not provide uploadUrl, downloadUrl, or apiUrl.")
 
         self._store.save(self._current_credential_artifacts())
 
-        return RegisterResult(
-            inbox=self._inbox_id,
-            accountId=account_id,
-        )
+        return RegisterResult(inbox=self._inbox_id, accountId=account_id)
 
     def get_primary_mail_account_id(self) -> str:
         if (
@@ -365,9 +337,7 @@ class AgentSession:
         )
 
     def _ensure_session(self) -> None:
-        if self._session_jwt and not is_jwt_expired(
-            self._session_jwt, SESSION_SAFETY_MARGIN_MS
-        ):
+        if self._session_jwt and not is_jwt_expired(self._session_jwt, SESSION_SAFETY_MARGIN_MS):
             return
         if not self._api_key:
             raise ValueError(
@@ -376,9 +346,7 @@ class AgentSession:
             )
 
         result = perform_pow_and_session(
-            auth_url=self._auth_url,
-            scrypt_salt=self._scrypt_salt,
-            api_key=self._api_key,
+            auth_url=self._auth_url, scrypt_salt=self._scrypt_salt, api_key=self._api_key
         )
         self._session_jwt = result.sessionJWT
         self._capability_jwt = None
@@ -413,17 +381,12 @@ def register(
         raise ValueError("forced is only supported when registering with username.")
 
     session = create_agent_session(
-        credentials_dir=credentials_dir,
-        env=env,
-        provider_api_key=api_key,
-        store=store,
+        credentials_dir=credentials_dir, env=env, provider_api_key=api_key, store=store
     )
     if username:
         return session.register(username, forced=forced)
     if not api_key:
-        raise ValueError(
-            "Internal: expected api_key to be set when username is not provided."
-        )
+        raise ValueError("Internal: expected api_key to be set when username is not provided.")
     return session.login_with_api_key(api_key)
 
 
@@ -477,9 +440,7 @@ def create_agent_session(
     )
     inbox_id = loaded_creds.inboxId if loaded_creds else None
     resolved_credential_dir = (
-        expand_credential_dir_input(credentials_dir)
-        if credentials_dir is not None
-        else ""
+        expand_credential_dir_input(credentials_dir) if credentials_dir is not None else ""
     )
 
     return AgentSession.create(
@@ -559,8 +520,7 @@ def _as_non_negative_int(value: object) -> int | None:
 
 
 def extract_blob_upload_limits(
-    session: Mapping[str, object],
-    account_id: str,
+    session: Mapping[str, object], account_id: str
 ) -> dict[str, int | None] | None:
     accounts = session.get("accounts")
     if not isinstance(accounts, dict):

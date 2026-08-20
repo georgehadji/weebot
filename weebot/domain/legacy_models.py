@@ -28,6 +28,7 @@ Key differences:
     - Legacy relies on ``Project.tasks`` list; new uses ``Session.events``
       event-sourced stream with ``get_last_plan()``.
 """
+
 from __future__ import annotations
 import warnings
 from dataclasses import dataclass, field
@@ -47,6 +48,7 @@ warnings.warn(
 # ---------------------------------------------------------------------------
 # Task / Project models (refactor plan Task 6)
 # ---------------------------------------------------------------------------
+
 
 class TaskStatus(Enum):
     PENDING = "pending"
@@ -155,6 +157,7 @@ class Project:
 # Product management model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Requirement:
     """A single product requirement / user story tracked in the backlog."""
@@ -163,9 +166,9 @@ class Requirement:
     project_id: str
     title: str
     description: str = ""
-    category: str = "feature"       # feature | bug | tech-debt | epic
-    priority: int = 3               # 1 (highest) – 5 (lowest)
-    status: str = "draft"           # draft | approved | in-progress | done | rejected
+    category: str = "feature"  # feature | bug | tech-debt | epic
+    priority: int = 3  # 1 (highest) – 5 (lowest)
+    status: str = "draft"  # draft | approved | in-progress | done | rejected
     tags: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
@@ -174,6 +177,7 @@ class Requirement:
 # ---------------------------------------------------------------------------
 # OpenManus-style Message / Memory / AgentState (Task 2)
 # ---------------------------------------------------------------------------
+
 
 class Role(Enum):
     SYSTEM = "system"
@@ -192,6 +196,7 @@ class AgentState(Enum):
 @dataclass
 class ToolCallSpec:
     """Minimal spec for a single tool call from LLM response."""
+
     id: str
     name: str
     arguments: str  # raw JSON string
@@ -200,6 +205,7 @@ class ToolCallSpec:
 @dataclass
 class Message:
     """A single chat message in the agent's memory."""
+
     role: Role
     content: str = ""
     tool_calls: list[ToolCallSpec] = field(default_factory=list)
@@ -221,17 +227,18 @@ class Message:
         return d
 
     @classmethod
-    def system(cls, content: str) -> "Message":
+    def system(cls, content: str) -> Message:
         return cls(role=Role.SYSTEM, content=content)
 
     @classmethod
-    def user(cls, content: str) -> "Message":
+    def user(cls, content: str) -> Message:
         return cls(role=Role.USER, content=content)
 
 
 @dataclass
 class Memory:
     """Conversation memory with automatic truncation of non-system messages."""
+
     max_messages: int = 100
     messages: list[Message] = field(default_factory=list)
 
@@ -248,7 +255,7 @@ class Memory:
         system = [m for m in self.messages if m.role == Role.SYSTEM]
         non_system = [m for m in self.messages if m.role != Role.SYSTEM]
         if len(non_system) > self.max_messages:
-            non_system = non_system[-self.max_messages:]
+            non_system = non_system[-self.max_messages :]
         self.messages = system + non_system
 
     def to_openai_format(self) -> list[dict[str, Any]]:
@@ -270,8 +277,8 @@ class AgentRelationship:
 
     orchestrator_id: str  # Top-level agent that initiated the workflow
     parent_agent_id: str  # Direct parent (None for root orchestrator)
-    child_agent_id: str   # Child agent spawned
-    role: str             # Child's role (researcher, analyst, etc.)
+    child_agent_id: str  # Child agent spawned
+    role: str  # Child's role (researcher, analyst, etc.)
     spawn_time: datetime = field(default_factory=datetime.now)
     tools_assigned: list[str] = field(default_factory=list)
     nesting_level: int = 1  # 1 (orchestrator) | 2 | 3

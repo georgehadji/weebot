@@ -6,6 +6,7 @@ the result into HEALTHY / DEGRADED / CRITICAL based on configured thresholds.
 Does NOT call ``MemoryMonitor.start()`` — the HeartbeatManager owns the
 polling loop. Two competing polling loops for the same resource would be a bug.
 """
+
 from __future__ import annotations
 
 from weebot.core.memory_monitor import MemoryMonitor, MemoryThresholds, MemoryStats

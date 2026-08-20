@@ -9,14 +9,13 @@ Implementation follows the OSWorld environment protocol:
 - Agent returns pyautogui-style actions (click, type, hotkey, scroll)
 - Evaluation scripts verify task completion via file/state comparison
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import base64
-import io
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.sandbox_port import (
     SandboxPort,
@@ -36,6 +35,7 @@ _JPEG_MIME = "image/jpeg"
 
 class OSWorldConnectionError(Exception):
     """Raised when the OSWorld VM cannot be reached."""
+
     pass
 
 
@@ -53,9 +53,7 @@ class OSWorldSandboxAdapter(SandboxPort):
     """
 
     def __init__(
-        self,
-        settings: OSWorldSettings | None = None,
-        config: SandboxConfig | None = None,
+        self, settings: OSWorldSettings | None = None, config: SandboxConfig | None = None
     ) -> None:
         self._settings = settings or OSWorldSettings()
         self._config = config or SandboxConfig(allow_network=True)
@@ -100,10 +98,10 @@ class OSWorldSandboxAdapter(SandboxPort):
     async def execute(
         self,
         command: list[str],
-        timeout: Optional[float] = None,
-        cwd: Optional[str | Path] = None,
-        env: Optional[dict[str, str]] = None,
-        memory_limit_mb: Optional[int] = None,
+        timeout: float | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        memory_limit_mb: int | None = None,
     ) -> SandboxResult:
         """Execute a command inside the OSWorld VM."""
         return await self._exec(command, timeout=timeout, cwd=cwd, env=env)
@@ -112,30 +110,24 @@ class OSWorldSandboxAdapter(SandboxPort):
         self,
         script: str,
         shell: str = "bash",
-        timeout: Optional[float] = None,
-        cwd: Optional[str | Path] = None,
-        env: Optional[dict[str, str]] = None,
-        memory_limit_mb: Optional[int] = None,
+        timeout: float | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        memory_limit_mb: int | None = None,
     ) -> SandboxResult:
         """Execute a shell script inside the OSWorld VM."""
-        return await self._exec(
-            [shell, "-c", script],
-            timeout=timeout, cwd=cwd, env=env,
-        )
+        return await self._exec([shell, "-c", script], timeout=timeout, cwd=cwd, env=env)
 
     async def execute_python(
         self,
         code: str,
-        timeout: Optional[float] = None,
-        cwd: Optional[str | Path] = None,
-        env: Optional[dict[str, str]] = None,
-        memory_limit_mb: Optional[int] = None,
+        timeout: float | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
+        memory_limit_mb: int | None = None,
     ) -> SandboxResult:
         """Execute Python code inside the OSWorld VM."""
-        return await self._exec(
-            ["python3", "-c", code],
-            timeout=timeout, cwd=cwd, env=env,
-        )
+        return await self._exec(["python3", "-c", code], timeout=timeout, cwd=cwd, env=env)
 
     # ── OSWorld-specific operations ─────────────────────────────────
 
@@ -158,11 +150,18 @@ class OSWorldSandboxAdapter(SandboxPort):
             button: Mouse button — "left", "right", or "middle".
         """
         import json
+
         payload = json.dumps({"action": "click", "x": x, "y": y, "button": button})
-        await self._exec(["python3", "-c", f"""
+        await self._exec(
+            [
+                "python3",
+                "-c",
+                f"""
 import pyautogui
 pyautogui.click({x}, {y}, button='{button}')
-"""])
+""",
+            ]
+        )
 
     async def double_click(self, x: int, y: int) -> None:
         """Double-click at (x, y)."""
@@ -174,12 +173,19 @@ pyautogui.click({x}, {y}, button='{button}')
         Uses base64 encoding to avoid shell escaping issues.
         """
         import base64 as _b64
+
         encoded = _b64.b64encode(text.encode()).decode()
-        await self._exec(["python3", "-c", f"""
+        await self._exec(
+            [
+                "python3",
+                "-c",
+                f"""
 import base64, pyautogui
 text = base64.b64decode('{encoded}').decode()
 pyautogui.write(text, interval=0.05)
-"""])
+""",
+            ]
+        )
 
     async def hotkey(self, *keys: str) -> None:
         """Press a hotkey combination (e.g., hotkey('ctrl', 'c'))."""
@@ -189,7 +195,13 @@ pyautogui.write(text, interval=0.05)
     async def scroll(self, clicks: int, x: int | None = None, y: int | None = None) -> None:
         """Scroll at (x,y) or current position."""
         args = f"{x}, {y}, " if x is not None else ""
-        await self._exec(["python3", "-c", f"import pyautogui; pyautogui.scroll({clicks}, {args}button='middle')"])
+        await self._exec(
+            [
+                "python3",
+                "-c",
+                f"import pyautogui; pyautogui.scroll({clicks}, {args}button='middle')",
+            ]
+        )
 
     async def get_accessibility_tree(self) -> str:
         """Fetch the accessibility tree from the OSWorld VM as a flat JSON array.
@@ -197,7 +209,11 @@ pyautogui.write(text, interval=0.05)
         Uses AT-SPI on Linux or UIA on Windows to enumerate interactive elements.
         Returns a JSON array of {name, role, bounds: {x,y,w,h}, enabled, focused}.
         """
-        result = await self._exec(["python3", "-c", """
+        result = await self._exec(
+            [
+                "python3",
+                "-c",
+                """
 try:
     import pyatspi
     import json
@@ -233,7 +249,9 @@ try:
     print(json.dumps(elements, ensure_ascii=False))
 except ImportError:
     print(json.dumps([]))  # at-spi not available
-"""])
+""",
+            ]
+        )
         return result.stdout if result.success else "[]"
 
     async def get_file(self, remote_path: str) -> bytes:
@@ -253,6 +271,7 @@ except ImportError:
             ValueError: If *remote_path* contains unsafe characters.
         """
         import re as _re
+
         if not _re.match(r"^[a-zA-Z0-9/._\-\~]+$", remote_path):
             raise ValueError(f"Unsafe remote_path: {remote_path}")
         content = local_path.read_bytes()
@@ -260,24 +279,32 @@ except ImportError:
         if self._mode == "remote":
             return await self._remote_put_file(remote_path, encoded)
         # Docker: write via Python
-        result = await self._exec(["python3", "-c", f"""
+        result = await self._exec(
+            [
+                "python3",
+                "-c",
+                f"""
 import base64
 data = base64.b64decode('{encoded}')
 with open('{remote_path}', 'wb') as f:
     f.write(data)
-"""])
+""",
+            ]
+        )
         return result.success
 
     # ── Internal implementations ────────────────────────────────────
 
     async def _check_docker_available(self) -> bool:
         from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
+
         docker = DockerLinuxSandbox()
         return await docker.is_available()
 
     async def _check_remote_available(self) -> bool:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(f"{self._settings.base_url}/health")
                 return resp.status_code == 200
@@ -287,18 +314,15 @@ with open('{remote_path}', 'wb') as f:
     async def _exec(
         self,
         cmd: list[str],
-        timeout: Optional[float] = None,
-        cwd: Optional[str | Path] = None,
-        env: Optional[dict[str, str]] = None,
+        timeout: float | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
     ) -> SandboxResult:
         """Execute a command in the preferred backend."""
-        import time as _t
 
         if self._mode == "docker":
-            from weebot.infrastructure.sandbox.docker_linux import (
-                DockerLinuxSandbox,
-                SandboxResult as _SR,
-            )
+            from weebot.infrastructure.sandbox.docker_linux import DockerLinuxSandbox
+
             docker = DockerLinuxSandbox()
             return await docker.execute(cmd, timeout=timeout, cwd=cwd, env=env)
 
@@ -308,15 +332,16 @@ with open('{remote_path}', 'wb') as f:
     async def _remote_exec(
         self,
         cmd: list[str],
-        timeout: Optional[float] = None,
-        cwd: Optional[str | Path] = None,
-        env: Optional[dict[str, str]] = None,
+        timeout: float | None = None,
+        cwd: str | Path | None = None,
+        env: dict[str, str] | None = None,
     ) -> SandboxResult:
         import time as _t
-        import json
+
         t0 = _t.monotonic()
         try:
             import httpx
+
             headers = {}
             if self._settings.osworld_api_token:
                 headers["Authorization"] = f"Bearer {self._settings.osworld_api_token}"
@@ -336,12 +361,7 @@ with open('{remote_path}', 'wb') as f:
             )
         except Exception as exc:
             elapsed = (_t.monotonic() - t0) * 1000
-            return SandboxResult(
-                stdout="",
-                stderr=str(exc),
-                returncode=-1,
-                elapsed_ms=elapsed,
-            )
+            return SandboxResult(stdout="", stderr=str(exc), returncode=-1, elapsed_ms=elapsed)
 
     async def _docker_capture_screenshot(self) -> bytes:
         """Capture screenshot from Docker container.
@@ -349,18 +369,19 @@ with open('{remote_path}', 'wb') as f:
         Tries backends in order: import (ImageMagick) → scrot → python mss.
         One of these must be installed in the Docker container.
         """
-        import shutil as _su
-        commands = [
-            ["import", "-window", "root", "/tmp/screen.png"],
-            ["scrot", "/tmp/screen.png"],
-        ]
+
+        commands = [["import", "-window", "root", "/tmp/screen.png"], ["scrot", "/tmp/screen.png"]]
         for cmd in commands:
             result = await self._exec(cmd)
             if result.success:
                 file_result = await self._exec(["cat", "/tmp/screen.png"])
                 return file_result.stdout.encode()
         # Fallback: mss (cross-platform, no extra deps)
-        result = await self._exec(["python3", "-c", """
+        result = await self._exec(
+            [
+                "python3",
+                "-c",
+                """
 try:
     import mss, base64
     with mss.mss() as sct:
@@ -371,39 +392,41 @@ except ImportError:
     import mss
     with mss.mss() as sct:
         sct.shot(output='/tmp/screen.png')
-"""])
+""",
+            ]
+        )
         if result.success:
             file_result = await self._exec(["cat", "/tmp/screen.png"])
             return file_result.stdout.encode()
-        raise OSWorldConnectionError("Docker screenshot failed — install imagemagick, scrot, or mss in container")
+        raise OSWorldConnectionError(
+            "Docker screenshot failed — install imagemagick, scrot, or mss in container"
+        )
 
     async def _remote_capture_screenshot(self) -> bytes:
         import httpx
+
         headers = {}
         if self._settings.osworld_api_token:
             headers["Authorization"] = f"Bearer {self._settings.osworld_api_token}"
         async with httpx.AsyncClient(timeout=self._settings.osworld_action_timeout) as client:
-            resp = await client.get(
-                f"{self._settings.base_url}/screenshot",
-                headers=headers,
-            )
+            resp = await client.get(f"{self._settings.base_url}/screenshot", headers=headers)
             return resp.content
 
     async def _remote_get_file(self, remote_path: str) -> bytes:
         import httpx
+
         headers = {}
         if self._settings.osworld_api_token:
             headers["Authorization"] = f"Bearer {self._settings.osworld_api_token}"
         async with httpx.AsyncClient(timeout=self._settings.osworld_action_timeout) as client:
             resp = await client.get(
-                f"{self._settings.base_url}/file",
-                params={"path": remote_path},
-                headers=headers,
+                f"{self._settings.base_url}/file", params={"path": remote_path}, headers=headers
             )
             return resp.content
 
     async def _remote_put_file(self, remote_path: str, payload: str) -> bool:
         import httpx
+
         headers = {}
         if self._settings.osworld_api_token:
             headers["Authorization"] = f"Bearer {self._settings.osworld_api_token}"

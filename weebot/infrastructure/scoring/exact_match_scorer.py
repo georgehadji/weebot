@@ -8,10 +8,10 @@ Compares the agent's final answer against the expected answer with:
 
 Returns 1.0 for exact match, 0.0 for no match.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from weebot.application.ports.scoring_port import ScoringPort
 from weebot.domain.models.event import TrajectoryScored
@@ -40,11 +40,7 @@ class ExactMatchScorer(ScoringPort):
     def __init__(self, use_substring_fallback: bool = True):
         self._use_substring = use_substring_fallback
 
-    async def score(
-        self,
-        session: Session,
-        expected_answer: Optional[str] = None,
-    ) -> TrajectoryScored:
+    async def score(self, session: Session, expected_answer: str | None = None) -> TrajectoryScored:
         """Score a completed session by comparing its final message
         against the expected answer."""
         # Extract the final assistant message
@@ -69,8 +65,7 @@ class ExactMatchScorer(ScoringPort):
                 score = 1.0
                 success_patterns.append("exact_match")
             elif self._use_substring and (
-                normalized_expected in normalized_actual
-                or normalized_actual in normalized_expected
+                normalized_expected in normalized_actual or normalized_actual in normalized_expected
             ):
                 score = 0.5
                 failure_modes.append("partial_match_only")

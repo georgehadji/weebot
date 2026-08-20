@@ -1,4 +1,5 @@
 """Tests for KnowledgeTool (SQLite FTS5 persistent knowledge base)."""
+
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ def kb(tmp_path):
 # ---------------------------------------------------------------------------
 # add_note
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_add_note_returns_note_id(kb):
@@ -58,6 +60,7 @@ async def test_add_note_with_tags_and_project(kb):
 # search
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_search_finds_added_note(kb):
     await kb.execute(action="add_note", title="JWT authentication", body="Use HS256 algorithm")
@@ -93,6 +96,7 @@ async def test_search_no_results_returns_empty_list(kb):
 # get_note
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_note_returns_full_note(kb):
     add = await kb.execute(action="add_note", title="DB design", body="Use Postgres")
@@ -123,6 +127,7 @@ async def test_get_note_missing_id_is_error(kb):
 # list_notes
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_list_notes_returns_all(kb):
     await kb.execute(action="add_note", title="Note A", body="Content A")
@@ -148,6 +153,7 @@ async def test_list_notes_filtered_by_project(kb):
 # delete_note
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_delete_note_removes_it(kb):
     add = await kb.execute(action="add_note", title="Temp", body="delete me")
@@ -170,6 +176,7 @@ async def test_delete_note_missing_id_is_error(kb):
 # ---------------------------------------------------------------------------
 # unknown action
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_unknown_action_is_error(kb):

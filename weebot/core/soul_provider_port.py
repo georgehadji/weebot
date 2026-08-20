@@ -8,6 +8,7 @@ Moved from ``weebot.application.ports.soul_provider_port`` to
 ``weebot.core.soul_provider_port`` because ``core.personality_manager``
 needs it (core must not depend on application layer).
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -10,6 +10,7 @@ bodies into an execution path without routing through approval_policy first.
 Enable with: WEEBOT_ENABLE_ATOMIC_MAIL=1
 Credentials directory: ATOMIC_MAIL_CREDENTIALS_DIR (default ~/.atomicmail)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,6 +26,7 @@ try:
     # Reach Prometheus metrics through the application bridge so the tools
     # layer keeps no static edge into infrastructure.observability.
     from weebot.application.services.metrics_bridge import get_metrics
+
     _m = get_metrics()
     if _m is not None:
         _tool_calls_total = _m.tool_calls_total
@@ -37,10 +39,7 @@ except Exception:  # prometheus_client not installed or registry conflict
 
 _log = logging.getLogger(__name__)
 
-_BREAKER = CircuitBreaker(
-    failure_threshold=3,
-    cooldown_seconds=60.0,
-)
+_BREAKER = CircuitBreaker(failure_threshold=3, cooldown_seconds=60.0)
 _BREAKER_ID = "atomic_mail"
 
 _ACTIONS = ("register", "jmap_request", "help")
@@ -49,6 +48,7 @@ _ACTIONS = ("register", "jmap_request", "help")
 def _load_handle_tool_call():
     """Lazy import so missing shared-assets only errors at call time."""
     from weebot.infrastructure.adapters.atomicmail.mcp_server import handle_tool_call
+
     return handle_tool_call
 
 
@@ -182,7 +182,7 @@ class AtomicMailTool(BaseTool):
                 asyncio.to_thread(handle_tool_call, action, args),
                 timeout=self.default_timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await _BREAKER.record_failure(_BREAKER_ID)
             return ToolResult.error_result(
                 f"Atomic Mail request timed out after {self.default_timeout_seconds}s."
@@ -212,9 +212,7 @@ class AtomicMailTool(BaseTool):
             return ToolResult.error_result(error=body, execution_time_ms=elapsed_ms)
 
         await _BREAKER.record_success(_BREAKER_ID)
-        _log.info(
-            "AtomicMailTool success (action=%s, elapsed_ms=%d)", action, elapsed_ms
-        )
+        _log.info("AtomicMailTool success (action=%s, elapsed_ms=%d)", action, elapsed_ms)
         if _METRICS_AVAILABLE:
             _tool_calls_total.labels(tool="atomic_mail", success="true").inc()
             _tool_call_duration_seconds.labels(tool="atomic_mail").observe(elapsed_ms / 1000)
@@ -234,8 +232,15 @@ class AtomicMailTool(BaseTool):
 
         if action == "jmap_request":
             args = {}
-            for key in ("ops", "ops_file", "vars", "dry_run", "using",
-                        "attachments", "credentials_dir"):
+            for key in (
+                "ops",
+                "ops_file",
+                "vars",
+                "dry_run",
+                "using",
+                "attachments",
+                "credentials_dir",
+            ):
                 if key in kwargs:
                     args[key] = kwargs[key]
             return args

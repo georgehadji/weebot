@@ -1,4 +1,5 @@
 """Unit tests for MCP catalog domain models."""
+
 from __future__ import annotations
 
 from weebot.domain.models.mcp_catalog import MCPToolCatalogIndex

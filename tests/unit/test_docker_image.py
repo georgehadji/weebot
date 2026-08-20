@@ -6,6 +6,7 @@ Covers:
 - _resolve_image() falls back when Docker is unavailable
 - Dockerfile exists at the expected path
 """
+
 import pytest
 
 
@@ -22,10 +23,7 @@ class TestDockerImageResolution:
         # Mock create_subprocess_exec so docker inspect succeeds
         mock_proc = mocker.AsyncMock()
         mock_proc.returncode = 0
-        mocker.patch(
-            "asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        )
+        mocker.patch("asyncio.create_subprocess_exec", return_value=mock_proc)
 
         image = await sandbox._resolve_image()
         assert image == DockerLinuxSandbox.CUSTOM_IMAGE
@@ -40,10 +38,7 @@ class TestDockerImageResolution:
         # Mock docker image inspect to fail (returncode 1)
         mock_proc = mocker.AsyncMock()
         mock_proc.returncode = 1
-        mocker.patch(
-            "asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        )
+        mocker.patch("asyncio.create_subprocess_exec", return_value=mock_proc)
 
         image = await sandbox._resolve_image()
         assert image == DockerLinuxSandbox.DEFAULT_IMAGE
@@ -57,8 +52,7 @@ class TestDockerImageResolution:
 
         # Mock create_subprocess_exec to raise (Docker not installed)
         mocker.patch(
-            "asyncio.create_subprocess_exec",
-            side_effect=FileNotFoundError("docker not found"),
+            "asyncio.create_subprocess_exec", side_effect=FileNotFoundError("docker not found")
         )
 
         image = await sandbox._resolve_image()
@@ -82,19 +76,18 @@ class TestDockerfile:
     def test_tool_env_dockerfile_exists(self):
         """The weebot-tool-env.Dockerfile must exist at docker/."""
         from pathlib import Path
+
         root = Path(__file__).resolve().parent.parent.parent
         dockerfile = root / "docker" / "weebot-tool-env.Dockerfile"
         assert dockerfile.exists(), (
-            f"Expected {dockerfile} to exist. "
-            "Run the build step from Enhancement 5."
+            f"Expected {dockerfile} to exist. " "Run the build step from Enhancement 5."
         )
 
     def test_tool_env_dockerfile_is_valid(self):
         """The Dockerfile should have at least a FROM instruction."""
         from pathlib import Path
+
         root = Path(__file__).resolve().parent.parent.parent
         content = (root / "docker" / "weebot-tool-env.Dockerfile").read_text()
         assert content.startswith("FROM"), "Dockerfile must start with FROM"
-        assert "LABEL org.weebot.image" in content, (
-            "Dockerfile must have weebot labels"
-        )
+        assert "LABEL org.weebot.image" in content, "Dockerfile must have weebot labels"

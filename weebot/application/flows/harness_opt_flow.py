@@ -7,38 +7,30 @@ surfaces of HarnessConfig rather than skill content.  Uses inline LLM
 proposal generation (no OptimizerPort dependency) and delegates regression
 validation to the RegressionGate (Phase 4).
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Optional
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncGenerator, Callable
 
 from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_BALANCED
 from weebot.domain.models.session import Session
 
 from weebot.application.flows.base_flow import BaseFlow
-from weebot.application.services.harness_optimization_target import (
-    HarnessOptimizationTarget,
-)
+from weebot.application.services.harness_optimization_target import HarnessOptimizationTarget
 from weebot.application.services.regression_gate import RegressionGate
 from weebot.application.services.harness_safety_gate import HarnessSafetyGate
-from weebot.domain.models.event import (
-    AgentEvent,
-    DoneEvent,
-    MessageEvent,
-    WaitForUserEvent,
-)
+from weebot.domain.models.event import AgentEvent, DoneEvent, MessageEvent, WaitForUserEvent
 from weebot.domain.models.failure_signature import EvidenceBundle
-from weebot.domain.models.harness_edit import HarnessEdit, PromotionDecision
+from weebot.domain.models.harness_edit import HarnessEdit
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.application.ports.trajectory_repository_port import (
-        TrajectoryRepositoryPort,
-    )
+    from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +97,15 @@ class HarnessOptFlow(BaseFlow):
 
     def __init__(
         self,
-        llm: "LLMPort",
+        llm: LLMPort,
         target: HarnessOptimizationTarget,
-        trajectory_repo: "TrajectoryRepositoryPort",
-        held_in_tasks: Optional[list[str]] = None,
-        held_out_tasks: Optional[list[str]] = None,
+        trajectory_repo: TrajectoryRepositoryPort,
+        held_in_tasks: list[str] | None = None,
+        held_out_tasks: list[str] | None = None,
         max_proposals: int = 3,
-        gate: Optional[RegressionGate] = None,
-        tools: Optional[Any] = None,
-        code_quality_signal: Optional[Any] = None,
+        gate: RegressionGate | None = None,
+        tools: Any | None = None,
+        code_quality_signal: Any | None = None,
     ):
         self._llm = llm
         self._tools = tools
@@ -131,8 +123,7 @@ class HarnessOptFlow(BaseFlow):
         # Phase 4+ wiring: pass a task_runner that creates PlanActFlows
         # with the candidate harness config injected.
         self._gate = gate or RegressionGate(
-            task_runner=self._make_task_runner(),
-            code_quality_signal=code_quality_signal,
+            task_runner=self._make_task_runner(), code_quality_signal=code_quality_signal
         )
 
     def is_done(self) -> bool:
@@ -155,9 +146,7 @@ class HarnessOptFlow(BaseFlow):
             yield DoneEvent()
             return
 
-        yield MessageEvent(
-            message=f"Loaded harness {harness.version}: {harness.description}",
-        )
+        yield MessageEvent(message=f"Loaded harness {harness.version}: {harness.description}")
 
         # 2. Mine: query failure clusters from repository
         # NOTE: held-in evaluation (running tasks against the current harness)
@@ -175,15 +164,12 @@ class HarnessOptFlow(BaseFlow):
 
         yield MessageEvent(
             message=f"Found {len(bundle.clusters)} failure clusters "
-                    f"(total failures: {bundle.total_failures})",
+            f"(total failures: {bundle.total_failures})"
         )
 
         # 4. Propose: generate candidate edits from failure evidence
         yield MessageEvent(message=f"Proposing up to {self._max_proposals} harness edits...")
-        proposals = await self._propose_edits(
-            harness_content=self._target.content,
-            bundle=bundle,
-        )
+        proposals = await self._propose_edits(harness_content=self._target.content, bundle=bundle)
 
         if not proposals:
             logger.info("No edits proposed")
@@ -192,15 +178,11 @@ class HarnessOptFlow(BaseFlow):
             yield DoneEvent()
             return
 
-        yield MessageEvent(
-            message=f"Generated {len(proposals)} candidate proposals",
-        )
+        yield MessageEvent(message=f"Generated {len(proposals)} candidate proposals")
 
         # 5. Apply each proposal and validate via regression gate
         for i, edit in enumerate(proposals):
-            yield MessageEvent(
-                message=f"Proposal {i+1}/{len(proposals)}: {edit.target_surface}",
-            )
+            yield MessageEvent(message=f"Proposal {i+1}/{len(proposals)}: {edit.target_surface}")
 
             # Apply edit to produce a candidate harness
             candidate = await self._target.apply_edits([edit.to_edit_dict()])
@@ -226,13 +208,11 @@ class HarnessOptFlow(BaseFlow):
                 saved = await self._target.save(candidate)
                 yield MessageEvent(
                     message=f"✓ Accepted: {edit.target_surface} → "
-                            f"harness v{saved.version} "
-                            f"(Δ_in={decision.delta_in:+.2f}, Δ_ho={decision.delta_ho:+.2f})",
+                    f"harness v{saved.version} "
+                    f"(Δ_in={decision.delta_in:+.2f}, Δ_ho={decision.delta_ho:+.2f})"
                 )
             else:
-                yield MessageEvent(
-                    message=f"✗ Rejected: {edit.target_surface} — {decision.reason}",
-                )
+                yield MessageEvent(message=f"✗ Rejected: {edit.target_surface} — {decision.reason}")
 
         self._done = True
         yield DoneEvent()
@@ -257,15 +237,10 @@ class HarnessOptFlow(BaseFlow):
         """
         from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
-        from weebot.application.services.harness_metric_scorer import (
-            HarnessMetricScorer,
-        )
+        from weebot.application.services.harness_metric_scorer import HarnessMetricScorer
         from weebot.config.harness.schema import HarnessConfig
 
-        async def _run(
-            task_ids: list[str],
-            config: HarnessConfig,
-        ) -> list[dict]:
+        async def _run(task_ids: list[str], config: HarnessConfig) -> list[dict]:
             results = []
             for task_id in task_ids:
                 session = Session(
@@ -275,10 +250,7 @@ class HarnessOptFlow(BaseFlow):
                     context={"harness_version": config.version},
                 )
                 flow_cfg = PlanActFlowConfig(
-                    llm=self._llm,
-                    tools=self._tools,
-                    session=session,
-                    harness_config=config,
+                    llm=self._llm, tools=self._tools, session=session, harness_config=config
                 )
                 flow = PlanActFlow(flow_cfg)
                 try:
@@ -288,17 +260,13 @@ class HarnessOptFlow(BaseFlow):
                     task_error = None
                 except Exception as exc:
                     logger.warning(
-                        "Gate eval %s (harness %s) failed: %s",
-                        task_id, config.version, exc,
+                        "Gate eval %s (harness %s) failed: %s", task_id, config.version, exc
                     )
                     task_passed = False
                     task_error = str(exc)
 
                 # Score with HarnessMetricScorer
-                metrics = HarnessMetricScorer.score(
-                    session=session,
-                    task_passed=task_passed,
-                )
+                metrics = HarnessMetricScorer.score(session=session, task_passed=task_passed)
 
                 result: dict = {
                     "passed": task_passed,
@@ -313,20 +281,15 @@ class HarnessOptFlow(BaseFlow):
         return _run
 
     async def _mine_failure_patterns(
-        self,
-        min_support: int = 3,
-        lookback_days: int = 7,
-        max_clusters: int = 5,
+        self, min_support: int = 3, lookback_days: int = 7, max_clusters: int = 5
     ) -> EvidenceBundle:
         """Query the trajectory repository for failure clusters."""
         clusters = await self._trajectory_repo.get_clusters(
-            min_support=min_support,
-            lookback_days=lookback_days,
-            max_clusters=max_clusters,
+            min_support=min_support, lookback_days=lookback_days, max_clusters=max_clusters
         )
         total_failures = sum(c.support for c in clusters)
         total_trajectories = await self._trajectory_repo.count_trajectories(
-            lookback_days=lookback_days,
+            lookback_days=lookback_days
         )
         return EvidenceBundle(
             harness_version=self._target.name,
@@ -336,9 +299,7 @@ class HarnessOptFlow(BaseFlow):
         )
 
     async def _propose_edits(
-        self,
-        harness_content: str,
-        bundle: EvidenceBundle,
+        self, harness_content: str, bundle: EvidenceBundle
     ) -> list[HarnessEdit]:
         """Call the LLM to propose harness edits from failure evidence.
 
@@ -360,8 +321,7 @@ class HarnessOptFlow(BaseFlow):
             return []
 
         prompt = _HARNESS_PROPOSAL_PROMPT.format(
-            harness_content=harness_content,
-            failure_patterns="\n".join(pattern_lines),
+            harness_content=harness_content, failure_patterns="\n".join(pattern_lines)
         )
 
         edits = []
@@ -379,7 +339,7 @@ class HarnessOptFlow(BaseFlow):
 
                 raw = response.content
                 # Strip markdown fences if present
-                fence_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+                fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
                 if fence_match:
                     raw = fence_match.group(1)
 

@@ -9,6 +9,7 @@ which is exactly what the frontend calls immediately after creating a
 session (sessions/new/page.tsx → api.sessions.run(session.id)) — so
 starting any session from the UI was completely broken.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

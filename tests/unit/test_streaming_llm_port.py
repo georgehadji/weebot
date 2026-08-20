@@ -7,9 +7,10 @@ Verifies:
      regardless of whether the underlying provider can stream.
   3. as_streaming() passes a real streaming adapter through unchanged.
 """
+
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -25,22 +26,43 @@ from weebot.infrastructure.adapters.non_streaming_llm_adapter import (
 class _NonStreamingAdapter(LLMPort):
     """Bare LLMPort — no stream() method, like most real adapters today."""
 
-    async def chat(self, messages, tools=None, tool_choice="auto",
-                    response_format=None, model=None, temperature=None,
-                    max_tokens=None) -> LLMResponse:
+    async def chat(
+        self,
+        messages,
+        tools=None,
+        tool_choice="auto",
+        response_format=None,
+        model=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
         return LLMResponse(content="full response", model="stub-model", usage={"total_tokens": 10})
 
 
 class _StreamingAdapter(LLMPort):
     """An adapter that additionally implements stream()."""
 
-    async def chat(self, messages, tools=None, tool_choice="auto",
-                    response_format=None, model=None, temperature=None,
-                    max_tokens=None) -> LLMResponse:
+    async def chat(
+        self,
+        messages,
+        tools=None,
+        tool_choice="auto",
+        response_format=None,
+        model=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> LLMResponse:
         return LLMResponse(content="unused", model="stub-model")
 
-    async def stream(self, messages, tools=None, tool_choice="auto",
-                      model=None, temperature=None, max_tokens=None) -> AsyncIterator[LLMChunk]:
+    async def stream(
+        self,
+        messages,
+        tools=None,
+        tool_choice="auto",
+        model=None,
+        temperature=None,
+        max_tokens=None,
+    ) -> AsyncIterator[LLMChunk]:
         yield LLMChunk(delta="chunk-1", model="stub-model")
         yield LLMChunk(delta="chunk-2", model="stub-model", finish_reason="stop")
 

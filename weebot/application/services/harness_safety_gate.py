@@ -8,52 +8,55 @@ human approval via ``WaitForUserEvent``.
 This gate runs AFTER the RegressionGate has accepted the candidate,
 so the user is shown edits that already pass regression testing.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from weebot.domain.models.harness_edit import HarnessEdit
-
 
 # Surfaces that can be auto-promoted without human review.
 # These are the paper's primary edit targets — instruction text changes
 # that do not affect the agent's capabilities or safety boundaries.
 # Patterns ending with ``.*`` match any surface starting with that prefix
 # (e.g. ``"instructions.*"`` matches ``"instructions.bootstrap"``).
-AUTONOMOUS_SURFACES: frozenset[str] = frozenset({
-    # Instruction surfaces — the paper's primary edit targets
-    "instructions.system_prompt_extension",  # Policy note: broad but safe (text only)
-    "instructions.bootstrap",
-    "instructions.execution",
-    "instructions.verification",
-    "instructions.failure_recovery",
-    # Skill and structural tuning knobs
-    "skill_selection.active_skills",
-    "skill_retrieval.enabled",
-    "skill_retrieval.top_k",
-    "skill_retrieval.retriever",
-    "trajectory.repetition_threshold",
-    "trajectory.stagnation_window",
-    "trajectory.budget_hotspot_ratio",
-    "trajectory.exhaustion_ratio",
-})
+AUTONOMOUS_SURFACES: frozenset[str] = frozenset(
+    {
+        # Instruction surfaces — the paper's primary edit targets
+        "instructions.system_prompt_extension",  # Policy note: broad but safe (text only)
+        "instructions.bootstrap",
+        "instructions.execution",
+        "instructions.verification",
+        "instructions.failure_recovery",
+        # Skill and structural tuning knobs
+        "skill_selection.active_skills",
+        "skill_retrieval.enabled",
+        "skill_retrieval.top_k",
+        "skill_retrieval.retriever",
+        "trajectory.repetition_threshold",
+        "trajectory.stagnation_window",
+        "trajectory.budget_hotspot_ratio",
+        "trajectory.exhaustion_ratio",
+    }
+)
 
 # Surfaces that require human approval before promotion.
 # Changes here can affect safety (tool errors, loop detection) or
 # agent delegation (subagent definitions).
 # Patterns ending with ``.*`` match any surface starting with that prefix
 # (e.g. ``"middleware.*"`` matches ``"middleware.add:loop_breaker"``).
-GATED_SURFACES: frozenset[str] = frozenset({
-    "runtime_control.enabled",
-    "runtime_control.max_recent_tool_errors",
-    "runtime_control.max_total_tool_messages",
-    "runtime_control.loop_detection_instruction",
-    "subagents.definitions",
-    "subagents.*",
-    "middleware.*",
-    "tool_policies.*",
-})
+GATED_SURFACES: frozenset[str] = frozenset(
+    {
+        "runtime_control.enabled",
+        "runtime_control.max_recent_tool_errors",
+        "runtime_control.max_total_tool_messages",
+        "runtime_control.loop_detection_instruction",
+        "subagents.definitions",
+        "subagents.*",
+        "middleware.*",
+        "tool_policies.*",
+    }
+)
 
 
 class HarnessSafetyGate:
@@ -68,7 +71,7 @@ class HarnessSafetyGate:
     """
 
     @staticmethod
-    def check(edits: list[HarnessEdit]) -> "SafetyCheckResult":
+    def check(edits: list[HarnessEdit]) -> SafetyCheckResult:
         """Classify a list of HarnessEdits.
 
         Returns:
@@ -107,6 +110,7 @@ class HarnessSafetyGate:
 
 # ── Result type ───────────────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class SafetyCheckResult:
     """Result of a safety check on harness edits."""
@@ -127,6 +131,7 @@ class SafetyCheckResult:
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
+
 def _matches_any(surface: str, patterns: frozenset[str]) -> bool:
     """Check if *surface* matches any pattern in *patterns*.
 
@@ -144,10 +149,7 @@ def _matches_any(surface: str, patterns: frozenset[str]) -> bool:
     return False
 
 
-def _build_approval_prompt(
-    autonomous: list[HarnessEdit],
-    gated: list[HarnessEdit],
-) -> str:
+def _build_approval_prompt(autonomous: list[HarnessEdit], gated: list[HarnessEdit]) -> str:
     """Build a human-readable approval prompt for gated edits."""
     lines = [
         "**Self-Harness proposes harness edits that require your approval.**",
@@ -175,10 +177,12 @@ def _build_approval_prompt(
             lines.append(f"- **{e.target_surface}**: `{e.old_value}` → `{e.new_value}`")
         lines.append("")
 
-    lines.extend([
-        "**Approve:** Auto-promote all proposed edits.",
-        "**Reject:** Discard all proposed edits.",
-        "**Modify:** (Not supported yet — reject and manually apply the gated edits you want, then re-run.)",
-    ])
+    lines.extend(
+        [
+            "**Approve:** Auto-promote all proposed edits.",
+            "**Reject:** Discard all proposed edits.",
+            "**Modify:** (Not supported yet — reject and manually apply the gated edits you want, then re-run.)",
+        ]
+    )
 
     return "\n".join(lines)

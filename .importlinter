@@ -154,7 +154,6 @@ ignore_imports =
     weebot.interfaces.web.rate_limit -> weebot.infrastructure.observability.metrics
     weebot.interfaces.web.rate_limit -> weebot.infrastructure.security.audit_logger
     weebot.interfaces.web.routers.webhook -> weebot.application.di
-    weebot.interfaces.web.routers.webhook -> weebot.application.flows.plan_act_flow
     # Factories wire up the full tool set (composition root).
     weebot.interfaces.factories -> weebot.application.di
     weebot.interfaces.factories -> weebot.application.flows.plan_act_flow

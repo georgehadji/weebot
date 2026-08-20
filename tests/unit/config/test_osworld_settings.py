@@ -1,4 +1,5 @@
 """Tests for OSWorldSettings configuration."""
+
 import pytest
 from weebot.config.settings import OSWorldSettings
 
@@ -45,30 +46,35 @@ class TestOSWorldSettings:
     def test_dpi_below_minimum_rejected(self):
         """DPI scale below 0.5 is rejected."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             OSWorldSettings(osworld_dpi_scale=0.4)
 
     def test_dpi_above_maximum_rejected(self):
         """DPI scale above 4.0 is rejected."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             OSWorldSettings(osworld_dpi_scale=4.1)
 
     def test_screen_width_below_minimum_rejected(self):
         """Screen width below 640 is rejected."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             OSWorldSettings(osworld_screen_width=320)
 
     def test_screen_height_below_minimum_rejected(self):
         """Screen height below 480 is rejected."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             OSWorldSettings(osworld_screen_height=240)
 
     def test_connect_timeout_below_1_rejected(self):
         """Connect timeout below 1 is rejected."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             OSWorldSettings(osworld_connect_timeout=0)
 

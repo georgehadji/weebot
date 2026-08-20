@@ -11,12 +11,12 @@ Session continuity (Track 2 — Hermes Audit):
 
 Requires TELEGRAM_BOT_TOKEN in .env.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
 
 import aiohttp
 
@@ -30,11 +30,7 @@ from weebot.application.services.gateway_flow_resolver import GatewayFlowResolve
 from weebot.domain.models.gateway_session import GatewaySessionKey
 from weebot.domain.models.session import Session
 from weebot.interfaces.factories import build_tools, create_flow
-from weebot.interfaces.gateways.base import (
-    GatewayAdapter,
-    GatewayMessage,
-    GatewayResponse,
-)
+from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +106,7 @@ class TelegramAdapter(GatewayAdapter):
                     return data.get("result", [])
         return []
 
-    def _parse_update(self, update: dict) -> Optional[GatewayMessage]:
+    def _parse_update(self, update: dict) -> GatewayMessage | None:
         msg = update.get("message", {})
         text = msg.get("text", "")
         chat = msg.get("chat", {})
@@ -180,7 +176,8 @@ class TelegramAdapter(GatewayAdapter):
         if not self.is_authorized("telegram", message.external_id, sender_id):
             logger.warning(
                 "Telegram message rejected by gateway allowlist: chat=%s user=%s",
-                message.external_id, sender_id,
+                message.external_id,
+                sender_id,
             )
             return (
                 "🔒 This chat isn't authorized to use this bot yet.\n"
@@ -216,7 +213,7 @@ class TelegramAdapter(GatewayAdapter):
             # Close current session and create a new one
             await self._flow_resolver.close(key)
             gw_session, flow_session_id = await self._flow_resolver.resolve(
-                key=key, user_id=user_id, metadata=meta,
+                key=key, user_id=user_id, metadata=meta
             )
             session = await self._get_or_create_flow_session(flow_session_id, user_id)
             # Don't process the command text — just return confirmation
@@ -239,9 +236,7 @@ class TelegramAdapter(GatewayAdapter):
 
         return response or "(no response)"
 
-    async def _get_or_create_flow_session(
-        self, flow_session_id: str, user_id: str,
-    ) -> Session:
+    async def _get_or_create_flow_session(self, flow_session_id: str, user_id: str) -> Session:
         """Get or create a Weebot Session for the given flow session ID.
 
         Tries to load an existing session from the state repo first.
@@ -255,11 +250,7 @@ class TelegramAdapter(GatewayAdapter):
         except Exception:
             pass
 
-        session = Session(
-            id=flow_session_id,
-            user_id=user_id,
-            agent_id="telegram-agent",
-        )
+        session = Session(id=flow_session_id, user_id=user_id, agent_id="telegram-agent")
         return session
 
     def _handle_command_response(self, cmd_response: str, key: GatewaySessionKey) -> str:
@@ -347,7 +338,8 @@ class TelegramAdapter(GatewayAdapter):
                                 error_body = await resp.text()
                                 logger.warning(
                                     "Telegram media send failed (HTTP %d): %s",
-                                    resp.status, error_body[:200],
+                                    resp.status,
+                                    error_body[:200],
                                 )
                 except Exception as exc:
                     logger.warning("Telegram media send failed: %s", exc)

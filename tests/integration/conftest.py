@@ -1,4 +1,5 @@
 """Pytest configuration — load .env for real-API integration tests."""
+
 from __future__ import annotations
 
 import os

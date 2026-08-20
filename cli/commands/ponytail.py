@@ -7,6 +7,7 @@ Provides slash-command-style access to Ponytail modes and review/audit tools:
     python -m cli.main ponytail-audit [--path PATH]
     python -m cli.main ponytail-help
 """
+
 from __future__ import annotations
 
 import json
@@ -119,21 +120,13 @@ def cmd_ponytail(level: str) -> None:
 
 
 @click.command(name="ponytail-review")
-@click.option(
-    "--staged",
-    is_flag=True,
-    help="Review staged changes instead of unstaged changes.",
-)
+@click.option("--staged", is_flag=True, help="Review staged changes instead of unstaged changes.")
 def cmd_ponytail_review(staged: bool) -> None:
     """Review current git changes for over-engineering."""
     cmd = ["git", "diff", "--cached"] if staged else ["git", "diff", "HEAD"]
     try:
         diff = subprocess.check_output(
-            cmd,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            cmd, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace"
         )
     except subprocess.CalledProcessError as exc:
         if isinstance(exc.output, str):
@@ -165,15 +158,9 @@ def cmd_ponytail_review(staged: bool) -> None:
 
 
 @click.command(name="ponytail-audit")
+@click.option("--path", default=".", help="Path to audit (default: current directory).")
 @click.option(
-    "--path",
-    default=".",
-    help="Path to audit (default: current directory).",
-)
-@click.option(
-    "--max-files",
-    default=200,
-    help="Maximum number of files to include in the audit catalog.",
+    "--max-files", default=200, help="Maximum number of files to include in the audit catalog."
 )
 def cmd_ponytail_audit(path: str, max_files: int) -> None:
     """Audit the workspace for over-engineering and bloat."""
@@ -193,8 +180,7 @@ def cmd_ponytail_audit(path: str, max_files: int) -> None:
         return
 
     catalog = "\n".join(
-        f"{f.relative_to(root).as_posix()} ({f.stat().st_size} bytes)"
-        for f in sorted(files)
+        f"{f.relative_to(root).as_posix()} ({f.stat().st_size} bytes)" for f in sorted(files)
     )
 
     skill_text = _load_skill("ponytail-audit")
@@ -223,6 +209,5 @@ def cmd_ponytail_help() -> None:
         console.print(text)
     except click.ClickException:
         console.print(
-            "[yellow]ponytail-help skill not found.[/yellow] "
-            "Builtin skills may not be loaded."
+            "[yellow]ponytail-help skill not found.[/yellow] " "Builtin skills may not be loaded."
         )

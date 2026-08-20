@@ -1,17 +1,16 @@
 """Smart notification categorization (ported from OpenClaw)."""
+
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
-
-BUILTIN_CATEGORIES: Dict[str, List[str]] = {
-    "health":   ["blood sugar", "glucose", "cgm", "heart rate", "blood pressure"],
-    "urgent":   ["urgent", "critical", "emergency", "asap"],
+BUILTIN_CATEGORIES: dict[str, list[str]] = {
+    "health": ["blood sugar", "glucose", "cgm", "heart rate", "blood pressure"],
+    "urgent": ["urgent", "critical", "emergency", "asap"],
     "reminder": ["reminder", "don't forget", "remember"],
-    "email":    ["email", "inbox", "gmail", "mail from"],
+    "email": ["email", "inbox", "gmail", "mail from"],
     "calendar": ["calendar", "meeting", "event", "appointment", "standup"],
-    "build":    ["build", "ci", "deploy", "pipeline", "test failed"],
-    "error":    ["error", "failed", "exception", "traceback"],
+    "build": ["build", "ci", "deploy", "pipeline", "test failed"],
+    "error": ["error", "failed", "exception", "traceback"],
 }
 
 
@@ -32,7 +31,7 @@ class NotificationCategorizer:
     4. Default: "info"
     """
 
-    def __init__(self, user_rules: Optional[List[UserRule]] = None) -> None:
+    def __init__(self, user_rules: list[UserRule] | None = None) -> None:
         self._user_rules = [r for r in (user_rules or []) if r.enabled]
 
         def _compile(r: UserRule):
@@ -43,9 +42,11 @@ class NotificationCategorizer:
             except re.error as exc:
                 raise ValueError(f"Invalid regex in UserRule '{r.pattern}': {exc}") from exc
 
-        self._compiled: List[Tuple[Optional[re.Pattern], UserRule]] = [_compile(r) for r in self._user_rules]
+        self._compiled: list[tuple[re.Pattern | None, UserRule]] = [
+            _compile(r) for r in self._user_rules
+        ]
 
-    def categorize(self, message: str, metadata: Dict) -> str:
+    def categorize(self, message: str, metadata: dict) -> str:
         """Return category string for the given message + metadata."""
         # Tier 1: structured metadata (empty string falls through intentionally)
         if metadata.get("category"):

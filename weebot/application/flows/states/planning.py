@@ -1,8 +1,10 @@
 """Planning state for Plan-Act flow."""
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -21,9 +23,34 @@ def _infer_domain(prompt: str) -> str:
     """
     lo = prompt.lower()
     # Check robotics before coding — "reward function" is robotics, not coding
-    if any(kw in lo for kw in ("robot", "reward function", "reinforcement learning", "quadruped", "rl ", "physics sim")):
+    if any(
+        kw in lo
+        for kw in (
+            "robot",
+            "reward function",
+            "reinforcement learning",
+            "quadruped",
+            "rl ",
+            "physics sim",
+        )
+    ):
         return "robotics"
-    if any(kw in lo for kw in ("code", "refactor", "debug", "implement", "python", "javascript", "typescript", "html", "css", "api endpoint", "rest api")):
+    if any(
+        kw in lo
+        for kw in (
+            "code",
+            "refactor",
+            "debug",
+            "implement",
+            "python",
+            "javascript",
+            "typescript",
+            "html",
+            "css",
+            "api endpoint",
+            "rest api",
+        )
+    ):
         return "coding"
     if any(kw in lo for kw in ("review", "paper", "conference", "submission", "accept", "reject")):
         return "review"
@@ -38,13 +65,10 @@ def _infer_domain(prompt: str) -> str:
 
 class PlanningState(FlowState):
     """Handles the creation of the initial execution plan."""
+
     status = AgentStatus.PLANNING
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.plan_act_flow import AgentStatus
-        from weebot.application.flows.states.executing import ExecutingState
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.summarizing import SummarizingState
         from weebot.application.agents.planner import PlannerAgent
         from weebot.domain.models.event import ErrorEvent as EE
@@ -70,22 +94,28 @@ class PlanningState(FlowState):
         # prompt_consumed flag starves us of the task prompt.  Fall back
         # to original_task or last_prompt stored in the session context.
         if not prompt.strip():
-            prompt = (
-                context._session.context.get("_original_task", "")
-                or context._session.context.get("last_prompt", "")
-            )
+            prompt = context._session.context.get(
+                "_original_task", ""
+            ) or context._session.context.get("last_prompt", "")
             logger.debug("PlanningState prompt was empty — using fallback: %.80s", prompt)
 
         # ── Intent disambiguation gate (Enhancement 2 — S2 fix) ──────────────
         # Skip if this is a short continuation like "yes" / "proceed".
         # IntentReviewService.review() has a 5s timeout and fails open.
-        _is_continuation = (
-            len(prompt.split()) < 6
-            and prompt.strip().lower() in {
-                "yes", "ok", "proceed", "continue", "approve", "go ahead",
-                "y", "go", "do it", "run", "start", "lgtm",
-            }
-        )
+        _is_continuation = len(prompt.split()) < 6 and prompt.strip().lower() in {
+            "yes",
+            "ok",
+            "proceed",
+            "continue",
+            "approve",
+            "go ahead",
+            "y",
+            "go",
+            "do it",
+            "run",
+            "start",
+            "lgtm",
+        }
         if not _is_continuation and not context._session.context.get("_intent_reviewed"):
             try:
                 from weebot.application.services.intent_review_service import IntentReviewService
@@ -94,9 +124,7 @@ class PlanningState(FlowState):
                 from weebot.domain.models.event import WaitForUserEvent
 
                 _contract = IdeaContract(
-                    title=prompt[:80],
-                    prompt=prompt,
-                    source=IdeaSource.USER_PROMPT,
+                    title=prompt[:80], prompt=prompt, source=IdeaSource.USER_PROMPT
                 )
                 _review = await IntentReviewService(context._llm).review(_contract)
 
@@ -106,8 +134,7 @@ class PlanningState(FlowState):
                     context._session = context._session.model_copy(update={"context": _new_ctx})
                     yield WaitForUserEvent(
                         question="\n".join(
-                            f"{i+1}. {q}"
-                            for i, q in enumerate(_review.clarification_needed[:3])
+                            f"{i+1}. {q}" for i, q in enumerate(_review.clarification_needed[:3])
                         )
                     )
                     return
@@ -161,6 +188,7 @@ class PlanningState(FlowState):
         import time as _time
         from weebot.application.cqrs.commands import CreatePlanCommand
         from weebot.config.model_refs import MODEL_BUDGET
+
         _plan_t0 = _time.monotonic()
         cmd_result = await context._mediator.send(
             CreatePlanCommand(
@@ -178,21 +206,26 @@ class PlanningState(FlowState):
 
         # Consume events from the mediator result using shared reconstructor.
         from weebot.application.cqrs.event_reconstructor import reconstruct_events
+
         for event in reconstruct_events(cmd_result.data.get("events", [])):
             await context._emit(event)
             yield event
             if isinstance(event, PlanEvent) and event.status == PlanStatus.CREATED:
                 context._plan = Plan.model_validate(event.plan)
-                logger.info("Plan created with %d steps in %.1fs",
-                            len(context._plan.steps), _plan_elapsed)
+                logger.info(
+                    "Plan created with %d steps in %.1fs", len(context._plan.steps), _plan_elapsed
+                )
                 # Hook: post_plan_created
                 if getattr(context, "_hooks", None) is not None:
-                    await context._hooks.execute_hooks("post_plan_created", {
-                        "session_id": context._session.id,
-                        "plan": context._plan,
-                        "step_count": len(context._plan.steps),
-                        "elapsed_ms": _plan_elapsed * 1000,
-                    })
+                    await context._hooks.execute_hooks(
+                        "post_plan_created",
+                        {
+                            "session_id": context._session.id,
+                            "plan": context._plan,
+                            "step_count": len(context._plan.steps),
+                            "elapsed_ms": _plan_elapsed * 1000,
+                        },
+                    )
 
         # Also check for plan in result top-level
         if context._plan is None and cmd_result.data.get("plan"):
@@ -201,16 +234,15 @@ class PlanningState(FlowState):
         if context._plan is None or len(context._plan.steps) == 0:
             logger.info("No steps in plan, transitioning to SUMMARIZING")
             from weebot.application.flows.states.summarizing import SummarizingState
+
             context.set_state(SummarizingState())
         else:
             context._snapshot_plan()
             # --- DPPM: parallel planning for complex tasks ---
             from weebot.application.agents.parallel_planner import ParallelPlanner
 
-            _use_dppm = (
-                context._planning_mode == "dppm"
-                or (context._planning_mode == "auto"
-                    and ParallelPlanner.is_complex_task(prompt))
+            _use_dppm = context._planning_mode == "dppm" or (
+                context._planning_mode == "auto" and ParallelPlanner.is_complex_task(prompt)
             )
             if _use_dppm and context._llm is not None:
                 try:
@@ -225,7 +257,8 @@ class PlanningState(FlowState):
                             context._plan = plan
                             logger.info(
                                 "DPPM: generated plan with %d steps from %d candidates",
-                                len(plan.steps), len(candidates),
+                                len(plan.steps),
+                                len(candidates),
                             )
                 except Exception as exc:
                     logger.warning("DPPM planning failed, falling back to sequential: %s", exc)
@@ -244,7 +277,9 @@ class PlanningState(FlowState):
                                 awm_hints = best.generalized_steps
                                 logger.info(
                                     "AWM: injected %d workflow hints from '%s' (%.0f%% success rate)",
-                                    len(awm_hints), best.task_summary, best.success_rate * 100,
+                                    len(awm_hints),
+                                    best.task_summary,
+                                    best.success_rate * 100,
                                 )
                 except Exception as exc:
                     logger.debug("AWM: workflow query skipped: %s", exc)
@@ -261,7 +296,9 @@ class PlanningState(FlowState):
             # Transition to CritiquingState if a critic is available
             if context._plan_critic is not None:
                 from weebot.application.flows.states.critiquing import CritiquingState
+
                 context.set_state(CritiquingState(critic=context._plan_critic))
             else:
                 from weebot.application.flows.states.plan_review import next_state_after_plan
+
                 context.set_state(next_state_after_plan())

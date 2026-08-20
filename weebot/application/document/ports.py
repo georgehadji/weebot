@@ -4,6 +4,7 @@ flow depends on abstractions, not on infrastructure concretes.
 Concrete implementations live in ``weebot.infrastructure.document`` and are
 injected at composition time (interfaces layer / tests).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,11 +22,7 @@ class CompilerPort(Protocol):
         ...
 
     def compile(
-        self,
-        project_dir: str | Path,
-        main_tex: str = "main.tex",
-        *,
-        shell_escape: bool = False,
+        self, project_dir: str | Path, main_tex: str = "main.tex", *, shell_escape: bool = False
     ) -> CompileResult: ...
 
 

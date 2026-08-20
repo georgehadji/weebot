@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +16,7 @@ class TestBerbTool:
     def test_berb_tool_registry_registration(self):
         """Verify the berb tool is discoverable in the registry and assigned to correct roles."""
         registry = RoleBasedToolRegistry()
-        
+
         # Verify it exists in classes
         class_map = registry.build_tool_class_map()
         assert "berb" in class_map
@@ -59,7 +58,6 @@ class TestBerbTool:
     @patch("asyncio.create_subprocess_exec")
     async def test_berb_tool_fallback_to_api_success(self, mock_subprocess, mock_post):
         """Verify that berb tool automatically falls back to API (Method 2) if CLI execution fails."""
-        import httpx
 
         # Mock CLI execution failure
         mock_subprocess.side_effect = RuntimeError("Subprocess execution failed")
@@ -71,7 +69,7 @@ class TestBerbTool:
             "status": "success",
             "message": "API academic research run completed successfully.",
             "summary": "Full academic report details from API.",
-            "artifacts_dir": "E:\\Documents\\Vibe-Coding\\Berb\\artifacts"
+            "artifacts_dir": "E:\\Documents\\Vibe-Coding\\Berb\\artifacts",
         }
         mock_post.return_value = mock_post_resp
 

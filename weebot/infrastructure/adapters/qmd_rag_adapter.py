@@ -4,10 +4,10 @@ Wraps ``weebot.qmd_integration.rag_engine.QMDRagEngine`` in a hexagonal
 port/adapter pattern so the application layer can use RAG retrieval
 without importing infrastructure directly.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.rag_port import RagPort
 
@@ -35,6 +35,7 @@ class QmdRagAdapter(RagPort):
         try:
             if self._engine is None:
                 from weebot.qmd_integration.rag_engine import QMDRagEngine
+
                 self._engine = QMDRagEngine()
             results = await self._engine.search(query, top_k=top_k)
             return [r.content for r in results]

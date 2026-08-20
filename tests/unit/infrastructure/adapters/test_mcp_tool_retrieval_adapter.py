@@ -1,8 +1,8 @@
 """Unit tests for LocalEmbeddingMcpToolRetrievalAdapter."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 import pytest
 
@@ -17,7 +17,7 @@ from weebot.infrastructure.adapters.mcp_tool_retrieval_adapter import (
 class _EmbeddingResult:
     """Stub result returned by a fake embeddings object."""
 
-    embedding: List[float]
+    embedding: list[float]
 
 
 class _FakeEmbeddings:
@@ -28,10 +28,10 @@ class _FakeEmbeddings:
     DIM: int = 8
 
     def __init__(self) -> None:
-        self._index_calls: List[List[str]] = []
-        self._query_calls: List[str] = []
+        self._index_calls: list[list[str]] = []
+        self._query_calls: list[str] = []
 
-    async def embed_documents(self, texts: List[str]) -> List[_EmbeddingResult]:
+    async def embed_documents(self, texts: list[str]) -> list[_EmbeddingResult]:
         self._index_calls.append(list(texts))
         # Deterministic one-hot-ish vectors: position i is hot for doc i.
         results = []

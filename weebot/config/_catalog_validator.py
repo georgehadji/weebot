@@ -9,11 +9,12 @@ Design:
     - Warnings only, even for missing models
     - Standalone module with zero weebot imports beyond its types
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.services.model_registry._models import ModelConfig
@@ -29,7 +30,7 @@ class ValidationWarning:
     cascade_role: str
     field: str  # "missing", "provider_mismatch", "unknown_role"
     expected: str
-    actual: Optional[str]
+    actual: str | None
 
     def __str__(self) -> str:
         if self.field == "missing":
@@ -56,7 +57,7 @@ class ValidationReport:
     """Aggregated result from a validation run."""
 
     total_models_checked: int = 0
-    warnings: List[ValidationWarning] = field(default_factory=list)
+    warnings: list[ValidationWarning] = field(default_factory=list)
     elapsed_ms: float = 0.0
 
     @property
@@ -106,15 +107,10 @@ class CatalogValidator:
         from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
 
         _validator = CatalogValidator()
-        return _validator.validate(
-            role_cascades=_mr._ROLE_MODEL_CASCADE,
-            catalog=_CATALOG,
-        )
+        return _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
 
     def validate(
-        self,
-        role_cascades: Dict[str, List[str]],
-        catalog: Dict[str, "ModelConfig"],
+        self, role_cascades: dict[str, list[str]], catalog: dict[str, ModelConfig]
     ) -> ValidationReport:
         """Run validation across all roles and their cascade tiers.
 
@@ -134,10 +130,7 @@ class CatalogValidator:
 
         for role, model_ids in role_cascades.items():
             if not isinstance(model_ids, (list, tuple)):
-                _log.debug(
-                    "CatalogValidator: role '%s' doesn't have a model list — skipping",
-                    role,
-                )
+                _log.debug("CatalogValidator: role '%s' doesn't have a model list — skipping", role)
                 continue
 
             for model_id in model_ids:
@@ -163,11 +156,7 @@ class CatalogValidator:
         return model_id
 
     def _check_model(
-        self,
-        report: ValidationReport,
-        model_id: str,
-        role: str,
-        catalog: Dict[str, "ModelConfig"],
+        self, report: ValidationReport, model_id: str, role: str, catalog: dict[str, ModelConfig]
     ) -> None:
         """Validate a single model entry."""
         # Extract the expected provider from the model prefix
@@ -222,11 +211,11 @@ class CatalogValidator:
         # Map known OpenRouter prefixes to the provider names used in the catalog
         prefix_map = {
             "x-ai": "xai",
-            "z-ai": "openrouter",   # z-ai models go through OpenRouter
+            "z-ai": "openrouter",  # z-ai models go through OpenRouter
             "moonshotai": "moonshot",  # moonshotai prefix → "moonshot" provider
             "minimax": "openrouter",  # MiniMax models route through OpenRouter
-            "qwen": "openrouter",   # Qwen models go through OpenRouter
-            "kimi": "openrouter",   # Kimi models go through OpenRouter
+            "qwen": "openrouter",  # Qwen models go through OpenRouter
+            "kimi": "openrouter",  # Kimi models go through OpenRouter
             "kwaipilot": "openrouter",  # KwaiPilot models route through OpenRouter
             "nex-agi": "openrouter",
             "poolside": "openrouter",
@@ -247,10 +236,7 @@ class CatalogValidator:
         }
 
         # Models whose prefix matches the provider name directly
-        direct_providers = {
-            "deepseek",
-            "recraft",
-        }
+        direct_providers = {"deepseek", "recraft"}
 
         if prefix in prefix_map:
             return prefix_map[prefix]

@@ -8,13 +8,14 @@ This module clones/reads the repo, parses all categories, and generates
 minimal SKILL.md files from the available metadata.  Full skill bodies
 can be fetched from ClawHub on demand via fetch_full_skill().
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
@@ -24,11 +25,12 @@ logger = logging.getLogger(__name__)
 
 # ── Data models ──────────────────────────────────────────────────
 
+
 @dataclass
 class SkillEntry:
     name: str
     author: str
-    slug: str           # author-name
+    slug: str  # author-name
     description: str
     category: str
     url: str
@@ -46,9 +48,7 @@ class ImportResult:
 
 # ── Repo parser ──────────────────────────────────────────────────
 
-_LINK_RE = re.compile(
-    r'-\s*\[([^\]]+)]\((https://[^)]+)\)\s*[-–—]\s*(.+?)(?:\n|$)'
-)
+_LINK_RE = re.compile(r"-\s*\[([^\]]+)]\((https://[^)]+)\)\s*[-–—]\s*(.+?)(?:\n|$)")
 
 
 class ClawHubImporter:
@@ -62,11 +62,12 @@ class ClawHubImporter:
                                           install_dir=Path.home() / ".weebot/skills")
     """
 
-    def __init__(self, repo_path: Optional[Path] = None, git_adapter: Optional["ClawHubGitAdapter"] = None):
+    def __init__(self, repo_path: Path | None = None, git_adapter: ClawHubGitAdapter | None = None):
         if git_adapter is not None:
             self._git_adapter = git_adapter
         else:
             from weebot.infrastructure.adapters.clawhub_adapter import ClawHubGitAdapter
+
             self._git_adapter = ClawHubGitAdapter(repo_path=repo_path)
 
     @property
@@ -91,9 +92,11 @@ class ClawHubImporter:
             category = cat_file.stem.replace("-and-", " & ").replace("-", " ").title()
             entries.extend(self._parse_category_file(cat_file, category))
 
-        logger.info("Parsed %d skills across %d categories",
-                     len(entries),
-                     len(list(categories_dir.glob("*.md"))))
+        logger.info(
+            "Parsed %d skills across %d categories",
+            len(entries),
+            len(list(categories_dir.glob("*.md"))),
+        )
         return entries
 
     def _parse_category_file(self, path: Path, category: str) -> list[SkillEntry]:
@@ -112,14 +115,16 @@ class ClawHubImporter:
                 continue
 
             author = slug.split("-", 1)[0] if "-" in slug else "unknown"
-            entries.append(SkillEntry(
-                name=name,
-                author=author,
-                slug=slug,
-                description=desc,
-                category=category,
-                url=url,
-            ))
+            entries.append(
+                SkillEntry(
+                    name=name,
+                    author=author,
+                    slug=slug,
+                    description=desc,
+                    category=category,
+                    url=url,
+                )
+            )
 
         return entries
 
@@ -141,10 +146,7 @@ class ClawHubImporter:
     # ── Import ───────────────────────────────────────────────────
 
     def import_category(
-        self,
-        category_slug: str,
-        install_dir: Path,
-        top_n: int = 20,
+        self, category_slug: str, install_dir: Path, top_n: int = 20
     ) -> ImportResult:
         """Import the top N skills from a category.
 
@@ -175,9 +177,14 @@ class ClawHubImporter:
             except Exception as exc:
                 result.errors.append(f"{entry.name}: {exc}")
 
-        logger.info("Imported %d/%d skills from %s (skipped %d, errors %d)",
-                     result.imported, result.total_available,
-                     category_slug, result.skipped, len(result.errors))
+        logger.info(
+            "Imported %d/%d skills from %s (skipped %d, errors %d)",
+            result.imported,
+            result.total_available,
+            category_slug,
+            result.skipped,
+            len(result.errors),
+        )
         return result
 
     def _generate_skill_file(self, skill_dir: Path, entry: SkillEntry) -> None:
@@ -188,28 +195,28 @@ class ClawHubImporter:
         safe_name = entry.name.replace('"', '\\"')
         safe_desc = entry.description.replace('"', '\\"')
         content = (
-            f'---\n'
+            f"---\n"
             f'name: "{safe_name}"\n'
             f'description: "{safe_desc}"\n'
-            f'license: MIT\n'
-            f'source: {entry.url}\n'
+            f"license: MIT\n"
+            f"source: {entry.url}\n"
             f'category: "{entry.category}"\n'
             f'author: "{entry.author}"\n'
-            f'---\n'
-            f'\n'
-            f'# {entry.name}\n'
-            f'\n'
-            f'{entry.description}\n'
-            f'\n'
-            f'## Source\n'
-            f'Full skill body available at: {entry.url}\n'
-            f'\n'
-            f'## Category\n'
-            f'{entry.category}\n'
-            f'\n'
-            f'> This is a metadata-only import.'
-            f'  Use `weebot skills clawhub fetch {entry.slug}`\n'
-            f'> to download the complete skill body from ClawHub.\n'
+            f"---\n"
+            f"\n"
+            f"# {entry.name}\n"
+            f"\n"
+            f"{entry.description}\n"
+            f"\n"
+            f"## Source\n"
+            f"Full skill body available at: {entry.url}\n"
+            f"\n"
+            f"## Category\n"
+            f"{entry.category}\n"
+            f"\n"
+            f"> This is a metadata-only import."
+            f"  Use `weebot skills clawhub fetch {entry.slug}`\n"
+            f"> to download the complete skill body from ClawHub.\n"
         )
         (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
 
@@ -229,9 +236,7 @@ class ClawHubImporter:
                 data = json.loads(resp.read())
                 skill_dir = install_dir / data.get("name", slug)
                 skill_dir.mkdir(parents=True, exist_ok=True)
-                (skill_dir / "SKILL.md").write_text(
-                    data.get("content", ""), encoding="utf-8"
-                )
+                (skill_dir / "SKILL.md").write_text(data.get("content", ""), encoding="utf-8")
                 return True
         except Exception as exc:
             logger.warning("Failed to fetch %s: %s", slug, exc)

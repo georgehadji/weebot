@@ -1,10 +1,10 @@
 """OpenRouterSpeechAdapter — speech STT + TTS using OpenRouter cloud APIs."""
+
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import aiohttp
 
@@ -18,7 +18,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         tts_model: str = "elevenlabs/eleven-turbo-v2",
         stt_model: str = "openai/whisper-large-v3",
     ) -> None:
@@ -26,7 +26,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
         self._tts_model = tts_model
         self._stt_model = stt_model
 
-    async def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
+    async def transcribe(self, audio_path: str, language: str | None = None) -> str:
         """Transcribe an audio file using OpenRouter's speech-to-text endpoint."""
         if self._api_key == "no-key":
             raise RuntimeError("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai")
@@ -36,6 +36,7 @@ class OpenRouterSpeechAdapter(SpeechPort):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
         import base64
+
         audio_bytes = path.read_bytes()
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         ext = path.suffix.lstrip(".").lower() or "wav"
@@ -49,28 +50,27 @@ class OpenRouterSpeechAdapter(SpeechPort):
 
         payload: dict = {
             "model": self._stt_model,
-            "input_audio": {
-                "data": audio_b64,
-                "format": ext,
-            }
+            "input_audio": {"data": audio_b64, "format": ext},
         }
         if language:
             payload["language"] = language
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
                 "https://openrouter.ai/api/v1/audio/transcriptions",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),
-            ) as resp:
-                if resp.status != 200:
-                    err_text = await resp.text()
-                    raise RuntimeError(f"OpenRouter STT failed (HTTP {resp.status}): {err_text[:150]}")
-                data = await resp.json()
-                return data.get("text", "").strip()
+            ) as resp,
+        ):
+            if resp.status != 200:
+                err_text = await resp.text()
+                raise RuntimeError(f"OpenRouter STT failed (HTTP {resp.status}): {err_text[:150]}")
+            data = await resp.json()
+            return data.get("text", "").strip()
 
-    async def synthesize(self, text: str, voice: Optional[str] = None) -> bytes:
+    async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Synthesize text into speech audio bytes using OpenRouter's text-to-speech endpoint."""
         if self._api_key == "no-key":
             raise RuntimeError("OPENROUTER_API_KEY is not set. Get a key at https://openrouter.ai")
@@ -89,14 +89,16 @@ class OpenRouterSpeechAdapter(SpeechPort):
             "response_format": "mp3",
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
                 "https://openrouter.ai/api/v1/audio/speech",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=60),
-            ) as resp:
-                if resp.status != 200:
-                    err_text = await resp.text()
-                    raise RuntimeError(f"OpenRouter TTS failed (HTTP {resp.status}): {err_text[:150]}")
-                return await resp.read()
+            ) as resp,
+        ):
+            if resp.status != 200:
+                err_text = await resp.text()
+                raise RuntimeError(f"OpenRouter TTS failed (HTTP {resp.status}): {err_text[:150]}")
+            return await resp.read()

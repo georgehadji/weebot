@@ -9,14 +9,13 @@ Covers:
 - query excludes zero-or-negative scores
 - count returns correct document count
 """
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from weebot.application.ports.vector_store_port import VectorStorePort
 from weebot.infrastructure.adapters.numpy_vector_store import NumpyVectorStore
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 

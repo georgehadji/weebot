@@ -4,30 +4,102 @@ When a plan completes successfully, it's saved as a template keyed by
 the normalized task description hash. On new task requests, the cache
 is queried for matching templates to seed the planner.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.plan_template import PlanTemplate
 
 logger = logging.getLogger(__name__)
 
-_STOPWORDS: frozenset = frozenset({
-    "the", "a", "an", "in", "on", "at", "to", "for", "of", "with",
-    "and", "or", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would",
-    "can", "could", "shall", "should", "may", "might", "must",
-    "this", "that", "these", "those", "it", "its", "you", "your",
-    "i", "we", "they", "he", "she", "not", "no", "nor", "but",
-    "if", "then", "else", "when", "where", "why", "how", "all",
-    "each", "every", "both", "few", "more", "most", "some", "any",
-    "use", "using", "used", "set", "get", "make", "need", "take",
-    "please", "help", "want", "would", "could",
-})
+_STOPWORDS: frozenset = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "and",
+        "or",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "can",
+        "could",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "must",
+        "this",
+        "that",
+        "these",
+        "those",
+        "it",
+        "its",
+        "you",
+        "your",
+        "i",
+        "we",
+        "they",
+        "he",
+        "she",
+        "not",
+        "no",
+        "nor",
+        "but",
+        "if",
+        "then",
+        "else",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "some",
+        "any",
+        "use",
+        "using",
+        "used",
+        "set",
+        "get",
+        "make",
+        "need",
+        "take",
+        "please",
+        "help",
+        "want",
+    }
+)
+
 
 def compute_task_hash(task_description: str) -> str:
     """Compute a stable hash for a task description.
@@ -55,10 +127,7 @@ def jaccard_similarity(a: set[str], b: set[str]) -> float:
 
 
 async def find_matching_templates(
-    repo: Any,
-    task_description: str,
-    threshold: float = 0.4,
-    max_results: int = 3,
+    repo: Any, task_description: str, threshold: float = 0.4, max_results: int = 3
 ) -> list[PlanTemplate]:
     """Find plan templates matching a task description.
 

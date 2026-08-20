@@ -4,12 +4,13 @@ When a skill is installed and has a ``blueprint`` field in its manifest,
 the suggestion engine creates a suggestion (not an active job) that the
 user can accept, dismiss, or modify.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ class BlueprintSuggestion:
         self.deliver_to = deliver_to
         self.destination = destination
         self.no_agent = no_agent
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
         self.status = "pending"  # pending, accepted, dismissed, modified
 
     def to_dict(self) -> dict[str, Any]:
@@ -56,7 +57,7 @@ class BlueprintSuggestion:
         }
 
     @classmethod
-    def from_skill(cls, skill: Skill) -> "BlueprintSuggestion | None":
+    def from_skill(cls, skill: Skill) -> BlueprintSuggestion | None:
         """Create a suggestion from a skill's blueprint, if present."""
         bp = skill.blueprint
         if bp is None:

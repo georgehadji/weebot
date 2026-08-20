@@ -26,6 +26,7 @@ A minimal FastAPI app is used instead of the full ``create_app()`` so the
 test isolates the wiring itself from auth/lifespan/scheduler concerns
 already covered by other tests.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -85,7 +86,9 @@ def test_session_scoped_event_reaches_matching_session_socket(wired_app):
     client = TestClient(app)
 
     with client.websocket_connect("/ws/sessions/session-a") as ws:
-        asyncio.run(bus.publish(MessageEvent(role="assistant", message="hi a", session_id="session-a")))
+        asyncio.run(
+            bus.publish(MessageEvent(role="assistant", message="hi a", session_id="session-a"))
+        )
         received = ws.receive_json()
 
     assert received["type"] == "message"
@@ -97,10 +100,18 @@ def test_session_scoped_event_does_not_reach_other_session_socket(wired_app):
     app, bus = wired_app
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/sessions/session-a") as ws_a, \
-         client.websocket_connect("/ws/sessions/session-b") as ws_b:
-        asyncio.run(bus.publish(MessageEvent(role="assistant", message="only a", session_id="session-a")))
-        asyncio.run(bus.publish(MessageEvent(role="assistant", message="sentinel-b", session_id="session-b")))
+    with (
+        client.websocket_connect("/ws/sessions/session-a") as ws_a,
+        client.websocket_connect("/ws/sessions/session-b") as ws_b,
+    ):
+        asyncio.run(
+            bus.publish(MessageEvent(role="assistant", message="only a", session_id="session-a"))
+        )
+        asyncio.run(
+            bus.publish(
+                MessageEvent(role="assistant", message="sentinel-b", session_id="session-b")
+            )
+        )
 
         received_a = ws_a.receive_json()
         assert received_a["session_id"] == "session-a"
@@ -116,9 +127,13 @@ def test_session_scoped_event_does_not_reach_global_socket(wired_app):
     app, bus = wired_app
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/sessions/session-a") as ws_a, \
-         client.websocket_connect("/ws") as ws_global:
-        asyncio.run(bus.publish(MessageEvent(role="assistant", message="scoped", session_id="session-a")))
+    with (
+        client.websocket_connect("/ws/sessions/session-a") as ws_a,
+        client.websocket_connect("/ws") as ws_global,
+    ):
+        asyncio.run(
+            bus.publish(MessageEvent(role="assistant", message="scoped", session_id="session-a"))
+        )
         # No session_id → the broadcaster routes this to broadcast_global().
         asyncio.run(bus.publish(MessageEvent(role="assistant", message="sentinel-global")))
 

@@ -3,11 +3,11 @@
 Covers the gating (feature flag + model capability) and the image lifecycle
 (only the most recent screenshot stays live in the conversation buffer).
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from weebot.application.agents.executor._base import ExecutorAgent
 from weebot.application.models.tool_collection import ToolCollection
@@ -33,9 +33,7 @@ def _make_executor(model: str) -> ExecutorAgent:
 
 def test_vision_disabled_by_default(monkeypatch):
     # Flag defaults off — even a vision model should not enable injection.
-    monkeypatch.setattr(
-        "weebot.config.feature_flags.VISION_IN_LOOP_ENABLED", False, raising=False
-    )
+    monkeypatch.setattr("weebot.config.feature_flags.VISION_IN_LOOP_ENABLED", False, raising=False)
     ex = _make_executor(VISION_TEST_MODEL)
     assert ex._vision_enabled() is False
 
@@ -47,9 +45,7 @@ def test_vision_enabled_follows_feature_flag_only(monkeypatch):
     not by _vision_enabled. So _vision_enabled() should return True whenever the
     feature flag is on, regardless of which model is currently active.
     """
-    monkeypatch.setattr(
-        "weebot.config.feature_flags.VISION_IN_LOOP_ENABLED", True, raising=False
-    )
+    monkeypatch.setattr("weebot.config.feature_flags.VISION_IN_LOOP_ENABLED", True, raising=False)
     # VLM-capable model → enabled
     assert _make_executor(VISION_TEST_MODEL)._vision_enabled() is True
     # Non-vision model → still enabled (switching happens separately)
@@ -96,6 +92,7 @@ async def test_inject_does_not_disturb_plain_string_messages():
 
 
 # ── B2 regression: _inject_screenshot must not mutate original dicts ──────────
+
 
 async def test_inject_screenshot_does_not_mutate_original_dicts():
     ex = _make_executor(VISION_TEST_MODEL)

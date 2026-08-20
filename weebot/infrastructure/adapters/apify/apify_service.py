@@ -10,6 +10,7 @@ Operations (pass as first arg to execute()):
   get_dataset_items    — fetch items from a completed dataset
   search_store         — search the Apify actor store
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,15 +19,15 @@ import logging
 import os
 import re as _re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
 # Apify identifier format constraints (from Apify API documentation).
 # actor_id: "{owner}/{name}" — both segments alphanumeric, dashes, underscores, dots.
-_ACTOR_ID_RE = _re.compile(r'^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$')
+_ACTOR_ID_RE = _re.compile(r"^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$")
 # run_id and dataset_id: alphanumeric strings, 15–30 chars.
-_RESOURCE_ID_RE = _re.compile(r'^[a-zA-Z0-9]{15,30}$')
+_RESOURCE_ID_RE = _re.compile(r"^[a-zA-Z0-9]{15,30}$")
 
 
 def _validate_actor_id(actor_id: str) -> None:
@@ -37,6 +38,7 @@ def _validate_actor_id(actor_id: str) -> None:
 def _validate_resource_id(rid: str, name: str) -> None:
     if not _RESOURCE_ID_RE.match(rid):
         raise ValueError(f"Invalid {name} format: {rid!r}")
+
 
 from weebot.infrastructure.external_service_integration import (
     ExternalService,
@@ -57,7 +59,7 @@ _DEFAULT_TIMEOUT_SECS = 30
 class ApifyService(ExternalService):
     """Thin async wrapper around the Apify REST API v2."""
 
-    def __init__(self, api_key: Optional[str] = None) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         resolved_key = api_key or os.getenv("APIFY_API_KEY", "")
         config = ServiceConfig(
             name="apify",
@@ -69,8 +71,8 @@ class ApifyService(ExternalService):
             enabled=bool(resolved_key),
         )
         super().__init__(config)
-        self._sync_session: Optional[aiohttp.ClientSession] = None
-        self._fast_session: Optional[aiohttp.ClientSession] = None
+        self._sync_session: aiohttp.ClientSession | None = None
+        self._fast_session: aiohttp.ClientSession | None = None
 
     # ── lifecycle ──────────────────────────────────────────────────────────
 
@@ -78,12 +80,10 @@ class ApifyService(ExternalService):
         if self._initialized:
             return
         self._sync_session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=_SYNC_TIMEOUT_SECS),
-            headers=self._auth_headers(),
+            timeout=aiohttp.ClientTimeout(total=_SYNC_TIMEOUT_SECS), headers=self._auth_headers()
         )
         self._fast_session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT_SECS),
-            headers=self._auth_headers(),
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT_SECS), headers=self._auth_headers()
         )
         self._initialized = True
 
@@ -127,10 +127,7 @@ class ApifyService(ExternalService):
     # ── operations ─────────────────────────────────────────────────────────
 
     async def _run_actor_sync(
-        self,
-        actor_id: str,
-        run_input: Optional[Dict[str, Any]] = None,
-        memory_mbytes: int = 256,
+        self, actor_id: str, run_input: dict[str, Any] | None = None, memory_mbytes: int = 256
     ) -> ServiceResponse:
         """POST to sync endpoint — blocks until actor finishes, returns items."""
         _validate_actor_id(actor_id)
@@ -143,10 +140,7 @@ class ApifyService(ExternalService):
         )
 
     async def _run_actor(
-        self,
-        actor_id: str,
-        run_input: Optional[Dict[str, Any]] = None,
-        memory_mbytes: int = 256,
+        self, actor_id: str, run_input: dict[str, Any] | None = None, memory_mbytes: int = 256
     ) -> ServiceResponse:
         """Start an async actor run; returns run metadata (run_id, dataset_id)."""
         _validate_actor_id(actor_id)
@@ -162,18 +156,16 @@ class ApifyService(ExternalService):
         url = f"{_APIFY_BASE}/actor-runs/{run_id}"
         return await self._get(url, params=None, session=self._fast_session)
 
-    async def _get_dataset_items(
-        self, dataset_id: str, limit: int = 100
-    ) -> ServiceResponse:
+    async def _get_dataset_items(self, dataset_id: str, limit: int = 100) -> ServiceResponse:
         _validate_resource_id(dataset_id, "dataset_id")
         url = f"{_APIFY_BASE}/datasets/{dataset_id}/items"
         return await self._get(url, params={"limit": limit}, session=self._fast_session)
 
     async def _search_store(
-        self, query: str = "", limit: int = 20, category: Optional[str] = None
+        self, query: str = "", limit: int = 20, category: str | None = None
     ) -> ServiceResponse:
         url = f"{_APIFY_BASE}/store"
-        params: Dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit}
         if query:
             params["search"] = query
         if category:
@@ -182,23 +174,16 @@ class ApifyService(ExternalService):
 
     # ── HTTP helpers ───────────────────────────────────────────────────────
 
-    def _auth_headers(self) -> Dict[str, str]:
+    def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.config.api_key}"}
 
     async def _get(
-        self,
-        url: str,
-        params: Optional[Dict],
-        session: Optional[aiohttp.ClientSession],
+        self, url: str, params: dict | None, session: aiohttp.ClientSession | None
     ) -> ServiceResponse:
         return await self._request("GET", url, params=params, json_body=None, session=session)
 
     async def _post(
-        self,
-        url: str,
-        json_body: Any,
-        params: Optional[Dict],
-        session: Optional[aiohttp.ClientSession],
+        self, url: str, json_body: Any, params: dict | None, session: aiohttp.ClientSession | None
     ) -> ServiceResponse:
         return await self._request("POST", url, params=params, json_body=json_body, session=session)
 
@@ -206,9 +191,9 @@ class ApifyService(ExternalService):
         self,
         method: str,
         url: str,
-        params: Optional[Dict],
+        params: dict | None,
         json_body: Any,
-        session: Optional[aiohttp.ClientSession],
+        session: aiohttp.ClientSession | None,
     ) -> ServiceResponse:
         sess = session or self._fast_session
         start = datetime.now()
@@ -237,12 +222,9 @@ class ApifyService(ExternalService):
                         await asyncio.sleep(2**attempt)
                         continue
                     return ServiceResponse(
-                        success=False,
-                        error=err,
-                        status_code=resp.status,
-                        execution_time_ms=elapsed,
+                        success=False, error=err, status_code=resp.status, execution_time_ms=elapsed
                     )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 err = f"Timeout after {self.config.timeout}s"
                 if attempt < self.config.retry_attempts - 1:
                     await asyncio.sleep(2**attempt)

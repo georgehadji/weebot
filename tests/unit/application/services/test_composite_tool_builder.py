@@ -1,4 +1,5 @@
 """Tests for CompositeToolBuilder."""
+
 from __future__ import annotations
 
 import inspect
@@ -31,16 +32,11 @@ def _make_spec() -> CompositeToolSpec:
                 capture_output_as="file_content",
             ),
             SubToolCall(
-                tool_name="python_execute",
-                arguments={"code": "print('''${file_content}''')"},
+                tool_name="python_execute", arguments={"code": "print('''${file_content}''')"}
             ),
             SubToolCall(
                 tool_name="file_str_replace",
-                arguments={
-                    "path": "${path}",
-                    "old_str": "${old_str}",
-                    "new_str": "${new_str}",
-                },
+                arguments={"path": "${path}", "old_str": "${old_str}", "new_str": "${new_str}"},
             ),
         ],
     )
@@ -56,11 +52,9 @@ async def test_handler_invokes_executor_with_runtime_args() -> None:
     handler = builder.build(spec, executor)
     result = await handler(path="test.txt", old_str="old", new_str="new")
 
-    executor.assert_awaited_once_with(spec, runtime_args={
-        "path": "test.txt",
-        "old_str": "old",
-        "new_str": "new",
-    })
+    executor.assert_awaited_once_with(
+        spec, runtime_args={"path": "test.txt", "old_str": "old", "new_str": "new"}
+    )
     assert isinstance(result, CallToolResult)
     assert not result.isError
     assert any("ok" in item.text for item in result.content)
@@ -132,11 +126,7 @@ async def test_builder_accepts_real_composite_result() -> None:
         description="No-op composite.",
         sub_tools=[SubToolCall(tool_name="ping", arguments={})],
     )
-    executor = AsyncMock(return_value=CompositeResult(
-        success=True,
-        summary="done",
-        sub_results=[],
-    ))
+    executor = AsyncMock(return_value=CompositeResult(success=True, summary="done", sub_results=[]))
     builder = CompositeToolBuilder()
 
     handler = builder.build(spec, executor)

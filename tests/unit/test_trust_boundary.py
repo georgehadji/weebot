@@ -1,19 +1,16 @@
 """Unit tests for weebot/core/trust_boundary.py — Imperva/OpenClaw injection fix."""
+
 from __future__ import annotations
 
 import pytest
 
-from weebot.core.trust_boundary import (
-    UNTRUSTED_OUTPUT_TOOLS,
-    is_untrusted_tool,
-    wrap_untrusted,
-)
+from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
 from weebot.infrastructure.security.trust_boundary_scanner import scan_for_injection
-
 
 # ---------------------------------------------------------------------------
 # wrap_untrusted
 # ---------------------------------------------------------------------------
+
 
 class TestWrapUntrusted:
     def test_returns_content_fenced(self):
@@ -54,17 +51,26 @@ class TestWrapUntrusted:
 # is_untrusted_tool
 # ---------------------------------------------------------------------------
 
+
 class TestIsUntrustedTool:
-    @pytest.mark.parametrize("tool", [
-        "web_search", "advanced_browser", "browser_tool", "browser_inspector",
-        "vane_search", "video_ingest_tool", "ocr", "knowledge_tool", "apify_actor_tool",
-    ])
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            "web_search",
+            "advanced_browser",
+            "browser_tool",
+            "browser_inspector",
+            "vane_search",
+            "video_ingest_tool",
+            "ocr",
+            "knowledge_tool",
+            "apify_actor_tool",
+        ],
+    )
     def test_known_tools_flagged(self, tool):
         assert is_untrusted_tool(tool) is True
 
-    @pytest.mark.parametrize("tool", [
-        "bash_execute", "file_editor", "python_execute", "todo_tool",
-    ])
+    @pytest.mark.parametrize("tool", ["bash_execute", "file_editor", "python_execute", "todo_tool"])
     def test_internal_tools_not_flagged(self, tool):
         # bash_execute and python_execute are NOT in the untrusted list —
         # they are local execution, not external-content ingestion.
@@ -77,6 +83,7 @@ class TestIsUntrustedTool:
 # ---------------------------------------------------------------------------
 # scan_for_injection (requires AgentMemorySanitizer to be importable)
 # ---------------------------------------------------------------------------
+
 
 class TestScanForInjection:
     def test_clean_content_returns_none(self):

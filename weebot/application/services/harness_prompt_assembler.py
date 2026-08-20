@@ -8,6 +8,7 @@ This is the bridge between the versioned HarnessConfig YAML and the actual
 prompt the LLM sees.  The Self-Harness loop mutates the YAML; this
 service ensures those mutations reach the executor.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -69,28 +70,26 @@ class HarnessPromptAssembler:
         # Build each section independently to avoid positional misalignment
         section_map = {
             "yagni_preflight_section": (
-                f"{instructions.yagni_preflight}\n"
-                if instructions.yagni_preflight else ""
+                f"{instructions.yagni_preflight}\n" if instructions.yagni_preflight else ""
             ),
             "bootstrap_section": (
-                f"- **Boot:** {instructions.bootstrap}\n"
-                if instructions.bootstrap else ""
+                f"- **Boot:** {instructions.bootstrap}\n" if instructions.bootstrap else ""
             ),
             "execution_section": (
-                f"- **Execute:** {instructions.execution}\n"
-                if instructions.execution else ""
+                f"- **Execute:** {instructions.execution}\n" if instructions.execution else ""
             ),
             "verification_section": (
-                f"- **Verify:** {instructions.verification}\n"
-                if instructions.verification else ""
+                f"- **Verify:** {instructions.verification}\n" if instructions.verification else ""
             ),
             "failure_recovery_section": (
                 f"- **Recover:** {instructions.failure_recovery}\n"
-                if instructions.failure_recovery else ""
+                if instructions.failure_recovery
+                else ""
             ),
             "extension_section": (
                 f"{instructions.system_prompt_extension}\n"
-                if instructions.system_prompt_extension else ""
+                if instructions.system_prompt_extension
+                else ""
             ),
         }
 
@@ -127,10 +126,7 @@ class HarnessPromptAssembler:
         )
 
     @classmethod
-    def assemble_compact(
-        cls,
-        instructions: InstructionConfig | None = None,
-    ) -> str:
+    def assemble_compact(cls, instructions: InstructionConfig | None = None) -> str:
         """Return a single-line summary of active harness instructions.
 
         Useful for logging / debugging / audit trails.

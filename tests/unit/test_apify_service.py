@@ -1,4 +1,5 @@
 """Unit tests for ApifyService."""
+
 from __future__ import annotations
 
 import json
@@ -9,10 +10,10 @@ import pytest
 from weebot.infrastructure.adapters.apify.apify_service import ApifyService
 from weebot.infrastructure.external_service_integration import ServiceStatus
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_response(status: int, body: object) -> MagicMock:
     """Build a mock aiohttp response context manager."""
@@ -36,16 +37,17 @@ def _make_session(response_mock: MagicMock) -> MagicMock:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def service():
     svc = ApifyService(api_key="test-key")
     return svc
 
 
-
 # ---------------------------------------------------------------------------
 # Tests: initialization
 # ---------------------------------------------------------------------------
+
 
 class TestApifyServiceInit:
     def test_disabled_when_no_key(self):
@@ -75,6 +77,7 @@ class TestApifyServiceInit:
 # ---------------------------------------------------------------------------
 # Tests: execute dispatch
 # ---------------------------------------------------------------------------
+
 
 class TestApifyServiceExecute:
     @pytest.mark.asyncio
@@ -122,9 +125,7 @@ class TestApifyServiceExecute:
 
         await service.initialize()
         service._sync_session = MagicMock()
-        service._sync_session.request = MagicMock(
-            return_value=_make_response(200, [])
-        )
+        service._sync_session.request = MagicMock(return_value=_make_response(200, []))
         # Patch _request to capture URL
         original_request = service._request
 
@@ -135,9 +136,7 @@ class TestApifyServiceExecute:
         service._request = capturing_request  # type: ignore[method-assign]
 
         await service.execute(
-            "run_actor_sync",
-            actor_id="supreme_coder/youtube-transcript-scraper",
-            run_input={},
+            "run_actor_sync", actor_id="supreme_coder/youtube-transcript-scraper", run_input={}
         )
         assert any("supreme_coder~youtube-transcript-scraper" in u for u in captured_urls)
         await service.shutdown()
@@ -165,11 +164,7 @@ class TestApifyServiceExecute:
         service._fast_session = mock_session
         service._sync_session = mock_session
 
-        resp = await service.execute(
-            "run_actor_sync",
-            actor_id="apify/web-scraper",
-            run_input={},
-        )
+        resp = await service.execute("run_actor_sync", actor_id="apify/web-scraper", run_input={})
         assert not resp.success
         assert "401" in resp.error
         # 4xx must NOT be retried — exactly one attempt
@@ -188,9 +183,7 @@ class TestApifyServiceExecute:
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             resp = await service.execute(
-                "run_actor_sync",
-                actor_id="apify/web-scraper",
-                run_input={},
+                "run_actor_sync", actor_id="apify/web-scraper", run_input={}
             )
         assert not resp.success
         # retry_attempts=2 means one retry → 2 total calls
@@ -215,6 +208,7 @@ class TestApifyServiceExecute:
 # ---------------------------------------------------------------------------
 # Tests: health check
 # ---------------------------------------------------------------------------
+
 
 class TestApifyServiceHealthCheck:
     @pytest.mark.asyncio

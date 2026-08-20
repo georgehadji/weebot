@@ -8,7 +8,6 @@ Covers:
 
 Note: imports are inside test methods to avoid slow langchain import at collection time.
 """
-import pytest
 
 
 class TestMediaExtraction:
@@ -18,9 +17,7 @@ class TestMediaExtraction:
         """Plain text with no file paths returns empty media list."""
         from weebot.interfaces.gateways.base import GatewayAdapter
 
-        text, paths, as_doc, as_voice = GatewayAdapter.extract_media(
-            "Hello, how can I help you?"
-        )
+        text, paths, as_doc, as_voice = GatewayAdapter.extract_media("Hello, how can I help you?")
         assert text == "Hello, how can I help you?"
         assert paths == []
         assert as_doc is False

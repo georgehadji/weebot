@@ -5,15 +5,11 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import asdict
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from .help import HELP_TOPIC_LIST, help as get_help
-from .jmap_request import (
-    DEFAULT_JMAP_USING,
-    USER_VAR_KEY_RE,
-    JmapAttachmentInput,
-    jmap_request,
-)
+from .jmap_request import DEFAULT_JMAP_USING, USER_VAR_KEY_RE, JmapAttachmentInput, jmap_request
 from .session import register
 
 _SERVER_NAME = "atomicmail"
@@ -44,9 +40,7 @@ def _tool_error(text: str) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": text}], "isError": True}
 
 
-def _optional_bool_argument(
-    args: Mapping[str, Any], key: str
-) -> tuple[bool | None, str | None]:
+def _optional_bool_argument(args: Mapping[str, Any], key: str) -> tuple[bool | None, str | None]:
     value = args.get(key)
     if value is None:
         return None, None
@@ -116,9 +110,7 @@ def _tool_specs() -> list[dict[str, Any]]:
         {
             "name": "help",
             "title": "Atomic Mail documentation",
-            "description": (
-                "Built-in docs. Topics: " + ", ".join(HELP_TOPIC_LIST) + ", readme."
-            ),
+            "description": ("Built-in docs. Topics: " + ", ".join(HELP_TOPIC_LIST) + ", readme."),
             "inputSchema": {
                 "type": "object",
                 "properties": {"topic": {"type": "string"}},
@@ -195,13 +187,10 @@ def handle_tool_call(name: str, arguments: Mapping[str, Any] | None) -> dict[str
                 ):
                     return _tool_error("vars must be an object of string values.")
                 invalid_key = next(
-                    (key for key in vars_in if USER_VAR_KEY_RE.fullmatch(key) is None),
-                    None,
+                    (key for key in vars_in if USER_VAR_KEY_RE.fullmatch(key) is None), None
                 )
                 if invalid_key is not None:
-                    return _tool_error(
-                        f"vars key '{invalid_key}' must match /^[A-Z][A-Z0-9_]*$/."
-                    )
+                    return _tool_error(f"vars key '{invalid_key}' must match /^[A-Z][A-Z0-9_]*$/.")
             if using is not None:
                 if not isinstance(using, list) or not all(isinstance(item, str) for item in using):
                     return _tool_error("using must be an array of strings.")
@@ -304,8 +293,7 @@ def _handle_request(method: str, params: Mapping[str, Any] | None) -> Mapping[st
 
 def run_stdio_server(stdin: Any = None, stdout: Any = None) -> int:
     transport = _ContentLengthStdio(
-        stdin=stdin or sys.stdin.buffer,
-        stdout=stdout or sys.stdout.buffer,
+        stdin=stdin or sys.stdin.buffer, stdout=stdout or sys.stdout.buffer
     )
     while True:
         message = transport.read_message()

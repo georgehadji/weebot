@@ -3,6 +3,7 @@
 A judge evaluates an agent's output against a set of criteria and returns
 a per-criterion score with reasoning.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -18,6 +19,7 @@ class CriterionScore:
         score: Score on a 0.0–10.0 scale.
         reasoning: One-sentence justification for the score.
     """
+
     name: str
     score: float  # 0.0–10.0
     reasoning: str = ""
@@ -33,6 +35,7 @@ class JudgeVerdict:
         passed: Whether the output meets the pass threshold.
         reasoning: Summary reasoning.
     """
+
     criteria: list[CriterionScore] = field(default_factory=list)
     overall_score: float = 0.0
     passed: bool = True
@@ -56,9 +59,5 @@ class JudgePort(ABC):
 
     @abstractmethod
     async def judge(
-        self,
-        task_description: str,
-        output: str,
-        criteria: list[str],
-        context: str = "",
+        self, task_description: str, output: str, criteria: list[str], context: str = ""
     ) -> JudgeVerdict: ...

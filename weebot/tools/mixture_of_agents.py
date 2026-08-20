@@ -14,11 +14,12 @@ cascading).
 Best suited for hard tasks where a single model underperforms: complex
 reasoning, code correctness verification, research synthesis, math proofs.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import ConfigDict
 
@@ -29,18 +30,22 @@ from weebot.utils.prompt_loader import load_prompt_with_fallback
 logger = logging.getLogger(__name__)
 
 from weebot.config.model_refs import MODEL_MOA_REFERENCE
-from weebot.config.constants import TEMPERATURE_CREATIVE, TEMPERATURE_BALANCED, MAX_TOKENS_STANDARD, MAX_TOKENS_EXTENDED
+from weebot.config.constants import (
+    TEMPERATURE_CREATIVE,
+    TEMPERATURE_BALANCED,
+    MAX_TOKENS_STANDARD,
+    MAX_TOKENS_EXTENDED,
+)
 
-_DEFAULT_REFERENCE_MODELS: List[str] = MODEL_MOA_REFERENCE
+_DEFAULT_REFERENCE_MODELS: list[str] = MODEL_MOA_REFERENCE
 
 _AGGREGATOR_SYSTEM = load_prompt_with_fallback(
     "moa_aggregator.txt",
-    "You are an expert synthesizer. Synthesize multiple responses into one unified answer."
+    "You are an expert synthesizer. Synthesize multiple responses into one unified answer.",
 )
 
 _REFERENCE_SYSTEM = load_prompt_with_fallback(
-    "moa_reference.txt",
-    "You are a helpful AI assistant. Answer accurately and concisely.",
+    "moa_reference.txt", "You are a helpful AI assistant. Answer accurately and concisely."
 )
 
 __all__ = ["MixtureOfAgentsTool"]
@@ -94,12 +99,12 @@ class MixtureOfAgentsTool(BaseTool):
     }
 
     # Injected by tool_registry or DI container; None means tool is unconfigured.
-    llm_port: Optional[LLMPort] = None
+    llm_port: LLMPort | None = None
 
     async def execute(
         self,
         query: str,
-        reference_models: Optional[List[str]] = None,
+        reference_models: list[str] | None = None,
         aggregator_model: str = "",
         max_concurrency: int = 4,
         **_: Any,
@@ -112,31 +117,26 @@ class MixtureOfAgentsTool(BaseTool):
             )
 
         aggregator_model = aggregator_model or (
-            MODEL_MOA_REFERENCE[0] if MODEL_MOA_REFERENCE else "nvidia/nemotron-3-ultra-550b-a55b:free"
+            MODEL_MOA_REFERENCE[0]
+            if MODEL_MOA_REFERENCE
+            else "nvidia/nemotron-3-ultra-550b-a55b:free"
         )
         models = reference_models or _DEFAULT_REFERENCE_MODELS
         semaphore = asyncio.Semaphore(max_concurrency)
 
         # Phase 1: parallel reference model calls
         raw_results = await asyncio.gather(
-            *[
-                self._query_one(model_id, query, self.llm_port, semaphore)
-                for model_id in models
-            ]
+            *[self._query_one(model_id, query, self.llm_port, semaphore) for model_id in models]
         )
         successful = [r for r in raw_results if r["response"] is not None]
         failed = [r for r in raw_results if r["response"] is None]
 
         if not successful:
             errors = "; ".join(r["error"] or "unknown" for r in failed)
-            return ToolResult.error_result(
-                f"All {len(models)} reference models failed: {errors}"
-            )
+            return ToolResult.error_result(f"All {len(models)} reference models failed: {errors}")
 
         # Phase 2: aggregation
-        synthesized = await self._aggregate(
-            query, successful, aggregator_model, self.llm_port
-        )
+        synthesized = await self._aggregate(query, successful, aggregator_model, self.llm_port)
 
         return ToolResult.success_result(
             output=synthesized,
@@ -151,10 +151,7 @@ class MixtureOfAgentsTool(BaseTool):
 
     @staticmethod
     async def _query_one(
-        model_id: str,
-        query: str,
-        llm: LLMPort,
-        semaphore: asyncio.Semaphore,
+        model_id: str, query: str, llm: LLMPort, semaphore: asyncio.Semaphore
     ) -> dict[str, Any]:
         """Call one reference model and return a result dict."""
         async with semaphore:
@@ -177,10 +174,7 @@ class MixtureOfAgentsTool(BaseTool):
 
     @staticmethod
     async def _aggregate(
-        query: str,
-        successful: list[dict[str, Any]],
-        aggregator_model: str,
-        llm: LLMPort,
+        query: str, successful: list[dict[str, Any]], aggregator_model: str, llm: LLMPort
     ) -> str:
         """Synthesize reference responses into one answer via the aggregator model."""
         ref_block = "\n\n".join(

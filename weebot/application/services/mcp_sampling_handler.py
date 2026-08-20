@@ -7,12 +7,13 @@ LLM provider with rate limiting, model allowlists, and token caps.
 The handler is pluggable so that different sampling policies can be applied
 per MCP server (configured via MCPSamplingPolicy in the server config).
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from weebot.domain.models.mcp import MCPSamplingPolicy
@@ -50,6 +51,7 @@ class SamplingRequest:
 @dataclass
 class SamplingResult:
     """Result of a sampling/createMessage operation."""
+
     content: list[dict[str, Any]]
     model: str
     stop_reason: str | None = None
@@ -89,9 +91,7 @@ class MCPSamplingHandler:
     """
 
     def __init__(
-        self,
-        llm_provider: Any | None = None,
-        audit_log: logging.Logger | None = None,
+        self, llm_provider: Any | None = None, audit_log: logging.Logger | None = None
     ) -> None:
         self._llm_provider = llm_provider
         self._audit_log = audit_log or logger
@@ -120,17 +120,15 @@ class MCPSamplingHandler:
                 return candidate
 
         logger.warning(
-            "MCP server %s requested sampling with model %r, "
-            "which is not in its allowlist: %s",
-            server_name, candidate, policy.model_allowlist,
+            "MCP server %s requested sampling with model %r, " "which is not in its allowlist: %s",
+            server_name,
+            candidate,
+            policy.model_allowlist,
         )
         return None
 
     async def handle_sampling(
-        self,
-        server_name: str,
-        request: SamplingRequest,
-        policy: MCPSamplingPolicy,
+        self, server_name: str, request: SamplingRequest, policy: MCPSamplingPolicy
     ) -> SamplingResult | None:
         """Process a sampling/createMessage request from *server_name*.
 
@@ -145,15 +143,11 @@ class MCPSamplingHandler:
         limiter = self._get_rate_limiter(server_name, policy)
         allowed = await limiter.acquire()
         if not allowed:
-            self._audit_log.warning(
-                "Rate-limited sampling request from MCP server %s", server_name,
-            )
+            self._audit_log.warning("Rate-limited sampling request from MCP server %s", server_name)
             return None
 
         # Model allowlist
-        resolved_model = self._check_model_allowlist(
-            server_name, request.model, policy,
-        )
+        resolved_model = self._check_model_allowlist(server_name, request.model, policy)
         if resolved_model is None:
             return None
 
@@ -163,7 +157,7 @@ class MCPSamplingHandler:
         # Dispatch
         if self._llm_provider is not None:
             return await self._dispatch_to_provider(
-                server_name, request, resolved_model, effective_max_tokens,
+                server_name, request, resolved_model, effective_max_tokens
             )
 
         # If no provider is configured, return a stub result (useful during
@@ -171,20 +165,21 @@ class MCPSamplingHandler:
         self._audit_log.info(
             "Sampling request from %s (stub — no LLM provider configured): "
             "%d message(s), model=%s, max_tokens=%d",
-            server_name, len(request.messages), resolved_model, effective_max_tokens,
+            server_name,
+            len(request.messages),
+            resolved_model,
+            effective_max_tokens,
         )
         return SamplingResult(
-            content=[{"type": "text", "text": "[Sampling not available — no LLM provider configured]"}],
+            content=[
+                {"type": "text", "text": "[Sampling not available — no LLM provider configured]"}
+            ],
             model=resolved_model or "unknown",
             stop_reason="endTurn",
         )
 
     async def _dispatch_to_provider(
-        self,
-        server_name: str,
-        request: SamplingRequest,
-        model: str,
-        max_tokens: int,
+        self, server_name: str, request: SamplingRequest, model: str, max_tokens: int
     ) -> SamplingResult:
         """Dispatch a sampling request to the configured LLM provider.
 
@@ -193,7 +188,10 @@ class MCPSamplingHandler:
         """
         self._audit_log.info(
             "Dispatching sampling request from %s to %s (%d messages, %d max tokens)",
-            server_name, model, len(request.messages), max_tokens,
+            server_name,
+            model,
+            len(request.messages),
+            max_tokens,
         )
         # Stub: return a placeholder until integrated with real LLM port
         return SamplingResult(

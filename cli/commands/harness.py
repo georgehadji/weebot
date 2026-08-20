@@ -3,8 +3,10 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from datetime import UTC
 
 console = Console()
+
 
 @click.group()
 def benchmark() -> None:
@@ -25,8 +27,7 @@ def benchmark_list(tasks_dir: str) -> None:
     for task in tasks:
         tags = ", ".join(task.tags) if task.tags else "—"
         console.print(
-            f"[bold]{task.task_id}[/bold]  "
-            f"({len(task.samples)} samples, tags: {tags})"
+            f"[bold]{task.task_id}[/bold]  " f"({len(task.samples)} samples, tags: {tags})"
         )
 
 
@@ -36,7 +37,9 @@ def benchmark_list(tasks_dir: str) -> None:
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--sample", "sample_idx", default=0, type=int, show_default=True)
 @click.option("--db", default="./weebot_sessions.db", show_default=True)
-def benchmark_run(task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str) -> None:
+def benchmark_run(
+    task_path: str, skill_name: str, model: str | None, sample_idx: int, db: str
+) -> None:
     """Run one sample from a benchmark task at TASK_PATH."""
     import asyncio
     import json
@@ -71,8 +74,7 @@ def benchmark_run(task_path: str, skill_name: str, model: str | None, sample_idx
 @click.option("--output", "-o", default="benchmark_results.json", show_default=True)
 @click.option("--db", default="./weebot_sessions.db", show_default=True)
 def benchmark_batch(
-    tasks_dir: str, skill_name: str, model: str | None,
-    concurrency: int, output: str, db: str,
+    tasks_dir: str, skill_name: str, model: str | None, concurrency: int, output: str, db: str
 ) -> None:
     """Run all samples in all tasks under TASKS_DIR and write results to OUTPUT."""
     import asyncio
@@ -120,7 +122,9 @@ def benchmark_report(results_file: str) -> None:
 
     passed = sum(1 for r in records if r.get("passed"))
     avg_score = sum(r.get("score", 0.0) for r in records) / len(records)
-    console.print(f"[bold]Results:[/bold] {passed}/{len(records)} passed, avg score {avg_score:.3f}")
+    console.print(
+        f"[bold]Results:[/bold] {passed}/{len(records)} passed, avg score {avg_score:.3f}"
+    )
     console.print("")
 
     for r in records:
@@ -151,12 +155,9 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
     Creates agent definitions in .claude/agents/ and skills in
     .claude/skills/ tailored to the domain.
     """
-    import asyncio
 
     async def _run() -> None:
-        from weebot.application.flows.harness_generation_flow import (
-            HarnessGenerationFlow,
-        )
+        from weebot.application.flows.harness_generation_flow import HarnessGenerationFlow
         from rich.console import Console
 
         console = Console()
@@ -173,35 +174,55 @@ def harness_generate(domain: str, output_dir: str, dry_run: bool) -> None:
             console.print(f"\n[bold]Skills ({len(arch.skills)}):[/bold]")
             for s in arch.skills:
                 console.print(f"  [green]{s.name}[/green] — {s.description[:60]}")
-            console.print(f"\n[dim]Dry run — no files written.[/dim]")
+            console.print("\n[dim]Dry run — no files written.[/dim]")
             return
 
         flow = HarnessGenerationFlow(output_dir=output_dir)
         arch = await flow.generate_and_write(domain)
 
-        console.print(f"[green]✓[/green] Generated [bold]{arch.pattern.value}[/bold] harness for '[cyan]{arch.domain}[/cyan]'")
+        console.print(
+            f"[green]✓[/green] Generated [bold]{arch.pattern.value}[/bold] harness for '[cyan]{arch.domain}[/cyan]'"
+        )
         console.print(f"  Agents: {len(arch.agents)}")
         console.print(f"  Skills: {len(arch.skills)}")
         console.print(f"  Output: {Path(output_dir).resolve() / '.claude'}")
 
 
 @harness.command("evolve")
-@click.option("--harness-path", default="weebot/config/harness/v0.2.0.yaml",
-              show_default=True, help="Base harness YAML path")
-@click.option("--output-dir", default=None,
-              help="Output directory for evolved harnesses (default: <harness_path>/evolved/)")
-@click.option("--held-in-tasks", "-i", multiple=True,
-              help="Task IDs for held-in evaluation (repeatable)")
-@click.option("--held-out-tasks", "-o", multiple=True,
-              help="Task IDs for held-out evaluation (repeatable)")
+@click.option(
+    "--harness-path",
+    default="weebot/config/harness/v0.2.0.yaml",
+    show_default=True,
+    help="Base harness YAML path",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    help="Output directory for evolved harnesses (default: <harness_path>/evolved/)",
+)
+@click.option(
+    "--held-in-tasks", "-i", multiple=True, help="Task IDs for held-in evaluation (repeatable)"
+)
+@click.option(
+    "--held-out-tasks", "-o", multiple=True, help="Task IDs for held-out evaluation (repeatable)"
+)
 @click.option("--max-proposals", default=3, type=int, show_default=True)
-@click.option("--iterations", default=1, type=int, show_default=True,
-              help="Number of Self-Harness optimization iterations")
+@click.option(
+    "--iterations",
+    default=1,
+    type=int,
+    show_default=True,
+    help="Number of Self-Harness optimization iterations",
+)
 @click.option("--db", default="./weebot_sessions.db", show_default=True)
 def harness_evolve(
-    harness_path: str, output_dir: str | None,
-    held_in_tasks: tuple[str, ...], held_out_tasks: tuple[str, ...],
-    max_proposals: int, iterations: int, db: str,
+    harness_path: str,
+    output_dir: str | None,
+    held_in_tasks: tuple[str, ...],
+    held_out_tasks: tuple[str, ...],
+    max_proposals: int,
+    iterations: int,
+    db: str,
 ) -> None:
     """Run the Self-Harness optimization loop to evolve an agent harness.
 
@@ -211,7 +232,6 @@ def harness_evolve(
     (Δ_in ≥ 0, Δ_ho ≥ 0) are promoted to new versioned YAML files.
     """
     import asyncio
-    from pathlib import Path
 
     async def _run() -> None:
         from weebot.application.di import Container
@@ -220,11 +240,9 @@ def harness_evolve(
             HarnessOptimizationTarget,
         )
         from weebot.application.ports.llm_port import LLMPort
-        from weebot.infrastructure.persistence.trajectory_repo import (
-            TrajectoryRepository,
-        )
+        from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
 
-        console.print(f"[bold]Self-Harness Evolution[/bold]")
+        console.print("[bold]Self-Harness Evolution[/bold]")
         console.print(f"  Harness: {harness_path}")
         console.print(f"  Held-in tasks: {list(held_in_tasks)}")
         console.print(f"  Held-out tasks: {list(held_out_tasks)}")
@@ -238,16 +256,15 @@ def harness_evolve(
         trajectory_repo = TrajectoryRepository(db_path=db)
 
         # Create optimization target
-        target = HarnessOptimizationTarget(
-            harness_path=harness_path,
-            output_dir=output_dir,
-        )
+        target = HarnessOptimizationTarget(harness_path=harness_path, output_dir=output_dir)
         await target.load()
 
         if not held_in_tasks and not held_out_tasks:
-            console.print("[yellow]No held-in or held-out tasks provided — "
-                          "the optimizer can mine existing failure patterns "
-                          "but cannot validate proposals.[/yellow]")
+            console.print(
+                "[yellow]No held-in or held-out tasks provided — "
+                "the optimizer can mine existing failure patterns "
+                "but cannot validate proposals.[/yellow]"
+            )
 
         for iteration in range(iterations):
             console.print(f"\n[bold]Iteration {iteration + 1}/{iterations}[/bold]")
@@ -278,7 +295,6 @@ def harness_evolve(
     asyncio.run(_run())
 
 
-
 # ── Baseline: record and check eval performance over time ──────────
 
 DEFAULT_BASELINE_PATH = "weebot/config/harness/baseline.json"
@@ -287,10 +303,14 @@ DEFAULT_EVAL_TASKS = "weebot/config/harness/eval_tasks.yaml"
 
 def _git_sha() -> str:
     import subprocess
+
     try:
         return subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=5, check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
         ).stdout.strip()
     except Exception:
         return "unknown"
@@ -329,17 +349,22 @@ async def _run_eval_tasks(tasks, model, db, concurrency):
                     pass
             except Exception as exc:
                 return TaskOutcome(
-                    task_id=task_id, split=split,
+                    task_id=task_id,
+                    split=split,
                     fingerprint=prompt_fingerprint(prompt),
-                    passed=False, score=0.0, error=str(exc)[:200],
+                    passed=False,
+                    score=0.0,
+                    error=str(exc)[:200],
                 )
             completed = getattr(flow, "_session", session)
             status = str(getattr(completed, "status", "")).lower()
             passed = "fail" not in status and "error" not in status
             return TaskOutcome(
-                task_id=task_id, split=split,
+                task_id=task_id,
+                split=split,
                 fingerprint=prompt_fingerprint(prompt),
-                passed=passed, score=1.0 if passed else 0.0,
+                passed=passed,
+                score=1.0 if passed else 0.0,
             )
 
     return list(await _asyncio.gather(*[_one(*t) for t in tasks]))
@@ -363,7 +388,7 @@ def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> Non
     Requires LLM credentials. Commit the resulting artifact — every later
     `harness baseline check` is measured against it.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from weebot.application.harness.baseline import Baseline, load_eval_tasks
     from weebot.config.harness.schema import HarnessConfig
@@ -379,7 +404,7 @@ def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> Non
         harness_version = "unknown"
 
     baseline = Baseline(
-        recorded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        recorded_at=datetime.now(UTC).isoformat(timespec="seconds"),
         git_sha=_git_sha(),
         model=model or "default",
         harness_version=harness_version,
@@ -404,8 +429,13 @@ def harness_baseline_record(output, tasks, model, db, concurrency, notes) -> Non
 @click.option("--model", default=None, help="Override LLM model")
 @click.option("--db", default="./weebot_baseline.db", show_default=True)
 @click.option("--concurrency", default=2, type=int, show_default=True)
-@click.option("--tolerance", default=0.0, type=float, show_default=True,
-              help="Allowed drop in pass rate (0.1 = 10 points)")
+@click.option(
+    "--tolerance",
+    default=0.0,
+    type=float,
+    show_default=True,
+    help="Allowed drop in pass rate (0.1 = 10 points)",
+)
 def harness_baseline_check(baseline_path, tasks, model, db, concurrency, tolerance) -> None:
     """Re-run the eval set and compare against the recorded baseline.
 

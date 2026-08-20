@@ -1,14 +1,14 @@
 """Tests for governed skill loop — ProposalTracker, SkillReviewGate, SkillPromotionGate, consolidation."""
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.application.services.proposal_tracker import ProposalTracker
 from weebot.domain.models.skill import SkillReview, SkillPromotionResult
 from weebot.application.services.skill_curator import _extract_keywords, _keyword_overlap
 
-
 # ── ProposalTracker ──────────────────────────────────────────────────────────
+
 
 class TestProposalTracker:
     def test_fingerprint_stable(self):
@@ -33,8 +33,8 @@ class TestProposalTracker:
         """At N identical proposals (threshold=3), returns False."""
         tracker = ProposalTracker(suppression_threshold=3)
         fp = ProposalTracker.fingerprint("repeated skill")
-        assert tracker.record_and_check(fp) is True   # 1st
-        assert tracker.record_and_check(fp) is True   # 2nd
+        assert tracker.record_and_check(fp) is True  # 1st
+        assert tracker.record_and_check(fp) is True  # 2nd
         assert tracker.record_and_check(fp) is False  # 3rd → suppressed
 
     def test_different_fingerprints_not_suppressed(self):
@@ -61,11 +61,12 @@ class TestProposalTracker:
         tracker.record_and_check(fp)  # 1st
         assert tracker.record_and_check(fp) is False  # 2nd → suppressed
         tracker.reset()
-        assert tracker.record_and_check(fp) is True   # proceeds after reset
-        assert tracker.suppression_count() == 0       # counter cleared
+        assert tracker.record_and_check(fp) is True  # proceeds after reset
+        assert tracker.suppression_count() == 0  # counter cleared
 
 
 # ── Skill domain models ──────────────────────────────────────────────────────
+
 
 class TestSkillModels:
     def test_skill_review_defaults(self):
@@ -84,6 +85,7 @@ class TestSkillModels:
 
 # ── Skill curator consolidation helpers ─────────────────────────────────────
 
+
 class TestSkillConsolidation:
     def test_extract_keywords(self):
         keywords = _extract_keywords("this skill helps with bash shell commands")
@@ -101,7 +103,7 @@ class TestSkillConsolidation:
 
     def test_keyword_overlap_partial(self):
         overlap = _keyword_overlap({"bash", "shell"}, {"bash", "python"})
-        assert overlap == 1/3  # intersection={bash}, union={bash, shell, python}
+        assert overlap == 1 / 3  # intersection={bash}, union={bash, shell, python}
 
     def test_keyword_overlap_empty(self):
         assert _keyword_overlap(set(), {"a"}) == 0.0

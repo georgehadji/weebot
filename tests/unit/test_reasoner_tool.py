@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +16,7 @@ class TestReasonerTool:
     def test_reasoner_tool_registry_registration(self):
         """Verify the reasoner tool is discoverable in the registry and assigned to correct roles."""
         registry = RoleBasedToolRegistry()
-        
+
         # Verify it exists in classes
         class_map = registry.build_tool_class_map()
         assert "reasoner" in class_map
@@ -50,7 +49,7 @@ class TestReasonerTool:
             "synthesis": "We should use a distributed model here.",
             "citations": ["https://example.com/source"],
             "models_used": ["openai/gpt-4o"],
-            "errors": []
+            "errors": [],
         }
         mock_post.return_value = mock_post_resp
 
@@ -81,17 +80,14 @@ class TestReasonerTool:
         # First POST response missing synthesis, second POST has it
         first_resp = MagicMock()
         first_resp.status_code = 200
-        first_resp.json.return_value = {
-            "synthesis": None,
-            "errors": ["Failed to find local info"]
-        }
+        first_resp.json.return_value = {"synthesis": None, "errors": ["Failed to find local info"]}
 
         second_resp = MagicMock()
         second_resp.status_code = 200
         second_resp.json.return_value = {
             "synthesis": "Retried and found facts.",
             "citations": ["web-source"],
-            "models_used": ["google/gemini-pro"]
+            "models_used": ["google/gemini-pro"],
         }
 
         mock_post.side_effect = [first_resp, second_resp]
@@ -105,7 +101,7 @@ class TestReasonerTool:
 
         # Verify it was called twice (first time, then retry with web_search=True)
         assert mock_post.call_count == 2
-        
+
         # Verify that web_search was updated to True on the second call
         args, kwargs = mock_post.call_args_list[1]
         assert kwargs["json"]["web_search"] is True
@@ -117,6 +113,7 @@ class TestReasonerTool:
     async def test_reasoner_tool_cli_fallback_success(self, mock_subprocess, mock_post, mock_get):
         """Verify that tool automatically falls back to headless CLI execution if API calls fail."""
         import httpx
+
         # Discovery fails with HTTP connection error
         mock_get.side_effect = httpx.ConnectError("Connection refused")
         # Post fails with Connection refused
@@ -128,15 +125,17 @@ class TestReasonerTool:
         mock_process.communicate.return_value = (b"Headless CLI execution logs\n", b"")
         mock_subprocess.return_value = mock_process
 
-        with patch("builtins.open", MagicMock()), \
-             patch("pathlib.Path.exists") as mock_exists, \
-             patch("json.load") as mock_load:
-            
+        with (
+            patch("builtins.open", MagicMock()),
+            patch("pathlib.Path.exists") as mock_exists,
+            patch("json.load") as mock_load,
+        ):
+
             mock_exists.return_value = True
             mock_load.return_value = {
                 "synthesis": "CLI synthesized result.",
                 "citations": ["cli-source"],
-                "models_used": ["cli-model"]
+                "models_used": ["cli-model"],
             }
 
             tool = ReasonerTool()

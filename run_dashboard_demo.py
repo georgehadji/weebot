@@ -1,9 +1,12 @@
 """Minimal demo: create dashboard HTML manually, invoking weebot tools directly.
 This demonstrates the tool layer without the full PlanActFlow overhead."""
-import sys, os
+
+import sys
+
 sys.path.insert(0, ".")
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 from pathlib import Path

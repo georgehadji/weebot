@@ -1,12 +1,7 @@
 """Atomic Mail Python shared foundation package."""
 
 from .config import ResolvedAgentConfig, resolve_agent_config_from_env
-from .credentials import (
-    CredentialStore,
-    Credentials,
-    SkillFiles,
-    default_files_from_out_dir,
-)
+from .credentials import CredentialStore, Credentials, SkillFiles, default_files_from_out_dir
 from .help import help
 from .jmap_request import JmapAttachmentInput, JmapRequestResult, jmap_request, run_jmap_request
 from .mcp_server import handle_tool_call

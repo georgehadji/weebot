@@ -13,9 +13,11 @@ and ``dispatch_session_input.py`` call, so the interfaces layer can depend on
 a narrow structural type instead of the wide concrete class. Same shape and
 justification as the existing ``EventBusPort``/``EventPublisherPort`` split.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from weebot.application.ports.event_bus_port import EventBusPort
@@ -35,18 +37,18 @@ class TaskRunnerPort(Protocol):
         """Cancel a running session. Returns False if none was active."""
         ...
 
-    async def start_session(self, session: "Session", flow_factory: FlowFactory) -> "Session":
+    async def start_session(self, session: Session, flow_factory: FlowFactory) -> Session:
         """Start a session immediately as a background task."""
         ...
 
     def create_plan_act_factory(
         self,
-        llm: "LLMPort",
-        tools: "ToolCollection",
-        event_bus: Optional["EventBusPort"] = None,
-        model: Optional[str] = None,
+        llm: LLMPort,
+        tools: ToolCollection,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
         ponytail_mode: str | None = None,
-        steering: Optional["SteeringPort"] = None,
+        steering: SteeringPort | None = None,
     ) -> FlowFactory:
         """Build a ``PlanActFlow`` factory bound to the given collaborators."""
         ...

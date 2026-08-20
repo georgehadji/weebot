@@ -1,7 +1,7 @@
 """SkillOpt bindings mixin for Container — largest extraction (~200 lines)."""
+
 from __future__ import annotations
 
-from typing import Any, Optional
 
 from weebot.config.model_refs import MODEL_DI_SKILLOPT
 
@@ -10,9 +10,12 @@ class SkillOptMixin:
     """SkillOpt flow builder + scorer + optimizer bindings."""
 
     def configure_skillopt(
-        self, *, db_path="./weebot_sessions.db",
+        self,
+        *,
+        db_path="./weebot_sessions.db",
         optimizer_model=MODEL_DI_SKILLOPT,
-        target_model=None, harness="direct_chat",
+        target_model=None,
+        harness="direct_chat",
     ):
         self.configure_defaults(db_path=db_path, default_model=target_model)
         self.register("optimizer_llm", lambda: self._create_llm_by_id(optimizer_model))
@@ -22,23 +25,26 @@ class SkillOptMixin:
         self.register("validation_gate", lambda: self._create_validation_gate(harness))
         self.register("evolution_tracker", self._create_evolution_tracker)
         self.register("validation_runner", lambda: self._create_validation_runner(db_path))
-        self.register(
-            "transfer_flow_factory", lambda: self._create_transfer_flow_factory(db_path)
-        )
-        self.register(
-            "harness_optimization_target", self._create_harness_optimization_target
-        )
+        self.register("transfer_flow_factory", lambda: self._create_transfer_flow_factory(db_path))
+        self.register("harness_optimization_target", self._create_harness_optimization_target)
 
     def build_skill_opt_flow(
-        self, skill_name, train_tasks, validation_tasks=None,
-        output_path="best_skill.md", epochs=4, steps_per_epoch=5,
-        batch_size=40, use_planning=False,
+        self,
+        skill_name,
+        train_tasks,
+        validation_tasks=None,
+        output_path="best_skill.md",
+        epochs=4,
+        steps_per_epoch=5,
+        batch_size=40,
+        use_planning=False,
         use_archive_search: bool = False,
         use_evaluator_slot: bool = False,
         db_path: str = "./weebot_sessions.db",
         harness: str = "direct_chat",
     ):
         from weebot.application.flows.skill_opt_flow import SkillOptFlow
+
         mediator = self.build_mediator()
         gate = self._maybe_get_str("validation_gate")
         if gate is not None:
@@ -47,6 +53,7 @@ class SkillOptMixin:
         from weebot.application.services.trajectory_builder import TrajectoryBuilder
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
+
         # "optimizer_port" is registered under a string key (line ~19 above),
         # not the OptimizerPort type — self.get(OptimizerPort) raised KeyError
         # unconditionally, since Container.get() does not cross-resolve
@@ -75,6 +82,7 @@ class SkillOptMixin:
             from weebot.application.services.selective_erasure import SelectiveErasure
             from weebot.application.services.adversarial_pool import AdversarialPool
             from weebot.application.ports.llm_port import LLMPort
+
             evaluator_llm = self._maybe_get(LLMPort)
             evaluator_kwargs["evaluator_slot"] = EvaluatorState(
                 evaluator_id="skillopt-evaluator",
@@ -89,6 +97,7 @@ class SkillOptMixin:
         archive_kwargs = {}
         if use_archive_search:
             from weebot.application.services.thompson_sampler import ThompsonSampler
+
             archive_kwargs["use_archive_search"] = True
             archive_kwargs["thompson_sampler"] = ThompsonSampler(
                 optimizer=self.get("optimizer_port"),
@@ -99,10 +108,14 @@ class SkillOptMixin:
         from weebot.application.ports.event_bus_port import EventBusPort
 
         flow = SkillOptFlow(
-            skill_name=skill_name, train_tasks=train_tasks,
-            validation_tasks=validation_tasks, output_path=output_path,
-            epochs=epochs, steps_per_epoch=steps_per_epoch,
-            batch_size=batch_size, use_planning=use_planning,
+            skill_name=skill_name,
+            train_tasks=train_tasks,
+            validation_tasks=validation_tasks,
+            output_path=output_path,
+            epochs=epochs,
+            steps_per_epoch=steps_per_epoch,
+            batch_size=batch_size,
+            use_planning=use_planning,
             mediator=mediator,
             skill_store=self.get("skill_store"),
             optimizer=scoring_port,
@@ -118,23 +131,25 @@ class SkillOptMixin:
     def _create_llm_by_id(self, model_id: str):
         from weebot.config.model_registry import ModelProvider
         from weebot.infrastructure.adapters.llm.adapter_factory import create_adapter
+
         provider = ModelProvider.from_model_name(model_id).value
         return create_adapter(provider, model=model_id)
 
     def _create_optimizer_agent(self):
         from weebot.application.agents.optimizer_agent import OptimizerAgent
+
         return OptimizerAgent(optimizer_llm=self.get("optimizer_llm"))
 
     @staticmethod
     def _create_skill_store(db_path: str):
         from weebot.infrastructure.persistence.skill_store import SkillStore
+
         return SkillStore(db_path=db_path)
 
     @staticmethod
     def _create_trajectory_repo(db_path: str):
-        from weebot.infrastructure.persistence.trajectory_repo import (
-            TrajectoryRepository,
-        )
+        from weebot.infrastructure.persistence.trajectory_repo import TrajectoryRepository
+
         return TrajectoryRepository(db_path=db_path)
 
     def _create_evolution_tracker(self):
@@ -142,6 +157,7 @@ class SkillOptMixin:
         optimizer-tier reasoning role as OptimizerAgent, so it shares the
         optimizer_llm binding rather than the target model."""
         from weebot.application.services.evolution_tracker import EvolutionTracker
+
         return EvolutionTracker(llm=self.get("optimizer_llm"))
 
     @staticmethod
@@ -177,12 +193,9 @@ class SkillOptMixin:
         call site but is not consumed here — weebot has one execution harness
         (see _create_transfer_flow_factory).
         """
-        from weebot.application.cqrs.behaviors.validation_gate import (
-            ValidationGateBehavior,
-        )
-        return ValidationGateBehavior(
-            validation_runner=self._maybe_get_str("validation_runner"),
-        )
+        from weebot.application.cqrs.behaviors.validation_gate import ValidationGateBehavior
+
+        return ValidationGateBehavior(validation_runner=self._maybe_get_str("validation_runner"))
 
     def _create_target_flow_factory(self, db_path: str):
         """Return a callable that builds a PlanActFlow for SkillOpt rollouts."""
@@ -196,6 +209,7 @@ class SkillOptMixin:
         class _LazyLLM:
             def __init__(self, container):
                 self._c = container
+
             def __getattr__(self, name):
                 llm = self._c._maybe_get(LLMPort)
                 if llm is None:
@@ -204,6 +218,7 @@ class SkillOptMixin:
 
         def factory(session):
             from weebot.application.models.plan_act_flow_config import PlanActFlowConfig
+
             cfg = PlanActFlowConfig(
                 llm=self.get(LLMPort),
                 tools=None,
@@ -220,6 +235,7 @@ class SkillOptMixin:
                 harness_config=self._maybe_get(HarnessConfig),
             )
             return PlanActFlow(cfg)
+
         return factory
 
     def _create_validation_runner(self, db_path: str):
@@ -289,4 +305,5 @@ class SkillOptMixin:
                 harness_config=self._maybe_get(HarnessConfig),
             )
             return PlanActFlow(cfg)
+
         return factory

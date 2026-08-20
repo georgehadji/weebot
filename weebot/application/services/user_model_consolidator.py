@@ -7,10 +7,11 @@ system prompt alongside the raw behavioral rules.
 Replaces the stub ``behavioral_consolidation`` cron callback with
 real logic.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class UserModelConsolidator:
             When None, consolidation does a simple text merge (no LLM).
     """
 
-    def __init__(self, state_repo: Any, llm: Optional[Any] = None) -> None:
+    def __init__(self, state_repo: Any, llm: Any | None = None) -> None:
         self._repo = state_repo
         self._llm = llm
 
@@ -61,6 +62,7 @@ class UserModelConsolidator:
         # 4. Store the profile as a pinned memory entry
         try:
             import hashlib
+
             key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
             await self._repo.upsert_memory_metadata(
                 entry_hash=key,
@@ -105,9 +107,9 @@ class UserModelConsolidator:
                     {
                         "role": "system",
                         "content": "You are a user-modeling assistant. Given behavioral rules "
-                                    "and memory entries about a user, produce a 3-5 sentence "
-                                    "concise profile summarizing their preferences, work habits, "
-                                    "and patterns. Be specific and actionable.",
+                        "and memory entries about a user, produce a 3-5 sentence "
+                        "concise profile summarizing their preferences, work habits, "
+                        "and patterns. Be specific and actionable.",
                     },
                     {"role": "user", "content": input_text[:3000]},
                 ],

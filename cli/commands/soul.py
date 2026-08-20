@@ -7,6 +7,7 @@ Usage:
     python -m cli.main soul seed --profile reviewer
     python -m cli.main soul list
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +34,7 @@ def soul() -> None:
 @click.option("--profile", "-p", default=None, help="Profile name (e.g. 'coder', 'reviewer').")
 def soul_show(profile: str | None) -> None:
     """Display the current SOUL.md content."""
+
     async def _run():
         provider = _get_provider()
         soul_profile = await provider.load(profile)
@@ -59,6 +61,7 @@ def soul_show(profile: str | None) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to edit.")
 def soul_edit(profile: str | None) -> None:
     """Open SOUL.md in your default editor ($EDITOR or notepad)."""
+
     async def _run():
         provider = _get_provider()
         name = profile or "default"
@@ -88,7 +91,9 @@ def soul_edit(profile: str | None) -> None:
 
         console.print(f"[dim]Opening {path} with {editor}...[/dim]")
         subprocess.run([editor, str(path)], check=False)
-        console.print(f"[green]Done. Run 'weebot soul show{' --profile ' + profile if profile else ''}' to review.[/green]")
+        console.print(
+            f"[green]Done. Run 'weebot soul show{' --profile ' + profile if profile else ''}' to review.[/green]"
+        )
 
     asyncio.run(_run())
 
@@ -97,15 +102,20 @@ def soul_edit(profile: str | None) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to seed.")
 def soul_seed(profile: str | None) -> None:
     """Create a SOUL.md file from the default template."""
+
     async def _run():
         provider = _get_provider()
         name = profile or "default"
 
         try:
             soul_profile = await provider.seed(profile)
-            console.print(f"[green]Created SOUL.md for '{name}' at {soul_profile.source_path}[/green]")
+            console.print(
+                f"[green]Created SOUL.md for '{name}' at {soul_profile.source_path}[/green]"
+            )
         except FileExistsError:
-            console.print(f"[yellow]SOUL.md already exists for '{name}'. Use 'soul edit' to modify it.[/yellow]")
+            console.print(
+                f"[yellow]SOUL.md already exists for '{name}'. Use 'soul edit' to modify it.[/yellow]"
+            )
 
     asyncio.run(_run())
 
@@ -113,6 +123,7 @@ def soul_seed(profile: str | None) -> None:
 @soul.command("list")
 def soul_list() -> None:
     """List all profiles with SOUL.md files."""
+
     async def _run():
         provider = _get_provider()
         profiles = await provider.list_profiles()
@@ -139,9 +150,11 @@ def soul_list() -> None:
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+
 def _get_provider():
     """Resolve SoulProviderPort from the DI container."""
     from weebot.application.di import Container
+
     c = Container()
     c.configure_defaults()
     return c.get("soul_provider")

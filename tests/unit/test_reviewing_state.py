@@ -1,19 +1,17 @@
 """Tests for Phase 5: ReviewingState."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from weebot.application.flows.states.reviewing import ReviewingState
 from weebot.domain.models.code_review import CodeReviewResult
-from weebot.domain.models.plan import Plan, Step, StepStatus
+from weebot.domain.models.plan import Plan, Step
 
 
 @pytest.fixture
 def mock_reviewer():
     reviewer = AsyncMock()
-    reviewer.review.return_value = CodeReviewResult(
-        step_id="step-1",
-        verdict="approved",
-    )
+    reviewer.review.return_value = CodeReviewResult(step_id="step-1", verdict="approved")
     return reviewer
 
 
@@ -59,9 +57,7 @@ async def test_approved_advances_to_next_step(mock_context, mock_reviewer):
 async def test_revise_injects_hint_and_retries(mock_context, mock_reviewer):
     """revise verdict -> hint injected, retry_count+1, status=PENDING."""
     mock_reviewer.review.return_value = CodeReviewResult(
-        step_id="step-1",
-        verdict="revise",
-        hint="Add input validation",
+        step_id="step-1", verdict="revise", hint="Add input validation"
     )
     step = Step(id="step-1", description="Write code")
     state = ReviewingState(step=step, reviewer=mock_reviewer)
@@ -77,9 +73,7 @@ async def test_revise_injects_hint_and_retries(mock_context, mock_reviewer):
 async def test_revise_without_hint_no_bracket(mock_context, mock_reviewer):
     """revise with empty hint -> description unchanged."""
     mock_reviewer.review.return_value = CodeReviewResult(
-        step_id="step-1",
-        verdict="revise",
-        hint="",
+        step_id="step-1", verdict="revise", hint=""
     )
     step = Step(id="step-1", description="Write code", retry_count=0)
     state = ReviewingState(step=step, reviewer=mock_reviewer)
@@ -96,9 +90,7 @@ async def test_revise_without_hint_no_bracket(mock_context, mock_reviewer):
 async def test_reject_marks_step_failed(mock_context, mock_reviewer):
     """reject verdict -> step FAILED, UpdatingState."""
     mock_reviewer.review.return_value = CodeReviewResult(
-        step_id="step-1",
-        verdict="reject",
-        issues=["Unrecoverable issue"],
+        step_id="step-1", verdict="reject", issues=["Unrecoverable issue"]
     )
     step = Step(id="step-1", description="Write code")
     state = ReviewingState(step=step, reviewer=mock_reviewer)
@@ -128,6 +120,7 @@ async def test_thought_event_yielded(mock_context, mock_reviewer):
     events = [e async for e in gen]
     assert len(events) == 1
     from weebot.domain.models.event import ThoughtEvent
+
     assert isinstance(events[0], ThoughtEvent)
 
 
@@ -146,6 +139,7 @@ async def test_no_plan_falls_through(mock_context, mock_reviewer):
 def test_is_code_step_helper():
     """_is_code_step detects code-producing steps."""
     from weebot.application.flows.states.executing import _is_code_step
+
     assert _is_code_step(Step(id="s1", description="Implement sorting"))
     assert _is_code_step(Step(id="s2", description="Write a Python script"))
     assert _is_code_step(Step(id="s3", description="Fix bug in parser"))

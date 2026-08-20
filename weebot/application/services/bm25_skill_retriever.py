@@ -5,10 +5,10 @@ When rank_bm25 is not installed, falls back to simple word-overlap scoring.
 
 Maps to LIFE-HARNESS "Procedural Skill Layer" (Section 4.3.2).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.skill_retriever_port import SkillRetrieverPort
 from weebot.application.skills.skill_registry import SkillRegistry
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from rank_bm25 import BM25Okapi
+
     HAS_BM25 = True
 except ImportError:
     BM25Okapi = None  # type: ignore[assignment,misc]
@@ -32,18 +33,14 @@ class BM25SkillRetriever(SkillRetrieverPort):
         registry: Loaded SkillRegistry instance.
     """
 
-    def __init__(
-        self, registry: SkillRegistry, harness_config=None
-    ) -> None:
+    def __init__(self, registry: SkillRegistry, harness_config=None) -> None:
         self._registry = registry
         self._corpus: list[str] = []
         self._skill_names: list[str] = []
-        self._bm25: Optional["BM25Okapi"] = None
+        self._bm25: BM25Okapi | None = None
         self._top_k = 3
         if harness_config is not None:
-            self._top_k = getattr(
-                harness_config.skill_retrieval, "top_k", 3
-            )
+            self._top_k = getattr(harness_config.skill_retrieval, "top_k", 3)
         self.refresh()
 
     @property
@@ -81,9 +78,7 @@ class BM25SkillRetriever(SkillRetrieverPort):
             try:
                 tokenized = [doc.split() for doc in self._corpus]
                 self._bm25 = BM25Okapi(tokenized)
-                logger.info(
-                    "BM25 index built: %d skills", len(self._corpus)
-                )
+                logger.info("BM25 index built: %d skills", len(self._corpus))
             except Exception as exc:
                 logger.warning("BM25 index build failed: %s — using fallback", exc)
                 self._bm25 = None

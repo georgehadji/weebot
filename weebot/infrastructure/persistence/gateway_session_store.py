@@ -20,13 +20,14 @@ Schema:
         metadata TEXT DEFAULT '{}'
     );
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +41,9 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
     """SQLite-backed persistence for gateway sessions."""
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self._db_path = Path(db_path) if db_path else Path.home() / ".weebot" / "gateway_sessions.db"
+        self._db_path = (
+            Path(db_path) if db_path else Path.home() / ".weebot" / "gateway_sessions.db"
+        )
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -119,8 +122,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
         def _query() -> sqlite3.Row | None:
             with self._get_connection() as conn:
                 return conn.execute(
-                    "SELECT * FROM gateway_sessions WHERE composite_key = ?",
-                    (composite,),
+                    "SELECT * FROM gateway_sessions WHERE composite_key = ?", (composite,)
                 ).fetchone()
 
         row = await asyncio.to_thread(_query)
@@ -160,10 +162,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
         await asyncio.to_thread(_write)
 
     async def list(
-        self,
-        platform: str | None = None,
-        user_id: str | None = None,
-        active_only: bool = True,
+        self, platform: str | None = None, user_id: str | None = None, active_only: bool = True
     ) -> list[GatewaySession]:
         """List sessions with optional filtering."""
 
@@ -186,8 +185,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
                     where = "WHERE " + " AND ".join(conditions)
 
                 rows = conn.execute(
-                    f"SELECT * FROM gateway_sessions {where} ORDER BY last_activity_at DESC",
-                    params,
+                    f"SELECT * FROM gateway_sessions {where} ORDER BY last_activity_at DESC", params
                 ).fetchall()
                 return rows
 
@@ -202,7 +200,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
             with self._get_connection() as conn:
                 conn.execute(
                     "UPDATE gateway_sessions SET is_active = 0, last_activity_at = ? WHERE composite_key = ?",
-                    (datetime.now(timezone.utc).isoformat(), composite),
+                    (datetime.now(UTC).isoformat(), composite),
                 )
                 conn.commit()
 
@@ -214,10 +212,7 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
 
         def _delete() -> None:
             with self._get_connection() as conn:
-                conn.execute(
-                    "DELETE FROM gateway_sessions WHERE composite_key = ?",
-                    (composite,),
-                )
+                conn.execute("DELETE FROM gateway_sessions WHERE composite_key = ?", (composite,))
                 conn.commit()
 
         await asyncio.to_thread(_delete)
@@ -229,10 +224,10 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
             with self._get_connection() as conn:
                 # Calculate cutoff timestamp
                 from datetime import timedelta
-                cutoff = (datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)).isoformat()
+
+                cutoff = (datetime.now(UTC) - timedelta(seconds=ttl_seconds)).isoformat()
                 result = conn.execute(
-                    "DELETE FROM gateway_sessions WHERE last_activity_at < ?",
-                    (cutoff,),
+                    "DELETE FROM gateway_sessions WHERE last_activity_at < ?", (cutoff,)
                 )
                 conn.commit()
                 return result.rowcount
@@ -254,16 +249,12 @@ class SQLiteGatewaySessionStore(AbstractGatewaySessionStore):
         def _delete() -> int:
             with self._get_connection() as conn:
                 result = conn.execute(
-                    "DELETE FROM gateway_sessions WHERE flow_session_id = ?",
-                    (session_id,),
+                    "DELETE FROM gateway_sessions WHERE flow_session_id = ?", (session_id,)
                 )
                 conn.commit()
                 return result.rowcount
 
         count = await asyncio.to_thread(_delete)
         if count > 0:
-            logger.info(
-                "Deleted %d gateway session(s) for flow session %s",
-                count, session_id,
-            )
+            logger.info("Deleted %d gateway session(s) for flow session %s", count, session_id)
         return count

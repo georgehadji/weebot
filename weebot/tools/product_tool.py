@@ -5,11 +5,12 @@ only when no repository is provided (deprecated path).
 
 Author: Georgios-Chrysovalantis Chatzivantsidis
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import PrivateAttr
 
@@ -82,10 +83,7 @@ class ProductTool(BaseTool):
                 "enum": ["draft", "approved", "in-progress", "done", "rejected"],
                 "description": "New status (required for update_status).",
             },
-            "tags": {
-                "type": "string",
-                "description": "Comma-separated tags (optional).",
-            },
+            "tags": {"type": "string", "description": "Comma-separated tags (optional)."},
         },
         "required": ["action"],
     }
@@ -132,7 +130,8 @@ class ProductTool(BaseTool):
         category = kw.get("category") or "feature"
         if category not in _VALID_CATEGORIES:
             return ToolResult(
-                output="", error=f"Invalid category {category!r}. Choose from {sorted(_VALID_CATEGORIES)}"
+                output="",
+                error=f"Invalid category {category!r}. Choose from {sorted(_VALID_CATEGORIES)}",
             )
 
         raw_priority = kw.get("priority")
@@ -141,7 +140,9 @@ class ProductTool(BaseTool):
         except (TypeError, ValueError):
             priority_int = 3
         priority_int = max(1, min(5, priority_int))
-        priority_label = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "trivial"}.get(priority_int, "medium")
+        priority_label = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "trivial"}.get(
+            priority_int, "medium"
+        )
 
         description = (kw.get("description") or "").strip()
         tags = (kw.get("tags") or "").strip()
@@ -165,18 +166,20 @@ class ProductTool(BaseTool):
         if raw_priority is not None:
             try:
                 p = int(raw_priority)
-                priority_label = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "trivial"}.get(p, "medium")
+                priority_label = {
+                    1: "critical",
+                    2: "high",
+                    3: "medium",
+                    4: "low",
+                    5: "trivial",
+                }.get(p, "medium")
             except (TypeError, ValueError):
                 pass
 
         rows = await self._repo.get_requirements(
-            project_id=project_id or "",
-            status=status,
-            priority=priority_label,
+            project_id=project_id or "", status=status, priority=priority_label
         )
-        return ToolResult(
-            output=json.dumps({"count": len(rows), "requirements": rows}, indent=2)
-        )
+        return ToolResult(output=json.dumps({"count": len(rows), "requirements": rows}, indent=2))
 
     async def _update_status(self, kw: dict) -> ToolResult:
         req_id = (kw.get("req_id") or "").strip()
@@ -187,8 +190,7 @@ class ProductTool(BaseTool):
             return ToolResult(output="", error="'status' is required for update_status")
         if status not in _VALID_STATUSES:
             return ToolResult(
-                output="",
-                error=f"Invalid status {status!r}. Choose from {sorted(_VALID_STATUSES)}",
+                output="", error=f"Invalid status {status!r}. Choose from {sorted(_VALID_STATUSES)}"
             )
 
         updated = await self._repo.update_requirement_status(req_id, status)
@@ -225,6 +227,7 @@ class ProductTool(BaseTool):
             cat = "feature"
             if "[category:" in desc:
                 import re as _re
+
                 m = _re.search(r"\[category:\s*(\w+)\]", desc)
                 if m:
                     cat = m.group(1)
@@ -237,6 +240,7 @@ class ProductTool(BaseTool):
                 # Extract clean description (strip metadata prefix)
                 desc = req.get("description", "")
                 import re as _re2
+
                 clean_desc = _re2.sub(r"\[.*?\]\s*", "", desc).strip()
                 status_badge = f"`{req.get('status', 'open')}`"
                 priority_label = f"P{req.get('priority', 'medium')}"
@@ -268,6 +272,7 @@ class ProductTool(BaseTool):
             cat = "feature"
             if "[category:" in desc:
                 import re as _re
+
                 m = _re.search(r"\[category:\s*(\w+)\]", desc)
                 if m:
                     cat = m.group(1)

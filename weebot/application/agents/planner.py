@@ -1,10 +1,12 @@
 """Planner agent — creates and updates structured JSON plans."""
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any
+from collections.abc import AsyncGenerator
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
@@ -23,8 +25,14 @@ logger = logging.getLogger(__name__)
 
 # Prompts loaded from files in config/prompts/ with inline fallbacks.
 from pathlib import Path
-_PLANNER_PROMPT_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_system.txt"
-_PLANNER_UPDATE_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_update.txt"
+
+_PLANNER_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_system.txt"
+)
+_PLANNER_UPDATE_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "config" / "prompts" / "planner_update.txt"
+)
+
 
 def _load_planner_prompt(path: Path, fallback: str) -> str:
     """Load a planner prompt with multiple fallback strategies.
@@ -35,8 +43,11 @@ def _load_planner_prompt(path: Path, fallback: str) -> str:
     # 1. Try importlib.resources (works when weebot is installed as a package)
     try:
         from importlib.resources import files as _resource_files
+
         filename = path.name
-        return _resource_files("weebot.config.prompts").joinpath(filename).read_text(encoding="utf-8")
+        return (
+            _resource_files("weebot.config.prompts").joinpath(filename).read_text(encoding="utf-8")
+        )
     except Exception:
         pass
 
@@ -49,6 +60,7 @@ def _load_planner_prompt(path: Path, fallback: str) -> str:
 
     # 3. Inline fallback
     return fallback
+
 
 # Injected into PLANNER_SYSTEM_PROMPT when skill_prompt references web/UI work.
 SPEC_FILE_RULE = """
@@ -67,14 +79,14 @@ class PlannerAgent:
     def __init__(
         self,
         llm: LLMPort,
-        event_bus: Optional[EventBusPort] = None,
-        model: Optional[str] = None,
-        skill_prompt: Optional[str] = None,
-        facts: Optional[Dict[str, Any]] = None,
+        event_bus: EventBusPort | None = None,
+        model: str | None = None,
+        skill_prompt: str | None = None,
+        facts: dict[str, Any] | None = None,
         episodic_memory=None,
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         skill_catalog: str | None = None,  # Compact skill summary for step-boundary awareness
-        awm_hints: Optional[list[str]] = None,  # Agent Workflow Memory hints
+        awm_hints: list[str] | None = None,  # Agent Workflow Memory hints
     ):
         self._llm = llm
         self._event_bus = event_bus
@@ -85,7 +97,9 @@ class PlannerAgent:
         # Only inject the spec-file rule for complex multi-section UI tasks
         # where explicit spec files genuinely reduce executor context pressure.
         # For simple tasks, this rule causes over-decomposition and executor loops.
-        if skill_prompt and any(kw in skill_prompt.lower() for kw in ("multi-section", "multi-page", "5+ sections")):
+        if skill_prompt and any(
+            kw in skill_prompt.lower() for kw in ("multi-section", "multi-page", "5+ sections")
+        ):
             system_prompt += SPEC_FILE_RULE
         if skill_prompt:
             system_prompt = f"{system_prompt}\n\n{skill_prompt}"
@@ -104,26 +118,28 @@ class PlannerAgent:
                 f"Consider this proven step pattern for similar tasks:\n{hints_block}\n"
                 f"(These are hints, not requirements — adapt to the specific task.)"
             )
-        self._memory: List[Dict[str, Any]] = [
-            {"role": "system", "content": system_prompt}
-        ]
+        self._memory: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
 
     def _get_system_prompt(self) -> str:
         variant = self._try_load_variant()
         if variant:
             return variant
-        return _load_planner_prompt(_PLANNER_PROMPT_PATH, (
-            'You are a planning agent. Given a user task, create a COMPLETE plan with ALL necessary steps.\n'
-            'Do not add any text before or after the JSON. Output RAW JSON only.'
-        ))
+        return _load_planner_prompt(
+            _PLANNER_PROMPT_PATH,
+            (
+                "You are a planning agent. Given a user task, create a COMPLETE plan with ALL necessary steps.\n"
+                "Do not add any text before or after the JSON. Output RAW JSON only."
+            ),
+        )
 
     def _get_update_prompt(self) -> str:
         variant = self._try_load_variant()
         if variant:
             return variant
-        return _load_planner_prompt(_PLANNER_UPDATE_PATH, (
-            'You are a planning agent. Update the plan keeping completed steps as-is.'
-        ))
+        return _load_planner_prompt(
+            _PLANNER_UPDATE_PATH,
+            ("You are a planning agent. Update the plan keeping completed steps as-is."),
+        )
 
     def _try_load_variant(self) -> str | None:
         """Try loading a prompt variant from PromptRegistry, return None on failure."""
@@ -131,6 +147,7 @@ class PlannerAgent:
             return None
         try:
             from weebot.application.services.prompt_registry import PromptRegistry
+
             registry = PromptRegistry()
             content = registry.get_variant(self._prompt_variant_id)
             if content and content.prompt_content:
@@ -156,7 +173,7 @@ class PlannerAgent:
         return stripped
 
     @classmethod
-    def _parse_json_content(cls, content: str) -> Dict[str, Any]:
+    def _parse_json_content(cls, content: str) -> dict[str, Any]:
         cleaned = cls._strip_code_fences(content)
 
         # Fast path: strict parse
@@ -185,7 +202,7 @@ class PlannerAgent:
                     depth -= 1
                     if depth == 0:
                         try:
-                            return json.loads(cleaned[start:i + 1])
+                            return json.loads(cleaned[start : i + 1])
                         except json.JSONDecodeError:
                             break
 
@@ -193,18 +210,20 @@ class PlannerAgent:
         end = cleaned.rfind("}")
         if start != -1 and end != -1 and end > start:
             try:
-                return json.loads(cleaned[start:end + 1])
+                return json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 pass
 
         raise ValueError(f"Could not extract valid JSON from: {cleaned[:200]}")
 
-    async def _request_json_retry(self, memory: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _request_json_retry(self, memory: list[dict[str, Any]]) -> dict[str, Any]:
         retry_memory = list(memory)
-        retry_memory.append({
-            "role": "user",
-            "content": "Your previous response was invalid JSON. Return ONLY a valid JSON object matching the required schema.",
-        })
+        retry_memory.append(
+            {
+                "role": "user",
+                "content": "Your previous response was invalid JSON. Return ONLY a valid JSON object matching the required schema.",
+            }
+        )
         retry_response = await self._llm.chat(
             messages=retry_memory,
             response_format={"type": "json_object"},
@@ -214,22 +233,27 @@ class PlannerAgent:
         return self._parse_json_content(retry_response.content)
 
     @staticmethod
-    def _minimal_fallback_plan(prompt: str) -> Dict[str, Any]:
+    def _minimal_fallback_plan(prompt: str) -> dict[str, Any]:
         short = re.sub(r"\s+", " ", prompt).strip()
         return {
             "title": "Fallback Plan",
             "message": "Generated fallback plan after planner JSON failure.",
             "steps": [
-                {"id": "step-1", "description": f"Work on user request: {short[:120]}", "status": "pending"},
-                {"id": "step-2", "description": "Summarize findings and ask if user needs follow-up.", "status": "pending"},
+                {
+                    "id": "step-1",
+                    "description": f"Work on user request: {short[:120]}",
+                    "status": "pending",
+                },
+                {
+                    "id": "step-2",
+                    "description": "Summarize findings and ask if user needs follow-up.",
+                    "status": "pending",
+                },
             ],
         }
 
     async def create_plan(
-        self,
-        prompt: str,
-        attachments: Optional[List[str]] = None,
-        meta_notes: Optional[list[str]] = None,
+        self, prompt: str, attachments: list[str] | None = None, meta_notes: list[str] | None = None
     ) -> AsyncGenerator[AgentEvent, None]:
         # Reset _memory to just the system prompt so stale conversation
         # from a previous create_plan() call doesn't pollute this one.
@@ -281,7 +305,9 @@ class PlannerAgent:
         yield TitleEvent(title=plan.title)
         yield PlanEvent(status=PlanStatus.CREATED, plan=plan.model_dump())
 
-    async def update_plan(self, plan: Plan, completed_step: Step, failure_context: str = "") -> AsyncGenerator[AgentEvent, None]:
+    async def update_plan(
+        self, plan: Plan, completed_step: Step, failure_context: str = ""
+    ) -> AsyncGenerator[AgentEvent, None]:
         """Update the plan given the completed step. Optional *failure_context* from the
         previous execution attempt is injected into the prompt so the LLM can avoid
         repeating the same blocked/erroneous patterns."""
@@ -325,15 +351,16 @@ class PlannerAgent:
     # Patterns for steps that write spec files — these cause executor loops
     # when the conversation buffer fills up and the LLM can't complete the file.
     _SPEC_STEP_PATTERNS: list = [
-        r'tasks/specs/',
-        r'write.*spec.*to.*tasks/specs',
-        r'file_editor.*tasks/specs',
-        r'section spec.*tasks/specs',
+        r"tasks/specs/",
+        r"write.*spec.*to.*tasks/specs",
+        r"file_editor.*tasks/specs",
+        r"section spec.*tasks/specs",
     ]
 
     @staticmethod
-    def _parse_plan(data: Dict[str, Any]) -> Plan:
+    def _parse_plan(data: dict[str, Any]) -> Plan:
         import re as _re
+
         steps_data = data.get("steps", [])
         steps = []
         spec_count = 0
@@ -351,8 +378,7 @@ class PlannerAgent:
             # Filter: drop spec-writing steps that cause executor loops.
             # Allow at most 1 spec step per plan (some tasks genuinely need one).
             is_spec_step = any(
-                _re.search(pat, desc, _re.IGNORECASE)
-                for pat in PlannerAgent._SPEC_STEP_PATTERNS
+                _re.search(pat, desc, _re.IGNORECASE) for pat in PlannerAgent._SPEC_STEP_PATTERNS
             )
             if is_spec_step:
                 spec_count += 1
@@ -362,33 +388,37 @@ class PlannerAgent:
 
             # Heuristic: count discrete items (files, images) in the step.
             # If there are more than MAX_ITEMS_PER_STEP, split into batches.
-            _item_keywords = r'\b(?:hero|project\d|skill-|icon-|og-|profile|avatar|logo|favicon|banner|thumb)[\w.-]*'
+            _item_keywords = r"\b(?:hero|project\d|skill-|icon-|og-|profile|avatar|logo|favicon|banner|thumb)[\w.-]*"
             items = _re.findall(_item_keywords, desc, _re.IGNORECASE)
             unique_items = list(dict.fromkeys(items))  # dedup preserving order
             if len(unique_items) > PlannerAgent._MAX_ITEMS_PER_STEP:
                 heuristic_splits += 1  # split an item batch
                 batch_size = PlannerAgent._MAX_ITEMS_PER_STEP
                 for batch_num, i in enumerate(range(0, len(unique_items), batch_size)):
-                    batch_items = unique_items[i:i + batch_size]
+                    batch_items = unique_items[i : i + batch_size]
                     batch_desc = desc + f" (batch {batch_num + 1}: {', '.join(batch_items)})"
                     batch_id = f"{step_id}-b{batch_num + 1}" if batch_num > 0 else step_id
-                    steps.append(Step(
-                        id=batch_id, description=batch_desc, status="pending",
+                    steps.append(
+                        Step(
+                            id=batch_id,
+                            description=batch_desc,
+                            status="pending",
+                            acceptance_criteria=acceptance_criteria,
+                            context_scope=context_scope,
+                        )
+                    )
+            else:
+                steps.append(
+                    Step(
+                        id=step_id,
+                        description=desc,
+                        status="pending",
                         acceptance_criteria=acceptance_criteria,
                         context_scope=context_scope,
-                    ))
-            else:
-                steps.append(Step(
-                    id=step_id,
-                    description=desc,
-                    status="pending",
-                    acceptance_criteria=acceptance_criteria,
-                    context_scope=context_scope,
-                ))
+                    )
+                )
         plan = Plan(
-            title=data.get("title", "Untitled Plan"),
-            message=data.get("message", ""),
-            steps=steps,
+            title=data.get("title", "Untitled Plan"), message=data.get("message", ""), steps=steps
         )
         # Enhancement 4: Pydantic v2 silently ignores leading-underscore
         # keys in constructors, so set via object.__setattr__ after creation.

@@ -1,12 +1,9 @@
 """Unit tests for SuggestionEngine."""
+
 from __future__ import annotations
 
-import pytest
 
-from weebot.application.services.suggestion_engine import (
-    SuggestionEngine,
-    BlueprintSuggestion,
-)
+from weebot.application.services.suggestion_engine import SuggestionEngine, BlueprintSuggestion
 from weebot.domain.models.skill import Skill
 
 
@@ -15,9 +12,7 @@ class TestBlueprintSuggestion:
 
     def test_minimal_suggestion(self):
         s = BlueprintSuggestion(
-            skill_name="test-skill",
-            schedule="0 * * * *",
-            prompt="Run test skill",
+            skill_name="test-skill", schedule="0 * * * *", prompt="Run test skill"
         )
         assert s.id.startswith("suggestion-")
         assert s.skill_name == "test-skill"

@@ -13,14 +13,21 @@ Three gates, zero model calls:
 All filesystem access goes through FileStoragePort (C1 in the plan — the
 Application layer must not touch Path/open() directly).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Sequence
+from collections.abc import Sequence
 
 from weebot.application.ports.file_storage_port import FileStoragePort
 from weebot.application.ports.step_audit_port import StepAuditPort
-from weebot.domain.models.audit import AuditDimension, AuditReport, AuditVerdict, Violation, ViolationSeverity
+from weebot.domain.models.audit import (
+    AuditDimension,
+    AuditReport,
+    AuditVerdict,
+    Violation,
+    ViolationSeverity,
+)
 from weebot.domain.models.event import ToolEvent
 from weebot.domain.models.plan import Step
 
@@ -45,10 +52,7 @@ class StepEvidenceAuditor(StepAuditPort):
         self._files = file_storage
 
     async def audit_step(
-        self,
-        step: Step | None,
-        events: Sequence[ToolEvent],
-        session_id: str = "",
+        self, step: Step | None, events: Sequence[ToolEvent], session_id: str = ""
     ) -> AuditReport:
         violations: list[Violation] = []
         violations += await self._gate_written_files(events)
@@ -89,16 +93,20 @@ class StepEvidenceAuditor(StepAuditPort):
             try:
                 exists = await self._files.exists(p)
             except (OSError, ValueError):
-                _log.debug("Invalid path in step audit — skipping without blocking: %s", p, exc_info=True)
+                _log.debug(
+                    "Invalid path in step audit — skipping without blocking: %s", p, exc_info=True
+                )
                 continue
             if not exists:
-                violations.append(Violation(
-                    dimension=AuditDimension.COMPLETENESS,
-                    severity=ViolationSeverity.HIGH,
-                    description=f"written file missing on disk: {p}",
-                    location=p,
-                    recommendation="Re-write the file, or correct the claimed path.",
-                ))
+                violations.append(
+                    Violation(
+                        dimension=AuditDimension.COMPLETENESS,
+                        severity=ViolationSeverity.HIGH,
+                        description=f"written file missing on disk: {p}",
+                        location=p,
+                        recommendation="Re-write the file, or correct the claimed path.",
+                    )
+                )
         return violations
 
     def _gate_test_output(self, events: Sequence[ToolEvent]) -> list[Violation]:
@@ -119,13 +127,15 @@ class StepEvidenceAuditor(StepAuditPort):
             if "0 failed" in result:
                 continue
             if any(marker in result for marker in _TEST_FAILURE_MARKERS):
-                return [Violation(
-                    dimension=AuditDimension.ACCURACY,
-                    severity=ViolationSeverity.CRITICAL,
-                    description="test run reported failure",
-                    location=cmd[:80],
-                    recommendation="Fix the failing test(s) before marking this step complete.",
-                )]
+                return [
+                    Violation(
+                        dimension=AuditDimension.ACCURACY,
+                        severity=ViolationSeverity.CRITICAL,
+                        description="test run reported failure",
+                        location=cmd[:80],
+                        recommendation="Fix the failing test(s) before marking this step complete.",
+                    )
+                ]
         return []
 
     async def _gate_image_quality(self, events: Sequence[ToolEvent]) -> list[Violation]:
@@ -137,12 +147,14 @@ class StepEvidenceAuditor(StepAuditPort):
 
             result_text = (event.result or "").lower()
             if "svg fallback" in result_text or "placeholder" in result_text:
-                violations.append(Violation(
-                    dimension=AuditDimension.COMPLETENESS,
-                    severity=ViolationSeverity.MEDIUM,
-                    description="image_gen returned an SVG fallback, not a real photo",
-                    recommendation="Use search_images for stock photos.",
-                ))
+                violations.append(
+                    Violation(
+                        dimension=AuditDimension.COMPLETENESS,
+                        severity=ViolationSeverity.MEDIUM,
+                        description="image_gen returned an SVG fallback, not a real photo",
+                        recommendation="Use search_images for stock photos.",
+                    )
+                )
                 continue
 
             out_path = (event.function_args or {}).get("output_path", "")
@@ -158,11 +170,13 @@ class StepEvidenceAuditor(StepAuditPort):
             except (OSError, ValueError, UnicodeDecodeError):
                 continue
             if "<?xml" in head or "<svg" in head[:100]:
-                violations.append(Violation(
-                    dimension=AuditDimension.COMPLETENESS,
-                    severity=ViolationSeverity.MEDIUM,
-                    description=f"{out_path} is {fsize} bytes with SVG markup — likely a placeholder disguise",
-                    location=out_path,
-                    recommendation="Regenerate with search_images or a real image_gen call.",
-                ))
+                violations.append(
+                    Violation(
+                        dimension=AuditDimension.COMPLETENESS,
+                        severity=ViolationSeverity.MEDIUM,
+                        description=f"{out_path} is {fsize} bytes with SVG markup — likely a placeholder disguise",
+                        location=out_path,
+                        recommendation="Regenerate with search_images or a real image_gen call.",
+                    )
+                )
         return violations

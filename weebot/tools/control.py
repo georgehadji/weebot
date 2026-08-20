@@ -1,4 +1,5 @@
 """Control tools: TerminateTool (task complete signal) and AskHumanTool (HITL)."""
+
 from __future__ import annotations
 
 from weebot.tools.base import BaseTool, ToolResult
@@ -6,6 +7,7 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class TerminateTool(BaseTool):
     """Signals the agent that the task is complete. The agent should stop looping."""
+
     name: str = "terminate"
     description: str = (
         "Signal that the task is complete. Call this ONLY when: "
@@ -30,6 +32,7 @@ class TerminateTool(BaseTool):
 
 class AskHumanTool(BaseTool):
     """Pauses the agent to ask the human operator a question and wait for input."""
+
     name: str = "ask_human"
     description: str = (
         "CRITICAL: Only use this tool when the task is IMPOSSIBLE to complete "
@@ -41,10 +44,7 @@ class AskHumanTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "question": {
-                "type": "string",
-                "description": "The question to ask the human operator",
-            }
+            "question": {"type": "string", "description": "The question to ask the human operator"}
         },
         "required": ["question"],
     }

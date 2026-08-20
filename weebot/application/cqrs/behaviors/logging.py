@@ -1,8 +1,10 @@
 """Logging behavior for CQRS mediator."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from weebot.application.cqrs.base import Command, IPipelineBehavior, Query
 
@@ -23,11 +25,7 @@ class LoggingBehavior(IPipelineBehavior):
         """
         self._logger = logging.getLogger(logger_name)
 
-    async def handle(
-        self,
-        request: Command | Query,
-        next_callable: Callable,
-    ) -> Any:
+    async def handle(self, request: Command | Query, next_callable: Callable) -> Any:
         """Log request execution."""
         request_name = type(request).__name__
         self._logger.debug(f"Executing {request_name}")

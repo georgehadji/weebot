@@ -20,12 +20,13 @@ Two things must remain true for E7b to stay inert:
 When either fails, E7b is live and the snapshot guard has to be built.
 See tasks/specs/longhorizon_harness_implementation_plan.md (E7).
 """
+
 from __future__ import annotations
 
 import ast
 import inspect
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -56,7 +57,8 @@ def _parse(module) -> ast.Module:
 
 def _chat_calls(tree: ast.Module) -> list[ast.Call]:
     return [
-        node for node in ast.walk(tree)
+        node
+        for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == "chat"
@@ -64,6 +66,7 @@ def _chat_calls(tree: ast.Module) -> list[ast.Call]:
 
 
 # ── Tripwire 1: the verifier cannot act ──────────────────────────────
+
 
 def test_verifier_llm_calls_hand_over_no_tools():
     """E7b precondition: VerifyingState asks questions, it does not act.
@@ -111,6 +114,7 @@ def test_verifier_llm_calls_take_no_kwargs_splat():
 
 
 # ── Tripwire 2: the audit cannot write ───────────────────────────────
+
 
 def test_step_evidence_auditor_uses_only_readonly_port_methods():
     """Static half: every self._files.* call across ALL branches is a read."""
@@ -162,7 +166,7 @@ class _TripwirePort(FileStoragePort):
         self.reads.append(path)
         return False  # trip gate A so the violation path runs too
 
-    async def size(self, path: str) -> Optional[int]:
+    async def size(self, path: str) -> int | None:
         self.reads.append(path)
         return 512  # undersized, so gate C reads the file head
 
@@ -186,10 +190,13 @@ async def test_step_evidence_auditor_writes_nothing_when_every_gate_trips():
     """
     port = _TripwirePort()
     events = [
-        ToolEvent(tool_name="write_file", function_args={"path": "missing.txt"}),          # gate A
-        ToolEvent(tool_name="bash", function_args={"command": "pytest tests/"},
-                  result="3 failed, 1 passed"),                                            # gate B
-        ToolEvent(tool_name="image_gen", function_args={"output_path": "hero.png"}),       # gate C
+        ToolEvent(tool_name="write_file", function_args={"path": "missing.txt"}),  # gate A
+        ToolEvent(
+            tool_name="bash",
+            function_args={"command": "pytest tests/"},
+            result="3 failed, 1 passed",
+        ),  # gate B
+        ToolEvent(tool_name="image_gen", function_args={"output_path": "hero.png"}),  # gate C
     ]
 
     report = await StepEvidenceAuditor(port).audit_step(step=None, events=events)
@@ -199,6 +206,7 @@ async def test_step_evidence_auditor_writes_nothing_when_every_gate_trips():
 
 
 # ── Rot guard ────────────────────────────────────────────────────────
+
 
 def test_every_port_method_is_classified_read_or_write():
     """If FileStoragePort grows a method, classify it before shipping.

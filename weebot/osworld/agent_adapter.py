@@ -18,13 +18,14 @@ observes a screenshot + accessibility (a11y) tree and emits an executable
 action, capped at ~15 steps, scored by an execution-based evaluator. This
 adapter implements the agent side of that loop.
 """
+
 from __future__ import annotations
 
 import asyncio
 import base64
 import logging
 import re
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("desktopenv.agent")
 
@@ -70,9 +71,7 @@ def parse_pyautogui_code(response: str) -> list[str]:
         return []
 
     # Normalise semicolon-separated one-liners (OSWorld does the same).
-    normalized = "\n".join(
-        line.strip() for line in response.split(";") if line.strip()
-    )
+    normalized = "\n".join(line.strip() for line in response.split(";") if line.strip())
 
     # A bare special token is itself a valid action.
     if normalized.strip() in _SPECIAL_ACTIONS:
@@ -142,7 +141,7 @@ class WeebotOSWorldAgent:
 
         # Injected LLM (for tests) or lazily constructed weebot adapter.
         self._llm = llm
-        self.vm_ip: Optional[str] = None
+        self.vm_ip: str | None = None
 
         # Trajectory state (parallel lists, like PromptAgent).
         self.observations: list[dict] = []
@@ -184,9 +183,7 @@ class WeebotOSWorldAgent:
     def _build_messages(self, instruction: str, obs: dict[str, Any]) -> list[dict]:
         """Build the chat payload: system + recent trajectory + current obs."""
         system_text = (
-            _SYSTEM_PROMPT
-            + "\n\nYou are asked to complete the following task: "
-            + instruction
+            _SYSTEM_PROMPT + "\n\nYou are asked to complete the following task: " + instruction
         )
         messages: list[dict] = [
             {"role": "system", "content": [{"type": "text", "text": system_text}]}
@@ -194,16 +191,14 @@ class WeebotOSWorldAgent:
 
         # Recent trajectory (last N obs/action pairs), oldest first.
         if self.max_trajectory_length > 0 and self.observations:
-            recent_obs = self.observations[-self.max_trajectory_length:]
-            recent_actions = self.actions[-self.max_trajectory_length:]
+            recent_obs = self.observations[-self.max_trajectory_length :]
+            recent_actions = self.actions[-self.max_trajectory_length :]
             for past_obs, past_actions in zip(recent_obs, recent_actions):
                 messages.append(self._obs_to_user_message(past_obs, history=True))
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": [
-                            {"type": "text", "text": "\n".join(past_actions) or "WAIT"}
-                        ],
+                        "content": [{"type": "text", "text": "\n".join(past_actions) or "WAIT"}],
                     }
                 )
 
@@ -231,10 +226,7 @@ class WeebotOSWorldAgent:
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{b64}",
-                        "detail": "high",
-                    },
+                    "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
                 }
             )
         return {"role": "user", "content": content}

@@ -1,14 +1,14 @@
 """Unit tests for CompositeToolExecutor."""
+
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 import pytest
 
 from weebot.domain.models.composite_tool import CompositeToolSpec, SubToolCall
-from weebot.infrastructure.adapters.composite_tool_executor import (
-    CompositeToolExecutor,
-)
+from weebot.infrastructure.adapters.composite_tool_executor import CompositeToolExecutor
 
 
 class _FakeResult:
@@ -20,9 +20,7 @@ class _FakeResult:
         self.is_error = error is not None
 
 
-def _make_dispatcher(
-    steps: dict[str, list[str]],
-) -> dict[str, Callable[..., Awaitable[Any]]]:
+def _make_dispatcher(steps: dict[str, list[str]]) -> dict[str, Callable[..., Awaitable[Any]]]:
     """Build a dispatcher where each tool pops its next output from *steps*."""
     state = {name: list(outputs) for name, outputs in steps.items()}
 
@@ -34,10 +32,7 @@ def _make_dispatcher(
             return _FakeResult(error=output[6:])
         return _FakeResult(output=output)
 
-    return {
-        name: lambda _name=name, **kwargs: handler(_name, **kwargs)
-        for name in steps
-    }
+    return {name: lambda _name=name, **kwargs: handler(_name, **kwargs) for name in steps}
 
 
 class TestCompositeToolExecutor:
@@ -70,20 +65,12 @@ class TestCompositeToolExecutor:
             description="Demo",
             sub_tools=[
                 SubToolCall(
-                    tool_name="search",
-                    arguments={"query": "weather"},
-                    capture_output_as="results",
+                    tool_name="search", arguments={"query": "weather"}, capture_output_as="results"
                 ),
-                SubToolCall(
-                    tool_name="summarize",
-                    arguments={"text": "${results}"},
-                ),
+                SubToolCall(tool_name="summarize", arguments={"text": "${results}"}),
             ],
         )
-        dispatcher = _make_dispatcher({
-            "search": ["sunny"],
-            "summarize": ["summary: sunny"],
-        })
+        dispatcher = _make_dispatcher({"search": ["sunny"], "summarize": ["summary: sunny"]})
         executor = CompositeToolExecutor(dispatcher)
 
         result = await executor.execute(spec)
@@ -136,9 +123,7 @@ class TestCompositeToolExecutor:
         spec = CompositeToolSpec(
             name="demo",
             description="Demo",
-            sub_tools=[
-                SubToolCall(tool_name="missing", arguments={}),
-            ],
+            sub_tools=[SubToolCall(tool_name="missing", arguments={})],
         )
         executor = CompositeToolExecutor({})
 
@@ -152,9 +137,7 @@ class TestCompositeToolExecutor:
         spec = CompositeToolSpec(
             name="demo",
             description="Demo",
-            sub_tools=[
-                SubToolCall(tool_name="edit", arguments={"path": "default.txt"}),
-            ],
+            sub_tools=[SubToolCall(tool_name="edit", arguments={"path": "default.txt"})],
         )
 
         captured: dict[str, str] = {}
@@ -175,15 +158,8 @@ class TestCompositeToolExecutor:
             name="demo",
             description="Demo",
             sub_tools=[
-                SubToolCall(
-                    tool_name="read",
-                    arguments={},
-                    capture_output_as="content",
-                ),
-                SubToolCall(
-                    tool_name="write",
-                    arguments={"code": "print('${content}')"},
-                ),
+                SubToolCall(tool_name="read", arguments={}, capture_output_as="content"),
+                SubToolCall(tool_name="write", arguments={"code": "print('${content}')"}),
             ],
         )
 

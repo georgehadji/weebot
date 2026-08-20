@@ -3,6 +3,7 @@
 Requires ``WEEBOT_PG_DSN`` or ``WEEBOT_DB_BACKEND=postgresql`` to execute.
 Without a live PostgreSQL instance, all tests skip cleanly.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,8 +12,7 @@ import pytest
 from weebot.infrastructure.persistence.postgresql import POSTGRESQL_AVAILABLE
 
 pytestmark = pytest.mark.skipif(
-    not POSTGRESQL_AVAILABLE,
-    reason="asyncpg not installed — install with: pip install asyncpg",
+    not POSTGRESQL_AVAILABLE, reason="asyncpg not installed — install with: pip install asyncpg"
 )
 
 
@@ -24,8 +24,7 @@ def _has_pg() -> bool:
 
 
 _skip_if_no_pg = pytest.mark.skipif(
-    not _has_pg(),
-    reason="No WEEBOT_PG_DSN or WEEBOT_DB_BACKEND=postgresql configured",
+    not _has_pg(), reason="No WEEBOT_PG_DSN or WEEBOT_DB_BACKEND=postgresql configured"
 )
 
 
@@ -105,11 +104,7 @@ class TestPostgreSQLStateRepository:
         from weebot.domain.models.session import Session, SessionContext
 
         repo = PostgreSQLStateRepository()
-        session = Session(
-            id="pg-search-1",
-            title="Test search session",
-            context=SessionContext(),
-        )
+        session = Session(id="pg-search-1", title="Test search session", context=SessionContext())
         await repo.save_session(session)
 
         results = await repo.search_sessions("test", limit=5)

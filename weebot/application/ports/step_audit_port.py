@@ -6,10 +6,11 @@ configured dimensions (regex/pattern matching). StepAuditPort audits a step's
 answers "did the environment change the way the step claims", not "does the
 text look safe".
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Sequence
+from collections.abc import Sequence
 
 from weebot.domain.models.audit import AuditReport
 from weebot.domain.models.event import ToolEvent
@@ -21,10 +22,7 @@ class StepAuditPort(ABC):
 
     @abstractmethod
     async def audit_step(
-        self,
-        step: Step | None,
-        events: Sequence[ToolEvent],
-        session_id: str = "",
+        self, step: Step | None, events: Sequence[ToolEvent], session_id: str = ""
     ) -> AuditReport:
         """Check *events* for evidence that *step* actually happened.
 

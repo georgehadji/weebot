@@ -10,6 +10,7 @@ These tests build sessions via ``Session().add_event(...)`` — the constructor
 form ``Session(events=[...])`` used elsewhere in this suite leaves
 _memory_index empty from the start and cannot see this bug at all.
 """
+
 from __future__ import annotations
 
 from weebot.application.services.memory_compactor import MemoryCompactor
@@ -21,9 +22,7 @@ from weebot.domain.models.session import Session
 def _build_session_with_repeated_tool_results() -> Session:
     """A session whose compaction shrinks the event list (dedup collapses 5→1)."""
     session = Session(id="replace-events-test")
-    session = session.add_event(
-        PlanEvent(plan=Plan(title="t", message="m"))
-    )
+    session = session.add_event(PlanEvent(plan=Plan(title="t", message="m")))
     for i in range(5):
         session = session.add_event(
             ToolEvent(

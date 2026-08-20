@@ -1,4 +1,5 @@
 """Tests for Phase 1: Pre-mortem analyzer and state."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -40,8 +41,8 @@ async def test_analyzer_returns_risks_on_valid_response(mock_llm, sample_plan):
 @pytest.mark.asyncio
 async def test_analyzer_returns_empty_on_timeout(mock_llm, sample_plan):
     """Mock LLM raises TimeoutError; returns []."""
-    import asyncio
-    mock_llm.chat.side_effect = asyncio.TimeoutError("timeout")
+
+    mock_llm.chat.side_effect = TimeoutError("timeout")
     analyzer = PremortmAnalyzer(llm=mock_llm, timeout_seconds=1)
     risks = await analyzer.analyze(sample_plan, "Do research")
     assert risks == []
@@ -59,9 +60,7 @@ async def test_analyzer_returns_empty_on_parse_failure(mock_llm, sample_plan):
 @pytest.mark.asyncio
 async def test_analyzer_caps_at_three_risks(mock_llm, sample_plan):
     """LLM returns 5 risks; analyzer caps to 3."""
-    mock_llm.chat.return_value = MagicMock(
-        content='{"risks": ["A", "B", "C", "D", "E"]}'
-    )
+    mock_llm.chat.return_value = MagicMock(content='{"risks": ["A", "B", "C", "D", "E"]}')
     analyzer = PremortmAnalyzer(llm=mock_llm)
     risks = await analyzer.analyze(sample_plan, "Do research")
     assert len(risks) == 3

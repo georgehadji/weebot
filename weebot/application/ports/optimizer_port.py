@@ -12,6 +12,7 @@ This port wraps the five core operations from the SkillOpt paper:
   5. slow_update          — epoch-boundary longitudinal comparison
   6. meta_skill           — optimizer-side coaching (not deployed)
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,27 +27,21 @@ class OptimizerPort(ABC):
 
     @abstractmethod
     async def reflect_on_failures(
-        self,
-        batch: OptimizationBatch,
-        current_skill: Skill,
+        self, batch: OptimizationBatch, current_skill: Skill
     ) -> list[SkillEdit]:
         """Analyse failure trajectories and propose corrective edits."""
         ...
 
     @abstractmethod
     async def reflect_on_successes(
-        self,
-        batch: OptimizationBatch,
-        current_skill: Skill,
+        self, batch: OptimizationBatch, current_skill: Skill
     ) -> list[SkillEdit]:
         """Analyse success trajectories and propose reinforcing edits."""
         ...
 
     @abstractmethod
     async def merge_edits(
-        self,
-        failure_edits: list[SkillEdit],
-        success_edits: list[SkillEdit],
+        self, failure_edits: list[SkillEdit], success_edits: list[SkillEdit]
     ) -> list[SkillEdit]:
         """Hierarchically merge failure and success proposals.
 
@@ -57,10 +52,7 @@ class OptimizerPort(ABC):
 
     @abstractmethod
     async def rank_edits(
-        self,
-        edits: list[SkillEdit],
-        budget: int,
-        current_skill: Skill,
+        self, edits: list[SkillEdit], budget: int, current_skill: Skill
     ) -> list[SkillEdit]:
         """Rank edits by expected utility and clip to *budget*.
 
@@ -74,10 +66,7 @@ class OptimizerPort(ABC):
 
     @abstractmethod
     async def slow_update(
-        self,
-        prev_skill: Skill,
-        curr_skill: Skill,
-        longitudinal_data: list[tuple],
+        self, prev_skill: Skill, curr_skill: Skill, longitudinal_data: list[tuple]
     ) -> str:
         """Produce epoch-boundary guidance for the protected SLOW_UPDATE section.
 
@@ -93,10 +82,7 @@ class OptimizerPort(ABC):
 
     @abstractmethod
     async def meta_skill(
-        self,
-        prev_skill: Skill,
-        curr_skill: Skill,
-        longitudinal_data: list[tuple],
+        self, prev_skill: Skill, curr_skill: Skill, longitudinal_data: list[tuple]
     ) -> str:
         """Produce optimizer-side coaching (not deployed with target model).
 
@@ -108,9 +94,9 @@ class OptimizerPort(ABC):
     async def reflect_on_evaluator(
         self,
         batch: OptimizationBatch,
-        current_evaluator: "EvaluatorState",  # type: ignore[name-defined]  # noqa: F821
+        current_evaluator: EvaluatorState,  # type: ignore[name-defined]  # noqa: F821
         evolution_context: str = "",
-    ) -> list["SkillEdit"]:  # type: ignore[name-defined]  # noqa: F821
+    ) -> list[SkillEdit]:  # type: ignore[name-defined]  # noqa: F821
         """Analyse trajectories and propose edits to the evaluator's prompt.
 
         Same frontier-model optimizer, different target — edits the evaluator's
@@ -128,10 +114,7 @@ class OptimizerPort(ABC):
         return []
 
     async def plan_edits(
-        self,
-        batch: OptimizationBatch,
-        current_skill: Skill,
-        evolution_context: str = "",
+        self, batch: OptimizationBatch, current_skill: Skill, evolution_context: str = ""
     ) -> str:
         """Optional pre-reflect planning step (SIA-inspired).
 

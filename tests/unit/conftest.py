@@ -9,6 +9,7 @@ The autouse fixture below points ``env_file`` at nothing and clears the
 ambient config/provider variables so each unit test controls settings
 explicitly via constructor kwargs or ``monkeypatch.setenv``.
 """
+
 from __future__ import annotations
 
 # Shared model constant used across vision/multimodal unit tests.
@@ -63,9 +64,8 @@ def _isolate_weebot_settings(monkeypatch, tmp_path):
     # memory_dir= explicitly.
     try:
         from weebot.infrastructure.persistence import filesystem_memory
-        monkeypatch.setattr(
-            filesystem_memory, "DEFAULT_MEMORY_DIR", tmp_path / ".weebot_memory"
-        )
+
+        monkeypatch.setattr(filesystem_memory, "DEFAULT_MEMORY_DIR", tmp_path / ".weebot_memory")
     except Exception:
         pass
 
@@ -75,16 +75,19 @@ def _isolate_weebot_settings(monkeypatch, tmp_path):
     # (architecture remediation Phase 2.3)
     try:
         from weebot.utils.rate_limiter import reset_all_buckets
+
         reset_all_buckets()
     except Exception:
         pass
     try:
         from weebot.infrastructure.event_bus import _reset_metrics_cache
+
         _reset_metrics_cache()
     except Exception:
         pass
     try:
         from weebot.application.services.metrics_bridge import reset_metrics_cache
+
         reset_metrics_cache()
     except Exception:
         pass

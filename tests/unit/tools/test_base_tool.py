@@ -1,4 +1,5 @@
 """Unit tests for BaseTool protocol, ToolResult, and ToolCollection."""
+
 import pytest
 from weebot.tools.base import BaseTool, ToolResult, ToolCollection
 

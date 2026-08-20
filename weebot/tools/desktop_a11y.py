@@ -10,11 +10,11 @@ Backends (tried in order):
 3. ctypes Win32 API — lightweight Windows fallback
 4. pygetwindow — window title/geometry only (minimal)
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -25,10 +25,19 @@ _MAX_A11Y_DEPTH = 12
 # Maximum number of elements to return (token budget)
 _MAX_A11Y_ELEMENTS = 200
 # Roles that are not interactive — pruned from output
-_SKIP_ROLES = frozenset({
-    "pane", "panel", "separator", "tooltip", "statusbar",
-    "desktop", "client", "scrollpane", "splitpane",
-})
+_SKIP_ROLES = frozenset(
+    {
+        "pane",
+        "panel",
+        "separator",
+        "tooltip",
+        "statusbar",
+        "desktop",
+        "client",
+        "scrollpane",
+        "splitpane",
+    }
+)
 
 
 class DesktopA11yTool(BaseTool):
@@ -41,6 +50,7 @@ class DesktopA11yTool(BaseTool):
         desktop_a11y()  →  JSON array of UI elements from active window
         desktop_a11y(window_title="Settings")  →  target specific window
     """
+
     name: str = "desktop_a11y"
     description: str = (
         "Extract the accessibility tree of the active desktop window. "
@@ -55,7 +65,7 @@ class DesktopA11yTool(BaseTool):
             "window_title": {
                 "type": "string",
                 "description": "Optional: target a specific window by title substring",
-            },
+            }
         },
     }
 
@@ -68,9 +78,8 @@ class DesktopA11yTool(BaseTool):
             return ToolResult(
                 output=(
                     f"Found {len(elements)}{' (truncated)' if truncated else ''} "
-                    f"interactive elements\n"
-                    + json.dumps(elements, indent=2, ensure_ascii=False)
-                ),
+                    f"interactive elements\n" + json.dumps(elements, indent=2, ensure_ascii=False)
+                )
             )
         except Exception as exc:
             logger.warning("DesktopA11yTool failed: %s", exc)
@@ -86,6 +95,7 @@ class DesktopA11yTool(BaseTool):
             import pywinauto
             from pywinauto.application import Application
             from pywinauto import Desktop as PwDesktop
+
             return await self._with_pywinauto(window_title)
         except ImportError:
             logger.debug("pywinauto not available, trying ctypes UIA...")
@@ -102,6 +112,7 @@ class DesktopA11yTool(BaseTool):
     async def _with_pywinauto(self, window_title: str) -> list[dict]:
         """Extract elements via pywinauto Desktop/UIA wrapper."""
         from pywinauto import Desktop as PwDesktop
+
         desktop = PwDesktop(backend="uia")
         elements = []
 
@@ -109,26 +120,28 @@ class DesktopA11yTool(BaseTool):
             if depth > _MAX_A11Y_DEPTH or len(elements) >= _MAX_A11Y_ELEMENTS:
                 return
             try:
-                ctrl = element if hasattr(element, 'element_info') else None
+                ctrl = element if hasattr(element, "element_info") else None
                 if ctrl is None:
                     return
                 info = ctrl.element_info
                 role = info.control_type or ""
                 if role.lower() in _SKIP_ROLES:
                     return
-                rect = info.rectangle if hasattr(info, 'rectangle') else None
-                elements.append({
-                    "name": (info.name or "")[:80],
-                    "role": role,
-                    "bounds": {
-                        "x": rect.left if rect else 0,
-                        "y": rect.top if rect else 0,
-                        "w": rect.width() if rect else 0,
-                        "h": rect.height() if rect else 0,
-                    },
-                    "enabled": not (hasattr(info, 'enabled') and not info.enabled),
-                    "focused": info.control_id == 0 if hasattr(info, 'control_id') else False,
-                })
+                rect = info.rectangle if hasattr(info, "rectangle") else None
+                elements.append(
+                    {
+                        "name": (info.name or "")[:80],
+                        "role": role,
+                        "bounds": {
+                            "x": rect.left if rect else 0,
+                            "y": rect.top if rect else 0,
+                            "w": rect.width() if rect else 0,
+                            "h": rect.height() if rect else 0,
+                        },
+                        "enabled": not (hasattr(info, "enabled") and not info.enabled),
+                        "focused": info.control_id == 0 if hasattr(info, "control_id") else False,
+                    }
+                )
             except Exception:
                 pass
             try:
@@ -177,23 +190,33 @@ class DesktopA11yTool(BaseTool):
             is_visible = _user32.IsWindowVisible(hwnd)
             if not is_visible:
                 return True
-            elements.append({
-                "name": title[:80],
-                "role": "window",
-                "bounds": {"x": rect.left, "y": rect.top, "w": rect.right - rect.left, "h": rect.bottom - rect.top},
-                "enabled": True,
-                "focused": _user32.GetForegroundWindow() == hwnd,
-            })
+            elements.append(
+                {
+                    "name": title[:80],
+                    "role": "window",
+                    "bounds": {
+                        "x": rect.left,
+                        "y": rect.top,
+                        "w": rect.right - rect.left,
+                        "h": rect.bottom - rect.top,
+                    },
+                    "enabled": True,
+                    "focused": _user32.GetForegroundWindow() == hwnd,
+                }
+            )
             return True
 
         EnumWindows = _user32.EnumWindows
-        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+        EnumWindowsProc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)
+        )
         EnumWindows(EnumWindowsProc(enum_windows_proc), 0)
         return elements
 
     async def _with_pygetwindow(self, window_title: str) -> list[dict]:
         """Minimal window info via pygetwindow."""
         import pygetwindow as gw
+
         elements = []
         try:
             if window_title:
@@ -202,13 +225,20 @@ class DesktopA11yTool(BaseTool):
                 windows = gw.getAllWindows()
             for win in windows[:50]:
                 if win.visible:
-                    elements.append({
-                        "name": (win.title or "")[:80],
-                        "role": "window",
-                        "bounds": {"x": win.left, "y": win.top, "w": win.width, "h": win.height},
-                        "enabled": True,
-                        "focused": win.isActive,
-                    })
+                    elements.append(
+                        {
+                            "name": (win.title or "")[:80],
+                            "role": "window",
+                            "bounds": {
+                                "x": win.left,
+                                "y": win.top,
+                                "w": win.width,
+                                "h": win.height,
+                            },
+                            "enabled": True,
+                            "focused": win.isActive,
+                        }
+                    )
         except Exception as exc:
             logger.debug("pygetwindow failed: %s", exc)
         return elements

@@ -1,4 +1,5 @@
 """Domain models for composite MCP tools."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -14,8 +15,7 @@ class SubToolCall(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     description: str = Field(default="", description="Human-readable purpose")
     capture_output_as: str | None = Field(
-        default=None,
-        description="Variable name to store this step's output for later steps",
+        default=None, description="Variable name to store this step's output for later steps"
     )
 
 
@@ -30,8 +30,7 @@ class CompositeToolSpec(BaseModel):
         description="Atomic tool names to hide from list_tools when this composite is enabled",
     )
     transaction_policy: Literal["all_or_none", "best_effort"] = Field(
-        default="best_effort",
-        description="Whether a failed step aborts the whole workflow",
+        default="best_effort", description="Whether a failed step aborts the whole workflow"
     )
 
 

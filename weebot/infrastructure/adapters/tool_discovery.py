@@ -5,10 +5,10 @@ by discovering all ``BaseTool`` subclasses in ``weebot.tools`` and building
 :class:`~weebot.domain.models.tool_manifest.ToolManifest` records from their
 class-level metadata.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.domain.models.tool_manifest import ToolManifest
 from weebot.tools.base import BaseTool
@@ -69,6 +69,7 @@ def _import_tool_modules() -> None:
         except ImportError:
             _log.debug("Tool module not available: %s", mod_name)
 
+
 # ── Per-tool manifest overrides ──────────────────────────────────────────
 # Tools without class-level metadata are described here.  Tools that DO
 # declare _manifest_* attributes are discovered automatically.
@@ -76,14 +77,14 @@ def _import_tool_modules() -> None:
 _MANUAL_MANIFESTS: dict[str, dict] = {
     "bash": {
         "description": "Execute a shell command via PowerShell (Windows) or WSL2 bash. "
-                       "Dangerous commands are blocked; destructive commands require confirmation.",
+        "Dangerous commands are blocked; destructive commands require confirmation.",
         "roles": ["automation", "analyst", "admin", "product_manager"],
         "mcp_safe": False,
         "mcp_requires_confirm": True,
     },
     "python_execute": {
         "description": "Execute Python code in a sandboxed subprocess. "
-                       "Output is captured and returned.",
+        "Output is captured and returned.",
         "roles": ["analyst", "automation", "admin"],
         "mcp_safe": True,
         "mcp_requires_confirm": False,
@@ -96,8 +97,14 @@ _MANUAL_MANIFESTS: dict[str, dict] = {
     },
     "file_editor": {
         "description": "View, create, and edit files in the workspace.",
-        "roles": ["researcher", "analyst", "automation", "documentation",
-                   "product_manager", "admin"],
+        "roles": [
+            "researcher",
+            "analyst",
+            "automation",
+            "documentation",
+            "product_manager",
+            "admin",
+        ],
         "mcp_safe": False,
         "mcp_requires_confirm": True,
     },
@@ -168,7 +175,7 @@ class ToolDiscoveryAdapter:
     :class:`RoleBasedToolRegistry`.
     """
 
-    def __init__(self, role_registry: Optional[RoleBasedToolRegistry] = None) -> None:
+    def __init__(self, role_registry: RoleBasedToolRegistry | None = None) -> None:
         self._role_registry = role_registry or RoleBasedToolRegistry()
 
     # ── ToolDiscoveryPort implementation ──────────────────────────────
@@ -214,6 +221,7 @@ class ToolDiscoveryAdapter:
         _import_tool_modules()
 
         from weebot.tools.base import BaseTool as BT
+
         subclasses: list[type[BaseTool]] = []
 
         def _recurse(cls: type) -> None:
@@ -248,6 +256,7 @@ class ToolDiscoveryAdapter:
         if not name:
             # BashTool → bash, WebSearchTool → web_search
             import re
+
             name = re.sub(r"(?<!^)(?=[A-Z])", "_", tool_cls.__name__).lower()
             if name.endswith("_tool"):
                 name = name[:-5]  # strip _tool suffix
@@ -264,16 +273,12 @@ class ToolDiscoveryAdapter:
             or getattr(tool_cls, "description", "")
         )
         roles = manual.get("roles") or getattr(tool_cls, "_manifest_roles", [])
-        requires_deps = (
-            manual.get("requires_deps")
-            or getattr(tool_cls, "_manifest_requires_deps", [])
+        requires_deps = manual.get("requires_deps") or getattr(
+            tool_cls, "_manifest_requires_deps", []
         )
-        mcp_safe = manual.get(
-            "mcp_safe", getattr(tool_cls, "_manifest_mcp_safe", False)
-        )
+        mcp_safe = manual.get("mcp_safe", getattr(tool_cls, "_manifest_mcp_safe", False))
         mcp_requires_confirm = manual.get(
-            "mcp_requires_confirm",
-            getattr(tool_cls, "_manifest_mcp_requires_confirm", True),
+            "mcp_requires_confirm", getattr(tool_cls, "_manifest_mcp_requires_confirm", True)
         )
         is_experimental = manual.get(
             "is_experimental", getattr(tool_cls, "_manifest_is_experimental", False)

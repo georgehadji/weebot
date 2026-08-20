@@ -1,9 +1,10 @@
 """FlowPersistence — extracted from PlanActFlow for session persistence concerns."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from weebot.application.ports.checkpoint_port import CheckpointPort
@@ -20,9 +21,9 @@ class FlowPersistence:
 
     def __init__(
         self,
-        state_repo: Optional["StateRepositoryPort"] = None,
-        checkpoint_port: Optional["CheckpointPort"] = None,
-        logger_obj: Optional["StructuredLogger"] = None,
+        state_repo: StateRepositoryPort | None = None,
+        checkpoint_port: CheckpointPort | None = None,
+        logger_obj: StructuredLogger | None = None,
     ):
         self._state_repo = state_repo
         self._checkpoint_port = checkpoint_port
@@ -30,7 +31,7 @@ class FlowPersistence:
         self._emit_lock = asyncio.Lock()
         self._persistence_adapter = None
 
-    async def save_session(self, session: "Session") -> bool:
+    async def save_session(self, session: Session) -> bool:
         """Persist session to state repository.
 
         Returns True on success, False on failure.
@@ -44,8 +45,7 @@ class FlowPersistence:
                 ok = await adapter.save_session(session)
                 if not ok:
                     self._log.error(
-                        "Session %s dead-lettered — persistence exhausted retries",
-                        session.id,
+                        "Session %s dead-lettered — persistence exhausted retries", session.id
                     )
                     return False
             else:
@@ -56,7 +56,7 @@ class FlowPersistence:
                     return False
         return True
 
-    async def save_checkpoint(self, session: "Session", plan: Optional["Plan"], state_name: str) -> bool:
+    async def save_checkpoint(self, session: Session, plan: Plan | None, state_name: str) -> bool:
         """Save a flow checkpoint.
 
         Returns True on success, False if checkpoint_port is not available or fails.
@@ -66,12 +66,13 @@ class FlowPersistence:
 
         try:
             from weebot.domain.models.checkpoint import FlowCheckpoint, StepCheckpoint
+
             completed = [
                 StepCheckpoint(
-                    step_id=s.id, description=s.description,
-                    status=s.status.value, result=s.result,
+                    step_id=s.id, description=s.description, status=s.status.value, result=s.result
                 )
-                for s in plan.steps if s.status.value in ("completed", "failed")
+                for s in plan.steps
+                if s.status.value in ("completed", "failed")
             ]
             checkpoint = FlowCheckpoint(
                 session_id=session.id,
@@ -93,6 +94,7 @@ class FlowPersistence:
         if self._persistence_adapter is None:
             try:
                 from weebot.application.di import Container
+
                 c = Container()
                 c.configure_defaults()
                 self._persistence_adapter = c.get("session_persistence")

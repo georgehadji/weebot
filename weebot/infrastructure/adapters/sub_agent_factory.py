@@ -4,12 +4,12 @@ Wraps DispatchAgentsTool for parallel dispatch and creates ephemeral
 PlanActFlow instances.  Each sub-agent gets its own Session, runs
 independently, and returns a structured SubAgentResult.
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
@@ -21,7 +21,10 @@ from typing import Any
 
 def _get_tool_collection_cls():
     import importlib as _il
+
     return _il.import_module("weebot.application.models.tool_collection").ToolCollection
+
+
 from weebot.domain.models.sub_agent import (
     AgentTier,
     DispatchStrategy,
@@ -51,8 +54,8 @@ class SubAgentFactory(SubAgentFactoryPort):
         llm: LLMPort,
         tools: Any,  # ToolCollection — resolved via _get_tool_collection_cls()
         cost_tracker: SubAgentCostTrackerPort,
-        swarm_bus: Optional[SwarmEventBusPort] = None,
-        flow_factory: Optional[callable] = None,
+        swarm_bus: SwarmEventBusPort | None = None,
+        flow_factory: callable | None = None,
     ) -> None:
         self._llm = llm
         self._tools = tools
@@ -90,9 +93,11 @@ class SubAgentFactory(SubAgentFactoryPort):
                 if isinstance(event, ErrorEvent):
                     elapsed = time.monotonic() - start
                     return SubAgentResult(
-                        spec_id=spec.id, agent_id=session.id,
+                        spec_id=spec.id,
+                        agent_id=session.id,
                         role=spec.role.value,
-                        status=SubAgentStatus.FAILED, error=event.error,
+                        status=SubAgentStatus.FAILED,
+                        error=event.error,
                         model_used=spec.model or _TIER_MODEL[spec.tier],
                         elapsed_seconds=elapsed,
                     )
@@ -106,18 +111,21 @@ class SubAgentFactory(SubAgentFactoryPort):
             self._cost_tracker.record_cost(session.id, token_count, 0.0)
 
             return SubAgentResult(
-                spec_id=spec.id, agent_id=session.id,
+                spec_id=spec.id,
+                agent_id=session.id,
                 role=spec.role.value,
                 status=SubAgentStatus.COMPLETED,
                 summary=summary,
                 model_used=spec.model or _TIER_MODEL[spec.tier],
-                tool_calls=0, tokens_used=token_count,
+                tool_calls=0,
+                tokens_used=token_count,
                 elapsed_seconds=elapsed,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed = time.monotonic() - start
             return SubAgentResult(
-                spec_id=spec.id, agent_id=session.id,
+                spec_id=spec.id,
+                agent_id=session.id,
                 role=spec.role.value,
                 status=SubAgentStatus.TIMED_OUT,
                 error=f"Timed out after {spec.timeout_seconds}s",
@@ -127,7 +135,8 @@ class SubAgentFactory(SubAgentFactoryPort):
         except Exception as exc:
             elapsed = time.monotonic() - start
             return SubAgentResult(
-                spec_id=spec.id, agent_id=session.id,
+                spec_id=spec.id,
+                agent_id=session.id,
                 role=spec.role.value,
                 status=SubAgentStatus.FAILED,
                 error=str(exc),
@@ -154,11 +163,7 @@ class SubAgentFactory(SubAgentFactoryPort):
         Uses longest-summary heuristic — not true voting. Future: implement
         majority-vote consensus when eval data shows improvement.
         """
-        models = models or [
-            MODEL_CASCADE_TIER2,
-            MODEL_ROLE_CODER,
-            MODEL_CASCADE_TIER4,
-        ]
+        models = models or [MODEL_CASCADE_TIER2, MODEL_ROLE_CODER, MODEL_CASCADE_TIER4]
         specs = [spec.with_model(m) for m in models[:3]]
         results = await self.spawn_parallel(specs, max_concurrency=3)
         successes = [r for r in results if r.is_success]
@@ -170,7 +175,6 @@ class SubAgentFactory(SubAgentFactoryPort):
         """Build a PlanActFlow for a sub-agent session."""
         if self._flow_factory is None:
             raise RuntimeError(
-                "SubAgentFactory requires a flow_factory. "
-                "Inject via __init__(flow_factory=...)."
+                "SubAgentFactory requires a flow_factory. " "Inject via __init__(flow_factory=...)."
             )
         return self._flow_factory(session, spec, self._llm, self._tools)

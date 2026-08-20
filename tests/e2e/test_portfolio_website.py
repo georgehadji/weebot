@@ -16,6 +16,7 @@ Usage:
     pytest tests/e2e/test_portfolio_website.py -v -m real_api -s
     pytest tests/e2e/ -v -m "not real_api"   # CI-safe
 """
+
 from __future__ import annotations
 
 import os
@@ -28,23 +29,17 @@ import pytest
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.ports.llm_port import LLMPort
-from weebot.domain.models.event import (
-    DoneEvent,
-    ErrorEvent,
-    MessageEvent,
-    PlanEvent,
-    StepEvent,
-)
+from weebot.domain.models.event import DoneEvent, ErrorEvent, MessageEvent, PlanEvent, StepEvent
 from weebot.domain.models.session import Session, SessionStatus
 from weebot.infrastructure.adapters.llm.adapter_factory import AdapterFactory
 from weebot.application.cqrs.mediator import Mediator
 from weebot.tools.bash_tool import BashTool
 from weebot.tools.file_editor import StrReplaceEditorTool
 
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def _fmt_sec(seconds: float) -> str:
     """Human-readable duration string."""
@@ -60,6 +55,7 @@ def _fmt_sec(seconds: float) -> str:
 # ═════════════════════════════════════════════════════════════════════════════
 # Key resolution — reads .env directly (clean_env monkeypatches os.environ)
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def _load_dotenv_keys() -> dict[str, str]:
     """Parse .env and return all API key entries as a dict.
@@ -136,10 +132,7 @@ def llm() -> LLMPort:
 @pytest.fixture
 def tools() -> ToolCollection:
     """Tools the executor can use to write files and run commands."""
-    return ToolCollection(
-        BashTool(),
-        StrReplaceEditorTool(),
-    )
+    return ToolCollection(BashTool(), StrReplaceEditorTool())
 
 
 @pytest.fixture
@@ -177,16 +170,16 @@ _PORTFOLIO_PROMPT = (
     "Requirements:\n"
     "1. **Header** — sticky top bar with the designer's name and three nav links: "
     "Work, About, Contact.\n"
-    "2. **Hero section** — full-viewport hero with a heading (\"I design websites "
-    "that convert\"), a one-sentence subtitle, and a CTA button \"View My Work\".\n"
+    '2. **Hero section** — full-viewport hero with a heading ("I design websites '
+    'that convert"), a one-sentence subtitle, and a CTA button "View My Work".\n'
     "3. **Work / Portfolio grid** — 3 project cards, each with a placeholder image "
     "(use an SVG data URI or a coloured <div>), a project title, a 1-sentence "
-    "description, and a \"View Case Study\" link.\n"
+    'description, and a "View Case Study" link.\n'
     "4. **About section** — a brief bio paragraph and a 3-item skills list: "
     "UI/UX Design, HTML/CSS/JS, Figma & Prototyping.\n"
     "5. **Contact section** — a simple contact form (name, email, message) with a "
     "submit button (no backend — use a <form> with # action).\n"
-    "6. **Footer** — copyright \"© 2026 Maya Rivera. All rights reserved.\"\n"
+    '6. **Footer** — copyright "© 2026 Maya Rivera. All rights reserved."\n'
     "7. **Design** — clean modern aesthetic, dark theme with a coral accent "
     "(#FF6B6B), responsive (use media queries for mobile), semantic HTML5 tags.\n"
     "Use the file_editor tool to write the complete site to tasks/portfolio.html."
@@ -200,10 +193,7 @@ _PORTFOLIO_PROMPT = (
 
 @pytest.mark.real_api
 @pytest.mark.asyncio
-async def test_planner_creates_portfolio_plan(
-    llm: LLMPort,
-    container: Any,
-) -> None:
+async def test_planner_creates_portfolio_plan(llm: LLMPort, container: Any) -> None:
     """Planner creates a structured plan via the CQRS Mediator pipeline.
 
     Sends CreatePlanCommand through the Mediator (matching the production
@@ -231,9 +221,7 @@ async def test_planner_creates_portfolio_plan(
     )
     plan_elapsed = time.perf_counter() - t0
 
-    assert cmd_result.success, (
-        f"CreatePlanCommand failed: {cmd_result.error}"
-    )
+    assert cmd_result.success, f"CreatePlanCommand failed: {cmd_result.error}"
 
     events = cmd_result.data.get("events", [])
     plan = cmd_result.data.get("plan")
@@ -246,7 +234,11 @@ async def test_planner_creates_portfolio_plan(
     print(f"\n  📋 Plan title: {title}")
     print(f"  📋 Steps ({len(steps)}):")
     for i, s in enumerate(steps):
-        desc = s.get("description", str(s)) if isinstance(s, dict) else getattr(s, "description", str(s))
+        desc = (
+            s.get("description", str(s))
+            if isinstance(s, dict)
+            else getattr(s, "description", str(s))
+        )
         print(f"       {i+1}. {desc}")
 
     # Most models produce ≥ 2 steps, but a capable model may pack
@@ -254,9 +246,9 @@ async def test_planner_creates_portfolio_plan(
     if len(steps) < 2:
         print(f"  ⚠️ Only {len(steps)} plan step(s) — model used a single-step strategy")
     # Verify events were accumulated (proves pipeline behaviors ran)
-    assert len(events) >= 2, (
-        f"Handler should emit ≥ 2 events (TitleEvent + PlanEvent), got {len(events)}"
-    )
+    assert (
+        len(events) >= 2
+    ), f"Handler should emit ≥ 2 events (TitleEvent + PlanEvent), got {len(events)}"
 
     print(f"\n  ⏱️  CQRS plan creation: {_fmt_sec(plan_elapsed)}")
 
@@ -269,10 +261,7 @@ async def test_planner_creates_portfolio_plan(
 @pytest.mark.real_api
 @pytest.mark.asyncio
 async def test_full_flow_builds_portfolio_website(
-    llm: LLMPort,
-    tools: ToolCollection,
-    container: Any,
-    mediator: Any,
+    llm: LLMPort, tools: ToolCollection, container: Any, mediator: Any
 ) -> None:
     """End-to-end: PlanActFlow builds the portfolio and reaches COMPLETED."""
     from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -301,8 +290,8 @@ async def test_full_flow_builds_portfolio_website(
 
     # ── Timing bookkeeping ─────────────────────────────────────
     t_flow_start = time.perf_counter()
-    state_entries: dict[str, float] = {}   # state_name → first entry time
-    state_totals: dict[str, float] = {}    # state_name → cumulative time
+    state_entries: dict[str, float] = {}  # state_name → first entry time
+    state_totals: dict[str, float] = {}  # state_name → cumulative time
     prev_state: str | None = None
     prev_ts: float = t_flow_start
     step_start_ts: float | None = None
@@ -325,12 +314,17 @@ async def test_full_flow_builds_portfolio_website(
 
         if isinstance(event, PlanEvent) and event.plan:
             raw = event.plan
-            steps = raw if isinstance(raw, list) else (
-                raw.get("steps", []) if isinstance(raw, dict) else raw.steps
+            steps = (
+                raw
+                if isinstance(raw, list)
+                else (raw.get("steps", []) if isinstance(raw, dict) else raw.steps)
             )
             plan_steps = [
-                s.get("description", str(s)) if isinstance(s, dict)
-                else getattr(s, "description", str(s))
+                (
+                    s.get("description", str(s))
+                    if isinstance(s, dict)
+                    else getattr(s, "description", str(s))
+                )
                 for s in steps
             ]
 
@@ -362,7 +356,7 @@ async def test_full_flow_builds_portfolio_website(
                 print(f"  💬 {msg[:150]}")
 
         if isinstance(event, DoneEvent):
-            print(f"  🏁 DoneEvent received")
+            print("  🏁 DoneEvent received")
 
         if isinstance(event, ErrorEvent):
             error = event.error
@@ -379,16 +373,14 @@ async def test_full_flow_builds_portfolio_website(
     print(f"\n  States visited: {sorted(states_seen)}")
 
     # ── 1. State-machine progress ──────────────────────────────
-    assert len(states_seen) >= 2, (
-        f"Flow should visit ≥ 2 states (planning + executing), saw {states_seen}"
-    )
+    assert (
+        len(states_seen) >= 2
+    ), f"Flow should visit ≥ 2 states (planning + executing), saw {states_seen}"
     # Most models produce ≥ 2 steps, but a capable model may pack
     # everything into one step.  The real test is output below.
     if len(plan_steps) < 2:
         print(f"  ⚠️ Only {len(plan_steps)} plan step(s) — model used a single-step strategy")
-    assert len(step_results) >= 1, (
-        f"Expected ≥ 1 step execution event, got {len(step_results)}"
-    )
+    assert len(step_results) >= 1, f"Expected ≥ 1 step execution event, got {len(step_results)}"
 
     completed = [s for s in step_results if s["status"] == "completed"]
     print(f"  Completed steps: {len(completed)} / {len(step_results)}")
@@ -399,22 +391,23 @@ async def test_full_flow_builds_portfolio_website(
     # creates a long plan and the trajectory detector triggers an update
     # loop.  What matters is that HTML was produced (checked below).
     assert final_status in (
-        SessionStatus.COMPLETED, SessionStatus.WAITING, SessionStatus.PENDING,
-    ), (
-        f"Expected COMPLETED, WAITING, or PENDING, got {final_status}"
-    )
+        SessionStatus.COMPLETED,
+        SessionStatus.WAITING,
+        SessionStatus.PENDING,
+    ), f"Expected COMPLETED, WAITING, or PENDING, got {final_status}"
 
     # ── 2. Plan completion ────────────────────────────────────
     plan = flow._plan
     if plan is not None:
         from weebot.domain.models.plan import PlanStatus
+
         print(f"  Plan status: {plan.status}")
         # Plan should be COMPLETED (or at least not still PENDING if we
         # have step results)
         if len(completed) > 0 and len(completed) == len(step_results):
-            assert plan.status in (PlanStatus.COMPLETED,), (
-                f"All steps completed but plan status is {plan.status}"
-            )
+            assert plan.status in (
+                PlanStatus.COMPLETED,
+            ), f"All steps completed but plan status is {plan.status}"
 
     # ── 3. Output verification — the test is about a website ───
     full_output = "\n".join(messages)
@@ -450,7 +443,8 @@ async def test_full_flow_builds_portfolio_website(
     # the real session used New-Item / Get-ChildItem, but different
     # models choose different tool strategies.
     bash_mentions = sum(
-        1 for s in step_results
+        1
+        for s in step_results
         if "bash" in s["description"].lower()
         or any(
             kw in s["description"].lower()
@@ -458,21 +452,19 @@ async def test_full_flow_builds_portfolio_website(
         )
     )
     bash_in_messages = any(
-        kw in full_output.lower()
-        for kw in ("bash", "mkdir", "new-item", "get-childitem", "ls ")
+        kw in full_output.lower() for kw in ("bash", "mkdir", "new-item", "get-childitem", "ls ")
     )
-    print(f"  BashTool references: {bash_mentions} in steps, "
-          f"{'yes' if bash_in_messages else 'no'} in messages "
-          f"(informational — file_editor often suffices)")
+    print(
+        f"  BashTool references: {bash_mentions} in steps, "
+        f"{'yes' if bash_in_messages else 'no'} in messages "
+        f"(informational — file_editor often suffices)"
+    )
 
     # ── 5. file_editor / file-output references ─────────────────
     # Steps may be in any language — check for file paths, tool
     # names, or HTML-related tokens.
     _file_kw = ("file_editor", "html", "tasks/", ".html", ".md")
-    fe_refs = any(
-        any(kw in s["description"].lower() for kw in _file_kw)
-        for s in step_results
-    )
+    fe_refs = any(any(kw in s["description"].lower() for kw in _file_kw) for s in step_results)
     assert fe_refs, "At least one step should reference file output (HTML, tasks/, .md, etc.)"
 
     # ── 6. Timing summary ─────────────────────────────────────
@@ -483,7 +475,7 @@ async def test_full_flow_builds_portfolio_website(
         print(f"  {name:<24s} {_fmt_sec(state_totals[name]):>8s}  ({pct:5.1f}%)")
     # Per-step breakdown
     if step_times:
-        print(f"  ── Steps ──")
+        print("  ── Steps ──")
         for desc, elapsed in step_times:
             short = (desc[:70] + "…") if len(desc) > 70 else desc
             print(f"  {short:<72s} {_fmt_sec(elapsed):>8s}")
@@ -497,11 +489,7 @@ async def test_full_flow_builds_portfolio_website(
 @pytest.mark.real_api
 @pytest.mark.asyncio
 async def test_portfolio_file_written_to_disk(
-    llm: LLMPort,
-    tools: ToolCollection,
-    container: Any,
-    mediator: Any,
-    tmp_path: Path,
+    llm: LLMPort, tools: ToolCollection, container: Any, mediator: Any, tmp_path: Path
 ) -> None:
     """The flow should write tasks/portfolio.html to the workspace.
 
@@ -517,6 +505,7 @@ async def test_portfolio_file_written_to_disk(
 
     # Patch the settings singleton so FileEditorTool resolves paths under tmp_path
     import weebot.config.settings as settings_mod
+
     original_workspace = getattr(settings_mod, "WORKSPACE_ROOT", None)
     original_prefix = getattr(settings_mod, "REQUIRED_PATH_PREFIX", None)
     settings_mod.WORKSPACE_ROOT = tmp_path
@@ -524,6 +513,7 @@ async def test_portfolio_file_written_to_disk(
 
     # Clear cached imports that hold old settings references
     import sys
+
     for mod_name in (
         "weebot.tools.file_editor",
         "weebot.infrastructure.security.security_validators",
@@ -577,9 +567,11 @@ async def test_portfolio_file_written_to_disk(
             elif isinstance(event, MessageEvent) and event.message:
                 print(f"  💬 {event.message[:120]}")
         t_wf_total = time.perf_counter() - t_wf_start
-        print(f"\n  ⏱️  Flow wall time: {_fmt_sec(t_wf_total)}"
-              f"  |  step execution: {_fmt_sec(step_elapsed_total)}"
-              f"  ({step_count} steps)")
+        print(
+            f"\n  ⏱️  Flow wall time: {_fmt_sec(t_wf_total)}"
+            f"  |  step execution: {_fmt_sec(step_elapsed_total)}"
+            f"  ({step_count} steps)"
+        )
 
         # Check if file was created — try the temp workspace first,
         # then the real workspace (settings patch may not propagate when
@@ -595,12 +587,10 @@ async def test_portfolio_file_written_to_disk(
             print(f"\n  ✅ portfolio.html written to {found_path}: {len(content)} chars")
             print(f"  First 200 chars: {content[:200]}...")
 
-            assert "<!DOCTYPE html>" in content or "<html" in content.lower(), (
-                "File should contain an HTML doctype or <html> tag"
-            )
-            assert "Maya Rivera" in content, (
-                "Portfolio must mention the designer's name"
-            )
+            assert (
+                "<!DOCTYPE html>" in content or "<html" in content.lower()
+            ), "File should contain an HTML doctype or <html> tag"
+            assert "Maya Rivera" in content, "Portfolio must mention the designer's name"
         else:
             pytest.fail(
                 "Expected tasks/portfolio.html to be written to disk. "
@@ -664,9 +654,7 @@ async def test_direct_html_portfolio_generation(llm: LLMPort) -> None:
     assert len(html) > 300, f"Expected >300 chars of HTML, got {len(html)}"
 
     # HTML boilerplate
-    assert "<!DOCTYPE html>" in html or "<html" in html.lower(), (
-        "Must be a valid HTML document"
-    )
+    assert "<!DOCTYPE html>" in html or "<html" in html.lower(), "Must be a valid HTML document"
     assert "Maya Rivera" in html, "Must include the designer's name"
 
     # Key sections

@@ -1,4 +1,5 @@
 """Unit tests for Ponytail built-in skills."""
+
 from __future__ import annotations
 
 import pytest

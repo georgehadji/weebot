@@ -5,12 +5,11 @@ context loading). Each source is tagged with the scopes that include it in
 ``_SCOPE_SOURCES``; unknown scope values fall back to "full" so callers that
 predate scoping (or pass a bad value) keep prior behavior unchanged.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
-
-from weebot.core.output_path import output_path as _op
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +17,32 @@ logger = logging.getLogger(__name__)
 # weebot.domain.models.plan.ContextScope values (kept as plain strings here
 # so this module has no application->domain coupling beyond the value).
 _SCOPE_SOURCES: dict[str, frozenset[str]] = {
-    "full": frozenset({
-        "boot", "base", "harness", "skill", "skill_retriever",
-        "behavioral", "profile", "personality",
-    }),
+    "full": frozenset(
+        {
+            "boot",
+            "base",
+            "harness",
+            "skill",
+            "skill_retriever",
+            "behavioral",
+            "profile",
+            "personality",
+        }
+    ),
     "minimal": frozenset({"boot", "base", "harness"}),
-    "skill": frozenset({
-        "boot", "base", "harness", "skill", "skill_retriever", "behavioral",
-    }),
-    "creative": frozenset({
-        "boot", "base", "harness", "skill", "skill_retriever",
-        "behavioral", "profile", "personality",
-    }),
+    "skill": frozenset({"boot", "base", "harness", "skill", "skill_retriever", "behavioral"}),
+    "creative": frozenset(
+        {
+            "boot",
+            "base",
+            "harness",
+            "skill",
+            "skill_retriever",
+            "behavioral",
+            "profile",
+            "personality",
+        }
+    ),
 }
 
 _BOOT_BLOCK = (
@@ -61,12 +74,12 @@ async def build_executor_prompt(
     *,
     base_prompt: str,
     context_scope: str = "full",
-    harness_block: Optional[str] = None,
-    skill_prompt: Optional[str] = None,
-    skill_retriever: Optional[Any] = None,
-    behavioral_learner: Optional[Any] = None,
-    state_repo: Optional[Any] = None,
-    personality: Optional[Any] = None,
+    harness_block: str | None = None,
+    skill_prompt: str | None = None,
+    skill_retriever: Any | None = None,
+    behavioral_learner: Any | None = None,
+    state_repo: Any | None = None,
+    personality: Any | None = None,
     profile_name: str = "",
 ) -> str:
     """Assemble the system prompt from all configured sources.
@@ -134,6 +147,7 @@ async def build_executor_prompt(
     if "profile" in sources and state_repo is not None:
         try:
             import hashlib
+
             key = hashlib.sha256(b"user_model_profile").hexdigest()[:16]
             row = await state_repo.get_memory_entry(key)
             txt = row.get("entry_text", "") if row else ""
@@ -152,6 +166,5 @@ async def build_executor_prompt(
     return (
         "## CONSTRAINTS\n"
         "Internalize the following as rules and patterns to follow "
-        "while executing the current step.\n\n"
-        + "\n".join(constraints)
+        "while executing the current step.\n\n" + "\n".join(constraints)
     )

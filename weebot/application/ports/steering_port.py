@@ -8,10 +8,10 @@ Implementations:
 - InMemorySteeringAdapter  — queue-based (CLI, single-process)
 - WebSocketSteeringAdapter — routes through ConnectionManager (web)
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class SteeringPort(ABC):
@@ -22,7 +22,7 @@ class SteeringPort(ABC):
     """
 
     @abstractmethod
-    async def poll(self, session_id: str) -> Optional[str]:
+    async def poll(self, session_id: str) -> str | None:
         """Return any pending steering input for *session_id*, or None.
 
         Must be non-blocking.  Called once per state transition in

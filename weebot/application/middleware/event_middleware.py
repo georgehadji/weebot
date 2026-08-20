@@ -13,6 +13,7 @@ The context dict includes:
   - state_repo: the StateRepositoryPort (if configured)
   - emit_lock: asyncio.Lock for serializing DB writes
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,8 +1,8 @@
 """Indexed session memory for O(1) event-type lookups."""
+
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from typing import Optional
 
 from weebot.domain.models.event import AgentEvent, MessageEvent, PlanEvent, WaitForUserEvent
 from weebot.domain.models.plan import Plan
@@ -20,7 +20,7 @@ class SessionMemory:
         """Register an event at the given list index."""
         self._index[event.type].append(idx)
 
-    def find_last_plan(self, events: list[AgentEvent]) -> Optional[Plan]:
+    def find_last_plan(self, events: list[AgentEvent]) -> Plan | None:
         """Return the most recent PlanEvent.plan with step statuses reconciled.
 
         Step statuses are stored in StepEvents, NOT in the PlanEvent itself.
@@ -39,11 +39,7 @@ class SessionMemory:
         if not isinstance(event, PlanEvent) or event.plan is None:
             return None
 
-        plan = (
-            Plan.model_validate(event.plan)
-            if isinstance(event.plan, dict)
-            else event.plan
-        )
+        plan = Plan.model_validate(event.plan) if isinstance(event.plan, dict) else event.plan
 
         # Reconcile step statuses from StepEvents that happened AFTER this plan
         step_indices = self._index.get("step", [])
@@ -54,19 +50,20 @@ class SessionMemory:
             if isinstance(step_event, StepEvent) and step_event.step_id:
                 # Map StepEvent status to StepStatus
                 from weebot.domain.models.plan import StepStatus as PS
+
                 status_map = {
                     "started": PS.RUNNING,
                     "running": PS.RUNNING,
                     "completed": PS.COMPLETED,
                     "failed": PS.FAILED,
                 }
-                new_status = status_map.get(step_event.status, None)
+                new_status = status_map.get(step_event.status)
                 if new_status is not None:
                     plan = plan.update_step_status(step_event.step_id, new_status)
 
         return plan
 
-    def copy(self) -> "SessionMemory":
+    def copy(self) -> SessionMemory:
         """Return an independent copy of this index.
 
         Pydantic v2 model_copy() does not propagate PrivateAttr values, so

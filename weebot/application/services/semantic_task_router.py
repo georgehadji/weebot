@@ -9,10 +9,10 @@ nearest-centroid cosine similarity against labeled examples per
 Expected accuracy: >85% on the 25-case benchmark, compared to 72%
 for the keyword-based ``task_model_router.py``.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -135,8 +135,7 @@ class SemanticTaskRouter(TaskRouterPort):
                     vecs.append(np.array(result.embedding, dtype=np.float32))
                 except Exception as exc:
                     logger.warning(
-                        "SemanticTaskRouter: failed to embed example for %s: %s",
-                        cat.value, exc,
+                        "SemanticTaskRouter: failed to embed example for %s: %s", cat.value, exc
                     )
             if vecs:
                 centroid = np.mean(vecs, axis=0)
@@ -145,10 +144,7 @@ class SemanticTaskRouter(TaskRouterPort):
                     centroid = centroid / norm
                 self._centroids[cat] = centroid
 
-        logger.info(
-            "SemanticTaskRouter: built centroids for %d categories",
-            len(self._centroids),
-        )
+        logger.info("SemanticTaskRouter: built centroids for %d categories", len(self._centroids))
 
     async def route(self, query: str) -> TaskRoute:
         """Classify *query* into the best-matching TaskCategory.
@@ -181,10 +177,7 @@ class SemanticTaskRouter(TaskRouterPort):
         # Map [-1, 1] cosine to [0, 1] confidence
         confidence = round((best_score + 1.0) / 2.0, 3)
 
-        return TaskRoute(
-            category=best,
-            confidence=confidence,
-        )
+        return TaskRoute(category=best, confidence=confidence)
 
     async def refresh(self) -> None:
         """Rebuild centroids (called when examples change)."""

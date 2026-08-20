@@ -4,9 +4,10 @@ Replaces the original StateManager tests which were deleted with the
 deprecated state_manager.py module.  Tests the StateRepositoryPort
 contract via its live SQLite implementation.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
@@ -31,8 +32,8 @@ def sample_session() -> Session:
         id="test-session-001",
         user_id="test-user",
         status=SessionStatus.PENDING,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -40,7 +41,9 @@ class TestSaveAndLoad:
     """Core save/load roundtrip testing."""
 
     @pytest.mark.asyncio
-    async def test_save_and_load_roundtrip(self, repo: StateRepositoryPort, sample_session: Session):
+    async def test_save_and_load_roundtrip(
+        self, repo: StateRepositoryPort, sample_session: Session
+    ):
         await repo.save_session(sample_session)
         loaded = await repo.load_session("test-session-001")
         assert loaded is not None
@@ -71,10 +74,20 @@ class TestListSessions:
 
     @pytest.mark.asyncio
     async def test_lists_saved_sessions(self, repo: StateRepositoryPort):
-        s1 = Session(id="s1", user_id="u1", status=SessionStatus.PENDING,
-                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
-        s2 = Session(id="s2", user_id="u1", status=SessionStatus.COMPLETED,
-                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        s1 = Session(
+            id="s1",
+            user_id="u1",
+            status=SessionStatus.PENDING,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        s2 = Session(
+            id="s2",
+            user_id="u1",
+            status=SessionStatus.COMPLETED,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
         await repo.save_session(s1)
         await repo.save_session(s2)
         sessions = await repo.list_sessions()
@@ -84,10 +97,20 @@ class TestListSessions:
 
     @pytest.mark.asyncio
     async def test_filter_by_user(self, repo: StateRepositoryPort):
-        s1 = Session(id="s1", user_id="user-a", status=SessionStatus.PENDING,
-                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
-        s2 = Session(id="s2", user_id="user-b", status=SessionStatus.PENDING,
-                     created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        s1 = Session(
+            id="s1",
+            user_id="user-a",
+            status=SessionStatus.PENDING,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        s2 = Session(
+            id="s2",
+            user_id="user-b",
+            status=SessionStatus.PENDING,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
         await repo.save_session(s1)
         await repo.save_session(s2)
         sessions_a = await repo.list_sessions(user_id="user-a")
@@ -116,11 +139,7 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_full_lifecycle(self, repo: StateRepositoryPort):
-        session = Session(
-            id="lifecycle-test",
-            user_id="tester",
-            status=SessionStatus.PENDING,
-        )
+        session = Session(id="lifecycle-test", user_id="tester", status=SessionStatus.PENDING)
         await repo.save_session(session)
         loaded = await repo.load_session("lifecycle-test")
         assert loaded is not None and loaded.status == SessionStatus.PENDING

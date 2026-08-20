@@ -8,14 +8,15 @@ Three tables:
 Uses FTS5 for full-text search on node names + properties.
 Shares the same connection pool as the main state repository.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
 from weebot.domain.models.knowledge_graph import (
@@ -34,11 +35,7 @@ _MAX_NODES = 100_000
 class SQLiteKnowledgeGraph(KnowledgeGraphPort):
     """SQLite-backed knowledge graph adapter."""
 
-    def __init__(
-        self,
-        db_path: str = "./weebot_sessions.db",
-        max_nodes: int = _MAX_NODES,
-    ) -> None:
+    def __init__(self, db_path: str = "./weebot_sessions.db", max_nodes: int = _MAX_NODES) -> None:
         """Initialize the adapter.
 
         Args:
@@ -149,13 +146,8 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                     "SELECT COALESCE(COUNT(*), 0) AS cnt FROM kg_nodes"
                 ).fetchone()["cnt"]
                 if fts_count == 0 and node_count > 0:
-                    logger.info(
-                        "Backfilling kg_nodes_fts with %d existing nodes",
-                        node_count,
-                    )
-                    conn.execute(
-                        "INSERT INTO kg_nodes_fts(kg_nodes_fts) VALUES('rebuild')"
-                    )
+                    logger.info("Backfilling kg_nodes_fts with %d existing nodes", node_count)
+                    conn.execute("INSERT INTO kg_nodes_fts(kg_nodes_fts) VALUES('rebuild')")
 
             except sqlite3.OperationalError:
                 # FTS5 may not be available in all SQLite builds
@@ -178,20 +170,18 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     # ── Core operations ─────────────────────────────────────────────
 
-    async def get_node(self, node_id: str) -> Optional[KnowledgeNode]:
+    async def get_node(self, node_id: str) -> KnowledgeNode | None:
         """Fetch a single node by its ID."""
         return await self._run_db(self._get_node_sync, node_id)
 
-    def _get_node_sync(self, node_id: str) -> Optional[KnowledgeNode]:
+    def _get_node_sync(self, node_id: str) -> KnowledgeNode | None:
         with self._get_conn() as conn:
-            row = conn.execute(
-                "SELECT * FROM kg_nodes WHERE id = ?", (node_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM kg_nodes WHERE id = ?", (node_id,)).fetchone()
             return self._row_to_node(row) if row else None
 
     async def upsert_node(self, node: KnowledgeNode) -> KnowledgeNode:
         """Insert or update a knowledge graph node."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         props_json = json.dumps(node.properties, default=str)
         return await self._run_db(self._upsert_node_sync, node, now, props_json)
 
@@ -206,10 +196,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         passed, bumps the version, and snapshots the change.
         """
         with self._get_conn() as conn:
-            existing = conn.execute(
-                "SELECT * FROM kg_nodes WHERE id = ?",
-                (node.id,),
-            ).fetchone()
+            existing = conn.execute("SELECT * FROM kg_nodes WHERE id = ?", (node.id,)).fetchone()
 
             if existing:
                 old_props_json = existing["properties"]
@@ -246,9 +233,16 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                 conn.execute(
                     """INSERT INTO kg_nodes (id, label, name, properties, created_at, source_session_id, version, updated_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (node.id, node.label, node.name, props_json,
-                     node.created_at.isoformat(), node.source_session_id,
-                     node.version, now),
+                    (
+                        node.id,
+                        node.label,
+                        node.name,
+                        props_json,
+                        node.created_at.isoformat(),
+                        node.source_session_id,
+                        node.version,
+                        now,
+                    ),
                 )
 
                 # Initial snapshot
@@ -275,14 +269,20 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             conn.execute(
                 """INSERT OR REPLACE INTO kg_edges (source_id, target_id, relation, confidence, evidence, created_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (edge.source_id, edge.target_id, edge.relation, edge.confidence,
-                 edge.evidence, datetime.now(timezone.utc).isoformat()),
+                (
+                    edge.source_id,
+                    edge.target_id,
+                    edge.relation,
+                    edge.confidence,
+                    edge.evidence,
+                    datetime.now(UTC).isoformat(),
+                ),
             )
             conn.commit()
         return edge
 
     async def query(
-        self, label: Optional[str] = None, filters: Optional[dict[str, Any]] = None
+        self, label: str | None = None, filters: dict[str, Any] | None = None
     ) -> list[KnowledgeNode]:
         """Query nodes by label and optional property filters."""
         query = "SELECT * FROM kg_nodes WHERE 1=1"
@@ -296,10 +296,10 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             for key, value in filters.items():
                 # Filter by JSON property (simple substring match)
                 if isinstance(value, str):
-                    query += f" AND properties LIKE ?"
+                    query += " AND properties LIKE ?"
                     params.append(f'%"{key}": "%{value}%"')
                 else:
-                    query += f" AND properties LIKE ?"
+                    query += " AND properties LIKE ?"
                     params.append(f'%"{key}": {value}%')
 
         query += " ORDER BY updated_at DESC LIMIT 100"
@@ -312,9 +312,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_node(row) for row in rows]
 
-    async def get_neighbors(
-        self, node_id: str, depth: int = 1
-    ) -> dict[str, list[dict[str, Any]]]:
+    async def get_neighbors(self, node_id: str, depth: int = 1) -> dict[str, list[dict[str, Any]]]:
         """Get neighboring nodes and edges."""
         return await self._run_db(self._get_neighbors_sync, node_id)
 
@@ -354,11 +352,11 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
         return {"nodes": nodes, "edges": edges}
 
-    async def snapshot(self, node_id: str) -> Optional[KnowledgeSnapshot]:
+    async def snapshot(self, node_id: str) -> KnowledgeSnapshot | None:
         """Get the most recent snapshot of a node's properties."""
         return await self._run_db(self._snapshot_sync, node_id)
 
-    def _snapshot_sync(self, node_id: str) -> Optional[KnowledgeSnapshot]:
+    def _snapshot_sync(self, node_id: str) -> KnowledgeSnapshot | None:
         """Synchronous body of snapshot — runs in thread pool."""
         with self._get_conn() as conn:
             row = conn.execute(
@@ -415,13 +413,14 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
     # ── Phase 2: Hybrid search (sparse + dense + structured) ────────
 
-    async def _get_query_embedding(self, query: str) -> Optional[tuple[list[float], float]]:
+    async def _get_query_embedding(self, query: str) -> tuple[list[float], float] | None:
         """Compute query embedding outside the thread pool.
 
         Returns (vector, l2_norm) or None if embedding is unavailable.
         """
         try:
             from weebot.qmd_integration.embeddings import get_local_embeddings
+
             emb = get_local_embeddings()
             if not emb.is_available():
                 return None
@@ -436,8 +435,8 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         self,
         query: str,
         *,
-        label: Optional[str] = None,
-        filters: Optional[dict[str, Any]] = None,
+        label: str | None = None,
+        filters: dict[str, Any] | None = None,
         limit: int = 10,
         dense_weight: float = 0.4,
         sparse_weight: float = 0.4,
@@ -450,25 +449,31 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         Skips the embedding call entirely when ``dense_weight == 0``
         to avoid loading heavy ML dependencies unnecessarily.
         """
-        query_embedding: Optional[tuple[list[float], float]] = None
+        query_embedding: tuple[list[float], float] | None = None
         if dense_weight > 0:
             query_embedding = await self._get_query_embedding(query)
         return await self._run_db(
-            self._hybrid_search_sync, query, label, filters, limit,
-            dense_weight, sparse_weight, structured_weight,
+            self._hybrid_search_sync,
+            query,
+            label,
+            filters,
+            limit,
+            dense_weight,
+            sparse_weight,
+            structured_weight,
             query_embedding,
         )
 
     def _hybrid_search_sync(
         self,
         query: str,
-        label: Optional[str],
-        filters: Optional[dict[str, Any]],
+        label: str | None,
+        filters: dict[str, Any] | None,
         limit: int,
         dense_weight: float,
         sparse_weight: float,
         structured_weight: float,
-        query_embedding: Optional[tuple[list[float], float]],
+        query_embedding: tuple[list[float], float] | None,
     ) -> list[ScoredNode]:
         """Synchronous body of hybrid_search — runs in thread pool."""
         K = 60  # Standard RRF constant
@@ -512,7 +517,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                         except (json.JSONDecodeError, TypeError, ZeroDivisionError):
                             continue
                     dense_results.sort(key=lambda x: -x[1])
-                    dense_results = dense_results[:limit * 2]
+                    dense_results = dense_results[: limit * 2]
                 except Exception:
                     logger.debug("Dense search leg failed", exc_info=True)
 
@@ -529,8 +534,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
                         where += " AND properties LIKE ?"
                         params.append(f'%"{k}": "%{v}%"')
                 rows = conn.execute(
-                    f"SELECT id FROM kg_nodes {where} LIMIT ?",
-                    (*params, limit * 2),
+                    f"SELECT id FROM kg_nodes {where} LIMIT ?", (*params, limit * 2)
                 ).fetchall()
                 struct_ids = {r["id"] for r in rows}
 
@@ -557,16 +561,23 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 
                 sr_score = sparse_weight / (K + sr) if sparse_weight > 0 and in_sparse else 0.0
                 dr_score = dense_weight / (K + dr) if dense_weight > 0 and in_dense else 0.0
-                st_score = (structured_weight / (K + 1)
-                            if in_struct and structured_weight > 0
-                            else 0.0)
+                st_score = (
+                    structured_weight / (K + 1) if in_struct and structured_weight > 0 else 0.0
+                )
                 fused = sr_score + dr_score + st_score
-                rrf_scores.append((
-                    nid, fused,
-                    sr_score / sparse_weight if sparse_weight > 0 and in_sparse else 0.0,
-                    dr_score / dense_weight if dense_weight > 0 and in_dense else 0.0,
-                    st_score / structured_weight if structured_weight > 0 and in_struct else 0.0,
-                ))
+                rrf_scores.append(
+                    (
+                        nid,
+                        fused,
+                        sr_score / sparse_weight if sparse_weight > 0 and in_sparse else 0.0,
+                        dr_score / dense_weight if dense_weight > 0 and in_dense else 0.0,
+                        (
+                            st_score / structured_weight
+                            if structured_weight > 0 and in_struct
+                            else 0.0
+                        ),
+                    )
+                )
 
             rrf_scores.sort(key=lambda x: -x[1])
 
@@ -574,20 +585,18 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             for nid, fused, s_score, d_score, st_score in rrf_scores[:limit]:
                 node = self._get_node_sync(nid)
                 if node:
-                    results.append(ScoredNode(
-                        node=node,
-                        score=min(fused, 1.0),
-                        sparse_score=min(s_score, 1.0),
-                        dense_score=min(d_score, 1.0),
-                        structured_score=min(st_score, 1.0),
-                    ))
+                    results.append(
+                        ScoredNode(
+                            node=node,
+                            score=min(fused, 1.0),
+                            sparse_score=min(s_score, 1.0),
+                            dense_score=min(d_score, 1.0),
+                            structured_score=min(st_score, 1.0),
+                        )
+                    )
             return results
 
-    def _ensure_embeddings_sync(
-        self,
-        conn: sqlite3.Connection,
-        node_ids: list[str],
-    ) -> None:
+    def _ensure_embeddings_sync(self, conn: sqlite3.Connection, node_ids: list[str]) -> None:
         """Compute and store embeddings for nodes that lack them (lazy backfill).
 
         Runs inside the thread pool — uses the embedding singleton if available.
@@ -597,6 +606,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             return
         try:
             from weebot.qmd_integration.embeddings import get_local_embeddings
+
             emb = get_local_embeddings()
             if not emb.is_available():
                 return
@@ -616,10 +626,15 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             return
 
         import asyncio as _asyncio
-        now = datetime.now(timezone.utc).isoformat()
+
+        now = datetime.now(UTC).isoformat()
         for row in missing:
             try:
-                props = json.loads(row["properties"]) if isinstance(row["properties"], str) else row["properties"]
+                props = (
+                    json.loads(row["properties"])
+                    if isinstance(row["properties"], str)
+                    else row["properties"]
+                )
                 text = _embed_text_for_node(row["name"], props)
                 # Run async embed_query synchronously in this thread-pool thread
                 result = _asyncio.run(emb.embed_query(text))
@@ -647,25 +662,18 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             with self._get_conn() as conn:
                 # Find node IDs for this session
                 rows = conn.execute(
-                    "SELECT id FROM kg_nodes WHERE source_session_id = ?",
-                    (session_id,),
+                    "SELECT id FROM kg_nodes WHERE source_session_id = ?", (session_id,)
                 ).fetchall()
                 ids = [r["id"] for r in rows]
                 count = len(ids)
                 if ids:
                     placeholders = ",".join("?" * len(ids))
-                    conn.execute(
-                        f"DELETE FROM kg_snapshots WHERE node_id IN ({placeholders})",
-                        ids,
-                    )
+                    conn.execute(f"DELETE FROM kg_snapshots WHERE node_id IN ({placeholders})", ids)
                     conn.execute(
                         f"DELETE FROM kg_edges WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})",
                         ids * 2,
                     )
-                    conn.execute(
-                        f"DELETE FROM kg_nodes WHERE id IN ({placeholders})",
-                        ids,
-                    )
+                    conn.execute(f"DELETE FROM kg_nodes WHERE id IN ({placeholders})", ids)
                 conn.commit()
                 return count
 
@@ -679,13 +687,15 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         with self._get_conn() as conn:
             node_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_nodes").fetchone()["cnt"]
             edge_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_edges").fetchone()["cnt"]
-            snapshot_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_snapshots").fetchone()["cnt"]
-            oldest = conn.execute(
-                "SELECT MIN(created_at) as oldest FROM kg_nodes"
-            ).fetchone()["oldest"]
-            newest = conn.execute(
-                "SELECT MAX(created_at) as newest FROM kg_nodes"
-            ).fetchone()["newest"]
+            snapshot_count = conn.execute("SELECT COUNT(*) as cnt FROM kg_snapshots").fetchone()[
+                "cnt"
+            ]
+            oldest = conn.execute("SELECT MIN(created_at) as oldest FROM kg_nodes").fetchone()[
+                "oldest"
+            ]
+            newest = conn.execute("SELECT MAX(created_at) as newest FROM kg_nodes").fetchone()[
+                "newest"
+            ]
 
         return {
             "node_count": node_count,
@@ -709,28 +719,23 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             excess = count - int(self._max_nodes * 0.9)
             logger.warning(
                 "Knowledge graph has %d nodes (limit: %d). Pruning %d old nodes.",
-                count, self._max_nodes, excess,
+                count,
+                self._max_nodes,
+                excess,
             )
             # Find the oldest excess nodes to remove
             to_prune = conn.execute(
-                "SELECT id FROM kg_nodes ORDER BY updated_at ASC LIMIT ?",
-                (excess,),
+                "SELECT id FROM kg_nodes ORDER BY updated_at ASC LIMIT ?", (excess,)
             ).fetchall()
             ids = tuple(r["id"] for r in to_prune)
             if ids:
                 placeholders = ",".join("?" * len(ids))
-                conn.execute(
-                    f"DELETE FROM kg_snapshots WHERE node_id IN ({placeholders})",
-                    ids,
-                )
+                conn.execute(f"DELETE FROM kg_snapshots WHERE node_id IN ({placeholders})", ids)
                 conn.execute(
                     f"DELETE FROM kg_edges WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})",
                     ids * 2,
                 )
-                conn.execute(
-                    f"DELETE FROM kg_nodes WHERE id IN ({placeholders})",
-                    ids,
-                )
+                conn.execute(f"DELETE FROM kg_nodes WHERE id IN ({placeholders})", ids)
 
     @staticmethod
     def _row_to_node(row: sqlite3.Row, prefix: str = "") -> KnowledgeNode:
@@ -743,6 +748,7 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
         Returns:
             KnowledgeNode instance.
         """
+
         def col(name: str) -> Any:
             key = f"{prefix}_{name}" if prefix else name
             return row[key] if key in row.keys() else row.get(name)
@@ -752,7 +758,11 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
             label=col("label"),
             name=col("name"),
             properties=json.loads(col("properties") or "{}"),
-            created_at=datetime.fromisoformat(col("created_at")) if col("created_at") else datetime.now(timezone.utc),
+            created_at=(
+                datetime.fromisoformat(col("created_at"))
+                if col("created_at")
+                else datetime.now(UTC)
+            ),
             source_session_id=col("source_session_id") or "",
             version=col("version") or 1,
         )
@@ -764,12 +774,11 @@ class SQLiteKnowledgeGraph(KnowledgeGraphPort):
 def _l2_norm(v: list[float]) -> float:
     """L2 norm of a vector."""
     import math
+
     return math.sqrt(sum(x * x for x in v))
 
 
-def _cosine_similarity(
-    a: list[float], b: list[float], norm_a: float | None = None,
-) -> float:
+def _cosine_similarity(a: list[float], b: list[float], norm_a: float | None = None) -> float:
     """Cosine similarity between two vectors. Handles zero-vector edge cases."""
     if len(a) != len(b):
         return 0.0
@@ -788,10 +797,16 @@ def _embed_text_for_node(name: str, properties: dict) -> str:
     Combines the node name with the most semantically meaningful property
     values (excluding metadata keys).
     """
-    SKIP_PROPS = frozenset({
-        "_confidence", "_valid_from", "_valid_to", "_corroboration_count",
-        "source_session_id", "version",
-    })
+    SKIP_PROPS = frozenset(
+        {
+            "_confidence",
+            "_valid_from",
+            "_valid_to",
+            "_corroboration_count",
+            "source_session_id",
+            "version",
+        }
+    )
     parts = [name]
     for k, v in properties.items():
         if k not in SKIP_PROPS and isinstance(v, (str, int, float, bool)):

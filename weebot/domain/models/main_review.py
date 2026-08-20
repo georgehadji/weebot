@@ -1,8 +1,9 @@
 """MainReview — risk assessment for a gate-approved idea contract."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -22,6 +23,7 @@ class RiskBand(str, Enum):
 
 class MainReview(BaseModel):
     """Result of risk-scoring an idea contract that passed IntentReview."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     idea_contract_id: str = Field(default="")
     intent_review_id: str = Field(default="")
@@ -30,4 +32,4 @@ class MainReview(BaseModel):
     risk_score: float = Field(default=0.5, ge=0.0, le=1.0)
     risk_factors: list[str] = Field(default_factory=list)
     rationale: str = Field(default="")
-    reviewed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reviewed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

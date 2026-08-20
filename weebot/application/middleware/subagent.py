@@ -5,16 +5,13 @@ tools (DispatchAgentsTool, SwarmTool, HyperAgentFlow). The agent calls
 `task(description="...", subagent_type="coder")` and the middleware compiles
 and invokes the sub-agent graph inline, returning the result as a tool message.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from weebot.application.middleware.base import (
-    Middleware,
-    MiddlewareRequest,
-    ToolCallResult,
-)
+from weebot.application.middleware.base import Middleware, MiddlewareRequest, ToolCallResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +34,14 @@ _TASK_TOOL_DEFINITION = {
                 },
                 "subagent_type": {
                     "type": "string",
-                    "enum": ["coder", "researcher", "analyst", "reviewer", "automation", "designer"],
+                    "enum": [
+                        "coder",
+                        "researcher",
+                        "analyst",
+                        "reviewer",
+                        "automation",
+                        "designer",
+                    ],
                     "description": "Which role of sub-agent to dispatch.",
                 },
             },
@@ -55,32 +59,25 @@ class SubAgentMiddleware(Middleware):
                      but returns an error on use.
     """
 
-    def __init__(self, sub_factory: Optional[Any] = None) -> None:
+    def __init__(self, sub_factory: Any | None = None) -> None:
         self._sub_factory = sub_factory
 
     def name(self) -> str:
         return "SubAgentMiddleware"
 
     async def before_request(
-        self,
-        request: MiddlewareRequest,
-        state: dict[str, Any],
+        self, request: MiddlewareRequest, state: dict[str, Any]
     ) -> tuple[MiddlewareRequest, dict[str, Any]]:
         """Inject the `task` tool into the tool list."""
         tools = list(request.tools)
         # Check if task tool is already present
-        if not any(
-            t.get("function", {}).get("name") == "task"
-            for t in tools
-        ):
+        if not any(t.get("function", {}).get("name") == "task" for t in tools):
             tools.append(_TASK_TOOL_DEFINITION)
         request.tools = tools
         return request, state
 
     async def after_tool_call(
-        self,
-        result: ToolCallResult,
-        state: dict[str, Any],
+        self, result: ToolCallResult, state: dict[str, Any]
     ) -> tuple[ToolCallResult, dict[str, Any]]:
         """Intercept `task` tool calls and dispatch to SubAgentFactoryPort."""
         if result.tool_name != "task" or self._sub_factory is None:

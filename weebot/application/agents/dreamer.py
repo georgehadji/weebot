@@ -4,12 +4,13 @@ Synthesizes opportunity proposals, failed-step events, and audit violations into
 actionable IdeaContract objects.  Uses the "dreamer" role model (Kimi K2.6).
 Fail-open: returns [] on any error.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.dreamer_port import DreamerPort
 from weebot.application.ports.llm_port import LLMPort
@@ -50,10 +51,7 @@ class DreamerAgent(DreamerPort):
     """Synthesizes signals into IdeaContracts. Fail-open: returns []."""
 
     def __init__(
-        self,
-        llm: LLMPort,
-        max_contracts: int = _MAX_CONTRACTS,
-        timeout_seconds: float = _TIMEOUT,
+        self, llm: LLMPort, max_contracts: int = _MAX_CONTRACTS, timeout_seconds: float = _TIMEOUT
     ) -> None:
         self._llm = llm
         self._max_contracts = max_contracts
@@ -66,9 +64,7 @@ class DreamerAgent(DreamerPort):
         audit_violations: list[Any],
         session_id: str = "",
     ) -> list[IdeaContract]:
-        signals = self._compile_signals(
-            opportunity_proposals, failed_step_events, audit_violations,
-        )
+        signals = self._compile_signals(opportunity_proposals, failed_step_events, audit_violations)
         if not signals:
             return []
 
@@ -93,7 +89,7 @@ class DreamerAgent(DreamerPort):
 
     @staticmethod
     def _compile_signals(
-        proposals: list[Any], failed_events: list[dict], violations: list[Any],
+        proposals: list[Any], failed_events: list[dict], violations: list[Any]
     ) -> list[str]:
         texts: list[str] = []
         for p in proposals:
@@ -125,18 +121,20 @@ class DreamerAgent(DreamerPort):
         if isinstance(data, dict):
             data = data.get("ideas", data.get("contracts", []))
         contracts = []
-        for item in data[:self._max_contracts]:
+        for item in data[: self._max_contracts]:
             try:
-                contracts.append(IdeaContract(
-                    title=item.get("title", "Untitled"),
-                    prompt=item.get("prompt", ""),
-                    source=IdeaSource(item.get("source", "opportunity_proposal")),
-                    evidence=item.get("evidence", []),
-                    heat_score=min(1.0, max(0.0, float(item.get("heat_score", 0.0)))),
-                    estimated_effort=item.get("estimated_effort", "medium"),
-                    dreamer_session_id=session_id,
-                ))
+                contracts.append(
+                    IdeaContract(
+                        title=item.get("title", "Untitled"),
+                        prompt=item.get("prompt", ""),
+                        source=IdeaSource(item.get("source", "opportunity_proposal")),
+                        evidence=item.get("evidence", []),
+                        heat_score=min(1.0, max(0.0, float(item.get("heat_score", 0.0)))),
+                        estimated_effort=item.get("estimated_effort", "medium"),
+                        dreamer_session_id=session_id,
+                    )
+                )
             except Exception:
                 continue
         contracts.sort(key=lambda c: c.heat_score, reverse=True)
-        return contracts[:self._max_contracts]
+        return contracts[: self._max_contracts]

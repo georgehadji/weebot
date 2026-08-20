@@ -1,4 +1,5 @@
 """Unit tests for ContractLoader (Tier 3.2 — Environment Contract Layer)."""
+
 from __future__ import annotations
 
 from pathlib import Path

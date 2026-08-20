@@ -14,9 +14,11 @@ Adapters that cannot stream are wrapped in ``NonStreamingLLMAdapter``
 have exactly one code path: check once, wrap if needed, always call
 ``.stream()``.
 """
+
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
 
 from weebot.domain.models.llm_response import LLMChunk
 
@@ -27,12 +29,12 @@ class StreamingLLMPort(Protocol):
 
     def stream(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[LLMChunk]:
         """Stream a chat completion as a sequence of ``LLMChunk`` deltas."""
         ...

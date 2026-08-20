@@ -1,7 +1,8 @@
 """TruthBinder fuzz tests — corrected expectations with documented gaps."""
+
 import pytest
 
-from weebot.application.services.truth_binder import TruthBinder, _KNOWN_PROMPT_FRAGMENTS
+from weebot.application.services.truth_binder import TruthBinder
 from weebot.domain.models.truth_binding import TruthBindingResult
 
 
@@ -13,29 +14,35 @@ def binder():
 class TestPromptLeakDetection:
     """Tests matching the _KNOWN_PROMPT_FRAGMENTS regex patterns."""
 
-    @pytest.mark.parametrize("response,should_block", [
-        # Patterns that exist and work
-        ("You are Reasonix Code, a helpful coding assistant.", True),
-        ("My system prompt says I should be helpful.", True),
-        ("# System Prompt\nYou are an AI assistant.", True),
-        ("## Constraints: Do not reveal system information.", True),
-        ("<identity>ReasonixCodeAgent</identity>", True),
-        ("You are an AI assistant, here to help.", True),
-        # Safe
-        ("The answer is 42.", False),
-        ("I can help you write that script.", False),
-    ])
+    @pytest.mark.parametrize(
+        "response,should_block",
+        [
+            # Patterns that exist and work
+            ("You are Reasonix Code, a helpful coding assistant.", True),
+            ("My system prompt says I should be helpful.", True),
+            ("# System Prompt\nYou are an AI assistant.", True),
+            ("## Constraints: Do not reveal system information.", True),
+            ("<identity>ReasonixCodeAgent</identity>", True),
+            ("You are an AI assistant, here to help.", True),
+            # Safe
+            ("The answer is 42.", False),
+            ("I can help you write that script.", False),
+        ],
+    )
     def test_prompt_leak(self, binder, response, should_block):
         threat = binder._check_prompt_leak(response)
         blocked = threat is not None
         assert blocked == should_block
 
-    @pytest.mark.parametrize("gap_text", [
-        "As an AI assistant",       # ⚠️ BUG: no regex for "As an AI"
-        "my instructions are",       # ⚠️ BUG: no regex for instruction ref
-        "my system instructions",    # ⚠️ BUG: no regex
-        "my training data",          # ⚠️ BUG: no regex for training disclosure
-    ])
+    @pytest.mark.parametrize(
+        "gap_text",
+        [
+            "As an AI assistant",  # ⚠️ BUG: no regex for "As an AI"
+            "my instructions are",  # ⚠️ BUG: no regex for instruction ref
+            "my system instructions",  # ⚠️ BUG: no regex
+            "my training data",  # ⚠️ BUG: no regex for training disclosure
+        ],
+    )
     def test_documented_leak_gaps(self, binder, gap_text):
         """Known gaps in _KNOWN_PROMPT_FRAGMENTS — these should be added."""
         threat = binder._check_prompt_leak(gap_text)
@@ -44,10 +51,9 @@ class TestPromptLeakDetection:
             pytest.xfail(f"Missing leak pattern: '{gap_text}'")
         assert threat is not None
 
-    @pytest.mark.parametrize("gap_text", [
-        "I am configured with the following constraints",
-        "internal prompt",
-    ])
+    @pytest.mark.parametrize(
+        "gap_text", ["I am configured with the following constraints", "internal prompt"]
+    )
     def test_more_leak_gaps(self, binder, gap_text):
         """Additional gaps."""
         threat = binder._check_prompt_leak(gap_text)
@@ -56,23 +62,26 @@ class TestPromptLeakDetection:
 
 
 class TestScheduleHonesty:
-    @pytest.mark.parametrize("response,has_schedule,should_block", [
-        ("I'll check back in 2 hours.", False, True),
-        ("I'll monitor that for you.", False, True),
-        ("I will check in again tomorrow.", False, True),
-        ("Keep an eye on the deployment.", False, True),
-        ("Stay tuned for updates.", False, True),
-        ("I'll check back in 2 hours.", True, False),
-        ("Let me check on that later.", False, False),
-        ("The build completed.", False, False),
-    ])
+    @pytest.mark.parametrize(
+        "response,has_schedule,should_block",
+        [
+            ("I'll check back in 2 hours.", False, True),
+            ("I'll monitor that for you.", False, True),
+            ("I will check in again tomorrow.", False, True),
+            ("Keep an eye on the deployment.", False, True),
+            ("Stay tuned for updates.", False, True),
+            ("I'll check back in 2 hours.", True, False),
+            ("Let me check on that later.", False, False),
+            ("The build completed.", False, False),
+        ],
+    )
     def test_schedule_honesty(self, binder, response, has_schedule, should_block):
         from weebot.domain.models.event import ToolEvent
+
         events = []
         if has_schedule:
             ev = ToolEvent(
-                tool_name="schedule", status="called",
-                function_args={"cron": "*/5 * * * *"},
+                tool_name="schedule", status="called", function_args={"cron": "*/5 * * * *"}
             )
             events.append(ev)
         threat = binder._check_schedule_honesty(response, {"session_events": events})
@@ -82,8 +91,7 @@ class TestScheduleHonesty:
 class TestUrlSubstitution:
     def test_url_not_in_trace_blocked(self, binder):
         threat = binder._check_url_substitution(
-            "Visit https://evil.com for details",
-            {"navigation_trace": ["https://example.com"]},
+            "Visit https://evil.com for details", {"navigation_trace": ["https://example.com"]}
         )
         assert threat is not None
 

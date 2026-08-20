@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from .help import HELP_TOPIC_LIST, help as get_help, normalize_help_topic
 from .jmap_request import DEFAULT_JMAP_USING, JmapAttachmentInput, jmap_request
@@ -46,7 +46,9 @@ def _parse_user_vars_json(raw: str) -> dict[str, str]:
             )
         ) from err
     if not isinstance(value, dict):
-        raise ValueError(_error("vars_not_object", "--vars must be a JSON object of { VAR_NAME: string }."))
+        raise ValueError(
+            _error("vars_not_object", "--vars must be a JSON object of { VAR_NAME: string }.")
+        )
     out: dict[str, str] = {}
     for key, item in value.items():
         if not isinstance(key, str) or not key:
@@ -108,8 +110,7 @@ def _build_parser() -> argparse.ArgumentParser:
     jmap_ops.add_argument("--ops", help="Inline JMAP JSON.")
     jmap_ops.add_argument("--ops-file", help="JMAP ops file path or bundled preset name.")
     jmap_cmd.add_argument(
-        "--using",
-        help="Comma-separated capability URNs used when ops does not provide using.",
+        "--using", help="Comma-separated capability URNs used when ops does not provide using."
     )
     jmap_cmd.add_argument("--vars", help="JSON object with VAR_NAME -> string placeholder values.")
     jmap_cmd.add_argument(
@@ -119,8 +120,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Attachment path; repeat for multiple files.",
     )
     jmap_cmd.add_argument(
-        "--attachment-path-base",
-        help="Base directory for resolving relative attachment paths.",
+        "--attachment-path-base", help="Base directory for resolving relative attachment paths."
     )
     jmap_cmd.add_argument(
         "--dry-run",
@@ -154,10 +154,7 @@ def _cmd_jmap_request(args: argparse.Namespace) -> int:
         attachments = [JmapAttachmentInput(path=item) for item in args.attachments]
     if args.dry_run and attachments:
         raise ValueError(
-            _error(
-                "cli_dry_run_with_attachment",
-                "--dry-run cannot be combined with --attachment.",
-            )
+            _error("cli_dry_run_with_attachment", "--dry-run cannot be combined with --attachment.")
         )
 
     using = list(DEFAULT_JMAP_USING)
@@ -213,9 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "help":
             return _cmd_help(args)
         message = _error_template(
-            "cli_unknown_command_template",
-            "Unknown command: {cmd}",
-            {"cmd": str(args.command)},
+            "cli_unknown_command_template", "Unknown command: {cmd}", {"cmd": str(args.command)}
         )
         sys.stderr.write(f"Error: {message}\n")
         return 2

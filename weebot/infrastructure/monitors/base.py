@@ -4,6 +4,7 @@ Each monitor runs in its own asyncio.Task inside HeartbeatManager.
 ``check()`` must be non-blocking (async def). The HeartbeatManager
 cancels checks that exceed 2 × interval_seconds.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,6 +27,7 @@ class MonitorReport:
         message: Human-readable description of current state.
         metadata: Optional structured data for logging or event payloads.
     """
+
     state: MonitorState
     message: str
     metadata: dict = field(default_factory=dict)
@@ -41,13 +43,11 @@ class Monitor(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def interval_seconds(self) -> int:
-        ...
+    def interval_seconds(self) -> int: ...
 
     @abstractmethod
     async def check(self) -> MonitorReport:

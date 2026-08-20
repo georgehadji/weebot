@@ -4,10 +4,10 @@ Each edit is a single bounded change to one editable surface.  The
 Self-Harness proposal stage produces multiple edits; the validation
 gate promotes only edits that pass regression testing.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from pydantic import BaseModel, Field
 
@@ -28,45 +28,27 @@ class HarnessEdit(BaseModel):
         accepted: Whether the edit passed the regression gate.
     """
 
-    target_surface: str = Field(
-        description="Dot-separated path (e.g. 'instructions.bootstrap')",
-    )
+    target_surface: str = Field(description="Dot-separated path (e.g. 'instructions.bootstrap')")
     edit_type: str = Field(
         default="instruction",
         description="Type of edit: instruction, middleware, subagent, or tool_policy",
     )
     old_value: str = Field(default="", description="Value before the edit")
     new_value: str = Field(default="", description="Value after the edit")
-    targeted_mechanism: str = Field(
-        default="",
-        description="Failure mechanism this edit addresses",
-    )
-    expected_effect: str = Field(
-        default="",
-        description="What should improve",
-    )
+    targeted_mechanism: str = Field(default="", description="Failure mechanism this edit addresses")
+    expected_effect: str = Field(default="", description="What should improve")
     regression_risks: list[str] = Field(
-        default_factory=list,
-        description="Potential negative side-effects",
+        default_factory=list, description="Potential negative side-effects"
     )
     validation_score: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Score from regression testing",
+        default=0.0, ge=0.0, le=1.0, description="Score from regression testing"
     )
-    accepted: bool = Field(
-        default=False,
-        description="Whether the edit passed the regression gate",
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-    )
+    accepted: bool = Field(default=False, description="Whether the edit passed the regression gate")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def to_edit_dict(self) -> dict:
         """Convert to the dict format expected by HarnessOptimizationTarget.apply_edits()."""
-        return {
-            "target": self.target_surface,
-            "value": self.new_value,
-        }
+        return {"target": self.target_surface, "value": self.new_value}
 
 
 class PromotionDecision(BaseModel):

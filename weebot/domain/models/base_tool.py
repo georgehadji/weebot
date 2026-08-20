@@ -8,6 +8,7 @@ rather than reaching into the tools package.
 All concrete tools continue to import from ``weebot.tools.base``
 (which re-exports this class).
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,6 +27,7 @@ class BaseTool(ABC, BaseModel):
     Concrete implementations live under ``weebot/tools/`` and import
     via ``weebot.tools.base`` (which re-exports from here).
     """
+
     name: str
     description: str
     parameters: dict  # JSON Schema object
@@ -43,7 +45,7 @@ class BaseTool(ABC, BaseModel):
     truncation_strategy: str = "head"
 
     @abstractmethod
-    async def execute(self, **kwargs: Any) -> "ToolResult":  # noqa: F821 — forward ref
+    async def execute(self, **kwargs: Any) -> ToolResult:  # noqa: F821 — forward ref
         ...
 
     async def health_check(self) -> bool:

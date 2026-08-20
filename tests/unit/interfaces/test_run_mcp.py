@@ -6,13 +6,13 @@ Coverage:
 - main(): sys.exit(1) on bad settings; calls run_stdio / run_sse correctly
 - ping tool: returns JSON with status, version, ISO timestamp
 """
+
 from __future__ import annotations
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # _try_attach
@@ -159,14 +159,7 @@ class TestMain:
             patch("run_mcp._build_server", return_value=mock_server),
             patch(
                 "sys.argv",
-                [
-                    "run_mcp.py",
-                    "--transport",
-                    "sse",
-                    "--host",
-                    "0.0.0.0",
-                    "--allow-remote",
-                ],
+                ["run_mcp.py", "--transport", "sse", "--host", "0.0.0.0", "--allow-remote"],
             ),
             patch.dict("os.environ", {"WEEBOT_MCP_API_KEY": "test-key"}, clear=False),
             patch("asyncio.run"),

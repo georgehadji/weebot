@@ -1,8 +1,8 @@
 """Tests for VideoIngestTool (YouTube transcript ingestion + JSONL export)."""
+
 from __future__ import annotations
 
 import json
-import os
 from unittest.mock import patch
 
 import pytest
@@ -10,10 +10,10 @@ import pytest
 from weebot.tools.video_ingest_tool import VideoIngestTool, _chunk_text, _extract_video_id
 from weebot.infrastructure.persistence.sqlite_tool_repo import SQLiteToolRepository
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def vt(tmp_path):
@@ -31,6 +31,7 @@ def _fake_transcript(text: str = "Hello world " * 200):
 # ---------------------------------------------------------------------------
 # _extract_video_id
 # ---------------------------------------------------------------------------
+
 
 def test_extract_video_id_standard_url():
     vid = _extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -55,6 +56,7 @@ def test_extract_video_id_invalid_url():
 # ---------------------------------------------------------------------------
 # _chunk_text
 # ---------------------------------------------------------------------------
+
 
 def test_chunk_text_produces_chunks():
     text = " ".join([f"word{i}" for i in range(1000)])
@@ -86,6 +88,7 @@ def test_chunk_text_short_input_single_chunk():
 # ingest_youtube — validation errors
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_ingest_youtube_missing_url_is_error(vt):
     result = await vt.execute(action="ingest_youtube", project_id="p1")
@@ -103,9 +106,7 @@ async def test_ingest_youtube_missing_project_id_is_error(vt):
 @pytest.mark.asyncio
 async def test_ingest_youtube_invalid_url_is_error(vt):
     result = await vt.execute(
-        action="ingest_youtube",
-        url="https://not-youtube.com/video",
-        project_id="p1",
+        action="ingest_youtube", url="https://not-youtube.com/video", project_id="p1"
     )
     assert result.is_error
     assert "video ID" in result.error
@@ -114,6 +115,7 @@ async def test_ingest_youtube_invalid_url_is_error(vt):
 # ---------------------------------------------------------------------------
 # ingest_youtube — success (mocked transcript API)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_ingest_youtube_returns_source_id(vt):
@@ -182,6 +184,7 @@ async def test_ingest_youtube_source_recorded(vt):
 # list_sources
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_list_sources_empty_project(vt):
     result = await vt.execute(action="list_sources", project_id="nonexistent")
@@ -213,11 +216,10 @@ async def test_list_sources_no_filter_returns_all(vt):
 # export_jsonl
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_export_jsonl_missing_project_id_is_error(vt, tmp_path):
-    result = await vt.execute(
-        action="export_jsonl", output_path=str(tmp_path / "out.jsonl")
-    )
+    result = await vt.execute(action="export_jsonl", output_path=str(tmp_path / "out.jsonl"))
     assert result.is_error
     assert "project_id" in result.error
 
@@ -243,9 +245,7 @@ async def test_export_jsonl_creates_valid_jsonl(vt, tmp_path):
         )
 
     out = str(tmp_path / "training.jsonl")
-    result = await vt.execute(
-        action="export_jsonl", project_id="export-test", output_path=out
-    )
+    result = await vt.execute(action="export_jsonl", project_id="export-test", output_path=out)
 
     assert not result.is_error, result.error
     data = json.loads(result.output)
@@ -277,23 +277,19 @@ async def test_export_jsonl_resumes_after_crash(vt, tmp_path):
     out = str(tmp_path / "resume.jsonl")
 
     # First export — write all lines
-    r1 = await vt.execute(
-        action="export_jsonl", project_id="resume-test", output_path=out
-    )
+    r1 = await vt.execute(action="export_jsonl", project_id="resume-test", output_path=out)
     d1 = json.loads(r1.output)
     assert d1["skipped"] == 0
     total = d1["total"]
 
     # Simulate partial crash by truncating to first line
-    with open(out, "r", encoding="utf-8") as fh:
+    with open(out, encoding="utf-8") as fh:
         first_line = fh.readline()
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(first_line)
 
     # Second export — should skip the 1 already-written line
-    r2 = await vt.execute(
-        action="export_jsonl", project_id="resume-test", output_path=out
-    )
+    r2 = await vt.execute(action="export_jsonl", project_id="resume-test", output_path=out)
     d2 = json.loads(r2.output)
     assert d2["skipped"] == 1
     assert d2["exported"] == total - 1
@@ -303,6 +299,7 @@ async def test_export_jsonl_resumes_after_crash(vt, tmp_path):
 # ---------------------------------------------------------------------------
 # unknown action
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_unknown_action_is_error(vt):

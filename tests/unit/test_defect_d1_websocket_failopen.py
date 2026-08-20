@@ -11,6 +11,7 @@ The defect is fixed — ``_websocket_auth`` now applies the same loopback-only
 policy as the HTTP path.  The assertions below have been inverted accordingly:
 they now pin the *correct* behaviour so the fail-open cannot silently return.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

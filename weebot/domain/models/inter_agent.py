@@ -3,9 +3,10 @@
 Agents within a swarm can publish findings as they discover them, allowing
 other agents to leverage shared knowledge before the synthesizer runs.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 from uuid import uuid4
 
@@ -18,9 +19,8 @@ class InterAgentMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     sender_agent_id: str = Field(default="")
     topic: str = Field(
-        default="",
-        description="Short topic key, e.g. 'competitor_found', 'pricing_discovered'",
+        default="", description="Short topic key, e.g. 'competitor_found', 'pricing_discovered'"
     )
     payload: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

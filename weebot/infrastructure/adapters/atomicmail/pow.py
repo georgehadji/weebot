@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
 
 SCRYPT_N = 16_384
 SCRYPT_R = 8
@@ -56,10 +56,7 @@ def scrypt_hash(data: str, salt: str) -> bytes:
 
 
 def solve_pow(
-    challenge: str,
-    difficulty: int,
-    salt: str,
-    on_progress: Callable[[int], None] | None = None,
+    challenge: str, difficulty: int, salt: str, on_progress: Callable[[int], None] | None = None
 ) -> PowSolution:
     nonce = 0
     while True:

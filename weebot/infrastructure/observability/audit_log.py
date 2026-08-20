@@ -14,13 +14,14 @@ Each entry contains:
 The hash chain ensures tamper detection: changing any entry invalidates all
 subsequent hashes.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -77,12 +78,7 @@ class AuditLog:
             conn.commit()
 
     def _compute_hash(
-        self,
-        sequence: int,
-        timestamp: str,
-        event_type: str,
-        details: str,
-        previous_hash: str,
+        self, sequence: int, timestamp: str, event_type: str, details: str, previous_hash: str
     ) -> str:
         """Compute the SHA-256 hash for an audit entry."""
         payload = f"{sequence}|{timestamp}|{event_type}|{details}|{previous_hash}"
@@ -92,15 +88,11 @@ class AuditLog:
         """Get the hash of the most recent entry, or '' for the first entry."""
         with self._get_conn() as conn:
             row = conn.execute(
-                "SELECT hash FROM audit_log ORDER BY sequence DESC LIMIT 1",
+                "SELECT hash FROM audit_log ORDER BY sequence DESC LIMIT 1"
             ).fetchone()
             return row["hash"] if row else ""
 
-    async def record(
-        self,
-        event_type: str,
-        details: dict[str, Any] | None = None,
-    ) -> int:
+    async def record(self, event_type: str, details: dict[str, Any] | None = None) -> int:
         """Record a new audit log entry (atomic transaction).
 
         Reads the last hash and computes the next sequence in a single
@@ -115,7 +107,7 @@ class AuditLog:
             Sequence number of the new entry.
         """
         details_json = json.dumps(details or {}, default=str)
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         def _insert() -> int:
             with self._get_conn() as conn:
@@ -133,7 +125,7 @@ class AuditLog:
                     sequence = seq_row["next_seq"]
 
                     entry_hash = self._compute_hash(
-                        sequence, timestamp, event_type, details_json, previous_hash,
+                        sequence, timestamp, event_type, details_json, previous_hash
                     )
 
                     conn.execute(
@@ -148,13 +140,11 @@ class AuditLog:
                     raise
 
         import asyncio
+
         return await asyncio.to_thread(_insert)
 
     async def query(
-        self,
-        event_type: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
+        self, event_type: str | None = None, limit: int = 100, offset: int = 0
     ) -> list[dict[str, Any]]:
         """Query audit log entries.
 
@@ -167,13 +157,11 @@ class AuditLog:
             List of dicts with sequence, timestamp, event_type, details, hash.
         """
         import asyncio
+
         return await asyncio.to_thread(self._query_sync, event_type, limit, offset)
 
     def _query_sync(
-        self,
-        event_type: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
+        self, event_type: str | None = None, limit: int = 100, offset: int = 0
     ) -> list[dict[str, Any]]:
         with self._get_conn() as conn:
             if event_type:
@@ -192,14 +180,16 @@ class AuditLog:
 
             results = []
             for row in rows:
-                results.append({
-                    "sequence": row["sequence"],
-                    "timestamp": row["timestamp"],
-                    "event_type": row["event_type"],
-                    "details": json.loads(row["details"]) if row["details"] else {},
-                    "previous_hash": row["previous_hash"],
-                    "hash": row["hash"],
-                })
+                results.append(
+                    {
+                        "sequence": row["sequence"],
+                        "timestamp": row["timestamp"],
+                        "event_type": row["event_type"],
+                        "details": json.loads(row["details"]) if row["details"] else {},
+                        "previous_hash": row["previous_hash"],
+                        "hash": row["hash"],
+                    }
+                )
             return results
 
     async def verify_integrity(self) -> list[int]:
@@ -209,6 +199,7 @@ class AuditLog:
             List of sequence numbers of corrupted entries (empty if intact).
         """
         import asyncio
+
         return await asyncio.to_thread(self._verify_integrity_sync)
 
     def _verify_integrity_sync(self) -> list[int]:
@@ -216,7 +207,7 @@ class AuditLog:
         with self._get_conn() as conn:
             rows = conn.execute(
                 """SELECT sequence, timestamp, event_type, details, previous_hash, hash
-                   FROM audit_log ORDER BY sequence ASC""",
+                   FROM audit_log ORDER BY sequence ASC"""
             ).fetchall()
 
             expected_previous = ""
@@ -237,14 +228,14 @@ class AuditLog:
     async def count(self, event_type: str | None = None) -> int:
         """Count entries, optionally filtered by type."""
         import asyncio
+
         return await asyncio.to_thread(self._count_sync, event_type)
 
     def _count_sync(self, event_type: str | None = None) -> int:
         with self._get_conn() as conn:
             if event_type:
                 row = conn.execute(
-                    "SELECT COUNT(*) AS cnt FROM audit_log WHERE event_type = ?",
-                    (event_type,),
+                    "SELECT COUNT(*) AS cnt FROM audit_log WHERE event_type = ?", (event_type,)
                 ).fetchone()
             else:
                 row = conn.execute("SELECT COUNT(*) AS cnt FROM audit_log").fetchone()

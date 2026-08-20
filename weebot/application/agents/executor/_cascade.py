@@ -4,6 +4,7 @@ Responsible for per-role model cascade: parallel probes → sequential fallback
 → live model rescue.  Extracted from the original ExecutorAgent god class to
 isolate LLM-calling logic from step orchestration.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,6 +51,7 @@ class CascadeExecutor:
     def _get_credit_threshold(cls) -> int:
         """Return the credit threshold, respecting env-var override."""
         import os as _os
+
         try:
             return int(_os.environ.get("OPENROUTER_MIN_CREDITS", cls._OPENROUTER_MIN_CREDITS))
         except (TypeError, ValueError):
@@ -96,6 +98,7 @@ class CascadeExecutor:
             return cached
         try:
             from weebot.application.services.task_model_router import category_for_step
+
             cat = category_for_step(description)
         except Exception:
             cat = "general"
@@ -128,11 +131,13 @@ class CascadeExecutor:
             Remaining credits in tokens, or 0 if the check fails.
         """
         import os
+
         key = os.getenv("OPENROUTER_API_KEY")
         if not key:
             return 0
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(
                     "https://openrouter.ai/api/v1/auth/key",
@@ -157,9 +162,7 @@ class CascadeExecutor:
         return prefix not in known_direct
 
     @staticmethod
-    async def get_credits_and_filter_direct(
-        model_ids: list[str],
-    ) -> list[str]:
+    async def get_credits_and_filter_direct(model_ids: list[str]) -> list[str]:
         """Filter ``model_ids`` to only include non-OpenRouter models if
         credits are below threshold.  Returns all models on success.
 
@@ -176,8 +179,7 @@ class CascadeExecutor:
         if filtered != model_ids:
             skipped = len(model_ids) - len(filtered)
             logger.info(
-                "OpenRouter credits low (%d — need %d), skipping %d "
-                "OpenRouter-only model(s)",
+                "OpenRouter credits low (%d — need %d), skipping %d " "OpenRouter-only model(s)",
                 credits,
                 threshold,
                 skipped,
@@ -215,10 +217,19 @@ class CascadeExecutor:
     @staticmethod
     def _is_fast_fail_error(exc: Exception) -> bool:
         msg = str(exc).lower()
-        return any(kw in msg for kw in (
-            "404", "401", "403", "not found", "unauthorized",
-            "permission denied", "invalid api key", "resource_not_found",
-        ))
+        return any(
+            kw in msg
+            for kw in (
+                "404",
+                "401",
+                "403",
+                "not found",
+                "unauthorized",
+                "permission denied",
+                "invalid api key",
+                "resource_not_found",
+            )
+        )
 
     async def _cascade_try_chat(
         self,
@@ -288,7 +299,11 @@ class CascadeExecutor:
                     tier=tier,
                     outcome=CascadeOutcome.SUCCESS,
                     latency_ms=elapsed,
-                    token_count=getattr(resp, "usage", {}).get("total_tokens", 0) if hasattr(resp, "usage") else 0,
+                    token_count=(
+                        getattr(resp, "usage", {}).get("total_tokens", 0)
+                        if hasattr(resp, "usage")
+                        else 0
+                    ),
                     task_category=task_category,
                 )
                 return resp
@@ -303,7 +318,7 @@ class CascadeExecutor:
                 task_category=task_category,
             )
             return None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed = (_cascade_time.monotonic() - start) * 1000
             logger.debug("Model %s timed out after %.0fms", model_id, elapsed)
             self._record_decision(
@@ -319,14 +334,18 @@ class CascadeExecutor:
             if ErrorClassifier.should_fail_fast(exc):
                 # Fast-fail errors (401, 403, 404) are recorded as FAILED
                 # but do NOT raise — the cascade must try other models.
-                logger.warning("Fast-fail from %s: %s — suppressing to continue cascade",
-                               model_id, str(exc)[:200])
+                logger.warning(
+                    "Fast-fail from %s: %s — suppressing to continue cascade",
+                    model_id,
+                    str(exc)[:200],
+                )
             else:
                 if first_error is not None and model_id not in first_error:
                     first_error[model_id] = str(exc)[:300] or type(exc).__name__
                 self._cascade_record_failure(model_id)
                 # Track server errors so we skip this model in the current cascade run
                 from weebot.core.error_classifier import ErrorCategory
+
                 if ErrorClassifier.classify(exc) == ErrorCategory.SERVER_ERROR:
                     self._server_error_models.add(model_id)
                     logger.debug("Server error from %s — skipping for rest of cascade", model_id)
@@ -344,9 +363,7 @@ class CascadeExecutor:
     # ── Full cascade orchestration ──────────────────────────────────
 
     async def call_with_cascade(
-        self,
-        messages: list[dict[str, Any]],
-        description: str = "",
+        self, messages: list[dict[str, Any]], description: str = ""
     ) -> LLMResponse:
         """Per-role cascade: primary → fallback1 → fallback2 → tier3 → tier4.
 
@@ -358,6 +375,7 @@ class CascadeExecutor:
             AllModelsTrippedError: if every model in the cascade failed.
         """
         from weebot.config.model_refs import get_model_cascade_for_role
+
         role_cascade = get_model_cascade_for_role(self._agent_role)
         role_primary = role_cascade[0]
         role_fallback1 = role_cascade[1] if len(role_cascade) > 1 else self._TIER2_MODEL
@@ -379,11 +397,12 @@ class CascadeExecutor:
         first_error: dict[str, str] = {}
         self._server_error_models.clear()  # fresh per-run set
 
-        async def _try(model: str, tmo: float, *, tier: CascadeTier = CascadeTier.BUDGET) -> LLMResponse | None:
+        async def _try(
+            model: str, tmo: float, *, tier: CascadeTier = CascadeTier.BUDGET
+        ) -> LLMResponse | None:
             nonlocal fast_fail
             resp = await self._cascade_try_chat(
-                messages, model, tmo, fast_fail, first_error,
-                tier=tier, task_category=task_category,
+                messages, model, tmo, fast_fail, first_error, tier=tier, task_category=task_category
             )
             if resp is None and not fast_fail:
                 if any(self._is_fast_fail_error(ee) for ee in first_error.values() if ee):
@@ -394,17 +413,19 @@ class CascadeExecutor:
             return resp
 
         # ── Credit pre-check: filter OpenRouter models if low credits ──
-        all_models = list(dict.fromkeys(
-            m for m in (role_primary, *acr_models, task_model, role_fallback1) if m
-        ))
+        all_models = list(
+            dict.fromkeys(m for m in (role_primary, *acr_models, task_model, role_fallback1) if m)
+        )
         filtered_models = await self.get_credits_and_filter_direct(all_models)
 
         # ── Phase 1: parallel probes (90s timeout) ──────────────────
-        parallel = list(dict.fromkeys(
-            m for m in filtered_models if m not in self._server_error_models
-        ))
+        parallel = list(
+            dict.fromkeys(m for m in filtered_models if m not in self._server_error_models)
+        )
         if parallel:
-            tasks = {asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel}
+            tasks = {
+                asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel
+            }
             done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
             for fut in done:
                 resp = fut.result()
@@ -422,12 +443,16 @@ class CascadeExecutor:
                     return resp
 
         # ── Phase 2: sequential fallback (60s) ──────────────────────
-        remaining = [m for m in (role_fallback2, self._TIER4_MODEL)
-                     if m and not self.cascade_is_tripped(m)
-                     and m not in parallel
-                     and m not in self._server_error_models]
+        remaining = [
+            m
+            for m in (role_fallback2, self._TIER4_MODEL)
+            if m
+            and not self.cascade_is_tripped(m)
+            and m not in parallel
+            and m not in self._server_error_models
+        ]
         remaining_tiers = [CascadeTier.BUDGET, CascadeTier.PREMIUM]
-        for m, t in zip(remaining, remaining_tiers[:len(remaining)]):
+        for m, t in zip(remaining, remaining_tiers[: len(remaining)]):
             resp = await _try(m, 60.0, tier=t)
             if resp is not None:
                 if self._on_success:
@@ -435,9 +460,13 @@ class CascadeExecutor:
                 return resp
 
         # ── Live model rescue (all-404) ─────────────────────────────
-        if fast_fail and first_error and all(
-            any(kw in (e or "").lower() for kw in ("404", "not found"))
-            for e in first_error.values()
+        if (
+            fast_fail
+            and first_error
+            and all(
+                any(kw in (e or "").lower() for kw in ("404", "not found"))
+                for e in first_error.values()
+            )
         ):
             rescue_model = await self._live_model_rescue(messages)
             if rescue_model is not None:
@@ -447,6 +476,7 @@ class CascadeExecutor:
 
         # ── Terminal ────────────────────────────────────────────────
         from weebot.domain.exceptions import AllModelsTrippedError
+
         raise AllModelsTrippedError(
             "All models in the cascade have tripped their circuit breakers. "
             "Check OpenRouter credits at https://openrouter.ai/credits"
@@ -454,10 +484,7 @@ class CascadeExecutor:
 
     # ── Live model rescue ───────────────────────────────────────────
 
-    async def _live_model_rescue(
-        self,
-        messages: list[dict[str, Any]],
-    ) -> LLMResponse | None:
+    async def _live_model_rescue(self, messages: list[dict[str, Any]]) -> LLMResponse | None:
         """Last-resort: fetch available models from OpenRouter and try the best.
 
         Prefers paid models with tools support; falls back to free models only
@@ -465,6 +492,7 @@ class CascadeExecutor:
         """
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get("https://openrouter.ai/api/v1/models")
                 resp.raise_for_status()
@@ -498,7 +526,9 @@ class CascadeExecutor:
         rescue_id = candidates[0]["id"]
         logger.warning(
             "Live model rescue: trying %s (from %d paid + %d free candidates)",
-            rescue_id, len(paid_models), len(free_models),
+            rescue_id,
+            len(paid_models),
+            len(free_models),
         )
 
         try:
@@ -506,11 +536,7 @@ class CascadeExecutor:
             c.configure_defaults()
             llm = c.get(LLMPort)
             resp = await asyncio.wait_for(
-                llm.chat(
-                    messages=messages,
-                    model=rescue_id,
-                    temperature=TEMPERATURE_BALANCED,
-                ),
+                llm.chat(messages=messages, model=rescue_id, temperature=TEMPERATURE_BALANCED),
                 timeout=30.0,
             )
             if resp and (resp.content or resp.tool_calls):

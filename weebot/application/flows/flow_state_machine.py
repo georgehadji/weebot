@@ -8,13 +8,11 @@ Usage:
     fsm = FlowStateMachine()
     next_state = fsm.transition(current_state, event_type)
 """
+
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional
 
 from weebot.application.flows.states.base import AgentStatus
-
 
 # State transition rules: (current_agent_status, event_type) → next_agent_status
 # event_type can be "plan_created", "step_completed", "review_approved",
@@ -42,7 +40,7 @@ class FlowStateMachine:
     """
 
     @staticmethod
-    def transition(current: AgentStatus, event: str) -> Optional[AgentStatus]:
+    def transition(current: AgentStatus, event: str) -> AgentStatus | None:
         """Return the next status given the current status and event.
 
         Args:
@@ -62,10 +60,7 @@ class FlowStateMachine:
     @staticmethod
     def valid_events_for(status: AgentStatus) -> list[str]:
         """Return all valid event types for a given status."""
-        return [
-            event for (s, event) in _TRANSITION_TABLE
-            if s == status
-        ]
+        return [event for (s, event) in _TRANSITION_TABLE if s == status]
 
     @staticmethod
     def terminal_states() -> set[AgentStatus]:

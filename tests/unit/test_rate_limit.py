@@ -2,6 +2,7 @@
 
 Tests cover token bucket behavior, tier mapping, and health endpoint exemption.
 """
+
 from __future__ import annotations
 
 from collections import deque
@@ -31,6 +32,7 @@ class TestTokenBucket:
         assert not b.allow("u")
         # Simulate window passing by manipulating internal timestamps
         import time as _time
+
         b._buckets["u"] = deque([_time.monotonic() - 10])  # 10s ago (outside 5s window)
         assert b.allow("u")  # old entry pruned, new one allowed
 

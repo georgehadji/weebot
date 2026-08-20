@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 import httpx
 
 from pydantic import PrivateAttr
@@ -21,7 +21,7 @@ class ReasonerTool(BaseTool):
     with various models, multi-perspective debate, and synthesis.
     """
 
-    _tool_config: Optional[ToolConfig] = PrivateAttr(default=None)
+    _tool_config: ToolConfig | None = PrivateAttr(default=None)
 
     def set_config(self, config: ToolConfig) -> None:
         """Inject a ToolConfig (Reasoner endpoint/creds) via the tool registry."""
@@ -116,7 +116,7 @@ class ReasonerTool(BaseTool):
         enhance_prompt: bool = False,
         expert: bool = False,
         source_type: str = "general",
-        domain: Optional[str] = None,
+        domain: str | None = None,
         **kwargs: Any,
     ) -> ToolResult:
         api_url = resolve_setting(
@@ -124,12 +124,13 @@ class ReasonerTool(BaseTool):
         ).rstrip("/")
         api_key = resolve_setting(self._tool_config, "reasoner_api_key", "REASONER_API_KEY")
         reasoner_dir = resolve_setting(
-            self._tool_config, "reasoner_dir", "REASONER_DIR", "E:\\Documents\\Vibe-Coding\\Reasoner"
+            self._tool_config,
+            "reasoner_dir",
+            "REASONER_DIR",
+            "E:\\Documents\\Vibe-Coding\\Reasoner",
         )
 
-        headers = {
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
@@ -168,9 +169,7 @@ class ReasonerTool(BaseTool):
         async def _call_reasoner(req_payload: dict) -> dict:
             async with httpx.AsyncClient(timeout=180.0) as client:
                 resp = await client.post(
-                    f"{api_url}/api/agent/run/sync",
-                    json=req_payload,
-                    headers=headers,
+                    f"{api_url}/api/agent/run/sync", json=req_payload, headers=headers
                 )
                 resp.raise_for_status()
                 return resp.json()
@@ -181,7 +180,9 @@ class ReasonerTool(BaseTool):
                 logger.info("Calling Reasoner POST /api/agent/run/sync with preset=%s", preset)
                 result = await _call_reasoner(payload)
             except Exception as api_exc:
-                logger.warning("Reasoner API call failed: %s. Falling back to headless CLI...", api_exc)
+                logger.warning(
+                    "Reasoner API call failed: %s. Falling back to headless CLI...", api_exc
+                )
                 try:
                     import sys
                     import tempfile
@@ -193,9 +194,12 @@ class ReasonerTool(BaseTool):
                     cli_args = [
                         sys.executable,
                         "main.py",
-                        "--problem", problem,
-                        "--preset", preset,
-                        "--top-k", str(top_k),
+                        "--problem",
+                        problem,
+                        "--preset",
+                        preset,
+                        "--top-k",
+                        str(top_k),
                     ]
                     if sequential:
                         cli_args.append("--sequential")
@@ -216,10 +220,12 @@ class ReasonerTool(BaseTool):
                     with tempfile.TemporaryDirectory() as tmpdir:
                         temp_json_path = Path(tmpdir) / "reasoner_headless_output.json"
                         cli_args.extend(["--output", str(temp_json_path)])
-                        
-                        logger.info("Falling back to headless CLI execution of Reasoner in %s", reasoner_dir)
+
+                        logger.info(
+                            "Falling back to headless CLI execution of Reasoner in %s", reasoner_dir
+                        )
                         logger.info("CLI command: %s", " ".join(cli_args))
-                        
+
                         # Execute subprocess asynchronously
                         process = await asyncio.create_subprocess_exec(
                             *cli_args,
@@ -228,17 +234,31 @@ class ReasonerTool(BaseTool):
                             stderr=asyncio.subprocess.PIPE,
                         )
                         stdout, stderr = await process.communicate()
-                        
+
                         if process.returncode != 0:
-                            err_msg = stderr.decode(errors="ignore").strip() or stdout.decode(errors="ignore").strip()
-                            logger.error("Reasoner CLI execution failed with exit code %d: %s", process.returncode, err_msg)
-                            raise RuntimeError(f"Reasoner CLI execution failed with exit code {process.returncode}: {err_msg}")
-                        
+                            err_msg = (
+                                stderr.decode(errors="ignore").strip()
+                                or stdout.decode(errors="ignore").strip()
+                            )
+                            logger.error(
+                                "Reasoner CLI execution failed with exit code %d: %s",
+                                process.returncode,
+                                err_msg,
+                            )
+                            raise RuntimeError(
+                                f"Reasoner CLI execution failed with exit code {process.returncode}: {err_msg}"
+                            )
+
                         # Read back the saved JSON results
                         if not temp_json_path.exists():
-                            logger.error("Reasoner CLI completed but output file was not created: %s", temp_json_path)
-                            raise FileNotFoundError(f"Reasoner CLI output file was not created at {temp_json_path}")
-                            
+                            logger.error(
+                                "Reasoner CLI completed but output file was not created: %s",
+                                temp_json_path,
+                            )
+                            raise FileNotFoundError(
+                                f"Reasoner CLI output file was not created at {temp_json_path}"
+                            )
+
                         with open(temp_json_path, encoding="utf-8") as f:
                             result = await asyncio.to_thread(json.load, f)
                 except Exception as cli_exc:
@@ -246,17 +266,21 @@ class ReasonerTool(BaseTool):
                     return ToolResult.error_result(
                         f"Reasoner execution failed. API error: {api_exc}. CLI error: {cli_exc}"
                     )
-            
+
             # ── Handle response ──
             synthesis = result.get("synthesis")
             if not synthesis:
-                logger.warning("Reasoner response missing synthesis answer. Retrying with web_search=True...")
+                logger.warning(
+                    "Reasoner response missing synthesis answer. Retrying with web_search=True..."
+                )
                 # Treat missing synthesis as a failed run and retry with web_search=True
                 payload["web_search"] = True
                 result = await _call_reasoner(payload)
                 synthesis = result.get("synthesis")
                 if not synthesis:
-                    return ToolResult.error_result("Reasoner execution succeeded but returned no synthesis final answer.")
+                    return ToolResult.error_result(
+                        "Reasoner execution succeeded but returned no synthesis final answer."
+                    )
 
             citations = result.get("citations", [])
             errors = result.get("errors", [])
@@ -265,7 +289,7 @@ class ReasonerTool(BaseTool):
             # Construct summary
             summary = f"Reasoner final answer:\n\n{synthesis}\n\n"
             if citations:
-                summary += f"Citations:\n" + "\n".join(f"- {c}" for c in citations) + "\n\n"
+                summary += "Citations:\n" + "\n".join(f"- {c}" for c in citations) + "\n\n"
             if models_used:
                 summary += f"Models used: {', '.join(models_used)}\n"
             if errors:

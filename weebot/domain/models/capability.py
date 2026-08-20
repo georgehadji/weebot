@@ -5,6 +5,7 @@ Part of the Adaptive Capability Router (ACR) — Phase P1.
 Quality axes represent *capabilities* (what a model is good at), not penalties
 (cost, latency) which are handled as separate terms in the utility function.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -21,6 +22,7 @@ class CapabilityAxis(str, Enum):
     context-window are NOT capabilities — they are penalties/constraints and
     live in ModelInfo / the Constraint Checker.
     """
+
     REASONING = "reasoning"
     CODING = "coding"
     WRITING = "writing"
@@ -41,22 +43,20 @@ class ModelQualityProfile(BaseModel):
     The ``source`` field tracks provenance so consumers can distinguish
     hand-authored seeds from live telemetry measurements.
     """
+
     model_config = ConfigDict(frozen=True)
 
     # Pydantic v2's frozen hash can't handle dict fields — use object's hash instead.
     __hash__ = object.__hash__
 
-    model_id: str = Field(
-        description="Full model identifier (e.g. 'deepseek/deepseek-v4-flash')",
-    )
+    model_id: str = Field(description="Full model identifier (e.g. 'deepseek/deepseek-v4-flash')")
     axes: dict[CapabilityAxis, float] = Field(
         default_factory=dict,
         description="Quality scores per axis (0..10).  Only capability axes — "
-                    "no cost, latency, or context fields.",
+        "no cost, latency, or context fields.",
     )
     source: Literal["benchmark", "telemetry", "seed"] = Field(
-        default="seed",
-        description="Provenance of the profile data.",
+        default="seed", description="Provenance of the profile data."
     )
 
 
@@ -74,6 +74,7 @@ class TaskRequirement(BaseModel):
        provides the ``(α, β, δ, ε)`` weights for the linear combination
        ``U = α·cap_match + β·quality − δ·cost − ε·latency``.
     """
+
     model_config = ConfigDict(frozen=True)
 
     # Pydantic v2's frozen hash can't handle dict fields — use object's hash instead.
@@ -81,16 +82,13 @@ class TaskRequirement(BaseModel):
 
     # ── Hard-gate flags ─────────────────────────────────────────────
     requires_vision: bool = Field(
-        default=False,
-        description="Step requires a vision-capable model.",
+        default=False, description="Step requires a vision-capable model."
     )
     requires_tools: bool = Field(
-        default=True,
-        description="Step requires function/tool calling support.",
+        default=True, description="Step requires function/tool calling support."
     )
     min_context: int = Field(
-        default=0,
-        description="Minimum context window (input tokens) required.",
+        default=0, description="Minimum context window (input tokens) required."
     )
 
     # ── Quality match weights (cap_match vector) ────────────────────
@@ -101,13 +99,13 @@ class TaskRequirement(BaseModel):
             CapabilityAxis.TOOL_USE: 1.0,
         },
         description="Weight per capability axis — forms the requirement "
-                    "vector for cosine match against ModelQualityProfile.axes. "
-                    "Axes not listed default to 0.0 (irrelevant for this task).",
+        "vector for cosine match against ModelQualityProfile.axes. "
+        "Axes not listed default to 0.0 (irrelevant for this task).",
     )
 
     # ── Utility function coefficients ───────────────────────────────
     utility_coeff: dict[str, float] = Field(
         default_factory=lambda: {"alpha": 0.4, "beta": 0.3, "delta": 0.2, "epsilon": 0.1},
         description="Coefficients (α, β, δ, ε) for the combo utility function. "
-                    "Must sum to 1.0 within floating-point tolerance.",
+        "Must sum to 1.0 within floating-point tolerance.",
     )

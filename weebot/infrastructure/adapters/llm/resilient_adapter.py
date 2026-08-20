@@ -1,15 +1,15 @@
 """Resilient LLM adapter wrapper with retry, circuit breaker, and timeout."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import re
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
-from weebot.core.circuit_breaker import CircuitBreaker, BreakerState
-from weebot.core.error_classifier import ErrorClassifier, ErrorCategory
+from weebot.core.circuit_breaker import CircuitBreaker
+from weebot.core.error_classifier import ErrorClassifier
 from weebot.infrastructure.observability import metrics as _metrics
 from weebot.infrastructure.observability.tracing import get_tracer
 from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
@@ -17,15 +17,18 @@ from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 # Optional caching support
 try:
     from weebot.infrastructure.cache.llm_cache import LLMCache, CacheKey
+
     CACHE_AVAILABLE = True
 except ImportError:
     CACHE_AVAILABLE = False
 
 # Credential redaction patterns
 _CREDENTIAL_REDACTIONS = [
-    (re.compile(r'(api[_-]?key|token|secret|password)[=:]\s*\S+', re.IGNORECASE),
-     r'\1=***REDACTED***'),
-    (re.compile(r'(sk-[a-zA-Z0-9]{20,})'), 'sk-***REDACTED***'),
+    (
+        re.compile(r"(api[_-]?key|token|secret|password)[=:]\s*\S+", re.IGNORECASE),
+        r"\1=***REDACTED***",
+    ),
+    (re.compile(r"(sk-[a-zA-Z0-9]{20,})"), "sk-***REDACTED***"),
 ]
 
 
@@ -40,29 +43,32 @@ def _sanitize_error(exc: BaseException) -> None:
         except (AttributeError, TypeError):
             pass
 
+
 logger = logging.getLogger(__name__)
 
 
 class CircuitBreakerOpen(Exception):
     """Raised when circuit breaker is open for a model."""
+
     pass
 
 
 class LLMTimeoutError(Exception):
     """Raised when LLM request exceeds timeout."""
+
     pass
 
 
 class ResilientLLMAdapter(LLMPort):
     """
     Wrapper that adds resilience patterns to any LLM adapter.
-    
+
     Patterns applied:
     - Exponential backoff retry (weebot/utils/backoff.py)
     - Circuit breaker per model (weebot/core/circuit_breaker.py)
     - Request timeout enforcement
     - Optional request/response caching
-    
+
     Usage:
         inner = OpenAIAdapter(api_key="...")
         resilient = ResilientLLMAdapter(
@@ -74,7 +80,7 @@ class ResilientLLMAdapter(LLMPort):
         )
         response = await resilient.chat(messages=[...])
     """
-    
+
     def __init__(
         self,
         inner_adapter: LLMPort,
@@ -83,11 +89,11 @@ class ResilientLLMAdapter(LLMPort):
         enable_circuit_breaker: bool = True,
         enable_retry: bool = True,
         enable_caching: bool = False,
-        cache: Optional[Any] = None,
+        cache: Any | None = None,
     ):
         """
         Initialize resilient adapter wrapper.
-        
+
         Args:
             inner_adapter: The actual LLM adapter to wrap
             model_name: Identifier for this model (used by circuit breaker)
@@ -102,47 +108,47 @@ class ResilientLLMAdapter(LLMPort):
         self._timeout = timeout
         self._enable_caching = enable_caching
         self._cache = cache
-        
+
         # Configure retry with exponential backoff
         if enable_retry:
             self._retry = RetryWithBackoff(
                 BackoffConfig(
-                    delays=[1, 2, 4, 8, 15, 30],
-                    jitter=0.25,
-                    retryable=self._is_retryable_error
+                    delays=[1, 2, 4, 8, 15, 30], jitter=0.25, retryable=self._is_retryable_error
                 )
             )
         else:
             self._retry = None
-        
+
         # Configure circuit breaker
         if enable_circuit_breaker:
             self._circuit = CircuitBreaker(
-                failure_threshold=3,
-                cooldown_seconds=60.0,
-                jitter_percent=0.2
+                failure_threshold=3, cooldown_seconds=60.0, jitter_percent=0.2
             )
         else:
             self._circuit = None
-        
+
         logger.debug(
             "Initialized ResilientLLMAdapter for %s (timeout=%ss, circuit_breaker=%s, retry=%s, caching=%s)",
-            model_name, timeout, enable_circuit_breaker, enable_retry, enable_caching,
+            model_name,
+            timeout,
+            enable_circuit_breaker,
+            enable_retry,
+            enable_caching,
         )
-    
+
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """
         Send chat completion request with resilience patterns.
-        
+
         Flow:
         1. Check circuit breaker state
         2. Check cache (if enabled and applicable)
@@ -153,23 +159,24 @@ class ResilientLLMAdapter(LLMPort):
         tracer = get_tracer(__name__)
         span_name = f"llm.chat.{self._model_name or 'unknown'}"
         with tracer.start_as_current_span(span_name) as span:
-            provider = self._model_name.split("/")[0] if "/" in (self._model_name or "") else "unknown"
+            provider = (
+                self._model_name.split("/")[0] if "/" in (self._model_name or "") else "unknown"
+            )
             span.set_attribute("llm.model", self._model_name or "unknown")
             span.set_attribute("llm.provider", provider)
             return await self._chat_with_tracing(
-                messages, tools, tool_choice, response_format,
-                model, temperature, max_tokens,
+                messages, tools, tool_choice, response_format, model, temperature, max_tokens
             )
 
     async def _chat_with_tracing(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """Inner chat implementation — called inside the trace span."""
         # Use the runtime model parameter for circuit breaker key.
@@ -181,10 +188,8 @@ class ResilientLLMAdapter(LLMPort):
         if self._circuit:
             result = await self._circuit.evaluate(_breaker_key)
             if not result.allowed:
-                raise CircuitBreakerOpen(
-                    f"Circuit open for {_breaker_key}: {result.reason}"
-                )
-        
+                raise CircuitBreakerOpen(f"Circuit open for {_breaker_key}: {result.reason}")
+
         # Step 2: Check cache
         cache_key = None
         if self._cache and self._should_cache(messages, tools, temperature):
@@ -196,7 +201,7 @@ class ResilientLLMAdapter(LLMPort):
                     return cached
             except Exception as e:
                 logger.warning(f"Cache read error: {e}")
-        
+
         # Step 3: Execute with retry and timeout
         _model_id = model or self._model_name
         _provider = _model_id.split("/")[0] if "/" in _model_id else "unknown"
@@ -212,7 +217,7 @@ class ResilientLLMAdapter(LLMPort):
                     response_format=response_format,
                     model=model,
                     temperature=temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
                 )
             else:
                 response = await self._execute_with_timeout(
@@ -222,14 +227,18 @@ class ResilientLLMAdapter(LLMPort):
                     response_format=response_format,
                     model=model,
                     temperature=temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
                 )
 
             # Duration & success counter
             _duration = asyncio.get_event_loop().time() - _start
             try:
-                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="success").inc()
-                _metrics.llm_call_duration_seconds.labels(model=_model_id, provider=_provider).observe(_duration)
+                _metrics.llm_calls_total.labels(
+                    model=_model_id, provider=_provider, status="success"
+                ).inc()
+                _metrics.llm_call_duration_seconds.labels(
+                    model=_model_id, provider=_provider
+                ).observe(_duration)
             except Exception:
                 pass
 
@@ -246,11 +255,13 @@ class ResilientLLMAdapter(LLMPort):
 
             return response
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             if self._circuit:
                 await self._circuit.record_failure(_breaker_key)
             try:
-                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="timeout").inc()
+                _metrics.llm_calls_total.labels(
+                    model=_model_id, provider=_provider, status="timeout"
+                ).inc()
             except Exception:
                 pass
             raise LLMTimeoutError(
@@ -261,7 +272,9 @@ class ResilientLLMAdapter(LLMPort):
             # Auth errors are unrecoverable — fail fast without circuit recording
             if ErrorClassifier.should_fail_fast(e):
                 try:
-                    _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="auth_error").inc()
+                    _metrics.llm_calls_total.labels(
+                        model=_model_id, provider=_provider, status="auth_error"
+                    ).inc()
                 except Exception:
                     pass
                 _sanitize_error(e)
@@ -270,21 +283,23 @@ class ResilientLLMAdapter(LLMPort):
             if self._circuit and self._is_retryable_error(e):
                 await self._circuit.record_failure(_breaker_key)
             try:
-                _metrics.llm_calls_total.labels(model=_model_id, provider=_provider, status="error").inc()
+                _metrics.llm_calls_total.labels(
+                    model=_model_id, provider=_provider, status="error"
+                ).inc()
             except Exception:
                 pass
             _sanitize_error(e)
             raise
-    
+
     async def _execute_with_timeout(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         """Execute inner adapter with timeout enforcement."""
         return await asyncio.wait_for(
@@ -297,9 +312,9 @@ class ResilientLLMAdapter(LLMPort):
                 temperature=temperature,
                 max_tokens=max_tokens,
             ),
-            timeout=self._timeout
+            timeout=self._timeout,
         )
-    
+
     def _is_retryable_error(self, exc: Exception) -> bool:
         """Delegate retry decision to ErrorClassifier using the action ladder.
 
@@ -309,16 +324,16 @@ class ResilientLLMAdapter(LLMPort):
         (auth, bad requests, content filters, tool errors) are not retried.
         """
         return ErrorClassifier.is_retryable(exc)
-    
+
     def _should_cache(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]],
-        temperature: Optional[float]
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        temperature: float | None,
     ) -> bool:
         """
         Determine if this request should be cached.
-        
+
         Don't cache:
         - Requests with temperature > 0 (non-deterministic)
         - Streaming requests (not supported yet)
@@ -326,37 +341,37 @@ class ResilientLLMAdapter(LLMPort):
         if temperature is not None and temperature > 0:
             return False
         return True
-    
+
     def _make_cache_key(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]],
-        model: Optional[str],
-        temperature: Optional[float]
-    ) -> "CacheKey":
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        model: str | None,
+        temperature: float | None,
+    ) -> CacheKey:
         """Create deterministic cache key from request parameters."""
         if not CACHE_AVAILABLE:
             raise RuntimeError("Caching not available")
-        
+
         return CacheKey.from_request(
             messages=messages,
             model=model or self._model_name,
             temperature=temperature or 0.0,
-            tools=tools
+            tools=tools,
         )
-    
+
     # -------------------------------------------------------------------------
     # Inspection API
     # -------------------------------------------------------------------------
-    
-    def get_circuit_state(self) -> Optional[str]:
+
+    def get_circuit_state(self) -> str | None:
         """Get current circuit breaker state for this model."""
         if self._circuit:
             state = self._circuit.get_state(self._model_name)
             return state.value
         return None
-    
-    def get_metrics(self) -> Dict[str, Any]:
+
+    def get_metrics(self) -> dict[str, Any]:
         """Get resilience metrics for this adapter."""
         metrics = {
             "model": self._model_name,
@@ -365,14 +380,14 @@ class ResilientLLMAdapter(LLMPort):
             "retry_enabled": self._retry is not None,
             "caching_enabled": self._enable_caching,
         }
-        
+
         if self._circuit:
             metrics["circuit_state"] = self._circuit.get_state(self._model_name).value
             circuit_metrics = self._circuit.get_metrics()
             metrics["circuit_metrics"] = circuit_metrics
-        
+
         return metrics
-    
+
     async def reset_circuit(self) -> None:
         """Manually reset circuit breaker to CLOSED state."""
         if self._circuit:

@@ -10,6 +10,7 @@ The loop calls:
   4. ``save(candidate)`` — persist an accepted candidate
   5. ``rollback()`` — revert to last saved version
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -55,9 +56,7 @@ class OptimizationTarget(ABC):
         ...
 
     @abstractmethod
-    async def apply_edits(
-        self, edits: list[dict[str, Any]],
-    ) -> Any:
+    async def apply_edits(self, edits: list[dict[str, Any]]) -> Any:
         """Apply a set of edits to the current target, returning the candidate.
 
         Args:

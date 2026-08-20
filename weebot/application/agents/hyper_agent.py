@@ -6,11 +6,11 @@ SynthesizerAgent.
 
 Implements the Tool→Skill→Subagent decision gate from Will's workshop.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from weebot.application.agents.goal_agent import GoalAgent
 from weebot.application.agents.synthesizer_agent import SynthesizerAgent
@@ -19,7 +19,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.sub_agent_cost_tracker_port import SubAgentCostTrackerPort
 from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort
-from weebot.domain.models.agent_capability import AGENT_CAPABILITIES, AgentCapability
+from weebot.domain.models.agent_capability import AGENT_CAPABILITIES
 from weebot.domain.models.sub_agent import (
     AgentTier,
     DispatchStrategy,
@@ -45,7 +45,7 @@ class HyperAgent:
         swarm_bus: SwarmEventBusPort,
         sub_agent_factory: SubAgentFactoryPort,
         cost_tracker: SubAgentCostTrackerPort,
-        model: Optional[str] = None,
+        model: str | None = None,
         max_concurrency: int = 4,
     ) -> None:
         self._llm = llm
@@ -88,8 +88,12 @@ class HyperAgent:
         """Heuristic v1 — regex-based. Replace with LLM classifier when eval data exists."""
         lo = prompt.lower()
         parallel_patterns = [
-            r"in parallel", r"each\b.*separately", r"independently",
-            r"\bfor each\b", r"simultaneously", r"all at once",
+            r"in parallel",
+            r"each\b.*separately",
+            r"independently",
+            r"\bfor each\b",
+            r"simultaneously",
+            r"all at once",
         ]
         if any(re.search(p, lo) for p in parallel_patterns):
             return DispatchStrategy.PARALLEL
@@ -103,24 +107,24 @@ class HyperAgent:
 
     # ── Spec generation ───────────────────────────────────────────
 
-    def _specs_from_swarm(
-        self, swarm: SwarmSpec, strategy: DispatchStrategy
-    ) -> list[SubAgentSpec]:
+    def _specs_from_swarm(self, swarm: SwarmSpec, strategy: DispatchStrategy) -> list[SubAgentSpec]:
         specs: list[SubAgentSpec] = []
         for goal in swarm.goals:
             role = self._map_role(goal.role)
             cap = AGENT_CAPABILITIES[role]
             effective = DispatchStrategy.FRESH_MIND if cap.requires_fresh_context else strategy
-            specs.append(SubAgentSpec(
-                role=role,
-                description=goal.description,
-                prompt=goal.description,
-                tier=cap.tier,
-                strategy=effective,
-                tools=goal.tools or cap.default_tools,
-                model=cap.preferred_models[0] if cap.preferred_models else None,
-                max_tool_calls=cap.max_tool_calls,
-            ))
+            specs.append(
+                SubAgentSpec(
+                    role=role,
+                    description=goal.description,
+                    prompt=goal.description,
+                    tier=cap.tier,
+                    strategy=effective,
+                    tools=goal.tools or cap.default_tools,
+                    model=cap.preferred_models[0] if cap.preferred_models else None,
+                    max_tool_calls=cap.max_tool_calls,
+                )
+            )
         return specs
 
     @staticmethod
@@ -155,20 +159,16 @@ class HyperAgent:
     # ── Synthesis ─────────────────────────────────────────────────
 
     async def _synthesize(
-        self,
-        original_prompt: str,
-        results: list[SubAgentResult],
-        swarm_spec: SwarmSpec,
+        self, original_prompt: str, results: list[SubAgentResult], swarm_spec: SwarmSpec
     ) -> SwarmResult:
         """Call SynthesizerAgent with the actual signature it expects."""
         summaries = [
             {"role": r.role, "summary": r.summary, "model_used": r.model_used}
-            for r in results if r.is_success
+            for r in results
+            if r.is_success
         ]
         if not summaries:
             raise RuntimeError("All sub-agents failed — nothing to synthesize")
         return await self._synthesizer.synthesize(
-            prompt=original_prompt,
-            results=summaries,
-            strategy=swarm_spec.synthesis_strategy,
+            prompt=original_prompt, results=summaries, strategy=swarm_spec.synthesis_strategy
         )

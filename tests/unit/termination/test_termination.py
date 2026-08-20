@@ -1,4 +1,5 @@
 """Unit tests for composable termination conditions (Improvement #2)."""
+
 import pytest
 
 from weebot.application.termination.base import (
@@ -86,27 +87,29 @@ class TestWallClockTermination:
 class TestTextMentionTermination:
     def test_detects_keyword(self):
         cond = TextMentionTermination("FAILED", scan_last_n=5)
-        ctx = TerminationContext(last_messages=[
-            {"role": "assistant", "content": "everything is fine"},
-            {"role": "tool", "content": "FAILED: connection refused"},
-        ])
+        ctx = TerminationContext(
+            last_messages=[
+                {"role": "assistant", "content": "everything is fine"},
+                {"role": "tool", "content": "FAILED: connection refused"},
+            ]
+        )
         result = cond.check(ctx)
         assert result.should_terminate
         assert "failed" in result.reason.lower()
 
     def test_ignores_when_not_present(self):
         cond = TextMentionTermination("FAILED", scan_last_n=5)
-        ctx = TerminationContext(last_messages=[
-            {"role": "assistant", "content": "everything is fine"},
-        ])
+        ctx = TerminationContext(
+            last_messages=[{"role": "assistant", "content": "everything is fine"}]
+        )
         result = cond.check(ctx)
         assert not result.should_terminate
 
     def test_case_insensitive(self):
         cond = TextMentionTermination("done", scan_last_n=3)
-        ctx = TerminationContext(last_messages=[
-            {"role": "assistant", "content": "Task DONE successfully"},
-        ])
+        ctx = TerminationContext(
+            last_messages=[{"role": "assistant", "content": "Task DONE successfully"}]
+        )
         result = cond.check(ctx)
         assert result.should_terminate
 

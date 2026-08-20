@@ -4,13 +4,13 @@ MCP (Model Context Protocol) allows weebot to discover and call tools from
 external servers.  This port abstracts the transport layer — stdio, SSE,
 and streamable-http are handled by the infrastructure adapter.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
 
 from weebot.domain.models.base_tool import BaseTool
-from weebot.domain.models.tool_result import ToolResult
 
 
 class MCPToolPort(ABC):

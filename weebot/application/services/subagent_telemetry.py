@@ -3,6 +3,7 @@
 Collects runtime metrics from subagent invocations and publishes them
 for observability and cost tracking.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SubagentInvocation:
     """Record of a single subagent RPC invocation."""
+
     id: str
     tool_calls: int = 0
     duration_seconds: float = 0.0
@@ -38,8 +40,10 @@ class SubagentTelemetry:
         self._invocations.append(invocation)
         logger.info(
             "Subagent %s: %d tool calls, %.1fs, ~$%.4f",
-            invocation.id, invocation.tool_calls,
-            invocation.duration_seconds, invocation.estimated_cost_usd,
+            invocation.id,
+            invocation.tool_calls,
+            invocation.duration_seconds,
+            invocation.estimated_cost_usd,
         )
 
     def get_stats(self) -> dict[str, Any]:
@@ -63,7 +67,9 @@ class SubagentTelemetry:
             "total_duration_seconds": round(total_duration, 2),
             "total_tool_calls": total_calls,
             "total_cost_usd": round(total_cost, 6),
-            "success_rate": round(successes / len(self._invocations), 3) if self._invocations else 1.0,
+            "success_rate": (
+                round(successes / len(self._invocations), 3) if self._invocations else 1.0
+            ),
         }
 
     def clear(self) -> None:

@@ -19,6 +19,7 @@ Task-specific:
   SUMMARIZATION: DeepSeek V4 Flash (fast, cheap)
   GENERAL:       Kimi K2.6 (direct API preferred)
 """
+
 from __future__ import annotations
 
 # ========================================================================
@@ -122,6 +123,7 @@ def get_vs_model() -> str:
     """Return the single source of truth for the VS-capable model."""
     return MODEL_VS_CAPABLE
 
+
 # ========================================================================
 # Task-specific
 # ========================================================================
@@ -182,92 +184,92 @@ MODEL_ROLE_DOCUMENTATION: str = "deepseek/deepseek-v4-flash"
 
 _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
-        "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
-        "qwen/qwen3.8-max",                       # fallback 2: Qwen Max — strong comprehension
+        "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
+        "deepseek/deepseek-v4-flash:thinking",  # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
+        "qwen/qwen3.8-max",  # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
-        "deepseek/deepseek-v4-flash:thinking",    # primary: DeepSeek V4 Flash :thinking — math/reasoning
-        "moonshotai/kimi-k2.6:thinking",          # fallback 1: Kimi K2.6 :thinking
-        "x-ai/grok-4.3:thinking",                 # fallback 2: Grok 4.3 :thinking — factual accuracy
+        "deepseek/deepseek-v4-flash:thinking",  # primary: DeepSeek V4 Flash :thinking — math/reasoning
+        "moonshotai/kimi-k2.6:thinking",  # fallback 1: Kimi K2.6 :thinking
+        "x-ai/grok-4.3:thinking",  # fallback 2: Grok 4.3 :thinking — factual accuracy
     ],
     "coder": [
-        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro
-        "poolside/laguna-xs-2.1",               # fallback 2: Laguna XS 2.1 — coding
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 3: KAT-Coder-Air
-        "minimax/minimax-m3",                    # fallback 4: MiniMax M3 — budget
-        "deepseek/deepseek-v4-flash",             # fallback 4: DeepSeek V4 Flash
-        "moonshotai/kimi-k2.6",                   # fallback 5: Kimi K2.6
-        "moonshotai/kimi-k2.7-code",              # fallback 6: Kimi K2.7 Code — complex coding
+        "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro
+        "poolside/laguna-xs-2.1",  # fallback 2: Laguna XS 2.1 — coding
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 3: KAT-Coder-Air
+        "minimax/minimax-m3",  # fallback 4: MiniMax M3 — budget
+        "deepseek/deepseek-v4-flash",  # fallback 4: DeepSeek V4 Flash
+        "moonshotai/kimi-k2.6",  # fallback 5: Kimi K2.6
+        "moonshotai/kimi-k2.7-code",  # fallback 6: Kimi K2.7 Code — complex coding
     ],
     "executor": [
-        "z-ai/glm-5.2:thinking",                  # primary: GLM 5.2 :thinking
-        "google/gemini-3.5-flash",                # fallback 1: Gemini 3.5 Flash — 1M ctx
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
-        "moonshotai/kimi-k2.6:thinking",          # fallback 4: Kimi K2.6 :thinking — structured + CoT
+        "z-ai/glm-5.2:thinking",  # primary: GLM 5.2 :thinking
+        "google/gemini-3.5-flash",  # fallback 1: Gemini 3.5 Flash — 1M ctx
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
+        "moonshotai/kimi-k2.6:thinking",  # fallback 4: Kimi K2.6 :thinking — structured + CoT
     ],
     "reviewer": [
-        "x-ai/grok-4.3:thinking",                 # primary: Grok 4.3 :thinking
-        "google/gemini-2.5-flash",                # fallback 1: Gemini 2.5 Flash — multimodal
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 2: DeepSeek V4 Flash :thinking
-        "moonshotai/kimi-k2.6:thinking",          # fallback 3: Kimi K2.6 :thinking
+        "x-ai/grok-4.3:thinking",  # primary: Grok 4.3 :thinking
+        "google/gemini-2.5-flash",  # fallback 1: Gemini 2.5 Flash — multimodal
+        "deepseek/deepseek-v4-flash:thinking",  # fallback 2: DeepSeek V4 Flash :thinking
+        "moonshotai/kimi-k2.6:thinking",  # fallback 3: Kimi K2.6 :thinking
     ],
     "admin": [
-        "x-ai/grok-4.3",                          # primary: Grok 4.3 — agentic orchestration
-        "x-ai/grok-build-0.1",                    # fallback 1: Grok Build
-        "x-ai/grok-4.3",                          # fallback 2: Grok 4.3
-        "moonshotai/kimi-k2.6",                   # fallback 3: Kimi K2.6
+        "x-ai/grok-4.3",  # primary: Grok 4.3 — agentic orchestration
+        "x-ai/grok-build-0.1",  # fallback 1: Grok Build
+        "x-ai/grok-4.3",  # fallback 2: Grok 4.3
+        "moonshotai/kimi-k2.6",  # fallback 3: Kimi K2.6
     ],
     "automation": [
-        "x-ai/grok-build-0.1",                    # primary: Grok Build — fast agentic SWE
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
-        "deepseek/deepseek-v4-flash",             # fallback 3: DeepSeek V4 Flash — instruction following
-        "moonshotai/kimi-k2.6",                   # fallback 4: Kimi K2.6
+        "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash",  # fallback 3: DeepSeek V4 Flash — instruction following
+        "moonshotai/kimi-k2.6",  # fallback 4: Kimi K2.6
     ],
     "documentation": [
-        "deepseek/deepseek-v4-flash",             # primary: DeepSeek V4 Flash — fast, cheap
-        "moonshotai/kimi-k2.6",                   # fallback 1: Kimi K2.6
-        "minimax/minimax-m3",                     # fallback 2: MiniMax M3
+        "deepseek/deepseek-v4-flash",  # primary: DeepSeek V4 Flash — fast, cheap
+        "moonshotai/kimi-k2.6",  # fallback 1: Kimi K2.6
+        "minimax/minimax-m3",  # fallback 2: MiniMax M3
     ],
     "product_manager": [
         "moonshotai/kimi-k2.6",
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash",
         "minimax/minimax-m3",
     ],
     "planner": [
-        "moonshotai/kimi-k2.6:thinking",          # primary: Kimi K2.6 :thinking — structured planning + CoT
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
-        "deepseek/deepseek-v4-flash:thinking",    # fallback 3: DeepSeek V4 Flash :thinking
-        "x-ai/grok-build-0.1",                    # fallback 4: Grok Build — agentic
+        "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — structured planning + CoT
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
+        "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking
+        "x-ai/grok-build-0.1",  # fallback 4: Grok Build — agentic
     ],
     "planner_sub": [
         "moonshotai/kimi-k2.6:thinking",
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
-        "deepseek/deepseek-v4-flash",             # primary: fast, cheap
-        "kwaipilot/kat-coder-pro-v2.5",           # fallback 1: KAT-Coder-Pro V2.5 — layout & visual design experts
-        "kwaipilot/kat-coder-air-v2.5",           # fallback 2: KAT-Coder-Air V2.5
+        "deepseek/deepseek-v4-flash",  # primary: fast, cheap
+        "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — layout & visual design experts
+        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5
         "moonshotai/kimi-k2.6",
-        "minimax/minimax-m3",                     # fallback 4: MiniMax M3 — paid, $0.30/$1.20
+        "minimax/minimax-m3",  # fallback 4: MiniMax M3 — paid, $0.30/$1.20
     ],
     "vision": [
-        "openai/gpt-4o",                          # primary: best vision + tool use
-        "google/gemini-3.5-flash",                # fallback 1: 1M ctx
-        "qwen/qwen3.7-flash",                     # fallback 2: text/image/video, 1M ctx, $0.03/1M
-        "thinkingmachines/inkling-small",         # fallback 3: text/image/audio MoE, 512K ctx
-        "google/gemini-2.5-flash",                # fallback 4: Gemini 2.5 Flash — multimodal
-        "qwen/qwen2.5-vl-72b-instruct",            # fallback 5: budget VLM
+        "openai/gpt-4o",  # primary: best vision + tool use
+        "google/gemini-3.5-flash",  # fallback 1: 1M ctx
+        "qwen/qwen3.7-flash",  # fallback 2: text/image/video, 1M ctx, $0.03/1M
+        "thinkingmachines/inkling-small",  # fallback 3: text/image/audio MoE, 512K ctx
+        "google/gemini-2.5-flash",  # fallback 4: Gemini 2.5 Flash — multimodal
+        "qwen/qwen2.5-vl-72b-instruct",  # fallback 5: budget VLM
     ],
 }
 
@@ -285,11 +287,8 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
     if role and role in _ROLE_MODEL_CASCADE:
         return list(_ROLE_MODEL_CASCADE[role])
     # Default cascade — prefer xAI (native API key) over OpenRouter models
-    return [
-        "x-ai/grok-build-0.1",
-        "x-ai/grok-4.3",
-        MODEL_CASCADE_TIER1,
-    ]
+    return ["x-ai/grok-build-0.1", "x-ai/grok-4.3", MODEL_CASCADE_TIER1]
+
 
 # ========================================================================
 # DI container + factory defaults
@@ -321,7 +320,7 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "kwaipilot/kat-coder-air-v2.5",
     "minimax/minimax-m3",
     "deepseek/deepseek-v4-flash-0731",  # 1M ctx / 384K out, same price as base V4 Flash
-    "qwen/qwen3.7-flash",               # cheapest fallback of last resort
+    "qwen/qwen3.7-flash",  # cheapest fallback of last resort
 ]
 MODEL_FALLBACK_NON_OPENROUTER: str = "minimax/minimax-m3"
 
@@ -378,6 +377,7 @@ MODEL_IMAGE_QWEN_PRO: str = "qwen/qwen-image-3-pro"
 """Qwen Image 3 Pro — premium tier of Qwen Image 3, $0.04/img (added 2026-08-05).
 66K context. Precise text/detail rendering down to 10px, richer world knowledge."""
 
+
 def get_image_models() -> list[str]:
     """Return the canonical list of image generation model IDs."""
     return [
@@ -405,75 +405,67 @@ def get_image_models() -> list[str]:
 IMAGE_CASCADE: dict[str, list[str]] = {
     # ── Website hero banners — photorealistic, high impact ──────────
     "hero": [
-        "x-ai/grok-imagine-image-quality",       # 1st: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",           # 2nd: paid — photorealistic
-        "black-forest-labs/flux.2-max",           # 3rd: paid — max quality
+        "x-ai/grok-imagine-image-quality",  # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",  # 2nd: paid — photorealistic
+        "black-forest-labs/flux.2-max",  # 3rd: paid — max quality
     ],
-
     # ── Logos, brand assets, icons — vector output preferred ────────
     "logo": [
-        "ideogram/ideogram-v3-turbo",             # 1st: paid — best text/logo rendering
-        "recraft/recraft-v4.1-pro-vector",       # 2nd: paid — professional SVG
-        "recraft/recraft-v4.1-pro",               # 3rd: paid — raster fallback
+        "ideogram/ideogram-v3-turbo",  # 1st: paid — best text/logo rendering
+        "recraft/recraft-v4.1-pro-vector",  # 2nd: paid — professional SVG
+        "recraft/recraft-v4.1-pro",  # 3rd: paid — raster fallback
     ],
-
     # ── Small icons, favicons, UI elements ──────────────────────────
     "icon": [
-        "krea/krea-2-medium-turbo",               # 1st: $0.015/img — fastest iteration
-        "black-forest-labs/flux.2-klein-4b",      # 2nd: cheapest paid — fast
-        "recraft/recraft-v4.1-pro-vector",         # 3rd: paid — clean vector
-        "black-forest-labs/flux.2-flex",            # 4th: paid — batch-optimized
+        "krea/krea-2-medium-turbo",  # 1st: $0.015/img — fastest iteration
+        "black-forest-labs/flux.2-klein-4b",  # 2nd: cheapest paid — fast
+        "recraft/recraft-v4.1-pro-vector",  # 3rd: paid — clean vector
+        "black-forest-labs/flux.2-flex",  # 4th: paid — batch-optimized
     ],
-
     # ── Photorealistic — products, people, places ───────────────────
     "photo": [
-        "x-ai/grok-imagine-image-quality",       # 1st: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",           # 2nd: paid — excellent quality
-        "krea/krea-2-large",                      # 3rd: raw, textured photorealism — $0.06/img
-        "black-forest-labs/flux.2-max",           # 5th: paid — max quality
-        "recraft/recraft-v4.1-pro",               # 5th: paid — consistent output
+        "x-ai/grok-imagine-image-quality",  # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",  # 2nd: paid — excellent quality
+        "krea/krea-2-large",  # 3rd: raw, textured photorealism — $0.06/img
+        "black-forest-labs/flux.2-max",  # 5th: paid — max quality
+        "recraft/recraft-v4.1-pro",  # 5th: paid — consistent output
     ],
-
     # ── Diagrams, charts, UI mockups, technical illustrations ───────
     "diagram": [
-        "krea/krea-2-medium-turbo",               # 1st: $0.015/img — cheap+fast
-        "google/gemini-2.5-flash-image",           # 2nd: cheap — specialized
-        "recraft/recraft-v4.1-pro-vector",         # 3rd: paid — vector output
+        "krea/krea-2-medium-turbo",  # 1st: $0.015/img — cheap+fast
+        "google/gemini-2.5-flash-image",  # 2nd: cheap — specialized
+        "recraft/recraft-v4.1-pro-vector",  # 3rd: paid — vector output
     ],
-
     # ── Social media, thumbnails — fast, cheap, decent ──────────────
     "social": [
-        "krea/krea-2-medium-turbo",               # 1st: $0.015/img — cheapest, fastest
-        "krea/krea-2-medium",                        # 2nd: balanced artistic
-        "krea/krea-2-medium",                        # 3rd: balanced artistic — $0.03/img
-        "black-forest-labs/flux.2-klein-4b",        # 6th: cheapest paid — fast
-        "black-forest-labs/flux.2-flex",             # 6th: batch-optimized
-        "x-ai/grok-imagine-image-quality",          # 6th: cheap (~$0.05/img) — direct xAI
+        "krea/krea-2-medium-turbo",  # 1st: $0.015/img — cheapest, fastest
+        "krea/krea-2-medium",  # 2nd: balanced artistic
+        "krea/krea-2-medium",  # 3rd: balanced artistic — $0.03/img
+        "black-forest-labs/flux.2-klein-4b",  # 6th: cheapest paid — fast
+        "black-forest-labs/flux.2-flex",  # 6th: batch-optimized
+        "x-ai/grok-imagine-image-quality",  # 6th: cheap (~$0.05/img) — direct xAI
     ],
-
     # ── Text-heavy images — signs, banners with text ────────────────
     "text": [
-        "ideogram/ideogram-v3-turbo",             # 1st: paid — industry-leading text rendering
-        "recraft/recraft-v4.1-pro-vector",        # 2nd: paid — vector text
-        "bytedance-seed/seedream-4.5",             # 3rd: paid — best text rendering
-        "qwen/qwen-image-3",                      # 4th: paid — precise text rendering down to 10px
+        "ideogram/ideogram-v3-turbo",  # 1st: paid — industry-leading text rendering
+        "recraft/recraft-v4.1-pro-vector",  # 2nd: paid — vector text
+        "bytedance-seed/seedream-4.5",  # 3rd: paid — best text rendering
+        "qwen/qwen-image-3",  # 4th: paid — precise text rendering down to 10px
     ],
-
     # ── Branded / enterprise — safety, consistency ──────────────────
     "brand": [
-        "ideogram/ideogram-v3-turbo",             # 1st: paid — brand-accurate text + logos
-        "recraft/recraft-v4.1-pro",               # 2nd: paid — consistent output
-        "microsoft/mai-image-2.5",                # 3rd: paid — enterprise safety
+        "ideogram/ideogram-v3-turbo",  # 1st: paid — brand-accurate text + logos
+        "recraft/recraft-v4.1-pro",  # 2nd: paid — consistent output
+        "microsoft/mai-image-2.5",  # 3rd: paid — enterprise safety
     ],
-
     # ── General / catch-all ────────────────────────────────────────
     "general": [
-        "x-ai/grok-imagine-image-quality",        # 1st: cheap (~$0.05/img) — direct xAI
-        "black-forest-labs/flux.2-pro",            # 2nd: paid — photorealistic
-        "krea/krea-2-large",                      # 3rd: raw photorealism — $0.06/img
-        "krea/krea-2-medium",                      # 4th: balanced artistic — $0.03/img
-        "black-forest-labs/flux.2-flex",           # 5th: paid — batch-optimized
-        "qwen/qwen-image-3-pro",                  # 6th: paid — unified gen+edit, 66K ctx, $0.04/img
+        "x-ai/grok-imagine-image-quality",  # 1st: cheap (~$0.05/img) — direct xAI
+        "black-forest-labs/flux.2-pro",  # 2nd: paid — photorealistic
+        "krea/krea-2-large",  # 3rd: raw photorealism — $0.06/img
+        "krea/krea-2-medium",  # 4th: balanced artistic — $0.03/img
+        "black-forest-labs/flux.2-flex",  # 5th: paid — batch-optimized
+        "qwen/qwen-image-3-pro",  # 6th: paid — unified gen+edit, 66K ctx, $0.04/img
     ],
 }
 
@@ -507,8 +499,9 @@ def describe_image_cascade(use_case: str) -> str:
     """Return a human-readable description of the cascade for *use_case*."""
     cascade = IMAGE_CASCADE.get(use_case, IMAGE_CASCADE["general"])
     labels = ["Primary", "Fallback 1", "Fallback 2", "Fallback 3", "Fallback 4"]
-    lines = [f"  {labels[i] if i < len(labels) else f'Tier {i}'}: {m}"
-             for i, m in enumerate(cascade)]
+    lines = [
+        f"  {labels[i] if i < len(labels) else f'Tier {i}'}: {m}" for i, m in enumerate(cascade)
+    ]
     lines.append(f"  Ultimate: SVG template ({use_case})")
     return "\n".join(lines)
 
@@ -592,37 +585,37 @@ def get_video_models() -> list[str]:
 VIDEO_CASCADE: dict[str, list[str]] = {
     # ── Short / social clips — fast, cheap, decent ──────────────
     "short": [
-        "bytedance/seedance-2.0-fast",           # 1st: fast + cheap
-        "bytedance/seedance-2.0",                 # 2nd: better quality
-        "kling/video-v3-standard",                # 3rd: standard quality
+        "bytedance/seedance-2.0-fast",  # 1st: fast + cheap
+        "bytedance/seedance-2.0",  # 2nd: better quality
+        "kling/video-v3-standard",  # 3rd: standard quality
     ],
     # ── Cinematic / narrative — quality first ───────────────────
     "cinematic": [
-        "openai/sora-2-pro",                      # 1st: premium
-        "google/veo-3.1",                         # 2nd: highest quality Google
-        "minimax/hailuo-2.3",                     # 3rd: strong cinematic
-        "kling/video-v3-pro",                     # 4th: pro quality
+        "openai/sora-2-pro",  # 1st: premium
+        "google/veo-3.1",  # 2nd: highest quality Google
+        "minimax/hailuo-2.3",  # 3rd: strong cinematic
+        "kling/video-v3-pro",  # 4th: pro quality
     ],
     # ── Product demos / marketing ───────────────────────────────
     "product": [
-        "alibaba/wan-2.7",                        # 1st: good general
-        "kling/video-v3-pro",                     # 2nd: pro quality
-        "google/veo-3.1-fast",                    # 3rd: fast
+        "alibaba/wan-2.7",  # 1st: good general
+        "kling/video-v3-pro",  # 2nd: pro quality
+        "google/veo-3.1-fast",  # 3rd: fast
     ],
     # ── Brand / enterprise — safety, consistency ────────────────
     "brand": [
-        "x-ai/grok-imagine-video-1.5",            # 1st: direct xAI — v1.5 with audio
-        "x-ai/grok-imagine-video",                # 2nd: direct xAI — v1 fallback
-        "google/veo-3.1",                         # 3rd: professional
-        "kling/video-o1-pro",                     # 4th: reasoning-enhanced
+        "x-ai/grok-imagine-video-1.5",  # 1st: direct xAI — v1.5 with audio
+        "x-ai/grok-imagine-video",  # 2nd: direct xAI — v1 fallback
+        "google/veo-3.1",  # 3rd: professional
+        "kling/video-o1-pro",  # 4th: reasoning-enhanced
     ],
     # ── General / catch-all — free → cheap → best ──────────────
     "general": [
-        "x-ai/grok-imagine-video-1.5",            # 1st: direct xAI — v1.5 with audio
-        "x-ai/grok-imagine-video",                # 2nd: direct xAI — v1 fallback
-        "kling/video-v3-standard",                # 3rd: standard
-        "alibaba/wan-2.6",                        # 4th: budget
-        "google/veo-3.1-lite",                    # 5th: lite
+        "x-ai/grok-imagine-video-1.5",  # 1st: direct xAI — v1.5 with audio
+        "x-ai/grok-imagine-video",  # 2nd: direct xAI — v1 fallback
+        "kling/video-v3-standard",  # 3rd: standard
+        "alibaba/wan-2.6",  # 4th: budget
+        "google/veo-3.1-lite",  # 5th: lite
     ],
 }
 
@@ -672,6 +665,7 @@ MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 # Per-Model Harness Resolution
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def sanitize_model_id(model_id: str) -> str:
     """Sanitize a model ID for use as a filename.
 
@@ -696,6 +690,7 @@ def get_harness_for_model(model_id: str) -> str:
         Relative path to the YAML harness config file.
     """
     from pathlib import Path
+
     safe_name = sanitize_model_id(model_id)
     model_file = Path(f"weebot/config/harness/models/{safe_name}.yaml")
     if model_file.exists():
@@ -706,6 +701,7 @@ def get_harness_for_model(model_id: str) -> str:
 # ========================================================================
 # Free-tier models (canonical list)
 # ========================================================================
+
 
 def get_free_models() -> list[str]:
     """Return the canonical list of budget (paid) model IDs.
@@ -771,21 +767,19 @@ def get_rerank_model_for(use_case: str) -> str:
         OpenRouter-qualified model ID.
     """
     _rerank_map = {
-        "research": RERANK_MODEL_PRO,      # multi-source synthesis — quality matters
-        "skills": RERANK_MODEL_PRO,        # BM25 → semantic — quality matters
-        "evaluation": RERANK_MODEL_PRO,    # staged evaluator — quality matters
-        "search": RERANK_MODEL_FREE,       # web search — high-throughput, free tier
-        "compressor": RERANK_MODEL_FREE,   # conversation compressor — high-throughput
-        "memory": RERANK_MODEL_FREE,       # memory archivist — high-throughput
-        "knowledge": RERANK_MODEL_FREE,    # knowledge graph FTS5 — high-throughput
+        "research": RERANK_MODEL_PRO,  # multi-source synthesis — quality matters
+        "skills": RERANK_MODEL_PRO,  # BM25 → semantic — quality matters
+        "evaluation": RERANK_MODEL_PRO,  # staged evaluator — quality matters
+        "search": RERANK_MODEL_FREE,  # web search — high-throughput, free tier
+        "compressor": RERANK_MODEL_FREE,  # conversation compressor — high-throughput
+        "memory": RERANK_MODEL_FREE,  # memory archivist — high-throughput
+        "knowledge": RERANK_MODEL_FREE,  # knowledge graph FTS5 — high-throughput
     }
     return _rerank_map.get(use_case, RERANK_MODEL_FREE)
 
 
 def get_models_for_role_and_task(
-    role: str,
-    task_type: str = "",
-    cascade: list[str] | None = None,
+    role: str, task_type: str = "", cascade: list[str] | None = None
 ) -> list[str]:
     """Return the combined model list for a role + optional task type.
 
@@ -810,6 +804,7 @@ def get_models_for_role_and_task(
     if task_type:
         try:
             from weebot.core.model_cascade_config import get_cascade_for_task
+
             task_models = get_cascade_for_task(task_type)
             for tm in task_models:
                 if tm.id not in combined:
@@ -838,15 +833,15 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     # Cross-lab diversity: xAI Grok 4.3 :thinking (xAI lab ≠ Z.ai planner) → DeepSeek :thinking → Grok Build
     "critic": [
         "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k2.7-code",              # Kimi K2.7 Code — premium review
-        "google/gemini-2.5-flash",                # Gemini 2.5 Flash — multimodal review
+        "moonshotai/kimi-k2.7-code",  # Kimi K2.7 Code — premium review
+        "google/gemini-2.5-flash",  # Gemini 2.5 Flash — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     # GLM 5.2 :thinking (primary, reasoning xhigh) -> DeepSeek Flash :thinking -> Kimi K2.6 :thinking
     "executor": [
         "z-ai/glm-5.2:thinking",
-        "google/gemini-3.5-flash",                # Gemini 3.5 Flash — $1.50/1M, 1M ctx, agentic
+        "google/gemini-3.5-flash",  # Gemini 3.5 Flash — $1.50/1M, 1M ctx, agentic
         "deepseek/deepseek-v4-flash:thinking",
         "moonshotai/kimi-k2.6:thinking",
     ],
@@ -857,27 +852,23 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
         "qwen/qwen3.8-max",
     ],
     # DeepSeek Flash (fast, cheap — no thinking needed for summarization)
-    "summarizer": [
-        "deepseek/deepseek-v4-flash",
-        "minimax/minimax-m3",
-        "moonshotai/kimi-k2.6",
-    ],
+    "summarizer": ["deepseek/deepseek-v4-flash", "minimax/minimax-m3", "moonshotai/kimi-k2.6"],
     # GPT-4.1 Nano (fast, no reasoning) → DeepSeek Flash :thinking (reasoning subagent) → Qwen Coder 30B
     "subagent": [
-        "qwen/qwen3.7-flash",                     # cheapest in catalog — $0.03/$0.13, 1M ctx
+        "qwen/qwen3.7-flash",  # cheapest in catalog — $0.03/$0.13, 1M ctx
         "openai/gpt-4.1-nano",
-        "poolside/laguna-xs-2.1",                 # Laguna XS 2.1 — $0.10/1M coding agent
-        "google/gemini-2.5-flash-lite",           # Gemini 2.5 Flash Lite — subagent
-        "kwaipilot/kat-coder-air-v2.5",           # KAT-Coder-Air
-        "minimax/minimax-m3",                    # MiniMax M3 — budget 1M ctx
+        "poolside/laguna-xs-2.1",  # Laguna XS 2.1 — $0.10/1M coding agent
+        "google/gemini-2.5-flash-lite",  # Gemini 2.5 Flash Lite — subagent
+        "kwaipilot/kat-coder-air-v2.5",  # KAT-Coder-Air
+        "minimax/minimax-m3",  # MiniMax M3 — budget 1M ctx
         "deepseek/deepseek-v4-flash:thinking",
         "qwen/qwen3-coder-30b-a3b-instruct",
     ],
     # Independent code review: xAI Grok 4.3 :thinking (xAI ≠ Z.ai executor) → DeepSeek :thinking → Grok Build
     "reviewer": [
         "x-ai/grok-4.3:thinking",
-        "moonshotai/kimi-k2.7-code",              # Kimi K2.7 Code — premium review
-        "google/gemini-2.5-flash",                # Gemini 2.5 Flash — multimodal review
+        "moonshotai/kimi-k2.7-code",  # Kimi K2.7 Code — premium review
+        "google/gemini-2.5-flash",  # Gemini 2.5 Flash — multimodal review
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],

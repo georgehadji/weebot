@@ -7,6 +7,7 @@ Verifies:
   3. The dropped counter accumulates across overflow and resets on read.
   4. Under capacity, nothing is dropped and FIFO order is preserved.
 """
+
 from __future__ import annotations
 
 import pytest

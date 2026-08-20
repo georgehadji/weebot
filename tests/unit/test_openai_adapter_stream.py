@@ -10,6 +10,7 @@ Verifies:
   5. A rate limit before any chunk is yielded falls back to the next
      model in the chain, matching chat()'s pre-response fallback.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -67,10 +68,7 @@ async def test_stream_yields_content_chunks_in_order(adapter):
 
 @pytest.mark.asyncio
 async def test_stream_trailing_usage_only_chunk_yields_usage(adapter):
-    chunks = [
-        _fake_chunk(content="hi", finish_reason="stop"),
-        _usage_only_chunk(),
-    ]
+    chunks = [_fake_chunk(content="hi", finish_reason="stop"), _usage_only_chunk()]
     adapter._client.chat.completions.create = AsyncMock(return_value=_async_iter(chunks))
 
     received = [c async for c in adapter.stream(messages=[{"role": "user", "content": "hi"}])]
@@ -83,8 +81,7 @@ async def test_stream_trailing_usage_only_chunk_yields_usage(adapter):
 @pytest.mark.asyncio
 async def test_stream_tool_call_deltas_pass_through(adapter):
     tc = SimpleNamespace(
-        index=0, id="call_1",
-        function=SimpleNamespace(name="search", arguments='{"q":'),
+        index=0, id="call_1", function=SimpleNamespace(name="search", arguments='{"q":')
     )
     chunks = [_fake_chunk(tool_calls=[tc], finish_reason="tool_calls")]
     adapter._client.chat.completions.create = AsyncMock(return_value=_async_iter(chunks))
@@ -118,7 +115,12 @@ async def test_stream_falls_back_on_pre_stream_rate_limit(adapter, monkeypatch):
     create_mock = AsyncMock(side_effect=[_rate_limit_error(), _async_iter(fallback_chunks)])
     adapter._client.chat.completions.create = create_mock
 
-    received = [c async for c in adapter.stream(messages=[{"role": "user", "content": "hi"}], model="primarymodel")]
+    received = [
+        c
+        async for c in adapter.stream(
+            messages=[{"role": "user", "content": "hi"}], model="primarymodel"
+        )
+    ]
 
     assert len(received) == 1
     assert received[0].delta == "from fallback"

@@ -7,11 +7,9 @@ lock acquisitions, the cleanup loop raised KeyError on the missing key.
 
 FIX: Guard the cleanup loop with ``if session_id in self._connections``.
 """
+
 from __future__ import annotations
 
-import asyncio
-import json
-from unittest.mock import patch
 
 import pytest
 

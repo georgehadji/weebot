@@ -5,11 +5,11 @@ through the gateway delivery system.
 
 Requires STRIPE_WEBHOOK_SECRET in the environment for signature validation.
 """
+
 from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import logging
 from typing import Any
 
@@ -34,20 +34,17 @@ EVENT_PROMPT_MAP: dict[str, str] = {
         "This is urgent — investigate immediately and prepare evidence."
     ),
     "charge.dispute.closed": (
-        "A Stripe dispute was resolved. Details: {details}. "
-        "Update our records."
+        "A Stripe dispute was resolved. Details: {details}. " "Update our records."
     ),
     "invoice.payment_succeeded": (
-        "A Stripe invoice payment succeeded. Details: {details}. "
-        "Mark the invoice as paid."
+        "A Stripe invoice payment succeeded. Details: {details}. " "Mark the invoice as paid."
     ),
     "invoice.payment_failed": (
         "A Stripe invoice payment failed. Details: {details}. "
         "Follow up with the customer about the failed payment."
     ),
     "customer.subscription.updated": (
-        "A Stripe subscription was updated. Details: {details}. "
-        "Update our records."
+        "A Stripe subscription was updated. Details: {details}. " "Update our records."
     ),
     "customer.subscription.deleted": (
         "A Stripe subscription was canceled. Details: {details}. "
@@ -62,11 +59,7 @@ class StripeWebhookHandler:
     def __init__(self, webhook_secret: str | None = None) -> None:
         self._webhook_secret = webhook_secret
 
-    def validate_signature(
-        self,
-        payload: bytes,
-        sig_header: str,
-    ) -> bool:
+    def validate_signature(self, payload: bytes, sig_header: str) -> bool:
         """Validate the Stripe webhook signature.
 
         Args:
@@ -78,6 +71,7 @@ class StripeWebhookHandler:
         """
         if not self._webhook_secret:
             from weebot.config.settings import WeebotSettings
+
             _settings = WeebotSettings()
             if _settings.stripe_allow_unsigned_webhooks:
                 logger.warning(
@@ -108,25 +102,21 @@ class StripeWebhookHandler:
 
             # Timestamp replay check (±5 minutes)
             import time
+
             now = int(time.time())
             try:
                 t = int(timestamp)
                 if abs(now - t) > 300:
-                    logger.warning(
-                        "Stripe webhook timestamp replay detected: %s vs now %s",
-                        t, now,
-                    )
+                    logger.warning("Stripe webhook timestamp replay detected: %s vs now %s", t, now)
                     return False
             except ValueError:
                 logger.warning("Invalid Stripe webhook timestamp: %r", timestamp)
                 return False
 
             # Compute the expected signature
-            signed_payload = f"{timestamp}.{payload.decode('utf-8')}".encode("utf-8")
+            signed_payload = f"{timestamp}.{payload.decode('utf-8')}".encode()
             computed_sig = hmac.new(
-                self._webhook_secret.encode("utf-8"),
-                signed_payload,
-                hashlib.sha256,
+                self._webhook_secret.encode("utf-8"), signed_payload, hashlib.sha256
             ).hexdigest()
 
             # Constant-time comparison
@@ -175,9 +165,24 @@ class StripeWebhookHandler:
             # Stripe amounts are in the currency's smallest unit.
             # Zero-decimal currencies (JPY, KRW, VND, etc.) don't divide by 100.
             currency = obj.get("currency", "usd").upper()
-            zero_decimal = {"BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW",
-                           "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF",
-                           "XOF", "XPF"}
+            zero_decimal = {
+                "BIF",
+                "CLP",
+                "DJF",
+                "GNF",
+                "JPY",
+                "KMF",
+                "KRW",
+                "MGA",
+                "PYG",
+                "RWF",
+                "UGX",
+                "VND",
+                "VUV",
+                "XAF",
+                "XOF",
+                "XPF",
+            }
             if currency in zero_decimal:
                 parts.append(f"Amount: {currency} {amount}")
             else:

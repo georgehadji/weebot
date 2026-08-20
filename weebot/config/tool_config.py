@@ -4,11 +4,11 @@ Allows tools to receive configuration via constructor injection instead of
 importing WeebotSettings directly, decoupling the tools layer from the
 config/settings module.
 """
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -20,23 +20,24 @@ class ToolConfig:
     WeebotSettings inside a tool) keeps the tools layer decoupled from the
     config/settings module.
     """
+
     bash_timeout: int = 30
     python_timeout: int = 30
     sandbox_max_output_bytes: int = 65_536
-    max_tool_timeout: int = 300   # env: MAX_TOOL_TIMEOUT — ceiling for tool timeout params
+    max_tool_timeout: int = 300  # env: MAX_TOOL_TIMEOUT — ceiling for tool timeout params
 
     # External research-tool endpoints (Berb / Reasoner / Spacescraper).
     # Defaults mirror WeebotSettings; a value of None means "unset — fall back
     # to the corresponding environment variable at call time".
-    berb_api_url: Optional[str] = None       # env: BERB_API_URL
-    berb_api_key: Optional[str] = None       # env: BERB_API_KEY
-    berb_dir: Optional[str] = None           # env: BERB_DIR
-    reasoner_api_url: Optional[str] = None   # env: REASONER_API_URL
-    reasoner_api_key: Optional[str] = None   # env: REASONER_API_KEY
-    reasoner_dir: Optional[str] = None       # env: REASONER_DIR
-    scraper_api_url: Optional[str] = None    # env: SCRAPER_API_URL
-    scraper_api_key: Optional[str] = None    # env: SCRAPER_API_KEY
-    scraper_dir: Optional[str] = None        # env: SCRAPER_DIR
+    berb_api_url: str | None = None  # env: BERB_API_URL
+    berb_api_key: str | None = None  # env: BERB_API_KEY
+    berb_dir: str | None = None  # env: BERB_DIR
+    reasoner_api_url: str | None = None  # env: REASONER_API_URL
+    reasoner_api_key: str | None = None  # env: REASONER_API_KEY
+    reasoner_dir: str | None = None  # env: REASONER_DIR
+    scraper_api_url: str | None = None  # env: SCRAPER_API_URL
+    scraper_api_key: str | None = None  # env: SCRAPER_API_KEY
+    scraper_dir: str | None = None  # env: SCRAPER_DIR
 
     def __post_init__(self):
         if not (30 <= self.max_tool_timeout <= 3600):
@@ -52,11 +53,8 @@ DEFAULT_TOOL_CONFIG = ToolConfig()
 
 
 def resolve_setting(
-    config: Optional[ToolConfig],
-    attr: str,
-    env_var: str,
-    default: Optional[str] = None,
-) -> Optional[str]:
+    config: ToolConfig | None, attr: str, env_var: str, default: str | None = None
+) -> str | None:
     """Resolve a tool setting: injected ToolConfig first, then the environment.
 
     Lets a tool read configuration without importing WeebotSettings — the

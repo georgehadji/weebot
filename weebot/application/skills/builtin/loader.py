@@ -3,6 +3,7 @@
 Prompts are stored as markdown files in:
     weebot/application/skills/builtin/optimizer/*.md
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,9 +38,7 @@ def load_optimizer_prompt(name: str) -> str:
         if alt.exists():
             path = alt
         else:
-            raise FileNotFoundError(
-                f"Optimizer prompt '{name}' not found at {path}"
-            )
+            raise FileNotFoundError(f"Optimizer prompt '{name}' not found at {path}")
 
     content = path.read_text(encoding="utf-8")
     _CACHE[name] = content

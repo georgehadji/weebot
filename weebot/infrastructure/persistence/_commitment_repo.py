@@ -1,9 +1,9 @@
 """Commitment CRUD — extracted from SQLiteStateRepository for modularity."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, UTC
 
 from weebot.infrastructure.persistence.connection_pool import SQLiteConnectionPool
 
@@ -16,11 +16,18 @@ class CommitmentRepo:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def save(self, commitment_id: str, promise_text: str, context: str,
-                   source_session_id: str, source_event_id: Optional[str] = None,
-                   due_at: Optional[str] = None, status: str = "pending") -> None:
+    async def save(
+        self,
+        commitment_id: str,
+        promise_text: str,
+        context: str,
+        source_session_id: str,
+        source_event_id: str | None = None,
+        due_at: str | None = None,
+        status: str = "pending",
+    ) -> None:
         """Insert or update a commitment."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 """
@@ -48,12 +55,11 @@ class CommitmentRepo:
                 },
             )
 
-    async def list(self, status: Optional[str] = None) -> list[dict]:
+    async def list(self, status: str | None = None) -> list[dict]:
         """List commitments, optionally filtered by status."""
         if status:
             rows = await self._pool.execute_read(
-                "SELECT * FROM commitments WHERE status = ? ORDER BY created_at DESC",
-                (status,),
+                "SELECT * FROM commitments WHERE status = ? ORDER BY created_at DESC", (status,)
             )
         else:
             rows = await self._pool.execute_read(
@@ -68,10 +74,11 @@ class CommitmentRepo:
         )
         return [dict(r) for r in rows]
 
-    async def update_status(self, commitment_id: str, status: str,
-                            failure_reason: Optional[str] = None) -> None:
+    async def update_status(
+        self, commitment_id: str, status: str, failure_reason: str | None = None
+    ) -> None:
         """Update a commitment's status."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         async with self._pool.acquire_write() as conn:
             await conn.execute(
                 """

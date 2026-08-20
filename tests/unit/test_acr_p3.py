@@ -1,4 +1,5 @@
 """Unit tests for ACR Phase P3 — benchmark suites and runner."""
+
 from __future__ import annotations
 
 import pytest
@@ -10,10 +11,7 @@ from weebot.infrastructure.benchmark.suites import (
     BenchmarkItem,
     BenchmarkSuite,
 )
-from weebot.infrastructure.benchmark.runner import (
-    BenchmarkRunner,
-    CostGuardError,
-)
+from weebot.infrastructure.benchmark.runner import BenchmarkRunner, CostGuardError
 
 
 class TestBenchmarkSuites:
@@ -22,13 +20,18 @@ class TestBenchmarkSuites:
     def test_all_suites_have_items(self):
         for suite in ALL_SUITES:
             assert len(suite.items) >= 1, f"{suite.name} has no items"
-            assert suite.axis in ("reasoning", "coding", "writing", "math",
-                                  "long_context", "tool_use")
+            assert suite.axis in (
+                "reasoning",
+                "coding",
+                "writing",
+                "math",
+                "long_context",
+                "tool_use",
+            )
         assert len(ALL_SUITES) == 6
 
     def test_suites_by_axis_complete(self):
-        for axis in ("reasoning", "coding", "writing", "math",
-                     "long_context", "tool_use"):
+        for axis in ("reasoning", "coding", "writing", "math", "long_context", "tool_use"):
             assert axis in SUITES_BY_AXIS
 
     def test_perfect_score(self):
@@ -43,18 +46,20 @@ class TestBenchmarkSuites:
         assert item.score_response("") == 0.0
 
     def test_suite_scoring(self):
-        suite = BenchmarkSuite("test", "reasoning", [
-            BenchmarkItem("q1", expected=["a"]),
-            BenchmarkItem("q2", expected=["b"]),
-        ])
+        suite = BenchmarkSuite(
+            "test",
+            "reasoning",
+            [BenchmarkItem("q1", expected=["a"]), BenchmarkItem("q2", expected=["b"])],
+        )
         score = suite.score_all(["answer a", "answer b"])
         assert score == 10.0
 
     def test_suite_scoring_partial(self):
-        suite = BenchmarkSuite("test", "reasoning", [
-            BenchmarkItem("q1", expected=["a"]),
-            BenchmarkItem("q2", expected=["b"]),
-        ])
+        suite = BenchmarkSuite(
+            "test",
+            "reasoning",
+            [BenchmarkItem("q1", expected=["a"]), BenchmarkItem("q2", expected=["b"])],
+        )
         score = suite.score_all(["answer a", "wrong"])
         assert score == 5.0  # half credit
 
@@ -99,11 +104,7 @@ class TestBenchmarkRunner:
             assert score == 0.0, f"Expected 0, got {score}"
 
     async def test_runner_returns_profile_with_zero_on_all_failures(self):
-        runner = BenchmarkRunner(
-            call_llm=self._mock_llm_error,
-            cost_ceiling=10.0,
-            max_retries=0,
-        )
+        runner = BenchmarkRunner(call_llm=self._mock_llm_error, cost_ceiling=10.0, max_retries=0)
         profile = await runner.run("error-model", suites=[ALL_SUITES[0]])
         # All items failed, but profile is still created with 0.0 scores
         assert profile is not None

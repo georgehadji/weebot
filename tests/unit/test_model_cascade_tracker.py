@@ -1,7 +1,8 @@
 """Unit tests for ModelCascadeTracker — enriched CascadeDecision fields + per-category stats."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest
 
@@ -65,18 +66,18 @@ class TestCascadeDecisionFields:
     def test_immutable(self):
         """CascadeDecision remains frozen."""
         d = CascadeDecision(
-            model_name="m", tier=CascadeTier.FREE, outcome=CascadeOutcome.SUCCESS, latency_ms=0.0,
+            model_name="m", tier=CascadeTier.FREE, outcome=CascadeOutcome.SUCCESS, latency_ms=0.0
         )
         with pytest.raises(AttributeError):
             d.model_name = "other"  # type: ignore[misc]
 
     def test_timestamp_defaults_to_now(self):
         """Timestamp defaults to current UTC time."""
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         d = CascadeDecision(
-            model_name="m", tier=CascadeTier.FREE, outcome=CascadeOutcome.SUCCESS, latency_ms=0.0,
+            model_name="m", tier=CascadeTier.FREE, outcome=CascadeOutcome.SUCCESS, latency_ms=0.0
         )
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         assert before <= d.timestamp <= after
 
 
@@ -90,14 +91,16 @@ class TestPerCategoryStats:
 
     def test_single_category_single_model(self):
         tracker = ModelCascadeTracker(max_decisions=100)
-        tracker.record(CascadeDecision(
-            model_name="model-a",
-            tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS,
-            latency_ms=100.0,
-            cost_estimate=0.001,
-            task_category="coding",
-        ))
+        tracker.record(
+            CascadeDecision(
+                model_name="model-a",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=100.0,
+                cost_estimate=0.001,
+                task_category="coding",
+            )
+        )
         stats = tracker.per_category_stats()
         assert "coding" in stats
         assert "model-a" in stats["coding"]
@@ -113,22 +116,35 @@ class TestPerCategoryStats:
         tracker = ModelCascadeTracker(max_decisions=100)
         # coding / model-a: 2 success, 1 fail
         for _ in range(2):
-            tracker.record(CascadeDecision(
-                model_name="model-a", tier=CascadeTier.FREE,
-                outcome=CascadeOutcome.SUCCESS, latency_ms=50.0,
+            tracker.record(
+                CascadeDecision(
+                    model_name="model-a",
+                    tier=CascadeTier.FREE,
+                    outcome=CascadeOutcome.SUCCESS,
+                    latency_ms=50.0,
+                    task_category="coding",
+                )
+            )
+        tracker.record(
+            CascadeDecision(
+                model_name="model-a",
+                tier=CascadeTier.BUDGET,
+                outcome=CascadeOutcome.FAILED,
+                latency_ms=30.0,
+                error_message="timeout",
                 task_category="coding",
-            ))
-        tracker.record(CascadeDecision(
-            model_name="model-a", tier=CascadeTier.BUDGET,
-            outcome=CascadeOutcome.FAILED, latency_ms=30.0,
-            error_message="timeout", task_category="coding",
-        ))
+            )
+        )
         # research / model-b: 1 success
-        tracker.record(CascadeDecision(
-            model_name="model-b", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS, latency_ms=200.0,
-            task_category="research",
-        ))
+        tracker.record(
+            CascadeDecision(
+                model_name="model-b",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=200.0,
+                task_category="research",
+            )
+        )
 
         stats = tracker.per_category_stats()
 
@@ -148,11 +164,15 @@ class TestPerCategoryStats:
 
     def test_clear_resets_per_category_stats(self):
         tracker = ModelCascadeTracker(max_decisions=100)
-        tracker.record(CascadeDecision(
-            model_name="model-a", tier=CascadeTier.FREE,
-            outcome=CascadeOutcome.SUCCESS, latency_ms=10.0,
-            task_category="coding",
-        ))
+        tracker.record(
+            CascadeDecision(
+                model_name="model-a",
+                tier=CascadeTier.FREE,
+                outcome=CascadeOutcome.SUCCESS,
+                latency_ms=10.0,
+                task_category="coding",
+            )
+        )
         assert tracker.per_category_stats()
         tracker.clear()
         assert tracker.per_category_stats() == {}
@@ -164,6 +184,7 @@ class TestRouterDedup:
     def test_no_duplicate_pattern_keys(self):
         from weebot.application.services.task_model_router import _PATTERNS
         from weebot.application.services.task_model_router import TaskCategory
+
         seen = set()
         for cat in _PATTERNS:
             assert cat not in seen, f"Duplicate TaskCategory key: {cat}"

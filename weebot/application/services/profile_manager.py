@@ -3,14 +3,15 @@
 Extracted from the original domain/models/user_profile.py monolith as
 part of architecture remediation (step-6).
 """
+
 from __future__ import annotations
 
 import logging
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from weebot.application.ports.profile_storage_port import ProfileStoragePort
 from weebot.domain.models.user_profile import (
@@ -70,9 +71,9 @@ class UserProfileManager:
         self,
         user_id: str,
         profile_type: UserProfileType = UserProfileType.CUSTOM,
-        name: Optional[str] = None,
-        email: Optional[str] = None,
-        initial_preferences: Optional[Dict[PreferenceCategory, Dict[str, Any]]] = None,
+        name: str | None = None,
+        email: str | None = None,
+        initial_preferences: dict[PreferenceCategory, dict[str, Any]] | None = None,
     ) -> UserProfile:
         """Create a new user profile with default preferences."""
         profile = UserProfile(
@@ -86,13 +87,15 @@ class UserProfileManager:
 
         for category, prefs in self._default_preferences.items():
             for key, value in prefs.items():
-                profile.preferences.append(UserPreference(
-                    category=category,
-                    key=key,
-                    value=value,
-                    last_updated=datetime.now(),
-                    confidence=0.8,
-                ))
+                profile.preferences.append(
+                    UserPreference(
+                        category=category,
+                        key=key,
+                        value=value,
+                        last_updated=datetime.now(),
+                        confidence=0.8,
+                    )
+                )
 
         if initial_preferences:
             for category, prefs in initial_preferences.items():
@@ -105,18 +108,20 @@ class UserProfileManager:
                             pref_exists = True
                             break
                     if not pref_exists:
-                        profile.preferences.append(UserPreference(
-                            category=category,
-                            key=key,
-                            value=value,
-                            last_updated=datetime.now(),
-                            confidence=0.8,
-                        ))
+                        profile.preferences.append(
+                            UserPreference(
+                                category=category,
+                                key=key,
+                                value=value,
+                                last_updated=datetime.now(),
+                                confidence=0.8,
+                            )
+                        )
 
         await self.storage.save_profile(profile)
         return profile
 
-    async def get_profile(self, user_id: str) -> Optional[UserProfile]:
+    async def get_profile(self, user_id: str) -> UserProfile | None:
         """Get a user profile."""
         return await self.storage.load_profile(user_id)
 
@@ -155,16 +160,20 @@ class UserProfileManager:
                 pref.confidence = confidence
                 return await self.update_profile(profile)
 
-        profile.preferences.append(UserPreference(
-            category=category,
-            key=key,
-            value=value,
-            last_updated=datetime.now(),
-            confidence=confidence,
-        ))
+        profile.preferences.append(
+            UserPreference(
+                category=category,
+                key=key,
+                value=value,
+                last_updated=datetime.now(),
+                confidence=confidence,
+            )
+        )
         return await self.update_profile(profile)
 
-    async def get_preference(self, user_id: str, category: PreferenceCategory, key: str) -> Optional[Any]:
+    async def get_preference(
+        self, user_id: str, category: PreferenceCategory, key: str
+    ) -> Any | None:
         """Get a specific user preference."""
         profile = await self.get_profile(user_id)
         if not profile:
@@ -195,40 +204,46 @@ class UserProfileManager:
                 return await self.update_profile(profile)
         return False
 
-    async def infer_preferences_from_interactions(self, user_id: str) -> Dict[PreferenceCategory, Dict[str, Any]]:
+    async def infer_preferences_from_interactions(
+        self, user_id: str
+    ) -> dict[PreferenceCategory, dict[str, Any]]:
         """Infer user preferences from interaction history."""
         profile = await self.get_profile(user_id)
         if not profile or not profile.interaction_history:
             return {}
 
         # Count interaction types
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
         for interaction in profile.interaction_history:
             t = interaction.interaction_type.value
             type_counts[t] = type_counts.get(t, 0) + 1
 
-        inferred: Dict[PreferenceCategory, Dict[str, Any]] = {}
+        inferred: dict[PreferenceCategory, dict[str, Any]] = {}
         if type_counts.get("research_request", 0) > type_counts.get("query", 0):
-            inferred[PreferenceCategory.CONTENT_PREFERENCES] = {
-                "depth_preference": "deep",
-            }
+            inferred[PreferenceCategory.CONTENT_PREFERENCES] = {"depth_preference": "deep"}
 
         total_feedback = sum(
-            1 for i in profile.interaction_history
+            1
+            for i in profile.interaction_history
             if i.interaction_type == InteractionType.FEEDBACK and i.satisfaction_score is not None
         )
         if total_feedback > 5:
-            avg_satisfaction = sum(
-                i.satisfaction_score for i in profile.interaction_history
-                if i.interaction_type == InteractionType.FEEDBACK and i.satisfaction_score is not None
-            ) / total_feedback
+            avg_satisfaction = (
+                sum(
+                    i.satisfaction_score
+                    for i in profile.interaction_history
+                    if i.interaction_type == InteractionType.FEEDBACK
+                    and i.satisfaction_score is not None
+                )
+                / total_feedback
+            )
             inferred[PreferenceCategory.COMMUNICATION_STYLE] = {
-                "effectiveness_score": avg_satisfaction,
+                "effectiveness_score": avg_satisfaction
             }
 
         return inferred
 
-    def get_personalized_response_style(self, user_id: str) -> Dict[str, Any]:
+    def get_personalized_response_style(self, user_id: str) -> dict[str, Any]:
         """Placeholder — would use stored preferences."""
         return {"tone": "professional", "detail_level": "balanced"}
 
@@ -240,7 +255,7 @@ class UserProfileManager:
         """Placeholder affinity score."""
         return 0.5
 
-    def get_privacy_settings(self, user_id: str) -> Dict[str, Any]:
+    def get_privacy_settings(self, user_id: str) -> dict[str, Any]:
         """Get privacy settings for a user (placeholder)."""
         return {
             "data_sharing_consent": False,
@@ -265,6 +280,7 @@ _DEFAULT_PROFILE = "default"
 @dataclass
 class Profile:
     """A named profile with isolated configuration."""
+
     name: str
     path: Path
     created_at: str = ""
@@ -281,12 +297,12 @@ class ProfileManager:
             ``~/.weebot/profiles/``.
     """
 
-    def __init__(self, profiles_root: Optional[Path] = None) -> None:
+    def __init__(self, profiles_root: Path | None = None) -> None:
         self._root = (profiles_root or _PROFILES_ROOT).resolve()
 
     # ── CRUD ───────────────────────────────────────────────────────
 
-    def create(self, name: str, from_profile: Optional[str] = None) -> Profile:
+    def create(self, name: str, from_profile: str | None = None) -> Profile:
         """Create a new profile.
 
         Args:
@@ -301,8 +317,7 @@ class ProfileManager:
         """
         if not name or not name.replace("-", "").replace("_", "").isalnum():
             raise ValueError(
-                f"Invalid profile name: {name!r}. "
-                "Use letters, digits, hyphens, and underscores."
+                f"Invalid profile name: {name!r}. " "Use letters, digits, hyphens, and underscores."
             )
 
         profile_path = self._root / name
@@ -320,16 +335,15 @@ class ProfileManager:
                         shutil.copy2(str(item), str(profile_path / item.name))
 
         # Write profile metadata
-        from datetime import timezone
+
         (profile_path / ".metadata").write_text(
-            f"name: {name}\ncreated_at: {datetime.now(timezone.utc).isoformat()}\n",
-            encoding="utf-8",
+            f"name: {name}\ncreated_at: {datetime.now(UTC).isoformat()}\n", encoding="utf-8"
         )
 
         logger.info("Created profile '%s' at %s", name, profile_path)
         return Profile(name=name, path=profile_path)
 
-    def get(self, name: str) -> Optional[Profile]:
+    def get(self, name: str) -> Profile | None:
         """Get a profile by name, or ``None`` if it does not exist."""
         profile_path = self._root / name
         if not profile_path.is_dir():
@@ -374,7 +388,7 @@ class ProfileManager:
         logger.info("Deleted profile '%s'", name)
         return True
 
-    def switch(self, name: str) -> Optional[Profile]:
+    def switch(self, name: str) -> Profile | None:
         """Switch to an existing profile, writing the active marker."""
         profile = self.get(name)
         if profile is None:
@@ -386,7 +400,7 @@ class ProfileManager:
         return profile
 
     @staticmethod
-    def active_profile_name(profiles_root: Optional[Path] = None) -> str:
+    def active_profile_name(profiles_root: Path | None = None) -> str:
         """Return the currently active profile name (``default`` if unset)."""
         root = profiles_root or _PROFILES_ROOT
         marker = root.parent / ".active_profile"

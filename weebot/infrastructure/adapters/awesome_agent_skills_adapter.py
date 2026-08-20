@@ -21,12 +21,12 @@ Index resolution (two link types in the README):
     Download URL: https://raw.githubusercontent.com/<owner>/<repo>/main/skills/<slug>/SKILL.md
                   (slug derived from the display text)
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -65,12 +65,11 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
     """
 
     def __init__(
-        self,
-        index_url: Optional[str] = None,
-        http_client: Optional[httpx.AsyncClient] = None,
+        self, index_url: str | None = None, http_client: httpx.AsyncClient | None = None
     ) -> None:
         if index_url is None:
             from weebot.config.settings import WeebotSettings
+
             index_url = WeebotSettings().awesome_agent_skills_index_url
         self._index_url = index_url
         self._client = http_client or httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
@@ -106,15 +105,17 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
             primary_url = (
                 f"https://raw.githubusercontent.com/{owner}/skills/main/skills/{slug}/SKILL.md"
             )
-            skills.append(RemoteSkill(
-                name=slug,
-                version="latest",
-                description=description,
-                author=owner,
-                download_url=primary_url,
-                homepage=f"https://agent-skill.co/{owner}/skills/{slug}",
-                tags=[owner, "awesome-agent-skills"],
-            ))
+            skills.append(
+                RemoteSkill(
+                    name=slug,
+                    version="latest",
+                    description=description,
+                    author=owner,
+                    download_url=primary_url,
+                    homepage=f"https://agent-skill.co/{owner}/skills/{slug}",
+                    tags=[owner, "awesome-agent-skills"],
+                )
+            )
 
         # Type 2: direct GitHub links with explicit /tree/main/skills/<slug> path
         for m in _GITHUB_TREE_RE.finditer(resp.text):
@@ -130,15 +131,17 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
             download_url = (
                 f"https://raw.githubusercontent.com/{owner}/{repo}/main/skills/{slug}/SKILL.md"
             )
-            skills.append(RemoteSkill(
-                name=slug,
-                version="latest",
-                description=description,
-                author=owner,
-                download_url=download_url,
-                homepage=f"https://github.com/{owner}/{repo}/tree/main/skills/{slug}",
-                tags=[owner, "awesome-agent-skills", "github-direct"],
-            ))
+            skills.append(
+                RemoteSkill(
+                    name=slug,
+                    version="latest",
+                    description=description,
+                    author=owner,
+                    download_url=download_url,
+                    homepage=f"https://github.com/{owner}/{repo}/tree/main/skills/{slug}",
+                    tags=[owner, "awesome-agent-skills", "github-direct"],
+                )
+            )
 
         # Type 3: bare GitHub repo links (derive slug from display text)
         for m in _GITHUB_BARE_RE.finditer(resp.text):
@@ -159,20 +162,20 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
             download_url = (
                 f"https://raw.githubusercontent.com/{owner}/{repo}/main/skills/{slug}/SKILL.md"
             )
-            skills.append(RemoteSkill(
-                name=slug,
-                version="latest",
-                description=description,
-                author=owner,
-                download_url=download_url,
-                homepage=f"https://github.com/{owner}/{repo}",
-                tags=[owner, "awesome-agent-skills", "github-direct"],
-            ))
+            skills.append(
+                RemoteSkill(
+                    name=slug,
+                    version="latest",
+                    description=description,
+                    author=owner,
+                    download_url=download_url,
+                    homepage=f"https://github.com/{owner}/{repo}",
+                    tags=[owner, "awesome-agent-skills", "github-direct"],
+                )
+            )
 
         self._cached = skills
-        logger.info(
-            "awesome-agent-skills index: %d skills parsed from README", len(skills)
-        )
+        logger.info("awesome-agent-skills index: %d skills parsed from README", len(skills))
         return list(self._cached)
 
     async def search(self, query: str) -> list[RemoteSkill]:
@@ -224,9 +227,7 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
         # <owner>/agent-skills, <owner>/<product>-skills, etc.
         if "/skills/main/skills/" in skill.download_url:
             # Fallback 1: <owner>/skills/main/<slug>/SKILL.md
-            urls_to_try.append(
-                skill.download_url.replace("/skills/main/skills/", "/skills/main/")
-            )
+            urls_to_try.append(skill.download_url.replace("/skills/main/skills/", "/skills/main/"))
             # Fallback 2: <owner>/agent-skills/main/skills/<slug>/SKILL.md
             urls_to_try.append(
                 skill.download_url.replace("/skills/main/skills/", "/agent-skills/main/skills/")
@@ -237,9 +238,7 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
             )
         elif "/main/skills/" in skill.download_url:
             # Direct GitHub link — also try without skills/ prefix
-            urls_to_try.append(
-                skill.download_url.replace("/main/skills/", "/main/")
-            )
+            urls_to_try.append(skill.download_url.replace("/main/skills/", "/main/"))
 
         for url in urls_to_try:
             content = await self._fetch_raw(url)
@@ -247,8 +246,7 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
                 return self._write_skill_md(content, target_dir, skill.name)
 
         logger.warning(
-            "Could not download SKILL.md for '%s' — tried %d URLs",
-            skill.name, len(urls_to_try),
+            "Could not download SKILL.md for '%s' — tried %d URLs", skill.name, len(urls_to_try)
         )
         return False
 
@@ -258,7 +256,7 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
 
     # ── internals ────────────────────────────────────────────────────
 
-    async def _fetch_raw(self, url: str) -> Optional[bytes]:
+    async def _fetch_raw(self, url: str) -> bytes | None:
         """GET *url* and return content, or None on any error."""
         try:
             resp = await self._client.get(url)
@@ -291,6 +289,7 @@ class AwesomeAgentSkillsAdapter(SkillIndexPort):
 
 
 # ── module-level helper (mirrors agentskills_index._parse_agentskills_skill) ──
+
 
 def _parse_awesome_skill(raw: dict) -> RemoteSkill:
     """Convert a dict (for testing) into a RemoteSkill.

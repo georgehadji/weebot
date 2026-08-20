@@ -1,23 +1,17 @@
 """Unit tests for RoleBasedToolRegistryAdapter."""
+
 from __future__ import annotations
 
-from typing import List
 
-import pytest
-
-from weebot.application.ports.mcp_tool_registration_port import (
-    McpToolRegistrationPort,
-)
-from weebot.infrastructure.adapters.mcp_tool_registry_adapter import (
-    RoleBasedToolRegistryAdapter,
-)
+from weebot.application.ports.mcp_tool_registration_port import McpToolRegistrationPort
+from weebot.infrastructure.adapters.mcp_tool_registry_adapter import RoleBasedToolRegistryAdapter
 
 
 class _FakeRegistry:
     """In-memory registry-like object satisfying the adapter's duck-typed contract."""
 
     def __init__(self) -> None:
-        self._roles: dict[str, List[str]] = {}
+        self._roles: dict[str, list[str]] = {}
 
     def add_tool_to_role(self, role: str, tool_name: str) -> None:
         if role not in self._roles:
@@ -29,10 +23,10 @@ class _FakeRegistry:
         if role in self._roles and tool_name in self._roles[role]:
             self._roles[role].remove(tool_name)
 
-    def add_role(self, role: str, tools: List[str]) -> None:
+    def add_role(self, role: str, tools: list[str]) -> None:
         self._roles[role] = list(tools)
 
-    def list_roles(self) -> List[str]:
+    def list_roles(self) -> list[str]:
         return list(self._roles.keys())
 
 

@@ -6,9 +6,9 @@ Covers:
 - Classification of previously-unknown modules from the empirical run
 - layer_counts aggregation
 """
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.core.layer_classifier import layer_for_module, layer_counts
 
@@ -31,9 +31,13 @@ class TestLayerForModule:
         assert layer_for_module("weebot/application/eval/judges.py") == "application"
 
     def test_infrastructure(self):
-        assert layer_for_module("weebot/infrastructure/persistence/skill_store.py") == "infrastructure"
+        assert (
+            layer_for_module("weebot/infrastructure/persistence/skill_store.py") == "infrastructure"
+        )
         assert layer_for_module("weebot/infrastructure/event_bus.py") == "infrastructure"
-        assert layer_for_module("weebot/infrastructure/mcp/mcp_client_manager.py") == "infrastructure"
+        assert (
+            layer_for_module("weebot/infrastructure/mcp/mcp_client_manager.py") == "infrastructure"
+        )
 
     def test_tools_classified_as_infrastructure(self):
         """weebot/tools/* previously classified as 'unknown' — now infrastructure."""
@@ -118,14 +122,14 @@ class TestLayerCounts:
     def test_all_classified(self):
         """Verify that previously-unknown modules from the empirical run are now classified."""
         previously_unknown = [
-            "weebot/tools/base.py",           # → infrastructure
-            "weebot/tools/file_editor.py",     # → infrastructure
-            "weebot/agents/parser.py",         # → application
-            "weebot/agents/models.py",         # → application
+            "weebot/tools/base.py",  # → infrastructure
+            "weebot/tools/file_editor.py",  # → infrastructure
+            "weebot/agents/parser.py",  # → application
+            "weebot/agents/models.py",  # → application
             "weebot/qmd_integration/embeddings.py",  # → infrastructure
             "weebot/skills/builtin/reasoner/prompt.md",  # → application
         ]
         for path in previously_unknown:
-            assert layer_for_module(path) != "unknown", (
-                f"Module {path} should not be 'unknown' after layer fixes"
-            )
+            assert (
+                layer_for_module(path) != "unknown"
+            ), f"Module {path} should not be 'unknown' after layer fixes"

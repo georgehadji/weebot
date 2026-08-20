@@ -10,10 +10,11 @@ This preserves the conversational head (which anchors the task) and the
 recent tail (most relevant to the current execution step) while dramatically
 reducing token count for long-running sessions.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import TEMPERATURE_DETERMINISTIC, MAX_TOKENS_SHORT
@@ -53,7 +54,7 @@ class ConversationCompressor:
     def __init__(
         self,
         llm: LLMPort,
-        cheap_model: Optional[str] = None,
+        cheap_model: str | None = None,
         keep_head: int = KEEP_HEAD,
         keep_tail: int = KEEP_TAIL,
     ) -> None:
@@ -62,12 +63,11 @@ class ConversationCompressor:
         self._keep_tail = keep_tail
         if cheap_model is None:
             from weebot.config.model_refs import MODEL_BUDGET
+
             cheap_model = MODEL_BUDGET
         self._cheap_model = cheap_model
 
-    async def compress(
-        self, buffer: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    async def compress(self, buffer: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return a new buffer with middle turns replaced by a summary message.
 
         If the buffer is too short to compress (head + tail >= len),
@@ -83,9 +83,7 @@ class ConversationCompressor:
         min_compressible = self._keep_head + self._keep_tail + 1
         if total < min_compressible:
             logger.debug(
-                "Buffer too short to compress (%d < %d turns), skipping",
-                total,
-                min_compressible,
+                "Buffer too short to compress (%d < %d turns), skipping", total, min_compressible
             )
             return buffer
 
@@ -94,11 +92,9 @@ class ConversationCompressor:
         tail = buffer[total - self._keep_tail :]
 
         summary = await self._summarize(middle)
-        summary_msg: Dict[str, Any] = {
+        summary_msg: dict[str, Any] = {
             "role": "system",
-            "content": (
-                f"[Context summary — {len(middle)} turns compressed]\n{summary}"
-            ),
+            "content": (f"[Context summary — {len(middle)} turns compressed]\n{summary}"),
         }
 
         compressed = head + [summary_msg] + tail
@@ -110,16 +106,14 @@ class ConversationCompressor:
         )
         return compressed
 
-    async def _summarize(self, messages: List[Dict[str, Any]]) -> str:
+    async def _summarize(self, messages: list[dict[str, Any]]) -> str:
         """Call cheap model to produce a factual summary of *messages*."""
-        transcript_parts: List[str] = []
+        transcript_parts: list[str] = []
         for msg in messages:
             role = msg.get("role", "unknown")
             content = msg.get("content") or ""
             if isinstance(content, list):
-                content = " ".join(
-                    p.get("text", "") for p in content if isinstance(p, dict)
-                )
+                content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
             if content:
                 transcript_parts.append(f"{role.upper()}: {content[:2000]}")
 
@@ -131,10 +125,7 @@ class ConversationCompressor:
             response = await self._llm.chat(
                 messages=[
                     {"role": "system", "content": _COMPRESS_SYSTEM},
-                    {
-                        "role": "user",
-                        "content": f"Summarize this conversation:\n\n{transcript}",
-                    },
+                    {"role": "user", "content": f"Summarize this conversation:\n\n{transcript}"},
                 ],
                 model=self._cheap_model,
                 tools=None,

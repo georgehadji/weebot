@@ -7,16 +7,18 @@ agent sees them.
 Inspired by Deep Agents' middleware stack — but simplified for weebot's
 immutable-state architecture.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
 class MiddlewareRequest:
     """The intercepted request to the LLM."""
+
     messages: list[dict[str, Any]]
     tools: list[dict[str, Any]]
     step_id: str = ""
@@ -26,6 +28,7 @@ class MiddlewareRequest:
 @dataclass
 class MiddlewareResponse:
     """The intercepted response from the LLM."""
+
     content: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -34,15 +37,16 @@ class MiddlewareResponse:
 @dataclass
 class ToolCallResult:
     """Result of a single tool call within the middleware pipeline."""
+
     tool_name: str = ""
     arguments: dict[str, Any] = field(default_factory=dict)
     output: str = ""
-    error: Optional[str] = None
+    error: str | None = None
     is_error: bool = False
     duration_ms: float = 0.0
 
     @classmethod
-    def from_raw(cls, raw: Any) -> "ToolCallResult":
+    def from_raw(cls, raw: Any) -> ToolCallResult:
         """Convert from a ToolResult or similar."""
         if hasattr(raw, "output"):
             return cls(
@@ -69,9 +73,7 @@ class Middleware(ABC):
         ...
 
     async def before_request(
-        self,
-        request: MiddlewareRequest,
-        state: dict[str, Any],
+        self, request: MiddlewareRequest, state: dict[str, Any]
     ) -> tuple[MiddlewareRequest, dict[str, Any]]:
         """Called before the LLM request is sent.
 
@@ -81,10 +83,7 @@ class Middleware(ABC):
         return request, state
 
     async def after_response(
-        self,
-        response: MiddlewareResponse,
-        request: MiddlewareRequest,
-        state: dict[str, Any],
+        self, response: MiddlewareResponse, request: MiddlewareRequest, state: dict[str, Any]
     ) -> tuple[MiddlewareResponse, dict[str, Any]]:
         """Called after the LLM responds but before tool calls are dispatched.
 
@@ -94,9 +93,7 @@ class Middleware(ABC):
         return response, state
 
     async def after_tool_call(
-        self,
-        result: ToolCallResult,
-        state: dict[str, Any],
+        self, result: ToolCallResult, state: dict[str, Any]
     ) -> tuple[ToolCallResult, dict[str, Any]]:
         """Called after each individual tool call completes.
 

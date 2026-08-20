@@ -5,15 +5,15 @@ across sessions to build a deepening model of the user.
 
 Inspired by Honcho (plastic-labs/honcho) dialectic user modeling.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class UserObservation:
     """A single observation about the user from a session."""
+
     timestamp: str
     category: str  # preference, skill, knowledge, behavior
     observation: str
@@ -30,6 +31,7 @@ class UserObservation:
 @dataclass
 class UserModel:
     """Accumulated model of the user across sessions."""
+
     user_id: str
     observations: list[UserObservation] = field(default_factory=list)
     expertise_areas: list[str] = field(default_factory=list)
@@ -50,34 +52,27 @@ class UserModelingService:
         models_dir: Directory to persist user models.
     """
 
-    def __init__(self, models_dir: Optional[str] = None) -> None:
+    def __init__(self, models_dir: str | None = None) -> None:
         self._dir = Path(models_dir) if models_dir else Path.home() / ".weebot" / "user-models"
         self._dir.mkdir(parents=True, exist_ok=True)
 
     async def record_observation(
-        self,
-        user_id: str,
-        category: str,
-        observation: str,
-        confidence: float = 0.5,
+        self, user_id: str, category: str, observation: str, confidence: float = 0.5
     ) -> None:
         """Record an observation about a user."""
         model = await self.load_model(user_id)
-        model.observations.append(UserObservation(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            category=category,
-            observation=observation,
-            confidence=confidence,
-        ))
+        model.observations.append(
+            UserObservation(
+                timestamp=datetime.now(UTC).isoformat(),
+                category=category,
+                observation=observation,
+                confidence=confidence,
+            )
+        )
         model.interaction_count += 1
         await self._save_model(model)
 
-    async def infer_preference(
-        self,
-        user_id: str,
-        key: str,
-        value: str,
-    ) -> None:
+    async def infer_preference(self, user_id: str, key: str, value: str) -> None:
         """Record or update a user preference."""
         model = await self.load_model(user_id)
         model.preferences[key] = value
@@ -126,9 +121,15 @@ class UserModelingService:
         path = self._dir / f"{model.user_id}.json"
         data = {
             "user_id": model.user_id,
-            "observations": [{"timestamp": o.timestamp, "category": o.category,
-                              "observation": o.observation, "confidence": o.confidence}
-                             for o in model.observations],
+            "observations": [
+                {
+                    "timestamp": o.timestamp,
+                    "category": o.category,
+                    "observation": o.observation,
+                    "confidence": o.confidence,
+                }
+                for o in model.observations
+            ],
             "expertise_areas": model.expertise_areas,
             "preferences": model.preferences,
             "interaction_count": model.interaction_count,

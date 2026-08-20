@@ -4,9 +4,10 @@ These models describe the MCP (Model Context Protocol) server topology
 that Weebot connects to.  They are pure domain models with no dependency
 on the MCP SDK or any infrastructure adapter.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any
 
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 class MCPTransport(str, Enum):
     """Supported MCP transport protocols."""
+
     STDIO = "stdio"
     HTTP = "http"
     SSE = "sse"
@@ -23,6 +25,7 @@ class MCPTransport(str, Enum):
 
 class MCPConnectionState(str, Enum):
     """Lifecycle state of a connection to an MCP server."""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -35,6 +38,7 @@ class MCPAuthConfig(BaseModel):
     Supports OAuth (for hosted MCP servers like Stripe) and
     bearer token / mTLS for private servers.
     """
+
     type: str = Field(default="none", description="Auth type: none, oauth, bearer, mtls")
     oauth_client_id: str | None = Field(default=None, description="OAuth client ID")
     oauth_scopes: list[str] = Field(default_factory=list, description="OAuth scopes")
@@ -45,6 +49,7 @@ class MCPAuthConfig(BaseModel):
 
 class MCPToolFilterConfig(BaseModel):
     """Filtering rules for tools exposed by an MCP server."""
+
     include: list[str] | None = Field(default=None, description="Glob patterns to include")
     exclude: list[str] | None = Field(default=None, description="Glob patterns to exclude")
     include_prompts: bool = Field(default=False, description="Expose prompts as tools")
@@ -61,6 +66,7 @@ class MCPToolFilterConfig(BaseModel):
 
 class MCPSamplingPolicy(BaseModel):
     """Policy for handling sampling/createMessage requests from an MCP server."""
+
     enabled: bool = Field(default=True, description="Allow sampling requests")
     max_tokens_per_request: int = Field(default=4096, ge=1, le=65536)
     model_allowlist: list[str] | None = Field(
@@ -76,6 +82,7 @@ class MCPServerConfig(BaseModel):
     Supports stdio subprocess (command + args + env), HTTP/SSE streaming
     connections (url + headers), and streamable-http.
     """
+
     name: str = Field(description="Unique server identifier")
     transport: MCPTransport = Field(default=MCPTransport.STDIO)
     enabled: bool = Field(default=True, description="Connect on startup")
@@ -118,11 +125,14 @@ class MCPServerConfig(BaseModel):
         return v.strip()
 
     @model_validator(mode="after")
-    def _validate_transport_requirements(self) -> "MCPServerConfig":
+    def _validate_transport_requirements(self) -> MCPServerConfig:
         """Validate transport-specific required fields."""
         if self.transport == MCPTransport.STDIO and not self.command:
             raise ValueError("command is required for stdio transport")
-        if self.transport in (MCPTransport.HTTP, MCPTransport.SSE, MCPTransport.STREAMABLE_HTTP) and not self.url:
+        if (
+            self.transport in (MCPTransport.HTTP, MCPTransport.SSE, MCPTransport.STREAMABLE_HTTP)
+            and not self.url
+        ):
             raise ValueError(f"url is required for {self.transport} transport")
         return self
 
@@ -132,6 +142,7 @@ class MCPToolInfo(BaseModel):
 
     Stored per-server after tool discovery, before filtering is applied.
     """
+
     original_name: str = Field(description="Tool name as returned by the MCP server")
     namespaced_name: str = Field(description="Namespaced name: mcp__<server>__<tool>")
     description: str = Field(default="", description="Tool description from the server")
@@ -144,6 +155,7 @@ class MCPToolInfo(BaseModel):
 
 class MCPConnectionMetrics(BaseModel):
     """Runtime metrics for a single MCP server connection."""
+
     server_name: str
     state: MCPConnectionState = MCPConnectionState.DISCONNECTED
     connected_at: datetime | None = None
@@ -158,8 +170,6 @@ class MCPConnectionMetrics(BaseModel):
 
     def update_uptime(self) -> None:
         if self.connected_at and self.state == MCPConnectionState.CONNECTED:
-            self.uptime_seconds = (
-                datetime.now(timezone.utc) - self.connected_at
-            ).total_seconds()
+            self.uptime_seconds = (datetime.now(UTC) - self.connected_at).total_seconds()
         else:
             self.uptime_seconds = 0.0

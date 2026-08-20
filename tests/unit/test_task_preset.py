@@ -1,4 +1,5 @@
 """Tests for Phase 5: TaskPreset and preset registry."""
+
 import pytest
 
 from weebot.domain.models.task_preset import TaskPreset
@@ -55,11 +56,7 @@ def test_get_preset_empty_string():
 
 def test_register_custom_preset():
     """register_preset adds a custom preset."""
-    custom = TaskPreset(
-        name="custom",
-        enable_premortem=True,
-        max_steps=5,
-    )
+    custom = TaskPreset(name="custom", enable_premortem=True, max_steps=5)
     register_preset(custom)
     retrieved = get_preset("custom")
     assert retrieved.name == "custom"

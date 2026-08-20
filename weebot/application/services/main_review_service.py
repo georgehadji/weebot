@@ -2,6 +2,7 @@
 
 Uses the "verifier" role model. Fail-open: returns DEFERRED on any error.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,13 +52,16 @@ class MainReviewService(MainReviewPort):
                 self._llm.chat(
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": (
-                            f"Title: {contract.title}\n\n"
-                            f"Prompt: {contract.prompt[:500]}\n\n"
-                            f"Intent review: {_reasoning}\n"
-                            f"Estimated effort: {contract.estimated_effort}\n"
-                            f"Heat score: {contract.heat_score:.2f}"
-                        )},
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Title: {contract.title}\n\n"
+                                f"Prompt: {contract.prompt[:500]}\n\n"
+                                f"Intent review: {_reasoning}\n"
+                                f"Estimated effort: {contract.estimated_effort}\n"
+                                f"Heat score: {contract.heat_score:.2f}"
+                            ),
+                        },
                     ],
                     temperature=TEMPERATURE_PRECISE,
                     max_tokens=_MAX_TOKENS,

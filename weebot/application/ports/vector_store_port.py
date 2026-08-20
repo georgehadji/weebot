@@ -5,10 +5,10 @@ future backends (Zvec, FAISS, pgvector) without retriever rewrites.
 The default implementation is ``NumpyVectorStore`` in the infrastructure
 layer — zero new dependencies.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import numpy as np
 
@@ -25,10 +25,7 @@ class VectorStorePort(ABC):
 
     @abstractmethod
     async def upsert(
-        self,
-        ids: list[str],
-        vectors: np.ndarray,
-        metadata: Optional[list[dict]] = None,
+        self, ids: list[str], vectors: np.ndarray, metadata: list[dict] | None = None
     ) -> None:
         """Insert or update documents.
 
@@ -44,11 +41,7 @@ class VectorStorePort(ABC):
         ...
 
     @abstractmethod
-    async def query(
-        self,
-        vector: np.ndarray,
-        top_k: int = 10,
-    ) -> list[tuple[str, float, dict]]:
+    async def query(self, vector: np.ndarray, top_k: int = 10) -> list[tuple[str, float, dict]]:
         """Return the *top_k* most similar documents by cosine similarity.
 
         Args:

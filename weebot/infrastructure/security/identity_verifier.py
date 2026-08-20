@@ -10,48 +10,51 @@ This module provides:
 - Action attribution - trace every action to originating request
 - Multi-factor authorization for sensitive operations
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
 class VerificationLevel(Enum):
     """Level of identity verification required."""
-    NONE = "none"           # No verification
-    BASIC = "basic"         # Source identification only
-    STANDARD = "standard"   # Source + basic authorization
-    STRONG = "strong"       # Multi-factor verification
-    CRITICAL = "critical"   # Full verification with logging
+
+    NONE = "none"  # No verification
+    BASIC = "basic"  # Source identification only
+    STANDARD = "standard"  # Source + basic authorization
+    STRONG = "strong"  # Multi-factor verification
+    CRITICAL = "critical"  # Full verification with logging
 
 
 @dataclass
 class IdentityClaim:
     """Claimed identity for an agent action."""
+
     claim_id: str
     source_type: str  # user, agent, system, external
     source_id: str
     source_name: str
-    claimed_permissions: List[str]
+    claimed_permissions: list[str]
     timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class VerificationResult:
     """Result of identity verification."""
+
     is_valid: bool
     level: VerificationLevel
     claim: IdentityClaim
-    verified_permissions: List[str] = field(default_factory=list)
-    denied_permissions: List[str] = field(default_factory=list)
+    verified_permissions: list[str] = field(default_factory=list)
+    denied_permissions: list[str] = field(default_factory=list)
     reason: str = ""
     confidence: float = 1.0  # 0.0 to 1.0
     requires_additional_verification: bool = False
@@ -60,16 +63,17 @@ class VerificationResult:
 @dataclass
 class ActionAttribution:
     """Complete attribution for an agent action."""
+
     action_id: str
     agent_id: str
     original_claim: IdentityClaim
-    verified_permissions: List[str]
+    verified_permissions: list[str]
     actual_action: str
-    target: Optional[str]
+    target: str | None
     result: str
     timestamp: datetime = field(default_factory=datetime.now)
     verification_level: VerificationLevel = VerificationLevel.NONE
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class IdentityVerifier:
@@ -104,20 +108,37 @@ class IdentityVerifier:
     """
 
     # Known trusted source patterns
-    _TRUSTED_SOURCES: Set[str] = {"user", "system", "trusted_agent"}
-    _UNTRUSTED_SOURCES: Set[str] = {"external", "unknown", "anonymous"}
+    _TRUSTED_SOURCES: set[str] = {"user", "system", "trusted_agent"}
+    _UNTRUSTED_SOURCES: set[str] = {"external", "unknown", "anonymous"}
 
     # Sensitive actions requiring strong verification
-    _SENSITIVE_ACTIONS: Set[str] = {
-        "delete", "remove", "rm", "rmdir",
-        "format", "mkfs", "drop",
-        "exec", "run", "execute",
-        "sudo", "su", "runas",
-        "chmod", "chown", "chgrp",
-        "kill", "terminate",
-        "shutdown", "reboot",
-        "export", "upload", "send",
-        "credential", "password", "key",
+    _SENSITIVE_ACTIONS: set[str] = {
+        "delete",
+        "remove",
+        "rm",
+        "rmdir",
+        "format",
+        "mkfs",
+        "drop",
+        "exec",
+        "run",
+        "execute",
+        "sudo",
+        "su",
+        "runas",
+        "chmod",
+        "chown",
+        "chgrp",
+        "kill",
+        "terminate",
+        "shutdown",
+        "reboot",
+        "export",
+        "upload",
+        "send",
+        "credential",
+        "password",
+        "key",
     }
 
     def __init__(
@@ -131,7 +152,7 @@ class IdentityVerifier:
         self._max_verification_age = timedelta(seconds=max_verification_age_seconds)
 
         # Permission policies
-        self._source_policies: Dict[str, Dict[str, Any]] = {
+        self._source_policies: dict[str, dict[str, Any]] = {
             "user": {
                 "default_permissions": ["read", "execute"],
                 "sensitive_actions": ["write", "delete"],
@@ -155,17 +176,15 @@ class IdentityVerifier:
         }
 
         # Verification cache
-        self._verification_cache: Dict[str, VerificationResult] = {}
-        self._attribution_log: List[ActionAttribution] = []
+        self._verification_cache: dict[str, VerificationResult] = {}
+        self._attribution_log: list[ActionAttribution] = []
         self._max_log_size = 5000
 
         # Failed verification tracking
-        self._failed_verifications: Dict[str, List[datetime]] = {}
+        self._failed_verifications: dict[str, list[datetime]] = {}
 
     def verify_claim(
-        self,
-        claim: IdentityClaim,
-        required_level: VerificationLevel = VerificationLevel.STANDARD,
+        self, claim: IdentityClaim, required_level: VerificationLevel = VerificationLevel.STANDARD
     ) -> VerificationResult:
         """
         Verify an identity claim.
@@ -223,9 +242,9 @@ class IdentityVerifier:
         agent_id: str,
         claim: IdentityClaim,
         action: str,
-        target: Optional[str] = None,
+        target: str | None = None,
         result: str = "success",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ActionAttribution:
         """
         Create complete attribution for an agent action.
@@ -264,7 +283,7 @@ class IdentityVerifier:
         # Store attribution
         self._attribution_log.append(attribution)
         if len(self._attribution_log) > self._max_log_size:
-            self._attribution_log = self._attribution_log[-self._max_log_size:]
+            self._attribution_log = self._attribution_log[-self._max_log_size :]
 
         # Log failed verification attempts
         if not verification.is_valid:
@@ -273,10 +292,7 @@ class IdentityVerifier:
         return attribution
 
     def check_authorization(
-        self,
-        claim: IdentityClaim,
-        action: str,
-        target: Optional[str] = None,
+        self, claim: IdentityClaim, action: str, target: str | None = None
     ) -> tuple[bool, str]:
         """
         Check if a claim is authorized for a specific action.
@@ -312,17 +328,20 @@ class IdentityVerifier:
         if is_sensitive:
             sensitive_perms = policy.get("sensitive_actions", [])
             if not any(perm in verification.verified_permissions for perm in sensitive_perms):
-                return False, f"Source type '{claim.source_type}' lacks permission for sensitive action"
+                return (
+                    False,
+                    f"Source type '{claim.source_type}' lacks permission for sensitive action",
+                )
 
         return True, "Authorized"
 
     def get_attributions(
         self,
-        agent_id: Optional[str] = None,
-        source_id: Optional[str] = None,
-        since: Optional[datetime] = None,
+        agent_id: str | None = None,
+        source_id: str | None = None,
+        since: datetime | None = None,
         limit: int = 100,
-    ) -> List[ActionAttribution]:
+    ) -> list[ActionAttribution]:
         """
         Query action attributions.
 
@@ -346,16 +365,14 @@ class IdentityVerifier:
 
         return filtered[-limit:]
 
-    def get_failed_verifications(self, source_id: str) -> List[datetime]:
+    def get_failed_verifications(self, source_id: str) -> list[datetime]:
         """Get timestamps of failed verification attempts for a source."""
         return self._failed_verifications.get(source_id, []).copy()
 
     # Private methods
 
     def _determine_verification_level(
-        self,
-        claim: IdentityClaim,
-        required_level: VerificationLevel,
+        self, claim: IdentityClaim, required_level: VerificationLevel
     ) -> VerificationLevel:
         """Determine the effective verification level needed."""
         # External sources always need stronger verification
@@ -378,11 +395,7 @@ class IdentityVerifier:
         required_idx = level_order.index(required_level)
         return required_level
 
-    def _verify_basic(
-        self,
-        claim: IdentityClaim,
-        policy: Dict[str, Any],
-    ) -> VerificationResult:
+    def _verify_basic(self, claim: IdentityClaim, policy: dict[str, Any]) -> VerificationResult:
         """Perform basic verification (source identification)."""
         # Check if source is known
         is_trusted = claim.source_type in self._TRUSTED_SOURCES
@@ -396,11 +409,7 @@ class IdentityVerifier:
             confidence=0.8 if is_trusted else 0.5,
         )
 
-    def _verify_standard(
-        self,
-        claim: IdentityClaim,
-        policy: Dict[str, Any],
-    ) -> VerificationResult:
+    def _verify_standard(self, claim: IdentityClaim, policy: dict[str, Any]) -> VerificationResult:
         """Perform standard verification (source + authorization)."""
         # Check source type
         if claim.source_type in self._UNTRUSTED_SOURCES:
@@ -430,10 +439,7 @@ class IdentityVerifier:
         )
 
     def _verify_strong(
-        self,
-        claim: IdentityClaim,
-        policy: Dict[str, Any],
-        level: VerificationLevel,
+        self, claim: IdentityClaim, policy: dict[str, Any], level: VerificationLevel
     ) -> VerificationResult:
         """Perform strong verification (multi-factor)."""
         # Check for failed verifications
@@ -466,14 +472,17 @@ class IdentityVerifier:
             is_valid=True,
             level=level,
             claim=claim,
-            verified_permissions=policy.get("default_permissions", []) + policy.get("sensitive_actions", []),
+            verified_permissions=policy.get("default_permissions", [])
+            + policy.get("sensitive_actions", []),
             reason="Strong verification passed",
             confidence=0.95,
         )
 
     def _get_cache_key(self, claim: IdentityClaim) -> str:
         """Generate cache key for verification result."""
-        content = f"{claim.source_type}:{claim.source_id}:{':'.join(sorted(claim.claimed_permissions))}"
+        content = (
+            f"{claim.source_type}:{claim.source_id}:{':'.join(sorted(claim.claimed_permissions))}"
+        )
         return hashlib.md5(content.encode()).hexdigest()
 
     def _track_failed_verification(self, source_id: str) -> None:
@@ -492,7 +501,7 @@ class IdentityVerifier:
 
 
 # Singleton instance
-_verifier: Optional[IdentityVerifier] = None
+_verifier: IdentityVerifier | None = None
 
 
 def get_identity_verifier() -> IdentityVerifier:

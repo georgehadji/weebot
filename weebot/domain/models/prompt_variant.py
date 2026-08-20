@@ -7,11 +7,11 @@ in the prompt variant archive.
 
 See: docs/plans/hyperagents-enhancement-plan.md
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,12 +31,10 @@ class PromptVariant(BaseModel):
     """
 
     variant_id: str = Field(default="")
-    parent_id: Optional[str] = Field(default=None)
+    parent_id: str | None = Field(default=None)
     agent_type: str = Field(default="")  # "executor", "planner", "meta_critic"
     prompt_content: str = Field(default="")
     source: PromptVariantSource = Field(default=PromptVariantSource.HUMAN)
     score: float = Field(default=0.0)
     is_active: bool = Field(default=False)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

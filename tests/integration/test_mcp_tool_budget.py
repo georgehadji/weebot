@@ -1,4 +1,5 @@
 """Integration test: MCP + native tool scoping respects the ≤ 12 tool budget."""
+
 from __future__ import annotations
 
 import pytest
@@ -77,8 +78,12 @@ def registry():
 async def test_tool_collection_stays_within_budget(registry, monkeypatch):
     """With scoping enabled, the final ToolCollection must have ≤ 12 tools."""
     selected_native = ["native_tool_00", "native_tool_05", "native_tool_10", "native_tool_15"]
-    selected_external = ["mcp__srv__ext_00", "mcp__srv__ext_03", "mcp__srv__ext_06",
-                         "mcp__srv__ext_09"]
+    selected_external = [
+        "mcp__srv__ext_00",
+        "mcp__srv__ext_03",
+        "mcp__srv__ext_06",
+        "mcp__srv__ext_09",
+    ]
 
     bridge = _FakeBridge(names=selected_external)
     selector = _FakeNativeSelector(names=selected_native)
@@ -87,9 +92,7 @@ async def test_tool_collection_stays_within_budget(registry, monkeypatch):
     def _fake_create(_self, names, **kwargs):
         return ToolCollection(*[_FakeTool(name=n) for n in names])
 
-    monkeypatch.setattr(
-        RoleBasedToolRegistry, "create_tool_collection_from_names", _fake_create
-    )
+    monkeypatch.setattr(RoleBasedToolRegistry, "create_tool_collection_from_names", _fake_create)
 
     session = Session(id="tool-budget-test")
     flow = PlanActFlow(
@@ -128,9 +131,7 @@ async def test_unscoped_registry_exceeds_budget(registry, monkeypatch):
     def _fake_create(_self, names, **kwargs):
         return ToolCollection(*[_FakeTool(name=n) for n in names])
 
-    monkeypatch.setattr(
-        RoleBasedToolRegistry, "create_tool_collection_from_names", _fake_create
-    )
+    monkeypatch.setattr(RoleBasedToolRegistry, "create_tool_collection_from_names", _fake_create)
 
     session = Session(id="tool-budget-unscoped-test")
     flow = PlanActFlow(

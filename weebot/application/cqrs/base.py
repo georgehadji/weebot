@@ -8,10 +8,12 @@ frozen=True config, providing automatic validation, JSON Schema
 generation, and model_dump() serialisation consistent with the
 domain models.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Generic, TypeVar
+from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -77,6 +79,7 @@ class CommandResult(Generic[TResult]):
         error: Error message (if failed).
         error_code: Machine-readable error code (if failed).
     """
+
     __slots__ = ("success", "data", "error", "error_code")
 
     def __init__(
@@ -97,9 +100,7 @@ class CommandResult(Generic[TResult]):
         return cls(success=True, data=data)
 
     @classmethod
-    def fail(
-        cls, error: str, error_code: str | None = None
-    ) -> CommandResult[Any]:
+    def fail(cls, error: str, error_code: str | None = None) -> CommandResult[Any]:
         """Create a failed result."""
         return cls(success=False, error=error, error_code=error_code)
 
@@ -118,6 +119,7 @@ class QueryResult(Generic[TResult]):
         error: Error message (if failed).
         resource_not_found: Whether the requested resource was not found.
     """
+
     __slots__ = ("success", "data", "error", "resource_not_found")
 
     def __init__(
@@ -140,11 +142,7 @@ class QueryResult(Generic[TResult]):
     @classmethod
     def not_found(cls, resource_name: str = "Resource") -> QueryResult[Any]:
         """Create a not-found result."""
-        return cls(
-            success=False,
-            error=f"{resource_name} not found",
-            resource_not_found=True,
-        )
+        return cls(success=False, error=f"{resource_name} not found", resource_not_found=True)
 
     @classmethod
     def fail(cls, error: str) -> QueryResult[Any]:
@@ -191,11 +189,7 @@ class IPipelineBehavior(ABC):
     """
 
     @abstractmethod
-    async def handle(
-        self,
-        request: Command | Query,
-        next_callable: Callable[[], Any],
-    ) -> Any:
+    async def handle(self, request: Command | Query, next_callable: Callable[[], Any]) -> Any:
         """Handle the request through the pipeline."""
         ...
 

@@ -9,6 +9,7 @@ Design notes:
 - On timeout or parse failure, returns an empty list (non-blocking).
 - 3 risks max — enough signal without bloating the plan.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,19 +42,17 @@ _TIMEOUT_SECONDS = 8.0
 class PremortmAnalyzer:
     """Runs a pre-mortem analysis on a plan and returns a list of risk strings."""
 
-    def __init__(self, llm: "LLMPort", timeout_seconds: float = _TIMEOUT_SECONDS) -> None:
+    def __init__(self, llm: LLMPort, timeout_seconds: float = _TIMEOUT_SECONDS) -> None:
         self._llm = llm
         self._timeout = timeout_seconds
 
-    async def analyze(self, plan: "Plan", task: str) -> list[str]:
+    async def analyze(self, plan: Plan, task: str) -> list[str]:
         """Return up to 3 prospective failure causes for *plan*.
 
         On timeout or parse failure, returns [] so the flow is never blocked.
         """
         try:
-            steps_text = "\n".join(
-                f"  {i+1}. {s.description}" for i, s in enumerate(plan.steps)
-            )
+            steps_text = "\n".join(f"  {i+1}. {s.description}" for i, s in enumerate(plan.steps))
             user_msg = (
                 f"Task: {task}\n\nPlan:\n{steps_text}\n\n"
                 "What are the most likely causes of failure?"

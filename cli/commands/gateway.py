@@ -7,11 +7,11 @@ Usage:
     python -m cli.main gateway allowlist remove --platform <p> --id <chat_id>
     python -m cli.main gateway auth show
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
 
 import click
 from rich.console import Console
@@ -28,6 +28,7 @@ def _get_session_store():
     from weebot.infrastructure.persistence.gateway_session_store import SQLiteGatewaySessionStore
 
     from weebot.config.settings import WeebotSettings
+
     settings = WeebotSettings()
     return SQLiteGatewaySessionStore()
 
@@ -35,6 +36,7 @@ def _get_session_store():
 def _get_gateway_auth():
     """Resolve the gateway auth module."""
     from weebot.core.gateway_auth import GatewayAuth
+
     return GatewayAuth()
 
 
@@ -58,10 +60,7 @@ def sessions_list(platform: str | None, show_all: bool) -> None:
     store = _get_session_store()
 
     async def _list():
-        sessions = await store.list(
-            platform=platform,
-            active_only=not show_all,
-        )
+        sessions = await store.list(platform=platform, active_only=not show_all)
         return sessions
 
     sessions = asyncio.run(_list())
@@ -117,8 +116,9 @@ def gateway_allowlist() -> None:
 @gateway_allowlist.command("add")
 @click.option("--platform", required=True, help="Platform (telegram, discord, slack)")
 @click.option("--id", "entity_id", required=True, help="Chat or user ID to allow")
-@click.option("--type", "entity_type", type=click.Choice(["chat", "user"]),
-              default="chat", help="Entity type")
+@click.option(
+    "--type", "entity_type", type=click.Choice(["chat", "user"]), default="chat", help="Entity type"
+)
 def allowlist_add(platform: str, entity_id: str, entity_type: str) -> None:
     """Add a chat or user to the allowlist."""
     auth = _get_gateway_auth()
@@ -133,8 +133,9 @@ def allowlist_add(platform: str, entity_id: str, entity_type: str) -> None:
 @gateway_allowlist.command("remove")
 @click.option("--platform", required=True, help="Platform (telegram, discord, slack)")
 @click.option("--id", "entity_id", required=True, help="Chat or user ID to block")
-@click.option("--type", "entity_type", type=click.Choice(["chat", "user"]),
-              default="chat", help="Entity type")
+@click.option(
+    "--type", "entity_type", type=click.Choice(["chat", "user"]), default="chat", help="Entity type"
+)
 def allowlist_remove(platform: str, entity_id: str, entity_type: str) -> None:
     """Block a chat or user."""
     auth = _get_gateway_auth()
@@ -187,7 +188,9 @@ def gateway_auth(platform: str | None) -> None:
     else:
         console.print(f"Platforms: {', '.join(config.get('allowed_platforms', []))}")
         console.print(f"Allow all by default: {config.get('allow_all_by_default', False)}")
-        console.print(f"Blocked users: {sum(len(v) for v in config.get('blocked_users', {}).values())}")
+        console.print(
+            f"Blocked users: {sum(len(v) for v in config.get('blocked_users', {}).values())}"
+        )
 
 
 if __name__ == "__main__":

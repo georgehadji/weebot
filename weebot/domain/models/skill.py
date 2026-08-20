@@ -4,11 +4,12 @@ Extended with optimization state for the SkillOpt loop: version history,
 bounded edit application, protected slow-update section, and best-skill
 export.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, PrivateAttr
 
@@ -30,17 +31,17 @@ class SkillProvenance(BaseModel):
     Self-generated content is a steering-injection surface, so provenance is
     tracked explicitly and gates live injection via the trust tier.
     """
+
     origin: Literal["human", "distilled", "imported"] = Field(
-        default="human",
-        description="How the skill was authored.",
+        default="human", description="How the skill was authored."
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None, description="Session that produced a distilled skill."
     )
-    trajectory_ref: Optional[str] = Field(
+    trajectory_ref: str | None = Field(
         default=None, description="Reference to the originating trajectory."
     )
-    created_at: Optional[datetime] = Field(default=None)
+    created_at: datetime | None = Field(default=None)
     positive_uses: int = Field(
         default=0,
         ge=0,
@@ -50,11 +51,12 @@ class SkillProvenance(BaseModel):
 
 class SkillMetadata(BaseModel):
     """Metadata for a skill."""
-    emoji: Optional[str] = Field(default=None)
-    env: List[str] = Field(default_factory=list)
-    primary_env: Optional[str] = Field(default=None)
-    homepage: Optional[str] = Field(default=None)
-    source: Optional[str] = Field(default=None)
+
+    emoji: str | None = Field(default=None)
+    env: list[str] = Field(default_factory=list)
+    primary_env: str | None = Field(default=None)
+    homepage: str | None = Field(default=None)
+    source: str | None = Field(default=None)
 
     # --- Hermes-inspired (M3) Platform-specific skills ---
     platforms: list[str] = Field(
@@ -106,23 +108,25 @@ class SkillMetadata(BaseModel):
 
 class SkillVersion(BaseModel):
     """Immutable snapshot of a skill at a point in time."""
+
     version: int = 0
     content: str = ""
-    validation_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    accepted_at: Optional[datetime] = None
-    edit_history: list["SkillEditApplied"] = Field(default_factory=list)
+    validation_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    accepted_at: datetime | None = None
+    edit_history: list[SkillEditApplied] = Field(default_factory=list)
 
 
 class SkillEditApplied(BaseModel):
     """Record of an edit that was applied (audit trail entry)."""
+
     op: str = ""  # Literal["append", "insert_after", "replace", "delete"]
-    target: Optional[str] = None
+    target: str | None = None
     content: str = ""
     support_count: int = 1
     source_type: str = "failure"
     accepted: bool = False
-    score_delta: Optional[float] = None
-    applied_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    score_delta: float | None = None
+    applied_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TransferResult(BaseModel):
@@ -130,6 +134,7 @@ class TransferResult(BaseModel):
 
     Stored in Skill.transfer_scores keyed by "model_id:harness".
     """
+
     target_model: str = Field(default="", description="e.g., 'openai/gpt-5.4-mini'")
     target_harness: str = Field(default="direct_chat", description="e.g., 'direct_chat' | 'codex'")
     baseline_score: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -137,7 +142,7 @@ class TransferResult(BaseModel):
     delta: float = Field(default=0.0, description="transfer_score - baseline_score")
     n_tasks: int = Field(default=0, description="Number of validation tasks run")
     latency_s: float = Field(default=0.0, description="Wall-clock time for evaluation")
-    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class EvolutionEntry(BaseModel):
@@ -147,6 +152,7 @@ class EvolutionEntry(BaseModel):
     the optimizer's reflection prompts so it can avoid repeating failed
     approaches across epochs.
     """
+
     epoch: int = 0
     narrative: str = ""
     accepted_count: int = 0
@@ -154,7 +160,7 @@ class EvolutionEntry(BaseModel):
     best_score: float = 0.0
     score_delta: float = 0.0
     slow_update_applied: bool = False
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class Skill(BaseModel):
@@ -164,14 +170,15 @@ class Skill(BaseModel):
     Each successful edit creates a new SkillVersion, and the best
     validated version is exported as best_skill.md.
     """
+
     name: str = Field(default="")
     description: str = Field(default="")
     content: str = Field(default="", description="Markdown body of SKILL.md")
     metadata: SkillMetadata = Field(default_factory=SkillMetadata)
-    source_path: Optional[str] = Field(default=None)
+    source_path: str | None = Field(default=None)
 
     # --- Blueprint (Track 6 — Hermes Audit) ---
-    blueprint: Optional[dict] = Field(
+    blueprint: dict | None = Field(
         default=None,
         description=(
             "Blueprint configuration for auto-scheduling. "
@@ -198,20 +205,16 @@ class Skill(BaseModel):
     current_version: int = Field(default=0, description="Index into versions[]")
     best_version: int = Field(default=0, description="Index of best validated version")
     slow_update_content: str = Field(
-        default="",
-        description="Protected section content (wrapped in SLOW_UPDATE markers)",
+        default="", description="Protected section content (wrapped in SLOW_UPDATE markers)"
     )
     rejected_edit_buffer: list[SkillEditApplied] = Field(
-        default_factory=list,
-        description="Recent rejected edits (negative feedback)",
+        default_factory=list, description="Recent rejected edits (negative feedback)"
     )
     meta_skill: str = Field(
-        default="",
-        description="Optimizer-side coaching (never deployed with target model)",
+        default="", description="Optimizer-side coaching (never deployed with target model)"
     )
     transfer_scores: dict[str, TransferResult] = Field(
-        default_factory=dict,
-        description="Transfer evaluation results keyed by 'model_id:harness'",
+        default_factory=dict, description="Transfer evaluation results keyed by 'model_id:harness'"
     )
     evolution_log: list[EvolutionEntry] = Field(
         default_factory=list,
@@ -243,7 +246,7 @@ class Skill(BaseModel):
         lines.append(self.content)
         return "\n".join(lines)
 
-    def check_env(self, env: Optional[dict[str, str | None]] = None) -> Dict[str, bool]:
+    def check_env(self, env: dict[str, str | None] | None = None) -> dict[str, bool]:
         """Check whether required environment variables are set.
 
         Args:
@@ -256,10 +259,11 @@ class Skill(BaseModel):
         """
         if env is None:
             import os
+
             env = dict(os.environ)
         return {name: env.get(name) not in (None, "") for name in self.metadata.env}
 
-    def is_ready(self, env: Optional[dict[str, str | None]] = None) -> bool:
+    def is_ready(self, env: dict[str, str | None] | None = None) -> bool:
         """Return True if all required env vars are present.
 
         Args:
@@ -282,12 +286,12 @@ class Skill(BaseModel):
         """
         return self.metadata.trust == "trusted"
 
-    def with_trust(self, tier: TrustTier) -> "Skill":
+    def with_trust(self, tier: TrustTier) -> Skill:
         """Return a copy with the trust tier set to *tier* (immutable)."""
         new_meta = self.metadata.model_copy(update={"trust": tier})
         return self.model_copy(update={"metadata": new_meta})
 
-    def record_positive_use(self, *, promotion_threshold: int) -> "Skill":
+    def record_positive_use(self, *, promotion_threshold: int) -> Skill:
         """Record one validated positive use, promoting candidate→trusted.
 
         Increments ``provenance.positive_uses``. A ``candidate`` skill is
@@ -322,6 +326,7 @@ class Skill(BaseModel):
     def detect_platform() -> str:
         """Detect the current OS platform: macos, linux, or windows."""
         import sys
+
         if sys.platform == "darwin":
             return "macos"
         if sys.platform == "win32":
@@ -337,6 +342,7 @@ class Skill(BaseModel):
         Keys that already have a value set in the active config are skipped.
         """
         import sys as _sys
+
         # Check if config is stored in a module-level dict (set by CLI/DI)
         active_config = getattr(_sys.modules.get("weebot.config.settings"), "_skill_config", {})
         if active_config is None:
@@ -369,7 +375,7 @@ class Skill(BaseModel):
 
     # --- Progressive Disclosure methods (H1) ---
 
-    def get_reference(self, key: str) -> Optional[str]:
+    def get_reference(self, key: str) -> str | None:
         """Load and return a reference file on demand.
 
         Only loads the file on first access — subsequent calls return the
@@ -413,11 +419,7 @@ class Skill(BaseModel):
 
     # --- optimization methods ---
 
-    def apply_edits(
-        self,
-        edits: list[SkillEdit],
-        budget: Optional[int] = None,
-    ) -> Skill:
+    def apply_edits(self, edits: list[SkillEdit], budget: int | None = None) -> Skill:
         """Apply bounded edits to produce a new candidate skill version.
 
         Args:
@@ -451,9 +453,7 @@ class Skill(BaseModel):
 
         new_version_number = len(self.versions)
         candidate = SkillVersion(
-            version=new_version_number,
-            content=new_content,
-            edit_history=history,
+            version=new_version_number, content=new_content, edit_history=history
         )
 
         return self.model_copy(
@@ -478,10 +478,7 @@ class Skill(BaseModel):
         version_idx = self.current_version
         version = self.versions[version_idx]
         updated = version.model_copy(
-            update={
-                "validation_score": validation_score,
-                "accepted_at": datetime.now(timezone.utc),
-            }
+            update={"validation_score": validation_score, "accepted_at": datetime.now(UTC)}
         )
         new_versions = list(self.versions)
         new_versions[version_idx] = updated
@@ -491,18 +488,9 @@ class Skill(BaseModel):
         if best_score is None or validation_score > best_score:
             new_best = version_idx
 
-        return self.model_copy(
-            update={
-                "versions": new_versions,
-                "best_version": new_best,
-            }
-        )
+        return self.model_copy(update={"versions": new_versions, "best_version": new_best})
 
-    def reject_current(
-        self,
-        score_drop: float,
-        failure_analysis: str = "",
-    ) -> Skill:
+    def reject_current(self, score_drop: float, failure_analysis: str = "") -> Skill:
         """Reject the current candidate and record its edits in the buffer."""
         if not self.versions:
             return self
@@ -526,11 +514,7 @@ class Skill(BaseModel):
         if len(new_buffer) > 32:
             new_buffer = new_buffer[-32:]
 
-        return self.model_copy(
-            update={
-                "rejected_edit_buffer": new_buffer,
-            }
-        )
+        return self.model_copy(update={"rejected_edit_buffer": new_buffer})
 
     def apply_slow_update(self, guidance: str) -> Skill:
         """Rewrite the protected SLOW_UPDATE section with epoch guidance.
@@ -543,7 +527,7 @@ class Skill(BaseModel):
         end = self.content.find(SLOW_UPDATE_END)
         if start != -1 and end != -1:
             before = self.content[:start]
-            after = self.content[end + len(SLOW_UPDATE_END):]
+            after = self.content[end + len(SLOW_UPDATE_END) :]
             new_content = (before.rstrip() + "\n\n" + after.lstrip()).strip()
         else:
             new_content = self.content
@@ -552,12 +536,7 @@ class Skill(BaseModel):
         section = f"{SLOW_UPDATE_START}\n{guidance}\n{SLOW_UPDATE_END}"
         new_content = section + "\n\n" + new_content
 
-        return self.model_copy(
-            update={
-                "content": new_content,
-                "slow_update_content": guidance,
-            }
-        )
+        return self.model_copy(update={"content": new_content, "slow_update_content": guidance})
 
     def export_best(self) -> str:
         """Return the best validated skill content as a deployable markdown string.
@@ -572,7 +551,7 @@ class Skill(BaseModel):
         end = content.find(SLOW_UPDATE_END)
         if start != -1 and end != -1:
             before = content[:start]
-            after = content[end + len(SLOW_UPDATE_END):]
+            after = content[end + len(SLOW_UPDATE_END) :]
             content = (before.rstrip() + "\n\n" + after.lstrip()).strip()
 
         lines = [
@@ -602,6 +581,7 @@ class SkillPromotionResult(BaseModel):
 
     Produced by ``SkillPromotionGate.evaluate()``.
     """
+
     skill_name: str
     passed: bool = False
     verify_score: float = 0.0
@@ -614,6 +594,7 @@ class SkillReview(BaseModel):
 
     Produced by ``SkillReviewGate.review()``.
     """
+
     skill_name: str
     coherence: float = 0.0
     value: float = 0.0
@@ -630,6 +611,7 @@ class SkillMatch(BaseModel):
     Returned by BM25SkillRetriever; injected into the executor's system
     prompt to provide relevant procedural guidance for the current task.
     """
+
     skill_name: str = Field(default="")
     description: str = Field(default="")
     content_preview: str = Field(default="")

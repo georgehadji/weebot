@@ -33,9 +33,11 @@ class DedupStore:
     """
 
     def __init__(self, max_entries: int = 1000) -> None:
-        self._data: dict[str, Any] = {}          # normalized key → original value
-        self._stored: dict[str, Any] = {}         # normalized key → normalized value (for dedup comparison)
-        self._timestamps: dict[str, int] = {}    # monotonic counter for tiebreaker
+        self._data: dict[str, Any] = {}  # normalized key → original value
+        self._stored: dict[str, Any] = (
+            {}
+        )  # normalized key → normalized value (for dedup comparison)
+        self._timestamps: dict[str, int] = {}  # monotonic counter for tiebreaker
         self._max_entries = max_entries
         self._clock: int = 0
 

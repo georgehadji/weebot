@@ -4,6 +4,7 @@ These functions strip common prompt-injection patterns from text before it is
 returned in an MCP resource response.  They are pure presentation-layer filters;
 they do NOT modify any underlying data store.
 """
+
 from __future__ import annotations
 
 import re

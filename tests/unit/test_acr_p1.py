@@ -1,15 +1,12 @@
 """Unit tests for ACR Phase P1 — domain models, constraint checker, utility scorer, router."""
+
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from weebot.domain.models.capability import (
-    CapabilityAxis,
-    ModelQualityProfile,
-    TaskRequirement,
-)
+from weebot.domain.models.capability import CapabilityAxis, ModelQualityProfile, TaskRequirement
 
 
 class TestCapabilityDomain:
@@ -29,8 +26,7 @@ class TestCapabilityDomain:
 
     def test_model_quality_profile_immutable(self):
         p = ModelQualityProfile(
-            model_id="test/model",
-            axes={CapabilityAxis.CODING: 8.5, CapabilityAxis.REASONING: 7.0},
+            model_id="test/model", axes={CapabilityAxis.CODING: 8.5, CapabilityAxis.REASONING: 7.0}
         )
         assert p.model_id == "test/model"
         assert p.axes[CapabilityAxis.CODING] == 8.5
@@ -78,7 +74,7 @@ class TestConstraintChecker:
 
         cc = ConstraintChecker()
         # Most models support function calling; find one that doesn't
-        from weebot.config.model_registry import get_models_by_provider, ModelProvider
+
         req = TaskRequirement(requires_tools=True)
         eligible = cc.eligible(["deepseek/deepseek-v4-flash"], req)
         assert "deepseek/deepseek-v4-flash" in eligible
@@ -144,14 +140,13 @@ class TestUtilityScorer:
 
         scorer = UtilityScorer()
         scores = scorer.score(
-            ["deepseek/deepseek-v4-flash", "minimax/minimax-m3"],
-            TaskCategory.CODING,
+            ["deepseek/deepseek-v4-flash", "minimax/minimax-m3"], TaskCategory.CODING
         )
         # cap_match must be ≤ 1.0 (cosine similarity bound)
         for s in scores:
-            assert 0.0 <= s.cap_match <= 1.0001, (
-                f"cap_match={s.cap_match} for {s.model_id} — should be a cosine"
-            )
+            assert (
+                0.0 <= s.cap_match <= 1.0001
+            ), f"cap_match={s.cap_match} for {s.model_id} — should be a cosine"
             assert 0.0 <= s.cost_norm <= 1.0
             assert 0.0 <= s.lat_norm <= 1.0
 
@@ -208,6 +203,7 @@ class TestAdaptiveCapabilityRouter:
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )
+
         acr = AdaptiveCapabilityRouter(force_acr=False)
         result = acr.route("refactor the database module")
         assert len(result) == 1
@@ -218,6 +214,7 @@ class TestAdaptiveCapabilityRouter:
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )
+
         acr = AdaptiveCapabilityRouter(force_acr=True)
         result = acr.route("refactor the database module")
         assert len(result) >= 2  # at least 2 candidates
@@ -227,6 +224,7 @@ class TestAdaptiveCapabilityRouter:
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )
+
         acr = AdaptiveCapabilityRouter(force_acr=True)
         result = acr.route("")  # empty → GENERAL
         assert len(result) >= 1
@@ -235,7 +233,10 @@ class TestAdaptiveCapabilityRouter:
         from weebot.application.services.routing.adaptive_capability_router import (
             AdaptiveCapabilityRouter,
         )
-        with patch("weebot.application.services.routing.adaptive_capability_router.WEEBOT_ACR_SHADOW", True):
+
+        with patch(
+            "weebot.application.services.routing.adaptive_capability_router.WEEBOT_ACR_SHADOW", True
+        ):
             acr = AdaptiveCapabilityRouter(force_acr=True)
             result = acr.route("search for Clean Architecture patterns")
             assert len(result) == 1  # returns static in shadow mode
@@ -251,9 +252,7 @@ class TestQualityProfiles:
 
         for cat, model_id in CATEGORY_MODEL.items():
             profile = get_profile(model_id)
-            assert profile is not None, (
-                f"No quality profile for {model_id} (used by {cat.value})"
-            )
+            assert profile is not None, f"No quality profile for {model_id} (used by {cat.value})"
 
     def test_all_categories_have_requirements(self):
         from weebot.application.services.task_model_router import TaskCategory
@@ -270,9 +269,9 @@ class TestQualityProfiles:
         penalty_names = {"cost", "latency", "context"}
         for model_id, profile in get_all_profiles().items():
             for axis in profile.axes:
-                assert axis.value not in penalty_names, (
-                    f"Penalty axis '{axis.value}' found in quality profile for {model_id}"
-                )
+                assert (
+                    axis.value not in penalty_names
+                ), f"Penalty axis '{axis.value}' found in quality profile for {model_id}"
 
     def test_seed_profiles_are_immutable(self):
         from weebot.config.capability_profiles import get_profile
@@ -305,4 +304,3 @@ class TestQualityProfiles:
         assert air_cfg.tier == ModelTier.STANDARD
         assert TaskType.CODE_GENERATION in pro_cfg.strengths
         assert TaskType.CODE_GENERATION in air_cfg.strengths
-

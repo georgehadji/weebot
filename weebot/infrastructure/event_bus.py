@@ -1,15 +1,12 @@
 """Async event bus implementation — distributes events to all subscribers."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from weebot.application.ports.event_bus_port import (
-    DomainEventHandler,
-    EventBusPort,
-    EventHandler,
-)
+from weebot.application.ports.event_bus_port import DomainEventHandler, EventBusPort, EventHandler
 from weebot.domain.models.event import AgentEvent, DomainEvent
 
 if TYPE_CHECKING:
@@ -17,15 +14,19 @@ if TYPE_CHECKING:
 
 # Prometheus metrics — lazily imported to avoid circular import at module level
 _metrics_cache = None
+
+
 def _get_metrics():
     global _metrics_cache
     if _metrics_cache is None:
         from weebot.infrastructure.observability import metrics as _m
+
         _metrics_cache = _m
     return _metrics_cache
 
 
 _metrics_reset_hook = None
+
 
 def _reset_metrics_cache() -> None:
     """Reset the metrics cache.
@@ -34,6 +35,7 @@ def _reset_metrics_cache() -> None:
     """
     global _metrics_cache
     _metrics_cache = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +51,8 @@ class AsyncEventBus(EventBusPort):
 
     def __init__(self, handler_timeout: float | None = 30.0) -> None:
         self._handler_timeout = handler_timeout
-        self._handlers: List[EventHandler] = []
-        self._domain_handlers: List[DomainEventHandler] = []
+        self._handlers: list[EventHandler] = []
+        self._domain_handlers: list[DomainEventHandler] = []
         self._lock = asyncio.Lock()
 
     async def publish(self, event: AgentEvent) -> None:
@@ -67,8 +69,7 @@ class AsyncEventBus(EventBusPort):
         if not handlers:
             return
         results = await asyncio.gather(
-            *[self._safe_call(h, event) for h in handlers],
-            return_exceptions=True,
+            *[self._safe_call(h, event) for h in handlers], return_exceptions=True
         )
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
@@ -79,10 +80,11 @@ class AsyncEventBus(EventBusPort):
         if timeout is not None and timeout > 0:
             try:
                 await asyncio.wait_for(handler(event), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "Event handler %s timed out after %ss — event %s dropped for this subscriber",
-                    getattr(handler, "__name__", handler), timeout,
+                    getattr(handler, "__name__", handler),
+                    timeout,
                     getattr(event, "type", type(event).__name__),
                 )
         else:
@@ -99,7 +101,6 @@ class AsyncEventBus(EventBusPort):
         EventBroker.subscribe(event_type=…) semantics so that code using
         the old broker can migrate to AsyncEventBus easily.
         """
-        from weebot.domain.models.event import AgentEvent
 
         async def filtered_handler(event: AgentEvent) -> None:
             # AgentEvent subclasses store the type in their 'type' field
@@ -130,26 +131,22 @@ class AsyncEventBus(EventBusPort):
         if not handlers:
             return
         results = await asyncio.gather(
-            *[self._safe_call_domain(h, event) for h in handlers],
-            return_exceptions=True,
+            *[self._safe_call_domain(h, event) for h in handlers], return_exceptions=True
         )
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.warning(
-                    "Domain handler %s failed: %s", handlers[idx], result
-                )
+                logger.warning("Domain handler %s failed: %s", handlers[idx], result)
 
-    async def _safe_call_domain(
-        self, handler: DomainEventHandler, event: DomainEvent
-    ) -> None:
+    async def _safe_call_domain(self, handler: DomainEventHandler, event: DomainEvent) -> None:
         timeout = self._handler_timeout
         if timeout is not None and timeout > 0:
             try:
                 await asyncio.wait_for(handler(event), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     "Domain handler %s timed out after %ss — event %s dropped",
-                    getattr(handler, "__name__", handler), timeout,
+                    getattr(handler, "__name__", handler),
+                    timeout,
                     getattr(event, "type", type(event).__name__),
                 )
         else:
@@ -178,11 +175,7 @@ class DurableEventBus(EventBusPort):
         event_store: The persistent event store for journalling.
     """
 
-    def __init__(
-        self,
-        inner: AsyncEventBus,
-        event_store: "EventStorePort",
-    ) -> None:
+    def __init__(self, inner: AsyncEventBus, event_store: EventStorePort) -> None:
         self._inner = inner
         self._event_store = event_store
 
@@ -223,9 +216,7 @@ class DurableEventBus(EventBusPort):
             event_type = getattr(event, "type", type(event).__name__)  # type: ignore[union-attr]
             data = event.model_dump() if hasattr(event, "model_dump") else {"raw": str(event)}  # type: ignore[union-attr]
             await self._event_store.log_event(
-                session_id=str(session_id),
-                event_type=str(event_type),
-                data=data,
+                session_id=str(session_id), event_type=str(event_type), data=data
             )
         except Exception:
             logger.warning(
@@ -241,9 +232,7 @@ class DurableEventBus(EventBusPort):
             event_type = getattr(event, "type", type(event).__name__)
             data = event.model_dump() if hasattr(event, "model_dump") else {"raw": str(event)}
             await self._event_store.log_event(
-                session_id=str(session_id or ""),
-                event_type=str(event_type),
-                data=data,
+                session_id=str(session_id or ""), event_type=str(event_type), data=data
             )
         except Exception:
             logger.warning(
@@ -251,6 +240,3 @@ class DurableEventBus(EventBusPort):
                 getattr(event, "type", type(event).__name__),
                 exc_info=True,
             )
-
-
-

@@ -5,9 +5,9 @@ copies of the replacement text (silent data loss reported as success), and
 _remove deleted every substring match unconditionally with no injection scan
 on `match`. Zero prior tests covered either path.
 """
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.tools.persistent_memory import PersistentMemoryTool
 from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
@@ -32,13 +32,13 @@ class TestReplaceFailsClosedOnMultipleMatches:
 
         assert result.is_error
         assert set(result.data["candidates"]) == {
-            "a note about x", "a note about y", "a note about z",
+            "a note about x",
+            "a note about y",
+            "a note about z",
         }
         # Originals must survive untouched — this is the bug being fixed.
         read = await tool.execute(action="read", file="agent")
-        assert read.data["entries"] == [
-            "a note about x", "a note about y", "a note about z",
-        ]
+        assert read.data["entries"] == ["a note about x", "a note about y", "a note about z"]
 
     async def test_single_match_replace_succeeds(self, tmp_path):
         tool = _tool(tmp_path)
@@ -96,9 +96,7 @@ class TestDelimiterRejection:
     async def test_replace_rejects_section_sign_in_new_entry(self, tmp_path):
         tool = _tool(tmp_path)
         await _seed(tool, "a note")
-        result = await tool.execute(
-            action="replace", file="agent", match="note", entry="sec§tion"
-        )
+        result = await tool.execute(action="replace", file="agent", match="note", entry="sec§tion")
         assert result.is_error
 
 
@@ -149,6 +147,7 @@ class TestSnapshotCap:
         self, monkeypatch, tmp_path
     ):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "MEMORY_SNAPSHOT_CAP_ENABLED", True, raising=False)
 
         adapter = FileSystemMemoryAdapter(memory_dir=tmp_path)
@@ -167,6 +166,7 @@ class TestSnapshotCap:
     ):
         import weebot.config.feature_flags as ff
         import weebot.tools.persistent_memory as pm
+
         monkeypatch.setattr(ff, "MEMORY_SNAPSHOT_CAP_ENABLED", True, raising=False)
         monkeypatch.setattr(pm, "MEMORY_SNAPSHOT_MAX_CHARS", 100, raising=False)
 
@@ -184,6 +184,7 @@ class TestSnapshotCap:
 
     async def test_cap_enabled_user_profile_never_capped(self, monkeypatch, tmp_path):
         import weebot.config.feature_flags as ff
+
         monkeypatch.setattr(ff, "MEMORY_SNAPSHOT_CAP_ENABLED", True, raising=False)
 
         adapter = FileSystemMemoryAdapter(memory_dir=tmp_path)

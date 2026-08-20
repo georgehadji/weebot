@@ -9,28 +9,24 @@ Verifies:
 These tests use the real CLI / DI machinery but mock the LLM layer to
 avoid live API calls.  They depend on a temporary SQLite database.
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
-import signal
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
-from weebot.infrastructure.persistence.in_memory_state_repo import (
-    InMemoryStateRepository,
-)
+from weebot.infrastructure.persistence.in_memory_state_repo import InMemoryStateRepository
 from weebot.domain.models.session import Session, SessionStatus
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 def _cli_python(args: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
     """Run a CLI command via ``python -m cli.main``.
@@ -41,19 +37,14 @@ def _cli_python(args: list[str], env: dict | None = None) -> subprocess.Complete
     merged_env = {**os.environ, **(env or {})}
     # Pin to in-memory or temp DB so tests don't dirty the real DB
     merged_env.setdefault("WEEBOT_DB_PATH", ":memory:")
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env=merged_env,
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=merged_env)
     return result
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 1. E2E — happy path
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.external
 class TestFlowRunE2E:
@@ -75,19 +66,20 @@ class TestFlowRunE2E:
     @pytest.mark.asyncio
     async def test_flow_run_invalid_model_returns_error(self):
         """A non-existent model should fail gracefully, not crash."""
-        result = _cli_python([
-            "flow", "run",
-            "say hello",
-            "--model", "nonexistent-model-v99",
-        ])
+        result = _cli_python(["flow", "run", "say hello", "--model", "nonexistent-model-v99"])
         # May exit non-zero — but must not hang or segfault
         assert result.returncode is not None
-        assert "error" in result.stderr.lower() or "error" in result.stdout.lower() or result.returncode != 0
+        assert (
+            "error" in result.stderr.lower()
+            or "error" in result.stdout.lower()
+            or result.returncode != 0
+        )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 2. Performance smoke — 10 concurrent flows
 # ═════════════════════════════════════════════════════════════════════════════
+
 
 @pytest.mark.slow
 class TestConcurrentFlows:
@@ -115,10 +107,7 @@ class TestConcurrentFlows:
             await repo.save_session(session)
 
         # Fire all 10 concurrently
-        results = await asyncio.gather(
-            *[_fake_run(s) for s in sessions],
-            return_exceptions=True,
-        )
+        results = await asyncio.gather(*[_fake_run(s) for s in sessions], return_exceptions=True)
 
         # None should be an exception
         errors = [r for r in results if isinstance(r, Exception)]
@@ -135,6 +124,7 @@ class TestConcurrentFlows:
 # 3. Chaos — kill process mid-flow, verify session recovery
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @pytest.mark.slow
 class TestChaosRecovery:
 
@@ -149,20 +139,14 @@ class TestChaosRecovery:
         Full recovery (retry via ``weebot flow retry``) is verified
         by the TaskRunner unit tests in test_cqrs_handlers.
         """
-        import tempfile
-        import aiosqlite
 
         # Use a real temp DB to simulate crash-survival semantics
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
 
         try:
-            from weebot.infrastructure.persistence.sqlite_state_repo import (
-                SQLiteStateRepository,
-            )
-            from weebot.infrastructure.persistence.connection_pool import (
-                close_all_pools,
-            )
+            from weebot.infrastructure.persistence.sqlite_state_repo import SQLiteStateRepository
+            from weebot.infrastructure.persistence.connection_pool import close_all_pools
 
             repo = SQLiteStateRepository(db_path=db_path)
 

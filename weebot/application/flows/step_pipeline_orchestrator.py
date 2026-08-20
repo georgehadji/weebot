@@ -14,22 +14,24 @@ Usage:
     pipeline = StepPipelineOrchestrator(llm=llm, tools=tools)
     result = await pipeline.run(step, plan)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class StepPipelineResult:
     """Result of running a step through the pipeline."""
+
     def __init__(
         self,
         step: Any,
         passed: bool = False,
         needs_replan: bool = False,
-        error: Optional[str] = None,
+        error: str | None = None,
         validation_score: float = 0.0,
         review_verdict: str = "",
     ) -> None:
@@ -65,11 +67,7 @@ class StepPipelineOrchestrator:
         self._event_bus = event_bus
 
     async def run(
-        self,
-        step: Any,
-        plan: Any,
-        session: Any,
-        context: Optional[dict[str, Any]] = None,
+        self, step: Any, plan: Any, session: Any, context: dict[str, Any] | None = None
     ) -> StepPipelineResult:
         """Execute a single step through the full pipeline.
 
@@ -86,7 +84,8 @@ class StepPipelineOrchestrator:
                 critique = await self._critic.critique(step, plan)
                 if not critique.passed:
                     return StepPipelineResult(
-                        step=step, passed=False,
+                        step=step,
+                        passed=False,
                         needs_replan=True,
                         error=f"Critique failed: {critique.reasoning}",
                     )
@@ -98,15 +97,14 @@ class StepPipelineOrchestrator:
             result = await self._execute_step(step, session, context)
             if result is None:
                 return StepPipelineResult(
-                    step=step, passed=False,
+                    step=step,
+                    passed=False,
                     needs_replan=True,
                     error="Step execution returned no result",
                 )
         except Exception as exc:
             return StepPipelineResult(
-                step=step, passed=False,
-                needs_replan=True,
-                error=f"Step execution failed: {exc}",
+                step=step, passed=False, needs_replan=True, error=f"Step execution failed: {exc}"
             )
 
         # 3. Review (post-execution code review)
@@ -117,7 +115,8 @@ class StepPipelineOrchestrator:
                 review_verdict = getattr(review, "verdict", "approved")
                 if review_verdict == "rejected":
                     return StepPipelineResult(
-                        step=step, passed=False,
+                        step=step,
+                        passed=False,
                         needs_replan=True,
                         error=f"Review rejected: {getattr(review, 'summary', '')}",
                         review_verdict=review_verdict,
@@ -133,7 +132,8 @@ class StepPipelineOrchestrator:
                 validation_score = getattr(validation, "score", 1.0)
                 if validation_score < 0.5:
                     return StepPipelineResult(
-                        step=step, passed=False,
+                        step=step,
+                        passed=False,
                         needs_replan=False,
                         error=f"Verification failed (score={validation_score:.2f})",
                         validation_score=validation_score,
@@ -143,17 +143,12 @@ class StepPipelineOrchestrator:
                 logger.warning("Step verification failed (proceeding): %s", exc)
 
         return StepPipelineResult(
-            step=step, passed=True,
-            validation_score=validation_score,
-            review_verdict=review_verdict,
+            step=step, passed=True, validation_score=validation_score, review_verdict=review_verdict
         )
 
     async def _execute_step(
-        self,
-        step: Any,
-        session: Any,
-        context: Optional[dict[str, Any]] = None,
-    ) -> Optional[Any]:
+        self, step: Any, session: Any, context: dict[str, Any] | None = None
+    ) -> Any | None:
         """Execute a step using the available tools.
 
         Note: Actual execution is tightly coupled to PlanActFlow's CQRS
@@ -167,7 +162,8 @@ class StepPipelineOrchestrator:
 
         logger.info(
             "Pipeline executing step %s: %.60s",
-            getattr(step, "id", "?"), getattr(step, "description", ""),
+            getattr(step, "id", "?"),
+            getattr(step, "description", ""),
         )
         # Stub: real execution requires the CQRS mediator and ExecutorAgent
         # from PlanActFlow.  Returns a placeholder result for now.

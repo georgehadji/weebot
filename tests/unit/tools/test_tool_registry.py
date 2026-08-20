@@ -96,7 +96,7 @@ class TestSandboxPortInjection:
         sentinel = object()
 
         collection = registry.create_tool_collection_from_names(
-            ["bash", "python_execute"], sandbox_port=sentinel,
+            ["bash", "python_execute"], sandbox_port=sentinel
         )
 
         for name in ("bash", "python_execute"):

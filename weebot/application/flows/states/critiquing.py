@@ -5,10 +5,12 @@ Inserts between PlanningState and ExecutingState:
 - 0.5 <= overall_confidence < 0.8 → proceed with warnings injected into executor prompt
 - overall_confidence < 0.5 → send back to PlanningState with critique context
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -22,12 +24,14 @@ logger = logging.getLogger(__name__)
 
 class ConfidentThresholds:
     """Confidence thresholds for plan critique verdicts."""
+
     REVISE_THRESHOLD = 0.5
     WARN_THRESHOLD = 0.8
 
 
 class CritiquingState(FlowState):
     """Validates a plan before allowing execution to proceed."""
+
     status = AgentStatus.PLANNING  # Reuses PLANNING status to avoid adding new enum values
 
     def __init__(self, critic: PlanCriticService | None = None) -> None:
@@ -39,10 +43,7 @@ class CritiquingState(FlowState):
         """
         self._critic = critic
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.executing import ExecutingState
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.planning import PlanningState
 
         from weebot.application.flows.states.plan_review import next_state_after_plan
@@ -58,8 +59,7 @@ class CritiquingState(FlowState):
             return
 
         logger.info(
-            "Critiquing plan '%s' with %d steps",
-            context._plan.title, len(context._plan.steps),
+            "Critiquing plan '%s' with %d steps", context._plan.title, len(context._plan.steps)
         )
 
         # Reset critique from previous cycle
@@ -68,17 +68,19 @@ class CritiquingState(FlowState):
         # Build critique context
         critique_context = {
             "task": prompt,
-            "tools": [t.name for t in context._tools] if hasattr(context._tools, "__iter__") else [],
+            "tools": (
+                [t.name for t in context._tools] if hasattr(context._tools, "__iter__") else []
+            ),
         }
 
         # Run the critic
-        critique: PlanCritique = await self._critic.critique(
-            context._plan, critique_context,
-        )
+        critique: PlanCritique = await self._critic.critique(context._plan, critique_context)
 
         logger.info(
             "Plan critique verdict: %s (confidence: %.2f, flaws: %d)",
-            critique.verdict, critique.overall_confidence, len(critique.flaws),
+            critique.verdict,
+            critique.overall_confidence,
+            len(critique.flaws),
         )
 
         # ── Phase 5: Override thresholds from task_preset if provided ──
@@ -94,17 +96,16 @@ class CritiquingState(FlowState):
             # High confidence — proceed to pre-mortem then execution
             logger.info("Plan approved with high confidence")
             from weebot.application.flows.states.premortem import PremortmState
+
             context.set_state(PremortmState())
 
         elif critique.overall_confidence >= _revise:
             # Medium confidence — proceed but inject warnings
-            logger.info(
-                "Plan approved with warnings (%d flaws)",
-                len(critique.flaws),
-            )
+            logger.info("Plan approved with warnings (%d flaws)", len(critique.flaws))
             # Store critique on the flow for executor prompt injection
             context._plan_critique = critique
             from weebot.application.flows.states.premortem import PremortmState
+
             context.set_state(PremortmState())
 
         else:
@@ -119,12 +120,21 @@ class CritiquingState(FlowState):
 
         # Yield critique as a thought event for observability
         from weebot.domain.models.event import ThoughtEvent
+
         yield ThoughtEvent(
             step_id="critique",
             thought=(
                 f"**Plan Critique** — Verdict: {critique.verdict}, "
                 f"Confidence: {critique.overall_confidence:.2f}\n\n"
-                + ("**Flaws:**\n" + "\n".join(f"- {f}" for f in critique.flaws) if critique.flaws else "")
-                + ("\n\n**Suggestions:**\n" + "\n".join(f"- {s}" for s in critique.suggestions) if critique.suggestions else "")
+                + (
+                    "**Flaws:**\n" + "\n".join(f"- {f}" for f in critique.flaws)
+                    if critique.flaws
+                    else ""
+                )
+                + (
+                    "\n\n**Suggestions:**\n" + "\n".join(f"- {s}" for s in critique.suggestions)
+                    if critique.suggestions
+                    else ""
+                )
             ),
         )

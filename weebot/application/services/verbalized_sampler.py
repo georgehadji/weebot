@@ -6,11 +6,12 @@ that every consumer (ToT, Planner, Dreamer, Optimizer, Content) reuses.
 Fail-open: on any parse/LLM error, returns a single-item distribution
 with the fallback text so the agentic loop never regresses.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from weebot.config.constants import (
     VS_DEFAULT_K,
@@ -54,7 +55,7 @@ class VerbalizedSampler:
     def __init__(
         self,
         llm: Any,
-        model: Optional[str] = None,
+        model: str | None = None,
         default_k: int = VS_DEFAULT_K,
         default_threshold: float = VS_TAIL_THRESHOLD,
     ):
@@ -64,16 +65,14 @@ class VerbalizedSampler:
         self._default_threshold = default_threshold
 
         # Load prompt template (with file fallback)
-        self._prompt_template = load_prompt_with_fallback(
-            VS_PROMPT_FILENAME, VS_FALLBACK_PROMPT,
-        )
+        self._prompt_template = load_prompt_with_fallback(VS_PROMPT_FILENAME, VS_FALLBACK_PROMPT)
 
     async def sample(
         self,
         instruction: str,
         *,
-        k: Optional[int] = None,
-        threshold: Optional[float] = None,
+        k: int | None = None,
+        threshold: float | None = None,
         variant: Literal["standard", "cot"] = "standard",
         context: str = "",
         temperature: float = TEMPERATURE_CREATIVE,
@@ -110,10 +109,7 @@ class VerbalizedSampler:
             )
 
         # Build the prompt
-        prompt_body = self._prompt_template.format(
-            k=k,
-            threshold_clause=threshold_clause,
-        )
+        prompt_body = self._prompt_template.format(k=k, threshold_clause=threshold_clause)
 
         if context:
             full_instruction = f"{context}\n\n{instruction}"
@@ -154,21 +150,20 @@ class VerbalizedSampler:
             dist = parse_sampled_distribution(raw_text)
             if dist:
                 logger.debug(
-                    "VS sample: k=%d variant=%s returned %d responses, "
-                    "mode_prob=%.3f",
-                    k, variant, len(dist.responses),
+                    "VS sample: k=%d variant=%s returned %d responses, " "mode_prob=%.3f",
+                    k,
+                    variant,
+                    len(dist.responses),
                     dist.mode().probability if dist.mode() else 0.0,
                 )
                 return dist
             # Empty parse — fall through to single-item fallback
             logger.warning("VS: empty parse — falling back to single-item distribution")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("VS: timeout after %.1fs — falling back", timeout)
         except Exception as exc:
             logger.warning("VS: %s — falling back to single-item distribution", exc)
 
         # Fail-open: return a single-item distribution wrapping the instruction
-        return SampledDistribution(
-            responses=[SampledResponse(text=instruction, probability=1.0)],
-        )
+        return SampledDistribution(responses=[SampledResponse(text=instruction, probability=1.0)])

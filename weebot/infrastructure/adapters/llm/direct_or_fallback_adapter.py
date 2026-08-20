@@ -6,10 +6,11 @@ or the adapter has no API key configured, it falls back to *secondary*
 and DeepSeek models prefer ``DEEPSEEK_API_KEY`` while OpenRouter serves
 as a universal safety net.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 
@@ -71,7 +72,7 @@ class DirectOrFallbackAdapter(LLMPort):
         if not model or not self._model_prefix:
             return None
         if model.startswith(self._model_prefix):
-            return model[len(self._model_prefix):]
+            return model[len(self._model_prefix) :]
         # Model doesn't belong to this provider — use primary's default
         return None
 
@@ -97,17 +98,17 @@ class DirectOrFallbackAdapter(LLMPort):
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[str] = "auto",
-        response_format: Optional[Dict[str, Any]] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = "auto",
+        response_format: dict[str, Any] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResponse:
         # Shared kwargs for both adapters (model is intentionally omitted
         # from primary — it uses the native provider model name).
-        shared: Dict[str, Any] = {
+        shared: dict[str, Any] = {
             "messages": messages,
             "tools": tools,
             "tool_choice": tool_choice,
@@ -118,9 +119,7 @@ class DirectOrFallbackAdapter(LLMPort):
 
         # If no direct key, skip straight to fallback
         if not self._primary_has_key:
-            logger.debug(
-                "%s: no API key — using OpenRouter fallback", self._label
-            )
+            logger.debug("%s: no API key — using OpenRouter fallback", self._label)
             return await self._secondary.chat(model=model, **shared)
 
         # If the caller requested a model that doesn't belong to this
@@ -130,7 +129,9 @@ class DirectOrFallbackAdapter(LLMPort):
         if model and self._model_prefix and not model.startswith(self._model_prefix):
             logger.debug(
                 "%s: model %s doesn't match prefix %s — routing to OpenRouter",
-                self._label, model, self._model_prefix,
+                self._label,
+                model,
+                self._model_prefix,
             )
             return await self._secondary.chat(model=model, **shared)
 

@@ -4,6 +4,7 @@ Constrained to editing skill prompts, tool contract YAML files, and
 rule files. Every patch is validated through AST parsing + sandbox
 execution before being applied. Patches are git-backed for rollback.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +13,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 import yaml
@@ -33,9 +34,7 @@ _ALLOWED_TARGET_DIRS = [
 
 # Tier 2 allowlist — only active when METACOGNITIVE_IMPROVEMENT_ENABLED.
 # These directories contain the self-improvement machinery itself.
-_META_ALLOWED_TARGET_DIRS = [
-    "weebot/application/services/self_improver.py",
-]
+_META_ALLOWED_TARGET_DIRS = ["weebot/application/services/self_improver.py"]
 
 
 def _get_effective_allowlist() -> list[str]:
@@ -43,11 +42,13 @@ def _get_effective_allowlist() -> list[str]:
     effective = list(_ALLOWED_TARGET_DIRS)
     try:
         from weebot.config.feature_flags import METACOGNITIVE_IMPROVEMENT_ENABLED
+
         if METACOGNITIVE_IMPROVEMENT_ENABLED:
             effective.extend(_META_ALLOWED_TARGET_DIRS)
     except ImportError:
         pass
     return effective
+
 
 # Allowlist of file extensions
 _ALLOWED_EXTENSIONS = {".md", ".yaml", ".yml", ".json", ".txt"}
@@ -62,9 +63,7 @@ class SelfImprover(SelfImprovementPort):
     """
 
     def __init__(
-        self,
-        project_root: Optional[Path] = None,
-        validation_runner: Optional[Any] = None,
+        self, project_root: Path | None = None, validation_runner: Any | None = None
     ) -> None:
         """Initialize the self-improver.
 
@@ -78,9 +77,7 @@ class SelfImprover(SelfImprovementPort):
 
     # ── Public API ──────────────────────────────────────────────────
 
-    async def propose_patch(
-        self, context: dict[str, Any]
-    ) -> Optional[SelfImprovementPatch]:
+    async def propose_patch(self, context: dict[str, Any]) -> SelfImprovementPatch | None:
         """Propose a patch based on execution context.
 
         Args:
@@ -334,14 +331,12 @@ class SelfImprover(SelfImprovementPort):
         old_lines = old.splitlines(keepends=True)
         new_lines = new.splitlines(keepends=True)
         diff = difflib.unified_diff(
-            old_lines, new_lines,
-            fromfile=f"a/{filepath}",
-            tofile=f"b/{filepath}",
+            old_lines, new_lines, fromfile=f"a/{filepath}", tofile=f"b/{filepath}"
         )
         return "".join(diff)
 
     @staticmethod
-    def _apply_diff(content: str, diff: str) -> Optional[str]:
+    def _apply_diff(content: str, diff: str) -> str | None:
         """Apply a unified diff to content.
 
         Args:

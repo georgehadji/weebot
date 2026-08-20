@@ -9,10 +9,10 @@ save() once: any skill saved with trust == 'trusted' is materialized to
 disk via SkillMaterializer, making it retrievable in the same process
 without a restart. Saves for any other trust tier pass through unchanged.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.application.ports.skill_store_port import SkillStorePort
 from weebot.application.services.skill_materializer import SkillMaterializer
@@ -44,10 +44,11 @@ class MaterializingSkillStore(SkillStorePort):
             logger.warning(
                 "Skill '%s' saved as trusted but materialization failed — "
                 "it will not be retrievable until the registry next reloads: %s",
-                skill.name, exc,
+                skill.name,
+                exc,
             )
 
-    async def load(self, name: str) -> Optional[Skill]:
+    async def load(self, name: str) -> Skill | None:
         return await self._store.load(name)
 
     async def list_names(self) -> list[str]:

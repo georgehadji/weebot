@@ -5,6 +5,7 @@ give path-fidelity signal (did the agent take the right route, not just
 land on the right answer) that TrajectoryMonitor's runtime degeneracy
 checks don't provide.
 """
+
 from __future__ import annotations
 
 

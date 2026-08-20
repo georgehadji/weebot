@@ -10,12 +10,13 @@ Closely follows the pattern of PremortmAnalyzer:
 product-mode reference:
     https://github.com/sohaibt/product-mode
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -76,7 +77,7 @@ class ProductGateAnalyzer:
 
     def __init__(
         self,
-        llm: "LLMPort",
+        llm: LLMPort,
         timeout_seconds: float = _TIMEOUT_SECONDS,
         low_confidence_threshold: float = _LOW_CONFIDENCE_THRESHOLD,
         model: str = _PRODUCT_GATE_MODEL,
@@ -115,7 +116,7 @@ class ProductGateAnalyzer:
                 logger.warning("ProductGateAnalyzer: LLM returned empty content")
                 return ProductContext(
                     overall_confidence=0.0,
-                    generated_at=datetime.now(timezone.utc).isoformat(),
+                    generated_at=datetime.now(UTC).isoformat(),
                     model_used=model_id,
                 )
             if raw.startswith("```"):
@@ -123,7 +124,9 @@ class ProductGateAnalyzer:
             data = json.loads(raw)
 
             assumptions = [
-                ProductAssumption(text=str(a.get("text", "")), status=str(a.get("status", "unknown")))
+                ProductAssumption(
+                    text=str(a.get("text", "")), status=str(a.get("status", "unknown"))
+                )
                 for a in data.get("assumptions", [])
                 if isinstance(a, dict) and a.get("text")
             ]
@@ -136,34 +139,33 @@ class ProductGateAnalyzer:
                 reversibility=str(data.get("reversibility", "two-way")),
                 assumptions=assumptions,
                 overall_confidence=float(data.get("overall_confidence", 0.5)),
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
                 model_used=model_id,
             )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "ProductGateAnalyzer: timed out after %.1fs", self._timeout,
-            )
+        except TimeoutError:
+            logger.warning("ProductGateAnalyzer: timed out after %.1fs", self._timeout)
             return ProductContext(
                 overall_confidence=0.0,
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
                 model_used=model_id,
             )
         except json.JSONDecodeError:
             logger.warning(
                 "ProductGateAnalyzer: LLM returned non-JSON response (len=%d): %.200r",
-                len(raw) if 'raw' in dir() else 0,
-                raw[:200] if 'raw' in dir() else "[no raw]",
+                len(raw) if "raw" in dir() else 0,
+                raw[:200] if "raw" in dir() else "[no raw]",
             )
             # Best-effort partial parse — the JSON may be truncated at
             # max_tokens.  Extract whatever key:value pairs we can find.
             partial = ProductContext(
                 overall_confidence=0.0,
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
                 model_used=model_id,
             )
-            raw_val = raw if 'raw' in dir() else ""
+            raw_val = raw if "raw" in dir() else ""
             for key in ("problem", "why_now", "scope", "success_metric", "reversibility"):
                 import re as _re
+
                 m = _re.search(rf'"{key}"\s*:\s*"([^"]*)"', raw_val)
                 if m:
                     setattr(partial, key, m.group(1))
@@ -176,12 +178,10 @@ class ProductGateAnalyzer:
                     pass
             return partial
         except Exception as exc:
-            logger.warning(
-                "ProductGateAnalyzer non-blocking failure: %s", exc,
-            )
+            logger.warning("ProductGateAnalyzer non-blocking failure: %s", exc)
             return ProductContext(
                 overall_confidence=0.0,
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
                 model_used=model_id,
             )
 
@@ -207,9 +207,7 @@ class ProductGateAnalyzer:
             low.append("overall_confidence")
         return low
 
-    def generate_clarification_questions(
-        self, ctx: ProductContext
-    ) -> list[str]:
+    def generate_clarification_questions(self, ctx: ProductContext) -> list[str]:
         """Generate up to 3 clarification questions from low-confidence fields.
 
         These are static template questions keyed to the missing fields,
@@ -218,20 +216,14 @@ class ProductGateAnalyzer:
         low = self.get_low_confidence_fields(ctx)
         questions: list[str] = []
         field_map = {
-            "problem": [
-                "Who is the user and what problem are they trying to solve?",
-            ],
-            "why_now": [
-                "Why is this needed now — what changed or what happens if we wait?",
-            ],
-            "scope": [
-                "What's the smallest version of this that would be useful?",
-            ],
+            "problem": ["Who is the user and what problem are they trying to solve?"],
+            "why_now": ["Why is this needed now — what changed or what happens if we wait?"],
+            "scope": ["What's the smallest version of this that would be useful?"],
             "success_metric": [
-                "How will we know this worked — what metric or observable tells us?",
+                "How will we know this worked — what metric or observable tells us?"
             ],
             "overall_confidence": [
-                "Can you clarify the goal? The description was too vague to confidently frame the problem.",
+                "Can you clarify the goal? The description was too vague to confidently frame the problem."
             ],
         }
         seen = set()

@@ -33,9 +33,7 @@ def shared_dir() -> Path:
         if candidate.exists():
             return candidate.parent
 
-    raise RuntimeError(
-        "Could not locate shared assets. Set ATOMIC_MAIL_SHARED_DIR explicitly."
-    )
+    raise RuntimeError("Could not locate shared assets. Set ATOMIC_MAIL_SHARED_DIR explicitly.")
 
 
 def read_shared_json(relative_path: str) -> Any:

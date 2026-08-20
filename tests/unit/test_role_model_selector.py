@@ -1,4 +1,5 @@
 """Tests for Phase 4: RoleModelSelector."""
+
 import pytest
 
 from weebot.application.services.role_model_selector import RoleModelSelector

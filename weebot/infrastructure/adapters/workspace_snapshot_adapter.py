@@ -24,6 +24,7 @@ Known blind spot: a write that restores both size and mtime_ns is invisible.
 That requires deliberate mtime forgery, which is not the failure mode this
 guards against (an agent tool writing a file it should not have).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,11 +43,26 @@ _log = logging.getLogger(__name__)
 _BACKEND = "local-stat-manifest"
 
 # Directories never worth scanning when git cannot supply the file list.
-_SKIP_DIRS = frozenset({
-    ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".next", ".turbo", "htmlcov", ".tox",
-})
+_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        "htmlcov",
+        ".tox",
+    }
+)
 
 _DEFAULT_MAX_FILES = 20_000
 _DEFAULT_GIT_TIMEOUT = 10.0
@@ -72,6 +88,7 @@ class LocalWorkspaceSnapshotAdapter(WorkspaceSnapshotPort):
     ) -> None:
         if root_dir is None:
             from weebot.config.settings import WORKSPACE_ROOT
+
             root_dir = WORKSPACE_ROOT
         self._root = Path(root_dir).resolve()
         self._max_files = max_files
@@ -86,19 +103,17 @@ class LocalWorkspaceSnapshotAdapter(WorkspaceSnapshotPort):
         except Exception as exc:  # pragma: no cover - defensive
             _log.debug("Workspace snapshot failed", exc_info=True)
             return WorkspaceSnapshot(
-                backend=_BACKEND,
-                payload={"error": f"{type(exc).__name__}: {exc}"},
+                backend=_BACKEND, payload={"error": f"{type(exc).__name__}: {exc}"}
             )
         return WorkspaceSnapshot(
-            backend=_BACKEND,
-            payload={"files": manifest, "truncated": truncated},
+            backend=_BACKEND, payload={"files": manifest, "truncated": truncated}
         )
 
     async def diff(self, before: WorkspaceSnapshot) -> WorkspaceDrift:
         """Compare now against *before*, failing closed if either end is unusable."""
         if before.backend != _BACKEND:
             return WorkspaceDrift(
-                unavailable_reason=f"snapshot from foreign backend {before.backend!r}",
+                unavailable_reason=f"snapshot from foreign backend {before.backend!r}"
             )
 
         payload = before.payload if isinstance(before.payload, dict) else {}
@@ -175,7 +190,12 @@ class LocalWorkspaceSnapshotAdapter(WorkspaceSnapshotPort):
         """Tracked + untracked-but-not-ignored files. None if git is unusable."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "git", "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+                "git",
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
                 cwd=str(self._root),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -191,7 +211,7 @@ class LocalWorkspaceSnapshotAdapter(WorkspaceSnapshotPort):
 
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self._git_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _log.debug("git ls-files timed out after %ss — falling back to walk", self._git_timeout)
             try:
                 proc.kill()

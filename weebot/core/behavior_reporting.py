@@ -8,9 +8,8 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from weebot.core.behavior_tracker import LEDGER_DIR, TRUST_FILE, WEEBOT_DIR, SELF_KNOWLEDGE_FILE
 
@@ -29,6 +28,7 @@ SESSION_COMMENT = re.compile(r"<!-- session:(\S+) agent:(\S+) -->")
 @dataclass
 class LedgerEntry:
     """Parsed ledger entry."""
+
     timestamp: str
     date: str
     action: str
@@ -37,28 +37,28 @@ class LedgerEntry:
     session_id: str
     agent_version: str
     is_override: bool = False
-    override_reason: Optional[str] = None
-    dest_path: Optional[str] = None  # For moved files
+    override_reason: str | None = None
+    dest_path: str | None = None  # For moved files
     watcher_died: bool = False
 
 
 class LedgerParser:
     """Parser for ledger markdown files."""
-    
+
     @staticmethod
-    def parse_entry(lines: List[str]) -> Optional[LedgerEntry]:
+    def parse_entry(lines: list[str]) -> LedgerEntry | None:
         """Parse a single entry from lines."""
         if not lines:
             return None
-        
+
         # Parse header
         header_match = ENTRY_HEADER.match(lines[0])
         if not header_match:
             return None
-        
+
         timestamp = header_match.group(1)
         date = timestamp[:10]
-        
+
         entry = LedgerEntry(
             timestamp=timestamp,
             date=date,
@@ -68,14 +68,14 @@ class LedgerParser:
             session_id="",
             agent_version="",
         )
-        
+
         # Check for override marker
         first_content = lines[1] if len(lines) > 1 else ""
         if OVERRIDE_MARKER.match(first_content):
             entry.is_override = True
             # Remove override marker from processing
             lines = [lines[0]] + lines[2:]
-        
+
         # Parse content lines
         for line in lines[1:]:
             if line.startswith("ACTION"):
@@ -102,15 +102,15 @@ class LedgerParser:
                 if match:
                     entry.session_id = match.group(1)
                     entry.agent_version = match.group(2)
-        
+
         return entry
-    
+
     @staticmethod
-    def parse_file(md_file: Path) -> List[LedgerEntry]:
+    def parse_file(md_file: Path) -> list[LedgerEntry]:
         """Parse all entries from a markdown file."""
         entries = []
         current_lines = []
-        
+
         for line in md_file.read_text().splitlines():
             if line == "" and current_lines:
                 # End of entry
@@ -120,83 +120,93 @@ class LedgerParser:
                 current_lines = []
             else:
                 current_lines.append(line)
-        
+
         # Handle last entry
         if current_lines:
             entry = LedgerParser.parse_entry(current_lines)
             if entry:
                 entries.append(entry)
-        
+
         return entries
 
 
 class BehaviorReporter:
     """Generates reports on agent behavior."""
-    
+
     def __init__(self):
         self.parser = LedgerParser()
-    
-    def _get_all_entries(self) -> List[LedgerEntry]:
+
+    def _get_all_entries(self) -> list[LedgerEntry]:
         """Get all entries from all ledger files."""
         entries = []
         for md_file in sorted(LEDGER_DIR.glob("*.md")):
             entries.extend(self.parser.parse_file(md_file))
         return entries
-    
-    def _get_entries_for_date(self, date_str: str) -> List[LedgerEntry]:
+
+    def _get_entries_for_date(self, date_str: str) -> list[LedgerEntry]:
         """Get entries for a specific date."""
         md_file = LEDGER_DIR / f"{date_str}.md"
         if md_file.exists():
             return self.parser.parse_file(md_file)
         return []
-    
-    def get_today_report(self) -> Dict:
+
+    def get_today_report(self) -> dict:
         """Generate report for today."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         return self.get_date_report(today)
-    
-    def get_date_report(self, date_str: str) -> Dict:
+
+    def get_date_report(self, date_str: str) -> dict:
         """Generate report for a specific date."""
         entries = self._get_entries_for_date(date_str)
-        
+
         # Filter out watcher died events
         normal_entries = [e for e in entries if not e.watcher_died]
-        
+
         if not normal_entries:
             return {
                 "date": date_str,
                 "total_actions": 0,
                 "actions_by_type": {},
                 "last_action": None,
-                "summary": "No activity recorded today."
+                "summary": "No activity recorded today.",
             }
-        
+
         # Count by action type
         action_counts = Counter(e.action for e in normal_entries if e.action)
-        
+
         # Get last action
         last = normal_entries[-1]
-        
+
         # Count autonomous vs user-initiated
         autonomous = sum(1 for e in normal_entries if e.initiated == "autonomous")
         user_initiated = sum(1 for e in normal_entries if e.initiated == "by user")
         overrides = sum(1 for e in normal_entries if e.is_override)
-        
+
         # Generate summary
-        action_summary = ", ".join(f"{count} {action}" for action, count in action_counts.most_common())
-        
-        summary_parts = [f"The agent performed {len(normal_entries)} action{'s' if len(normal_entries) != 1 else ''} today: {action_summary}."]
-        
+        action_summary = ", ".join(
+            f"{count} {action}" for action, count in action_counts.most_common()
+        )
+
+        summary_parts = [
+            f"The agent performed {len(normal_entries)} action{'s' if len(normal_entries) != 1 else ''} today: {action_summary}."
+        ]
+
         if autonomous and user_initiated:
-            summary_parts.append(f"{autonomous} were autonomous and {user_initiated} were user-initiated.")
+            summary_parts.append(
+                f"{autonomous} were autonomous and {user_initiated} were user-initiated."
+            )
         elif autonomous:
-            summary_parts.append(f"All {autonomous} were autonomous -- none sanctioned by the user.")
+            summary_parts.append(
+                f"All {autonomous} were autonomous -- none sanctioned by the user."
+            )
         else:
             summary_parts.append(f"All {user_initiated} were user-initiated.")
-        
+
         if overrides:
-            summary_parts.append(f"{overrides} action{'s' if overrides != 1 else ''} was marked as override.")
-        
+            summary_parts.append(
+                f"{overrides} action{'s' if overrides != 1 else ''} was marked as override."
+            )
+
         return {
             "date": date_str,
             "total_actions": len(normal_entries),
@@ -204,44 +214,42 @@ class BehaviorReporter:
             "autonomous_count": autonomous,
             "user_initiated_count": user_initiated,
             "override_count": overrides,
-            "last_action": {
-                "action": last.action,
-                "path": last.path,
-                "timestamp": last.timestamp
-            },
-            "summary": " ".join(summary_parts)
+            "last_action": {"action": last.action, "path": last.path, "timestamp": last.timestamp},
+            "summary": " ".join(summary_parts),
         }
-    
-    def get_recent_actions(self, count: int = 10, session_id: Optional[str] = None) -> List[LedgerEntry]:
+
+    def get_recent_actions(
+        self, count: int = 10, session_id: str | None = None
+    ) -> list[LedgerEntry]:
         """Get recent actions, optionally filtered by session."""
         entries = self._get_all_entries()
-        
+
         # Filter out watcher died
         entries = [e for e in entries if not e.watcher_died]
-        
+
         # Filter by session if specified
         if session_id:
             entries = [e for e in entries if e.session_id == session_id]
-        
+
         # Sort by timestamp (newest first)
         entries.sort(key=lambda e: e.timestamp, reverse=True)
-        
+
         return entries[:count]
-    
-    def get_session_summary(self, session_id: str) -> Dict:
+
+    def get_session_summary(self, session_id: str) -> dict:
         """Get summary for a specific session."""
         entries = self._get_all_entries()
         session_entries = [e for e in entries if e.session_id == session_id and not e.watcher_died]
-        
+
         if not session_entries:
             return {
                 "session_id": session_id,
                 "total_actions": 0,
-                "summary": "No actions recorded for this session."
+                "summary": "No actions recorded for this session.",
             }
-        
+
         action_counts = Counter(e.action for e in session_entries if e.action)
-        
+
         return {
             "session_id": session_id,
             "total_actions": len(session_entries),
@@ -249,36 +257,38 @@ class BehaviorReporter:
             "start_time": min(e.timestamp for e in session_entries),
             "end_time": max(e.timestamp for e in session_entries),
         }
-    
-    def get_trust_report(self) -> Dict:
+
+    def get_trust_report(self) -> dict:
         """Get full trust report."""
         try:
             trust_data = json.loads(TRUST_FILE.read_text())
         except (json.JSONDecodeError, FileNotFoundError):
             trust_data = {"score": 1.0, "total": 0, "overrides": 0, "last_updated": ""}
-        
+
         entries = self._get_all_entries()
         normal_entries = [e for e in entries if not e.watcher_died]
-        
+
         score_pct = int(trust_data.get("score", 1.0) * 100)
-        
+
         return {
             "score_percentage": score_pct,
             "score": trust_data.get("score", 1.0),
             "total_actions": trust_data.get("total", 0),
             "overrides": trust_data.get("overrides", 0),
             "last_updated": trust_data.get("last_updated", ""),
-            "status": "trusted" if score_pct >= 90 else "review" if score_pct >= 70 else "supervision"
+            "status": (
+                "trusted" if score_pct >= 90 else "review" if score_pct >= 70 else "supervision"
+            ),
         }
-    
-    def format_console_report(self, date_str: Optional[str] = None) -> str:
+
+    def format_console_report(self, date_str: str | None = None) -> str:
         """Format a report for console display."""
         if date_str is None:
-            date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        
+            date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+
         report = self.get_date_report(date_str)
         trust = self.get_trust_report()
-        
+
         border = "━" * 50
         lines = [
             border,
@@ -288,27 +298,31 @@ class BehaviorReporter:
             f"  TODAY      {report['total_actions']} action{'s' if report['total_actions'] != 1 else ''} recorded",
             "",
         ]
-        
-        if report['last_action']:
-            last = report['last_action']
-            lines.extend([
-                f"  LAST       {last['action']} {Path(last['path']).name}",
-                f"             {last['timestamp']}",
+
+        if report["last_action"]:
+            last = report["last_action"]
+            lines.extend(
+                [
+                    f"  LAST       {last['action']} {Path(last['path']).name}",
+                    f"             {last['timestamp']}",
+                    "",
+                ]
+            )
+
+        lines.extend(
+            [
+                f"  TRUST      {trust['score_percentage']}%",
+                f"             {trust['total_actions']} total actions",
+                f"             {trust['overrides']} override{'s' if trust['overrides'] != 1 else ''}",
                 "",
-            ])
-        
-        lines.extend([
-            f"  TRUST      {trust['score_percentage']}%",
-            f"             {trust['total_actions']} total actions",
-            f"             {trust['overrides']} override{'s' if trust['overrides'] != 1 else ''}",
-            "",
-            border,
-            "  SUMMARY:",
-            "",
-        ])
-        
+                border,
+                "  SUMMARY:",
+                "",
+            ]
+        )
+
         # Wrap summary text
-        summary = report.get('summary', 'No summary available.')
+        summary = report.get("summary", "No summary available.")
         words = summary.split()
         line = "  "
         for word in words:
@@ -319,36 +333,36 @@ class BehaviorReporter:
                 line += " " + word if line != "  " else word
         if line != "  ":
             lines.append(line)
-        
+
         lines.extend(["", border])
-        
+
         return "\n".join(lines)
 
 
 class SelfKnowledgeGenerator:
     """Generates agent self-knowledge from behavioral history."""
-    
+
     def __init__(self):
         self.reporter = BehaviorReporter()
-    
+
     def generate(self) -> str:
         """Generate self-knowledge markdown."""
         trust = self.reporter.get_trust_report()
         recent = self.reporter.get_recent_actions(5)
-        
+
         # Analyze patterns
         all_entries = self.reporter._get_all_entries()
         normal_entries = [e for e in all_entries if not e.watcher_died]
-        
+
         action_counts = Counter(e.action for e in normal_entries if e.action)
-        
+
         # Most touched files
         file_counts = Counter(e.path for e in normal_entries)
         top_files = file_counts.most_common(5)
-        
+
         content = f"""# Weebot Self-Knowledge
 
-> Generated: {datetime.now(timezone.utc).isoformat()}  
+> Generated: {datetime.now(UTC).isoformat()}  
 > This file contains your behavioral history. Read it to understand your patterns and improve.
 
 ## Trust Profile
@@ -364,13 +378,13 @@ class SelfKnowledgeGenerator:
 | Time | Action | Path |
 |------|--------|------|
 """
-        
+
         for entry in recent:
             path_display = entry.path
             if len(path_display) > 40:
                 path_display = "..." + path_display[-37:]
             content += f"| {entry.timestamp[11:19]} | {entry.action} | `{path_display}` |\n"
-        
+
         content += "\n## Action Patterns\n\n"
         if action_counts:
             for action, count in action_counts.most_common(10):
@@ -378,7 +392,7 @@ class SelfKnowledgeGenerator:
                 content += f"- **{action}:** {count} {bar}\n"
         else:
             content += "_No patterns recorded yet._\n"
-        
+
         content += "\n## Frequently Modified Files\n\n"
         if top_files:
             for path, count in top_files:
@@ -386,7 +400,7 @@ class SelfKnowledgeGenerator:
                 content += f"- `{display_path}` ({count} times)\n"
         else:
             content += "_No file patterns recorded yet._\n"
-        
+
         content += f"""
 ## Recommendations
 
@@ -395,7 +409,7 @@ class SelfKnowledgeGenerator:
 ## Lessons from Overrides
 
 """
-        
+
         # List override reasons
         overrides = [e for e in normal_entries if e.is_override and e.override_reason]
         if overrides:
@@ -403,7 +417,7 @@ class SelfKnowledgeGenerator:
                 content += f"- [{entry.timestamp[:10]}] {entry.override_reason}\n"
         else:
             content += "_No overrides recorded. Keep up the good work!_\n"
-        
+
         content += """
 ---
 
@@ -416,41 +430,49 @@ class SelfKnowledgeGenerator:
 
 *This file is updated automatically. Do not edit manually.*
 """
-        
+
         return content
-    
-    def _generate_recommendations(self, trust: Dict, entries: List[LedgerEntry]) -> str:
+
+    def _generate_recommendations(self, trust: dict, entries: list[LedgerEntry]) -> str:
         """Generate personalized recommendations."""
         recs = []
-        
-        score = trust['score_percentage']
+
+        score = trust["score_percentage"]
         if score >= 95:
             recs.append("✓ Your trust score is excellent. You have demonstrated reliable behavior.")
         elif score >= 80:
-            recs.append("⚠ Your trust score is good but could be improved. Review any overrides to understand corrections.")
+            recs.append(
+                "⚠ Your trust score is good but could be improved. Review any overrides to understand corrections."
+            )
         else:
-            recs.append("⚠ Your trust score needs improvement. Consider asking for user confirmation on significant changes.")
-        
-        if trust['overrides'] > 0:
-            recs.append(f"📋 You have {trust['overrides']} override(s). Carefully review what went wrong to avoid repeating mistakes.")
-        
+            recs.append(
+                "⚠ Your trust score needs improvement. Consider asking for user confirmation on significant changes."
+            )
+
+        if trust["overrides"] > 0:
+            recs.append(
+                f"📋 You have {trust['overrides']} override(s). Carefully review what went wrong to avoid repeating mistakes."
+            )
+
         # Pattern-based recommendations
         action_counts = Counter(e.action for e in entries if e.action)
         if action_counts.get("deleted", 0) > action_counts.get("created", 0) * 2:
-            recs.append("⚠ You delete files more often than you create them. Be careful not to remove important code.")
-        
-        if len(entries) > 100 and trust['overrides'] == 0:
+            recs.append(
+                "⚠ You delete files more often than you create them. Be careful not to remove important code."
+            )
+
+        if len(entries) > 100 and trust["overrides"] == 0:
             recs.append("✓ You have many actions with no overrides. Your reliability is high.")
-        
+
         return "\n\n".join(recs) if recs else "_No specific recommendations at this time._"
-    
+
     def save(self) -> Path:
         """Generate and save self-knowledge file."""
         content = self.generate()
         WEEBOT_DIR.mkdir(parents=True, exist_ok=True)
         SELF_KNOWLEDGE_FILE.write_text(content, encoding="utf-8")
         return SELF_KNOWLEDGE_FILE
-    
+
     def get_content(self) -> str:
         """Get current self-knowledge or generate new."""
         if SELF_KNOWLEDGE_FILE.exists():
@@ -463,6 +485,6 @@ if __name__ == "__main__":
     reporter = BehaviorReporter()
     print(reporter.format_console_report())
     print("\n")
-    
+
     gen = SelfKnowledgeGenerator()
     print(gen.generate()[:2000])

@@ -6,6 +6,7 @@ Covers:
 - download — writes SKILL.md, uses fallback URL, validates frontmatter
 - Settings — new awesome_agent_skills_index_url in WeebotSettings
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -40,8 +41,7 @@ class TestAwesomeAgentSkillsAdapter:
         )
 
         return AwesomeAgentSkillsAdapter(
-            index_url="https://example.com/README.md",
-            http_client=MagicMock(),
+            index_url="https://example.com/README.md", http_client=MagicMock()
         )
 
     # ── fetch_index ────────────────────────────────────────────────
@@ -80,7 +80,7 @@ class TestAwesomeAgentSkillsAdapter:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         mock_resp.raise_for_status.side_effect = HTTPStatusError(
-            "Not found", request=MagicMock(), response=mock_resp,
+            "Not found", request=MagicMock(), response=mock_resp
         )
 
         adapter._client.get = AsyncMock(return_value=mock_resp)
@@ -93,9 +93,7 @@ class TestAwesomeAgentSkillsAdapter:
         """Network error returns empty list (graceful degradation)."""
         from httpx import RequestError
 
-        adapter._client.get = AsyncMock(
-            side_effect=RequestError("DNS failed"),
-        )
+        adapter._client.get = AsyncMock(side_effect=RequestError("DNS failed"))
 
         skills = await adapter.fetch_index()
         assert skills == []
@@ -175,14 +173,14 @@ class TestAwesomeAgentSkillsAdapter:
         mock_resp.content = b"---\nname: test-skill\ndescription: x\n---\nHello"
         adapter._client.get = AsyncMock(return_value=mock_resp)
 
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
-        )
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
 
-        skill = _parse_awesome_skill({
-            "name": "test-skill",
-            "download_url": "https://raw.githubusercontent.com/test/skills/main/skills/test-skill/SKILL.md",
-        })
+        skill = _parse_awesome_skill(
+            {
+                "name": "test-skill",
+                "download_url": "https://raw.githubusercontent.com/test/skills/main/skills/test-skill/SKILL.md",
+            }
+        )
 
         result = await adapter.download(skill, str(tmp_path))
         assert result is True
@@ -198,29 +196,28 @@ class TestAwesomeAgentSkillsAdapter:
         primary_resp = MagicMock()
         primary_resp.status_code = 404
         primary_resp.raise_for_status.side_effect = HTTPStatusError(
-            "Not found", request=MagicMock(), response=primary_resp,
+            "Not found", request=MagicMock(), response=primary_resp
         )
 
         # Fallback URL succeeds
         fallback_resp = MagicMock()
         fallback_resp.content = b"---\nname: fallback-skill\ndescription: x\n---\nContent"
 
-        adapter._client.get = AsyncMock(side_effect=[
-            primary_resp,       # primary URL → 404
-            fallback_resp,      # fallback URL → 200
-        ])
-
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
+        adapter._client.get = AsyncMock(
+            side_effect=[primary_resp, fallback_resp]  # primary URL → 404  # fallback URL → 200
         )
 
-        skill = _parse_awesome_skill({
-            "name": "fallback-skill",
-            "download_url": (
-                "https://raw.githubusercontent.com/getsentry/skills/main/skills/"
-                "fallback-skill/SKILL.md"
-            ),
-        })
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
+
+        skill = _parse_awesome_skill(
+            {
+                "name": "fallback-skill",
+                "download_url": (
+                    "https://raw.githubusercontent.com/getsentry/skills/main/skills/"
+                    "fallback-skill/SKILL.md"
+                ),
+            }
+        )
 
         result = await adapter.download(skill, str(tmp_path))
         assert result is True
@@ -233,14 +230,11 @@ class TestAwesomeAgentSkillsAdapter:
         mock_resp.content = b"This is plain text, not a SKILL.md"
         adapter._client.get = AsyncMock(return_value=mock_resp)
 
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
-        )
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
 
-        skill = _parse_awesome_skill({
-            "name": "bad-skill",
-            "download_url": "https://example.com/bad/SKILL.md",
-        })
+        skill = _parse_awesome_skill(
+            {"name": "bad-skill", "download_url": "https://example.com/bad/SKILL.md"}
+        )
 
         result = await adapter.download(skill, str(tmp_path))
         assert result is False
@@ -256,23 +250,19 @@ class TestAwesomeAgentSkillsAdapter:
             resp = MagicMock()
             resp.status_code = 404
             resp.raise_for_status.side_effect = HTTPStatusError(
-                "Not found", request=MagicMock(), response=resp,
+                "Not found", request=MagicMock(), response=resp
             )
             return resp
 
-        adapter._client.get = AsyncMock(side_effect=[
-            _make_error(),  # primary → 404
-            _make_error(),  # fallback → 404
-        ])
-
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
+        adapter._client.get = AsyncMock(
+            side_effect=[_make_error(), _make_error()]  # primary → 404  # fallback → 404
         )
 
-        skill = _parse_awesome_skill({
-            "name": "missing-skill",
-            "download_url": "https://example.com/missing/SKILL.md",
-        })
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
+
+        skill = _parse_awesome_skill(
+            {"name": "missing-skill", "download_url": "https://example.com/missing/SKILL.md"}
+        )
 
         result = await adapter.download(skill, str(tmp_path))
         assert result is False
@@ -287,9 +277,7 @@ class TestParseAwesomeSkill:
 
     def test_parse_awesome_skill_fields(self):
         """All fields populated correctly."""
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
-        )
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
 
         raw = {
             "name": "web-research",
@@ -310,9 +298,7 @@ class TestParseAwesomeSkill:
 
     def test_parse_awesome_skill_defaults(self):
         """Missing fields get sensible defaults."""
-        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import (
-            _parse_awesome_skill,
-        )
+        from weebot.infrastructure.adapters.awesome_agent_skills_adapter import _parse_awesome_skill
 
         skill = _parse_awesome_skill({"name": "minimal"})
         assert skill.name == "minimal"

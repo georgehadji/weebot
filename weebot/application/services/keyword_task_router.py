@@ -6,15 +6,14 @@ lists.  The highest keyword-hit count category wins.
 
 Maps to Enhancement 6 — Neural Task Router (always-available fallback).
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
-from weebot.application.ports.file_storage_port import FileStoragePort
 from weebot.application.ports.task_router_port import TaskRouterPort
 from weebot.domain.models.task_route import TaskCategory, TaskComplexity, TaskRoute
 
@@ -34,7 +33,7 @@ class KeywordTaskRouter(TaskRouterPort):
         config_path: Path to task_classification.yaml.
     """
 
-    def __init__(self, config_path: Optional[Path] = None) -> None:
+    def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = config_path or _CONFIG_PATH
         self._categories: list[dict] = []
         self._fallback: dict = {}
@@ -56,20 +55,25 @@ class KeywordTaskRouter(TaskRouterPort):
             for cat_name, cfg in data.get("categories", {}).items():
                 cat_enum = getattr(TaskCategory, cat_name.upper(), None)
                 if cat_enum:
-                    self._categories.append({
-                        "category": cat_enum,
-                        "keywords": [k.lower() for k in cfg.get("keywords", [])],
-                        "flow_type": cfg.get("flow_type", "plan_act"),
-                        "tool_restriction": cfg.get("tool_restriction", "admin_role"),
-                        "mandatory_rules": cfg.get("mandatory_rules", []),
-                        "complexity": TaskComplexity(cfg.get("complexity", "high")),
-                    })
+                    self._categories.append(
+                        {
+                            "category": cat_enum,
+                            "keywords": [k.lower() for k in cfg.get("keywords", [])],
+                            "flow_type": cfg.get("flow_type", "plan_act"),
+                            "tool_restriction": cfg.get("tool_restriction", "admin_role"),
+                            "mandatory_rules": cfg.get("mandatory_rules", []),
+                            "complexity": TaskComplexity(cfg.get("complexity", "high")),
+                        }
+                    )
 
-            self._fallback = data.get("fallback", {
-                "flow_type": "plan_act",
-                "tool_restriction": "admin_role",
-                "mandatory_rules": ["error_handling.md"],
-            })
+            self._fallback = data.get(
+                "fallback",
+                {
+                    "flow_type": "plan_act",
+                    "tool_restriction": "admin_role",
+                    "mandatory_rules": ["error_handling.md"],
+                },
+            )
 
             logger.info(
                 "KeywordTaskRouter: loaded %d categories, %d total keywords",
@@ -128,9 +132,22 @@ class KeywordTaskRouter(TaskRouterPort):
         if matched_count >= 2:
             return TaskComplexity.HIGH
         high_signals = (
-            "build", "create", "develop", "design", "architect", "end-to-end",
-            "full ", "system", "application", "app", "pipeline", "deploy",
-            "integrate", "website", "platform", "microservice",
+            "build",
+            "create",
+            "develop",
+            "design",
+            "architect",
+            "end-to-end",
+            "full ",
+            "system",
+            "application",
+            "app",
+            "pipeline",
+            "deploy",
+            "integrate",
+            "website",
+            "platform",
+            "microservice",
         )
         if any(sig in query_lower for sig in high_signals):
             return TaskComplexity.HIGH

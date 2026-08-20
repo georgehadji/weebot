@@ -1,9 +1,9 @@
 """HTML to LLM-ready markdown converter."""
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from bs4 import BeautifulSoup, Tag
 
@@ -15,15 +15,24 @@ class ContentExtractor:
 
     # Elements to remove (noise)
     NOISE_ELEMENTS = [
-        "script", "style", "nav", "footer", "header",
-        "aside", "advertisement", "ad", "iframe",
-        "noscript", "svg", "canvas", "video", "audio",
+        "script",
+        "style",
+        "nav",
+        "footer",
+        "header",
+        "aside",
+        "advertisement",
+        "ad",
+        "iframe",
+        "noscript",
+        "svg",
+        "canvas",
+        "video",
+        "audio",
     ]
 
     # Elements that are likely main content
-    CONTENT_INDICATORS = [
-        "article", "main", "content", "post", "entry",
-    ]
+    CONTENT_INDICATORS = ["article", "main", "content", "post", "entry"]
 
     def __init__(self, max_tokens: int = 4000, preserve_links: bool = True):
         """Initialize extractor.
@@ -35,7 +44,7 @@ class ContentExtractor:
         self.max_chars = max_tokens * 4  # Rough approximation
         self.preserve_links = preserve_links
 
-    def extract_markdown(self, html: str, url: Optional[str] = None) -> str:
+    def extract_markdown(self, html: str, url: str | None = None) -> str:
         """Convert HTML to clean markdown.
 
         Args:
@@ -70,8 +79,16 @@ class ContentExtractor:
     def _find_main_content(self, soup: BeautifulSoup) -> Tag:
         """Find the main content area of the page."""
         # Try common content selectors
-        for selector in ["main", "article", "[role='main']", ".content", "#content",
-                        ".post-content", ".entry-content", ".article-body"]:
+        for selector in [
+            "main",
+            "article",
+            "[role='main']",
+            ".content",
+            "#content",
+            ".post-content",
+            ".entry-content",
+            ".article-body",
+        ]:
             element = soup.select_one(selector)
             if element:
                 return element
@@ -83,7 +100,7 @@ class ContentExtractor:
 
         return soup
 
-    def _convert_to_markdown(self, element: Tag, base_url: Optional[str] = None) -> str:
+    def _convert_to_markdown(self, element: Tag, base_url: str | None = None) -> str:
         """Convert BeautifulSoup element to markdown."""
         lines = []
 
@@ -96,7 +113,7 @@ class ContentExtractor:
 
         return "\n\n".join(lines)
 
-    def _tag_to_markdown(self, tag: Tag, base_url: Optional[str] = None) -> Optional[str]:
+    def _tag_to_markdown(self, tag: Tag, base_url: str | None = None) -> str | None:
         """Convert a single tag to markdown."""
         name = tag.name
         text = tag.get_text(strip=True)
@@ -187,7 +204,7 @@ class ContentExtractor:
 
         return None
 
-    def _process_inline_elements(self, tag: Tag, base_url: Optional[str] = None) -> str:
+    def _process_inline_elements(self, tag: Tag, base_url: str | None = None) -> str:
         """Process inline elements within a paragraph."""
         parts = []
         for child in tag.children:
@@ -247,35 +264,33 @@ class ContentExtractor:
     def _clean_markdown(self, markdown: str) -> str:
         """Clean up markdown formatting."""
         # Remove excessive blank lines
-        markdown = re.sub(r'\n{3,}', '\n\n', markdown)
+        markdown = re.sub(r"\n{3,}", "\n\n", markdown)
 
         # Remove leading/trailing whitespace
         markdown = markdown.strip()
 
         # Fix list formatting - remove duplicate list markers
-        lines = markdown.split('\n')
+        lines = markdown.split("\n")
         cleaned = []
         for line in lines:
             # Remove duplicate list markers
-            line = re.sub(r'^(\s*)-\s*-\s+', r'\1- ', line)
+            line = re.sub(r"^(\s*)-\s*-\s+", r"\1- ", line)
             cleaned.append(line)
 
-        return '\n'.join(cleaned)
+        return "\n".join(cleaned)
 
     def _truncate(self, markdown: str) -> str:
         """Truncate markdown to max length, preserving structure."""
         # Try to truncate at a logical boundary
-        truncated = markdown[:self.max_chars]
+        truncated = markdown[: self.max_chars]
 
         # Find last complete paragraph/section
         last_boundary = max(
-            truncated.rfind('\n\n'),
-            truncated.rfind('.\n'),
-            truncated.rfind('```\n'),
+            truncated.rfind("\n\n"), truncated.rfind(".\n"), truncated.rfind("```\n")
         )
 
         if last_boundary > self.max_chars * 0.5:  # At least half was captured
-            truncated = truncated[:last_boundary + 1]
+            truncated = truncated[: last_boundary + 1]
 
         return truncated + "\n\n[Content truncated...]"
 

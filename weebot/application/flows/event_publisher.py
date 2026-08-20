@@ -9,11 +9,12 @@ Usage:
                                 state_repo=state_repo, ...)
     await publisher.emit(event)
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.session import Session
@@ -37,13 +38,13 @@ class EventPublisher:
     def __init__(
         self,
         session: Session,
-        event_bus: Optional[EventBusPort] = None,
-        state_repo: Optional[StateRepositoryPort] = None,
-        truth_binder: Optional[Any] = None,
-        plan: Optional[Any] = None,
-        persistence_adapter: Optional[Any] = None,
-        hooks: Optional[Any] = None,
-        emit_lock: Optional[asyncio.Lock] = None,
+        event_bus: EventBusPort | None = None,
+        state_repo: StateRepositoryPort | None = None,
+        truth_binder: Any | None = None,
+        plan: Any | None = None,
+        persistence_adapter: Any | None = None,
+        hooks: Any | None = None,
+        emit_lock: asyncio.Lock | None = None,
     ) -> None:
         self._session = session
         self._event_bus = event_bus
@@ -109,6 +110,7 @@ class EventPublisher:
     def _apply_credential_sanitization(event: AgentEvent) -> AgentEvent:
         if isinstance(event, MessageEvent) and event.role == "user":
             from weebot.core.credential_sanitizer import sanitize
+
             sanitized = sanitize(event.message or "")
             if sanitized != event.message:
                 event = event.model_copy(update={"message": sanitized})
@@ -121,12 +123,13 @@ class EventPublisher:
         """Save a flow checkpoint if a CheckpointPort is wired."""
         if self._hooks is not None:
             try:
-                await self._hooks.execute_hooks("checkpoint", {
-                    "session_id": self._session.id,
-                    "step_id": getattr(
-                        self._plan, "current_step", None
-                    ),
-                })
+                await self._hooks.execute_hooks(
+                    "checkpoint",
+                    {
+                        "session_id": self._session.id,
+                        "step_id": getattr(self._plan, "current_step", None),
+                    },
+                )
             except Exception:
                 logger.debug("Checkpoint hook failed", exc_info=True)
 
@@ -141,22 +144,16 @@ class EventPublisher:
 
         if event.type == "step":
             step_id = getattr(event, "step_id", None) or getattr(event, "id", "unknown")
-            domain_event = PlanStepCompleted(
-                session_id=self._session.id,
-                step_id=str(step_id),
-            )
+            domain_event = PlanStepCompleted(session_id=self._session.id, step_id=str(step_id))
             await self._event_bus.publish_domain_event(domain_event)
 
         if event.type in ("message", "thought") and hasattr(event, "message"):
             msg = getattr(event, "message", "")
             if isinstance(msg, str) and len(msg) > 50:
                 from hashlib import md5
+
                 key = md5(msg.encode()).hexdigest()[:12]
-                domain_event = FactDiscovered(
-                    session_id=self._session.id,
-                    key=key,
-                    value=msg[:500],
-                )
+                domain_event = FactDiscovered(session_id=self._session.id, key=key, value=msg[:500])
                 await self._event_bus.publish_domain_event(domain_event)
 
     # ── Step 5: Persistence ────────────────────────────────────────────────
@@ -166,8 +163,7 @@ class EventPublisher:
             ok = await self._persistence_adapter.save_session(self._session)
             if not ok:
                 logger.error(
-                    "Session %s dead-lettered — persistence exhausted retries",
-                    self._session.id,
+                    "Session %s dead-lettered — persistence exhausted retries", self._session.id
                 )
         else:
             try:

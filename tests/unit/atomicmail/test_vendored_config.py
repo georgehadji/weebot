@@ -1,4 +1,5 @@
 """Tests for vendored atomicmail config resolution (offline, no network)."""
+
 from __future__ import annotations
 
 import os

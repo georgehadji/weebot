@@ -7,6 +7,7 @@ Covers:
 - ProductGateReviewEvent and ProductDecisionEvent construction
 - _is_trivial heuristic
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,14 +20,13 @@ from weebot.domain.models.event import (
     ProductDecisionEvent,
     WaitForUserEvent,
     ThoughtEvent,
-    ErrorEvent,
 )
 from weebot.application.services.product_gate_analyzer import ProductGateAnalyzer
-
 
 # ========================================================================
 # Fixtures
 # ========================================================================
+
 
 def _mock_llm(response_text: str) -> MagicMock:
     """Create a mock LLMPort that returns *response_text*."""
@@ -75,6 +75,7 @@ def _make_flow(plan=None, session=None):
 # ProductContext model tests
 # ========================================================================
 
+
 class TestProductContext:
     def test_defaults(self):
         """ProductContext should have sensible defaults."""
@@ -113,6 +114,7 @@ class TestProductContext:
     def test_confidence_bounds(self):
         """overall_confidence should reject values outside 0.0-1.0."""
         import pydantic
+
         with pytest.raises(pydantic.ValidationError):
             ProductContext(overall_confidence=1.5)
         with pytest.raises(pydantic.ValidationError):
@@ -131,9 +133,7 @@ class TestProductContext:
             scope="Test scope",
             success_metric="Test metric",
             reversibility="one-way",
-            assumptions=[
-                ProductAssumption(text="Test assumption", status="unknown"),
-            ],
+            assumptions=[ProductAssumption(text="Test assumption", status="unknown")],
             overall_confidence=0.7,
         )
         data = ctx.model_dump(mode="json")
@@ -147,6 +147,7 @@ class TestProductContext:
 # ========================================================================
 # ProductGateAnalyzer tests
 # ========================================================================
+
 
 class TestProductGateAnalyzer:
     @pytest.mark.asyncio
@@ -241,6 +242,7 @@ class TestProductGateAnalyzer:
 # ========================================================================
 # ProductGateState tests
 # ========================================================================
+
 
 class TestProductGateState:
     @pytest.mark.asyncio
@@ -340,7 +342,9 @@ class TestProductGateState:
         flow._llm = llm
 
         # Simulate resume after clarification
-        state = ProductGateState(resume_with="I need a todo app for personal use, with local storage")
+        state = ProductGateState(
+            resume_with="I need a todo app for personal use, with local storage"
+        )
         events = []
         async for event in state.execute(flow, ""):
             events.append(event)
@@ -369,6 +373,7 @@ class TestProductGateState:
 # ========================================================================
 # Event model tests
 # ========================================================================
+
 
 class TestProductGateReviewEvent:
     def test_minimal_construction(self):
@@ -431,15 +436,18 @@ class TestProductDecisionEvent:
 # Feature flag tests
 # ========================================================================
 
+
 class TestFeatureFlags:
     def test_product_mode_off_by_default(self):
         """PRODUCT_MODE_ENABLED should default to False."""
         from weebot.config.feature_flags import PRODUCT_MODE_ENABLED
+
         assert PRODUCT_MODE_ENABLED is False
 
     def test_product_decision_log_off_by_default(self):
         """PRODUCT_DECISION_LOG_ENABLED should default to False."""
         from weebot.config.feature_flags import PRODUCT_DECISION_LOG_ENABLED
+
         assert PRODUCT_DECISION_LOG_ENABLED is False
 
     @patch.dict("os.environ", {"WEEBOT_PRODUCT_MODE": "true"})
@@ -447,6 +455,7 @@ class TestFeatureFlags:
         """WEEBOT_PRODUCT_MODE=true should enable the flag."""
         from importlib import reload
         import weebot.config.feature_flags as flags
+
         reload(flags)
         assert flags.PRODUCT_MODE_ENABLED is True
         # Reset for other tests
@@ -457,6 +466,7 @@ class TestFeatureFlags:
         """WEEBOT_PRODUCT_DECISION_LOG=1 should enable the flag."""
         from importlib import reload
         import weebot.config.feature_flags as flags
+
         reload(flags)
         assert flags.PRODUCT_DECISION_LOG_ENABLED is True
         reload(flags)

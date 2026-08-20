@@ -14,10 +14,12 @@ every tool has. Contract files only exist for a subset of tools and drive
 not argument coercion — merging the two would make canonicalization behave
 differently depending on whether a contract file happens to exist.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 from weebot.application.ports.canonicalizer_port import CanonicalizerPort
 from weebot.domain.models.base_tool import BaseTool
@@ -33,10 +35,7 @@ class ActionCanonicalizer(CanonicalizerPort):
     """Validates and canonicalizes tool-call arguments against tool JSON schemas."""
 
     def __init__(
-        self,
-        tools: Sequence[BaseTool] = (),
-        strict_mode: bool = False,
-        coerce_types: bool = True,
+        self, tools: Sequence[BaseTool] = (), strict_mode: bool = False, coerce_types: bool = True
     ) -> None:
         self._schemas: dict[str, dict[str, Any]] = {
             t.name: t.parameters for t in tools if isinstance(t.parameters, dict)
@@ -44,9 +43,7 @@ class ActionCanonicalizer(CanonicalizerPort):
         self._strict_mode = strict_mode
         self._coerce_types = coerce_types
 
-    def canonicalize(
-        self, tool_name: str, arguments: dict[str, Any]
-    ) -> CanonicalizationResult:
+    def canonicalize(self, tool_name: str, arguments: dict[str, Any]) -> CanonicalizationResult:
         schema = self._schemas.get(tool_name)
         if not schema:
             return CanonicalizationResult(
@@ -82,8 +79,7 @@ class ActionCanonicalizer(CanonicalizerPort):
         missing_required = [name for name in required if name not in corrected]
         if missing_required and self._strict_mode:
             reason = (
-                f"missing required argument(s) for '{tool_name}': "
-                f"{', '.join(missing_required)}"
+                f"missing required argument(s) for '{tool_name}': " f"{', '.join(missing_required)}"
             )
             return CanonicalizationResult(
                 verdict=CanonicalizationVerdict.BLOCK,
@@ -93,9 +89,7 @@ class ActionCanonicalizer(CanonicalizerPort):
                 block_reason=reason,
             )
 
-        verdict = (
-            CanonicalizationVerdict.FILL_DEFAULT if changes else CanonicalizationVerdict.PASS
-        )
+        verdict = CanonicalizationVerdict.FILL_DEFAULT if changes else CanonicalizationVerdict.PASS
         return CanonicalizationResult(
             verdict=verdict,
             original_args=dict(arguments),

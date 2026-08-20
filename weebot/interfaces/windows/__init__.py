@@ -5,6 +5,7 @@ Usage:
 or:
     weebot companion
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-async def run_companion(adapter: Optional[object] = None) -> None:
+async def run_companion(adapter: object | None = None) -> None:
     """Start the full desktop companion (tray + hotkey + overlay).
 
     This is the main entry point called by ``weebot companion``.
@@ -22,6 +23,7 @@ async def run_companion(adapter: Optional[object] = None) -> None:
     """
     if adapter is None:
         from weebot.infrastructure.adapters.windows_desktop import WindowsDesktopAdapter
+
         adapter = WindowsDesktopAdapter()
     await adapter.start()
 

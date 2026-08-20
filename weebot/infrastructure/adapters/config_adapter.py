@@ -3,9 +3,10 @@
 Created during architecture remediation (step-10).  Register in DI as:
     container.register(ConfigPort, lambda: ConfigAdapter())
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.config_port import ConfigPort
 
@@ -15,6 +16,7 @@ class ConfigAdapter(ConfigPort):
 
     def __init__(self) -> None:
         from weebot.config.settings import WeebotSettings
+
         self._settings = WeebotSettings()
 
     def _resolve(self, key: str) -> Any:
@@ -26,6 +28,7 @@ class ConfigAdapter(ConfigPort):
         # Then try constants
         try:
             from weebot.config import constants as C
+
             return getattr(C, key)
         except AttributeError:
             return None
@@ -33,6 +36,7 @@ class ConfigAdapter(ConfigPort):
         # Then try model_refs
         try:
             from weebot.config import model_refs as M
+
             return getattr(M, key)
         except AttributeError:
             return None
@@ -74,15 +78,17 @@ class ConfigAdapter(ConfigPort):
     @property
     def workspace_root(self) -> str:
         from weebot.config.constants import WORKSPACE_ROOT
+
         return str(WORKSPACE_ROOT)
 
     @property
     def logs_dir(self) -> str:
         from weebot.config.constants import LOGS_DIR
+
         return str(LOGS_DIR)
 
     @property
-    def default_model(self) -> Optional[str]:
+    def default_model(self) -> str | None:
         return getattr(self._settings, "MODEL_NAME", None)
 
     @property

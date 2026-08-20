@@ -4,6 +4,7 @@ The log-parser and preflight-parser tests are pure and always run. The
 end-to-end compile test is gated on the XeLaTeX toolchain being installed
 (skipped otherwise), so CI without TeX Live still passes.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,12 +14,7 @@ import pytest
 from weebot.application.document.book_assembler import assemble_main_tex, write_project
 from weebot.application.document.book_generation_flow import BookGenerationFlow
 from weebot.application.document.stub_content_provider import StubContentProvider
-from weebot.domain.models.book import (
-    Book,
-    Chapter,
-    CompileErrorCategory,
-    Section,
-)
+from weebot.domain.models.book import Book, Chapter, CompileErrorCategory, Section
 from weebot.infrastructure.document.latex_compiler import LatexCompilerService
 from weebot.infrastructure.document.log_parser import has_blocking_errors, parse_log
 from weebot.infrastructure.document.preflight import _parse_pdffonts, preflight_pdf
@@ -40,6 +36,7 @@ def _sample_book() -> Book:
 
 
 # ── log parser ─────────────────────────────────────────────────────────────
+
 
 def test_parse_undefined_reference_and_citation():
     log = (
@@ -83,6 +80,7 @@ def test_error_signature_dedupes():
 
 # ── preflight parser ────────────────────────────────────────────────────────
 
+
 def test_parse_pdffonts_detects_not_embedded():
     out = (
         "name              type    encoding  emb sub uni object ID\n"
@@ -124,6 +122,7 @@ def f(x):
 
 # ── assembly (pure) ─────────────────────────────────────────────────────────
 
+
 def test_assemble_main_tex_structure():
     tex = assemble_main_tex(_sample_book())
     assert "\\input{preamble.tex}" in tex
@@ -148,6 +147,7 @@ def test_write_project_emits_files(tmp_path):
 
 # ── end-to-end flow (needs XeLaTeX) ─────────────────────────────────────────
 
+
 @pytest.mark.slow
 # LatexCompilerService budgets 300s per compile, but the suite-wide pytest
 # timeout is 60s — so on a machine that actually has the toolchain (CI skips
@@ -157,8 +157,7 @@ def test_write_project_emits_files(tmp_path):
 # fetches packages on demand.
 @pytest.mark.timeout(360)
 @pytest.mark.skipif(
-    not LatexCompilerService.toolchain_available(),
-    reason="XeLaTeX/latexmk toolchain not installed",
+    not LatexCompilerService.toolchain_available(), reason="XeLaTeX/latexmk toolchain not installed"
 )
 def test_generation_flow_produces_print_ready_pdf(tmp_path):
     flow = BookGenerationFlow(
@@ -177,13 +176,12 @@ def test_generation_flow_produces_print_ready_pdf(tmp_path):
 @pytest.mark.slow
 @pytest.mark.timeout(360)  # see the note on the previous test
 @pytest.mark.skipif(
-    not LatexCompilerService.toolchain_available(),
-    reason="XeLaTeX/latexmk toolchain not installed",
+    not LatexCompilerService.toolchain_available(), reason="XeLaTeX/latexmk toolchain not installed"
 )
 def test_compile_greek_example_end_to_end(tmp_path):
     work = tmp_path / "book"
     LatexCompilerService.prepare_project(work)
-    (work / "refs.bib").write_text('@book{e,author={Euler},title={Introductio},year={1748}}\n')
+    (work / "refs.bib").write_text("@book{e,author={Euler},title={Introductio},year={1748}}\n")
     (work / "main.tex").write_text(_MINIMAL_BODY, encoding="utf-8")
 
     result = LatexCompilerService().compile(work, "main.tex", shell_escape=True)

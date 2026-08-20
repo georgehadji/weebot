@@ -5,6 +5,7 @@ retrieval-miss detection, deduplication, and trust promotion. Feature
 flags themselves live in :mod:`weebot.config.feature_flags`; they are
 re-exported here so callers have a single import for the learning subsystem.
 """
+
 from __future__ import annotations
 
 from weebot.config.feature_flags import (  # noqa: F401  (re-export)

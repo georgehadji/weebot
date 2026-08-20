@@ -12,13 +12,13 @@ Reserved property keys (stored in the ``properties`` JSON dict):
     - ``_corroboration_count``: Integer, incremented when matching facts
       arrive without conflict
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ── Reserved property keys ──────────────────────────────────────────
 # Stored inside the ``properties`` JSON dict, not as top-level columns.
@@ -50,16 +50,18 @@ Incremented when an incoming observation agrees with the stored value
 
 class KnowledgeNode(BaseModel):
     """A discrete entity in the knowledge graph."""
+
     id: str = Field(default="", description="Unique node identifier")
-    label: str = Field(default="fact", description="Node type: competitor, person, technology, file, fact")
+    label: str = Field(
+        default="fact", description="Node type: competitor, person, technology, file, fact"
+    )
     name: str = Field(default="", description="Human-readable entity name")
     properties: dict[str, Any] = Field(
         default_factory=dict,
         description="Arbitrary key-value properties (price, url, confidence, etc.)",
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="When this node was first discovered",
+        default_factory=lambda: datetime.now(UTC), description="When this node was first discovered"
     )
     source_session_id: str = Field(default="", description="Which session discovered this node")
     version: int = Field(default=1, description="Monotonic version counter")
@@ -67,40 +69,47 @@ class KnowledgeNode(BaseModel):
 
 class KnowledgeEdge(BaseModel):
     """A typed relationship between two knowledge graph nodes."""
+
     source_id: str = Field(default="", description="Source node ID")
     target_id: str = Field(default="", description="Target node ID")
     relation: str = Field(
         default="",
         description="Relationship type: competes_with, uses, priced_at, authored_by, etc.",
     )
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in this relationship")
+    confidence: float = Field(
+        default=1.0, ge=0.0, le=1.0, description="Confidence in this relationship"
+    )
     evidence: str = Field(
-        default="",
-        description="Citation or tool call that established this edge",
+        default="", description="Citation or tool call that established this edge"
     )
 
 
 class ScoredNode(BaseModel):
     """A knowledge graph node with a relevance score from hybrid search."""
-    node: Optional[KnowledgeNode] = Field(default=None, description="The matched node (None when only scores are computed)")
+
+    node: KnowledgeNode | None = Field(
+        default=None, description="The matched node (None when only scores are computed)"
+    )
     score: float = Field(default=0.0, ge=0.0, le=1.0, description="Fused relevance score")
     sparse_score: float = Field(default=0.0, ge=0.0, le=1.0, description="FTS5 BM25 component")
-    dense_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Cosine similarity component")
-    structured_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Label/filter component")
+    dense_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Cosine similarity component"
+    )
+    structured_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Label/filter component"
+    )
 
 
 class KnowledgeSnapshot(BaseModel):
     """Temporal record of changes to a knowledge graph node."""
+
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="When the snapshot was taken",
+        default_factory=lambda: datetime.now(UTC), description="When the snapshot was taken"
     )
     node_id: str = Field(default="", description="The node that changed")
     previous_properties: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Properties before the change",
+        default_factory=dict, description="Properties before the change"
     )
     new_properties: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Properties after the change",
+        default_factory=dict, description="Properties after the change"
     )

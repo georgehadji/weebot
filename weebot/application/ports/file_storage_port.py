@@ -4,10 +4,11 @@ Application-layer services MUST NOT use open() or os.path directly.
 They should depend on this port for all filesystem access, making
 I/O testable and swappable.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 
 class FileStoragePort(ABC):
@@ -42,7 +43,7 @@ class FileStoragePort(ABC):
         """Return True if the path exists on disk."""
 
     @abstractmethod
-    async def size(self, path: str) -> Optional[int]:
+    async def size(self, path: str) -> int | None:
         """Return the file size in bytes, or None if it does not exist."""
 
     @abstractmethod

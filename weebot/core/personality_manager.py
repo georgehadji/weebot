@@ -14,12 +14,13 @@ identity sources, assembled in Hermes-compatible order:
 Maps to Hermes Evolution Phase 1.1 (Enhancement 1 — XML-scoped prompts)
 and SOUL.md support (Enhancement 11).
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from weebot.domain.models.personality import RoleSectionMapping
 
@@ -51,9 +52,9 @@ class PersonalityManager:
 
     def __init__(
         self,
-        core_path: Optional[Path] = None,
-        soul_provider: Optional["SoulProviderPort"] = None,
-        profile_name: Optional[str] = None,
+        core_path: Path | None = None,
+        soul_provider: SoulProviderPort | None = None,
+        profile_name: str | None = None,
     ) -> None:
         self._core_path = core_path or _CORE_FILE
         self._soul_provider = soul_provider
@@ -73,7 +74,9 @@ class PersonalityManager:
             self._sections = self._parse_xml_sections(raw)
             logger.info(
                 "Loaded core personality: %s (%d sections, %d chars)",
-                self._core_path, len(self._sections), len(raw),
+                self._core_path,
+                len(self._sections),
+                len(raw),
             )
         except Exception as exc:
             logger.warning("Failed to read core personality: %s", exc)
@@ -99,11 +102,7 @@ class PersonalityManager:
                 sections[tag] = content
         return sections
 
-    def get_system_prompt(
-        self,
-        role: Optional[str] = None,
-        profile_name: Optional[str] = None,
-    ) -> str:
+    def get_system_prompt(self, role: str | None = None, profile_name: str | None = None) -> str:
         """Return the assembled system prompt: SOUL.md (slot #1) + WEEBOT_CORE.md (slot #2).
 
         Assembly order follows the Hermes pattern:
@@ -136,7 +135,7 @@ class PersonalityManager:
 
         return "\n\n".join(parts) + "\n\n"
 
-    def _load_soul(self, profile_name: Optional[str] = None) -> str | None:
+    def _load_soul(self, profile_name: str | None = None) -> str | None:
         """Load SOUL.md content, with per-profile caching.
 
         Since ``SoulProviderPort.load()`` is async but ``get_system_prompt()``
@@ -177,7 +176,7 @@ class PersonalityManager:
         self._soul_cache[cache_key] = result
         return result if result else None
 
-    def _build_core_prompt(self, role: Optional[str] = None) -> str | None:
+    def _build_core_prompt(self, role: str | None = None) -> str | None:
         """Build the WEEBOT_CORE.md section of the system prompt."""
         if not self._sections:
             return None

@@ -3,6 +3,7 @@
 Extracted from the original domain/models/user_profile.py monolith as
 part of architecture remediation (step-6).
 """
+
 from __future__ import annotations
 
 import aiofiles
@@ -10,7 +11,6 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional
 
 from weebot.application.ports.profile_storage_port import ProfileStoragePort
 from weebot.domain.models.user_profile import (
@@ -30,7 +30,7 @@ class InMemoryUserProfileStorage(ProfileStoragePort):
     """In-memory storage for user profiles."""
 
     def __init__(self):
-        self.profiles: Dict[str, UserProfile] = {}
+        self.profiles: dict[str, UserProfile] = {}
 
     async def save_profile(self, profile: UserProfile) -> bool:
         try:
@@ -40,7 +40,7 @@ class InMemoryUserProfileStorage(ProfileStoragePort):
             logger.error("Error saving profile for user %s: %s", profile.user_id, e)
             return False
 
-    async def load_profile(self, user_id: str) -> Optional[UserProfile]:
+    async def load_profile(self, user_id: str) -> UserProfile | None:
         return self.profiles.get(user_id)
 
     async def delete_profile(self, user_id: str) -> bool:
@@ -97,7 +97,9 @@ class FileUserProfileStorage(ProfileStoragePort):
                         "description": goal.description,
                         "category": goal.category,
                         "created_at": goal.created_at.isoformat(),
-                        "target_completion": goal.target_completion.isoformat() if goal.target_completion else None,
+                        "target_completion": (
+                            goal.target_completion.isoformat() if goal.target_completion else None
+                        ),
                         "current_progress": goal.current_progress,
                         "status": goal.status,
                         "related_tasks": goal.related_tasks,
@@ -121,13 +123,13 @@ class FileUserProfileStorage(ProfileStoragePort):
             logger.error("Error saving profile for user %s: %s", profile.user_id, e)
             return False
 
-    async def load_profile(self, user_id: str) -> Optional[UserProfile]:
+    async def load_profile(self, user_id: str) -> UserProfile | None:
         try:
             file_path = self.storage_dir / f"{user_id}.json"
             if not file_path.exists():
                 return None
 
-            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            async with aiofiles.open(file_path, encoding="utf-8") as f:
                 content = await f.read()
                 profile_dict = json.loads(content)
 
@@ -147,36 +149,46 @@ class FileUserProfileStorage(ProfileStoragePort):
             )
 
             for pref_dict in profile_dict.get("preferences", []):
-                profile.preferences.append(UserPreference(
-                    category=PreferenceCategory(pref_dict["category"]),
-                    key=pref_dict["key"],
-                    value=pref_dict["value"],
-                    last_updated=datetime.fromisoformat(pref_dict["last_updated"]),
-                    confidence=pref_dict.get("confidence", 1.0),
-                ))
+                profile.preferences.append(
+                    UserPreference(
+                        category=PreferenceCategory(pref_dict["category"]),
+                        key=pref_dict["key"],
+                        value=pref_dict["value"],
+                        last_updated=datetime.fromisoformat(pref_dict["last_updated"]),
+                        confidence=pref_dict.get("confidence", 1.0),
+                    )
+                )
 
             for interaction_dict in profile_dict.get("interaction_history", []):
-                profile.interaction_history.append(UserInteraction(
-                    interaction_id=interaction_dict["interaction_id"],
-                    interaction_type=InteractionType(interaction_dict["interaction_type"]),
-                    timestamp=datetime.fromisoformat(interaction_dict["timestamp"]),
-                    content=interaction_dict["content"],
-                    context=interaction_dict["context"],
-                    outcome=interaction_dict.get("outcome"),
-                    satisfaction_score=interaction_dict.get("satisfaction_score"),
-                ))
+                profile.interaction_history.append(
+                    UserInteraction(
+                        interaction_id=interaction_dict["interaction_id"],
+                        interaction_type=InteractionType(interaction_dict["interaction_type"]),
+                        timestamp=datetime.fromisoformat(interaction_dict["timestamp"]),
+                        content=interaction_dict["content"],
+                        context=interaction_dict["context"],
+                        outcome=interaction_dict.get("outcome"),
+                        satisfaction_score=interaction_dict.get("satisfaction_score"),
+                    )
+                )
 
             for goal_dict in profile_dict.get("goals", []):
-                profile.goals.append(UserGoal(
-                    goal_id=goal_dict["goal_id"],
-                    description=goal_dict["description"],
-                    category=goal_dict["category"],
-                    created_at=datetime.fromisoformat(goal_dict["created_at"]),
-                    target_completion=datetime.fromisoformat(goal_dict["target_completion"]) if goal_dict.get("target_completion") else None,
-                    current_progress=goal_dict.get("current_progress", 0.0),
-                    status=goal_dict.get("status", "active"),
-                    related_tasks=goal_dict.get("related_tasks", []),
-                ))
+                profile.goals.append(
+                    UserGoal(
+                        goal_id=goal_dict["goal_id"],
+                        description=goal_dict["description"],
+                        category=goal_dict["category"],
+                        created_at=datetime.fromisoformat(goal_dict["created_at"]),
+                        target_completion=(
+                            datetime.fromisoformat(goal_dict["target_completion"])
+                            if goal_dict.get("target_completion")
+                            else None
+                        ),
+                        current_progress=goal_dict.get("current_progress", 0.0),
+                        status=goal_dict.get("status", "active"),
+                        related_tasks=goal_dict.get("related_tasks", []),
+                    )
+                )
 
             return profile
         except Exception as e:

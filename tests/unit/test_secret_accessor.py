@@ -1,4 +1,5 @@
 """Unit tests for SecretAccessor — centralized environment access."""
+
 from __future__ import annotations
 
 import pytest
@@ -87,6 +88,7 @@ class TestSecretAccessorRedaction:
 
     def test_api_key_is_redacted(self, caplog):
         import logging
+
         caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"OPENROUTER_API_KEY": "sk-or-v1-very-secret"})
         SecretAccessor.get("OPENROUTER_API_KEY")
@@ -95,6 +97,7 @@ class TestSecretAccessorRedaction:
 
     def test_non_secret_is_logged_plainly(self, caplog):
         import logging
+
         caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"TIMEOUT": "30"})
         SecretAccessor.get("TIMEOUT")
@@ -103,6 +106,7 @@ class TestSecretAccessorRedaction:
 
     def test_unset_key_logs_not_set(self, caplog):
         import logging
+
         caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({})
         SecretAccessor.get("MISSING")
@@ -110,6 +114,7 @@ class TestSecretAccessorRedaction:
 
     def test_secret_suffix_token_is_redacted(self, caplog):
         import logging
+
         caplog.set_level(logging.DEBUG, logger="weebot.config.secret_accessor")
         SecretAccessor.set_source({"GITHUB_TOKEN": "ghp_1234567890abcdef"})
         SecretAccessor.get("GITHUB_TOKEN")

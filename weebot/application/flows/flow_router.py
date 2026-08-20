@@ -8,10 +8,11 @@ approval.
 Returns both the resolved FlowState and a (possibly mutated) Session,
 so callers can apply context mutations alongside the transition.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from weebot.application.flows.states.base import FlowState
 from weebot.application.flows.states.executing import ExecutingState
@@ -36,6 +37,7 @@ class FlowRouter:
             from weebot.application.flows.states.executing import ExecutingState
             from weebot.application.flows.states.planning import PlanningState
             from weebot.application.flows.states.product_gate import ProductGateState
+
             cls._state_class_map = {
                 "ExecutingState": ExecutingState,
                 "PlanningState": PlanningState,
@@ -92,10 +94,8 @@ class FlowRouter:
 
     @staticmethod
     def resolve_initial_state(
-        session: Session,
-        prompt: str,
-        extra: dict | None = None,
-    ) -> Tuple[FlowState, Session]:
+        session: Session, prompt: str, extra: dict | None = None
+    ) -> tuple[FlowState, Session]:
         """Determine the initial flow state for a session.
 
         Priority:
@@ -168,24 +168,23 @@ class FlowRouter:
         return PlanningState(), session
 
     @staticmethod
-    async def record_misalignment(
-        session: Session,
-        prompt: str,
-        journal: Any = None,
-    ) -> None:
+    async def record_misalignment(session: Session, prompt: str, journal: Any = None) -> None:
         """Record a user correction in the misalignment journal (best-effort)."""
         if journal is None:
             return
         try:
             import asyncio
             from weebot.domain.models.misalignment_entry import MisalignmentEntry
-            asyncio.ensure_future(journal.record(
-                MisalignmentEntry(
-                    session_id=session.id,
-                    project_path=session.context.get("working_dir", ""),
-                    symptom="user_correction",
-                    correction_text=prompt[:500],
+
+            asyncio.ensure_future(
+                journal.record(
+                    MisalignmentEntry(
+                        session_id=session.id,
+                        project_path=session.context.get("working_dir", ""),
+                        symptom="user_correction",
+                        correction_text=prompt[:500],
+                    )
                 )
-            ))
+            )
         except ImportError:
             pass

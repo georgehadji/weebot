@@ -2,6 +2,7 @@
 
 Extracted from deprecated weebot/ai_router.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -9,7 +10,6 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 
 class ResponseCache:
@@ -20,7 +20,7 @@ class ResponseCache:
         self.ttl_hours = ttl_hours
         self._lock = threading.Lock()
 
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str | None:
         cache_file = self.cache_dir / f"{key}.txt"
         with self._lock:
             if cache_file.exists():
@@ -33,7 +33,7 @@ class ResponseCache:
         cache_file = self.cache_dir / f"{key}.txt"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         with self._lock:
-            tmp_path: Optional[Path] = None
+            tmp_path: Path | None = None
             try:
                 with tempfile.NamedTemporaryFile(
                     mode="w",

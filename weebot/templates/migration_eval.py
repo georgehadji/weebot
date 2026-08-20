@@ -37,14 +37,10 @@ class _Validator(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:  # noqa: D102
         if isinstance(node.func, ast.Name):
             if node.func.id not in _ALLOWED_BUILTINS:
-                raise ValueError(
-                    f"Function call {node.func.id!r} is not allowed"
-                )
+                raise ValueError(f"Function call {node.func.id!r} is not allowed")
         elif isinstance(node.func, ast.Attribute):
             if node.func.attr not in _ALLOWED_METHODS:
-                raise ValueError(
-                    f"Method call {node.func.attr!r} is not allowed"
-                )
+                raise ValueError(f"Method call {node.func.attr!r} is not allowed")
             self.visit(node.func.value)
         else:
             raise ValueError("Unsupported function call")
@@ -56,17 +52,11 @@ class _Validator(ast.NodeVisitor):
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: D102
         for target in node.targets:
             if not isinstance(target, ast.Subscript):
-                raise ValueError(
-                    "Assignments must be to result[...] or parameters[...]"
-                )
+                raise ValueError("Assignments must be to result[...] or parameters[...]")
             if not isinstance(target.value, ast.Name):
-                raise ValueError(
-                    "Assignments must be to result[...] or parameters[...]"
-                )
+                raise ValueError("Assignments must be to result[...] or parameters[...]")
             if target.value.id not in {"result", "parameters"}:
-                raise ValueError(
-                    "Assignments must be to result[...] or parameters[...]"
-                )
+                raise ValueError("Assignments must be to result[...] or parameters[...]")
             self.visit(target.slice)
         self.visit(node.value)
 
@@ -125,9 +115,7 @@ class _Validator(ast.NodeVisitor):
         pass
 
     def generic_visit(self, node: ast.AST) -> None:  # noqa: D102
-        raise ValueError(
-            f"Unsupported expression type: {type(node).__name__}"
-        )
+        raise ValueError(f"Unsupported expression type: {type(node).__name__}")
 
 
 def evaluate_migration_script(script: str, parameters: dict, result: dict) -> dict:
@@ -147,12 +135,7 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
     tree = ast.parse(script, mode="exec")
     _Validator().visit(tree)
 
-    _builtins: dict[str, Any] = {
-        "str": str,
-        "int": int,
-        "len": len,
-        "sorted": sorted,
-    }
+    _builtins: dict[str, Any] = {"str": str, "int": int, "len": len, "sorted": sorted}
 
     def _eval(node: ast.AST) -> Any:
         if isinstance(node, ast.Constant):
@@ -200,10 +183,8 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
             if isinstance(node.op, ast.Mod):
                 return left % right
             if isinstance(node.op, ast.Pow):
-                return left ** right
-            raise ValueError(
-                f"Unsupported binary operator: {type(node.op).__name__}"
-            )
+                return left**right
+            raise ValueError(f"Unsupported binary operator: {type(node.op).__name__}")
         if isinstance(node, ast.UnaryOp):
             operand = _eval(node.operand)
             if isinstance(node.op, ast.USub):
@@ -212,16 +193,11 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
                 return +operand
             if isinstance(node.op, ast.Not):
                 return not operand
-            raise ValueError(
-                f"Unsupported unary operator: {type(node.op).__name__}"
-            )
+            raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
         if isinstance(node, ast.List):
             return [_eval(elt) for elt in node.elts]
         if isinstance(node, ast.Dict):
-            return {
-                _eval(k): _eval(v)
-                for k, v in zip(node.keys, node.values)
-            }
+            return {_eval(k): _eval(v) for k, v in zip(node.keys, node.values)}
         if isinstance(node, ast.Tuple):
             return tuple(_eval(elt) for elt in node.elts)
         if isinstance(node, ast.Compare):
@@ -249,9 +225,7 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
                 elif isinstance(op, ast.NotIn):
                     comp = left not in right
                 else:
-                    raise ValueError(
-                        f"Unsupported comparison: {type(op).__name__}"
-                    )
+                    raise ValueError(f"Unsupported comparison: {type(op).__name__}")
                 if not comp:
                     return False
                 left = right
@@ -262,9 +236,7 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
                 return all(values)
             if isinstance(node.op, ast.Or):
                 return any(values)
-            raise ValueError(
-                f"Unsupported bool op: {type(node.op).__name__}"
-            )
+            raise ValueError(f"Unsupported bool op: {type(node.op).__name__}")
         if isinstance(node, ast.IfExp):
             test = _eval(node.test)
             if test:
@@ -283,8 +255,6 @@ def evaluate_migration_script(script: str, parameters: dict, result: dict) -> di
             for stmt in node.body:
                 _eval(stmt)
             return result
-        raise ValueError(
-            f"Unsupported expression type: {type(node).__name__}"
-        )
+        raise ValueError(f"Unsupported expression type: {type(node).__name__}")
 
     return _eval(tree)

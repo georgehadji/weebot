@@ -1,4 +1,5 @@
 """Unit tests for tray app non-GUI logic."""
+
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -35,6 +36,7 @@ class TestTrayStatusIcon:
 
     def test_generate_icon_returns_pil_image(self):
         from PIL import Image
+
         icon = TrayStatusIcon.__new__(TrayStatusIcon)
         img = icon._generate_icon_image("green")
         assert isinstance(img, Image.Image)
@@ -62,7 +64,7 @@ class TestTrayStatusIcon:
 
     def test_set_status_updates_internal_state(self):
         icon = TrayStatusIcon()
-        icon._icon = None   # no real tray window
+        icon._icon = None  # no real tray window
         icon.set_status(TrayStatus.CONNECTED)
         assert icon._status == TrayStatus.CONNECTED
 
@@ -72,6 +74,7 @@ class TestTrayStatusIcon:
 
         class FakeIcon:
             title = ""
+
             def __setattr__(self, name, value):
                 if name == "icon":
                     captured_images.append(value)
@@ -82,4 +85,5 @@ class TestTrayStatusIcon:
         assert len(captured_images) == 1
         # Verify it's a PIL image (green circle)
         from PIL import Image
+
         assert isinstance(captured_images[0], Image.Image)

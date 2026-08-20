@@ -1,21 +1,23 @@
 """Response schemas for web API."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-
 class ErrorResponse(BaseModel):
     """Error response."""
+
     error: str = Field(..., description="Error message")
     detail: str | None = Field(default=None, description="Detailed error information")
 
 
 class SessionResponse(BaseModel):
     """Session response."""
+
     id: str = Field(..., description="Session ID")
     user_id: str = Field(..., description="User ID")
     agent_id: str = Field(..., description="Agent ID")
@@ -29,12 +31,14 @@ class SessionResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     """List of sessions response."""
+
     sessions: list[SessionResponse] = Field(default_factory=list)
     total: int = Field(..., description="Total number of sessions")
 
 
 class ModelInfoResponse(BaseModel):
     """Model information response."""
+
     id: str = Field(..., description="Model ID")
     name: str = Field(..., description="Model display name")
     provider: str = Field(..., description="Model provider")
@@ -46,6 +50,7 @@ class ModelInfoResponse(BaseModel):
 
 class HealthComponent(BaseModel):
     """Health status of a single component."""
+
     name: str = Field(..., description="Component name")
     status: str = Field(..., description="Component status (healthy/degraded/unhealthy)")
     latency_ms: float | None = Field(default=None, description="Response latency in ms")
@@ -54,13 +59,15 @@ class HealthComponent(BaseModel):
 
 class HealthResponse(BaseModel):
     """System health check response."""
+
     status: str = Field(..., description="Overall system status")
     components: list[HealthComponent] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class MetricsResponse(BaseModel):
     """System metrics response."""
+
     total_sessions: int = Field(..., description="Total number of sessions")
     active_sessions: int = Field(..., description="Number of active sessions")
     completed_sessions: int = Field(..., description="Number of completed sessions")
@@ -70,6 +77,7 @@ class MetricsResponse(BaseModel):
 
 class CostData(BaseModel):
     """Daily cost data."""
+
     date: str = Field(..., description="Date label")
     cost: float = Field(..., description="Cost for the day")
     tokens: int = Field(..., description="Token count for the day")
@@ -77,6 +85,7 @@ class CostData(BaseModel):
 
 class ModelUsage(BaseModel):
     """Model usage statistics."""
+
     name: str = Field(..., description="Model name")
     cost: float = Field(..., description="Cost for this model")
     usage: int = Field(..., description="Number of calls")
@@ -84,6 +93,7 @@ class ModelUsage(BaseModel):
 
 class DashboardMetricsResponse(BaseModel):
     """Dashboard metrics response."""
+
     total_sessions: int = Field(default=0)
     active_sessions: int = Field(default=0)
     completed_sessions: int = Field(default=0)

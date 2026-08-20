@@ -7,12 +7,14 @@ Each sub-agent runs a full PlanActFlow in its own ephemeral Session.
 This mirrors the BenchmarkRunner.run_batch() concurrency pattern but is
 invocable as a tool from within an ExecutorAgent loop.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 from pydantic import ConfigDict
 
@@ -80,13 +82,13 @@ class DispatchAgentsTool(BaseTool):
     }
 
     # Private injected dependencies — excluded from Pydantic schema
-    _flow_factory: Optional[Callable] = None
-    _state_repo: Optional[Any] = None
+    _flow_factory: Callable | None = None
+    _state_repo: Any | None = None
 
     def __init__(
         self,
-        flow_factory: Optional[Callable] = None,
-        state_repo: Optional[Any] = None,
+        flow_factory: Callable | None = None,
+        state_repo: Any | None = None,
         swarm_bus=None,
         **data,
     ):
@@ -96,10 +98,7 @@ class DispatchAgentsTool(BaseTool):
         object.__setattr__(self, "_swarm_bus", swarm_bus)
 
     async def execute(
-        self,
-        tasks: List[Dict[str, Any]],
-        max_concurrency: int = 4,
-        **_,
+        self, tasks: list[dict[str, Any]], max_concurrency: int = 4, **_
     ) -> ToolResult:
         if not self._flow_factory:
             return ToolResult.error_result(
@@ -111,7 +110,7 @@ class DispatchAgentsTool(BaseTool):
 
         semaphore = asyncio.Semaphore(max_concurrency)
 
-        async def _run_one(task_spec: Dict[str, Any]) -> Dict[str, Any]:
+        async def _run_one(task_spec: dict[str, Any]) -> dict[str, Any]:
             task_id = task_spec.get("task_id", str(uuid.uuid4())[:8])
             description = task_spec.get("description", "")
             context = task_spec.get("context", "")
@@ -121,20 +120,23 @@ class DispatchAgentsTool(BaseTool):
                 session = self._make_session(task_id)
                 try:
                     flow = self._flow_factory(session)
-                    summary_lines: List[str] = []
+                    summary_lines: list[str] = []
                     async for event in flow.run(prompt):
                         # Collect the final MessageEvent text as the task summary
-                        event_type = getattr(event, "type", None) or getattr(event, "event_type", None)
+                        event_type = getattr(event, "type", None) or getattr(
+                            event, "event_type", None
+                        )
                         if event_type in ("message", "MESSAGE"):
-                            content = getattr(event, "content", None) or getattr(event, "message", "")
+                            content = getattr(event, "content", None) or getattr(
+                                event, "message", ""
+                            )
                             summary_lines.append(str(content))
                     summary = summary_lines[-1] if summary_lines else "(no output)"
 
                     # ── Tier 3.1: Publish findings to swarm bus ──
                     if self._swarm_bus is not None:
-                        from weebot.domain.models.inter_agent import (
-                            InterAgentMessage,
-                        )
+                        from weebot.domain.models.inter_agent import InterAgentMessage
+
                         await self._swarm_bus.publish(
                             InterAgentMessage(
                                 sender_agent_id=task_id,

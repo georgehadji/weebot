@@ -8,13 +8,13 @@ ClusterFailurePatternsHandler:
   Groups stored signatures by exact (cause, behavior, mechanism) match,
   orders by (support × mean_actionability), and returns an EvidenceBundle.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult, QueryHandler, QueryResult
 from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
@@ -23,18 +23,12 @@ from weebot.application.cqrs.commands.failure_signature_commands import (
     ClusterFailurePatternsQuery,
     ExtractFailureSignatureCommand,
 )
-from weebot.domain.models.failure_signature import (
-    EvidenceBundle,
-    FailureCluster,
-    FailureSignature,
-)
+from weebot.domain.models.failure_signature import EvidenceBundle, FailureSignature
 from weebot.domain.models.trajectory import TrajectoryHealth
 
 if TYPE_CHECKING:
     from weebot.application.ports.llm_port import LLMPort
-    from weebot.application.ports.trajectory_repository_port import (
-        TrajectoryRepositoryPort,
-    )
+    from weebot.application.ports.trajectory_repository_port import TrajectoryRepositoryPort
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +65,8 @@ class ExtractFailureSignatureHandler(CommandHandler):
 
     def __init__(
         self,
-        llm: "LLMPort",
-        trajectory_repo: "TrajectoryRepositoryPort",
+        llm: LLMPort,
+        trajectory_repo: TrajectoryRepositoryPort,
         budget_model: str | None = None,
     ) -> None:
         self._llm = llm
@@ -83,18 +77,18 @@ class ExtractFailureSignatureHandler(CommandHandler):
         try:
             if not command.trajectory_text:
                 logger.info(
-                    "No trajectory text for session %s — skipping extraction",
-                    command.session_id,
+                    "No trajectory text for session %s — skipping extraction", command.session_id
                 )
                 return CommandResult.fail(
-                    error="No trajectory text provided",
-                    error_code="NO_TRACE",
+                    error="No trajectory text provided", error_code="NO_TRACE"
                 )
 
             # Call LLM to extract the triple
             prompt = _EXTRACTION_PROMPT.format(
                 trajectory_text=command.trajectory_text[:4000],
-                failure_modes=", ".join(command.failure_modes) if command.failure_modes else "(none)",
+                failure_modes=(
+                    ", ".join(command.failure_modes) if command.failure_modes else "(none)"
+                ),
             )
 
             response = await self._llm.chat(
@@ -107,13 +101,12 @@ class ExtractFailureSignatureHandler(CommandHandler):
 
             if not response or not response.content:
                 return CommandResult.fail(
-                    error="LLM returned empty response",
-                    error_code="EMPTY_LLM",
+                    error="LLM returned empty response", error_code="EMPTY_LLM"
                 )
 
             # Strip markdown code fences if the model wrapped the JSON
             raw = response.content
-            fence_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw, re.DOTALL)
+            fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
             if fence_match:
                 raw = fence_match.group(1)
 
@@ -130,7 +123,8 @@ class ExtractFailureSignatureHandler(CommandHandler):
                 except ValueError:
                     logger.warning(
                         "Unknown trajectory_health value %r for session %s — storing as None",
-                        command.trajectory_health, command.session_id,
+                        command.trajectory_health,
+                        command.session_id,
                     )
 
             # NOTE: command.harness_version currently receives
@@ -144,7 +138,7 @@ class ExtractFailureSignatureHandler(CommandHandler):
                 mechanism=mechanism,
                 trajectory_health=health,
                 actionability_score=_estimate_actionability(
-                    terminal_cause, agent_behavior, mechanism,
+                    terminal_cause, agent_behavior, mechanism
                 ),
                 harness_version=command.harness_version,
                 model_id=command.model_id,
@@ -152,22 +146,17 @@ class ExtractFailureSignatureHandler(CommandHandler):
 
             await self._repo.save_failure_signature(signature)
 
-            return CommandResult.ok(data={
-                "session_id": command.session_id,
-                "signature": signature.model_dump(),
-            })
+            return CommandResult.ok(
+                data={"session_id": command.session_id, "signature": signature.model_dump()}
+            )
 
         except json.JSONDecodeError as exc:
             return CommandResult.fail(
-                error=f"Failed to parse LLM JSON: {exc}",
-                error_code="PARSE_ERROR",
+                error=f"Failed to parse LLM JSON: {exc}", error_code="PARSE_ERROR"
             )
         except Exception as exc:
             logger.error("Failure signature extraction failed: %s", exc, exc_info=True)
-            return CommandResult.fail(
-                error=str(exc),
-                error_code="EXTRACTION_ERROR",
-            )
+            return CommandResult.fail(error=str(exc), error_code="EXTRACTION_ERROR")
 
 
 class BatchExtractSignaturesHandler(CommandHandler):
@@ -177,9 +166,7 @@ class BatchExtractSignaturesHandler(CommandHandler):
     """
 
     def __init__(
-        self,
-        handler: ExtractFailureSignatureHandler,
-        trajectory_repo: "TrajectoryRepositoryPort",
+        self, handler: ExtractFailureSignatureHandler, trajectory_repo: TrajectoryRepositoryPort
     ) -> None:
         self._handler = handler
         self._repo = trajectory_repo
@@ -193,10 +180,9 @@ class BatchExtractSignaturesHandler(CommandHandler):
             )
 
             if not existing:
-                return CommandResult.ok(data={
-                    "processed": 0,
-                    "message": "No sessions without signatures found",
-                })
+                return CommandResult.ok(
+                    data={"processed": 0, "message": "No sessions without signatures found"}
+                )
 
             results = []
             for session_id, task_id, trace_text, failure_modes in existing:
@@ -209,25 +195,26 @@ class BatchExtractSignaturesHandler(CommandHandler):
                     model_id=command.model_id,
                 )
                 result = await self._handler.handle(sub_cmd)
-                results.append({
-                    "session_id": session_id,
-                    "success": result.success,
-                    "error": result.error if not result.success else None,
-                })
+                results.append(
+                    {
+                        "session_id": session_id,
+                        "success": result.success,
+                        "error": result.error if not result.success else None,
+                    }
+                )
 
-            return CommandResult.ok(data={
-                "processed": len(results),
-                "success_count": sum(1 for r in results if r["success"]),
-                "failed_count": sum(1 for r in results if not r["success"]),
-                "results": results,
-            })
+            return CommandResult.ok(
+                data={
+                    "processed": len(results),
+                    "success_count": sum(1 for r in results if r["success"]),
+                    "failed_count": sum(1 for r in results if not r["success"]),
+                    "results": results,
+                }
+            )
 
         except Exception as exc:
             logger.error("Batch extraction failed: %s", exc, exc_info=True)
-            return CommandResult.fail(
-                error=str(exc),
-                error_code="BATCH_EXTRACTION_ERROR",
-            )
+            return CommandResult.fail(error=str(exc), error_code="BATCH_EXTRACTION_ERROR")
 
 
 class ClusterFailurePatternsHandler(QueryHandler):
@@ -238,7 +225,7 @@ class ClusterFailurePatternsHandler(QueryHandler):
     an EvidenceBundle ordered by (support × mean_actionability).
     """
 
-    def __init__(self, trajectory_repo: "TrajectoryRepositoryPort") -> None:
+    def __init__(self, trajectory_repo: TrajectoryRepositoryPort) -> None:
         self._repo = trajectory_repo
 
     async def handle(self, query: ClusterFailurePatternsQuery) -> QueryResult:
@@ -255,7 +242,7 @@ class ClusterFailurePatternsHandler(QueryHandler):
 
             # Also query total trajectories examined
             total_trajectories = await self._repo.count_trajectories(
-                lookback_days=query.lookback_days,
+                lookback_days=query.lookback_days
             )
 
             bundle = EvidenceBundle(
@@ -275,9 +262,8 @@ class ClusterFailurePatternsHandler(QueryHandler):
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
-def _estimate_actionability(
-    terminal_cause: str, agent_behavior: str, mechanism: str,
-) -> float:
+
+def _estimate_actionability(terminal_cause: str, agent_behavior: str, mechanism: str) -> float:
     """Heuristic actionability score based on signature characteristics.
 
     Returns 0.0–1.0.  High scores = likely addressable by a harness edit.
@@ -285,12 +271,17 @@ def _estimate_actionability(
     """
     # Mechanisms that are typically addressable by harness changes
     high_impact = {
-        "verification_skipped", "tool_misuse", "missing_dependency",
-        "unproductive_repetition", "wrong_assumption",
+        "verification_skipped",
+        "tool_misuse",
+        "missing_dependency",
+        "unproductive_repetition",
+        "wrong_assumption",
     }
     # Agent behaviors that indicate addressable patterns
     high_impact_behaviors = {
-        "retry_loop", "premature_conclusion", "verification_skipped",
+        "retry_loop",
+        "premature_conclusion",
+        "verification_skipped",
         "dependency_untested",
     }
 

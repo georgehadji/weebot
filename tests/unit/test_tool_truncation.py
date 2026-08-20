@@ -1,11 +1,12 @@
 """Tests for Phase 4: Context-aware output truncation."""
+
 import pytest
 
 from weebot.application.models.tool_collection import _truncate
 from weebot.tools.base import BaseTool, ToolResult
 
-
 # ── Pure function tests for _truncate ─────────────────────────────
+
 
 def test_head_truncation_keeps_start():
     """output > limit; result starts with original prefix."""
@@ -64,7 +65,6 @@ def test_boundary_no_truncation_below_limit():
 async def test_metadata_records_strategy():
     """ToolCollection records truncation metadata including strategy."""
     from weebot.application.models.tool_collection import ToolCollection
-    from weebot.tools.base import BaseTool, ToolResult
 
     class _TailTool(BaseTool):
         name: str = "tail_tool"

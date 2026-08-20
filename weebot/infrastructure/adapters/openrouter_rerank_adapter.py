@@ -7,12 +7,11 @@ Cohere-compatible JSON body.
 All rerank models use ``text->rerank`` modality — they are NOT chat models
 and cannot be called via ``LLMPort.chat()``.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
-from typing import Optional
 
 import httpx
 
@@ -59,11 +58,7 @@ class OpenRouterRerankAdapter(RerankPort):
     # ── RerankPort implementation ───────────────────────────────────
 
     async def rerank(
-        self,
-        query: str,
-        documents: list[str],
-        model: str | None = None,
-        top_n: int | None = None,
+        self, query: str, documents: list[str], model: str | None = None, top_n: int | None = None
     ) -> list[RerankResult]:
         """Rerank *documents* against *query* via the OpenRouter rerank endpoint."""
         if not documents:
@@ -79,35 +74,33 @@ class OpenRouterRerankAdapter(RerankPort):
             if effective_model != RERANK_MODEL_VERIFIED:
                 logger.warning(
                     "Rerank with model %s failed (%s) — retrying with verified fallback %s",
-                    effective_model, exc, RERANK_MODEL_VERIFIED,
+                    effective_model,
+                    exc,
+                    RERANK_MODEL_VERIFIED,
                 )
                 try:
                     return await self._call_rerank(query, documents, top_n, RERANK_MODEL_VERIFIED)
                 except Exception as fallback_exc:
                     logger.warning(
                         "Rerank fallback to %s also failed (%d docs): %s",
-                        RERANK_MODEL_VERIFIED, len(documents), fallback_exc,
+                        RERANK_MODEL_VERIFIED,
+                        len(documents),
+                        fallback_exc,
                     )
             else:
                 logger.warning(
                     "Rerank failed after retries for model %s (%d docs): %s",
-                    effective_model, len(documents), exc,
+                    effective_model,
+                    len(documents),
+                    exc,
                 )
             return self._identity_results(documents)
 
     async def _call_rerank(
-        self,
-        query: str,
-        documents: list[str],
-        top_n: int | None,
-        model_id: str,
+        self, query: str, documents: list[str], top_n: int | None, model_id: str
     ) -> list[RerankResult]:
         """Call the rerank API with retry backoff for a specific model."""
-        body: dict = {
-            "model": model_id,
-            "query": query,
-            "documents": documents,
-        }
+        body: dict = {"model": model_id, "query": query, "documents": documents}
         if top_n is not None:
             body["top_n"] = top_n
 
@@ -133,18 +126,15 @@ class OpenRouterRerankAdapter(RerankPort):
             idx = item.get("index", 0)
             doc = body["documents"][idx] if idx < len(body["documents"]) else ""
             results.append(
-                RerankResult(
-                    index=idx,
-                    document=doc,
-                    score=float(item.get("relevance_score", 0.0)),
-                )
+                RerankResult(index=idx, document=doc, score=float(item.get("relevance_score", 0.0)))
             )
 
         # Sort by score descending (should already be sorted, but ensure)
         results.sort(key=lambda r: r.score, reverse=True)
         logger.debug(
             "Rerank: %d docs → %d results (model=%s, top_score=%.3f)",
-            len(body["documents"]), len(results),
+            len(body["documents"]),
+            len(results),
             body.get("model", "?"),
             results[0].score if results else 0.0,
         )
@@ -153,7 +143,4 @@ class OpenRouterRerankAdapter(RerankPort):
     @staticmethod
     def _identity_results(documents: list[str]) -> list[RerankResult]:
         """Return identity-mapped results (original order, score=1.0)."""
-        return [
-            RerankResult(index=i, document=doc, score=1.0)
-            for i, doc in enumerate(documents)
-        ]
+        return [RerankResult(index=i, document=doc, score=1.0) for i, doc in enumerate(documents)]

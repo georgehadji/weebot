@@ -3,6 +3,7 @@
 Covers the helper that maps neutral image content blocks to Anthropic/OpenAI
 wire formats. Plain-string messages (the common case) must pass through untouched.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -133,21 +134,19 @@ def test_convert_does_not_mutate_input():
 
 # ── B3 regression: short markers must not false-positive inside longer tokens ─
 
-@pytest.mark.parametrize("model", [
-    "openai/o1",
-    "o1-mini",
-    "o1-preview",
-    "openai/o3-mini",
-    "o3",
-])
+
+@pytest.mark.parametrize("model", ["openai/o1", "o1-mini", "o1-preview", "openai/o3-mini", "o3"])
 def test_o1_o3_match_as_exact_segments(model):
     assert model_supports_vision(model) is True
 
 
-@pytest.mark.parametrize("model", [
-    "vendor/coral-o1dering",   # "o1" inside a longer token
-    "provider/tool3-engine",   # no "o3" segment
-    "gpto1-variant",           # "o1" not at segment boundary
-])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "vendor/coral-o1dering",  # "o1" inside a longer token
+        "provider/tool3-engine",  # no "o3" segment
+        "gpto1-variant",  # "o1" not at segment boundary
+    ],
+)
 def test_o1_o3_do_not_false_positive_on_substrings(model):
     assert model_supports_vision(model) is False

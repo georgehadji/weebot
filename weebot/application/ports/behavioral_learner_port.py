@@ -1,8 +1,9 @@
 """Behavioral Learner port — abstract interface for automatic rule extraction."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.behavioral_rule import BehavioralRule
 
@@ -17,7 +18,7 @@ class BehavioralLearnerPort(ABC):
     @abstractmethod
     async def learn_from_correction(
         self, user_message: str, context: dict[str, Any]
-    ) -> Optional[BehavioralRule]:
+    ) -> BehavioralRule | None:
         """Extract a behavioral rule from a user correction, if one exists.
 
         Args:

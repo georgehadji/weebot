@@ -4,16 +4,17 @@ Defines the port for fetching, searching, and downloading skills from a
 remote index (SkillHub).  The index is a JSON document hosted at a
 configurable URL and contains metadata about community-contributed skills.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
 class RemoteSkill:
     """A skill entry in the remote SkillHub index."""
+
     name: str
     version: str
     description: str

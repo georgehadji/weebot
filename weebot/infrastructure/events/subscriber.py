@@ -1,10 +1,16 @@
 """Infrastructure subscriber for domain events."""
-import logging
-from typing import List
 
-from weebot.domain.models.event import DomainEvent, FactDiscovered, MemoryCompacted, PlanStepCompleted
+import logging
+
+from weebot.domain.models.event import (
+    DomainEvent,
+    FactDiscovered,
+    MemoryCompacted,
+    PlanStepCompleted,
+)
 
 logger = logging.getLogger("weebot.domain.events")
+
 
 class InfrastructureEventSubscriber:
     """Listens for domain events and routes them to infrastructure logging/storage."""
@@ -12,7 +18,7 @@ class InfrastructureEventSubscriber:
     def __init__(self, event_bus=None):
         self._event_bus = event_bus
 
-    async def handle_events(self, events: List[DomainEvent]):
+    async def handle_events(self, events: list[DomainEvent]):
         """Process a list of domain events."""
         for event in events:
             if isinstance(event, FactDiscovered):

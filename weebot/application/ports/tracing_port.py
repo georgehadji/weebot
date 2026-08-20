@@ -3,6 +3,7 @@
 Allows OpenTelemetry to be switched to test doubles in unit tests
 and prevents application-layer imports of infrastructure tracing modules.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -21,7 +22,7 @@ class Span(ABC):
         """End the span."""
 
     @abstractmethod
-    def __enter__(self) -> "Span":
+    def __enter__(self) -> Span:
         """Enter span context."""
 
     @abstractmethod

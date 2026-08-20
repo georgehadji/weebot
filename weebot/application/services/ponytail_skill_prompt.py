@@ -3,10 +3,10 @@
 This helper lives in the Application layer so both CLI and web interfaces can
 reuse it without the Application layer depending on Interface code.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-
 
 _ALLOWED_MODES = {"off", "lite", "full", "ultra"}
 
@@ -18,6 +18,7 @@ def _read_persisted_mode() -> str:
         return "off"
     try:
         import json
+
         data = json.loads(mode_file.read_text(encoding="utf-8"))
         mode = str(data.get("mode", "off")).strip().lower()
         return mode if mode in _ALLOWED_MODES else "off"
@@ -51,10 +52,7 @@ def get_ponytail_mode(mode: str | None = None) -> str:
     return resolved_mode if resolved_mode in _ALLOWED_MODES else "off"
 
 
-def build_ponytail_skill_prompt(
-    existing: str | None = None,
-    mode: str | None = None,
-) -> str | None:
+def build_ponytail_skill_prompt(existing: str | None = None, mode: str | None = None) -> str | None:
     """Append Ponytail skill instructions when *mode* is active.
 
     Args:

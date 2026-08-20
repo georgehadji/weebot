@@ -7,11 +7,11 @@ Covers:
 4. VerbalizedSampler fail-open on LLM error / timeout
 5. Prompt build with k, threshold, cot variant injection
 """
+
 from __future__ import annotations
 
 import json
 import random
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,10 +22,10 @@ from weebot.models.structured_output import (
     parse_sampled_distribution,
 )
 
-
 # ============================================================================
 # 1. SampledResponse — probability coercion
 # ============================================================================
+
 
 class TestSampledResponseCoercion:
     """SampledResponse probability field accepts diverse formats."""
@@ -80,16 +80,19 @@ class TestSampledResponseCoercion:
 # 2. SampledDistribution — selection
 # ============================================================================
 
+
 class TestSampledDistribution:
     """SampledDistribution selection methods."""
 
     def test_mode_returns_highest_probability(self):
         """mode() returns the argmax response."""
-        d = SampledDistribution(responses=[
-            SampledResponse(text="a", probability=0.2),
-            SampledResponse(text="b", probability=0.7),
-            SampledResponse(text="c", probability=0.1),
-        ])
+        d = SampledDistribution(
+            responses=[
+                SampledResponse(text="a", probability=0.2),
+                SampledResponse(text="b", probability=0.7),
+                SampledResponse(text="c", probability=0.1),
+            ]
+        )
         assert d.mode().text == "b"
         assert d.mode().probability == 0.7
 
@@ -100,11 +103,13 @@ class TestSampledDistribution:
 
     def test_tail_filters_below_threshold(self):
         """tail(0.3) returns responses with prob < 0.3."""
-        d = SampledDistribution(responses=[
-            SampledResponse(text="a", probability=0.2),
-            SampledResponse(text="b", probability=0.7),
-            SampledResponse(text="c", probability=0.1),
-        ])
+        d = SampledDistribution(
+            responses=[
+                SampledResponse(text="a", probability=0.2),
+                SampledResponse(text="b", probability=0.7),
+                SampledResponse(text="c", probability=0.1),
+            ]
+        )
         tail = d.tail(0.3)
         assert len(tail) == 2
         assert tail[0].text == "a"
@@ -112,18 +117,22 @@ class TestSampledDistribution:
 
     def test_tail_empty_when_all_above_threshold(self):
         """tail returns empty list when all probabilities are above threshold."""
-        d = SampledDistribution(responses=[
-            SampledResponse(text="a", probability=0.5),
-            SampledResponse(text="b", probability=0.5),
-        ])
+        d = SampledDistribution(
+            responses=[
+                SampledResponse(text="a", probability=0.5),
+                SampledResponse(text="b", probability=0.5),
+            ]
+        )
         assert d.tail(0.4) == []
 
     def test_weighted_sample_deterministic(self):
         """weighted_sample with seeded RNG is deterministic."""
-        d = SampledDistribution(responses=[
-            SampledResponse(text="a", probability=0.8),
-            SampledResponse(text="b", probability=0.2),
-        ])
+        d = SampledDistribution(
+            responses=[
+                SampledResponse(text="a", probability=0.8),
+                SampledResponse(text="b", probability=0.2),
+            ]
+        )
         rng = random.Random(42)
         result = d.weighted_sample(rng=rng)
         assert result is not None
@@ -136,10 +145,12 @@ class TestSampledDistribution:
 
     def test_texts_returns_all_texts(self):
         """texts() returns all response texts in order."""
-        d = SampledDistribution(responses=[
-            SampledResponse(text="first", probability=0.5),
-            SampledResponse(text="second", probability=0.5),
-        ])
+        d = SampledDistribution(
+            responses=[
+                SampledResponse(text="first", probability=0.5),
+                SampledResponse(text="second", probability=0.5),
+            ]
+        )
         assert d.texts() == ["first", "second"]
 
     def test_bool_true_when_nonempty(self):
@@ -156,6 +167,7 @@ class TestSampledDistribution:
 # ============================================================================
 # 3. parse_sampled_distribution — parsing
 # ============================================================================
+
 
 class TestParseSampledDistribution:
     """Parses LLM responses into SampledDistribution."""
@@ -203,13 +215,15 @@ class TestParseSampledDistribution:
 
     def test_complex_distribution(self):
         """Multi-candidate distribution with different formats parses."""
-        raw = json.dumps({
-            "responses": [
-                {"text": "Use pytest", "probability": 0.6},
-                {"text": "Use unittest", "probability": 0.3},
-                {"text": "Write custom runner", "probability": 0.1},
-            ]
-        })
+        raw = json.dumps(
+            {
+                "responses": [
+                    {"text": "Use pytest", "probability": 0.6},
+                    {"text": "Use unittest", "probability": 0.3},
+                    {"text": "Write custom runner", "probability": 0.1},
+                ]
+            }
+        )
         d = parse_sampled_distribution(raw)
         assert len(d.responses) == 3
         assert d.mode().text == "Use pytest"
@@ -219,15 +233,14 @@ class TestParseSampledDistribution:
 # 4. VerbalizedSampler — fail-open
 # ============================================================================
 
+
 class TestVerbalizedSamplerFailOpen:
     """VerbalizedSampler falls back to single-item distribution on errors."""
 
     @pytest.mark.asyncio
     async def test_fail_open_on_llm_exception(self):
         """LLM raising an exception returns single-item fallback."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
         llm.chat.side_effect = RuntimeError("LLM unavailable")
@@ -242,12 +255,10 @@ class TestVerbalizedSamplerFailOpen:
     @pytest.mark.asyncio
     async def test_fail_open_on_timeout(self):
         """LLM timeout returns single-item fallback."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
-        llm.chat.side_effect = asyncio.TimeoutError()
+        llm.chat.side_effect = TimeoutError()
 
         sampler = VerbalizedSampler(llm, model="test-model")
         dist = await sampler.sample("timeout test", timeout=0.1)
@@ -256,9 +267,7 @@ class TestVerbalizedSamplerFailOpen:
     @pytest.mark.asyncio
     async def test_fail_open_empty_parse(self):
         """LLM returning unparseable text returns single-item fallback."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
         mock_response = MagicMock()
@@ -276,15 +285,14 @@ class TestVerbalizedSamplerFailOpen:
 # 5. Prompt build
 # ============================================================================
 
+
 class TestVerbalizedSamplerPrompt:
     """Sampler builds the correct prompt based on parameters."""
 
     @pytest.mark.asyncio
     async def test_standard_variant(self):
         """Standard variant uses direct instruction prompt."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
         mock_response = MagicMock()
@@ -303,9 +311,7 @@ class TestVerbalizedSamplerPrompt:
     @pytest.mark.asyncio
     async def test_cot_variant_adds_reasoning_instruction(self):
         """Cot variant includes 'reason step-by-step' in system prompt."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
         mock_response = MagicMock()
@@ -324,9 +330,7 @@ class TestVerbalizedSamplerPrompt:
     @pytest.mark.asyncio
     async def test_context_is_prepended(self):
         """Context string is prepended to the instruction."""
-        from weebot.application.services.verbalized_sampler import (
-            VerbalizedSampler,
-        )
+        from weebot.application.services.verbalized_sampler import VerbalizedSampler
 
         llm = AsyncMock()
         mock_response = MagicMock()
@@ -334,10 +338,7 @@ class TestVerbalizedSamplerPrompt:
         llm.chat.return_value = mock_response
 
         sampler = VerbalizedSampler(llm, model="test-model")
-        await sampler.sample(
-            "fix the bug",
-            context="The user reported a login crash.",
-        )
+        await sampler.sample("fix the bug", context="The user reported a login crash.")
 
         call_args = llm.chat.call_args[1]
         messages = call_args.get("messages", [])
@@ -350,15 +351,18 @@ class TestVerbalizedSamplerPrompt:
 # 6. Constants
 # ============================================================================
 
+
 class TestVSConstants:
     """VS config constants have correct types and defaults."""
 
     def test_default_k(self):
         from weebot.config.constants import VS_DEFAULT_K
+
         assert VS_DEFAULT_K == 5
 
     def test_tail_threshold(self):
         from weebot.config.constants import VS_TAIL_THRESHOLD
+
         assert VS_TAIL_THRESHOLD == 0.10
 
     def test_flags_default_off(self):
@@ -369,6 +373,7 @@ class TestVSConstants:
             VS_ENABLE_OPTIMIZER,
             VS_ENABLE_CONTENT,
         )
+
         assert VS_ENABLE_RECOVERY is False
         assert VS_ENABLE_PLANNING is False
         assert VS_ENABLE_DREAMER is False
@@ -377,6 +382,7 @@ class TestVSConstants:
 
     def test_vs_model_refs(self):
         from weebot.config.model_refs import get_vs_model, MODEL_VS_CAPABLE
+
         model = get_vs_model()
         assert model == MODEL_VS_CAPABLE
         assert model == "qwen/qwen3.8-max"

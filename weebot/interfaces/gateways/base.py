@@ -11,6 +11,7 @@ the same lifecycle:
 
 All incoming messages pass through the SafetyChecker before execution.
 """
+
 from __future__ import annotations
 
 import re
@@ -27,8 +28,9 @@ from weebot.core.safety import SafetyChecker
 @dataclass
 class GatewayMessage:
     """A normalized message from any external platform."""
-    platform: str                          # "telegram", "slack", "webhook"
-    external_id: str                       # Platform-specific user/chat ID
+
+    platform: str  # "telegram", "slack", "webhook"
+    external_id: str  # Platform-specific user/chat ID
     text: str
     timestamp: datetime = field(default_factory=datetime.now)
     metadata: dict = field(default_factory=dict)
@@ -37,6 +39,7 @@ class GatewayMessage:
 @dataclass
 class GatewayResponse:
     """A normalized response to an external platform."""
+
     text: str
     platform: str
     external_id: str
@@ -47,7 +50,7 @@ class GatewayResponse:
     as_voice: bool = False
 
 
-_MEDIA_PATH_RE = re.compile(r'(?<!\w)(/[^\s;|<>{}`\']{10,})(?!\w)')
+_MEDIA_PATH_RE = re.compile(r"(?<!\w)(/[^\s;|<>{}`\']{10,})(?!\w)")
 _AUDIO_VOICE_DIRECTIVE = "[[audio_as_voice]]"
 _DOCUMENT_DIRECTIVE = "[[as_document]]"
 
@@ -58,6 +61,7 @@ class GatewayAdapter(ABC):
     def __init__(self, llm_port: LLMPort | None = None) -> None:
         if llm_port is None:
             from weebot.application.di import Container
+
             c = Container()
             c.configure_defaults()
             llm_port = c.get(LLMPort)
@@ -137,6 +141,7 @@ class GatewayAdapter(ABC):
             return None
 
         from cli.commands.ponytail import read_ponytail_mode, write_ponytail_mode
+
         if mode is None:
             return f"🐴 Ponytail mode is currently: {read_ponytail_mode()}"
         write_ponytail_mode(mode)
@@ -162,7 +167,7 @@ class GatewayAdapter(ABC):
         if normalized == "ponytail":
             return True, None
         if normalized.startswith("ponytail "):
-            mode = normalized[len("ponytail "):].strip()
+            mode = normalized[len("ponytail ") :].strip()
             if mode in allowed:
                 return True, mode
         return False, None
@@ -192,10 +197,27 @@ class GatewayAdapter(ABC):
         # Find bare absolute file paths
         paths = _MEDIA_PATH_RE.findall(text)
         # Filter out paths that definitely aren't media files
-        media_extensions = {".png", ".jpg", ".jpeg", ".gif", ".svg",
-                            ".mp4", ".mp3", ".wav", ".ogg", ".webm",
-                            ".pdf", ".docx", ".xlsx", ".csv", ".json",
-                            ".yaml", ".yml", ".md", ".txt"}
+        media_extensions = {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".mp4",
+            ".mp3",
+            ".wav",
+            ".ogg",
+            ".webm",
+            ".pdf",
+            ".docx",
+            ".xlsx",
+            ".csv",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".md",
+            ".txt",
+        }
 
         valid_paths = []
         for p in paths:

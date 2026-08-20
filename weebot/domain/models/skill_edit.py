@@ -9,13 +9,13 @@ Four operations with the paper's controllability guarantees:
 Each edit records support_count and source_type so the ranking engine
 can prefer edits that survive independent analyses.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # Sentinel markers for the protected slow-update section.
 SLOW_UPDATE_START = "<!-- SLOW_UPDATE_START -->"
@@ -35,7 +35,7 @@ class SkillEdit(BaseModel):
     """
 
     op: Literal["append", "insert_after", "replace", "delete"]
-    target: Optional[str] = Field(
+    target: str | None = Field(
         default=None,
         description="Section header / line anchor (required for insert_after, replace, delete)",
     )
@@ -80,9 +80,7 @@ class SkillEdit(BaseModel):
             return
         target_idx = content.find(self.target, slow_start)
         if slow_start <= target_idx <= slow_end + len(SLOW_UPDATE_END):
-            raise ValueError(
-                f"Cannot edit protected slow-update section: target='{self.target}'"
-            )
+            raise ValueError(f"Cannot edit protected slow-update section: target='{self.target}'")
 
     def _insert_after(self, content: str) -> str:
         idx = content.find(self.target)
@@ -97,22 +95,23 @@ class SkillEdit(BaseModel):
         match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
         if not match:
             raise ValueError(f"Section header not found: '{self.target}'")
-        return content[:match.start()] + self.content + content[match.end():]
+        return content[: match.start()] + self.content + content[match.end() :]
 
     def _delete_section(self, content: str) -> str:
         pattern = rf"^{re.escape(self.target)}.*?(?=\n#|\n---|\Z)"
         match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
         if not match:
             raise ValueError(f"Section header not found: '{self.target}'")
-        return content[:match.start()] + content[match.end():]
+        return content[: match.start()] + content[match.end() :]
 
 
 class SkillEditApplied(BaseModel):
     """Record of an edit that was applied (audit trail entry)."""
+
     op: Literal["append", "insert_after", "replace", "delete"]
-    target: Optional[str] = None
+    target: str | None = None
     content: str = ""
     support_count: int = 1
     source_type: Literal["failure", "success"] = "failure"
     accepted: bool = False
-    score_delta: Optional[float] = None
+    score_delta: float | None = None

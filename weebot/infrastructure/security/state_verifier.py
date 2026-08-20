@@ -9,18 +9,18 @@ This module provides:
 - State consistency checks
 - Confidence scoring based on verification results
 """
+
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 # Note: Using standard dataclasses instead of dataclasses_json for compatibility
 
@@ -29,20 +29,22 @@ _log = logging.getLogger(__name__)
 
 class VerificationStatus(Enum):
     """Status of verification check."""
-    VERIFIED = "verified"           # State matches claim
+
+    VERIFIED = "verified"  # State matches claim
     CONTRADICTED = "contradicted"  # State contradicts claim
     UNVERIFIABLE = "unverifiable"  # Cannot verify (missing info)
-    PENDING = "pending"            # Verification in progress
+    PENDING = "pending"  # Verification in progress
 
 
 @dataclass
 class VerificationResult:
     """Result of a state verification check."""
+
     status: VerificationStatus
     claimed_outcome: str
-    actual_state: Dict[str, Any] = field(default_factory=dict)
+    actual_state: dict[str, Any] = field(default_factory=dict)
     confidence_score: float = 1.0  # 0.0 to 1.0
-    discrepancies: List[str] = field(default_factory=list)
+    discrepancies: list[str] = field(default_factory=list)
     verification_method: str = "unknown"
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -55,19 +57,21 @@ class VerificationResult:
 @dataclass
 class FileOperationClaim:
     """Represents a claimed file operation."""
+
     operation: str  # create, modify, delete, move
     claimed_path: str
-    claimed_content: Optional[str] = None
-    claimed_permissions: Optional[str] = None
+    claimed_content: str | None = None
+    claimed_permissions: str | None = None
 
 
 @dataclass
 class CommandExecutionClaim:
     """Represents a claimed command execution."""
+
     command: str
     claimed_returncode: int
     claimed_output: str
-    claimed_effects: List[str] = field(default_factory=list)
+    claimed_effects: list[str] = field(default_factory=list)
 
 
 class StateVerifier:
@@ -95,21 +99,32 @@ class StateVerifier:
     """
 
     # Patterns that indicate potential false claims
-    _SUSPICIOUS_SUCCESS_PATTERNS: List[re.Pattern] = [
-        re.compile(r'^(?:success|completed|done|ok|finished)$', re.IGNORECASE),
-        re.compile(r'^file (?:created|written|saved)$', re.IGNORECASE),
-        re.compile(r'^command (?:executed|ran|completed)$', re.IGNORECASE),
+    _SUSPICIOUS_SUCCESS_PATTERNS: list[re.Pattern] = [
+        re.compile(r"^(?:success|completed|done|ok|finished)$", re.IGNORECASE),
+        re.compile(r"^file (?:created|written|saved)$", re.IGNORECASE),
+        re.compile(r"^command (?:executed|ran|completed)$", re.IGNORECASE),
     ]
 
     # Critical operations that require verification
-    _CRITICAL_OPERATIONS: Set[str] = {
-        'delete', 'remove', 'rm', 'rmdir',
-        'format', 'mkfs',
-        'drop', 'truncate',
-        'chmod', 'chown', 'chgrp',
-        'kill', 'terminate',
-        'shutdown', 'reboot',
-        'curl', 'wget', 'download',
+    _CRITICAL_OPERATIONS: set[str] = {
+        "delete",
+        "remove",
+        "rm",
+        "rmdir",
+        "format",
+        "mkfs",
+        "drop",
+        "truncate",
+        "chmod",
+        "chown",
+        "chgrp",
+        "kill",
+        "terminate",
+        "shutdown",
+        "reboot",
+        "curl",
+        "wget",
+        "download",
     }
 
     def __init__(
@@ -125,20 +140,14 @@ class StateVerifier:
         self._max_verification_time = max_verification_time
 
         # Verification cache to avoid redundant checks
-        self._verification_cache: Dict[str, VerificationResult] = {}
+        self._verification_cache: dict[str, VerificationResult] = {}
         self._max_cache_size = 1000
 
         # Track verification statistics
-        self._stats = {
-            "total_verifications": 0,
-            "contradictions_found": 0,
-            "unverifiable_count": 0,
-        }
+        self._stats = {"total_verifications": 0, "contradictions_found": 0, "unverifiable_count": 0}
 
     async def verify_file_operation(
-        self,
-        claimed: FileOperationClaim,
-        verify_content: bool = True,
+        self, claimed: FileOperationClaim, verify_content: bool = True
     ) -> VerificationResult:
         """
         Verify a file operation claim against actual filesystem state.
@@ -218,7 +227,7 @@ class StateVerifier:
                         claimed_outcome=f"File {claimed.operation}: {claimed_path}",
                         actual_state={"exists": True},
                         confidence_score=0.0,
-                        discrepancies=[f"File still exists after deletion claim"],
+                        discrepancies=["File still exists after deletion claim"],
                         verification_method="filesystem_check",
                     )
                     self._stats["contradictions_found"] += 1
@@ -253,9 +262,7 @@ class StateVerifier:
             )
 
     async def verify_command_execution(
-        self,
-        claimed: CommandExecutionClaim,
-        analyze_effects: bool = True,
+        self, claimed: CommandExecutionClaim, analyze_effects: bool = True
     ) -> VerificationResult:
         """
         Verify a command execution claim against actual execution results.
@@ -287,10 +294,7 @@ class StateVerifier:
             result = VerificationResult(
                 status=VerificationStatus.CONTRADICTED,
                 claimed_outcome=f"Command: {claimed.command}",
-                actual_state={
-                    "returncode": claimed.claimed_returncode,
-                    "suspicious_output": True,
-                },
+                actual_state={"returncode": claimed.claimed_returncode, "suspicious_output": True},
                 confidence_score=0.5,
                 discrepancies=["Output suggests failure but return code is 0"],
                 verification_method="output_analysis",
@@ -339,8 +343,8 @@ class StateVerifier:
     async def verify_network_operation(
         self,
         claimed_url: str,
-        claimed_status: Optional[int] = None,
-        claimed_response_contains: Optional[str] = None,
+        claimed_status: int | None = None,
+        claimed_response_contains: str | None = None,
     ) -> VerificationResult:
         """
         Verify a network operation claim.
@@ -369,6 +373,7 @@ class StateVerifier:
 
         try:
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(claimed_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     actual_status = resp.status
@@ -382,7 +387,9 @@ class StateVerifier:
                                 "actual_status": actual_status,
                             },
                             confidence_score=0.0,
-                            discrepancies=[f"HTTP status mismatch: claimed {claimed_status}, actual {actual_status}"],
+                            discrepancies=[
+                                f"HTTP status mismatch: claimed {claimed_status}, actual {actual_status}"
+                            ],
                             verification_method="http_request",
                         )
                         self._stats["contradictions_found"] += 1
@@ -420,11 +427,13 @@ class StateVerifier:
                 verification_method="error",
             )
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get verification statistics."""
         stats = self._stats.copy()
         if stats["total_verifications"] > 0:
-            stats["contradiction_rate"] = stats["contradictions_found"] / stats["total_verifications"]
+            stats["contradiction_rate"] = (
+                stats["contradictions_found"] / stats["total_verifications"]
+            )
         else:
             stats["contradiction_rate"] = 0.0
         return stats
@@ -448,7 +457,9 @@ class StateVerifier:
     async def _read_file_async(self, path: Path) -> str:
         """Read file content asynchronously."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: path.read_text(encoding='utf-8', errors='ignore'))
+        return await loop.run_in_executor(
+            None, lambda: path.read_text(encoding="utf-8", errors="ignore")
+        )
 
     def _content_similar(self, actual: str, claimed: str) -> bool:
         """Check if content is similar enough (handles truncation)."""
@@ -484,29 +495,26 @@ class StateVerifier:
         decoded output without dealing with asyncio StreamReaders.
         """
         from collections import namedtuple
+
         VerifyResult = namedtuple("VerifyResult", ["returncode", "stdout", "stderr"])
 
         proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
         try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=5.0
-            )
+            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=5.0)
             return VerifyResult(
                 returncode=proc.returncode or -1,
                 stdout=stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else "",
                 stderr=stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "",
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             raise
 
 
 # Singleton instance
-_verifier: Optional[StateVerifier] = None
+_verifier: StateVerifier | None = None
 
 
 def get_state_verifier() -> StateVerifier:

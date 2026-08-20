@@ -6,8 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -48,20 +47,20 @@ class BehaviorEventResponse(BaseModel):
 class DateReportResponse(BaseModel):
     date: str
     total_actions: int
-    actions_by_type: Dict[str, int]
+    actions_by_type: dict[str, int]
     autonomous_count: int
     user_initiated_count: int
     override_count: int
-    last_action: Optional[Dict[str, str]]
+    last_action: dict[str, str] | None
     summary: str
 
 
 class SessionSummaryResponse(BaseModel):
     session_id: str
     total_actions: int
-    actions_by_type: Dict[str, int]
-    start_time: Optional[str]
-    end_time: Optional[str]
+    actions_by_type: dict[str, int]
+    start_time: str | None
+    end_time: str | None
 
 
 class OverrideRequest(BaseModel):
@@ -94,11 +93,11 @@ async def get_date_report(date: str):
         raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
 
 
-@router.get("/recent", response_model=List[BehaviorEventResponse])
-async def get_recent_actions(count: int = 10, session_id: Optional[str] = None):
+@router.get("/recent", response_model=list[BehaviorEventResponse])
+async def get_recent_actions(count: int = 10, session_id: str | None = None):
     """Get recent actions."""
     entries = reporter.get_recent_actions(count, session_id)
-    
+
     return [
         BehaviorEventResponse(
             timestamp=e.timestamp,
@@ -107,7 +106,7 @@ async def get_recent_actions(count: int = 10, session_id: Optional[str] = None):
             session_id=e.session_id,
             agent_version=e.agent_version,
             initiated=e.initiated,
-            is_override=e.is_override
+            is_override=e.is_override,
         )
         for e in entries
     ]
@@ -124,10 +123,10 @@ async def mark_override(request: OverrideRequest):
     """Mark an action as unsanctioned."""
     trust = TrustManager()
     success = trust.mark_override(request.timestamp, request.reason)
-    
+
     if not success:
         raise HTTPException(status_code=404, detail=f"Action not found: {request.timestamp}")
-    
+
     return {"success": True, "timestamp": request.timestamp, "reason": request.reason}
 
 
@@ -135,29 +134,25 @@ async def mark_override(request: OverrideRequest):
 async def start_watching(session_id: str, directory: str):
     """Start behavior tracking for a session."""
     from pathlib import Path
-    
+
     watch_path = Path(directory).resolve()
     if not watch_path.exists():
         raise HTTPException(status_code=400, detail=f"Directory not found: {directory}")
-    
+
     # Check if already tracking
     existing = get_tracker(session_id)
     if existing and existing.is_running():
         return {
             "status": "already_running",
             "session_id": session_id,
-            "watch_dir": str(existing.watch_dir)
+            "watch_dir": str(existing.watch_dir),
         }
-    
+
     # Create and start tracker
     tracker = create_tracker(session_id, watch_path)
     tracker.start()
-    
-    return {
-        "status": "started",
-        "session_id": session_id,
-        "watch_dir": str(watch_path)
-    }
+
+    return {"status": "started", "session_id": session_id, "watch_dir": str(watch_path)}
 
 
 @router.post("/watch/stop")
@@ -168,7 +163,7 @@ async def stop_watching(session_id: str):
         tracker.stop()
         stop_tracker(session_id)
         return {"status": "stopped", "session_id": session_id}
-    
+
     raise HTTPException(status_code=404, detail=f"No active tracker for session: {session_id}")
 
 
@@ -178,7 +173,7 @@ async def get_watch_status(session_id: str):
     tracker = get_tracker(session_id)
     if tracker:
         return tracker.get_stats()
-    
+
     return {"session_id": session_id, "running": False}
 
 
@@ -200,7 +195,7 @@ async def regenerate_self_knowledge():
 
 # WebSocket for real-time behavior events
 # Store active WebSocket connections (with lock for concurrent access)
-_ws_connections: List[WebSocket] = []
+_ws_connections: list[WebSocket] = []
 _ws_lock = asyncio.Lock()
 _WS_MAX_MSG_SIZE = 1024 * 100  # 100 KB max incoming JSON
 
@@ -237,6 +232,7 @@ async def behavior_websocket(websocket: WebSocket):
     """WebSocket for real-time behavior events."""
     # WebSocket authentication check — three-tier: subprotocol → header → query param
     from weebot.config.settings import WeebotSettings
+
     _ws_settings = WeebotSettings()
     if _ws_settings.weebot_api_key:
         # 1. Subprotocol (preferred — works in browsers)
@@ -244,8 +240,9 @@ async def behavior_websocket(websocket: WebSocket):
         matched = False
         for proto in [p.strip() for p in protocols.split(",")]:
             if proto.startswith("bearer."):
-                token = proto[len("bearer."):]
+                token = proto[len("bearer.") :]
                 import hmac as _hmac
+
                 if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
                     matched = True
                     break
@@ -253,8 +250,9 @@ async def behavior_websocket(websocket: WebSocket):
         if not matched:
             auth_header = websocket.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
-                token = auth_header[len("Bearer "):]
+                token = auth_header[len("Bearer ") :]
                 import hmac as _hmac
+
                 if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
                     matched = True
         # 3. Query parameter (deprecated — kept for compat)
@@ -262,6 +260,7 @@ async def behavior_websocket(websocket: WebSocket):
             token = websocket.query_params.get("token")
             if token:
                 import hmac as _hmac
+
                 if _hmac.compare_digest(token, _ws_settings.weebot_api_key):
                     matched = True
         if not matched:
@@ -271,25 +270,24 @@ async def behavior_websocket(websocket: WebSocket):
     await websocket.accept()
     async with _ws_lock:
         _ws_connections.append(websocket)
-    
+
     logger.info(f"Behavior WebSocket connected: {websocket.client}")
-    
+
     try:
         # Send initial connection message
-        await websocket.send_json({
-            "type": "connected",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-        
+        await websocket.send_json({"type": "connected", "timestamp": datetime.now(UTC).isoformat()})
+
         # Send current trust score
         trust = reporter.get_trust_report()
-        await websocket.send_json({
-            "type": "trust.update",
-            "score": trust["score_percentage"],
-            "total_actions": trust["total_actions"],
-            "overrides": trust["overrides"]
-        })
-        
+        await websocket.send_json(
+            {
+                "type": "trust.update",
+                "score": trust["score_percentage"],
+                "total_actions": trust["total_actions"],
+                "overrides": trust["overrides"],
+            }
+        )
+
         # Keep connection alive and handle client messages
         while True:
             try:
@@ -298,41 +296,41 @@ async def behavior_websocket(websocket: WebSocket):
                     await websocket.send_json({"type": "error", "message": "Message too large"})
                     continue
                 message = json.loads(data)
-                
+
                 # Handle client commands
                 if message.get("action") == "ping":
-                    await websocket.send_json({"type": "pong", "timestamp": datetime.now(timezone.utc).isoformat()})
-                
+                    await websocket.send_json(
+                        {"type": "pong", "timestamp": datetime.now(UTC).isoformat()}
+                    )
+
                 elif message.get("action") == "get_recent":
                     count = message.get("count", 10)
                     entries = reporter.get_recent_actions(count)
-                    await websocket.send_json({
-                        "type": "recent.actions",
-                        "actions": [
-                            {
-                                "timestamp": e.timestamp,
-                                "action": e.action,
-                                "path": e.path,
-                                "is_override": e.is_override
-                            }
-                            for e in entries
-                        ]
-                    })
-                
+                    await websocket.send_json(
+                        {
+                            "type": "recent.actions",
+                            "actions": [
+                                {
+                                    "timestamp": e.timestamp,
+                                    "action": e.action,
+                                    "path": e.path,
+                                    "is_override": e.is_override,
+                                }
+                                for e in entries
+                            ],
+                        }
+                    )
+
                 elif message.get("action") == "get_trust":
                     trust = reporter.get_trust_report()
-                    await websocket.send_json({
-                        "type": "trust.update",
-                        **trust
-                    })
-                    
-            except asyncio.TimeoutError:
+                    await websocket.send_json({"type": "trust.update", **trust})
+
+            except TimeoutError:
                 # Send keepalive
-                await websocket.send_json({
-                    "type": "keepalive",
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
-                
+                await websocket.send_json(
+                    {"type": "keepalive", "timestamp": datetime.now(UTC).isoformat()}
+                )
+
     except WebSocketDisconnect:
         logger.info(f"Behavior WebSocket disconnected: {websocket.client}")
     except Exception as e:
@@ -348,32 +346,36 @@ async def session_behavior_websocket(websocket: WebSocket, session_id: str):
     """WebSocket for session-specific behavior events."""
     # WebSocket authentication check
     from weebot.config.settings import WeebotSettings
+
     _ws_settings = WeebotSettings()
     if _ws_settings.weebot_api_key:
         token = websocket.query_params.get("token")
         import hmac as _hmac
+
         if not _hmac.compare_digest(token or "", _ws_settings.weebot_api_key):
             await websocket.close(code=4001, reason="Unauthorized")
             return
 
     await websocket.accept()
-    
+
     logger.info(f"Session behavior WebSocket connected: {session_id}")
-    
+
     try:
-        await websocket.send_json({
-            "type": "connected",
-            "session_id": session_id,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-        
+        await websocket.send_json(
+            {
+                "type": "connected",
+                "session_id": session_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
-            
+
             if message.get("action") == "ping":
                 await websocket.send_json({"type": "pong"})
-                
+
     except WebSocketDisconnect:
         logger.info(f"Session behavior WebSocket disconnected: {session_id}")
     except Exception as e:
@@ -384,9 +386,10 @@ async def session_behavior_websocket(websocket: WebSocket, session_id: str):
 async def start_session_tracking(session_id: str, working_dir: str) -> BehaviorTracker:
     """Start tracking for a new session."""
     from pathlib import Path
-    
+
     # Set up event callback to broadcast to WebSockets
     _tracker_tasks: list[asyncio.Task] = []
+
     def on_event(event: BehaviorEvent):
         # Schedule broadcast in event loop
         try:
@@ -395,10 +398,10 @@ async def start_session_tracking(session_id: str, working_dir: str) -> BehaviorT
             _tracker_tasks.append(task)
         except Exception as e:
             logger.debug(f"Failed to broadcast event: {e}")
-    
+
     tracker = create_tracker(session_id, Path(working_dir).resolve(), on_event)
     tracker.start()
-    
+
     logger.info(f"Started behavior tracking for session {session_id}")
     return tracker
 
@@ -415,7 +418,7 @@ async def stop_session_tracking(session_id: str):
 if __name__ == "__main__":
     # Quick test
     import sys
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == "test":
         print("Trust report:", reporter.get_trust_report())
         print("Today report:", reporter.get_today_report())

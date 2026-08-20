@@ -6,10 +6,12 @@ advance to full evaluation.  This dramatically reduces compute cost.
 
 Default: probe_size=10, threshold=0.3
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 
 @dataclass
@@ -45,10 +47,7 @@ class StagedEvaluator:
         self.threshold = threshold
 
     async def evaluate(
-        self,
-        agent: Any,
-        tasks: list[Any],
-        eval_fn: Callable[[Any, list[Any]], float],
+        self, agent: Any, tasks: list[Any], eval_fn: Callable[[Any, list[Any]], float]
     ) -> StagedResult:
         """Evaluate *agent* on *tasks* with probe-then-full strategy.
 
@@ -74,7 +73,7 @@ class StagedEvaluator:
             )
 
         # Phase 1: probe
-        probe_tasks = tasks[:self.probe_size]
+        probe_tasks = tasks[: self.probe_size]
         probe_score = await eval_fn(agent, probe_tasks)
 
         if probe_score < self.threshold:

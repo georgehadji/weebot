@@ -8,11 +8,11 @@ Top candidates (confidence >= 0.7, max 3 per day) are stored in a
 ``pending_opportunities`` table and surfaced to the user on next
 interactive session start.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from weebot.application.ports.knowledge_graph_port import KnowledgeGraphPort
@@ -28,9 +28,18 @@ _CONFIDENCE_THRESHOLD = 0.7
 
 # Known patterns that suggest a recurring user interest
 _RECURRING_PATTERNS = [
-    "competitor", "pricing", "comparison", "benchmark",
-    "monitor", "track", "watch", "follow-up",
-    "update", "latest", "news", "trend",
+    "competitor",
+    "pricing",
+    "comparison",
+    "benchmark",
+    "monitor",
+    "track",
+    "watch",
+    "follow-up",
+    "update",
+    "latest",
+    "news",
+    "trend",
 ]
 
 
@@ -45,9 +54,9 @@ class OpportunityEngine:
 
     def __init__(
         self,
-        knowledge_graph: Optional[KnowledgeGraphPort] = None,
-        fts5_search: Optional[Any] = None,
-        state_repo: Optional[Any] = None,
+        knowledge_graph: KnowledgeGraphPort | None = None,
+        fts5_search: Any | None = None,
+        state_repo: Any | None = None,
     ) -> None:
         """Initialize the engine.
 
@@ -155,7 +164,7 @@ class OpportunityEngine:
                 self._store[i] = p.model_copy(update={"presented": True})
                 break
 
-    async def accept(self, proposal_id: str) -> Optional[OpportunityProposal]:
+    async def accept(self, proposal_id: str) -> OpportunityProposal | None:
         """Accept an opportunity (user opted in).
 
         Args:
@@ -194,17 +203,19 @@ class OpportunityEngine:
             props = comp.properties or {}
             confidence = props.get("_confidence", 0.0)
             if confidence < 0.5 or len(props) < 3:
-                proposals.append(OpportunityProposal(
-                    id=str(uuid4()),
-                    prompt=f"Research {comp.name} — update competitive intelligence",
-                    source="knowledge_gap",
-                    evidence=[
-                        f"KG node '{comp.name}' has low confidence ({confidence:.1f}) "
-                        f"and only {len(props)} properties"
-                    ],
-                    confidence=0.6 + (1.0 - confidence) * 0.3,
-                    estimated_effort="medium",
-                ))
+                proposals.append(
+                    OpportunityProposal(
+                        id=str(uuid4()),
+                        prompt=f"Research {comp.name} — update competitive intelligence",
+                        source="knowledge_gap",
+                        evidence=[
+                            f"KG node '{comp.name}' has low confidence ({confidence:.1f}) "
+                            f"and only {len(props)} properties"
+                        ],
+                        confidence=0.6 + (1.0 - confidence) * 0.3,
+                        estimated_effort="medium",
+                    )
+                )
 
         # Query for technology nodes with no edges
         technologies = await self._kg.query(label="technology")
@@ -212,16 +223,16 @@ class OpportunityEngine:
             neighbors = await self._kg.get_neighbors(tech.id)
             edges = neighbors.get("edges", [])
             if not edges:
-                proposals.append(OpportunityProposal(
-                    id=str(uuid4()),
-                    prompt=f"Investigate {tech.name} — how it relates to other entities",
-                    source="knowledge_gap",
-                    evidence=[
-                        f"KG node '{tech.name}' has no relationships to other entities"
-                    ],
-                    confidence=0.65,
-                    estimated_effort="low",
-                ))
+                proposals.append(
+                    OpportunityProposal(
+                        id=str(uuid4()),
+                        prompt=f"Investigate {tech.name} — how it relates to other entities",
+                        source="knowledge_gap",
+                        evidence=[f"KG node '{tech.name}' has no relationships to other entities"],
+                        confidence=0.65,
+                        estimated_effort="low",
+                    )
+                )
 
         return proposals
 
@@ -239,17 +250,19 @@ class OpportunityEngine:
                 results = await self._kg.search(pattern, limit=3)
                 if len(results) >= 2:
                     # Pattern appears multiple times — suggest deeper research
-                    proposals.append(OpportunityProposal(
-                        id=str(uuid4()),
-                        prompt=f"Deepen research on '{pattern}' — recurring topic detected",
-                        source="recurring_pattern",
-                        evidence=[
-                            f"'{pattern}' appears in {len(results)} KG nodes",
-                            f"Sample node: {results[0].name if results else 'unknown'}",
-                        ],
-                        confidence=0.7,
-                        estimated_effort="low",
-                    ))
+                    proposals.append(
+                        OpportunityProposal(
+                            id=str(uuid4()),
+                            prompt=f"Deepen research on '{pattern}' — recurring topic detected",
+                            source="recurring_pattern",
+                            evidence=[
+                                f"'{pattern}' appears in {len(results)} KG nodes",
+                                f"Sample node: {results[0].name if results else 'unknown'}",
+                            ],
+                            confidence=0.7,
+                            estimated_effort="low",
+                        )
+                    )
             except Exception:
                 continue
 

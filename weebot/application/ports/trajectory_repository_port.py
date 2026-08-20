@@ -4,10 +4,10 @@ Application layer defines the contract, infrastructure layer provides
 the SQLite adapter (TrajectoryRepository).  Flows and CQRS handlers
 depend on this port, not the concrete implementation.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.failure_signature import FailureCluster, FailureSignature
 from weebot.domain.models.trajectory import TrajectorySummary
@@ -22,17 +22,12 @@ class TrajectoryRepositoryPort(ABC):
 
     @abstractmethod
     async def get_by_skill(
-        self,
-        skill_name: str,
-        skill_version: int,
-        limit: int = 200,
+        self, skill_name: str, skill_version: int, limit: int = 200
     ) -> list[TrajectorySummary]:
         """Retrieve trajectories for a specific skill version."""
 
     @abstractmethod
-    async def get_by_session(
-        self, session_id: str
-    ) -> list[TrajectorySummary]:
+    async def get_by_session(self, session_id: str) -> list[TrajectorySummary]:
         """Retrieve all trajectories for a session."""
 
     @abstractmethod
@@ -56,10 +51,7 @@ class TrajectoryRepositoryPort(ABC):
 
     @abstractmethod
     async def get_sessions_without_signature(
-        self,
-        lookback_days: int = 7,
-        max_sessions: int = 200,
-        force_reprocess: bool = False,
+        self, lookback_days: int = 7, max_sessions: int = 200, force_reprocess: bool = False
     ) -> list[tuple[str, str | None, str | None, str | None]]:
         """Return (session_id, task_id, trajectory_text, failure_modes_json)
         for trajectories that lack a failure_signature entry."""

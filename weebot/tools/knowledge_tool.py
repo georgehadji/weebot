@@ -6,12 +6,11 @@ provided (deprecated — emits a warning).
 
 Author: Georgios-Chrysovalantis Chatzivantsidis
 """
+
 from __future__ import annotations
 
 import json
-import uuid
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import PrivateAttr
 
@@ -53,26 +52,11 @@ class KnowledgeTool(BaseTool):
                 "type": "string",
                 "description": "Note ID (required for get_note / delete_note).",
             },
-            "title": {
-                "type": "string",
-                "description": "Note title (required for add_note).",
-            },
-            "body": {
-                "type": "string",
-                "description": "Note body text (required for add_note).",
-            },
-            "tags": {
-                "type": "string",
-                "description": "Comma-separated tags (optional).",
-            },
-            "source": {
-                "type": "string",
-                "description": "Source URL or reference (optional).",
-            },
-            "project_id": {
-                "type": "string",
-                "description": "Project scope filter (optional).",
-            },
+            "title": {"type": "string", "description": "Note title (required for add_note)."},
+            "body": {"type": "string", "description": "Note body text (required for add_note)."},
+            "tags": {"type": "string", "description": "Comma-separated tags (optional)."},
+            "source": {"type": "string", "description": "Source URL or reference (optional)."},
+            "project_id": {"type": "string", "description": "Project scope filter (optional)."},
             "query": {
                 "type": "string",
                 "description": "Full-text search query (required for search).",
@@ -83,10 +67,11 @@ class KnowledgeTool(BaseTool):
 
     _repo: ToolRepositoryPort = PrivateAttr()
 
-    def __init__(self, repo: Optional[ToolRepositoryPort] = None):
+    def __init__(self, repo: ToolRepositoryPort | None = None):
         super().__init__()
         if repo is None:
             import importlib as _il
+
             _c = _il.import_module("weebot.application.di").Container()
             _c.configure_defaults()
             repo = _c.get(ToolRepositoryPort)  # type: ignore[assignment]
@@ -136,10 +121,7 @@ class KnowledgeTool(BaseTool):
             content = f"[source: {source}]\n{body}"
 
         note_id = await self._repo.save_note(
-            title=title,
-            content=content,
-            tags=tags_list or None,
-            project_id=project_id,
+            title=title, content=content, tags=tags_list or None, project_id=project_id
         )
         return ToolResult(output=json.dumps({"note_id": note_id, "title": title}))
 
@@ -150,10 +132,7 @@ class KnowledgeTool(BaseTool):
 
         rows = await self._repo.query_notes(search=query, limit=10)
         return ToolResult(
-            output=json.dumps(
-                {"query": query, "count": len(rows), "results": rows},
-                indent=2,
-            )
+            output=json.dumps({"query": query, "count": len(rows), "results": rows}, indent=2)
         )
 
     async def _get_note(self, kw: dict) -> ToolResult:
@@ -169,16 +148,12 @@ class KnowledgeTool(BaseTool):
     async def _list_notes(self, kw: dict) -> ToolResult:
         project_id = kw.get("project_id") or None
         tags_filter = (kw.get("tags") or "").strip()
-        tags_list = [t.strip() for t in tags_filter.split(",") if t.strip()] if tags_filter else None
+        tags_list = (
+            [t.strip() for t in tags_filter.split(",") if t.strip()] if tags_filter else None
+        )
 
-        rows = await self._repo.list_notes(
-            project_id=project_id or "",
-            tags=tags_list,
-            limit=50,
-        )
-        return ToolResult(
-            output=json.dumps({"count": len(rows), "notes": rows}, indent=2)
-        )
+        rows = await self._repo.list_notes(project_id=project_id or "", tags=tags_list, limit=50)
+        return ToolResult(output=json.dumps({"count": len(rows), "notes": rows}, indent=2))
 
     async def _delete_note(self, kw: dict) -> ToolResult:
         note_id = (kw.get("note_id") or "").strip()

@@ -6,11 +6,11 @@ answer against the expected answer and produce a score with reasoning.
 This is the generic fallback scorer when no benchmark-specific scorer
 applies. Cost: ~$0.001 per verification call.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_DETERMINISTIC
 from weebot.application.ports.llm_port import LLMPort
@@ -49,11 +49,7 @@ class VerifierScorer(ScoringPort):
     def __init__(self, llm: LLMPort):
         self._llm = llm
 
-    async def score(
-        self,
-        session: Session,
-        expected_answer: Optional[str] = None,
-    ) -> TrajectoryScored:
+    async def score(self, session: Session, expected_answer: str | None = None) -> TrajectoryScored:
         """Score a session by asking an LLM to verify the answer."""
         # Extract final assistant message
         final_content = ""
@@ -73,10 +69,7 @@ class VerifierScorer(ScoringPort):
                 harness="verifier",
             )
 
-        user_content = (
-            f"EXPECTED_ANSWER:\n{expected_answer}\n\n"
-            f"AGENT_ANSWER:\n{final_content}"
-        )
+        user_content = f"EXPECTED_ANSWER:\n{expected_answer}\n\n" f"AGENT_ANSWER:\n{final_content}"
 
         try:
             response = await self._llm.chat(

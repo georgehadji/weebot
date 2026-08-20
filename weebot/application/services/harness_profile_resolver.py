@@ -4,10 +4,10 @@ Reads from ROLE_MODEL_CONFIG (simple list format, legacy) and optional
 extended RoleProfile definitions. Falls back to existing config for
 backward compatibility.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from weebot.domain.models.role_profile import RoleProfile
 
@@ -40,8 +40,12 @@ def resolve_profile(role: str) -> RoleProfile:
 def register_profile(role: str, profile: RoleProfile) -> None:
     """Register an extended RoleProfile for *role*."""
     _EXTENDED_PROFILES[role] = profile
-    logger.info("Registered harness profile for role '%s': %s models, %d excluded tools",
-                role, len(profile.models), len(profile.excluded_tools))
+    logger.info(
+        "Registered harness profile for role '%s': %s models, %d excluded tools",
+        role,
+        len(profile.models),
+        len(profile.excluded_tools),
+    )
 
 
 def get_tools_for_role(role: str, default_tools: list[str]) -> list[str]:

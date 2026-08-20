@@ -5,6 +5,7 @@ dependency-graph analysis (Task 3 of the empirical run, June 2026).
 Centralizes layer classification so that linters, architecture validators,
 and analysis tools share one mapping.
 """
+
 from __future__ import annotations
 
 # Ordered by specificity (longer prefixes first) so that
@@ -24,25 +25,25 @@ _LAYER_RULES: list[tuple[str, str]] = [
     ("weebot/application/", "application"),
     # Infrastructure — adapters, persistence, MCP, observability
     ("weebot/infrastructure/", "infrastructure"),
-    ("weebot/tools/", "infrastructure"),               # tool implementations
-    ("weebot/qmd_integration/", "infrastructure"),     # QMD adapter
-    ("weebot/scheduling/", "infrastructure"),           # cron/scheduling
-    ("weebot/skills/", "application"),                  # skill definitions
+    ("weebot/tools/", "infrastructure"),  # tool implementations
+    ("weebot/qmd_integration/", "infrastructure"),  # QMD adapter
+    ("weebot/scheduling/", "infrastructure"),  # cron/scheduling
+    ("weebot/skills/", "application"),  # skill definitions
     # Interfaces — CLI, Web, MCP server
     ("weebot/interfaces/", "interfaces"),
-    ("weebot/mcp/", "interfaces"),                      # MCP server
-    ("weebot/templates/", "interfaces"),                # UI templates
+    ("weebot/mcp/", "interfaces"),  # MCP server
+    ("weebot/templates/", "interfaces"),  # UI templates
     # Core — cross-cutting concerns
     ("weebot/core/", "core"),
-    ("weebot/config", "core"),                          # configuration (handles weebot/config and weebot/config/)
-    ("weebot/models/", "domain"),                       # shared models (structured_output, etc.)
-    ("weebot/utils/", "core"),                          # cross-cutting utilities
+    ("weebot/config", "core"),  # configuration (handles weebot/config and weebot/config/)
+    ("weebot/models/", "domain"),  # shared models (structured_output, etc.)
+    ("weebot/utils/", "core"),  # cross-cutting utilities
     # Agents — legacy agent orchestration (maps to application)
     ("weebot/agents/", "application"),
     # Root-level modules (weebot/*.py — no subdirectory)
-    ("weebot/__init__", "interfaces"),                   # package facade
+    ("weebot/__init__", "interfaces"),  # package facade
     # Tests — separate layer
-    ("weebot/tests/", "tests"),                    # tests under weebot/tests/
+    ("weebot/tests/", "tests"),  # tests under weebot/tests/
     ("tests/", "tests"),
     # Root-level modules (continued)
 ]
@@ -62,7 +63,7 @@ def layer_for_module(module_path: str) -> str:
     # Normalize: convert backslashes, strip leading ./
     normalized = module_path.replace("\\", "/")
     while normalized.startswith("./") or normalized.startswith("../"):
-        normalized = normalized[normalized.index("/") + 1:]
+        normalized = normalized[normalized.index("/") + 1 :]
     for prefix, layer in _LAYER_RULES:
         if normalized.startswith(prefix):
             return layer

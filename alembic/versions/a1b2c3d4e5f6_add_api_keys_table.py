@@ -12,6 +12,7 @@ store (WI-11). Two hashes are stored:
 
 The raw API key is never persisted.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

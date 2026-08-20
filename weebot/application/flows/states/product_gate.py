@@ -20,10 +20,12 @@ Skipped for:
 product-mode reference:
     https://github.com/sohaibt/product-mode
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -34,7 +36,6 @@ from weebot.domain.models.event import (
     ThoughtEvent,
     WaitForUserEvent,
 )
-from weebot.domain.models.product_context import ProductContext
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +53,27 @@ def _is_trivial(prompt: str) -> bool:
         return True
     # Single verb patterns
     trivial_pats = (
-        "read", "show", "display", "cat", "list", "ls", "dir",
-        "run", "test", "check", "verify",
-        "what", "who", "when", "where", "how", "why",
-        "tell", "explain", "describe", "define",
+        "read",
+        "show",
+        "display",
+        "cat",
+        "list",
+        "ls",
+        "dir",
+        "run",
+        "test",
+        "check",
+        "verify",
+        "what",
+        "who",
+        "when",
+        "where",
+        "how",
+        "why",
+        "tell",
+        "explain",
+        "describe",
+        "define",
     )
     first = prompt.strip().lower().split()[0] if prompt.strip() else ""
     return first in trivial_pats
@@ -74,9 +92,7 @@ class ProductGateState(FlowState):
     def __init__(self, resume_with: str = "") -> None:
         self._resume_with = resume_with
 
-    async def execute(
-        self, context: "PlanActFlow", prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.planning import PlanningState
         from weebot.application.services.product_gate_analyzer import ProductGateAnalyzer
 
@@ -98,7 +114,9 @@ class ProductGateState(FlowState):
         effective_prompt = prompt
         original_task = context._session.context.get("_original_task", "")
         if self._resume_with and original_task:
-            effective_prompt = f"{original_task}\n\nAdditional context from user: {self._resume_with}"
+            effective_prompt = (
+                f"{original_task}\n\nAdditional context from user: {self._resume_with}"
+            )
         elif self._resume_with:
             effective_prompt = f"{prompt}\n\nAdditional context from user: {self._resume_with}"
         elif original_task and not effective_prompt.strip():
@@ -120,7 +138,8 @@ class ProductGateState(FlowState):
             questions = analyzer.generate_clarification_questions(product_ctx)
             logger.info(
                 "Product gate: low confidence (%.2f) — pausing for clarification on: %s",
-                product_ctx.overall_confidence, low_fields,
+                product_ctx.overall_confidence,
+                low_fields,
             )
 
             # Emit partial context for observability
@@ -138,12 +157,17 @@ class ProductGateState(FlowState):
             # Mark session as WAITING so resume works even if the caller
             # is killed before processing the WaitForUserEvent.
             from weebot.domain.models.session import SessionStatus
+
             context._session = context._session.set_status(SessionStatus.WAITING)
 
             # Build question text for the user
-            q_block = "\n".join(f"- {q}" for q in questions) if questions else (
-                "Your request was too vague to plan confidently. "
-                "Could you provide more detail on what you need?"
+            q_block = (
+                "\n".join(f"- {q}" for q in questions)
+                if questions
+                else (
+                    "Your request was too vague to plan confidently. "
+                    "Could you provide more detail on what you need?"
+                )
             )
             yield WaitForUserEvent(
                 question=(
@@ -178,9 +202,12 @@ class ProductGateState(FlowState):
                 f"**Scope:** {product_ctx.scope}\n"
                 f"**Success metric:** {product_ctx.success_metric}\n"
                 f"**Reversibility:** {product_ctx.reversibility}\n"
-                + (f"\n**Assumptions:**\n" + "\n".join(
-                    f"- [{a.status}] {a.text}" for a in product_ctx.assumptions
-                ) if product_ctx.assumptions else "")
+                + (
+                    "\n**Assumptions:**\n"
+                    + "\n".join(f"- [{a.status}] {a.text}" for a in product_ctx.assumptions)
+                    if product_ctx.assumptions
+                    else ""
+                )
                 + f"\n\n**Confidence:** {product_ctx.overall_confidence:.0%}"
             ),
         )

@@ -1,4 +1,5 @@
 """Tests for Phase 7: TreeOfThoughtsScorer."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -37,8 +38,8 @@ async def test_generate_candidates_handles_parse_failure(mock_llm):
 @pytest.mark.asyncio
 async def test_generate_candidates_handles_timeout(mock_llm):
     """Timeout returns fallback candidate."""
-    import asyncio
-    mock_llm.chat.side_effect = asyncio.TimeoutError()
+
+    mock_llm.chat.side_effect = TimeoutError()
     scorer = TreeOfThoughtsScorer(llm=mock_llm)
     candidates = await scorer.generate_candidates("Do X", "Failed")
     assert len(candidates) >= 1
@@ -72,9 +73,7 @@ async def test_score_candidate_handles_parse_failure(mock_llm):
 @pytest.mark.asyncio
 async def test_best_candidate_returns_string(mock_llm):
     """best_candidate returns a non-empty string."""
-    mock_llm.chat.return_value = MagicMock(
-        content='{"candidates": ["Approach A", "Approach B"]}'
-    )
+    mock_llm.chat.return_value = MagicMock(content='{"candidates": ["Approach A", "Approach B"]}')
     scorer = TreeOfThoughtsScorer(llm=mock_llm, num_candidates=2)
     best = await scorer.best_candidate("Do X", "Failed")
     assert isinstance(best, str)
@@ -83,9 +82,7 @@ async def test_best_candidate_returns_string(mock_llm):
 
 def test_scored_candidate_auto_aggregate():
     """ScoredCandidate auto-computes aggregate."""
-    c = ScoredCandidate(
-        description="Test", novelty=3, feasibility=4, specificity=5,
-    )
+    c = ScoredCandidate(description="Test", novelty=3, feasibility=4, specificity=5)
     assert c.aggregate == pytest.approx(4.0)
 
 

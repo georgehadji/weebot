@@ -6,12 +6,13 @@ requiring approval for risky commands.
 
 Based on patterns from The Dev Squad analysis.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 # Optional global hook registry for post_bash_guard events.
 _bash_guard_hooks: Any = None
@@ -405,8 +406,11 @@ class BashGuard:
         ),
     ]
 
-    def __init__(self, custom_patterns: Optional[list[tuple[str, RiskLevel, str, str]]] = None,
-                 on_security_event: Optional[callable] = None):
+    def __init__(
+        self,
+        custom_patterns: list[tuple[str, RiskLevel, str, str]] | None = None,
+        on_security_event: callable | None = None,
+    ):
         """Initialize the BashGuard.
 
         Args:
@@ -448,34 +452,14 @@ class BashGuard:
         # rm -fr X, rm -Rf X, rm -RF X, rm -rF X (both flags in one token) → rm -rf X
         # NOTE: bare -r without -f is NOT normalized — it's already caught by
         # the BLOCKED patterns (r"rm\s+-rf?\s*/\s*$" with f? absent).
-        cmd = re.sub(
-            r"\brm\s+-(?:[fF][rR]|[rR][fF])\b",
-            "rm -rf",
-            cmd,
-        )
+        cmd = re.sub(r"\brm\s+-(?:[fF][rR]|[rR][fF])\b", "rm -rf", cmd)
         # rm -r -f X, rm -f -r X (space-separated flags) → rm -rf X
-        cmd = re.sub(
-            r"\brm\s+(?:-[rR]\s+-[fF]\b|-[fF]\s+-[rR]\b)",
-            "rm -rf",
-            cmd,
-        )
+        cmd = re.sub(r"\brm\s+(?:-[rR]\s+-[fF]\b|-[fF]\s+-[rR]\b)", "rm -rf", cmd)
         # rm --recursive --force X (long options) → rm -rf X
-        cmd = re.sub(
-            r"\brm\s+(?:--recursive\s+--force\b|--force\s+--recursive\b)",
-            "rm -rf",
-            cmd,
-        )
+        cmd = re.sub(r"\brm\s+(?:--recursive\s+--force\b|--force\s+--recursive\b)", "rm -rf", cmd)
         # rm --recursive -f X, rm --force -r X (mixed long/short) → rm -rf X
-        cmd = re.sub(
-            r"\brm\s+--recursive\s+-[fF]\b",
-            "rm -rf",
-            cmd,
-        )
-        cmd = re.sub(
-            r"\brm\s+--force\s+-[rR]\b",
-            "rm -rf",
-            cmd,
-        )
+        cmd = re.sub(r"\brm\s+--recursive\s+-[fF]\b", "rm -rf", cmd)
+        cmd = re.sub(r"\brm\s+--force\s+-[rR]\b", "rm -rf", cmd)
         return cmd
 
     def evaluate(self, command: str) -> tuple[RiskLevel, list[SafetyCheck]]:
@@ -507,7 +491,12 @@ class BashGuard:
                 checks.append(check)
 
                 # Update max risk
-                risk_order = [RiskLevel.SAFE, RiskLevel.SUSPICIOUS, RiskLevel.DANGEROUS, RiskLevel.BLOCKED]
+                risk_order = [
+                    RiskLevel.SAFE,
+                    RiskLevel.SUSPICIOUS,
+                    RiskLevel.DANGEROUS,
+                    RiskLevel.BLOCKED,
+                ]
                 if risk_order.index(risk) > risk_order.index(max_risk):
                     max_risk = risk
 

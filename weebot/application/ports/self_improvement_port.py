@@ -1,8 +1,9 @@
 """Self-Improvement port — abstract interface for proposing and applying patches."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from weebot.domain.models.self_improvement import SelfImprovementPatch
 
@@ -15,9 +16,7 @@ class SelfImprovementPort(ABC):
     """
 
     @abstractmethod
-    async def propose_patch(
-        self, context: dict[str, Any]
-    ) -> Optional[SelfImprovementPatch]:
+    async def propose_patch(self, context: dict[str, Any]) -> SelfImprovementPatch | None:
         """Propose a patch based on execution context.
 
         Args:

@@ -1,11 +1,8 @@
 """Unit tests for composite tool domain models."""
+
 from __future__ import annotations
 
-from weebot.domain.models.composite_tool import (
-    CompositeToolSpec,
-    SubToolCall,
-    CompositeResult,
-)
+from weebot.domain.models.composite_tool import CompositeToolSpec, SubToolCall, CompositeResult
 
 
 class TestCompositeToolSpec:
@@ -20,7 +17,7 @@ class TestCompositeToolSpec:
                     tool_name="file_view",
                     arguments={"path": "${path}"},
                     capture_output_as="content",
-                ),
+                )
             ],
             hidden_atomic_tools=["file_editor"],
             transaction_policy="all_or_none",
@@ -31,19 +28,11 @@ class TestCompositeToolSpec:
         assert data["transaction_policy"] == "all_or_none"
 
     def test_default_transaction_policy_is_best_effort(self):
-        spec = CompositeToolSpec(
-            name="demo",
-            description="Demo",
-            sub_tools=[],
-        )
+        spec = CompositeToolSpec(name="demo", description="Demo", sub_tools=[])
         assert spec.transaction_policy == "best_effort"
 
     def test_default_hidden_atomic_tools_is_empty(self):
-        spec = CompositeToolSpec(
-            name="demo",
-            description="Demo",
-            sub_tools=[],
-        )
+        spec = CompositeToolSpec(name="demo", description="Demo", sub_tools=[])
         assert spec.hidden_atomic_tools == []
 
 

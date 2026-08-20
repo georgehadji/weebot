@@ -8,6 +8,7 @@ Keys are stored with two hashes:
 The raw API key is never persisted.  Verification uses ``hmac.compare_digest``
 for constant-time comparison.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -15,9 +16,9 @@ import hmac
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.ports.api_key_port import ApiKeyPort, ApiKeyRecord
 from weebot.config.settings import SESSIONS_DB
@@ -31,10 +32,10 @@ logger = logging.getLogger(__name__)
 # API keys have high entropy (48 bytes urlsafe base64), so scrypt's
 # primary value is slowing brute-force on leaked hashes.
 _SCRYPT_N = 2**14  # CPU/memory cost (16384)
-_SCRYPT_R = 8      # block size
-_SCRYPT_P = 1      # parallelization factor
-_SCRYPT_DKLEN = 32 # output length in bytes
-_SALT_BYTES = 32   # salt length for scrypt
+_SCRYPT_R = 8  # block size
+_SCRYPT_P = 1  # parallelization factor
+_SCRYPT_DKLEN = 32  # output length in bytes
+_SALT_BYTES = 32  # salt length for scrypt
 
 
 def _lookup_hash(raw_key: str) -> str:
@@ -50,8 +51,7 @@ def _hash_key(raw_key: str) -> tuple[str, str]:
     salt = os.urandom(_SALT_BYTES)
     key_bytes = raw_key.encode("utf-8")
     dk = hashlib.scrypt(
-        key_bytes, salt=salt,
-        n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN,
+        key_bytes, salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
     )
     return dk.hex(), salt.hex()
 
@@ -64,8 +64,7 @@ def _verify_key(raw_key: str, stored_hash_hex: str, salt_hex: str) -> bool:
     salt = bytes.fromhex(salt_hex)
     key_bytes = raw_key.encode("utf-8")
     dk = hashlib.scrypt(
-        key_bytes, salt=salt,
-        n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN,
+        key_bytes, salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN
     )
     return hmac.compare_digest(dk.hex(), stored_hash_hex)
 
@@ -80,6 +79,7 @@ class SQLiteApiKeyStore(ApiKeyPort):
     async def _ensure_open(self) -> aiosqlite.Connection:
         if self._conn is None:
             import aiosqlite
+
             self._conn = await aiosqlite.connect(str(self._db_path))
             self._conn.row_factory = aiosqlite.Row  # type: ignore[attr-defined]
             await self._conn.execute("""
@@ -112,38 +112,49 @@ class SQLiteApiKeyStore(ApiKeyPort):
             await self._conn.close()
             self._conn = None
 
-    async def save(self, key_id: str, principal_id: str,
-                   lookup_hash: str, key_hash: str, salt: str,
-                   scopes: list[str] | None = None,
-                   expires_at: datetime | None = None) -> None:
+    async def save(
+        self,
+        key_id: str,
+        principal_id: str,
+        lookup_hash: str,
+        key_hash: str,
+        salt: str,
+        scopes: list[str] | None = None,
+        expires_at: datetime | None = None,
+    ) -> None:
         import json
+
         conn = await self._ensure_open()
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         scopes_json = json.dumps(scopes or [])
         await conn.execute(
             """INSERT OR REPLACE INTO api_keys
                (id, principal_id, lookup_hash, key_hash, salt, scopes, created_at, expires_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (key_id, principal_id, lookup_hash, key_hash, salt,
-             scopes_json, now, expires_at.isoformat() if expires_at else None),
+            (
+                key_id,
+                principal_id,
+                lookup_hash,
+                key_hash,
+                salt,
+                scopes_json,
+                now,
+                expires_at.isoformat() if expires_at else None,
+            ),
         )
         await conn.commit()
 
-    async def load_by_lookup_hash(self, lookup_hash: str) -> Optional[ApiKeyRecord]:
+    async def load_by_lookup_hash(self, lookup_hash: str) -> ApiKeyRecord | None:
         conn = await self._ensure_open()
-        cursor = await conn.execute(
-            "SELECT * FROM api_keys WHERE lookup_hash = ?", (lookup_hash,),
-        )
+        cursor = await conn.execute("SELECT * FROM api_keys WHERE lookup_hash = ?", (lookup_hash,))
         row = await cursor.fetchone()
         if row is None:
             return None
         return self._row_to_record(row)
 
-    async def load(self, key_id: str) -> Optional[ApiKeyRecord]:
+    async def load(self, key_id: str) -> ApiKeyRecord | None:
         conn = await self._ensure_open()
-        cursor = await conn.execute(
-            "SELECT * FROM api_keys WHERE id = ?", (key_id,),
-        )
+        cursor = await conn.execute("SELECT * FROM api_keys WHERE id = ?", (key_id,))
         row = await cursor.fetchone()
         if row is None:
             return None
@@ -160,25 +171,22 @@ class SQLiteApiKeyStore(ApiKeyPort):
 
     async def revoke(self, key_id: str) -> bool:
         conn = await self._ensure_open()
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         cursor = await conn.execute(
-            "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
-            (now, key_id),
+            "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", (now, key_id)
         )
         await conn.commit()
         return cursor.rowcount > 0
 
     async def touch_last_used(self, key_id: str) -> None:
         conn = await self._ensure_open()
-        now = datetime.now(timezone.utc).isoformat()
-        await conn.execute(
-            "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
-            (now, key_id),
-        )
+        now = datetime.now(UTC).isoformat()
+        await conn.execute("UPDATE api_keys SET last_used_at = ? WHERE id = ?", (now, key_id))
         await conn.commit()
 
     def _row_to_record(self, row) -> ApiKeyRecord:
         import json
+
         return ApiKeyRecord(
             id=row["id"],
             principal_id=row["principal_id"],
@@ -189,7 +197,9 @@ class SQLiteApiKeyStore(ApiKeyPort):
             created_at=datetime.fromisoformat(row["created_at"]),
             expires_at=datetime.fromisoformat(row["expires_at"]) if row["expires_at"] else None,
             revoked_at=datetime.fromisoformat(row["revoked_at"]) if row["revoked_at"] else None,
-            last_used_at=datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None,
+            last_used_at=(
+                datetime.fromisoformat(row["last_used_at"]) if row["last_used_at"] else None
+            ),
         )
 
     @staticmethod

@@ -8,13 +8,13 @@ facts dict.
 Shares the Playwright browser session started by AdvancedBrowserTool so only one
 browser process is ever launched.
 """
+
 from __future__ import annotations
 
 import base64
-import json
 import logging
-from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin, urlparse
+from typing import Any
+from urllib.parse import urljoin
 
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -219,10 +219,7 @@ class BrowserInspectorTool(BaseTool):
                     "navigate: go to url and wait for network idle."
                 ),
             },
-            "url": {
-                "type": "string",
-                "description": "URL to navigate to (for 'navigate' action).",
-            },
+            "url": {"type": "string", "description": "URL to navigate to (for 'navigate' action)."},
             "selector": {
                 "type": "string",
                 "description": "CSS selector for 'inspect_element' action.",
@@ -232,16 +229,14 @@ class BrowserInspectorTool(BaseTool):
     }
 
     async def execute(
-        self,
-        action: str,
-        url: Optional[str] = None,
-        selector: Optional[str] = None,
-        **_,
+        self, action: str, url: str | None = None, selector: str | None = None, **_
     ) -> ToolResult:
         try:
             from playwright.async_api import async_playwright
         except ImportError:
-            return ToolResult.error_result("playwright is not installed; run: pip install playwright && playwright install chromium")
+            return ToolResult.error_result(
+                "playwright is not installed; run: pip install playwright && playwright install chromium"
+            )
 
         if action == "navigate":
             return await self._navigate(url)
@@ -274,24 +269,25 @@ class BrowserInspectorTool(BaseTool):
 
     # ── action implementations ───────────────────────────────────────
 
-    async def _navigate(self, url: Optional[str]) -> ToolResult:
+    async def _navigate(self, url: str | None) -> ToolResult:
         """Launch browser via shared adapter if needed and navigate to url."""
         if not url:
             return ToolResult.error_result("url is required for 'navigate' action")
         if self.browser is None or self.browser.page is None:
             if self.browser is None:
                 from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
+
                 self.browser = PlaywrightAdapter()
             from weebot.application.ports.browser_port import BrowserConfig
+
             await self.browser.start(BrowserConfig(headless=True))
         await self.browser.page.goto(url, wait_until="domcontentloaded", timeout=30000)
         return ToolResult.success_result(
-            output=f"Navigated to {url}",
-            data={"url": url, "action": "navigate"},
+            output=f"Navigated to {url}", data={"url": url, "action": "navigate"}
         )
 
     async def _extract_design_tokens(self, page) -> ToolResult:
-        tokens: Dict[str, Any] = await page.evaluate(_JS_DESIGN_TOKENS)
+        tokens: dict[str, Any] = await page.evaluate(_JS_DESIGN_TOKENS)
         custom = tokens.get("custom_properties", {})
         computed = tokens.get("computed_root", {})
         summary_lines = [f"Found {len(custom)} CSS custom properties (design tokens)"]
@@ -303,10 +299,10 @@ class BrowserInspectorTool(BaseTool):
             data={"custom_properties": custom, "computed_root": computed},
         )
 
-    async def _inspect_element(self, page, selector: Optional[str]) -> ToolResult:
+    async def _inspect_element(self, page, selector: str | None) -> ToolResult:
         if not selector:
             return ToolResult.error_result("'selector' is required for inspect_element")
-        result: Optional[Dict] = await page.evaluate(_JS_INSPECT_ELEMENT, selector)
+        result: dict | None = await page.evaluate(_JS_INSPECT_ELEMENT, selector)
         if result is None:
             return ToolResult.error_result(f"No element found matching selector: {selector!r}")
         css = result.get("computed_css", {})
@@ -319,8 +315,8 @@ class BrowserInspectorTool(BaseTool):
         )
         return ToolResult.success_result(output=summary, data=result)
 
-    async def _enumerate_assets(self, page, base_url: Optional[str]) -> ToolResult:
-        assets: List[Dict] = await page.evaluate(_JS_ENUMERATE_ASSETS)
+    async def _enumerate_assets(self, page, base_url: str | None) -> ToolResult:
+        assets: list[dict] = await page.evaluate(_JS_ENUMERATE_ASSETS)
         # Resolve relative URLs if we have a base
         current_url = page.url if hasattr(page, "url") else base_url
         if current_url:
@@ -329,19 +325,21 @@ class BrowserInspectorTool(BaseTool):
                 if src and not src.startswith(("http://", "https://", "data:")):
                     a["src"] = urljoin(current_url, src)
 
-        by_type: Dict[str, int] = {}
+        by_type: dict[str, int] = {}
         for a in assets:
             t = a.get("type", "unknown")
             by_type[t] = by_type.get(t, 0) + 1
 
-        summary = f"Found {len(assets)} assets: " + ", ".join(f"{v} {k}" for k, v in by_type.items())
+        summary = f"Found {len(assets)} assets: " + ", ".join(
+            f"{v} {k}" for k, v in by_type.items()
+        )
         return ToolResult.success_result(output=summary, data={"assets": assets, "counts": by_type})
 
     async def _get_structure(self, page) -> ToolResult:
         structure = await page.evaluate(_JS_GET_STRUCTURE)
         title = await page.title()
 
-        def _count_nodes(node: Optional[Dict], depth=0) -> int:
+        def _count_nodes(node: dict | None, depth=0) -> int:
             if not node:
                 return 0
             return 1 + sum(_count_nodes(c, depth + 1) for c in node.get("children", []))
@@ -349,8 +347,7 @@ class BrowserInspectorTool(BaseTool):
         n = _count_nodes(structure)
         summary = f"Page: '{title}' — {n} structural nodes extracted"
         return ToolResult.success_result(
-            output=summary,
-            data={"title": title, "url": page.url, "structure": structure},
+            output=summary, data={"title": title, "url": page.url, "structure": structure}
         )
 
     async def _screenshot(self, page) -> ToolResult:
@@ -381,16 +378,18 @@ class BrowserInspectorTool(BaseTool):
                     if bbox and bbox["width"] > 5 and bbox["height"] > 5:
                         tag = await el.evaluate("el => el.tagName.toLowerCase()")
                         text = (await el.inner_text() or "").strip()[:60]
-                        elements.append({
-                            "bounding_box": {
-                                "x": round(bbox["x"]),
-                                "y": round(bbox["y"]),
-                                "width": round(bbox["width"]),
-                                "height": round(bbox["height"]),
-                            },
-                            "tag": tag,
-                            "text": text,
-                        })
+                        elements.append(
+                            {
+                                "bounding_box": {
+                                    "x": round(bbox["x"]),
+                                    "y": round(bbox["y"]),
+                                    "width": round(bbox["width"]),
+                                    "height": round(bbox["height"]),
+                                },
+                                "tag": tag,
+                                "text": text,
+                            }
+                        )
                 except Exception:
                     continue
 
@@ -399,7 +398,8 @@ class BrowserInspectorTool(BaseTool):
             renderer = SomRenderer()
             viewport = page.viewport_size or {"width": 1920, "height": 1080}
             result = await renderer.render(
-                screenshot_bytes, elements,
+                screenshot_bytes,
+                elements,
                 page_width=viewport.get("width", 1920),
                 page_height=viewport.get("height", 1080),
             )

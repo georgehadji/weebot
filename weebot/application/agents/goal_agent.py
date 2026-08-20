@@ -7,11 +7,11 @@ execution via dispatch_parallel_tasks.
 
 Model: MODEL_CASCADE_TIER1 (Owl Alpha — free, agentic, tool-aware).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_DEFAULT
@@ -54,7 +54,7 @@ class GoalAgent:
         self._llm = llm
 
     async def decompose(
-        self, prompt: str, max_goals: int = 8, model: Optional[str] = None
+        self, prompt: str, max_goals: int = 8, model: str | None = None
     ) -> SwarmSpec:
         """Return a SwarmSpec with auto-generated roles and tool assignments.
 
@@ -131,10 +131,7 @@ class GoalAgent:
             original_prompt=prompt,
             goals=[
                 SubGoal(
-                    description=prompt[:200],
-                    role="researcher",
-                    tools=["web_search"],
-                    priority=0,
+                    description=prompt[:200], role="researcher", tools=["web_search"], priority=0
                 )
             ],
             max_concurrency=1,

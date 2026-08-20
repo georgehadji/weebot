@@ -3,9 +3,9 @@
 The executor should NOT abort when pytest returns exit code 1 during
 [RED-VERIFY] steps — test failure is the DESIRED outcome in TDD.
 """
+
 from __future__ import annotations
 
-import pytest
 
 from weebot.application.agents.executor._error_handler import (
     is_expected_failure,

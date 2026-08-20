@@ -8,13 +8,13 @@ Optionally:
   evaluate.py   — custom scorer: evaluate(session, expected_answer) -> float
                   Dynamically imported at load time.
 """
+
 from __future__ import annotations
 
 import importlib.util
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
 
 from weebot.domain.models.benchmark_task import SamplePair, WeebotTask
 
@@ -55,10 +55,7 @@ class TaskLoader:
             raise ValueError(f"samples.json must be a JSON array in {path}")
 
         samples = tuple(
-            SamplePair(
-                prompt=s["prompt"],
-                expected_answer=s.get("expected_answer"),
-            )
+            SamplePair(prompt=s["prompt"], expected_answer=s.get("expected_answer"))
             for s in raw_samples
         )
 
@@ -73,7 +70,7 @@ class TaskLoader:
         )
 
     @staticmethod
-    def load_all_from_dir(root: Path) -> List[WeebotTask]:
+    def load_all_from_dir(root: Path) -> list[WeebotTask]:
         """Discover and load all tasks under *root*.
 
         Walks immediate subdirectories of *root* that contain task.md.
@@ -86,7 +83,7 @@ class TaskLoader:
             List of loaded WeebotTask objects (order is filesystem order).
         """
         root = Path(root).resolve()
-        tasks: List[WeebotTask] = []
+        tasks: list[WeebotTask] = []
 
         for child in sorted(root.iterdir()):
             if not child.is_dir():
@@ -108,8 +105,7 @@ class TaskLoader:
 
         try:
             spec = importlib.util.spec_from_file_location(
-                f"_weebot_eval_{evaluate_py.parent.name}",
-                str(evaluate_py.resolve()),
+                f"_weebot_eval_{evaluate_py.parent.name}", str(evaluate_py.resolve())
             )
             if spec is None or spec.loader is None:
                 return None

@@ -1,4 +1,5 @@
 """Unit tests for the Ponytail web router."""
+
 from __future__ import annotations
 
 import pytest
@@ -13,8 +14,7 @@ def client(tmp_path, monkeypatch):
     # Redirect the project-local mode file into a temp directory so tests do
     # not mutate the real workspace state.
     monkeypatch.setattr(
-        "cli.commands.ponytail._PONYTAIL_MODE_FILE",
-        tmp_path / "ponytail_mode.json",
+        "cli.commands.ponytail._PONYTAIL_MODE_FILE", tmp_path / "ponytail_mode.json"
     )
 
     from fastapi import FastAPI

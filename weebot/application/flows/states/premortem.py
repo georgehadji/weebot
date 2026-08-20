@@ -6,10 +6,12 @@ Injects risk notes into the plan; never blocks execution.
 Enabled by: plan step count >= PREMORTEM_MIN_STEPS (default 3)
 OR task_preset.enable_premortem == True.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
@@ -26,9 +28,7 @@ class PremortmState(FlowState):
 
     status = AgentStatus.PLANNING  # Planning sub-phase — reuses existing status
 
-    async def execute(
-        self, context: "PlanActFlow", prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
         from weebot.application.flows.states.plan_review import next_state_after_plan
         from weebot.application.services.premortem_analyzer import PremortmAnalyzer
 
@@ -42,7 +42,8 @@ class PremortmState(FlowState):
         if _enable is None and (plan is None or len(plan.steps) < PREMORTEM_MIN_STEPS):
             logger.debug(
                 "Pre-mortem skipped: plan has %d steps (min %d)",
-                len(plan.steps) if plan else 0, PREMORTEM_MIN_STEPS,
+                len(plan.steps) if plan else 0,
+                PREMORTEM_MIN_STEPS,
             )
             context.set_state(next_state_after_plan())
             return
@@ -56,8 +57,7 @@ class PremortmState(FlowState):
             context._plan = plan.model_copy(
                 update={
                     "message": (
-                        f"{plan.message or ''}\n\n"
-                        f"[Pre-mortem risks]\n{risk_block}"
+                        f"{plan.message or ''}\n\n" f"[Pre-mortem risks]\n{risk_block}"
                     ).strip()
                 }
             )

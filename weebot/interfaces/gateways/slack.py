@@ -3,24 +3,20 @@
 Supports both incoming webhooks (Events API) and direct message posting
 via chat.postMessage. Validates HMAC signatures on incoming events.
 """
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import logging
 import time
-from typing import Optional
 
 import aiohttp
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.interfaces.factories import build_tools, create_flow
-from weebot.interfaces.gateways.base import (
-    GatewayAdapter,
-    GatewayMessage,
-    GatewayResponse,
-)
+from weebot.interfaces.gateways.base import GatewayAdapter, GatewayMessage, GatewayResponse
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +60,12 @@ class SlackAdapter(GatewayAdapter):
         expected = (
             "v0="
             + hmac.new(
-                self._signing_secret.encode("utf-8"),
-                sig_basestring.encode("utf-8"),
-                hashlib.sha256,
+                self._signing_secret.encode("utf-8"), sig_basestring.encode("utf-8"), hashlib.sha256
             ).hexdigest()
         )
         return hmac.compare_digest(expected, signature)
 
-    def parse_event(self, payload: dict) -> Optional[GatewayMessage]:
+    def parse_event(self, payload: dict) -> GatewayMessage | None:
         """Extract a GatewayMessage from a Slack Events API payload."""
         event = payload.get("event", {})
 
@@ -96,11 +90,7 @@ class SlackAdapter(GatewayAdapter):
             platform="slack",
             external_id=channel,
             text=self._strip_mentions(text),
-            metadata={
-                "user": user,
-                "team": payload.get("team_id", ""),
-                "ts": event.get("ts", ""),
-            },
+            metadata={"user": user, "team": payload.get("team_id", ""), "ts": event.get("ts", "")},
         )
 
     @staticmethod
@@ -110,7 +100,7 @@ class SlackAdapter(GatewayAdapter):
 
         return re.sub(r"<@[A-Z0-9]+>", "", text).strip()
 
-    async def process_event(self, payload: dict) -> Optional[str]:
+    async def process_event(self, payload: dict) -> str | None:
         """Process a validated Slack event and return a response."""
         msg = self.parse_event(payload)
         if msg is None:
@@ -119,7 +109,8 @@ class SlackAdapter(GatewayAdapter):
         if not self.is_authorized("slack", msg.external_id, msg.metadata.get("user", "")):
             logger.warning(
                 "Slack message rejected by gateway allowlist: channel=%s user=%s",
-                msg.external_id, msg.metadata.get("user"),
+                msg.external_id,
+                msg.metadata.get("user"),
             )
             return None
 
@@ -132,11 +123,7 @@ class SlackAdapter(GatewayAdapter):
         session_id = f"slack-{msg.external_id}-{uuid.uuid4().hex[:6]}"
         from weebot.domain.models.session import Session
 
-        session = Session(
-            id=session_id,
-            user_id=f"slack-{msg.external_id}",
-            agent_id="slack-agent",
-        )
+        session = Session(id=session_id, user_id=f"slack-{msg.external_id}", agent_id="slack-agent")
 
         tools = await build_tools(role="admin")
         flow = create_flow(
@@ -163,9 +150,7 @@ class SlackAdapter(GatewayAdapter):
         payload = {"channel": response.external_id, "text": response.text[:3000]}
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url, json=payload, headers=headers
-                ) as resp:
+                async with session.post(url, json=payload, headers=headers) as resp:
                     return resp.status == 200
         except Exception as exc:
             logger.warning("Slack send failed: %s", exc)

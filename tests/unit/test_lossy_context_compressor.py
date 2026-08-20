@@ -3,11 +3,11 @@
 Verifies head+tail retention, verbatim short messages,
 numeric/date preservation, and configurable ContextBudget caps.
 """
+
 from __future__ import annotations
 
 from weebot.application.services.lossy_context_compressor import (
     LossyContextCompressor,
-    _SHORT_MSG_THRESHOLD,
     _truncate_with_head_tail,
 )
 from weebot.domain.models.context import ContextBudget
@@ -56,10 +56,7 @@ class TestLossyContextCompressor:
 
     def test_short_messages_not_truncated(self) -> None:
         """Messages under the threshold pass through verbatim."""
-        msg = {
-            "role": "user",
-            "content": "What is the weather today in Berlin?",
-        }
+        msg = {"role": "user", "content": "What is the weather today in Berlin?"}
         budget = ContextBudget(message_head_chars=20, message_tail_chars=20)
         compressor = LossyContextCompressor()
 
@@ -67,9 +64,7 @@ class TestLossyContextCompressor:
         # We test via _truncate_with_head_tail which is used inside compress()
         content = str(msg["content"])
         result = _truncate_with_head_tail(
-            content,
-            head_chars=budget.message_head_chars,
-            tail_chars=budget.message_tail_chars,
+            content, head_chars=budget.message_head_chars, tail_chars=budget.message_tail_chars
         )
         assert result == content
 
@@ -103,11 +98,7 @@ class TestLossyContextCompressor:
     def test_compress_accepts_budget_override(self) -> None:
         """compress() should accept a budget with custom caps."""
         compressor = LossyContextCompressor()
-        budget = ContextBudget(
-            message_head_chars=50,
-            message_tail_chars=50,
-            summary_max_chars=500,
-        )
+        budget = ContextBudget(message_head_chars=50, message_tail_chars=50, summary_max_chars=500)
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -115,10 +106,10 @@ class TestLossyContextCompressor:
             {"role": "assistant", "content": "Another long response " * 100},
         ]
 
-        import pytest as _pytest
         # Run synchronously — the method is async but we just test the
         # budget doesn't cause errors
         import asyncio
+
         result = asyncio.run(compressor.compress(messages, budget=budget))
         assert result.retained_count > 0
         assert result.discarded_count >= 0

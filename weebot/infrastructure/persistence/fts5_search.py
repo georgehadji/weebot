@@ -4,12 +4,11 @@ Adds an FTS5 virtual table to the existing SQLite session database,
 indexing event summaries, plan titles, and tool outputs.  Enables
 semantic search over the agent's entire history.
 """
+
 from __future__ import annotations
 
-import json
 import logging
-import re
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +35,7 @@ def _sanitize_fts_query(q: str) -> str:
         safe = token.replace('"', '""')
         quoted.append(f'"{safe}"')
     return " AND ".join(quoted)
+
 
 _FTS5_CREATE = """
 CREATE VIRTUAL TABLE IF NOT EXISTS event_fts USING fts5(
@@ -72,27 +72,16 @@ async def ensure_fts5_table(conn) -> None:
 
 
 async def index_event(
-    conn,
-    session_id: str,
-    event_type: str,
-    summary: str,
-    content: str = "",
+    conn, session_id: str, event_type: str, summary: str, content: str = ""
 ) -> None:
     """Index a single event into the FTS5 table.
 
     Call this after saving a new event to the sessions table.
     """
-    await conn.execute(
-        _FTS5_INSERT,
-        (session_id, event_type, summary[:500], content[:1000]),
-    )
+    await conn.execute(_FTS5_INSERT, (session_id, event_type, summary[:500], content[:1000]))
 
 
-async def search_events(
-    pool,
-    query: str,
-    limit: int = 20,
-) -> list[dict[str, Any]]:
+async def search_events(pool, query: str, limit: int = 20) -> list[dict[str, Any]]:
     """Full-text search across all indexed events.
 
     Args:

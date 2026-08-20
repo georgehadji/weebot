@@ -9,6 +9,7 @@ dispatch parameter.  Any tool with a parameter also called 'name'
 FIX: Renamed the dispatch parameter to '_name' (leading underscore)
 so it never collides with tool-defined parameters.
 """
+
 from __future__ import annotations
 
 from weebot.application.models.tool_collection import ToolCollection
@@ -20,9 +21,7 @@ class ToolWithNameParam(BaseTool):
     description: str = "A tool that accepts a 'name' parameter"
     parameters: dict = {
         "type": "object",
-        "properties": {
-            "name": {"type": "string", "description": "A name parameter"},
-        },
+        "properties": {"name": {"type": "string", "description": "A name parameter"}},
     }
 
     async def execute(self, name: str = "", **kwargs) -> ToolResult:

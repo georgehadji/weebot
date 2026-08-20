@@ -6,11 +6,12 @@ Usage::
     weebot auth list-keys --principal user-1
     weebot auth revoke-key --key-id <id>
 """
+
 from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import click
 
@@ -43,11 +44,11 @@ def create_key(principal: str, scopes: str, expires: str) -> None:
             click.echo(f"Invalid expires format: {expires} (e.g. 90d, 12h, 365d)", err=True)
             sys.exit(1)
         if unit == "d":
-            expires_at = datetime.now(timezone.utc) + timedelta(days=amount)
+            expires_at = datetime.now(UTC) + timedelta(days=amount)
         elif unit == "h":
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=amount)
+            expires_at = datetime.now(UTC) + timedelta(hours=amount)
         elif unit == "m":
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=amount)
+            expires_at = datetime.now(UTC) + timedelta(minutes=amount)
         else:
             click.echo(f"Unknown time unit: {unit} (use d, h, m)", err=True)
             sys.exit(1)
@@ -56,7 +57,7 @@ def create_key(principal: str, scopes: str, expires: str) -> None:
     lookup = _lookup_hash(raw_key)
     key_hash, salt = _hash_key(raw_key)
 
-    key_id = f"key_{principal}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    key_id = f"key_{principal}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
 
     async def _do_save():
         store = SQLiteApiKeyStore()
@@ -86,9 +87,7 @@ def list_keys(principal: str | None) -> None:
             records = await store.list_by_principal(principal)
         else:
             conn = await store._ensure_open()
-            cursor = await conn.execute(
-                "SELECT * FROM api_keys ORDER BY created_at DESC"
-            )
+            cursor = await conn.execute("SELECT * FROM api_keys ORDER BY created_at DESC")
             rows = await cursor.fetchall()
             records = [store._row_to_record(r) for r in rows]
         await store.close()
@@ -100,7 +99,9 @@ def list_keys(principal: str | None) -> None:
         click.echo("No keys found.")
         return
 
-    click.echo(f"{'ID':50s} {'Principal':20s} {'Scopes':25s} {'Created':25s} {'Expires':25s} {'Status':10s}")
+    click.echo(
+        f"{'ID':50s} {'Principal':20s} {'Scopes':25s} {'Created':25s} {'Expires':25s} {'Status':10s}"
+    )
     click.echo("-" * 155)
     for r in records:
         status = "active" if r.is_valid else "revoked" if r.revoked_at else "expired"

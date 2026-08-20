@@ -1,4 +1,5 @@
 """ToolCallWeebotAgent — ReAct loop with OpenAI function calling."""
+
 from __future__ import annotations
 import asyncio
 import json
@@ -6,19 +7,15 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from weebot.domain.models import (
-    AgentState, Memory, Message, Role, ToolCallSpec, ToolResult,
-)
+from weebot.domain.models import AgentState, Memory, Message, Role, ToolCallSpec, ToolResult
 from weebot.config.model_refs import MODEL_DEPRECATED_TOOL_AGENT
 from weebot.utils.cost_ledger import CostLedger
 from weebot.utils.prompt_loader import load_prompt_with_fallback
-from typing import Optional
 
 from weebot.config.secret_accessor import SecretAccessor
 
 SYSTEM_PROMPT = load_prompt_with_fallback(
-    "tool_agent_system.txt",
-    "You are weebot, an autonomous AI agent.\nYou have access to tools.\n",
+    "tool_agent_system.txt", "You are weebot, an autonomous AI agent.\nYou have access to tools.\n"
 )
 
 MAX_STEPS = 30
@@ -44,21 +41,30 @@ class ToolCallWeebotAgent:
         system_prompt: str = SYSTEM_PROMPT,
         model: str | None = None,
         max_steps: int = MAX_STEPS,
-        executor_agent = None,
+        executor_agent=None,
     ) -> None:
         import warnings
+
         warnings.warn(
             "ToolCallWeebotAgent is deprecated; use PlanActFlow from weebot.application.flows.plan_act_flow",
             DeprecationWarning,
             stacklevel=2,
         )
-        api_key = SecretAccessor.get("OPENAI_API_KEY") or SecretAccessor.get("DEEPSEEK_API_KEY") or "no-key"
+        api_key = (
+            SecretAccessor.get("OPENAI_API_KEY")
+            or SecretAccessor.get("DEEPSEEK_API_KEY")
+            or "no-key"
+        )
         base_url = None
         if not SecretAccessor.get("OPENAI_API_KEY") and SecretAccessor.get("DEEPSEEK_API_KEY"):
             base_url = "https://api.deepseek.com"
 
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        self.model = model or SecretAccessor.get("WEEBOT_MODEL", MODEL_DEPRECATED_TOOL_AGENT) or MODEL_DEPRECATED_TOOL_AGENT
+        self.model = (
+            model
+            or SecretAccessor.get("WEEBOT_MODEL", MODEL_DEPRECATED_TOOL_AGENT)
+            or MODEL_DEPRECATED_TOOL_AGENT
+        )
         self.tools = tools
         self.max_steps = max_steps
         self.memory = Memory()
@@ -76,10 +82,7 @@ class ToolCallWeebotAgent:
         Returns True if LLM issued tool calls, False if it gave a final response.
         """
         tool_params = self.tools.to_params()
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "messages": self.memory.to_openai_format(),
-        }
+        kwargs: dict[str, Any] = {"model": self.model, "messages": self.memory.to_openai_format()}
         if tool_params:
             kwargs["tools"] = tool_params
             kwargs["tool_choice"] = "auto"
@@ -90,9 +93,7 @@ class ToolCallWeebotAgent:
         # Capture exact token counts from the API response and display EUR cost.
         if getattr(response, "usage", None) is not None:
             cost = self._ledger.record(
-                step=f"step-{self._step_count}",
-                usage=response.usage,
-                model=self.model,
+                step=f"step-{self._step_count}", usage=response.usage, model=self.model
             )
             self._ledger.print_step(cost)
 
@@ -101,17 +102,13 @@ class ToolCallWeebotAgent:
         tool_calls: list[ToolCallSpec] = []
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                tool_calls.append(ToolCallSpec(
-                    id=tc.id,
-                    name=tc.function.name,
-                    arguments=tc.function.arguments,
-                ))
+                tool_calls.append(
+                    ToolCallSpec(id=tc.id, name=tc.function.name, arguments=tc.function.arguments)
+                )
 
-        self.memory.add(Message(
-            role=Role.ASSISTANT,
-            content=msg.content or "",
-            tool_calls=tool_calls,
-        ))
+        self.memory.add(
+            Message(role=Role.ASSISTANT, content=msg.content or "", tool_calls=tool_calls)
+        )
 
         return bool(tool_calls)
 
@@ -132,11 +129,7 @@ class ToolCallWeebotAgent:
 
         pairs = await asyncio.gather(*[_run_one(tc) for tc in last.tool_calls])
         for tc_id, result in pairs:
-            self.memory.add(Message(
-                role=Role.TOOL,
-                content=str(result),
-                tool_call_id=tc_id,
-            ))
+            self.memory.add(Message(role=Role.TOOL, content=str(result), tool_call_id=tc_id))
 
     async def run(self, prompt: str) -> str:
         """Run agent until finished or max_steps reached."""

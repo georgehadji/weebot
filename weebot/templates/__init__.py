@@ -1,12 +1,9 @@
 """Weebot Template Engine."""
+
 from weebot.templates.parser import TemplateParser, WorkflowTemplate, TemplateValidationError
 from weebot.templates.parameters import ParameterResolver, ParameterValidationError
 from weebot.templates.registry import TemplateRegistry
-from weebot.templates.engine import (
-    TemplateEngine,
-    TemplateExecutionResult,
-    ExecutionContext,
-)
+from weebot.templates.engine import TemplateEngine, TemplateExecutionResult, ExecutionContext
 
 __all__ = [
     "TemplateParser",
@@ -27,11 +24,8 @@ try:
         TemplateCLI,
         create_integrated_engine,
     )
-    __all__.extend([
-        "TemplateOrchestratorIntegration",
-        "TemplateCLI",
-        "create_integrated_engine",
-    ])
+
+    __all__.extend(["TemplateOrchestratorIntegration", "TemplateCLI", "create_integrated_engine"])
 except ImportError:
     pass
 
@@ -43,12 +37,15 @@ try:
         register_agent_handlers,
         create_agent_enabled_engine,
     )
-    __all__.extend([
-        "TemplateAgentManager",
-        "TemplateAgentTaskHandler",
-        "register_agent_handlers",
-        "create_agent_enabled_engine",
-    ])
+
+    __all__.extend(
+        [
+            "TemplateAgentManager",
+            "TemplateAgentTaskHandler",
+            "register_agent_handlers",
+            "create_agent_enabled_engine",
+        ]
+    )
 except ImportError:
     pass
 
@@ -60,12 +57,15 @@ try:
         LoopWorkflowBuilder,
         TemplateRenderError,
     )
-    __all__.extend([
-        "JinjaTemplateRenderer",
-        "ConditionalWorkflowBuilder",
-        "LoopWorkflowBuilder",
-        "TemplateRenderError",
-    ])
+
+    __all__.extend(
+        [
+            "JinjaTemplateRenderer",
+            "ConditionalWorkflowBuilder",
+            "LoopWorkflowBuilder",
+            "TemplateRenderError",
+        ]
+    )
 except ImportError:
     pass
 
@@ -76,21 +76,21 @@ try:
         TemplateVersion,
         VersionMigration,
     )
-    __all__.extend([
-        "TemplateVersionManager",
-        "VersionedTemplateRegistry",
-        "TemplateVersion",
-        "VersionMigration",
-    ])
+
+    __all__.extend(
+        [
+            "TemplateVersionManager",
+            "VersionedTemplateRegistry",
+            "TemplateVersion",
+            "VersionMigration",
+        ]
+    )
 except ImportError:
     pass
 
-__all__.extend([
-    "TemplateMarketplace",
-    "LocalTemplateRepository",
-    "TemplateListing",
-    "TemplateReview",
-])
+__all__.extend(
+    ["TemplateMarketplace", "LocalTemplateRepository", "TemplateListing", "TemplateReview"]
+)
 
 try:
     from weebot.templates.hooks import (
@@ -100,33 +100,28 @@ try:
         HookConditions,
         hook,
     )
-    __all__.extend([
-        "HookRegistry",
-        "HookedTemplateEngine",
-        "BuiltinHooks",
-        "HookConditions",
-        "hook",
-    ])
+
+    __all__.extend(
+        ["HookRegistry", "HookedTemplateEngine", "BuiltinHooks", "HookConditions", "hook"]
+    )
 except ImportError:
     pass
 
 # Phase 6: Production Features
-__all__.extend([
-    "ProductionTemplateEngine",
-    "RateLimiter",
-    "Authenticator",
-    "User",
-    "DatabaseManager",
-    "RedisCache",
-    "HealthChecker",
-])
+__all__.extend(
+    [
+        "ProductionTemplateEngine",
+        "RateLimiter",
+        "Authenticator",
+        "User",
+        "DatabaseManager",
+        "RedisCache",
+        "HealthChecker",
+    ]
+)
 
 # Phase 6b: Adaptive Suggestions (EXPAND mode) — lazy, pulls sqlalchemy
-__all__.extend([
-    "AdaptiveSuggestionEngine",
-    "ParameterSuggestion",
-    "SuggestionContext",
-])
+__all__.extend(["AdaptiveSuggestionEngine", "ParameterSuggestion", "SuggestionContext"])
 
 try:
     from weebot.templates.feature_flags import (
@@ -135,20 +130,13 @@ try:
         FeatureConfig,
         get_feature_flags,
     )
-    __all__.extend([
-        "FeatureFlagManager",
-        "FeatureState",
-        "FeatureConfig",
-        "get_feature_flags",
-    ])
+
+    __all__.extend(["FeatureFlagManager", "FeatureState", "FeatureConfig", "get_feature_flags"])
 except ImportError:
     pass
 
 # Schema migrations — lazy, pulls sqlalchemy
-__all__.extend([
-    "SchemaManager",
-    "init_database",
-])
+__all__.extend(["SchemaManager", "init_database"])
 
 
 # ── Lazily-loaded heavy submodules (PEP 562) ──────────────────────────
@@ -183,6 +171,7 @@ def __getattr__(name: str):
     if submodule is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     import importlib
+
     try:
         mod = importlib.import_module(f"weebot.templates.{submodule}")
     except ImportError as exc:  # optional dependency missing

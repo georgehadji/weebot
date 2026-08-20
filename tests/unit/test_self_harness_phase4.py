@@ -3,15 +3,15 @@
 Tests the paper's acceptance rule, early rejection (cost savings),
 and error handling.  Uses mocked task_runners to avoid real LLM calls.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from weebot.domain.models.harness_edit import PromotionDecision
 from weebot.config.harness.schema import HarnessConfig
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────
+
 
 def _make_config(**overrides) -> HarnessConfig:
     """Create a HarnessConfig with optional field overrides."""
@@ -34,6 +34,7 @@ async def _task_runner_all_fail(task_ids, config):
 
 
 # ── Acceptance Rule Tests ─────────────────────────────────────────────────
+
 
 class TestRegressionGateAcceptance:
     """Tests for the paper's rule: Δ_in ≥ 0, Δ_ho ≥ 0, max(Δ_in, Δ_ho) > 0."""
@@ -92,9 +93,7 @@ class TestRegressionGateAcceptance:
         assert decision.delta_ho == 0.0  # Never computed
         # task_runner called 2 times (baseline held-in + candidate held-in)
         # NOT 4 times (which would mean held-out also ran)
-        assert call_count["n"] == 2, (
-            f"Expected 2 calls (held-in only) but got {call_count['n']}"
-        )
+        assert call_count["n"] == 2, f"Expected 2 calls (held-in only) but got {call_count['n']}"
 
     @pytest.mark.asyncio
     async def test_held_out_regression_rejects(self):
@@ -131,8 +130,8 @@ class TestRegressionGateAcceptance:
             repeats=1,
         )
         assert not decision.accepted
-        assert decision.delta_in > 0   # Improved on held-in
-        assert decision.delta_ho < 0   # Regressed on held-out
+        assert decision.delta_in > 0  # Improved on held-in
+        assert decision.delta_ho < 0  # Regressed on held-out
 
     @pytest.mark.asyncio
     async def test_no_improvement_rejects(self):
@@ -156,10 +155,7 @@ class TestRegressionGateAcceptance:
         from weebot.application.services.regression_gate import RegressionGate
 
         gate = RegressionGate()
-        decision = await gate.validate(
-            baseline=_make_config(),
-            candidate=_make_config(),
-        )
+        decision = await gate.validate(baseline=_make_config(), candidate=_make_config())
         assert not decision.accepted
         assert "fail-closed" in decision.reason
 
@@ -206,35 +202,32 @@ class TestRegressionGateAcceptance:
 
 # ── TaskRunReport Tests ──────────────────────────────────────────────────
 
+
 class TestTaskRunReport:
     def test_from_results_all_pass(self):
         from weebot.application.services.regression_gate import TaskRunReport
-        report = TaskRunReport.from_results([
-            {"passed": True},
-            {"passed": True},
-        ])
+
+        report = TaskRunReport.from_results([{"passed": True}, {"passed": True}])
         assert report.total == 2
         assert report.passed == 2
         assert report.pass_rate == 1.0
 
     def test_from_results_some_fail(self):
         from weebot.application.services.regression_gate import TaskRunReport
-        report = TaskRunReport.from_results([
-            {"passed": True},
-            {"passed": False},
-        ])
+
+        report = TaskRunReport.from_results([{"passed": True}, {"passed": False}])
         assert report.pass_rate == 0.5
 
     def test_from_results_with_errors(self):
         from weebot.application.services.regression_gate import TaskRunReport
-        report = TaskRunReport.from_results([
-            {"passed": False, "error": "timeout"},
-        ])
+
+        report = TaskRunReport.from_results([{"passed": False, "error": "timeout"}])
         assert len(report.errors) == 1
         assert report.errors[0] == "timeout"
 
     def test_from_results_empty(self):
         from weebot.application.services.regression_gate import TaskRunReport
+
         report = TaskRunReport.from_results([])
         assert report.total == 0
         assert report.pass_rate == 0.0

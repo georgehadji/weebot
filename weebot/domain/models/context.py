@@ -3,6 +3,7 @@
 Defines the types used by the pluggable context engine to manage LLM
 message context across long sessions.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -17,6 +18,7 @@ class MessageTier(str, Enum):
     Context messages are semi-stable (skill context, tool descriptions).
     Volatile messages are the most recent turns and are compressed first.
     """
+
     SYSTEM = "system"
     CONTEXT = "context"
     VOLATILE = "volatile"
@@ -24,6 +26,7 @@ class MessageTier(str, Enum):
 
 class CompressionStrategy(str, Enum):
     """Available compression strategies."""
+
     LOSSY_SUMMARIZE = "lossy_summarize"
     DROP_OLDEST = "drop_oldest"
     DROP_LOW_IMPORTANCE = "drop_low_importance"
@@ -31,6 +34,7 @@ class CompressionStrategy(str, Enum):
 
 class CompressionResult(BaseModel):
     """Result of a context compression operation."""
+
     summary: str = Field(default="", description="Compressed summary of discarded messages")
     retained_count: int = Field(default=0, description="Number of messages retained")
     discarded_count: int = Field(default=0, description="Number of messages discarded/dropped")
@@ -40,6 +44,7 @@ class CompressionResult(BaseModel):
 
 class ContextBudget(BaseModel):
     """Budget configuration for context window management."""
+
     max_tokens: int = Field(default=12000, ge=1000, description="Maximum allowed tokens")
     protect_last_n: int = Field(default=6, ge=0, description="Keep last N messages untouched")
     target_ratio: float = Field(default=0.5, ge=0.1, le=1.0, description="Target compression ratio")
@@ -47,14 +52,20 @@ class ContextBudget(BaseModel):
 
     # ── Phase 4 (F6): Lossy compression caps ────────────────────────
     message_head_chars: int = Field(
-        default=120, ge=20, le=1000,
+        default=120,
+        ge=20,
+        le=1000,
         description="Keep this many chars from the start of a long message (F6).",
     )
     message_tail_chars: int = Field(
-        default=120, ge=0, le=1000,
+        default=120,
+        ge=0,
+        le=1000,
         description="Keep this many chars from the end of a long message (F6).",
     )
     summary_max_chars: int = Field(
-        default=2000, ge=200, le=50000,
+        default=2000,
+        ge=200,
+        le=50000,
         description="Max chars for the aggregated summary preamble (F6).",
     )

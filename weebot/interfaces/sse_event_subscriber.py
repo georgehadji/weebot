@@ -1,9 +1,10 @@
 """SSE stream subscriber — yields Server-Sent Events formatted strings from the event bus."""
+
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import (
@@ -24,7 +25,7 @@ class SSEEventSubscriber:
 
     def __init__(self) -> None:
         self._queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
-        self._handler_id: Optional[int] = None
+        self._handler_id: int | None = None
 
     async def _on_event(self, event: AgentEvent) -> None:
         await self._queue.put(event)
@@ -50,23 +51,33 @@ class SSEEventSubscriber:
         base = {
             "type": event.type,
             "id": event.id,
-            "timestamp": event.timestamp.isoformat() if hasattr(event.timestamp, "isoformat") else str(event.timestamp),
+            "timestamp": (
+                event.timestamp.isoformat()
+                if hasattr(event.timestamp, "isoformat")
+                else str(event.timestamp)
+            ),
         }
         if isinstance(event, MessageEvent):
             base["role"] = event.role
             base["message"] = event.message
         elif isinstance(event, PlanEvent):
-            base["status"] = event.status.value if hasattr(event.status, "value") else str(event.status)
+            base["status"] = (
+                event.status.value if hasattr(event.status, "value") else str(event.status)
+            )
             base["plan"] = event.plan
             base["step"] = event.step
         elif isinstance(event, StepEvent):
             base["step_id"] = event.step_id
             base["description"] = event.description
-            base["status"] = event.status.value if hasattr(event.status, "value") else str(event.status)
+            base["status"] = (
+                event.status.value if hasattr(event.status, "value") else str(event.status)
+            )
         elif isinstance(event, ToolEvent):
             base["tool_name"] = event.tool_name
             base["function_name"] = event.function_name
-            base["status"] = event.status.value if hasattr(event.status, "value") else str(event.status)
+            base["status"] = (
+                event.status.value if hasattr(event.status, "value") else str(event.status)
+            )
             base["result"] = event.result
         elif isinstance(event, TitleEvent):
             base["title"] = event.title

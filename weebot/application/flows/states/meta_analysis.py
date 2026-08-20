@@ -5,15 +5,17 @@ cheap meta-critique of the full trajectory.  The resulting meta-notes are
 stored in session.context.meta_notes and injected into future planning
 cycles so the planner learns from past successes and failures.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import FlowState
-from weebot.domain.models.event import AgentEvent, PlanEvent, StepStatus as EventStepStatus
+from weebot.domain.models.event import AgentEvent, StepStatus as EventStepStatus
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +35,14 @@ class MetaAnalysisState(FlowState):
     # A dedicated META_ANALYZING value can be added to AgentStatus later.
     status = None  # Intentionally None — state transition is transparent
 
-    async def execute(
-        self, context: PlanActFlow, prompt: str
-    ) -> AsyncGenerator[AgentEvent, None]:
-        from weebot.application.flows.states.completed import CompletedState
+    async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 
         plan = context._plan
         session = context._session
 
         # ── Gather trajectory data ──
         task_description = session.context.original_task or prompt or "(no task)"
-        plan_summary = (
-            f"{plan.title}: {plan.message}" if plan else "(no plan)"
-        )
+        plan_summary = f"{plan.title}: {plan.message}" if plan else "(no plan)"
 
         step_results: list[tuple[str, str]] = []
         failures: list[str] = []
@@ -53,6 +50,7 @@ class MetaAnalysisState(FlowState):
 
         for event in session.events:
             from weebot.domain.models.event import StepEvent, ErrorEvent, ToolEvent
+
             if isinstance(event, StepEvent) and event.status == EventStepStatus.COMPLETED:
                 step_results.append((event.step_id, event.description or ""))
             elif isinstance(event, ErrorEvent) and event.error:
@@ -75,10 +73,7 @@ class MetaAnalysisState(FlowState):
 
             if result.meta_note and result.meta_note != "No actionable insights":
                 context._session = context._session.add_meta_note(result.meta_note)
-                context._log.info(
-                    "Meta-analysis produced note: %s",
-                    result.meta_note[:120],
-                )
+                context._log.info("Meta-analysis produced note: %s", result.meta_note[:120])
             else:
                 context._log.debug("Meta-analysis produced no actionable insights")
         except Exception as exc:
@@ -89,14 +84,12 @@ class MetaAnalysisState(FlowState):
 
         # ── Transition to VerifyingState (CoVe) → CompletedState ──
         from weebot.application.flows.states.verifying import VerifyingState
+
         context.set_state(VerifyingState())
 
 
 async def _maybe_distil_skill(
-    context: "PlanActFlow",
-    step_results: list[tuple[str, str]],
-    failures: list[str],
-    tool_count: int,
+    context: PlanActFlow, step_results: list[tuple[str, str]], failures: list[str], tool_count: int
 ) -> None:
     """Run live skill distillation if the feature flag is enabled.
 
@@ -123,14 +116,12 @@ async def _maybe_distil_skill(
             trajectory_lines.append(f"  - [{step_id}] {desc}")
         trajectory_text = "\n".join(trajectory_lines)
 
-        skill = await distiller.analyze_session(
-            session_id=session.id,
-            trajectory=trajectory_text,
-        )
+        skill = await distiller.analyze_session(session_id=session.id, trajectory=trajectory_text)
         if skill is not None:
             # Publish lifecycle event for observability
             try:
                 from weebot.domain.models.event import SkillDistilled
+
                 ev = SkillDistilled(
                     session_id=session.id,
                     skill_name=skill.name,
@@ -143,14 +134,15 @@ async def _maybe_distil_skill(
                 pass  # observability failure must never block flow
             context._log.info(
                 "Phase 1: distilled quarantined skill '%s' from session %s",
-                skill.name, session.id[:8],
+                skill.name,
+                session.id[:8],
             )
             await _maybe_review_skill(context, skill)
     except Exception as exc:
         context._log.warning("Phase 1 skill distillation failed (non-blocking): %s", exc)
 
 
-async def _maybe_review_skill(context: "PlanActFlow", skill) -> None:
+async def _maybe_review_skill(context: PlanActFlow, skill) -> None:
     """Review a freshly-distilled (quarantined) skill and promote it to
     candidate on pass, closing the loop AutonomousSkillCreator starts.
 
@@ -167,19 +159,21 @@ async def _maybe_review_skill(context: "PlanActFlow", skill) -> None:
     try:
         promoted_skill, review = await review_gate.apply(skill)
         if not review.promoted:
-            context._log.debug(
-                "Skill '%s' review rejected: %s", skill.name, review.summary,
-            )
+            context._log.debug("Skill '%s' review rejected: %s", skill.name, review.summary)
             return
 
         context._log.info(
             "Skill '%s' promoted quarantined -> candidate "
             "(coherence=%.2f value=%.2f safety=%.2f similarity=%.2f)",
-            skill.name, review.coherence, review.value,
-            review.safety, review.similarity,
+            skill.name,
+            review.coherence,
+            review.value,
+            review.safety,
+            review.similarity,
         )
         try:
             from weebot.domain.models.event import SkillPromoted
+
             ev = SkillPromoted(
                 skill_name=skill.name,
                 from_tier="quarantined",

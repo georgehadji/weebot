@@ -4,10 +4,10 @@ Extracted from the original domain/models/user_profile.py monolith as
 part of architecture remediation (step-6).  Adapt the port to different
 backends via the composition root.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from weebot.domain.models.user_profile import UserProfile
 
@@ -21,7 +21,7 @@ class ProfileStoragePort(ABC):
         ...
 
     @abstractmethod
-    async def load_profile(self, user_id: str) -> Optional[UserProfile]:
+    async def load_profile(self, user_id: str) -> UserProfile | None:
         """Load a user profile by user ID."""
         ...
 

@@ -5,13 +5,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping
+from typing import Literal
+from collections.abc import Mapping
 
-from .constants import (
-    DEFAULT_API_URL,
-    DEFAULT_AUTH_URL,
-    DEFAULT_POW_SCRYPT_SALT_HEX,
-)
+from .constants import DEFAULT_API_URL, DEFAULT_AUTH_URL, DEFAULT_POW_SCRYPT_SALT_HEX
 from .credentials import SkillFiles, default_files_from_out_dir, try_read_credentials
 
 ConfigSource = Literal["credentials-file", "env", "mixed", "defaults"]
@@ -61,8 +58,7 @@ def _pick_env(env: Mapping[str, str], key: str) -> str | None:
 
 
 def resolve_agent_config_from_env(
-    env: Mapping[str, str] | None = None,
-    credential_dir: str | None = None,
+    env: Mapping[str, str] | None = None, credential_dir: str | None = None
 ) -> ResolvedAgentConfig:
     current_env = env or os.environ
     resolved_credential_dir = (
@@ -81,9 +77,7 @@ def resolve_agent_config_from_env(
     auth_url = env_auth_url or (file_creds.authUrl if file_creds else None) or DEFAULT_AUTH_URL
     api_url = env_api_url or (file_creds.apiUrl if file_creds else None) or DEFAULT_API_URL
     scrypt_salt = (
-        env_salt
-        or (file_creds.scryptSalt if file_creds else None)
-        or DEFAULT_POW_SCRYPT_SALT_HEX
+        env_salt or (file_creds.scryptSalt if file_creds else None) or DEFAULT_POW_SCRYPT_SALT_HEX
     )
     api_key = env_api_key or (file_creds.apiKey if file_creds else None)
     inbox_id = file_creds.inboxId if file_creds else None

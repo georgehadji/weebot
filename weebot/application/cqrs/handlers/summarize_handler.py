@@ -7,9 +7,10 @@ from mediator infra (event fan-out, pipeline behaviors). The prior
 ``DeprecationWarning`` here was inaccurate — see
 tasks/specs/pre_existing_architecture_debt_plan.md, RC-1.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
 
 from weebot.application.cqrs.base import CommandHandler, CommandResult
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 from weebot.application.cqrs.commands import SummarizeCommand
 
 # SummarizeHandler delegates to ExecutorAgent — no extra imports needed
+
 
 class SummarizeHandler(CommandHandler):
     """Generate a final summary via the executor agent through the mediator."""
@@ -51,14 +53,7 @@ class SummarizeHandler(CommandHandler):
                 await self._state_repo.save_session(session)
 
             return CommandResult.ok(
-                data={
-                    "session_id": command.session_id,
-                    "events": events,
-                    "status": "summarized",
-                }
+                data={"session_id": command.session_id, "events": events, "status": "summarized"}
             )
         except Exception as exc:
-            return CommandResult.fail(
-                error=str(exc), error_code="SUMMARIZE_ERROR"
-            )
-
+            return CommandResult.fail(error=str(exc), error_code="SUMMARIZE_ERROR")

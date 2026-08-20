@@ -14,12 +14,13 @@ This service is that connection: it writes a trusted skill out as a
 SKILL.md the registry can parse, then reloads the registry and refreshes the
 live retriever's index so the skill becomes retrievable in the same process.
 """
+
 from __future__ import annotations
 
 import inspect
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -54,10 +55,7 @@ class SkillMaterializer:
     """
 
     def __init__(
-        self,
-        registry: SkillRegistry,
-        retriever: Optional[Any] = None,
-        skills_dir: Optional[Path] = None,
+        self, registry: SkillRegistry, retriever: Any | None = None, skills_dir: Path | None = None
     ) -> None:
         self._registry = registry
         self._retriever = retriever
@@ -93,7 +91,9 @@ class SkillMaterializer:
                 logger.warning(
                     "Skill '%s' materialized to disk but retriever refresh "
                     "failed — it will not be retrievable until the next "
-                    "refresh: %s", skill.name, exc,
+                    "refresh: %s",
+                    skill.name,
+                    exc,
                 )
 
         return skill_file

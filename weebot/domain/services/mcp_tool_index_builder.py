@@ -1,16 +1,15 @@
 """Pure, testable builder for the MCP tool catalog index."""
+
 from __future__ import annotations
 
-from typing import List
 
 from weebot.domain.models.mcp import MCPToolInfo
 from weebot.domain.models.mcp_catalog import MCPToolCatalogIndex
 
 
 def build_index(
-    tools: List[MCPToolInfo],
-    embeddings: List[List[float]] | None = None,
-) -> List[MCPToolCatalogIndex]:
+    tools: list[MCPToolInfo], embeddings: list[list[float]] | None = None
+) -> list[MCPToolCatalogIndex]:
     """Build a searchable catalog index from tool metadata and embeddings.
 
     Args:
@@ -30,7 +29,7 @@ def build_index(
             f"tools ({len(tools)}) and embeddings ({len(embeddings)}) must have the same length"
         )
 
-    indexed: List[MCPToolCatalogIndex] = []
+    indexed: list[MCPToolCatalogIndex] = []
     for i, tool in enumerate(tools):
         indexed.append(
             MCPToolCatalogIndex(

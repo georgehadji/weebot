@@ -16,22 +16,23 @@ Usage:
     templates = await awm.query(task_description="build a hero banner website")
     # templates[0].generalized_steps -> list of abstract step descriptions
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, UTC
+from typing import Any
 
 from weebot.domain.models.session import Session, SessionStatus
-from weebot.domain.models.event import AgentEvent, StepEvent, PlanEvent
-from weebot.domain.models.plan import Plan, Step
+from weebot.domain.models.plan import Plan
 from weebot.application.ports.llm_port import LLMPort
 
 logger = logging.getLogger(__name__)
 
 # ── Data model ───────────────────────────────────────────────────────────
+
 
 class WorkflowTemplate:
     """A generalized workflow induced from one or more similar sessions.
@@ -47,22 +48,23 @@ class WorkflowTemplate:
         created_at: ISO-8601 timestamp.
         last_used_at: ISO-8601 timestamp of most recent application.
     """
+
     def __init__(
         self,
         task_summary: str,
         generalized_steps: list[str],
-        source_session_ids: Optional[list[str]] = None,
+        source_session_ids: list[str] | None = None,
         success_rate: float = 0.0,
         use_count: int = 0,
-        created_at: Optional[str] = None,
-        last_used_at: Optional[str] = None,
+        created_at: str | None = None,
+        last_used_at: str | None = None,
     ) -> None:
         self.task_summary = task_summary
         self.generalized_steps = generalized_steps
         self.source_session_ids = source_session_ids or []
         self.success_rate = success_rate
         self.use_count = use_count
-        self.created_at = created_at or datetime.now(timezone.utc).isoformat()
+        self.created_at = created_at or datetime.now(UTC).isoformat()
         self.last_used_at = last_used_at or ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,7 +79,7 @@ class WorkflowTemplate:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "WorkflowTemplate":
+    def from_dict(cls, data: dict[str, Any]) -> WorkflowTemplate:
         return cls(**data)
 
     def __repr__(self) -> str:
@@ -90,6 +92,7 @@ class WorkflowTemplate:
 
 
 # ── Agent Workflow Memory ─────────────────────────────────────────────────
+
 
 class AgentWorkflowMemory:
     """Induces, stores, and retrieves reusable workflow templates.
@@ -105,7 +108,7 @@ class AgentWorkflowMemory:
 
     # ── Induction ─────────────────────────────────────────────────────────
 
-    async def induce(self, session: Session) -> Optional[WorkflowTemplate]:
+    async def induce(self, session: Session) -> WorkflowTemplate | None:
         """Extract a generalized workflow template from a completed session.
 
         Uses an LLM call to generalize the session's plan + events into
@@ -129,7 +132,9 @@ class AgentWorkflowMemory:
         # Count completed vs failed steps
         completed = sum(1 for s in plan.steps if s.status and s.status.name == "COMPLETED")
         if completed < 2:
-            logger.debug("AWM: only %d completed steps in session %s — skipping", completed, session.id)
+            logger.debug(
+                "AWM: only %d completed steps in session %s — skipping", completed, session.id
+            )
             return None
 
         # Build a compact task description for the LLM
@@ -160,14 +165,13 @@ class AgentWorkflowMemory:
             task_text = task_text[:500] + "…"
         return task_text
 
-    async def _generalize_steps(self, task: str, plan: Plan) -> Optional[dict[str, Any]]:
+    async def _generalize_steps(self, task: str, plan: Plan) -> dict[str, Any] | None:
         """LLM call: generalize concrete plan steps into abstract workflow steps.
 
         Returns dict with keys "summary" and "steps", or None on failure.
         """
         steps_text = "\n".join(
-            f"  {i+1}. {s.description or '(no description)'}"
-            for i, s in enumerate(plan.steps)
+            f"  {i+1}. {s.description or '(no description)'}" for i, s in enumerate(plan.steps)
         )
 
         prompt = (
@@ -175,8 +179,8 @@ class AgentWorkflowMemory:
             "generalize them into reusable abstract steps.\n\n"
             f"Task: {task}\n\n"
             f"Concrete steps:\n{steps_text}\n\n"
-            "Respond with JSON: {\"summary\": \"short task type summary (max 10 words)\", "
-            "\"steps\": [\"generalized step 1\", \"generalized step 2\", ...]}\n\n"
+            'Respond with JSON: {"summary": "short task type summary (max 10 words)", '
+            '"steps": ["generalized step 1", "generalized step 2", ...]}\n\n'
             "Rules:\n"
             "- Remove file paths, URLs, and specific values.\n"
             "- Keep the action pattern (e.g. 'implement the feature' → 'implement feature').\n"
@@ -186,8 +190,7 @@ class AgentWorkflowMemory:
 
         try:
             response = await self._llm.chat(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                messages=[{"role": "user", "content": prompt}], max_tokens=500
             )
             text = response.content.strip()
             # Strip markdown code fences if present
@@ -226,11 +229,7 @@ class AgentWorkflowMemory:
             self._templates.append(template)
             logger.debug("AWM: stored new template: %s", template)
 
-    async def query(
-        self,
-        task_description: str,
-        max_results: int = 3,
-    ) -> list[WorkflowTemplate]:
+    async def query(self, task_description: str, max_results: int = 3) -> list[WorkflowTemplate]:
         """Find the most relevant workflow templates for a task description.
 
         Uses simple keyword overlap as a lightweight retrieval strategy.
@@ -273,15 +272,52 @@ class AgentWorkflowMemory:
         words = re.findall(r"[a-z]+", text.lower())
         # Remove very common English stop words
         stop_words = {
-            "the", "a", "an", "is", "are", "was", "were", "be", "been",
-            "has", "have", "had", "do", "does", "did", "will", "would",
-            "can", "could", "to", "of", "in", "on", "at", "for", "with",
-            "by", "from", "this", "that", "and", "or", "but", "not",
-            "it", "its", "you", "your", "they", "their", "we", "our",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "has",
+            "have",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "can",
+            "could",
+            "to",
+            "of",
+            "in",
+            "on",
+            "at",
+            "for",
+            "with",
+            "by",
+            "from",
+            "this",
+            "that",
+            "and",
+            "or",
+            "but",
+            "not",
+            "it",
+            "its",
+            "you",
+            "your",
+            "they",
+            "their",
+            "we",
+            "our",
         }
         return {w for w in words if w not in stop_words and len(w) > 2}
 
-    def _find_similar(self, summary: str, threshold: float = 0.7) -> Optional[WorkflowTemplate]:
+    def _find_similar(self, summary: str, threshold: float = 0.7) -> WorkflowTemplate | None:
         """Find an existing template with similar summary."""
         tokens = self._tokenize(summary)
         for template in self._templates:
@@ -304,12 +340,12 @@ class AgentWorkflowMemory:
         # Weighted-average success rate
         total = target.use_count + incoming.use_count + 1
         target.success_rate = (
-            target.success_rate * (target.use_count + 1) +
-            incoming.success_rate * (incoming.use_count + 1)
+            target.success_rate * (target.use_count + 1)
+            + incoming.success_rate * (incoming.use_count + 1)
         ) / total
 
         target.use_count += 1
-        target.last_used_at = datetime.now(timezone.utc).isoformat()
+        target.last_used_at = datetime.now(UTC).isoformat()
 
         # Extend steps with any new ones from incoming
         existing_set = set(s.strip().lower() for s in target.generalized_steps)

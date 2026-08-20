@@ -4,18 +4,18 @@ Maps to Hermes Evolution Phase 2.1.  Uses FastAPI EventSourceResponse
 to push AgentEvent serializations as server-sent events.  The frontend
 consumes these to display live reasoning, tool execution, and status.
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from weebot.application.ports.event_bus_port import EventBusPort, EventHandler
+from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.domain.models.event import AgentEvent
 from weebot.interfaces.web.bounded_drop_oldest_queue import BoundedDropOldestQueue
 
@@ -42,19 +42,16 @@ async def stream_events(request: Request):
             console.log(data.tool_name, data.status);
         });
     """
-    event_bus: Optional[EventBusPort] = None
+    event_bus: EventBusPort | None = None
     try:
         container = request.app.state.container
         event_bus = container.get(EventBusPort)
     except (AttributeError, KeyError):
-        return JSONResponse(
-            status_code=503,
-            content={"error": "Event bus not available"},
-        )
+        return JSONResponse(status_code=503, content={"error": "Event bus not available"})
 
     async def event_generator():
         """Yield SSE messages for each AgentEvent published on the bus."""
-        queue: BoundedDropOldestQueue[Optional[AgentEvent]] = BoundedDropOldestQueue(
+        queue: BoundedDropOldestQueue[AgentEvent | None] = BoundedDropOldestQueue(
             maxsize=_SUBSCRIBER_QUEUE_MAXSIZE
         )
 
@@ -85,10 +82,7 @@ async def stream_events(request: Request):
                 except Exception:
                     data = {"type": event_type, "error": "serialization_failed"}
 
-                yield {
-                    "event": event_type,
-                    "data": json.dumps(data, default=str),
-                }
+                yield {"event": event_type, "data": json.dumps(data, default=str)}
         except asyncio.CancelledError:
             pass
         finally:

@@ -14,98 +14,93 @@ Features:
 
 Usage:
     from weebot.core.dashboard import DashboardServer
-    
+
     # Start dashboard server
     dashboard = DashboardServer(port=8080)
     await dashboard.start()
-    
+
     # Or run in background
     dashboard.run_in_background()
-    
+
     # Access at http://localhost:8080
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import time
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Callable
+from datetime import datetime, timedelta, UTC
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
     """Return timezone-aware UTC timestamp."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
 class MetricPoint:
     """A single metric data point with timestamp."""
+
     timestamp: datetime
     value: float
-    labels: Dict[str, str] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 class MetricsStore:
     """In-memory store for time-series metrics."""
-    
+
     def __init__(self, max_points: int = 1000):
-        self._metrics: Dict[str, deque] = {}
+        self._metrics: dict[str, deque] = {}
         self._max_points = max_points
-    
+
     def record(self, metric_name: str, value: float, **labels):
         """Record a metric value."""
         if metric_name not in self._metrics:
             self._metrics[metric_name] = deque(maxlen=self._max_points)
-        
-        self._metrics[metric_name].append(MetricPoint(
-            timestamp=_utc_now(),
-            value=value,
-            labels=labels
-        ))
-    
-    def get_latest(self, metric_name: str) -> Optional[MetricPoint]:
+
+        self._metrics[metric_name].append(
+            MetricPoint(timestamp=_utc_now(), value=value, labels=labels)
+        )
+
+    def get_latest(self, metric_name: str) -> MetricPoint | None:
         """Get the latest value for a metric."""
         if metric_name not in self._metrics or not self._metrics[metric_name]:
             return None
         return self._metrics[metric_name][-1]
-    
+
     def get_series(
-        self,
-        metric_name: str,
-        duration: timedelta = timedelta(minutes=5)
-    ) -> List[MetricPoint]:
+        self, metric_name: str, duration: timedelta = timedelta(minutes=5)
+    ) -> list[MetricPoint]:
         """Get time series for a metric within duration."""
         if metric_name not in self._metrics:
             return []
-        
+
         cutoff = _utc_now() - duration
         return [p for p in self._metrics[metric_name] if p.timestamp > cutoff]
-    
+
     def get_average(
-        self,
-        metric_name: str,
-        duration: timedelta = timedelta(minutes=5)
-    ) -> Optional[float]:
+        self, metric_name: str, duration: timedelta = timedelta(minutes=5)
+    ) -> float | None:
         """Get average value for a metric."""
         series = self.get_series(metric_name, duration)
         if not series:
             return None
         return sum(p.value for p in series) / len(series)
-    
-    def list_metrics(self) -> List[str]:
+
+    def list_metrics(self) -> list[str]:
         """List all available metrics."""
         return list(self._metrics.keys())
 
 
 class SystemHealthMonitor:
     """Monitor overall system health."""
-    
+
     HEALTH_WEIGHTS = {
         "agent_success_rate": 0.25,
         "tool_success_rate": 0.20,
@@ -113,48 +108,48 @@ class SystemHealthMonitor:
         "response_time_p95": 0.20,
         "error_rate": 0.15,
     }
-    
+
     def __init__(self, metrics_store: MetricsStore):
         self.metrics = metrics_store
         self._health_score: float = 1.0
         self._last_update = _utc_now()
         self._status: str = "healthy"  # healthy, degraded, critical
-    
+
     def update(self):
         """Update health score based on current metrics."""
         scores = {}
-        
+
         # Agent success rate (target: >95%)
         agent_success = self.metrics.get_average("agent_success_rate", timedelta(minutes=5))
         scores["agent_success_rate"] = agent_success or 0.5
-        
+
         # Tool success rate (target: >95%)
         tool_success = self.metrics.get_average("tool_success_rate", timedelta(minutes=5))
         scores["tool_success_rate"] = tool_success or 0.5
-        
+
         # API availability (target: >99%)
         api_avail = self.metrics.get_average("api_availability", timedelta(minutes=5))
         scores["api_availability"] = api_avail or 1.0
-        
+
         # Response time p95 (target: <5s, inverse scale)
         resp_time = self.metrics.get_average("response_time_p95", timedelta(minutes=5))
         if resp_time:
             scores["response_time_p95"] = max(0, 1 - (resp_time / 10000))  # 10s = 0
         else:
             scores["response_time_p95"] = 1.0
-        
+
         # Error rate (target: <1%, inverse scale)
         error_rate = self.metrics.get_average("error_rate", timedelta(minutes=5))
         scores["error_rate"] = max(0, 1 - (error_rate or 0) * 100)
-        
+
         # Calculate weighted score
         total_score = 0
         for key, weight in self.HEALTH_WEIGHTS.items():
             total_score += scores.get(key, 0) * weight
-        
+
         self._health_score = total_score
         self._last_update = _utc_now()
-        
+
         # Determine status
         if total_score >= 0.9:
             self._status = "healthy"
@@ -162,18 +157,18 @@ class SystemHealthMonitor:
             self._status = "degraded"
         else:
             self._status = "critical"
-    
+
     @property
     def health_score(self) -> float:
         """Get current health score (0-1)."""
         return self._health_score
-    
+
     @property
     def status(self) -> str:
         """Get current health status."""
         return self._status
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Export health status as dictionary."""
         return {
             "score": round(self._health_score, 2),
@@ -185,18 +180,18 @@ class SystemHealthMonitor:
                     "current": self.metrics.get_average(f"{name}", timedelta(minutes=5)),
                 }
                 for name, weight in self.HEALTH_WEIGHTS.items()
-            }
+            },
         }
 
 
 class DashboardHTML:
     """Generate HTML for the dashboard."""
-    
+
     @staticmethod
     def generate(metrics_store: MetricsStore, health: SystemHealthMonitor) -> str:
         """Generate complete dashboard HTML."""
         health_data = health.to_dict()
-        
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -428,12 +423,12 @@ class DashboardHTML:
     </div>
 </body>
 </html>"""
-    
+
     @staticmethod
     def _generate_metric_cards(metrics: MetricsStore) -> str:
         """Generate metric cards HTML."""
         cards = []
-        
+
         # Define metrics to display
         metric_definitions = [
             ("active_agents", "Active Agents", "count", 0),
@@ -443,12 +438,12 @@ class DashboardHTML:
             ("total_cost", "Total Cost (24h)", "usd", 0),
             ("error_count", "Errors (5m)", "count", 0),
         ]
-        
+
         for metric_name, title, unit, default in metric_definitions:
             value = metrics.get_average(metric_name, timedelta(minutes=5))
             if value is None:
                 value = default
-            
+
             # Format value based on unit
             if unit == "percent":
                 display_value = f"{value:.1%}"
@@ -458,16 +453,16 @@ class DashboardHTML:
                 display_value = f"${value:.4f}"
             else:
                 display_value = f"{value:.0f}"
-            
+
             cards.append(f"""
             <div class="metric-card">
                 <div class="metric-title">{title}</div>
                 <div class="metric-value">{display_value}</div>
             </div>
             """)
-        
+
         return "\n".join(cards)
-    
+
     @staticmethod
     def _generate_workflows_table(metrics: MetricsStore) -> str:
         """Generate workflows table HTML."""
@@ -508,7 +503,7 @@ class DashboardHTML:
             </tbody>
         </table>
         """
-    
+
     @staticmethod
     def _generate_alerts_table(metrics: MetricsStore) -> str:
         """Generate alerts table HTML."""
@@ -550,28 +545,23 @@ class DashboardHTML:
 class DashboardServer:
     """
     Built-in dashboard web server.
-    
+
     Provides a self-hosted web interface for system monitoring
     without external dependencies like Grafana.
     """
-    
-    def __init__(
-        self,
-        port: int = 8080,
-        host: str = "127.0.0.1",
-        api_token: Optional[str] = None,
-    ):
+
+    def __init__(self, port: int = 8080, host: str = "127.0.0.1", api_token: str | None = None):
         self.port = port
         self.host = host
         self.api_token = api_token
         self.metrics = MetricsStore()
         self.health = SystemHealthMonitor(self.metrics)
-        self._server: Optional[Any] = None
+        self._server: Any | None = None
         self._running = False
 
     @staticmethod
-    def _parse_headers(lines: List[str]) -> Dict[str, str]:
-        headers: Dict[str, str] = {}
+    def _parse_headers(lines: list[str]) -> dict[str, str]:
+        headers: dict[str, str] = {}
         for line in lines[1:]:
             if not line:
                 break
@@ -581,7 +571,7 @@ class DashboardServer:
             headers[key.strip().lower()] = value.strip()
         return headers
 
-    def _is_authorized(self, headers: Dict[str, str]) -> bool:
+    def _is_authorized(self, headers: dict[str, str]) -> bool:
         """Require bearer token for API endpoints when token auth is configured."""
         if not self.api_token:
             return True
@@ -595,26 +585,26 @@ class DashboardServer:
             if not request:
                 return
             request_str = request.decode(errors="replace")
-            
+
             # Parse path
             lines = request_str.split("\r\n")
             if not lines:
                 return
-            
+
             request_line = lines[0]
             parts = request_line.split()
             if len(parts) < 2:
                 return
-            
+
             path = parts[1].split("?", 1)[0]
             headers = self._parse_headers(lines)
-            
+
             # Update health before serving
             self.health.update()
-            
+
             # Route request
             status, response_body, content_type = self._route_request(path, headers)
-            
+
             # Send response
             body_bytes = response_body.encode("utf-8")
             response = (
@@ -629,11 +619,11 @@ class DashboardServer:
                 "img-src 'self' data:; script-src 'self'\r\n"
                 "Connection: close\r\n"
                 "\r\n"
-            ).encode("utf-8") + body_bytes
-            
+            ).encode() + body_bytes
+
             writer.write(response)
             await writer.drain()
-            
+
         except Exception:
             _log.exception("Error handling dashboard request")
             try:
@@ -651,20 +641,12 @@ class DashboardServer:
             writer.close()
             await writer.wait_closed()
 
-    def _route_request(self, path: str, headers: Dict[str, str]) -> tuple[str, str, str]:
+    def _route_request(self, path: str, headers: dict[str, str]) -> tuple[str, str, str]:
         if path.startswith("/api/") and not self._is_authorized(headers):
-            return (
-                "401 Unauthorized",
-                json.dumps({"error": "Unauthorized"}),
-                "application/json",
-            )
+            return ("401 Unauthorized", json.dumps({"error": "Unauthorized"}), "application/json")
 
         if path == "/" or path == "/index.html":
-            return (
-                "200 OK",
-                DashboardHTML.generate(self.metrics, self.health),
-                "text/html",
-            )
+            return ("200 OK", DashboardHTML.generate(self.metrics, self.health), "text/html")
         if path == "/api/metrics":
             return (
                 "200 OK",
@@ -680,45 +662,41 @@ class DashboardServer:
         if path == "/api/health":
             return "200 OK", json.dumps(self.health.to_dict()), "application/json"
         return "404 Not Found", json.dumps({"error": "Not found"}), "application/json"
-    
+
     async def start(self):
         """Start the dashboard server."""
-        self._server = await asyncio.start_server(
-            self.handle_request,
-            self.host,
-            self.port
-        )
+        self._server = await asyncio.start_server(self.handle_request, self.host, self.port)
         self._running = True
-        
+
         print(f"🚀 Dashboard server running at http://{self.host}:{self.port}")
         print(f"   Health endpoint: http://{self.host}:{self.port}/api/health")
         print(f"   Metrics endpoint: http://{self.host}:{self.port}/api/metrics")
-        
+
         async with self._server:
             await self._server.serve_forever()
-    
+
     def stop(self):
         """Stop the dashboard server."""
         if self._server:
             self._server.close()
             self._running = False
             print("Dashboard server stopped")
-    
+
     def run_in_background(self):
         """Run server in background thread."""
         import threading
-        
+
         def run_server():
             asyncio.run(self.start())
-        
+
         thread = threading.Thread(target=run_server, daemon=True)
         thread.start()
         print(f"Dashboard server started in background on port {self.port}")
-    
+
     def record_metric(self, name: str, value: float, **labels):
         """Record a metric from the application."""
         self.metrics.record(name, value, **labels)
-    
+
     @property
     def is_running(self) -> bool:
         """Check if server is running."""
@@ -727,9 +705,7 @@ class DashboardServer:
 
 # Convenience function for quick setup
 def start_dashboard(
-    port: int = 8080,
-    host: str = "127.0.0.1",
-    api_token: Optional[str] = None,
+    port: int = 8080, host: str = "127.0.0.1", api_token: str | None = None
 ) -> DashboardServer:
     """Create and start a dashboard server."""
     dashboard = DashboardServer(port=port, host=host, api_token=api_token)

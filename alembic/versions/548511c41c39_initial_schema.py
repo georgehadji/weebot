@@ -1,18 +1,18 @@
 """initial_schema
 
 Revision ID: 548511c41c39
-Revises: 
+Revises:
 Create Date: 2026-06-12 13:32:58.668007
 
 """
-from typing import Sequence, Union
+
+from typing import Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
-revision: str = '548511c41c39'
+revision: str = "548511c41c39"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,8 +32,7 @@ def upgrade() -> None:
     manage their own databases and are NOT covered by this migration.
     """
     # ── Sessions table ─────────────────────────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
@@ -45,18 +44,12 @@ def upgrade() -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-        """
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)"
-    )
+        """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status)")
 
     # ── Pending opportunities ───────────────────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE IF NOT EXISTS pending_opportunities (
             id TEXT PRIMARY KEY,
             prompt TEXT NOT NULL,
@@ -68,15 +61,11 @@ def upgrade() -> None:
             presented INTEGER NOT NULL DEFAULT 0,
             accepted INTEGER NOT NULL DEFAULT 0
         )
-        """
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS idx_opp_presented ON pending_opportunities(presented)"
-    )
+        """)
+    op.execute("CREATE INDEX IF NOT EXISTS idx_opp_presented ON pending_opportunities(presented)")
 
     # ── Behavioral rules ────────────────────────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE IF NOT EXISTS behavioral_rules (
             id TEXT PRIMARY KEY,
             rule_text TEXT NOT NULL,
@@ -87,23 +76,19 @@ def upgrade() -> None:
             applied_count INTEGER NOT NULL DEFAULT 0,
             last_applied_at TEXT
         )
-        """
-    )
+        """)
 
     # ── FTS5 virtual table for event search ─────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(
             session_id,
             event_data,
             content=''
         )
-        """
-    )
+        """)
 
     # ── Jobs table (scheduler) ──────────────────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             job_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -121,8 +106,7 @@ def upgrade() -> None:
             last_error TEXT,
             enabled INTEGER DEFAULT 1
         )
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

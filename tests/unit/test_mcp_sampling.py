@@ -1,7 +1,7 @@
 """Unit tests for MCP sampling handler and rate limiter."""
+
 from __future__ import annotations
 
-import asyncio
 import pytest
 
 from weebot.application.services.mcp_sampling_handler import (
@@ -52,10 +52,7 @@ class TestMCPSamplingHandler:
     @pytest.mark.asyncio
     async def test_model_not_in_allowlist(self):
         policy = MCPSamplingPolicy(model_allowlist=["claude-3-sonnet"])
-        request = SamplingRequest(
-            messages=[{"role": "user", "content": "Hello"}],
-            model="gpt-4",
-        )
+        request = SamplingRequest(messages=[{"role": "user", "content": "Hello"}], model="gpt-4")
         result = await self.handler.handle_sampling("test-server", request, policy)
         assert result is None
 
@@ -63,8 +60,7 @@ class TestMCPSamplingHandler:
     async def test_model_in_allowlist(self):
         policy = MCPSamplingPolicy(model_allowlist=["claude-3-sonnet"])
         request = SamplingRequest(
-            messages=[{"role": "user", "content": "Hello"}],
-            model="claude-3-sonnet",
+            messages=[{"role": "user", "content": "Hello"}], model="claude-3-sonnet"
         )
         result = await self.handler.handle_sampling("test-server", request, policy)
         assert result is not None
@@ -74,10 +70,7 @@ class TestMCPSamplingHandler:
     async def test_token_cap_enforced(self):
         """max_tokens_per_request should cap the request's max_tokens."""
         policy = MCPSamplingPolicy(max_tokens_per_request=100)
-        request = SamplingRequest(
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=9999,
-        )
+        request = SamplingRequest(messages=[{"role": "user", "content": "Hello"}], max_tokens=9999)
         result = await self.handler.handle_sampling("test-server", request, policy)
         assert result is not None
         # Internal dispatch uses effective_max_tokens which is min(9999, 100)
@@ -87,9 +80,7 @@ class TestMCPSamplingHandler:
     @pytest.mark.asyncio
     async def test_no_provider_stub_result(self):
         policy = MCPSamplingPolicy()
-        request = SamplingRequest(
-            messages=[{"role": "user", "content": "Hello"}],
-        )
+        request = SamplingRequest(messages=[{"role": "user", "content": "Hello"}])
         result = await self.handler.handle_sampling("test-server", request, policy)
         assert result is not None
         assert isinstance(result, SamplingResult)

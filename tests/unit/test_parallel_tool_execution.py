@@ -1,7 +1,7 @@
 """Tests for Phase 2: Parallel tool execution in ExecutorAgent."""
+
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from pydantic import PrivateAttr
 
@@ -11,6 +11,7 @@ from weebot.tools.base import BaseTool, ToolResult
 
 class _SlowTool(BaseTool):
     """Tool that takes a configurable delay."""
+
     name: str = "slow_tool"
     description: str = "Slow test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -35,6 +36,7 @@ class _SlowTool(BaseTool):
 
 class _FastTool(BaseTool):
     """Tool that returns immediately."""
+
     name: str = "fast_tool"
     description: str = "Fast test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -45,6 +47,7 @@ class _FastTool(BaseTool):
 
 class _SingleConcurTool(BaseTool):
     """Tool with max_concurrent=1 to test semaphore."""
+
     name: str = "single_concur"
     description: str = "Single-concurrency test tool"
     parameters: dict = {"type": "object", "properties": {}}
@@ -71,16 +74,13 @@ class _SingleConcurTool(BaseTool):
 @pytest.mark.asyncio
 async def test_results_in_declared_order():
     """Two tools complete in reverse order; results match declared order."""
-    tools = ToolCollection(
-        _SlowTool(name="slow_a", delay=0.2),
-        _FastTool(name="fast_b"),
-    )
+    tools = ToolCollection(_SlowTool(name="slow_a", delay=0.2), _FastTool(name="fast_b"))
     tool_calls = [
         {"function": {"name": "slow_a", "arguments": "{}"}, "id": "call_1"},
         {"function": {"name": "fast_b", "arguments": "{}"}, "id": "call_2"},
     ]
     # Simulate what _execute_tool_batch does
-    from weebot.application.agents.executor import ExecutorAgent
+
     # Use the batch method directly (unit test)
     tasks = [tools.execute(_name=tc["function"]["name"]) for tc in tool_calls]
     raw = await asyncio.gather(*tasks, return_exceptions=True)
@@ -95,8 +95,7 @@ async def test_results_in_declared_order():
 async def test_one_failure_does_not_abort_batch():
     """Tool 1 raises; tool 2 succeeds; both results present."""
     tools = ToolCollection(
-        _SlowTool(name="fail_tool", fail=True, delay=0.01),
-        _FastTool(name="ok_tool"),
+        _SlowTool(name="fail_tool", fail=True, delay=0.01), _FastTool(name="ok_tool")
     )
     tool_calls = [
         {"function": {"name": "fail_tool", "arguments": "{}"}, "id": "call_1"},
@@ -153,6 +152,6 @@ async def test_semaphore_limits_concurrent():
     tasks = [call() for _ in range(5)]
     await asyncio.gather(*tasks)
 
-    assert tool.max_concurrent_seen <= 1, (
-        f"Expected max_concurrent_seen <= 1, got {tool.max_concurrent_seen}"
-    )
+    assert (
+        tool.max_concurrent_seen <= 1
+    ), f"Expected max_concurrent_seen <= 1, got {tool.max_concurrent_seen}"

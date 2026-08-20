@@ -9,20 +9,16 @@ This module lives in ``config/`` alongside ``model_registry.py`` and
 ``model_refs.py``, keeping profile data accessible without crossing layer
 boundaries.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
 from weebot.application.services.task_model_router import TaskCategory
-from weebot.domain.models.capability import (
-    CapabilityAxis,
-    ModelQualityProfile,
-    TaskRequirement,
-)
+from weebot.domain.models.capability import CapabilityAxis, ModelQualityProfile, TaskRequirement
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +59,7 @@ def _load_profiles() -> dict[str, ModelQualityProfile]:
                         continue
                     axes[axis] = float(val)
                 seeds[model_id] = ModelQualityProfile(
-                    model_id=model_id,
-                    axes=axes,
-                    source=data.get("source", "seed"),
+                    model_id=model_id, axes=axes, source=data.get("source", "seed")
                 )
             logger.info("Loaded %d seed profiles from %s", len(seeds), _PROFILES_PATH)
         except Exception as exc:
@@ -76,13 +70,15 @@ def _load_profiles() -> dict[str, ModelQualityProfile]:
     merged = {**seeds, **benchmarks}
     logger.info(
         "Quality profiles: %d seeds + %d benchmarks = %d total",
-        len(seeds), len(benchmarks), len(merged),
+        len(seeds),
+        len(benchmarks),
+        len(merged),
     )
     _profiles_cache = merged
     return merged
 
 
-def get_profile(model_id: str) -> Optional[ModelQualityProfile]:
+def get_profile(model_id: str) -> ModelQualityProfile | None:
     """Return the quality profile for *model_id*, or ``None`` if not found."""
     return _load_profiles().get(model_id)
 
@@ -101,6 +97,7 @@ def refresh() -> None:
 
 # ── Benchmark profile persistence ───────────────────────────────────
 
+
 def _load_benchmarks() -> dict[str, ModelQualityProfile]:
     """Load benchmark profiles from JSON cache file."""
     global _benchmark_cache
@@ -111,6 +108,7 @@ def _load_benchmarks() -> dict[str, ModelQualityProfile]:
         return {}
     try:
         import json
+
         with open(_BENCHMARK_PATH, encoding="utf-8") as f:
             raw = json.load(f)
         result: dict[str, ModelQualityProfile] = {}
@@ -124,9 +122,7 @@ def _load_benchmarks() -> dict[str, ModelQualityProfile]:
                     continue
                 axes[axis] = float(val)
             result[model_id] = ModelQualityProfile(
-                model_id=model_id,
-                axes=axes,
-                source=data.get("source", "benchmark"),
+                model_id=model_id, axes=axes, source=data.get("source", "benchmark")
             )
         _benchmark_cache = result
         return result
@@ -146,15 +142,13 @@ def save_benchmark_profile(profile: ModelQualityProfile) -> None:
         profile: A ``ModelQualityProfile`` with ``source="benchmark"``.
     """
     import json
+
     benchmarks = _load_benchmarks()
     benchmarks[profile.model_id] = profile
     # Serialise to JSON
     serialised = {}
     for mid, p in benchmarks.items():
-        serialised[mid] = {
-            "axes": {k.value: v for k, v in p.axes.items()},
-            "source": p.source,
-        }
+        serialised[mid] = {"axes": {k.value: v for k, v in p.axes.items()}, "source": p.source}
     try:
         with open(_BENCHMARK_PATH, "w", encoding="utf-8") as f:
             json.dump(serialised, f, indent=2)
@@ -188,10 +182,7 @@ _TASK_REQUIREMENTS: dict[TaskCategory, TaskRequirement] = {
         requires_vision=False,
         requires_tools=True,
         min_context=8000,
-        quality_weights={
-            CapabilityAxis.CODING: 1.0,
-            CapabilityAxis.TOOL_USE: 3.0,
-        },
+        quality_weights={CapabilityAxis.CODING: 1.0, CapabilityAxis.TOOL_USE: 3.0},
         utility_coeff={"alpha": 0.2, "beta": 0.3, "delta": 0.3, "epsilon": 0.2},
     ),
     TaskCategory.RESEARCH: TaskRequirement(
@@ -280,10 +271,7 @@ def get_requirement(category: TaskCategory) -> TaskRequirement:
 
     Falls back to GENERAL if the category is unknown.
     """
-    return _TASK_REQUIREMENTS.get(
-        category,
-        _TASK_REQUIREMENTS[TaskCategory.GENERAL],
-    )
+    return _TASK_REQUIREMENTS.get(category, _TASK_REQUIREMENTS[TaskCategory.GENERAL])
 
 
 def get_all_requirements() -> dict[TaskCategory, TaskRequirement]:

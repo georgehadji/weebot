@@ -24,15 +24,15 @@ Auxiliary tables NOT yet under Alembic (separate DB files, tracked for future mi
   meta_edits, summaries, improvement_strategies, kg_nodes, kg_edges,
   skills, kb_notes, video_sources, requirements, misalignment_journal
 """
-from typing import Sequence, Union
+
+from typing import Union
+from collections.abc import Sequence
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
-revision: str = 'c0re_5ch3m4_v1'
-down_revision: Union[str, None] = 'e1a2b3c4d5f6'
+revision: str = "c0re_5ch3m4_v1"
+down_revision: Union[str, None] = "e1a2b3c4d5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

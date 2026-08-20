@@ -1,9 +1,14 @@
 """Run flow via direct module import, bypassing python -m Click issue."""
-import sys, os, asyncio, uuid
+
+import sys
+import asyncio
+import uuid
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 from weebot.application.di import Container
@@ -20,6 +25,7 @@ TASK = (
     "Keep it simple — write the file and report the path."
 )
 
+
 async def main():
     container = Container()
     container.configure_defaults()
@@ -28,11 +34,7 @@ async def main():
     model_service = ModelSelectionService()
     llm = model_service.create_llm_adapter("deepseek/deepseek-chat")
 
-    runner = AgentRunner(
-        llm=llm,
-        state_repo=state_repo,
-        model="deepseek/deepseek-chat",
-    )
+    runner = AgentRunner(llm=llm, state_repo=state_repo, model="deepseek/deepseek-chat")
 
     sid = str(uuid.uuid4())[:8]
     print(f"[{sid}] Running flow with DeepSeek...", flush=True)
@@ -46,6 +48,7 @@ async def main():
         print(f"[{sid}] {etype}: {msg}", flush=True)
 
     print(f"[{sid}] Done ({step_count} events)", flush=True)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -4,18 +4,20 @@ Defines WeebotTask and SamplePair for the SIA-compatible benchmark harness.
 Tasks are loaded from directories (task.md + samples.json) and run through
 PlanActFlow via BenchmarkRunner in the application layer.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
 
 
 @dataclass(frozen=True)
 class SamplePair:
     """One (prompt, expected_answer) pair within a benchmark task."""
+
     prompt: str
-    expected_answer: Optional[str] = None
+    expected_answer: str | None = None
 
 
 @dataclass(frozen=True)
@@ -27,10 +29,11 @@ class WeebotTask:
       samples.json    — list of {"prompt": "...", "expected_answer": "..."} objects
       evaluate.py     — optional custom scorer: evaluate(session, expected) -> float
     """
+
     task_id: str
     description: str
     samples: tuple[SamplePair, ...]  # frozen tuple for hashability
     pass_threshold: float = 0.5
     tags: tuple[str, ...] = field(default_factory=tuple)
-    custom_scorer: Optional[Callable] = None   # async fn(session, expected_answer) -> float
-    source_dir: Optional[Path] = None
+    custom_scorer: Callable | None = None  # async fn(session, expected_answer) -> float
+    source_dir: Path | None = None

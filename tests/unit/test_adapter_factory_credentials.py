@@ -5,12 +5,10 @@ its own settings-first/env-fallback logic, duplicating _has_direct_key()'s
 field map. Both now go through _resolve_direct_key(), so they can no
 longer disagree.
 """
+
 from __future__ import annotations
 
-from weebot.infrastructure.adapters.llm.adapter_factory import (
-    _has_direct_key,
-    _resolve_direct_key,
-)
+from weebot.infrastructure.adapters.llm.adapter_factory import _has_direct_key, _resolve_direct_key
 
 
 def test_unmapped_env_var_resolves_from_raw_environ(monkeypatch):

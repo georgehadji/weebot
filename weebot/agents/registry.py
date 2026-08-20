@@ -1,4 +1,5 @@
 """Registry for agent personas with import/export utilities."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,7 @@ import shutil
 import zipfile
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
 
 from weebot.agents.models import AgentPersona
 from weebot.agents.parser import AgentPersonaParser
@@ -27,7 +28,7 @@ class AgentRegistry:
     # CRUD
     # ------------------------------------------------------------------
 
-    def register(self, persona: AgentPersona, source_path: Optional[Path] = None) -> Path:
+    def register(self, persona: AgentPersona, source_path: Path | None = None) -> Path:
         """Register a persona and store its definition."""
         persona_path = self.registry_dir / f"{persona.persona_id}.json"
         persona_path.write_text(json.dumps(asdict(persona), indent=2), encoding="utf-8")
@@ -38,7 +39,7 @@ class AgentRegistry:
                 shutil.copyfile(source_path, dest)
         return persona_path
 
-    def get(self, persona_id: str) -> Optional[AgentPersona]:
+    def get(self, persona_id: str) -> AgentPersona | None:
         path = self.registry_dir / f"{persona_id}.json"
         if not path.exists():
             # Try by name lookup
@@ -49,8 +50,8 @@ class AgentRegistry:
         data = json.loads(path.read_text(encoding="utf-8"))
         return AgentPersona(**data)
 
-    def list_personas(self) -> List[AgentPersona]:
-        personas: List[AgentPersona] = []
+    def list_personas(self) -> list[AgentPersona]:
+        personas: list[AgentPersona] = []
         for file in self.registry_dir.glob("*.json"):
             data = json.loads(file.read_text(encoding="utf-8"))
             personas.append(AgentPersona(**data))
@@ -60,10 +61,10 @@ class AgentRegistry:
     # Import / Export
     # ------------------------------------------------------------------
 
-    def import_path(self, path: Path) -> List[AgentPersona]:
+    def import_path(self, path: Path) -> list[AgentPersona]:
         """Import agent personas from file or directory."""
         path = Path(path)
-        personas: List[AgentPersona] = []
+        personas: list[AgentPersona] = []
         if path.is_file():
             if path.suffix.lower() == ".zip":
                 personas.extend(self.import_bundle(path))
@@ -79,9 +80,9 @@ class AgentRegistry:
             personas.append(persona)
         return personas
 
-    def import_bundle(self, bundle_path: Path) -> List[AgentPersona]:
+    def import_bundle(self, bundle_path: Path) -> list[AgentPersona]:
         """Import personas from a zip bundle."""
-        personas: List[AgentPersona] = []
+        personas: list[AgentPersona] = []
         with zipfile.ZipFile(bundle_path, "r") as zf:
             zf.extractall(self.definitions_dir)
         for md_file in self.definitions_dir.rglob("*.md"):
@@ -90,7 +91,7 @@ class AgentRegistry:
             personas.append(persona)
         return personas
 
-    def export_bundle(self, output_path: Path, persona_ids: Optional[Iterable[str]] = None) -> Path:
+    def export_bundle(self, output_path: Path, persona_ids: Iterable[str] | None = None) -> Path:
         """Export personas into a zip bundle."""
         output_path = Path(output_path)
         persona_ids = set(persona_ids or [])
@@ -108,11 +109,11 @@ class AgentRegistry:
     # Sync
     # ------------------------------------------------------------------
 
-    def sync_to_claude(self, target_dir: Path, force: bool = False) -> List[Path]:
+    def sync_to_claude(self, target_dir: Path, force: bool = False) -> list[Path]:
         """Copy definitions into Claude's agents directory."""
         target_dir = Path(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
-        synced: List[Path] = []
+        synced: list[Path] = []
         for md_file in self.definitions_dir.glob("*.md"):
             dest = target_dir / md_file.name
             if dest.exists() and not force:
@@ -125,9 +126,9 @@ class AgentRegistry:
     # Packs
     # ------------------------------------------------------------------
 
-    def list_divisions(self) -> List[str]:
+    def list_divisions(self) -> list[str]:
         divisions = {p.division for p in self.list_personas() if p.division}
         return sorted(divisions)
 
-    def pack(self, division: str) -> List[AgentPersona]:
+    def pack(self, division: str) -> list[AgentPersona]:
         return [p for p in self.list_personas() if p.division.lower() == division.lower()]

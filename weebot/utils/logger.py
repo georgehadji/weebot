@@ -1,4 +1,5 @@
 """Logging utility for weebot."""
+
 import logging
 import logging.handlers
 import sys
@@ -28,16 +29,15 @@ class AgentLogger:
 
         # Rotating file handler: 5 MB max, 1 backup
         file_handler = logging.handlers.RotatingFileHandler(
-            self.log_path,
-            maxBytes=MAX_BYTES,
-            backupCount=1,
-            encoding="utf-8",
+            self.log_path, maxBytes=MAX_BYTES, backupCount=1, encoding="utf-8"
         )
         file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)-8s | %(module)-12s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)-8s | %(module)-12s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
 
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)

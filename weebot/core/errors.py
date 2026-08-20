@@ -9,7 +9,7 @@ This module provides comprehensive error handling with:
 
 Usage:
     from weebot.core.errors import WeebotError, ErrorCode, ErrorSeverity
-    
+
     raise WeebotError(
         message="Database connection failed",
         code=ErrorCode.SERVICE_UNAVAILABLE,
@@ -67,7 +67,6 @@ __all__ = [
     "ResourceNotFoundError",
     "TimeoutError",
     "APIError",
-    
     # Handler
     "ErrorHandler",
     "handle_errors",
@@ -76,14 +75,12 @@ __all__ = [
     "ErrorAggregator",
     "get_error_handler",
     "set_error_handler",
-    
     # User messages
     "get_user_message",
     "ErrorTranslator",
     "UserErrorCategory",
     "UserErrorMessage",
     "format_error_for_json",
-    
     # Security errors
     "SecurityError",
     "SecurityValidationError",

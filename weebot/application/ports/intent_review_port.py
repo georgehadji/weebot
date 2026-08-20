@@ -1,4 +1,5 @@
 """IntentReviewPort — abstract interface for reviewing idea contracts."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -14,5 +15,4 @@ class IntentReviewPort(ABC):
     """
 
     @abstractmethod
-    async def review(self, contract: IdeaContract) -> IntentReview:
-        ...
+    async def review(self, contract: IdeaContract) -> IntentReview: ...

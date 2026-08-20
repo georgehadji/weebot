@@ -8,6 +8,7 @@ Covers:
 - Empty config, missing file
 - Refresh reloads config
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,8 +19,8 @@ import yaml
 from weebot.application.services.keyword_task_router import KeywordTaskRouter
 from weebot.domain.models.task_route import TaskCategory, TaskComplexity
 
-
 # ── Test Config ─────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def minimal_config(tmp_path: Path) -> Path:
@@ -75,6 +76,7 @@ def router(minimal_config: Path) -> KeywordTaskRouter:
 
 
 # ── Tests ────────────────────────────────────────────────────────────────
+
 
 class TestRouterBasic:
     """Basic routing classification."""
@@ -198,7 +200,7 @@ class TestRouterConfig:
                     "flow_type": "chat",
                     "tool_restriction": "code_only",
                     "mandatory_rules": [],
-                },
+                }
             },
             "fallback": {
                 "flow_type": "plan_act",

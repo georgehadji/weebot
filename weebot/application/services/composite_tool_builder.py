@@ -4,6 +4,7 @@ Moves the inline handler/signature construction out of ``weebot.mcp.server``
 so composite tool behavior can be unit-tested without starting a full MCP
 server.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -25,10 +26,7 @@ from weebot.domain.models.composite_tool import CompositeToolSpec
 _VAR_PATTERN = re.compile(r"\$\{(\w+)\}")
 
 
-CompositeExecutorLike = Callable[
-    [CompositeToolSpec, dict[str, Any]],
-    Awaitable[Any],
-]
+CompositeExecutorLike = Callable[[CompositeToolSpec, dict[str, Any]], Awaitable[Any]]
 """Minimal callable used by the builder to execute a composite spec.
 
 The executor receives the spec and the runtime arguments supplied by the MCP
@@ -42,9 +40,7 @@ class CompositeToolBuilder:
     """Build a FastMCP-compatible async callable from a CompositeToolSpec."""
 
     def build(
-        self,
-        spec: CompositeToolSpec,
-        executor: CompositeExecutorLike,
+        self, spec: CompositeToolSpec, executor: CompositeExecutorLike
     ) -> Callable[..., Awaitable[CallToolResult]]:
         """Build an async handler for *spec* using *executor*.
 
@@ -59,11 +55,7 @@ class CompositeToolBuilder:
         """
         runtime_args = self._extract_runtime_args(spec)
         params = [
-            inspect.Parameter(
-                name,
-                inspect.Parameter.KEYWORD_ONLY,
-                default=None,
-            )
+            inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, default=None)
             for name in sorted(runtime_args)
         ]
         signature = inspect.Signature(params)
@@ -73,8 +65,7 @@ class CompositeToolBuilder:
                 result = await executor(spec, runtime_args=kwargs)
             except Exception as exc:  # pragma: no cover - defensive
                 return CallToolResult(
-                    content=[TextContent(type="text", text=str(exc))],
-                    isError=True,
+                    content=[TextContent(type="text", text=str(exc))], isError=True
                 )
 
             if not getattr(result, "success", False):

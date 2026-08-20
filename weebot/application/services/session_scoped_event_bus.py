@@ -11,13 +11,10 @@ anywhere a flow currently receives a bus.  Subscriber management
 (``subscribe``/``subscribe_domain``/etc.) delegates straight through —
 subscriptions are process-wide, not per-session.
 """
+
 from __future__ import annotations
 
-from weebot.application.ports.event_bus_port import (
-    DomainEventHandler,
-    EventBusPort,
-    EventHandler,
-)
+from weebot.application.ports.event_bus_port import DomainEventHandler, EventBusPort, EventHandler
 from weebot.domain.models.event import AgentEvent, DomainEvent
 
 

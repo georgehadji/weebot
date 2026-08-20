@@ -4,9 +4,10 @@ Allows the agent to verify its own outputs for safety, accuracy, and
 compliance.  Runs the AuditService on a given output text and returns
 the violation report with pass/fail verdict and score.
 """
+
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from weebot.application.ports.audit_port import AuditPort
 from weebot.application.services.audit_service import AuditService
@@ -26,10 +27,7 @@ class AuditTool(BaseTool):
     parameters: dict = {
         "type": "object",
         "properties": {
-            "output": {
-                "type": "string",
-                "description": "The output text to audit.",
-            },
+            "output": {"type": "string", "description": "The output text to audit."},
             "skill_name": {
                 "type": "string",
                 "description": "Optional skill name for threshold lookup.",
@@ -38,12 +36,13 @@ class AuditTool(BaseTool):
         "required": ["output"],
     }
 
-    _service: Optional[AuditPort] = None
+    _service: AuditPort | None = None
 
-    def __init__(self, service: Optional[AuditPort] = None, **data: Any) -> None:
+    def __init__(self, service: AuditPort | None = None, **data: Any) -> None:
         super().__init__(**data)
         if service is None:
             import importlib as _il
+
             _di_mod = _il.import_module("weebot.application.di")
             _c = _di_mod.Container()
             _c.configure_defaults()
@@ -52,10 +51,7 @@ class AuditTool(BaseTool):
 
     async def execute(self, output: str, skill_name: str = "", **_: Any) -> ToolResult:
 
-        report = await self._service.audit_output(
-            output=output,
-            skill_name=skill_name or None,
-        )
+        report = await self._service.audit_output(output=output, skill_name=skill_name or None)
 
         passed = await self._service.pass_threshold(report, skill_name or None)
 
