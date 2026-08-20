@@ -33,7 +33,7 @@ The project follows **Clean Architecture** (Hexagonal) principles:
 - **Domain Layer (`weebot/domain/`)**: Innermost layer. Business logic, entities, and port definitions. Pydantic models in `weebot/domain/models/` (Plan, Step, Session, Event).
 - **Application Layer (`weebot/application/`)**: Orchestration and use cases.
   - **Flows (`application/flows/`)**: `PlanActFlow` is the primary state machine.
-  - **Agents (`application/agents/`)**: `PlannerAgent` (planning) and `ExecutorAgent`/`StructuredExecutorAgent` (execution).
+  - **Agents (`application/agents/`)**: `PlannerAgent` (planning) and `ExecutorAgent` (execution).
   - **Skills (`application/skills/`)**: Specialized capabilities.
   - **CQRS (`application/cqrs/`)**: Mediator pattern for command/query separation.
 - **Infrastructure Layer (`weebot/infrastructure/`)**: External adapters.

@@ -11,7 +11,6 @@ from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_queue_port import TaskQueuePort, QueuedSession
-from weebot.application.services.memory_archivist import MemoryArchivist
 from weebot.domain.models.event import AgentEvent
 from weebot.domain.models.session import Session, SessionStatus
 
@@ -40,14 +39,12 @@ class TaskRunner:
         self,
         state_repo: StateRepositoryPort,
         event_bus: Optional[EventBusPort] = None,
-        archivist: Optional[MemoryArchivist] = None,
         max_pending: int = 100,
         max_session_retries: int = 3,
         task_queue: TaskQueuePort | None = None,
     ):
         self._state_repo = state_repo
         self._event_bus = event_bus
-        self._archivist = archivist
         self._max_session_retries = max_session_retries
         self._tasks: Dict[str, asyncio.Task] = {}
         self._task_queue: TaskQueuePort | None = task_queue
@@ -189,8 +186,6 @@ class TaskRunner:
         try:
             async for event in flow.run(session.context.get("last_prompt", "")):
                 session = session.add_event(event)
-                if self._archivist is not None:
-                    session = await self._archivist.archive_old_events(session)
                 await self._state_repo.save_session(session)
                 # Only publish from the runner when the flow has no event_bus of its
                 # own.  When the flow carries an event_bus (the DI container always
