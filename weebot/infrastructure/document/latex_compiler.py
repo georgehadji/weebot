@@ -14,9 +14,14 @@ callers on the sandbox path opt in explicitly. The command is still evaluated by
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
+
+_FONT_COMMAND_RE = re.compile(
+    r"\\(?:set(?:main|sans|mono)font(?:\[[^\]]*\])?|newfontfamily\\[a-zA-Z]+)\{([^}]+)\}"
+)
 
 from weebot.core.bash_guard import BashGuard, RiskLevel
 from weebot.domain.models.book import CompileError, CompileErrorCategory, CompileResult
@@ -68,6 +73,50 @@ class LatexCompilerService:
         return Path(__file__).resolve().parent / "templates" / "greek_scientific_preamble.tex"
 
     @classmethod
+    def required_fonts(cls) -> list[str]:
+        """Font families the locked preamble declares, in first-seen order.
+
+        Parses \\setmainfont/\\setsansfont/\\setmonofont/\\newfontfamily out of
+        the template itself (finding E1) rather than duplicating the family
+        list in a constant that could drift from the file it describes.
+        """
+        text = cls.locked_preamble_path().read_text(encoding="utf-8")
+        seen: list[str] = []
+        for name in _FONT_COMMAND_RE.findall(text):
+            name = name.strip()
+            if name not in seen:
+                seen.append(name)
+        return seen
+
+    @classmethod
+    def missing_fonts(cls) -> list[str]:
+        """Required font families that ``fc-list`` cannot resolve.
+
+        Fails open: if ``fc-list`` itself is unavailable, returns ``[]``
+        rather than a false "missing" — an undetectable font database must
+        never block an otherwise-valid compile.
+        """
+        if not shutil.which("fc-list"):
+            return []
+        try:
+            # text=True decodes with the locale's preferred encoding (e.g.
+            # cp1253 on a Greek-locale Windows box); fc-list emits font
+            # family names as UTF-8 regardless, and a mismatch doesn't
+            # raise -- it silently leaves .stdout as None. Decode
+            # explicitly instead.
+            out = subprocess.run(
+                ["fc-list", "--format=%{family}\n"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            ).stdout
+        except (subprocess.SubprocessError, OSError):
+            return []
+        installed = (out or "").lower()
+        return [f for f in cls.required_fonts() if f.lower() not in installed]
+
+    @classmethod
     def prepare_project(cls, project_dir: str | Path) -> Path:
         """Materialize the locked preamble into ``project_dir`` as ``preamble.tex``.
 
@@ -108,12 +157,26 @@ class LatexCompilerService:
                 ],
             )
 
+        missing = self.missing_fonts()
+        if missing:
+            return CompileResult(
+                ok=False,
+                errors=[
+                    CompileError(
+                        category=CompileErrorCategory.UNKNOWN,
+                        message=f"Required font(s) not installed: {', '.join(missing)}",
+                        fatal=True,
+                    )
+                ],
+            )
+
         proc = subprocess.Popen(
             cmd,
             cwd=str(project),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             start_new_session=(os.name != "nt"),
         )
         try:
@@ -131,7 +194,9 @@ class LatexCompilerService:
                 stdout = ""
 
         log_path = project / (Path(main_tex).stem + ".log")
-        log_text = log_path.read_text(errors="replace") if log_path.exists() else stdout
+        log_text = (
+            log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else stdout
+        )
 
         errors = parse_log(log_text)
         if timed_out:

@@ -181,6 +181,11 @@ ignore_imports =
     # Factories import PlanActFlowConfig for the sub-agent flow factory.
     weebot.interfaces.factories -> weebot.application.models.plan_act_flow_config
     # via importlib.import_module (dynamic) — undetectable by lint-imports
+    # `doctor` is a read-only diagnostic composition root (same category as
+    # the browser_use/playwright/mcp find_spec probes already in this file);
+    # it needs LatexCompilerService.missing_fonts()/toolchain_available() to
+    # report the latex_fonts check (finding E5).
+    weebot.interfaces.cli.support -> weebot.infrastructure.document.latex_compiler
 
 
 [importlinter:contract:core-no-app]

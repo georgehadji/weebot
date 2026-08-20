@@ -22,6 +22,10 @@ from weebot.infrastructure.document.latex_compiler import LatexCompilerService
 from weebot.infrastructure.document.log_parser import has_blocking_errors, parse_log
 from weebot.infrastructure.document.preflight import _parse_pdffonts, preflight_pdf
 
+# Computed once at collection time so both toolchain-gated tests below share
+# the same fc-list probe rather than shelling out twice each.
+_MISSING_FONTS = LatexCompilerService.missing_fonts()
+
 
 def _sample_book() -> Book:
     return Book(
@@ -195,6 +199,7 @@ def test_compile_timeout_returns_result_instead_of_hanging(tmp_path, monkeypatch
 @pytest.mark.skipif(
     not LatexCompilerService.toolchain_available(), reason="XeLaTeX/latexmk toolchain not installed"
 )
+@pytest.mark.skipif(bool(_MISSING_FONTS), reason=f"missing fonts: {_MISSING_FONTS}")
 def test_generation_flow_produces_print_ready_pdf(tmp_path):
     flow = BookGenerationFlow(
         compiler=LatexCompilerService(),
@@ -214,6 +219,7 @@ def test_generation_flow_produces_print_ready_pdf(tmp_path):
 @pytest.mark.skipif(
     not LatexCompilerService.toolchain_available(), reason="XeLaTeX/latexmk toolchain not installed"
 )
+@pytest.mark.skipif(bool(_MISSING_FONTS), reason=f"missing fonts: {_MISSING_FONTS}")
 def test_compile_greek_example_end_to_end(tmp_path):
     work = tmp_path / "book"
     LatexCompilerService.prepare_project(work)

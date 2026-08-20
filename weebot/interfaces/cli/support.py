@@ -303,6 +303,32 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
             )
         )
 
+    # LaTeX font dependency (finding E5). The LaTeX pipeline is optional, so
+    # a missing toolchain or missing font is a warning, not an error.
+    from weebot.infrastructure.document.latex_compiler import LatexCompilerService
+
+    if not LatexCompilerService.toolchain_available():
+        checks.append(
+            DoctorCheck(
+                name="latex_fonts", status="warn", details="XeLaTeX/latexmk toolchain not installed"
+            )
+        )
+    else:
+        missing_fonts = LatexCompilerService.missing_fonts()
+        if missing_fonts:
+            checks.append(
+                DoctorCheck(
+                    name="latex_fonts",
+                    status="warn",
+                    details=f"missing font(s): {', '.join(missing_fonts)}",
+                    data={"missing": missing_fonts},
+                )
+            )
+        else:
+            checks.append(
+                DoctorCheck(name="latex_fonts", status="ok", details="all required fonts resolve")
+            )
+
     # Tool availability.
     # Probe with find_spec, not __import__: executing browser_use/playwright/mcp
     # just to see whether they exist cost ~13 s of doctor's runtime.  find_spec

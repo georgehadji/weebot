@@ -1,5 +1,0 @@
-"""Stress test configuration."""
-
-
-def pytest_configure(config):
-    config.addinivalue_line("markers", "stress: marks stress tests (may be slow)")
