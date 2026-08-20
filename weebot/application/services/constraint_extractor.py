@@ -6,6 +6,20 @@ from dataclasses import dataclass
 from typing import List, Pattern, Tuple
 
 
+# Word-level tokenizer for check_step. Substring matching was the source of
+# the gate's measured false positives ("all" matching inside "install").
+_WORD_RE: Pattern = re.compile(r"[a-z0-9_]+")
+
+# Function words carry no evidence that a step violates a constraint, but they
+# are common enough to reach the match quorum on their own.
+_STOPWORDS: frozenset[str] = frozenset({
+    "a", "an", "the", "to", "of", "in", "on", "for", "with", "and", "or",
+    "any", "all", "my", "your", "our", "it", "its", "that", "this", "these",
+    "those", "is", "are", "be", "been", "from", "at", "by", "into", "onto",
+    "as", "if", "then", "than", "when", "while", "do", "does", "not", "no",
+})
+
+
 @dataclass
 class Constraint:
     """A critical constraint extracted from context."""
@@ -100,7 +114,17 @@ class ConstraintExtractor:
         Only negative and safety constraints (priority <= 2) are checked;
         positive requirements are not enforced here because partial progress
         is acceptable. Uses key-token matching — no LLM calls.
+
+        Matching is whole-token, not substring, and stopwords are dropped
+        before the vote. The previous ``tok in step_lower`` test counted
+        "all" as a match inside "install" and let function words like "the"
+        and "to" carry half the quorum on their own; measured against a real
+        run it fired on 3 of 6 benign steps. This gate pauses the flow and
+        asks the user, so a false positive is not free — see
+        tasks/specs/side_constraint_integrity_plan.md Phase 5.4 defect 2.
         """
+        step_tokens = {self._stem(t) for t in _WORD_RE.findall(step_description.lower())}
+
         violations: List[Constraint] = []
         for c in constraints:
             if c.priority > 2:
@@ -109,13 +133,34 @@ class ConstraintExtractor:
                 r"(?:do\s+not|don't|never|must\s+not|shall\s+not|cannot|can't|avoid)\s+(.+)",
                 c.text, re.IGNORECASE,
             )
-            if action_match:
-                prohibited_phrase = action_match.group(1).strip().rstrip(".!;").lower()
-                key_tokens = prohibited_phrase.split()[:5]
-                step_lower = step_description.lower()
-                if sum(1 for tok in key_tokens if tok in step_lower) >= max(1, len(key_tokens) // 2):
-                    violations.append(c)
+            if not action_match:
+                continue
+            prohibited_phrase = action_match.group(1).strip().rstrip(".!;").lower()
+            key_tokens = [
+                self._stem(t)
+                for t in _WORD_RE.findall(prohibited_phrase)
+                if t not in _STOPWORDS
+            ][:5]
+            if not key_tokens:
+                continue
+            matched = sum(1 for tok in key_tokens if tok in step_tokens)
+            # Majority of content tokens, rounding up: a single incidental
+            # word shared with the step is not evidence of a violation.
+            if matched >= max(1, (len(key_tokens) + 1) // 2):
+                violations.append(c)
         return violations
+
+    @staticmethod
+    def _stem(token: str) -> str:
+        """Crude singular/plural fold so "API keys" matches "API key".
+
+        Not a real stemmer and not worth one here — the only disagreement
+        this needs to survive is a trailing ``s`` between a constraint and a
+        step description written by different authors.
+        """
+        if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+            return token[:-1]
+        return token
 
     def has_critical_constraints(self, text: str) -> bool:
         """Quick check if text contains any critical (safety) constraints.

@@ -123,6 +123,80 @@ class ExecutingState(FlowState):
                 sum(1 for s in _plan.steps for kw in _browser_kw if kw in (s.description or "").lower()),
             )
 
+    # ── Constraint enforcement gate (Lost-in-Compaction Phase 5.4) ─────
+
+    @staticmethod
+    def _constraint_violations(
+        context: "PlanActFlow", step: "Step", prompt: str
+    ) -> list:
+        """Return the constraints *step* appears to violate, or an empty list.
+
+        Prefers the session-constraint registry, which accumulates every user
+        turn (start, resume, steering) and honours revocation and direction.
+        Falls back to regex over the original task only when the registry is
+        empty — i.e. when no extractor is wired.
+
+        Why the registry has to be first: the legacy expression
+        ``original_task or last_prompt or prompt`` always resolves to
+        ``original_task``, which is written in exactly one place and only when
+        the opening prompt is non-empty. A constraint the user stated on turn
+        five was therefore invisible to this gate forever, and gateway/chat
+        sessions never populated it at all.
+
+        Direction filtering happens in ``compile_enforceable``: a LOOSEN
+        constraint must never reach here. Before that filter existed, the
+        paper's SC#1 — "don't ask me to confirm, just do it" — made this gate
+        pause to ask for confirmation, violating the constraint it was
+        enforcing.
+        """
+        import os
+
+        if os.environ.get("CONSTRAINT_CHECK_ENABLED", "").lower() == "false":
+            return []
+
+        from weebot.application.services.constraint_compilers import compile_from_flow
+        from weebot.application.services.constraint_extractor import ConstraintExtractor
+
+        extractor = ConstraintExtractor()
+        constraints = compile_from_flow(context)
+        if not constraints:
+            source = (
+                context._session.context.get("original_task", "")
+                or context._session.context.get("last_prompt", "")
+                or prompt
+            )
+            if not source:
+                return []
+            constraints = extractor.extract(source)
+        return extractor.check_step(step.description, constraints)
+
+    @staticmethod
+    async def _journal_constraint_violation(
+        context: "PlanActFlow", step: "Step", constraint_text: str
+    ) -> None:
+        """Record the pause in the misalignment journal, best-effort.
+
+        Awaited rather than fire-and-forget: the previous ``ensure_future``
+        was never awaited and never had its exception retrieved, so a failing
+        journal wrote nothing and logged nothing. The write must not be able
+        to block the gate, hence the broad except.
+        """
+        journal = getattr(context, "_misalignment_journal", None)
+        if journal is None:
+            return
+        try:
+            from weebot.domain.models.misalignment_entry import MisalignmentEntry
+
+            await journal.record(MisalignmentEntry(
+                session_id=context._session.id,
+                project_path=context._session.context.get("working_dir", ""),
+                symptom="constraint_violation",
+                constraint_text=constraint_text,
+                step_description=step.description,
+            ))
+        except Exception as exc:
+            logger.warning("Misalignment journal write failed: %s", exc)
+
     async def execute(
         self, context: PlanActFlow, prompt: str
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -171,54 +245,37 @@ class ExecutingState(FlowState):
                 return
         # ─────────────────────────────────────────────────────────────────────
 
-        # ── Constraint enforcement (Enhancement 1 — S3 fix) ──────────────────
-        # Check the next step against constraints extracted from the original task
-        # before allowing execution. Uses ConstraintExtractor (regex-only, no LLM).
-        # Skip when CONSTRAINT_CHECK_ENABLED=false (batch/automated runs).
-        import os as _os_exec
-        if _os_exec.environ.get("CONSTRAINT_CHECK_ENABLED", "").lower() == "false":
-            _initial_prompt = ""
-        else:
-            _initial_prompt = (
-                context._session.context.get("original_task", "")
-                or context._session.context.get("last_prompt", "")
-                or prompt
+        # ── Constraint enforcement gate (Lost-in-Compaction Phase 5.4) ───────
+        # Pause before a step that appears to violate a user-issued constraint.
+        # See tasks/specs/side_constraint_integrity_plan.md Phase 5.4.
+        _ack_key = f"constraint_gate_ack:{step.id}"
+        _violations = (
+            []
+            if context._session.get_fact(_ack_key)
+            else self._constraint_violations(context, step, prompt)
+        )
+        if _violations:
+            _violation_text = "; ".join(c.text for c in _violations[:2])
+            logger.warning(
+                "Step '%s' may violate constraint: %s — pausing for user",
+                step.id, _violation_text,
             )
-        if _initial_prompt:
-            from weebot.application.services.constraint_extractor import ConstraintExtractor
-            _extractor = ConstraintExtractor()
-            _constraints = _extractor.extract(_initial_prompt)
-            _violations = _extractor.check_step(step.description, _constraints)
-            if _violations:
-                _violation_text = "; ".join(c.text for c in _violations[:2])
-                logger.warning(
-                    "Step '%s' may violate constraint: %s — pausing for user",
-                    step.id, _violation_text,
+            await self._journal_constraint_violation(context, step, _violations[0].text)
+            # Clear the gate for this step BEFORE pausing. On resume FlowRouter
+            # flips WAITING -> RUNNING and re-enters execute() from the top
+            # against the same step; with nothing cleared the gate re-fires and
+            # the user can never get past it. The inbound-mail gate above
+            # clears its pending flag for exactly this reason.
+            context._session = context._session.set_fact(_ack_key, True)
+            context._session = context._session.set_status(SessionStatus.WAITING)
+            yield WaitForUserEvent(
+                question=(
+                    f"Step '{step.description}' may violate a stated constraint:\n"
+                    f"  {_violation_text}\n\n"
+                    f"Type 'proceed' to allow this step, or describe an alternative approach."
                 )
-                _journal = getattr(context, "_misalignment_journal", None)
-                if _journal is not None:
-                    import asyncio as _asyncio
-                    try:
-                        from weebot.domain.models.misalignment_entry import MisalignmentEntry
-                        _asyncio.ensure_future(_journal.record(MisalignmentEntry(
-                            session_id=context._session.id,
-                            project_path=context._session.context.get("working_dir", ""),
-                            symptom="constraint_violation",
-                            constraint_text=_violations[0].text,
-                            step_description=step.description,
-                        )))
-                    except ImportError:
-                        pass
-                # Mark session as WAITING before yielding so resume works
-                context._session = context._session.set_status(SessionStatus.WAITING)
-                yield WaitForUserEvent(
-                    question=(
-                        f"Step '{step.description}' may violate a stated constraint:\n"
-                        f"  {_violation_text}\n\n"
-                        f"Type 'proceed' to allow this step, or describe an alternative approach."
-                    )
-                )
-                return
+            )
+            return
         # ──────────────────────────────────────────────────────────────────────
 
         # ── Capability 5: Behavioral Learning — extract rules from corrections ──
