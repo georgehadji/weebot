@@ -69,6 +69,17 @@ class StrReplaceEditorTool(BaseTool):
         self._path_validator = PathValidator()
         self._workspace = Path(WORKSPACE_ROOT).resolve()
 
+    @staticmethod
+    def _fs_permissions():
+        """Process-wide filesystem policy, loaded from config on first use.
+
+        Resolved here rather than injected: this tool is built by a registry
+        with no container access, and a DI binding with no reader is how the
+        rest of this subsystem stayed dead for so long.
+        """
+        from weebot.config.fs_permissions import load_fs_permission_checker
+        return load_fs_permission_checker()
+
     async def execute(self, command: str, path: str, **kwargs: Any) -> ToolResult:
         # ============================================================================
         # SECURITY: Validate path before any operation
@@ -129,6 +140,34 @@ class StrReplaceEditorTool(BaseTool):
                 error=f"Access denied: Resolved path escapes workspace boundaries."
             )
         
+        # ── Filesystem permission policy (audit 5.3) ─────────────────────
+        # Layered on top of the workspace containment above, which decides
+        # WHERE the agent may operate; this decides which subtrees inside the
+        # workspace are off limits for this operation. safe_path is already
+        # resolved, so a rule cannot be dodged with ".." or "./".
+        _perm = self._fs_permissions()
+        if _perm.has_rules:
+            _operation = "read" if command == "view" else "write"
+            _verdict = _perm.check(_operation, str(safe_path))
+            if _verdict != "allow":
+                # "interrupt" means "ask a human first". This tool has no
+                # approval channel, and treating an unanswered gate as
+                # permission would invert the rule's intent, so it fails
+                # closed and reports why.
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "Filesystem policy %s: %s on %s", _verdict, _operation, safe_path
+                )
+                _detail = (
+                    "requires human approval, which this tool cannot request"
+                    if _verdict == "interrupt"
+                    else "is denied by filesystem policy"
+                )
+                return ToolResult(
+                    output="",
+                    error=f"Access denied: {_operation} on {safe_path} {_detail}.",
+                )
+
         # Execute the command with the safe path
         if command == "view":
             return self._view(safe_path, kwargs.get("view_range"))

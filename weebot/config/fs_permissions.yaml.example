@@ -1,0 +1,52 @@
+# Filesystem permission policy — example.
+#
+# Copy to `fs_permissions.yaml` in this directory to activate. With no such
+# file present the checker holds no rules and every file operation behaves
+# exactly as it did before this mechanism existed.
+#
+# These rules layer ON TOP OF the file tool's workspace containment, which
+# already stops the agent operating outside WORKSPACE_ROOT. Their job is to
+# carve out subtrees INSIDE the workspace that are still off limits.
+#
+# Matching:
+#   - `paths` are globs. Rooted patterns ("/etc/**", "C:/keys/**") match
+#     absolute paths; anything else ("confidential/**") is resolved relative
+#     to the workspace root.
+#   - Both the rule and the candidate path are canonicalised before
+#     comparison, so "./confidential/x", "confidential//x" and
+#     "sub/../confidential/x" all match a "confidential/**" rule.
+#   - A rule naming a directory covers its contents, and a "dir/**" rule also
+#     covers the directory itself — listing it discloses the names inside.
+#   - First match wins, so put narrower `allow` exceptions ABOVE broader
+#     `deny` rules.
+#   - `..` is rejected at load time; a malformed rule is skipped with a
+#     warning rather than failing startup.
+#
+# Modes:
+#   allow      — permit (the default when nothing matches)
+#   deny       — refuse the operation
+#   interrupt  — require explicit human approval. NOTE: the file tool has no
+#                approval channel, so it currently fails CLOSED and treats
+#                this as deny. Use it to mark paths that should become
+#                approval-gated once a HITL path exists.
+
+version: 1
+
+rules: []
+  # Read-protect a secrets directory and any key material anywhere.
+  # - operations: [read]
+  #   paths: ["confidential/**", "**/*.pem", "**/*.key"]
+  #   mode: deny
+
+  # Make schema changes deliberate rather than incidental.
+  # - operations: [write]
+  #   paths: ["migrations/**"]
+  #   mode: interrupt
+
+  # Narrower allow placed above a broader deny (first match wins).
+  # - operations: [read]
+  #   paths: ["confidential/README.md"]
+  #   mode: allow
+  # - operations: [read]
+  #   paths: ["confidential/**"]
+  #   mode: deny
