@@ -156,11 +156,17 @@ has no measured precision, and a false positive becomes a *permanent*
 session-scoped instruction — mitigated by the evidence-span field, revocation,
 and the harness's negative cases, not eliminated.
 
-**Deferred.** `FSPermissionChecker` has zero callers and needs a rules loader,
-a DI binding, call sites, and a relaxed path invariant before path-scoped
-constraints can be enforced; it warrants its own ADR. Automatic promotion of a
-recurring session constraint into a durable behavioral rule is speculative and
-unimplemented.
+**Since implemented.** `FSPermissionChecker` is now enforceable: its path
+invariant accepts Windows and workspace-relative patterns, matching is
+canonicalised so a rule cannot be evaded with `./`, `//` or `..`, rules load
+from an optional `weebot/config/fs_permissions.yaml` (absent by default, so no
+behaviour change), and the file tool acts on the verdict — failing closed on
+`interrupt`, which has no approval channel at that layer.
+
+**Deferred.** A human-in-the-loop path for `interrupt`-mode filesystem rules,
+so a gated operation can be approved rather than merely refused. Automatic
+promotion of a recurring session constraint into a durable behavioral rule
+remains speculative and unimplemented.
 
 ---
 
