@@ -161,3 +161,8 @@ Agentic-Design-Patterns-main/
 # Downloaded third-party repo archives kept for reference reading only.
 # The root-level /*.zip rule does not cover this subdirectory.
 Github projects/
+
+# Transient sibling written by scripts/generate_catalog.py during an atomic
+# catalog replace. Removed on failure, renamed on success; only a killed
+# process leaves one behind.
+weebot/application/services/model_registry/_catalog.py.tmp

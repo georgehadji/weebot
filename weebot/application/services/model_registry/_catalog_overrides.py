@@ -36,9 +36,10 @@ from __future__ import annotations
 
 # ── Models absent from the OpenRouter response ───────────────────────────────
 #
-# Provenance: these nine were added to _catalog.py by hand after the last
-# self-consistent generation (343 entries, commit 21e177e1) and would have been
-# destroyed by the next `--write`. They are reproduced here verbatim so that a
+# Provenance: these nineteen were added to _catalog.py by hand -- nine after the
+# last self-consistent generation (343 entries, commit 21e177e1), plus the ten
+# `~*-latest` aliases below, which predate it -- and would have been destroyed
+# by the next `--write`. They are reproduced here verbatim so that a
 # regeneration preserves them. Re-verify against the API when it is reachable:
 # any that OpenRouter now lists should be deleted from this dict and allowed to
 # come from the payload instead.
@@ -158,15 +159,214 @@ EXTRA_MODELS: dict[str, dict] = {
         "api_key_env": "OPENROUTER_API_KEY",
         "tool_use_score": 5,
     },
+    # ── `~vendor/model-latest` floating aliases ──────────────────────────────
+    #
+    # These ten are a weebot convention, not OpenRouter ids: a stable name that
+    # points at whatever the vendor currently ships. The API cannot return them,
+    # so nothing in the payload will ever recreate them and a regeneration that
+    # does not carry them here deletes all ten -- 3% of the catalog, far under
+    # --max-shrink, so no guard would have fired. They were missed on the first
+    # pass because the baseline they were diffed against (21e177e1) had been
+    # hand-edited too, and already contained them.
+    "~anthropic/claude-fable-latest": {
+        "name": "Anthropic: Claude Fable Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.05,
+        "context_window": 1000000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~anthropic/claude-haiku-latest": {
+        "name": "Anthropic Claude Haiku Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.005,
+        "context_window": 200000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~anthropic/claude-opus-latest": {
+        "name": "Anthropic: Claude Opus Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.025,
+        "context_window": 1000000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~anthropic/claude-sonnet-latest": {
+        "name": "Anthropic Claude Sonnet Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.01,
+        "context_window": 1000000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~google/gemini-flash-latest": {
+        "name": "Google Gemini Flash Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.009000000000000001,
+        "context_window": 1048576,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~google/gemini-pro-latest": {
+        "name": "Google Gemini Pro Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.012,
+        "context_window": 1048576,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~moonshotai/kimi-latest": {
+        "name": "MoonshotAI Kimi Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.00341,
+        "context_window": 262144,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~openai/gpt-latest": {
+        "name": "OpenAI GPT Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.030000000000000002,
+        "context_window": 1050000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~openai/gpt-mini-latest": {
+        "name": "OpenAI GPT Mini Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.0045000000000000005,
+        "context_window": 400000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
+    "~x-ai/grok-latest": {
+        "name": "xAI: Grok Latest",
+        "provider": "openrouter",
+        "cost_per_1k_tokens": 0.006,
+        "context_window": 500000,
+        "strengths": [
+            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tool_use_score": 5,
+    },
 }
 
 # ── Field-level corrections to models the API does return ────────────────────
 #
-# Empty by design. Populate when a derived value is wrong for a named model,
-# rather than special-casing it inside the generator: a rule in the generator
-# applies to every model that happens to match it, an entry here applies to the
-# one model somebody actually checked.
-PINNED_FIELDS: dict[str, dict] = {}
+# Populate when a derived value is wrong for a named model, rather than
+# special-casing it inside the generator: a rule in the generator applies to
+# every model that happens to match it, an entry here applies to the one model
+# somebody actually checked.
+#
+# The entries below exist because EXTRA_MODELS merges with ``setdefault``: the
+# day OpenRouter starts listing one of those models, the payload-derived values
+# win and the hand-measured ones are silently discarded. These three fields are
+# exactly the ones the generator cannot derive -- ``determine_strengths`` has no
+# rule that can ever emit AGENTIC, ``tier`` is inferred from cost alone (so
+# PREMIUM is unreachable), and ``tool_use_score`` falls back to 5. Pinning them
+# means the API can refresh price, context and name while the measured
+# capabilities survive.
+PINNED_FIELDS: dict[str, dict] = {
+    "google/gemini-3.6-flash": {
+        "strengths": [
+            "CHAT", "CODE_GENERATION", "CODE_REVIEW", "REASONING", "AGENTIC", "DOCUMENTATION",
+            "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "tool_use_score": 6,
+    },
+    "meituan/longcat-2.0": {
+        "strengths": [
+            "CHAT", "CODE_GENERATION", "CODE_REVIEW", "REASONING", "AGENTIC", "DOCUMENTATION",
+            "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "tool_use_score": 6,
+    },
+    "meta/muse-spark-1.1": {
+        "strengths": [
+            "CHAT", "AGENTIC", "REASONING", "CODE_REVIEW", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "tool_use_score": 6,
+    },
+    "moonshotai/kimi-k3": {
+        "strengths": [
+            "CHAT", "CODE_GENERATION", "CODE_REVIEW", "DEBUGGING", "REASONING", "AGENTIC",
+            "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "PREMIUM",
+        "tool_use_score": 7,
+    },
+    "poolside/laguna-s-2.1": {
+        "strengths": [
+            "CHAT", "CODE_GENERATION", "CODE_REVIEW", "AGENTIC", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "FAST",
+        "tool_use_score": 6,
+    },
+    "qwen/qwen3.7-flash": {
+        "strengths": ["CHAT", "REASONING", "CODE_REVIEW", "DOCUMENTATION"],
+        "tier": "FAST",
+        "tool_use_score": 5,
+    },
+    "qwen/qwen3.8-max": {
+        "strengths": ["CHAT", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE"],
+        "tier": "STANDARD",
+        "tool_use_score": 5,
+    },
+    "thinkingmachines/inkling": {
+        "strengths": [
+            "CHAT", "CODE_REVIEW", "REASONING", "AGENTIC", "DOCUMENTATION", "ARCHITECTURE",
+        ],
+        "tier": "STANDARD",
+        "tool_use_score": 6,
+    },
+    "thinkingmachines/inkling-small": {
+        "strengths": ["CHAT", "REASONING", "DOCUMENTATION"],
+        "tier": "STANDARD",
+        "tool_use_score": 5,
+    },
+}
 
 # ── Models to drop even when the API lists them ──────────────────────────────
 #
@@ -184,4 +384,12 @@ SUPPRESSED_MODELS: set[str] = {
     # on its own; this entry keeps the policy in force even if openrouter/auto
     # is one day given a real price.
     "openrouter/auto",
+    # Removed alongside openrouter/auto in the same change, and for the same
+    # reason: OpenRouter prices all four of its meta-routers at -1. The pricing
+    # guard drops them on its own today, but a removal that rests only on a
+    # heuristic is not recorded -- give any of these a real price upstream and
+    # the next regeneration quietly brings it back.
+    "openrouter/bodybuilder",
+    "openrouter/fusion",
+    "openrouter/pareto-code",
 }

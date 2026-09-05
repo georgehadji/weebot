@@ -886,10 +886,17 @@ def test_god_modules_under_800_lines():
     # Tracked — will shrink via WP-2 decomposition
     line_allowlist: dict[str, int] = {
         "model_selection.py": 100,  # re-export shim (was 3265)
-        "_catalog.py": 5900,  # data catalog (351 model configs — pure data, grows with the model list)
-        # was 3900 pre-black; black wraps each multi-item strengths=[...] list
-        # one-entry-per-line, which is unavoidable at this line-length and adds
-        # no real complexity — it is still one line of data per model config.
+        "_catalog.py": 4200,  # data catalog (347 model configs — pure data, grows with the model list)
+        # Was 5900 while a one-off black run had wrapped every multi-item
+        # strengths=[...] list one-entry-per-line. The generator emits them on a
+        # single line, so restoring generated form brought the file back to 3491
+        # and the ceiling down with it; the headroom left is roughly 70 models.
+        #
+        # A line count is a weak instrument for a generated data file — it
+        # measures size, not debt, and it cannot see a hand-edit that keeps the
+        # length the same. The real gate is now
+        # test_the_shipped_catalog_is_byte_for_byte_what_the_generator_would_render,
+        # which pins the file to exactly what --write would produce.
         "_base.py": 1450,  # was 1400 (WP-8 pool wiring)                 # target: <800 (extract strategies)
         "plan_act_flow.py": 1000,  # 961 lines; target: <800 (decompose further)
         "information_synthesis.py": 900,  # WP-2: 850 lines, target: <800 (extract summarizer)

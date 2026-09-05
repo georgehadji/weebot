@@ -168,6 +168,146 @@ selection strategies and was not made unasked.
 
 ---
 
+## Second round: what a code review found in the fix itself `[VF]`
+
+The first round's fix was reviewed across ten independent angles. It did not
+survive intact. Every finding below was reproduced by direct execution before
+being acted on; the ones that matter are all the same shape as the defect the
+fix was written to close — **a guard whose error path fails open.**
+
+### The interlock was itself the execution sink `[VF]`
+
+`generate_catalog` interpolated the API-supplied `name` straight into Python
+source with no escaping, and `verify_rendered` *executes* that source. So the
+component whose docstring named "an unescaped quote in a model name" as the
+thing it defends against was the thing that ran the payload.
+
+Proven end to end: a payload entry named
+`X" if __import__("pathlib").Path(...).write_text("owned") else "Y` rendered as
+valid Python, and `verify_rendered` reported **"Rendered and imported cleanly:
+69 models"** while creating the marker file. It fires before the `--write`
+check, so a plain dry run — the documented safe operation — executed it.
+
+The benign case was as bad: a model named `Nous "Hermes" 3` produced
+unterminated source, so one badly-named upstream model blocked the entire
+refresh with an error blaming the wrong thing.
+
+Fixed by rendering every interpolated value with `json.dumps`, and by refusing
+model ids that would not survive the round trip through `MODEL_ENTRY_RE`.
+
+### The pricing guard reintroduced the hijack it was written to stop `[VF]`
+
+```python
+for key in ("prompt", "completion"):
+    try:
+        if float(pricing.get(key, 0)) < 0:
+            return True
+    except (ValueError, TypeError):
+        return False        # <-- returns from the function, not the loop
+```
+
+`is_variable_pricing({"prompt": None, "completion": "-1"})` returned `False`:
+`float(None)` raised on the first key, so the `-1` on the second was never
+seen. `pricing_to_cost` swallowed the same error into `0.0`, and `tier` is
+derived from cost — so a routing-time-priced meta-router was installed as a
+**free, FAST** model, which is the top of both `CostOptimized` and `Fastest`
+and passes a `budget=0` filter. Exactly the hijack, through the guard's own
+error path.
+
+The same fail-open shipped in the live catalog. `google/lyria-3-clip-preview`
+and `google/lyria-3-pro-preview` are music-generation models priced per second
+of audio; both sit at `cost=0.0, tier=FAST, context=1048576`, and
+`QualityOptimized().select(..., TaskType.CHAT, budget=0.0)` returns **a music
+model for a chat task**.
+
+Scoped precisely, because the first draft of this note overstated it: with no
+budget the same call returns `meta-llama/llama-4-scout` (score 1125 against
+lyria's 204.86). The music model wins only once a budget filter has removed
+everything that costs anything -- i.e. on a free-tier request -- where its
+1M context beats every other free model. Real, and narrower than "every
+selection".
+
+Fixed by making one parse rule, `parse_rates`, the only place prices are read.
+`None` means "not expressible as a per-token rate", and such models are
+excluded and reported rather than priced at zero. Zero is now reserved for
+models OpenRouter actually prices at zero.
+
+### The overrides missed ten of the nineteen hand-maintained models `[VF]`
+
+The first round claimed hand-maintained knowledge now survived a regeneration.
+For ten entries it did not. `_catalog.py` carries ten `~vendor/model-latest`
+floating aliases — a weebot convention the API cannot return — and none were in
+`EXTRA_MODELS`. They were missed because the baseline they were diffed against
+(`21e177e1`, "the last self-consistent generation") had itself been hand-edited
+and already contained them.
+
+Rendering a payload of the catalog's non-alias ids reported
+`- removed (10): ~anthropic/claude-fable-latest ...` and **exit 0** — 10/347 is
+3%, far under `--max-shrink 0.25`, so no guard fired. The headline number in
+this document was wrong: 19 models, not 9.
+
+### Corrections could not be applied to the models that needed them `[VF]`
+
+`PINNED_FIELDS` ran *before* `EXTRA_MODELS` was merged and skipped ids not yet
+present, so a pin naming a hand-added model was a silent no-op — the reverse of
+the order this file and `_catalog_overrides.py` both documented. Combined with
+`setdefault`, the day OpenRouter lists one of those models the payload wins and
+the measured values are discarded. That is not cosmetic: `determine_strengths`
+cannot emit `AGENTIC` under any input, and all six AGENTIC models plus the only
+PREMIUM one exist solely as overrides. Following the overrides file's own
+instruction to retire an entry once the API lists it would have driven
+`TaskType.AGENTIC` to zero matching models, silently.
+
+Fixed by applying extras first and pins last, warning on a pin that matched
+nothing, rejecting unknown field names outright, and populating `PINNED_FIELDS`
+with the three fields the generator cannot derive.
+
+### The remaining fail-opens `[VF]`
+
+| Guard | How it failed open | Now |
+|---|---|---|
+| `--max-shrink` | `if old_count and ...` — no baseline meant no check, silently | refuses without `--bootstrap` |
+| plausibility floor | counted the raw payload, so 60 models could render 5 | counts rendered entries |
+| `verify_rendered` | `TimeoutExpired` / `int(stdout)` escaped `except PayloadError` | both become `PayloadError` |
+| null `pricing`/`architecture` | `AttributeError` escaped as a bare traceback | handled |
+| `context_length: null` | rendered `context_window=None`, imported clean, `TypeError` at selection | type-checked |
+| the write | `write_text` truncates in place; nothing re-read the installed file | `os.replace` + post-write probe |
+| the probe | imported the *installed* catalog, so a half-written file could not be repaired | loads types by path |
+
+### The catalog was still not generator output `[VF]`
+
+The shipped file lacked the `Cost model:` header line the generator always
+emits — proof it was a hand-edit — carried 28 entries with a duplicated
+`TaskType.REASONING`, was **not sorted** (`qwen3.8-max` before
+`qwen3.7-flash`), and held two inline comments. It has been normalised to
+exactly what `render_catalog` produces: 347 models, byte-identical, with zero
+field differences against the previous commit (verified by loading both and
+comparing every field). The two comments are preserved in
+`_catalog_overrides.py`, where they survive regeneration.
+
+That normalisation is what makes the new gate possible.
+`test_the_shipped_catalog_is_byte_for_byte_what_the_generator_would_render`
+re-renders the installed entries and compares the whole file, so the
+`DO NOT EDIT MANUALLY` banner is now enforced rather than advisory. **It pins
+format and internal consistency, not provenance** — the entries are
+reconstructed from the file, so it cannot tell that a cost was hand-changed to
+a wrong number. Closing that needs a committed OpenRouter payload fixture to
+render from, which needs the API to be reachable.
+
+### The guard was in the wrong layer `[VF]`
+
+Everything above fixes the *generator*, which is one of six places model
+definitions are written and **not the one the application reads**. Verified
+against the post-fix catalog: constructing a `ModelConfig` with
+`cost_per_1k_tokens=-1000.0` and appending it to `MODELS.items()` still made
+`CostOptimized` and `Fastest` return it, still passed `budget=0.0`, and still
+gave `estimate_cost(1M, 100k) == -1,100,000`.
+
+`ModelConfig.__post_init__` now rejects a negative cost and a non-positive
+`context_window`. Because a dataclass is mutable, `_strategies.py` also clamps:
+`max(0.0, cost)` in the two scoring paths and `0 <= cost <= budget` in the three
+budget filters. A mutated instance that bypasses construction still cannot win.
+
 ## Not done
 
 - **No model data was refreshed.** Blocked, as above.
@@ -189,14 +329,52 @@ selection strategies and was not made unasked.
 - **`routers/models.py:43`** sorts on `tier_order` containing a `"free"` key
   that no `ModelTier` member produces, and sorts `local` last by fallback.
   Cosmetic; left alone.
+- **`determine_strengths` gives `CHAT` to every model, whatever its modality.**
+  `modality` is consulted only to add `CREATIVE`, so an audio- or image-only
+  model is recorded as good at chat, reasoning, code review, documentation and
+  architecture. This is why
+  `QualityOptimized().select(..., TaskType.CHAT, budget=0.0)` returns
+  `google/lyria-3-clip-preview` — a music model — on the shipped catalog:
+  `+100` for the bogus CHAT strength plus `1048576/10000` for context beats
+  every other *free* model. Without a budget it loses to
+  `meta-llama/llama-4-scout` (1125 vs 204.86), so the exposure is free-tier
+  requests, not all of them. `[VF]`
+
+  Two of those models are still in the catalog. The pricing fix means a future
+  regeneration excludes anything not token-priced, which probably covers them —
+  but "probably" is the problem: their pricing cannot be checked while the API
+  is unreachable, and removing entries on a hypothesis is the same class of
+  mistake as the hand-edits this work exists to stop. Fixing the rule properly
+  needs `architecture.modality` per model, which is in the payload and not in
+  the catalog. **Both need the payload; neither was guessed at.**
+- **The regeneration gate pins format, not provenance.** The new byte-for-byte
+  test re-renders the entries it reads *from the file*, so it cannot detect a
+  hand-changed cost that is still well-formed. A committed payload fixture
+  (`--save-payload` exists for this) plus a CI job that renders and diffs would
+  close it completely, and would need no network at review time — only once, to
+  capture the fixture.
 
 ---
 
 ## Verification
 
 ```
-tests/unit/scripts/test_generate_catalog.py    28 passed   (was 0 — no tests existed)
-tests/unit/test_catalog_validator.py           11 passed
-ruff check scripts/generate_catalog.py         clean
+tests/unit/                                    3905 passed / 0 failed
+  test_generate_catalog.py                       69 passed  (was 0 before this work)
+  test_model_config_guards.py                    14 passed  (new)
+  test_catalog_validator.py                      11 passed
+  test_architecture_fitness.py                   51 passed
+coverage                                       55.87%  (gate: 52%)
+ruff check --select F821,E9 weebot/ cli/       clean
+lint-imports                                   7 kept / 0 broken
 ratchets    139 / 29 / 143 / 73 / 68           all unchanged, at ceiling
+_catalog.py line ceiling                       5900 -> 4200 (file is 3491)
+```
+
+The catalog rewrite was checked for semantic equivalence rather than trusted:
+both versions were loaded and compared field by field.
+
+```
+old=347  new=347   added: []   removed: []
+field differences (excluding the 28 deduped strengths lists): 0
 ```
