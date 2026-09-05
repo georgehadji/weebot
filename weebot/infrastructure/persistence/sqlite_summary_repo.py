@@ -6,6 +6,7 @@ import asyncio
 import json
 import math
 import sqlite3
+from contextlib import closing
 
 from weebot.application.ports.summary_repo_port import SummaryRepositoryPort
 
@@ -18,7 +19,7 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
         self._init_db()
 
     def _init_db(self) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with closing(sqlite3.connect(self._db_path)) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS summaries (
                     session_id TEXT PRIMARY KEY,
@@ -30,7 +31,7 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
 
     async def save_summary(self, session_id: str, summary: str, embedding: list[float]) -> None:
         def _save() -> None:
-            with sqlite3.connect(self._db_path) as conn:
+            with closing(sqlite3.connect(self._db_path)) as conn, conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO summaries (session_id, summary, embedding_json) VALUES (?, ?, ?)",
                     (session_id, summary, json.dumps(embedding)),
@@ -43,7 +44,7 @@ class SQLiteSummaryRepository(SummaryRepositoryPort):
         self, embedding: list[float], k: int = 3
     ) -> list[tuple[str, str, float]]:
         def _query():
-            with sqlite3.connect(self._db_path) as conn:
+            with closing(sqlite3.connect(self._db_path)) as conn, conn:
                 return conn.execute(
                     "SELECT session_id, summary, embedding_json FROM summaries"
                 ).fetchall()

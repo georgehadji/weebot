@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from contextlib import closing
 import uuid
 from datetime import datetime, UTC
 from pathlib import Path
@@ -63,7 +64,7 @@ class MetaImprovementLog:
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.executescript(_SCHEMA_SQL)
 
     async def record(
@@ -82,7 +83,7 @@ class MetaImprovementLog:
         edit_id = str(uuid.uuid4())
 
         def _insert() -> str:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     """INSERT INTO meta_edits
                        (edit_id, timestamp, editor, target_file,
@@ -109,7 +110,7 @@ class MetaImprovementLog:
         """Return the most recent meta-edits."""
 
         def _query() -> list[dict]:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT * FROM meta_edits ORDER BY timestamp DESC LIMIT ?", (limit,)

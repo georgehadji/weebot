@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from weebot.application.ports.misalignment_journal_port import MisalignmentJournalPort
@@ -53,7 +54,7 @@ class SQLiteMisalignmentJournal(MisalignmentJournalPort):
             _log.warning("MisalignmentJournal: could not initialise table: %s", exc)
 
     def _ensure_table(self) -> None:
-        with sqlite3.connect(self._db_path) as conn:
+        with closing(sqlite3.connect(self._db_path)) as conn, conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(_CREATE_TABLE)
             conn.commit()

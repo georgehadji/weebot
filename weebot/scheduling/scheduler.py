@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from contextlib import closing
 import json
 import logging
 from dataclasses import dataclass, asdict
@@ -153,7 +154,7 @@ class SchedulingManager:
 
     def _init_db(self) -> None:
         """Initialize database schema."""
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
                     job_id TEXT PRIMARY KEY,
@@ -288,7 +289,7 @@ class SchedulingManager:
 
         # Remove from database (offload to thread pool)
         def _delete():
-            with sqlite3.connect(self.db_path) as conn:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
                 conn.execute("DELETE FROM jobs WHERE job_id = ?", (job_id,))
                 conn.commit()
 
@@ -306,7 +307,7 @@ class SchedulingManager:
         Returns:
             ScheduledJob if found, None otherwise
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
             if row:
@@ -341,7 +342,7 @@ class SchedulingManager:
 
         query += " ORDER BY created_at DESC"
 
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(query, params).fetchall()
             return [ScheduledJob.from_dict(dict(row)) for row in rows]
@@ -485,7 +486,7 @@ class SchedulingManager:
         """
 
         def _save():
-            with sqlite3.connect(self.db_path) as conn:
+            with closing(sqlite3.connect(self.db_path)) as conn, conn:
                 job_dict = job.to_dict()
                 # JSON-serialize trigger_config for storage
                 if isinstance(job_dict.get("trigger_config"), dict):

@@ -130,9 +130,10 @@ def build_roadmap_json(product_db_path: str | None = None) -> str:
 
     try:
         import sqlite3
+        from contextlib import closing
         import datetime as _dt
 
-        with sqlite3.connect(product_db_path) as conn:
+        with closing(sqlite3.connect(product_db_path)) as conn, conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """SELECT req_id, project_id, title, category, priority, status, tags
