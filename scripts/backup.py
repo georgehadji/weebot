@@ -93,22 +93,36 @@ def backup_database(src_path: Path, dest_dir: Path, label: str) -> Path:
 
 
 def verify_backup(backup_path: Path) -> bool:
-    """Run integrity_check on *backup_path*. Returns True if clean."""
-    conn = sqlite3.connect(str(backup_path))
+    """Run integrity_check on *backup_path*. Returns True if clean.
+
+    Returns False rather than raising on a malformed file: this is the
+    interlock that stands between a bad backup and an overwritten database, and
+    a caller doing `if not verify_backup(...)` gets an exception through it, not
+    a False. `PRAGMA integrity_check` raises DatabaseError once a file is
+    damaged badly enough, which is exactly the case the interlock exists for.
+    """
     try:
-        cursor = conn.execute("PRAGMA integrity_check;")
-        result = cursor.fetchone()
-        if result and result[0] == "ok":
-            print(f"Integrity check passed: {backup_path}")
-            return True
-        print(f"INTEGRITY CHECK FAILED: {backup_path} — {result}")
-        try:
-            backup_path.unlink()
-        except OSError:
-            pass
+        conn = sqlite3.connect(str(backup_path))
+    except sqlite3.DatabaseError:
         return False
+    try:
+        result = conn.execute("PRAGMA integrity_check;").fetchone()
+    except sqlite3.DatabaseError as exc:
+        print(f"INTEGRITY CHECK FAILED: {backup_path} — {exc}")
+        result = None
     finally:
         conn.close()
+
+    if result and result[0] == "ok":
+        print(f"Integrity check passed: {backup_path}")
+        return True
+
+    print(f"INTEGRITY CHECK FAILED: {backup_path} — {result}")
+    try:
+        backup_path.unlink()
+    except OSError:
+        pass
+    return False
 
 
 def prune_old_backups(dest_dir: Path, label: str, retention_days: int) -> int:

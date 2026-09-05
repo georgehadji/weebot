@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -43,14 +44,52 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def verify_backup(backup_path: Path) -> bool:
-    """Run integrity_check on the backup file."""
-    conn = sqlite3.connect(str(backup_path))
+    """Run integrity_check on the backup file.
+
+    Returns False rather than raising on a malformed file: this is the
+    interlock that stands between a bad backup and an overwritten database, and
+    a caller doing `if not verify_backup(...)` gets an exception through it, not
+    a False. `PRAGMA integrity_check` raises DatabaseError once a file is
+    damaged badly enough, which is exactly the case the interlock exists for.
+    """
     try:
-        cursor = conn.execute("PRAGMA integrity_check;")
-        result = cursor.fetchone()
+        conn = sqlite3.connect(str(backup_path))
+    except sqlite3.DatabaseError:
+        return False
+    try:
+        result = conn.execute("PRAGMA integrity_check;").fetchone()
+    except sqlite3.DatabaseError:
+        return False
+    else:
         return bool(result and result[0] == "ok")
     finally:
         conn.close()
+
+
+def _pre_restore_path(dest_path: Path) -> Path:
+    """Choose a pre-restore filename that cannot clobber an existing one.
+
+    The name used to be a fixed ``<dest>.pre-restore-bak``, which made the
+    documented recovery path destroy its own source. Restoring that file back
+    over the destination -- the whole point of keeping it -- renamed the
+    destination *onto* it first, because the derived name was the same path.
+    ``shutil.copy2`` then copied the file that had just been overwritten, so the
+    undo returned the very data it was meant to undo and the original was gone,
+    under the message "Restore completed successfully."
+
+    The common case keeps the documented name; only a collision diverges.
+    """
+    base = dest_path.with_suffix(dest_path.suffix + ".pre-restore-bak")
+    if not base.exists():
+        return base
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    candidate = dest_path.with_suffix(dest_path.suffix + f".pre-restore-{stamp}.bak")
+    counter = 1
+    while candidate.exists():
+        candidate = dest_path.with_suffix(dest_path.suffix + f".pre-restore-{stamp}-{counter}.bak")
+        counter += 1
+    return candidate
 
 
 def restore(backup_path: Path, dest_path: Path) -> Path | None:
@@ -61,7 +100,7 @@ def restore(backup_path: Path, dest_path: Path) -> Path | None:
     # Backup the current destination if it exists
     pre_bak = None
     if dest_path.exists():
-        pre_bak = dest_path.with_suffix(dest_path.suffix + ".pre-restore-bak")
+        pre_bak = _pre_restore_path(dest_path)
         dest_path.rename(pre_bak)
         print(f"Existing database backed up to: {pre_bak}")
 
