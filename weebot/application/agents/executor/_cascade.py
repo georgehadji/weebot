@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+
+from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
 from typing import Any
 
 from weebot.application.di import Container
@@ -124,7 +126,7 @@ class CascadeExecutor:
     # ── OpenRouter credit pre-check ────────────────────────────────
 
     @staticmethod
-    async def _check_openrouter_credits() -> int:
+    async def _check_openrouter_credits() -> int | None:
         """Query OpenRouter's auth key endpoint for remaining credits.
 
         Returns:
@@ -146,9 +148,13 @@ class CascadeExecutor:
                 if resp.status_code == 200:
                     data = resp.json()
                     return int(data.get("data", {}).get("credits", 0))
-                return 0
+                return None
         except Exception:
-            return 0  # fail open: assume OK on API error
+            # None means "unknown", NOT "zero". Returning 0 here was described as
+            # failing open but did the opposite: 0 >= threshold is false, so a
+            # transient error reaching openrouter.ai silently stripped every
+            # OpenRouter-only model from the cascade.
+            return None
 
     @staticmethod
     def _is_openrouter_model(model_id: str) -> bool:
@@ -171,6 +177,13 @@ class CascadeExecutor:
         """
         threshold = CascadeExecutor._get_credit_threshold()
         credits = await CascadeExecutor._check_openrouter_credits()
+        if credits is None:
+            # Unknown credits: try the models and let a real out-of-credits
+            # response fall through to the next tier, which is what the cascade
+            # exists to do. Dropping models on a failed check degrades quality
+            # for a network blip.
+            logger.debug("OpenRouter credit check unavailable — not filtering")
+            return model_ids
         if credits >= threshold:
             return model_ids  # enough credits — use all models
 
@@ -294,16 +307,26 @@ class CascadeExecutor:
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
                 logger.debug("Model %s succeeded in %.0fms", model_id, elapsed)
+                # `hasattr(resp, "usage")` was vacuous -- usage is a declared
+                # field, so it is always present -- and four adapters set it to
+                # None when a provider omits it, making `.get` raise on the
+                # success path. The adapters themselves already use the correct
+                # `getattr(response, "usage", None)` truthiness form.
+                _usage = getattr(resp, "usage", None) or {}
+                _prompt_tokens = int(_usage.get("prompt_tokens", 0) or 0)
+                _completion_tokens = int(_usage.get("completion_tokens", 0) or 0)
                 self._record_decision(
                     model_name=model_id,
                     tier=tier,
                     outcome=CascadeOutcome.SUCCESS,
                     latency_ms=elapsed,
-                    token_count=(
-                        getattr(resp, "usage", {}).get("total_tokens", 0)
-                        if hasattr(resp, "usage")
-                        else 0
+                    token_count=int(
+                        _usage.get("total_tokens", _prompt_tokens + _completion_tokens) or 0
                     ),
+                    # No caller ever supplied this, so the tracker's
+                    # total_cost_estimate was structurally 0.0 -- and
+                    # mcp/resources.py:297 publishes that number as cost accounting.
+                    cost_estimate=_estimate_cost(model_id, _prompt_tokens, _completion_tokens),
                     task_category=task_category,
                 )
                 return resp
