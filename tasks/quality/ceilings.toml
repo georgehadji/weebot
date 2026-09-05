@@ -1,0 +1,48 @@
+# Debt ceilings — one declarative source for every ratchet.
+#
+# Phase B2 of tasks/specs/review_gate_and_residual_work_plan.md.
+#
+# THE RULE IS EXACT EQUALITY, IN BOTH DIRECTIONS.
+#
+#   actual > ceiling  ->  fail: new debt was added
+#   actual < ceiling  ->  fail: lower the ceiling to <actual>
+#
+# The second half is the whole design. A ceiling that only blocks upward
+# movement is a number that sits where it was first measured forever, and the
+# slack between actual and ceiling is exactly where a regression hides
+# invisibly until it reaches the top. Failing when the count drops costs
+# nothing while debt is untouched, and makes every incidental cleanup
+# permanent the moment it happens.
+#
+# It also means a raised ceiling cannot be quiet: raising one without adding
+# the matching debt fails immediately, and raising one *with* the debt is a
+# diff in this file, which is the point -- it should take a deliberate edit
+# that a reviewer sees, not a constant buried in a script.
+#
+# These numbers may only go DOWN. Lower one in the same commit that removes
+# the debt.
+
+[ceilings]
+
+# Handlers whose body is exactly `pass` or `...`, by AST.
+# Measured by: scripts/lint_except_pass.py
+silent_except_handlers = 139
+
+# Blocking calls inside `async def`.
+# Measured by: scripts/lint_async_io.py
+blocking_io_in_async = 29
+
+# print() in production code (weebot/, cli/), excluding tests.
+# Measured by: the `lint-no-print` target in the Makefile.
+print_in_production = 143
+
+# Bare os.environ / os.getenv outside weebot/config/.
+# Measured by: the `lint-env-access` target in the Makefile.
+bare_env_reads = 73
+
+# bandit's B110 (try/except/pass), all LOW severity.
+# NOT the same metric as silent_except_handlers: that one counts handlers whose
+# body is exactly `pass`/`...` by AST, while B110 is bandit's own detection.
+# The sets overlap heavily but are not equal, so the two move independently.
+# Measured by: scripts/lint_bandit_b110.py
+bandit_b110 = 68

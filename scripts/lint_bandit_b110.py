@@ -7,17 +7,20 @@ which made the whole ``security-scan`` job incapable of failing: all three of
 its steps swallowed their own result the same way. A required check built on
 that job would have gated nothing.
 
-This is the ratchet pattern already used by ``lint_except_pass.py`` and
-``lint_async_io.py``: the run fails only when the count *exceeds* CEILING, so
-the existing backlog does not fail the build but nothing new can be added.
-Lower CEILING as findings are fixed; it must never be raised.
+Enforced as a **bidirectional** ratchet (phase B2): the run fails when the count
+exceeds the ceiling in ``tasks/quality/ceilings.toml`` *and* when it falls below
+it. The second half is the point -- a ceiling that only blocks upward movement
+sits where it was first measured forever, and the slack between actual and
+ceiling is exactly where a regression hides unnoticed. Lower the ceiling in the
+same commit that removes the debt; it may never be raised.
 
 Not the same metric as ``lint_except_pass.py``. That script counts handlers
 whose body is exactly ``pass`` or ``...``; bandit's B110 is its own detection
 of try/except/pass. The sets overlap heavily but are not equal (139 against
-68 at the time of writing), so the two ceilings move independently.
+68 at the time of writing), so the two ceilings move independently -- which is
+why they are two separate entries in ``tasks/quality/ceilings.toml``.
 
-Exit code: 0 if count <= CEILING, 1 otherwise.
+Exit code: 0 only when count == ceiling.
 
 Usage:
     python scripts/lint_bandit_b110.py
@@ -28,9 +31,17 @@ import json
 import subprocess
 import sys
 
-# Current known count of B110 findings, all LOW severity. Measured on 3fd25df.
-# The workflow comment claimed 71; the actual count is 68.
-CEILING = 68
+# The ceiling lives in tasks/quality/ceilings.toml (phase B2); it was a constant
+# here. Measured on 3fd25df -- the workflow comment claimed 71, the actual is 68.
+
+
+def _ceiling_check(actual: int) -> tuple[int, str]:
+    import pathlib as _p
+
+    sys.path.insert(0, str(_p.Path(__file__).resolve().parent))
+    from quality_ceilings import check
+
+    return check("bandit_b110", actual)
 
 _CMD = [
     sys.executable, "-m", "bandit",
@@ -64,23 +75,16 @@ def main() -> int:
     count = len(findings)
 
     print("=== bandit B110 (try/except/pass) ratchet ===")
-    print(f"{count} finding(s); ceiling is {CEILING}.")
+    code, message = _ceiling_check(count)
+    print(message)
 
-    if count > CEILING:
+    if code and count > 0:
         for f in findings[:20]:
             print(f"  {f.get('filename')}:{f.get('line_number')}")
         if count > 20:
             print(f"  ... and {count - 20} more")
-        print(
-            f"ERROR: {count - CEILING} new try/except/pass site(s). "
-            "Log the exception, or re-raise.",
-            file=sys.stderr,
-        )
-        return 1
-
-    if count < CEILING:
-        print(f"Ceiling can be lowered to {count} in scripts/lint_bandit_b110.py.")
-    return 0
+        print("Log the exception, or re-raise.", file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

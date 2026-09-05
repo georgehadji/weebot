@@ -11,11 +11,14 @@ never matched it, so the gate reported clean while 139 such handlers existed.
 A swallowed exception is invisible at runtime; the project policy is that every
 handler logs at least at DEBUG level.
 
-Enforced as a ratchet: the run fails only when the count *exceeds* CEILING, so
-existing debt does not block the build but no new site can be added. Lower
-CEILING as sites are fixed; it must never be raised.
+Enforced as a **bidirectional** ratchet (phase B2): the run fails when the count
+exceeds the ceiling in ``tasks/quality/ceilings.toml`` *and* when it falls below
+it. The second half is the point -- a ceiling that only blocks upward movement
+sits where it was first measured forever, and the slack between actual and
+ceiling is exactly where a regression hides unnoticed. Lower the ceiling in the
+same commit that removes the debt; it may never be raised.
 
-Exit code: 0 if count <= CEILING, 1 otherwise.
+Exit code: 0 only when count == ceiling.
 
 Usage:
     python scripts/lint_except_pass.py [paths ...]
@@ -24,11 +27,11 @@ Usage:
 from __future__ import annotations
 
 import ast
+import pathlib
 import sys
 from pathlib import Path
 
 # Current known count. Lower this as handlers are fixed; never raise it.
-CEILING = 139
 
 DEFAULT_PATHS = ("weebot", "cli")
 
@@ -75,22 +78,30 @@ def find_violations(paths: tuple[str, ...]) -> list[str]:
     return hits
 
 
+# The ceiling lives in tasks/quality/ceilings.toml, and the rule that compares
+# against it lives in scripts/quality_ceilings.py. Both are shared by all five
+# ratchets so that the rule cannot drift between them -- and so that lowering a
+# ceiling is a diff in one declarative file rather than an edit buried here.
+def _ceiling_check(actual: int) -> tuple[int, str]:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from quality_ceilings import check
+
+    return check("silent_except_handlers", actual)
+
+
 def main(argv: list[str]) -> int:
     paths = tuple(argv[1:]) or DEFAULT_PATHS
     hits = find_violations(paths)
     for hit in hits:
         print(f"{hit}: exception handler body is only `pass` — log at DEBUG instead")
-    print(f"\n{len(hits)} silent handler(s) found; ceiling is {CEILING}.")
-    if len(hits) > CEILING:
+    code, message = _ceiling_check(len(hits))
+    print(f"\n{message}")
+    if code:
         print(
-            f"ERROR: {len(hits) - CEILING} new silent handler(s). "
             "Log the exception at DEBUG rather than swallowing it.",
             file=sys.stderr,
         )
-        return 1
-    if len(hits) < CEILING:
-        print(f"Ceiling can be lowered to {len(hits)} in scripts/lint_except_pass.py.")
-    return 0
+    return code
 
 
 if __name__ == "__main__":

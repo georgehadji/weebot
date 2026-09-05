@@ -14,16 +14,16 @@ from __future__ import annotations
 
 import ast
 import re
+import pathlib
 import sys
 from pathlib import Path
 
 
-# Current known count of genuine sites. Lower as they are fixed; never raise.
-# Before the scope/dedupe fixes this script reported 83 for these same 29 sites:
+# The ceiling lives in tasks/quality/ceilings.toml (phase B2), enforced in both
+# directions. Before the scope/dedupe fixes this script reported 83 for these same 29 sites:
 # it descended into nested sync helpers (the correct `asyncio.to_thread` pattern
 # in the persistence stores), matched `aiofiles.open(` as blocking, and emitted
 # one report per Call node rather than per line.
-CEILING = 29
 
 BLOCKING_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bopen\s*\("),
@@ -125,6 +125,17 @@ def _check_file(path: Path) -> list[str]:
     return violations
 
 
+# The ceiling lives in tasks/quality/ceilings.toml, and the rule that compares
+# against it lives in scripts/quality_ceilings.py. Both are shared by all five
+# ratchets so that the rule cannot drift between them -- and so that lowering a
+# ceiling is a diff in one declarative file rather than an edit buried here.
+def _ceiling_check(actual: int) -> tuple[int, str]:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from quality_ceilings import check
+
+    return check("blocking_io_in_async", actual)
+
+
 def main() -> int:
     paths = sys.argv[1:] if len(sys.argv) > 1 else ["weebot", "cli"]
     all_violations: list[str] = []
@@ -159,17 +170,10 @@ def main() -> int:
         print("=== Blocking I/O in async functions ===")
         for v in sorted(all_violations):
             print(v)
-        print(f"\n{len(all_violations)} violation(s) found; ceiling is {CEILING}.")
+        code, message = _ceiling_check(len(all_violations))
+        print(f"\n{message}")
         print("Wrap blocking calls with 'await asyncio.to_thread(...)' or 'loop.run_in_executor(...)'.")
-        if len(all_violations) > CEILING:
-            print(
-                f"ERROR: {len(all_violations) - CEILING} new blocking call(s) in async code.",
-                file=sys.stderr,
-            )
-            return 1
-        if len(all_violations) < CEILING:
-            print(f"Ceiling can be lowered to {len(all_violations)} in scripts/lint_async_io.py.")
-        return 0
+        return code
 
     print("No blocking I/O violations found in async functions.")
     return 0
