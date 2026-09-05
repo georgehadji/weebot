@@ -181,7 +181,11 @@ def dream_build(contract_id: str) -> None:
         async for event in runner.run_prompt(contract.prompt, session_id=session.id):
             await subscriber.on_event(event)
             if isinstance(event, WaitForUserEvent):
-                answer = input(f"\n[weebot asks] {event.question}\nYour answer: ")
+                # to_thread: a bare input() here would block the event loop,
+                # freezing the runner's own background tasks while it waits.
+                answer = await asyncio.to_thread(
+                    input, f"\n[weebot asks] {event.question}\nYour answer: "
+                )
                 async for resume_event in runner.resume_session(session.id, answer):
                     await subscriber.on_event(resume_event)
                 break

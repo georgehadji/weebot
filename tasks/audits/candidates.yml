@@ -264,13 +264,21 @@ candidates:
 
   - id: D26
     wave: W3
-    location: weebot/interfaces/web/websocket.py:68-72, behavior_router.py:205-228
+    location: weebot/interfaces/web/routers/behavior_router.py:203, websocket.py:69-74
     claim: "`_ws_lock` held across a timeout-less send loop; one hung client stalls every subscriber"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/interfaces/web/test_d26_broadcast_liveness.py
     verdict_note: >-
-      Ranked Priority 2 by the residual-work plan as one of the two clearest
-      liveness (T6) candidates. Not triggered.
+      Both halves true, at different severities, and the recorded location had
+      them the wrong way round. `_ws_lock` lives in behavior_router, not
+      websocket.py: `broadcast_event` held it across `await ws.send_json`, and
+      since the same lock guards registration and removal, a hung client
+      deadlocked the whole subsystem -- including its own disconnect, which is
+      what made the state permanent. websocket.py already released its lock
+      before sending, so it could not deadlock, but its send loop was
+      sequential and unbounded, which starves later subscribers. Both now
+      snapshot under the lock and fan out concurrently under a per-send
+      timeout. 9 failing triggers before, 13 passing after.
 
   - id: D27
     wave: W3
@@ -282,11 +290,17 @@ candidates:
 
   - id: D28
     wave: W3
-    location: weebot/application/flows/states/
+    location: weebot/core/approval.py:354, cli/commands/flow.py:92, cli/commands/dream.py:184
     claim: "`input()` inside `async def` blocks the whole event loop"
-    status: deferred
-    evidence: null
-    verdict_note: "Ranked Priority 2 with D26. Not triggered."
+    status: fixed
+    evidence: tests/unit/test_d28_no_blocking_input_in_async.py
+    verdict_note: >-
+      Claim true; recorded location wrong. There is no `input()` anywhere under
+      weebot/application/flows/states/ -- the three real sites are elsewhere,
+      and the audit that recorded this never named one. All three now use
+      `await asyncio.to_thread(input, ...)`. The proof is a zero-tolerance AST
+      gate over weebot/ and cli/ rather than three site-specific tests: the
+      sites were found by grep, and grep runs on nobody's behalf.
 
   - id: D29
     wave: W3
@@ -477,6 +491,15 @@ candidates:
       worked in no configuration at all: without a key the server was
       unauthenticated, and with one it raised at construction. See
       review_gate_d47_d50.md.
+
+  # ── Found while fixing D26 (not from a wave) ──────────────────────────
+  - id: D51
+    wave: D26
+    location: weebot/interfaces/web/routers/behavior_router.py:391-400
+    claim: "`_tracker_tasks` grows once per filesystem event and is never awaited, pruned or cancelled"
+    status: open
+    evidence: null
+    verdict_note: null
 
   - id: D48
     wave: W6
