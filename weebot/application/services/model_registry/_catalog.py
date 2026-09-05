@@ -1,8 +1,11 @@
 """Auto-generated model catalog. DO NOT EDIT MANUALLY.
 
 Generated from https://openrouter.ai/api/v1/models
-Total models: 343
+Total models: 347
 Generated: See git history for timestamp.
+
+Corrections belong in _catalog_overrides.py, which survives regeneration.
+Editing this file directly does not: the next --write discards it.
 """
 
 # mypy: ignore-errors
@@ -3894,39 +3897,6 @@ MODELS: dict[str, ModelConfig] = {
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
     ),
-    "openrouter/auto": ModelConfig(
-        name="Auto Router",
-        provider="openrouter",
-        cost_per_1k_tokens=-1000.0,
-        context_window=2000000,
-        strengths=[
-            TaskType.CHAT,
-            TaskType.CREATIVE,
-            TaskType.CODE_REVIEW,
-            TaskType.REASONING,
-            TaskType.DOCUMENTATION,
-            TaskType.ARCHITECTURE,
-        ],
-        tier=ModelTier.STANDARD,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
-    ),
-    "openrouter/bodybuilder": ModelConfig(
-        name="Body Builder (beta)",
-        provider="openrouter",
-        cost_per_1k_tokens=-1000.0,
-        context_window=128000,
-        strengths=[
-            TaskType.CHAT,
-            TaskType.CODE_REVIEW,
-            TaskType.REASONING,
-            TaskType.DOCUMENTATION,
-            TaskType.ARCHITECTURE,
-        ],
-        tier=ModelTier.STANDARD,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
-    ),
     "openrouter/free": ModelConfig(
         name="Free Models Router",
         provider="openrouter",
@@ -3941,38 +3911,6 @@ MODELS: dict[str, ModelConfig] = {
             TaskType.ARCHITECTURE,
         ],
         tier=ModelTier.FAST,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
-    ),
-    "openrouter/fusion": ModelConfig(
-        name="OpenRouter: Fusion",
-        provider="openrouter",
-        cost_per_1k_tokens=-1000.0,
-        context_window=1000000,
-        strengths=[
-            TaskType.CHAT,
-            TaskType.CODE_REVIEW,
-            TaskType.REASONING,
-            TaskType.DOCUMENTATION,
-            TaskType.ARCHITECTURE,
-        ],
-        tier=ModelTier.STANDARD,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
-    ),
-    "openrouter/pareto-code": ModelConfig(
-        name="Pareto Code Router",
-        provider="openrouter",
-        cost_per_1k_tokens=-1000.0,
-        context_window=2000000,
-        strengths=[
-            TaskType.CHAT,
-            TaskType.CODE_GENERATION,
-            TaskType.DEBUGGING,
-            TaskType.DOCUMENTATION,
-            TaskType.ARCHITECTURE,
-        ],
-        tier=ModelTier.STANDARD,
         api_key_env="OPENROUTER_API_KEY",
         tool_use_score=5,
     ),
