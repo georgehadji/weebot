@@ -34,9 +34,12 @@ jobs:
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F821,E9
       - name: Python dependency audit
-        # Non-blocking — known CVEs exist in the dependency tree.
-        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
-        run: pip-audit 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
+        # ADVISORY. Known CVEs exist in the dependency tree, so this reports
+        # rather than gates. `continue-on-error` instead of `|| echo`: the step
+        # keeps its real exit code and is surfaced as a warning, where the shell
+        # idiom forged a success and made the signal unreadable.
+        continue-on-error: true
+        run: pip-audit 2>&1 | head -20
       - name: Run import-linter
         run: make lint-imports
       - name: Secret scan
@@ -47,10 +50,13 @@ jobs:
         run: pytest tests/integration/test_security_penetration.py -v --tb=short
       - name: Run event bridge contract tests
         run: pytest tests/integration/test_event_bridge_contract.py -v --tb=short
-      - name: Lint env access (ratchet)
-        # Non-blocking — 96 bare os.getenv() calls remain.
-        # Will become blocking once count is reduced.
-        run: make lint-env-access 2>&1 || echo "lint-env-access violations remain (non-blocking)"
+      - name: Bare env-access ratchet
+        # BLOCKING. `make lint-env-access` has been a real ratchet since Wave 0
+        # (73 reads, ceiling 73, exits 1 above it) -- but the `|| echo` wrapper
+        # discarded that exit code, so the gate Wave 0 built was disarmed by the
+        # workflow that ran it. Removing the wrapper costs nothing: the count is
+        # at its ceiling and the target exits 0.
+        run: make lint-env-access
       - name: Silent except-handler ratchet
         # Blocking above the ceiling only: existing debt does not fail the build,
         # but no new silently-swallowed exception can be added. Previously this
@@ -80,9 +86,9 @@ jobs:
       - name: Ruff lint (F, E9 — undefined names + syntax)
         run: ruff check weebot/ cli/ --select F821,E9
       - name: Python dependency audit
-        # Non-blocking — known CVEs exist in the dependency tree.
-        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
-        run: pip-audit 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
+        # ADVISORY — see the note in the lint-and-arch job.
+        continue-on-error: true
+        run: pip-audit 2>&1 | head -20
       - name: Run unit tests with coverage
         run: pytest tests/unit/ -v --tb=short --cov=weebot --cov-report=term --cov-fail-under=52
 
@@ -160,8 +166,16 @@ jobs:
       - name: Build
         run: npm run build
 
-  security-scan:
-    name: Security Scan
+  # The former single "Security Scan" job is split in two. All three of its
+  # steps ended in `|| echo`, so its conclusion was a constant: it could not
+  # fail, whatever any scanner found. A required check built on it would have
+  # gated nothing. The split makes the distinction structural rather than a
+  # shell idiom, so the name on the check tells you whether it can fail.
+  #
+  # security-advisory  — reports; never gates; MUST NOT be a required check.
+  # security-blocking  — genuinely fails; intended to be required.
+  security-advisory:
+    name: Security Scan (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -173,25 +187,41 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install bandit pip-audit
+          pip install pip-audit
       - name: pip-audit
-        # Non-blocking — known CVEs exist in the dependency tree.
-        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
-        run: pip-audit -r requirements.txt --strict 2>&1 | head -20 || echo "pip-audit found advisories (non-blocking)"
-      - name: Bandit SAST
-        # Non-blocking — 71 pre-existing B110 (try/except/pass without logging)
-        # findings exist across weebot/ and cli/. All are LOW severity; the
-        # bandit config in pyproject.toml deliberately scopes the scan to B110
-        # only, so this gate has been failing since it was introduced and has
-        # never gated a merge. Made explicit rather than left silently red,
-        # matching the pip-audit / npm audit steps above and below.
-        # Will become blocking once the 71 call sites log in their except
-        # blocks — tracked in tasks/specs/pre_existing_architecture_debt_plan.md.
-        run: bandit -c pyproject.toml -r weebot/ cli/ || echo "bandit found B110 findings (non-blocking)"
+        # ADVISORY — known CVEs exist in the dependency tree.
+        continue-on-error: true
+        run: pip-audit -r requirements.txt --strict 2>&1 | head -20
       - name: npm audit
+        # ADVISORY — known advisories exist in weebot-ui deps.
+        continue-on-error: true
         run: |
           cd weebot-ui
-          npm audit --audit-level=high 2>&1 || echo "npm audit found advisories (non-blocking)"
+          npm audit --audit-level=high
+
+  security-blocking:
+    name: Security Scan (blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install bandit
+      - name: Bandit B110 ratchet
+        # BLOCKING above the ceiling only. bandit was previously run with
+        # `|| echo`, so its 68 findings were discarded and the step could not
+        # fail. The pre-existing backlog still does not fail the build, but no
+        # new try/except/pass site can be added.
+        #
+        # The workflow comment here used to claim 71 findings; the measured
+        # count is 68, and the ceiling is set from the measurement.
+        run: python scripts/lint_bandit_b110.py
 
   docker-smoke:
     name: Docker Build Smoke Test
@@ -210,11 +240,11 @@ jobs:
       - name: Build weebot-ui image
         run: docker build -t weebot-ui -f weebot-ui/Dockerfile .
       - name: Frontend dependency audit
-        # Non-blocking — known advisories exist in weebot-ui deps.
-        # Will become blocking once advisories are addressed (see implementation_plan.md WI-10).
+        # ADVISORY — known advisories exist in weebot-ui deps.
+        continue-on-error: true
         run: |
           cd weebot-ui
-          npm audit --audit-level=high 2>&1 || echo "npm audit found advisories (non-blocking in CI)"
+          npm audit --audit-level=high
       - name: Start services (no .env — verify crash-free)
         run: |
           export OPENROUTER_API_KEY=ci-test-key
