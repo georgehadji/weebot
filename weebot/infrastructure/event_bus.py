@@ -121,8 +121,13 @@ class AsyncEventBus(EventBusPort):
         Removes every registration for the handler: the signature carries no
         event type, so there is no way to say which one to keep.
         """
+        # Compare with ==, not `is`. The original `handler in self._handlers`
+        # used equality, and callers pass bound methods -- `obj.method` builds a
+        # new object on every access, so `obj.method is obj.method` is False
+        # while `==` is True. Identity comparison here silently stopped
+        # main.py:304 from detaching the event broadcaster at shutdown.
         for registered in list(self._handlers):
-            if registered is handler or getattr(registered, "_wrapped_handler", None) is handler:
+            if registered == handler or getattr(registered, "_wrapped_handler", None) == handler:
                 self._handlers.remove(registered)
 
     # ── Domain event support ────────────────────────────────────────

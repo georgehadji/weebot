@@ -171,3 +171,52 @@ class TestEveryFlowStateDeclaresAStatus:
 
         assert MetaAnalysisState.status is AgentStatus.SUMMARIZING
         assert MetaAnalysisState.status.value == "summarizing"
+
+
+class TestUnsubscribeAcceptsBoundMethods:
+    """W8 regression guard.
+
+    The W3 fix compared with ``is``. Callers pass bound methods
+    (``main.py:194`` subscribes ``broadcaster.publish`` and ``main.py:304``
+    unsubscribes it), and ``obj.method`` constructs a new object on every
+    attribute access -- so identity comparison silently stopped matching what
+    the original ``handler in self._handlers`` had matched by equality.
+    """
+
+    @pytest.mark.asyncio
+    async def test_bound_method_can_be_unsubscribed(self):
+        class Broadcaster:
+            def __init__(self):
+                self.seen: list = []
+
+            async def publish(self, event):
+                self.seen.append(event)
+
+        b = Broadcaster()
+        assert b.publish is not b.publish, "premise: bound methods are not identical"
+
+        bus = AsyncEventBus(handler_timeout=None)
+        bus.subscribe(b.publish)
+        bus.unsubscribe(b.publish)
+        await bus.publish(MessageEvent(role="user", message="x"))
+
+        assert bus._handlers == []
+        assert b.seen == []
+
+    @pytest.mark.asyncio
+    async def test_bound_method_via_subscribe_by_type_too(self):
+        class Broadcaster:
+            def __init__(self):
+                self.seen: list = []
+
+            async def publish(self, event):
+                self.seen.append(event)
+
+        b = Broadcaster()
+        bus = AsyncEventBus(handler_timeout=None)
+        bus.subscribe_by_type("message", b.publish)
+        bus.unsubscribe(b.publish)
+        await bus.publish(MessageEvent(role="user", message="x"))
+
+        assert bus._handlers == []
+        assert b.seen == []
