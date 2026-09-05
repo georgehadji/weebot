@@ -107,7 +107,10 @@ class ActivityStream:
     def recent(self, n: int = 50, project_id: str | None = None) -> list[ActivityEvent]:
         """Return up to n most recent events, optionally filtered by project_id."""
         if project_id is not None:
-            return list(self._by_project[project_id])[:n]
+            # .get, not []: _by_project is a defaultdict, so indexing it here
+            # inserted a permanent empty deque for every project_id ever asked
+            # about. A read must not allocate.
+            return list(self._by_project.get(project_id, ()))[:n]
         return list(self._buffer)[:n]
 
     def clear(self) -> None:
