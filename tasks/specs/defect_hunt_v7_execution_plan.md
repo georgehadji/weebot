@@ -304,8 +304,9 @@ explicitly ratcheted with a recorded number · every instrument's baseline count
 **Surface:** `weebot/core/bash_guard.py`, `egress_guard.py`, `trust_boundary.py`, `approval.py`,
 `approval_policy.py`, `output_path.py`, `weebot/tools/bash_security.py`, `bash_tool.py`,
 `python_tool.py`, `powershell_tool.py`, `weebot/infrastructure/security/**`,
-`weebot/infrastructure/sandbox/**`, `weebot/config/secret_accessor.py`, `secret_redaction.py`,
-`credential_sanitizer.py`, the atomic-mail inbound gate in `flows/states/executing.py`.
+`weebot/infrastructure/sandbox/**`, `weebot/config/secret_accessor.py`,
+`weebot/core/secret_redaction.py`, `weebot/core/credential_sanitizer.py`, the atomic-mail
+inbound gate in `flows/states/executing.py`.
 
 **Phase 1 regions, highest priority first** (reachability and blast radius from recon):
 

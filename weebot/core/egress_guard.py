@@ -110,9 +110,13 @@ _BASH_EGRESS_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-# browser tools indicating form-submit or navigation with POST data
+# browser tools indicating form-submit or navigation with POST data.
+# Entries are ``BaseTool.name`` values — the identifier ``classify()`` receives.
+# "browser_tool" is the module file name of the tool registered as
+# "browser_navigator", so it matched nothing and form submissions from the real
+# browser tool were never classified as egress.
 _BROWSER_EGRESS_TOOLS: frozenset[str] = frozenset(
-    {"advanced_browser", "browser_tool", "computer_use"}
+    {"advanced_browser", "browser_navigator", "browser_tool", "computer_use"}
 )
 _BROWSER_EGRESS_ACTIONS: frozenset[str] = frozenset(
     {

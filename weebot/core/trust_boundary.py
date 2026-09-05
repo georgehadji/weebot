@@ -33,17 +33,39 @@ _CLOSE_RE = re.compile(r"⟦END_UNTRUSTED_DATA⟧")
 
 # Tools whose output must be treated as untrusted external content.
 # This is the authoritative list — add here when new network/file tools are added.
+#
+# Entries MUST be ``BaseTool.name`` values, not module file names: this set is
+# matched against the tool name the model actually calls
+# (``_tool_executor.py`` -> ``is_untrusted_tool(name)``), which is the same
+# identifier ``RoleBasedToolRegistry`` authorizes. Several entries below were
+# written as module names (``browser_tool`` for the tool named
+# ``browser_navigator``), so they matched nothing and left the real tool
+# unfenced *and* untainted for the egress trifecta check. Stale names are kept
+# rather than deleted — an unmatched name over-fences nothing, while a missing
+# name silently disables both controls. ``test_trust_boundary_registry.py``
+# now fails if a registered external-content tool is absent here.
 UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
     {
         "web_search",
         "advanced_browser",
-        "browser_tool",
+        "browser_navigator",  # BaseTool.name of tools/browser_tool.py
+        "browser_tool",  # legacy module-name spelling; matches no registered tool
         "browser_inspect",  # browser_inspector alias
         "browser_inspector",
         "vane_search",
-        "video_ingest_tool",
+        "web_scraper",
+        "spacescraper",
+        "search_images",
+        "weather",
+        "video_ingest",  # BaseTool.name of tools/video_ingest_tool.py
+        "video_ingest_tool",  # legacy module-name spelling
+        "youtube_download",
         "ocr",
-        "knowledge_tool",
+        "ocr_structured",
+        "screenshot_ocr",
+        "knowledge_tool",  # legacy; the registered "knowledge" tool is a LOCAL
+        # note store (ToolRepositoryPort), not external content — deliberately
+        # not fenced, so a stored note is not mistaken for a fresh ingest.
         "apify_actor_tool",
         # file_editor reads are gated separately by EgressGuard when the path is external,
         # but mark it here too so the wrapper is applied if it returns external content.

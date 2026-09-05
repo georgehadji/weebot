@@ -9,10 +9,13 @@ Based on patterns from The Dev Squad analysis.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 # Optional global hook registry for post_bash_guard events.
 _bash_guard_hooks: Any = None
@@ -437,8 +440,19 @@ class BashGuard:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
                 self._compiled_patterns.append((compiled, risk, desc, suggestion))
-            except re.error:
-                # Skip invalid patterns
+            except re.error as exc:
+                # A malformed pattern silently removed the rule it encoded —
+                # including BLOCKED rules — leaving the guard weaker with no
+                # trace. Skipping is still the only safe action here (raising
+                # would make the whole guard unconstructable), but it must be
+                # visible.
+                _log.error(
+                    "bash_guard: dropping unusable %s pattern %r (%s) — "
+                    "the rule it encodes is NOT enforced",
+                    risk.value if hasattr(risk, "value") else risk,
+                    pattern,
+                    exc,
+                )
                 continue
 
     @staticmethod
