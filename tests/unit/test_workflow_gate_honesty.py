@@ -50,13 +50,23 @@ class TestNoStepSwallowsItsExitCode:
         assert len(jobs) >= 8, f"expected the full job set, got {sorted(jobs)}"
 
     def test_no_run_step_discards_its_result(self):
+        """Scans every workflow, not only the one this repair audited.
+
+        A step that swallows its exit code is dishonest wherever it lives, and
+        a new workflow file is exactly where the idiom would come back.
+        """
         offenders = []
-        for job_id, job in _workflow()["jobs"].items():
-            for step in job.get("steps", []):
-                run = step.get("run") or ""
-                for idiom in _SWALLOWING:
-                    if idiom in run:
-                        offenders.append(f"{job_id} / {step.get('name', '<unnamed>')}: {idiom}")
+        for path in sorted(_WORKFLOW.parent.glob("*.yml")):
+            parsed = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            for job_id, job in (parsed.get("jobs") or {}).items():
+                for step in job.get("steps", []):
+                    run = step.get("run") or ""
+                    for idiom in _SWALLOWING:
+                        if idiom in run:
+                            offenders.append(
+                                f"{path.name} / {job_id} / "
+                                f"{step.get('name', '<unnamed>')}: {idiom}"
+                            )
         assert offenders == [], (
             "these steps discard their exit code, so their job cannot fail on them. "
             "Use `continue-on-error: true` to mark a step advisory — it keeps the "
@@ -69,6 +79,17 @@ class TestAdvisoryJobsSaySo:
 
     @staticmethod
     def _can_fail(job: dict) -> bool:
+        """Can the job fail *on its own subject matter*?
+
+        `Install dependencies` is excluded deliberately, and the distinction is
+        load-bearing rather than a convenience. Every job has that step, so
+        counting it would make every job look blocking — including
+        `Security Scan (advisory)`, whose scanners are all
+        `continue-on-error`. Its only way to fail is a package-index outage:
+        it blocks on infrastructure and passes on a CVE. That is precisely a
+        job that must stay out of any required-checks list, so it must not
+        count as blocking here.
+        """
         blocking = [
             s for s in _named_steps(job)
             if not _is_advisory(s) and s.get("name") != "Install dependencies"

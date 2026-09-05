@@ -68,6 +68,14 @@ jobs:
         # exited 1, so `make check` was red on a clean checkout, and it appeared
         # nowhere in CI.
         run: python scripts/lint_async_io.py
+      - name: Ruleset / workflow consistency
+        # BLOCKING, and offline -- no token, no permissions. GitHub validates
+        # required-check names against nothing, so renaming a job here leaves
+        # .github/rulesets/main.json requiring a context that never reports, and
+        # every pull request then waits on it forever with no error saying why.
+        # The reverse drift is just as quiet: a new job nobody requires is red
+        # while the merge button stays green.
+        run: python scripts/check_ruleset_consistency.py
 
   unit-tests:
     name: Unit Tests

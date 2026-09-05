@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live lint-imports lint-env-access check-arch check
+.PHONY: help install test test-live lint-imports lint-env-access lint-ruleset check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -53,6 +53,10 @@ lint-bare-except-pass:
 	@echo "=== Silent except-handler check (AST, ratcheted) ==="
 	@python scripts/lint_except_pass.py
 
+lint-ruleset:
+	@echo "=== Ruleset / workflow consistency (offline) ==="
+	@python scripts/check_ruleset_consistency.py
+
 lint-env-access:
 	@echo "=== Bare os.environ / os.getenv Access Check (ratcheted) ==="
 	@count=$$(grep -Prn "os\.environ(?!(\.get|\[))|os\.getenv\(" \
@@ -94,5 +98,5 @@ lint-no-print:
 	    echo "ERROR: new print() in production code. Use logger instead."; exit 1; \
 	  fi
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print lint-ruleset
 	@echo "=== All checks passed ==="
