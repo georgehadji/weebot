@@ -6,6 +6,7 @@ as suspicious or dangerous by the BashGuard.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -351,7 +352,12 @@ async def console_approval_callback(request: ApprovalRequest) -> ApprovalDecisio
     # Get user input
     while True:
         try:
-            choice = input("Approve this command? [Y/N/S/?]: ").strip().lower()
+            # to_thread, not input(): this coroutine runs on the event loop's
+            # thread, so a bare input() stops every other task in the process
+            # for as long as the prompt is on screen -- timers, sockets,
+            # keepalives, cancellations. Only this task should wait.
+            raw = await asyncio.to_thread(input, "Approve this command? [Y/N/S/?]: ")
+            choice = raw.strip().lower()
 
             if choice in ("y", "yes"):
                 return ApprovalDecision.APPROVED

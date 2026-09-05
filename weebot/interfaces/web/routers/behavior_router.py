@@ -19,6 +19,7 @@ from weebot.core.behavior_tracker import (
     get_tracker,
     stop_tracker,
 )
+from weebot.interfaces.web.websocket import fan_out
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/behavior", tags=["behavior"])
@@ -198,33 +199,47 @@ async def regenerate_self_knowledge():
 _ws_connections: list[WebSocket] = []
 _ws_lock = asyncio.Lock()
 _WS_MAX_MSG_SIZE = 1024 * 100  # 100 KB max incoming JSON
+# How long one client may take to accept a broadcast before it is dropped.
+_WS_SEND_TIMEOUT = 5.0
 
 
 async def broadcast_event(event: BehaviorEvent):
-    """Broadcast event to all connected WebSockets."""
+    """Broadcast event to all connected WebSockets.
+
+    The lock covers the snapshot only, never the sends. It used to wrap the
+    whole function, and because the same lock also guards registration (in
+    ``behavior_websocket``) and removal (in its ``finally`` block), a client
+    whose socket never drained held every one of them: no event could be
+    broadcast, no new client could connect, and -- the part that made it
+    permanent -- no client could disconnect, because leaving required the lock
+    the hang was holding. The one thing that would have cleared it was the one
+    thing it blocked.
+    """
     async with _ws_lock:
         if not _ws_connections:
             return
+        connections = list(_ws_connections)
 
-        message = {
-            "type": f"file.{event.event_type}",
-            "timestamp": event.timestamp,
-            "path": event.path,
-            "session_id": event.session_id,
-            "agent_version": event.agent_version,
-        }
+    message = {
+        "type": f"file.{event.event_type}",
+        "timestamp": event.timestamp,
+        "path": event.path,
+        "session_id": event.session_id,
+        "agent_version": event.agent_version,
+    }
 
-        disconnected = []
-        for ws in _ws_connections:
-            try:
-                await ws.send_json(message)
-            except Exception:
-                disconnected.append(ws)
+    disconnected = await fan_out(
+        connections,
+        lambda ws: ws.send_json(message),
+        timeout=_WS_SEND_TIMEOUT,
+        what="behavior WebSocket",
+    )
 
-        # Clean up disconnected
-        for ws in disconnected:
-            if ws in _ws_connections:
-                _ws_connections.remove(ws)
+    if disconnected:
+        async with _ws_lock:
+            for ws in disconnected:
+                if ws in _ws_connections:
+                    _ws_connections.remove(ws)
 
 
 @router.websocket("/ws")

@@ -1,0 +1,534 @@
+# Defect-hunt candidate inventory — the single source of truth.
+#
+# Phase B1 of tasks/specs/review_gate_and_residual_work_plan.md. The candidates
+# were recorded as Markdown tables spread across nine audit files: readable, but
+# not checkable. Nothing counted them, nothing stopped one being quietly
+# dropped, and answering "what is still open?" meant re-reading nine documents —
+# which is exactly what happened when the question was last asked.
+#
+# The audits keep their narrative. The counts come from here.
+# tests/unit/test_candidate_inventory.py enforces that the two agree.
+#
+# status:
+#   fixed     — verified defect, repaired; `evidence` names a proof test
+#   cleared   — investigated, innocence established; `verdict_note` required
+#   deferred  — read and consciously set aside; `verdict_note` required
+#   open      — generated, never investigated
+#
+# A `cleared` or `deferred` record without a `verdict_note` fails the gate. That
+# is the protocol's Phase 4 rule — a candidate may not be dismissed silently —
+# expressed as a test rather than as a convention.
+
+meta:
+  source_of_record: tasks/audits/
+  reconciliation_note: >-
+    The residual-work plan's Appendix B listed 25 uninvestigated candidates.
+    This inventory reports 24 not closed, and the difference is exact:
+    25 - 2 (D47 fixed, D50 cleared) + 1 = 24. The one addition is D13, which
+    Appendix B omitted because W2 triaged it "PARTLY DEFENDED" rather than
+    leaving it uninvestigated — but its fail-open policy question was escalated,
+    not answered, so it is unresolved. Converting the prose to data surfaced a
+    candidate the prose count had lost, on the first run.
+  numbering_gaps: [D1, D2, D7]
+  numbering_gaps_note: >-
+    D1, D2 and D7 appear nowhere in the audits except inside the range label
+    "D1-D12" in the baseline. Either they were generated and never written down,
+    or the numbering simply began at D3 and the label was loose. Prose-based
+    tracking cannot tell which, and that is this file's justification in
+    miniature. Recorded rather than invented: no claim is attributed to them.
+
+candidates:
+
+  # ── Wave 1 — security & trust boundary ────────────────────────────────
+  - id: D3
+    wave: W1
+    location: weebot/core/output_path.py
+    claim: "`startswith` prefix test is not path containment; a sibling directory sharing a string prefix passes"
+    status: fixed
+    evidence: tests/unit/test_output_path.py
+    verdict_note: null
+
+  - id: D4
+    wave: W1
+    location: weebot/core/egress_guard.py
+    claim: "EgressGuard `None` leaves egress ungated"
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Defended, not proven innocent. Requires DI resolution *and* a bare
+      EgressGuard() to both raise. W1 recorded this as [HYP], cleared by
+      reasoning rather than by an executable trigger.
+
+  - id: D5
+    wave: W1
+    location: weebot/tools/bash_tool.py
+    claim: "Analyzer exception falls back to a weaker legacy check"
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Defended: BashGuard still runs independently at bash_tool.py:395, so the
+      degrade is not to "no check". Cleared by reasoning, [HYP] not [VF].
+
+  - id: D6
+    wave: W1
+    location: weebot/core/bash_guard.py
+    claim: "An invalid guard regex is dropped silently, weakening the guard with no signal"
+    status: fixed
+    evidence: tests/unit/test_bash_guard_security.py
+    verdict_note: >-
+      Verified but LOW: `custom_patterns` has no production caller, so the
+      reachable blast radius is a future one.
+
+  - id: D8
+    wave: W1
+    location: weebot/application/services/state_verifier.py:501
+    claim: "Raw `create_subprocess_shell` outside the bash-guard path"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      W1 enumerated 51 subprocess sites but triaged none; regions R1/R2 were
+      declared in scope and not hunted. Deferred to W7, which did not enter it
+      either.
+
+  - id: D9
+    wave: W1
+    location: "region R6 — secret classification & event sanitisation"
+    claim: "not recorded — W1 names only the region, never an individual claim"
+    status: open
+    evidence: null
+    verdict_note: null
+
+  - id: D10
+    wave: W1
+    location: "region R6 — secret classification & event sanitisation"
+    claim: "not recorded — W1 names only the region, never an individual claim"
+    status: open
+    evidence: null
+    verdict_note: null
+
+  - id: D11
+    wave: W1
+    location: weebot/core/trust_boundary.py
+    claim: "The untrusted-tool list is keyed on module names, not the `BaseTool.name` values actually checked"
+    status: fixed
+    evidence: tests/unit/core/test_trust_boundary_registry.py
+    verdict_note: null
+
+  - id: D12
+    wave: W1
+    location: weebot/application/flows/states/executing.py
+    claim: "The inbound-mail approval flag is cleared before the pause"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Partially defended — no clear-without-pause path exists. W1 left it [UNK]
+      on the resume path specifically; that path was never triggered.
+
+  - id: S1
+    wave: W1
+    location: weebot/core/output_path.py
+    claim: "`output_path()` returns absolute paths verbatim, so `/etc/passwd` resolves to itself"
+    status: fixed
+    evidence: tests/unit/test_output_path.py
+    verdict_note: null
+
+  # ── Wave 2 — verification gates ───────────────────────────────────────
+  - id: D13
+    wave: W2
+    location: weebot/application/services/step_evaluator.py:104
+    claim: "An evaluator exception yields score=1.0, passed=True"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      PARTLY DEFENDED — the fail-open is documented in the module docstring, so
+      it is a policy rather than an oversight. W2 escalated the policy question
+      (its R-2) rather than changing it: whether failing open is right for a
+      *verification* gate is a product decision, not a defect.
+
+  - id: D14
+    wave: W2
+    location: weebot/application/services/step_evaluator.py:93
+    claim: "`json.loads(resp.content or \"{}\")` turns an empty completion into a perfect score with no exception"
+    status: fixed
+    evidence: tests/unit/services/test_step_evaluator.py
+    verdict_note: null
+
+  - id: D15
+    wave: W2
+    location: weebot/application/services/conversation_compressor.py:137
+    claim: "A compression failure replaces real turns with the error string, destroying them"
+    status: fixed
+    evidence: tests/unit/services/test_compression_is_not_destructive.py
+    verdict_note: null
+
+  - id: D16
+    wave: W2
+    location: weebot/application/services/trajectory_builder.py:74
+    claim: "Failure yields `failure_modes=[]`, indistinguishable from a clean trajectory"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Read and deferred: it logs a warning, so the failure is not invisible, and
+      the blast radius is a leaky analysis rather than a wrong verdict.
+
+  - id: D17
+    wave: W2
+    location: weebot/application/services/verifier_scorer.py:84
+    claim: "Bare `json.loads(response.content)` fails open"
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      FALSE. It raises, is caught, and yields score=0.0 with an explicit
+      failure_mode — it fails *closed*, and correctly. Re-checked by W8 against
+      the W2 fixes and still closed.
+
+  - id: D18
+    wave: W2
+    location: weebot/models/structured_output.py:430
+    claim: "Any failure produces an empty distribution"
+    status: deferred
+    evidence: null
+    verdict_note: "Not triggered; consumers were never traced, so the blast radius is unknown."
+
+  - id: S2
+    wave: W2
+    location: weebot/models/structured_output.py
+    claim: "`parse_agent_output` never raises, so a caller cannot distinguish \"the model reported PARTIAL\" from \"we failed to parse\""
+    status: open
+    evidence: null
+    verdict_note: null
+
+  # ── Wave 3 — flow state machine & concurrency ─────────────────────────
+  - id: D19
+    wave: W3
+    location: weebot/application/flows/states/meta_analysis.py
+    claim: "`status = None` on a field typed `AgentStatus`; the `getattr` default does not rescue it"
+    status: fixed
+    evidence: tests/unit/test_w3_flow_state_and_subscription.py
+    verdict_note: null
+
+  - id: D20
+    wave: W3
+    location: weebot/application/flows/states/
+    claim: "Terminate-with-next-step returns without `set_state`, so `prompt_consumed` is never reset"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; W3 stopped at its investigation budget before triggering it."
+
+  - id: D21
+    wave: W3
+    location: weebot/application/flows/states/updating.py
+    claim: "`UpdatePlanCommand` failure sends `ExecutingState` back to the same failing step — livelock"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W3's budget."
+
+  - id: D22
+    wave: W3
+    location: weebot/application/flows/states/reviewing.py
+    claim: "`else: # \"reject\"` silently marks any unrecognised verdict FAILED"
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Defended conclusively: CodeReviewResult.verdict is
+      Literal["approved","revise","reject"], so Pydantic rejects anything else
+      before the branch is reached. W8 re-checked it against the later fixes and
+      the Literal still holds.
+
+  - id: D23
+    wave: W3
+    location: weebot/infrastructure/watchers/
+    claim: "`get_event_loop()` + `create_task` from the watchdog observer thread, swallowed"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W3's budget."
+
+  - id: D24
+    wave: W3
+    location: weebot/infrastructure/event_bus.py
+    claim: "`subscribe`/`unsubscribe` mutate `_handlers` without `self._lock`"
+    status: cleared
+    evidence: tests/unit/test_w3_flow_state_and_subscription.py
+    verdict_note: >-
+      STATISTICAL, not proven. N=200 same-loop plus N=200 cross-thread produced
+      0 failures, so it is bounded by 400 trials rather than by argument. Any
+      change to AsyncEventBus.subscribe reopens it.
+
+  - id: D25
+    wave: W3
+    location: weebot/infrastructure/event_bus.py
+    claim: "`subscribe_by_type` appends a closure, so `unsubscribe(handler)` can never remove it"
+    status: fixed
+    evidence: tests/unit/test_w3_flow_state_and_subscription.py
+    verdict_note: null
+
+  - id: D26
+    wave: W3
+    location: weebot/interfaces/web/routers/behavior_router.py:203, websocket.py:69-74
+    claim: "`_ws_lock` held across a timeout-less send loop; one hung client stalls every subscriber"
+    status: fixed
+    evidence: tests/unit/interfaces/web/test_d26_broadcast_liveness.py
+    verdict_note: >-
+      Both halves true, at different severities, and the recorded location had
+      them the wrong way round. `_ws_lock` lives in behavior_router, not
+      websocket.py: `broadcast_event` held it across `await ws.send_json`, and
+      since the same lock guards registration and removal, a hung client
+      deadlocked the whole subsystem -- including its own disconnect, which is
+      what made the state permanent. websocket.py already released its lock
+      before sending, so it could not deadlock, but its send loop was
+      sequential and unbounded, which starves later subscribers. Both now
+      snapshot under the lock and fan out concurrently under a per-send
+      timeout. 9 failing triggers before, 13 passing after.
+
+  - id: D27
+    wave: W3
+    location: weebot/core/activity_stream.py
+    claim: "`recent()` indexes a `defaultdict`, inserting a permanent empty deque per unknown project"
+    status: fixed
+    evidence: tests/unit/test_w3_flow_state_and_subscription.py
+    verdict_note: null
+
+  - id: D28
+    wave: W3
+    location: weebot/core/approval.py:354, cli/commands/flow.py:92, cli/commands/dream.py:184
+    claim: "`input()` inside `async def` blocks the whole event loop"
+    status: fixed
+    evidence: tests/unit/test_d28_no_blocking_input_in_async.py
+    verdict_note: >-
+      Claim true; recorded location wrong. There is no `input()` anywhere under
+      weebot/application/flows/states/ -- the three real sites are elsewhere,
+      and the audit that recorded this never named one. All three now use
+      `await asyncio.to_thread(input, ...)`. The proof is a zero-tolerance AST
+      gate over weebot/ and cli/ rather than three site-specific tests: the
+      sites were found by grep, and grep runs on nobody's behalf.
+
+  - id: D29
+    wave: W3
+    location: weebot/application/flows/
+    claim: "`t.exception()` in a done-callback raises `CancelledError`"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W3's budget."
+
+  - id: S5
+    wave: W3
+    location: weebot/application/flows/
+    claim: "Both declared transition tables are dead code — the architecture documents a machine that does not execute"
+    status: open
+    evidence: null
+    verdict_note: null
+
+  # ── Wave 4 — persistence & data integrity ─────────────────────────────
+  - id: D30
+    wave: W4
+    location: weebot/infrastructure/persistence/connection_pool.py
+    claim: "The configured `timeout` never reaches sqlite; a 30 s setting yields busy_timeout=5000 ms"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_w4_pool_and_index_integrity.py
+    verdict_note: null
+
+  - id: D31
+    wave: W4
+    location: weebot/infrastructure/persistence/connection_pool.py
+    claim: "`close()` never evicts from `_pool_registry`; the next `get_or_create_pool()` returns the closed pool"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_w4_pool_and_index_integrity.py
+    verdict_note: null
+
+  - id: D32
+    wave: W4
+    location: weebot/infrastructure/persistence/sqlite_state_repo.py
+    claim: "`save_session` spans three separate write transactions; a crash between them leaves partial state"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W4's budget."
+
+  - id: D33
+    wave: W4
+    location: weebot/infrastructure/persistence/sqlite_state_repo.py
+    claim: "The FTS5 watermark advances past events that failed to index, so they are never retried"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_w4_pool_and_index_integrity.py
+    verdict_note: null
+
+  - id: D34
+    wave: W4
+    location: weebot/infrastructure/persistence/sqlite_state_repo.py
+    claim: "A truncation rule implemented twice, only one copy resetting the FTS watermark"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W4's budget."
+
+  - id: D35
+    wave: W4
+    location: weebot/infrastructure/persistence/session_persistence_adapter.py
+    claim: "`PERSISTENCE_RETRY_CONFIG` has `retryable=None`, which backoff.py treats as retry-everything, so permanent errors are retried"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_w4_pool_and_index_integrity.py
+    verdict_note: null
+
+  - id: D36
+    wave: W4
+    location: weebot/infrastructure/persistence/connection_pool.py
+    claim: "`close()` drains only the idle queue; a checked-out read connection leaks its worker thread"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W4's budget."
+
+  - id: D37
+    wave: W4
+    location: weebot/infrastructure/adapters/playwright/
+    claim: "Playwright `start()` has no cleanup if `new_context`/`new_page` raises after `launch()`"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Deferred by W4 to W7 as a resource-lifecycle candidate; W7 spent its
+      budget on S4 (37 sites) and did not enter it either.
+
+  - id: D38
+    wave: W4
+    location: weebot/ (subprocess sites)
+    claim: "`subprocess.Popen` assigned to a local, never waited or terminated; `terminate()` without `wait()` leaves a zombie"
+    status: deferred
+    evidence: null
+    verdict_note: "Deferred by W4 to W7; W7 did not enter it either."
+
+  - id: S4
+    wave: W4
+    location: "37 sites across 10 modules"
+    claim: "`with sqlite3.connect(...) as conn:` commits but does not close, leaking a connection and file descriptor per call"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_w7_connection_lifecycle.py
+    verdict_note: >-
+      Generated in W4 and deferred there — a 37-site sweep does not fit a
+      15-line fix budget. Closed by W7, which took the same budget deviation
+      rather than let the programme's largest verified seed survive untouched.
+
+  # ── Wave 5 — LLM adapters, cascade & cost ─────────────────────────────
+  - id: D39
+    wave: W5
+    location: weebot/application/agents/executor/_cascade.py
+    claim: "Orphaned probes on the `FIRST_COMPLETED` path keep running and billing"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Ranked Priority 3 by the residual-work plan as unbounded spend (T4). Not
+      triggered.
+
+  - id: D40
+    wave: W5
+    location: weebot/application/agents/executor/_cascade.py
+    claim: "Credit-check failure strips models while the comment claims fail-open; 3 models in, 1 out"
+    status: fixed
+    evidence: tests/unit/agents/test_w5_cascade_accounting.py
+    verdict_note: null
+
+  - id: D41
+    wave: W5
+    location: weebot/infrastructure/adapters/llm/resilient_adapter.py
+    claim: "Breaker keyed on `model or self._model_name`, inspected and reset on `self._model_name`"
+    status: deferred
+    evidence: null
+    verdict_note: "Generated and read; not triggered within W5's budget."
+
+  - id: D42
+    wave: W5
+    location: weebot/infrastructure/adapters/llm/
+    claim: "Cache written with 4 key parts and read with 3, so `get_adapter()` never hits"
+    status: fixed
+    evidence: tests/unit/agents/test_w5_cascade_accounting.py
+    verdict_note: null
+
+  - id: D43
+    wave: W5
+    location: weebot/application/agents/executor/_cascade.py
+    claim: "`cost_estimate` is never supplied, so `total_cost_estimate` is structurally 0.0"
+    status: fixed
+    evidence: tests/unit/agents/test_w5_cascade_accounting.py
+    verdict_note: null
+
+  - id: D44
+    wave: W5
+    location: weebot/infrastructure/adapters/llm/
+    claim: "No client HTTP timeout on any concrete adapter; the only timeout is the cascade's own"
+    status: deferred
+    evidence: null
+    verdict_note: "Ranked Priority 3 with D39 as the liveness cousin of unbounded spend. Not triggered."
+
+  - id: S3
+    wave: W5
+    location: weebot/application/agents/executor/_cascade.py
+    claim: "`hasattr(resp, \"usage\")` is vacuous; `usage=None` makes `.get` raise AttributeError"
+    status: fixed
+    evidence: tests/unit/agents/test_w5_cascade_accounting.py
+    verdict_note: null
+
+  # ── Wave 6 — external interfaces & non-human entry points ─────────────
+  - id: D45
+    wave: W6
+    location: weebot/interfaces/web/main.py
+    claim: "`/ws/sessions/{id}` authenticates but never authorises, so any authenticated caller can subscribe to any session"
+    status: fixed
+    evidence: tests/unit/interfaces/test_w6_ws_authorisation.py
+    verdict_note: null
+
+  - id: D46
+    wave: W6
+    location: .env.example:130
+    claim: "The template ships `WEEBOT_ENFORCE_SESSION_OWNERSHIP=false` where the code defaults to true"
+    status: fixed
+    evidence: tests/unit/interfaces/test_w6_ws_authorisation.py
+    verdict_note: null
+
+  - id: D47
+    wave: W6
+    location: weebot/mcp/server.py, run_mcp.py
+    claim: "`token_verifier=None` when `WEEBOT_MCP_API_KEY` is unset gives an unauthenticated SSE server"
+    status: fixed
+    evidence: tests/unit/mcp/test_d47_sse_transport_auth.py
+    verdict_note: >-
+      Understated as recorded. Six chained defects meant MCP SSE authentication
+      worked in no configuration at all: without a key the server was
+      unauthenticated, and with one it raised at construction. See
+      review_gate_d47_d50.md.
+
+  # ── Found while fixing D26 (not from a wave) ──────────────────────────
+  - id: D51
+    wave: D26
+    location: weebot/interfaces/web/routers/behavior_router.py:391-400
+    claim: "`_tracker_tasks` grows once per filesystem event and is never awaited, pruned or cancelled"
+    status: open
+    evidence: null
+    verdict_note: null
+
+  - id: D48
+    wave: W6
+    location: weebot/mcp/server.py
+    claim: "Dynamic tools forward unvalidated `**kwargs` to `tool.execute()`"
+    status: open
+    evidence: null
+    verdict_note: null
+
+  - id: D49
+    wave: W6
+    location: weebot/interfaces/web/main.py
+    claim: "Two `@app.exception_handler(Exception)` registrations; the second replaces the first, and they return different error codes"
+    status: fixed
+    evidence: tests/unit/interfaces/test_w6_ws_authorisation.py
+    verdict_note: null
+
+  - id: D50
+    wave: W6
+    location: weebot/interfaces/web/event_broadcaster.py
+    claim: "Events without `session_id` broadcast to all global connections"
+    status: cleared
+    evidence: tests/unit/interfaces/web/test_d50_event_scope_routing.py
+    verdict_note: >-
+      The claim describes real behaviour but accuses a deliberate design:
+      session_id == "" meaning global is a documented routing contract, stated
+      in SessionPresenceEvent's own docstring, which leaves the field empty on
+      purpose. Flow events are stamped by SessionScopedEventBus on the web path,
+      and an existing wiring test already proves scoped events never reach the
+      global socket. One latent hole was fixed in passing (broker_adapter's
+      fallback dropped session_id while embedding caller payload); it had no
+      production caller. See review_gate_d47_d50.md.

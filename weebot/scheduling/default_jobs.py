@@ -123,8 +123,14 @@ async def _database_backup_job() -> None:
 
     import weebot.config.settings as _settings
 
-    settings = _settings.WeebotSettings()
-    db_path = settings.sessions_db_path or os.environ.get("WEEBOT_SESSIONS_DB")
+    # This read `settings.sessions_db_path` off a freshly built WeebotSettings.
+    # That attribute never existed -- not in any revision of settings.py, and
+    # referenced nowhere else in the tree -- so the job raised AttributeError on
+    # every run and the daily backup has never once executed. The configured
+    # path is the module-level SESSIONS_DB, which already reads
+    # WEEBOT_SESSIONS_DB and defaults to ./weebot_sessions.db. Constructing
+    # WeebotSettings served only that broken lookup, so it goes with it.
+    db_path = getattr(_settings, "SESSIONS_DB", None) or os.environ.get("WEEBOT_SESSIONS_DB")
     backup_dir = os.environ.get("WEEBOT_BACKUP_DIR")
 
     if not db_path or not backup_dir:

@@ -83,6 +83,7 @@ nul;
 !/docs/atomic_mail.md
 !/docs/archive/
 !/docs/CONFIGURATION.md
+!/docs/BRANCHES.md
 /stripe-landing
 /Notion
 /logs

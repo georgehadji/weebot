@@ -5,10 +5,67 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Awaitable, Callable, Iterable
+from typing import TypeVar
 
 from starlette.websockets import WebSocket
 
 logger = logging.getLogger(__name__)
+
+# How long a single send may take before the peer is treated as gone.
+#
+# A WebSocket send blocks until the peer's receive window opens, so a client
+# that stops reading -- suspended laptop, wedged browser tab, half-open TCP
+# connection -- makes its send never return. Without a bound, one such client
+# holds a broadcast open for the life of the process.
+_WS_SEND_TIMEOUT = 5.0
+
+_C = TypeVar("_C")
+
+
+async def fan_out(
+    connections: Iterable[_C],
+    send: Callable[[_C], Awaitable[None]],
+    *,
+    timeout: float,
+    what: str = "WebSocket",
+) -> set[_C]:
+    """Deliver to every connection concurrently and report the ones that failed.
+
+    Concurrent rather than sequential, because a sequential loop makes every
+    client wait for the slowest one ahead of it: a single peer that stops
+    reading starves everybody behind it in the list. Bounded rather than
+    open-ended, because "stops reading" is indistinguishable from "will read
+    eventually" and only a clock can tell them apart.
+
+    A timed-out send is cancelled rather than left pending -- the peer is not
+    draining, so the send would otherwise stay alive holding its payload for as
+    long as the process runs.
+
+    ``timeout`` is required, not defaulted: each caller states the bound its own
+    clients are held to, so there is no shared default to drift out of sync.
+
+    Returns the connections that raised or timed out, for the caller to evict.
+    Never raises for a single client's failure; an outer cancellation still
+    propagates, since ``CancelledError`` is not an ``Exception``.
+    """
+    conns = list(connections)
+    if not conns:
+        return set()
+
+    async def _deliver(conn: _C) -> _C | None:
+        try:
+            await asyncio.wait_for(send(conn), timeout=timeout)
+        except TimeoutError:
+            logger.warning("%s send exceeded %ss; dropping unresponsive client", what, timeout)
+            return conn
+        except Exception as e:
+            logger.warning(f"Failed to send to {what}: {e}")
+            return conn
+        return None
+
+    results = await asyncio.gather(*(_deliver(c) for c in conns))
+    return {c for c in results if c is not None}
 
 
 class ConnectionManager:
@@ -64,14 +121,12 @@ class ConnectionManager:
             connections = list(self._connections[session_id])
 
         payload = json.dumps(message) if isinstance(message, dict) else message
-        disconnected = set()
-
-        for connection in connections:
-            try:
-                await connection.send_text(payload)
-            except Exception as e:
-                logger.warning(f"Failed to send to WebSocket: {e}")
-                disconnected.add(connection)
+        disconnected = await fan_out(
+            connections,
+            lambda c: c.send_text(payload),
+            timeout=_WS_SEND_TIMEOUT,
+            what="WebSocket",
+        )
 
         # Clean up disconnected clients.
         # Guard: the session may have been removed by disconnect() between
@@ -91,14 +146,12 @@ class ConnectionManager:
             connections = list(self._global_connections)
 
         payload = json.dumps(message) if isinstance(message, dict) else message
-        disconnected = set()
-
-        for connection in connections:
-            try:
-                await connection.send_text(payload)
-            except Exception as e:
-                logger.warning(f"Failed to send to global WebSocket: {e}")
-                disconnected.add(connection)
+        disconnected = await fan_out(
+            connections,
+            lambda c: c.send_text(payload),
+            timeout=_WS_SEND_TIMEOUT,
+            what="global WebSocket",
+        )
 
         if disconnected:
             async with self._global_lock:

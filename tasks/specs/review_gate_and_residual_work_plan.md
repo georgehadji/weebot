@@ -47,7 +47,7 @@ Measured against `240107f`; commands in Appendix A.
 | **7 steps swallow their own failure** with `\|\| echo` | lines 39, 53, 85, 180, 190, 194, 217 |
 | The **`Security Scan` job cannot fail** | all three of its steps (pip-audit, bandit, npm audit) are `\|\| echo` |
 | The automated reviewer did not run | `chatgpt-codex-connector[bot]`: *"You have reached your Codex usage limits for code reviews."* |
-| A stale **`master`** branch exists at a different SHA | `901e476`, unreferenced by CI |
+| A stale **`master`** branch exists at a different SHA | `901e476`, unreferenced by CI — **"stale" was wrong, see the correction below** |
 | **`CODEOWNERS` does not exist** | no file at any conventional path |
 
 ### 2.2 Defect A1 — three jobs are partly or wholly fail-open
@@ -138,6 +138,24 @@ disable it is also the only person reviewing.
 **Prove each gate blocks.** Wave 0's discipline applies unchanged: after configuring protection,
 attempt a direct push to `main` and a merge with a failing check, and confirm both are refused.
 A gate assumed to work is not a gate.
+
+### Correction — `master` is not stale (added after A4 was executed)
+
+This plan asserted a *"stale `master` branch"* on the strength of its SHA differing from `main`'s.
+Measuring it during A4 disproved the characterisation, and the entry above is left standing rather
+than rewritten because what the plan assumed is part of its record.
+
+`[VF]` `git merge-base main master` **exits 1 with no output**: the two branches share no common
+ancestor. `master` carries **490 commits** (2026-02-28 → 2026-07-21) against `main`'s 120, and holds
+**both** release tags, `v2.0.0` and `v2.1.0`, which exist on no other branch. `main` has **four**
+root commits of its own.
+
+It is a disjoint parallel history, not a leftover pointer — so *delete* was never the right half of
+the disjunction. Documented instead in [`docs/BRANCHES.md`](../../docs/BRANCHES.md). The one part of
+the original claim that held: nothing in CI or the Makefile references it, so it costs nothing to
+keep.
+
+Execution record for A2 and A4: [`tasks/audits/review_gate_a2_a4.md`](../audits/review_gate_a2_a4.md).
 
 ---
 

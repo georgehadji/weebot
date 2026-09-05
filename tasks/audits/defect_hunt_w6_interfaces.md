@@ -16,9 +16,9 @@ Execution record for W6. Threats **T1**, **T2**; classes **C1**, **C2**, **C3**.
 | **D45** | `/ws/sessions/{id}` authenticates but never authorises | **FIRED** — no `verify_session_ownership` anywhere in the endpoint | ✅ **VERIFIED DEFECT** |
 | **D46** | `.env.example` ships a weaker default than the code | **FIRED** — template `false`, code default `"true"` | ✅ **VERIFIED DEFECT** |
 | **D49** | Two `@app.exception_handler(Exception)`; the second replaces the first | **FIRED** — two registrations, returning **different** `error_code` values | ✅ **VERIFIED DEFECT** |
-| **D47** | `token_verifier=None` when `WEEBOT_MCP_API_KEY` unset | not investigated | 🔵 **SUSPECTED** |
+| **D47** | `token_verifier=None` when `WEEBOT_MCP_API_KEY` unset | investigated later | ✅ **VERIFIED — [closed](review_gate_d47_d50.md)** |
 | **D48** | Dynamic tools forward unvalidated `**kwargs` to `tool.execute()` | not investigated | 🔵 **SUSPECTED** |
-| **D50** | Events without `session_id` broadcast to all global connections | not investigated | 🔵 **SUSPECTED** |
+| **D50** | Events without `session_id` broadcast to all global connections | investigated later | ⚪ **CLEARED — [see why](review_gate_d47_d50.md)** |
 
 ### D45 — authentication is not authorisation
 
@@ -97,6 +97,11 @@ such — see R-1.
 D50 (events without `session_id` broadcast to every global connection — closely related to D45 and
 arguably the same leak by another route).
 
+**D47 and D50 were investigated later** and are recorded in
+[review_gate_d47_d50.md](review_gate_d47_d50.md). D47 was understated here: MCP SSE authentication
+did not work in *any* configuration — without a key the server was unauthenticated, and with one it
+raised at construction. **D48 remains uninvestigated.**
+
 Of the declared regions, **webhook signature verification ordering**, **MCP transport auth**, and
 **dynamic-tool kwargs validation** were never entered. `interfaces/gateways/**`,
 `weebot/scheduling/**` (cron triggers agent runs — a non-human entry point) and `cli/**` were not
@@ -109,6 +114,13 @@ looked at at all.
   configured app is the right proof and was not written.
 - **R-2 — D50 may be the same leak by another path.** If the broadcaster fans unscoped events to
   all connections, fixing the subscription check does not stop the delivery. Not investigated.
+
+  **Resolved — the premise held, the conclusion did not.** The broadcaster does fan unscoped events
+  to every global connection, but that is a *documented* routing contract (`SessionPresenceEvent`
+  states it in its own docstring and depends on it), and session events are stamped by
+  `SessionScopedEventBus` at every flow construction on the web path. D50 is cleared. One latent
+  hole was fixed on the way past: `broker_adapter._convert`'s fallback embedded arbitrary caller
+  payload in an event with no `session_id`. See [review_gate_d47_d50.md](review_gate_d47_d50.md).
 - **R-3 — changing the template default may break existing deployments** that copied it and rely
   on cross-session access. That is the correct direction for a security default, but it is a
   behaviour change for anyone who took the old template at its word.

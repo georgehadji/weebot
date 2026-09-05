@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live lint-imports lint-env-access check-arch check
+.PHONY: help install test test-live lint-imports lint-env-access lint-ruleset check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -9,8 +9,6 @@
 # the previous `--exclude-dir=weebot/GitNexus-main` and `--exclude-dir=weebot/config`
 # never excluded anything. Both are corrected below; the ceilings are measured
 # with the corrected exclusions.
-PRINT_CEILING ?= 143
-ENV_ACCESS_CEILING ?= 73
 
 help:
 	@echo "Available targets:"
@@ -53,6 +51,12 @@ lint-bare-except-pass:
 	@echo "=== Silent except-handler check (AST, ratcheted) ==="
 	@python scripts/lint_except_pass.py
 
+lint-ruleset:
+	@echo "=== Ruleset / workflow consistency (offline) ==="
+	@python scripts/check_ruleset_consistency.py
+
+# The grep still does the counting; only the ceiling comparison moved to
+# scripts/quality_ceilings.py, so centralising the rule cannot change a number.
 lint-env-access:
 	@echo "=== Bare os.environ / os.getenv Access Check (ratcheted) ==="
 	@count=$$(grep -Prn "os\.environ(?!(\.get|\[))|os\.getenv\(" \
@@ -62,10 +66,8 @@ lint-env-access:
 	    --exclude-dir=Output \
 	    --exclude-dir=config \
 	    weebot/ cli/ | wc -l); \
-	  echo "$$count bare env read(s) outside weebot/config/; ceiling is $(ENV_ACCESS_CEILING)."; \
-	  if [ "$$count" -gt "$(ENV_ACCESS_CEILING)" ]; then \
-	    echo "ERROR: new bare os.environ/os.getenv. Use SecretAccessor instead."; exit 1; \
-	  fi
+	  python scripts/quality_ceilings.py --check bare_env_reads --actual "$$count" \
+	    || { echo "Use SecretAccessor instead of a bare os.environ/os.getenv."; exit 1; }
 
 check-arch:
 	@echo "=== Architecture Fitness Tests ==="
@@ -89,10 +91,8 @@ lint-no-print:
 	    --exclude-dir=Output \
 	    --exclude-dir=GitNexus-main \
 	    weebot/ cli/ | wc -l); \
-	  echo "$$count print() call(s) in production code; ceiling is $(PRINT_CEILING)."; \
-	  if [ "$$count" -gt "$(PRINT_CEILING)" ]; then \
-	    echo "ERROR: new print() in production code. Use logger instead."; exit 1; \
-	  fi
+	  python scripts/quality_ceilings.py --check print_in_production --actual "$$count" \
+	    || { echo "Use logger instead of print() in production code."; exit 1; }
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print lint-ruleset
 	@echo "=== All checks passed ==="
