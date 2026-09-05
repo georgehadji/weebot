@@ -175,7 +175,27 @@ reason**, not silently dropped.
 
 ### Residual risks
 
-- **R-1 — egress friction is now higher, and enforcement is on by default.**
+- **R-1 — RESOLVED after review.** Recorded here because the reasoning is the point.
+
+  *Original finding:* `is_enforcing()` reads `WEEBOT_EGRESS_ENFORCE` defaulting to **true**, so
+  adding `weather`, `search_images`, `spacescraper` and the OCR variants to the untrusted set
+  meant those tools now tainted the session and every subsequent send required approval. The
+  security-economics objection was that over-tainting trains users to approve reflexively or to
+  set `WEEBOT_EGRESS_ENFORCE=false`, disabling the control completely — strictly worse than the
+  narrow injection risk from, say, wttr.in.
+
+  *Resolution (authorized, landed separately):* the two controls now have separate predicates.
+  `is_untrusted_tool()` keeps its broad meaning and still drives the **fence**, which costs
+  nothing. A new `taints_egress_context()` drives the **taint**, and is narrower by exactly
+  `FENCE_ONLY_TOOLS`. The default is to taint; exemption is explicit, and a test pins the
+  exemption set to `{"weather"}` so it cannot quietly grow back into the hole this closed.
+  Verified: `weather` is fenced and does not taint; `browser_navigator`, `web_search`,
+  `search_images`, `video_ingest`, OCR, `atomic_mail`, `file_editor` and every `mcp__*` tool do
+  both.
+
+- **R-1b — the taint is still sticky and never reset.** That is deliberate: the injected text
+  stays in the context window, so the risk does not expire when the tool call ends. It remains
+  the dominant source of approval friction, and no change here addresses it.
   `is_enforcing()` reads `WEEBOT_EGRESS_ENFORCE` defaulting to **true**. Adding `weather`,
   `search_images`, `spacescraper` and the OCR variants to the untrusted set means those tools now
   taint the session, so subsequent sends require approval where they previously did not.

@@ -103,6 +103,25 @@ def wrap_untrusted(source: str, content: str) -> str:
     return f"{open_tag}\n{_PREAMBLE}\n\n{safe}\n{_CLOSE}"
 
 
+# Tools whose output is fenced but which do NOT taint the session for the
+# egress trifecta check.
+#
+# is_untrusted_tool() gates two controls with very different costs. The fence
+# (executor/_base.py) is free: it wraps output in delimiters and nothing else
+# changes. The taint (executor/_tool_executor.py) is sticky and session-wide,
+# and WEEBOT_EGRESS_ENFORCE defaults to true, so one ingest makes every later
+# send require approval for the rest of the session. Paying the second cost for
+# sources a third party cannot write to buys nothing, and over-approval trains
+# users to disable the guard outright -- strictly worse than the risk it
+# addresses.
+#
+# Membership requires a fixed-schema, single-origin endpoint whose text is not
+# chosen by a third party. Anything that returns pages, documents, messages,
+# transcripts, search results or OCR of arbitrary media does NOT qualify: an
+# attacker picks that text. When in doubt, leave a tool out of this set -- the
+# default is to taint.
+FENCE_ONLY_TOOLS: frozenset[str] = frozenset({"weather"})
+
 _MCP_NAMESPACE_PREFIX = "mcp__"
 
 
@@ -119,3 +138,13 @@ def is_untrusted_tool(tool_name: str) -> bool:
     return len(tool_name) > len(_MCP_NAMESPACE_PREFIX) and tool_name.startswith(
         _MCP_NAMESPACE_PREFIX
     )
+
+
+def taints_egress_context(tool_name: str) -> bool:
+    """Return True if ingesting this tool's output must gate later egress.
+
+    Narrower than :func:`is_untrusted_tool` by exactly ``FENCE_ONLY_TOOLS``.
+    Fence everything external; reserve the sticky session taint for content an
+    attacker can actually author.
+    """
+    return is_untrusted_tool(tool_name) and tool_name not in FENCE_ONLY_TOOLS

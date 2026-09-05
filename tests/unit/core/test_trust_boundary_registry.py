@@ -165,3 +165,62 @@ class TestBoundaries:
 
     def test_unknown_tool_is_not_fenced(self):
         assert is_untrusted_tool("some_tool_that_does_not_exist") is False
+
+
+class TestFenceTaintDecoupling:
+    """The fence is free; the egress taint is sticky and session-wide.
+
+    is_untrusted_tool() gated both, so fencing a low-risk source also made every
+    later send in that session require approval. The two now have separate
+    predicates.
+    """
+
+    def test_taint_is_a_subset_of_the_fence(self):
+        """Nothing may taint without also being fenced."""
+        from weebot.core.trust_boundary import FENCE_ONLY_TOOLS, taints_egress_context
+
+        for tool in sorted(UNTRUSTED_OUTPUT_TOOLS | EXTERNAL_CONTENT_TOOLS):
+            if taints_egress_context(tool):
+                assert is_untrusted_tool(tool) is True, tool
+        for tool in sorted(FENCE_ONLY_TOOLS):
+            assert is_untrusted_tool(tool) is True, f"{tool} must still be fenced"
+            assert taints_egress_context(tool) is False, f"{tool} must not taint"
+
+    def test_attacker_authored_sources_still_taint(self):
+        """Anything a third party can write to must keep gating egress."""
+        from weebot.core.trust_boundary import taints_egress_context
+
+        for tool in (
+            "web_search",
+            "browser_navigator",
+            "advanced_browser",
+            "web_scraper",
+            "spacescraper",
+            "video_ingest",
+            "youtube_download",
+            "ocr",
+            "ocr_structured",
+            "screenshot_ocr",
+            "atomic_mail",
+            "file_editor",
+            "search_images",
+            "mcp__anything__here",
+        ):
+            assert taints_egress_context(tool) is True, tool
+
+    def test_exemption_set_stays_small_and_justified(self):
+        """A large exemption set would quietly rebuild the hole this closed."""
+        from weebot.core.trust_boundary import FENCE_ONLY_TOOLS
+
+        assert FENCE_ONLY_TOOLS == frozenset({"weather"}), (
+            "Adding to FENCE_ONLY_TOOLS exempts a tool from the egress trifecta "
+            "check. It requires a fixed-schema, single-origin endpoint whose "
+            "text no third party can choose."
+        )
+
+    def test_trusted_tools_neither_fenced_nor_tainting(self):
+        from weebot.core.trust_boundary import taints_egress_context
+
+        for tool in ("bash", "python_execute", "terminate", "knowledge"):
+            assert is_untrusted_tool(tool) is False, tool
+            assert taints_egress_context(tool) is False, tool
