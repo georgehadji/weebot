@@ -151,7 +151,14 @@ Consequences, both now corrected:
 ### B1 — a proof test for a production hang had gone inert
 
 `tests/unit/test_latex_document.py::test_compile_timeout_returns_result_instead_of_hanging`
-failed on `main` and on every PR against it.
+failed on a clean checkout of `main`'s code — verified by running the baseline locally — and in
+CI on every PR opened against it.
+
+**It did not fail in `main`'s own CI, and this record originally implied it did.** All seven jobs
+of `main@0440f3a`'s run (32450507421) completed in **2–4 seconds** with `conclusion: failure` —
+too fast to have installed dependencies, let alone run a test. That is a startup/infrastructure
+failure in which no test executed; its logs have since expired, so the cause cannot be recovered.
+The defect below is unaffected: it was established by execution, not by reading a CI badge.
 
 The font validation added by `0440f3a` (findings E/F) returns at `latex_compiler.py:161` before
 `compile()` ever reaches the `subprocess.Popen` at `:173`. The test exists to guard the
