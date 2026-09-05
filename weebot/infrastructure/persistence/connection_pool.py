@@ -115,7 +115,11 @@ class SQLiteConnectionPool:
             logger.debug(f"Initializing SQLite pool for {self.db_path}")
 
             # Create write connection
-            self._write_conn = await aiosqlite.connect(str(self.db_path))
+            # Without timeout=, sqlite uses its 5s default busy timeout, so the
+            # pool's configured value governed only the read-queue wait and never
+            # the database itself: a writer blocked past 5s raised "database is
+            # locked" no matter how generous self.timeout was.
+            self._write_conn = await aiosqlite.connect(str(self.db_path), timeout=self.timeout)
 
             # Enable WAL mode for better concurrency
             if self.enable_wal:
@@ -129,7 +133,7 @@ class SQLiteConnectionPool:
 
             # Pre-create read connections
             for i in range(self.max_read):
-                conn = await aiosqlite.connect(str(self.db_path))
+                conn = await aiosqlite.connect(str(self.db_path), timeout=self.timeout)
                 conn.row_factory = aiosqlite.Row
                 await self._read_pool.put(conn)
                 logger.debug(f"Created read connection {i+1}/{self.max_read}")
@@ -359,7 +363,17 @@ async def get_or_create_pool(
     path_key = str(Path(db_path).resolve())
 
     async with _get_pool_lock():
-        if path_key not in _pool_registry:
+        existing = _pool_registry.get(path_key)
+        if existing is not None and existing._closed:
+            # close() does not evict from the registry, so a registry hit can be a
+            # dead pool -- and every repository close() calls pool.close() directly.
+            # Returning it made the *next* caller fail with "Connection pool is
+            # closed" on an object it had just been handed as ready to use.
+            logger.info(f"Replacing closed pool for {db_path}")
+            del _pool_registry[path_key]
+            existing = None
+
+        if existing is None:
             pool = SQLiteConnectionPool(
                 db_path=db_path, max_read_connections=max_read_connections, **kwargs
             )

@@ -294,9 +294,20 @@ class AdapterFactory:
             raise ValueError(f"Unknown provider: {provider}")
 
     def get_adapter(self, provider: str, model: str | None = None) -> LLMPort | None:
-        """Get cached adapter if it exists."""
-        cache_key = f"{provider}:{model}:None"
-        return self._adapters.get(cache_key)
+        """Get a cached adapter for *provider*/*model* if one exists.
+
+        create_adapter() keys the cache on ``provider:model:api_key:cache_flag``.
+        This built ``provider:model:None`` -- three parts against four -- so the
+        lookup could never hit, whatever was cached. Match on the prefix the two
+        share; when several adapters differ only by api_key or caching flag, any
+        of them satisfies "an adapter for this provider and model", so the first
+        is returned.
+        """
+        prefix = f"{provider}:{model}:"
+        for key, adapter in self._adapters.items():
+            if key.startswith(prefix):
+                return adapter
+        return None
 
     def clear_cache(self) -> None:
         """Clear the adapter cache."""

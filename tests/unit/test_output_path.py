@@ -16,12 +16,30 @@ class TestOutputPath:
         assert "weebot" in norm
 
     def test_already_absolute_under_project(self):
-        from pathlib import Path
+        # NOTE: this walked up four parents (the repo's *parent*), so the path
+        # it built was outside the project root and the assertion below locked
+        # in the very escape output_path is supposed to prevent. Use the
+        # resolver's own root so the test exercises what its name claims.
+        import weebot.core.output_path as mod
 
-        root = Path(__file__).resolve().parent.parent.parent.parent
-        abs_path = str(root / "Output" / "x.txt")
+        abs_path = str(mod._PROJECT_ROOT / "Output" / "x.txt")
         result = output_path(abs_path)
         assert abs_path.replace("\\", "/") == result.replace("\\", "/")
+
+    def test_absolute_outside_project_rejected(self, tmp_path):
+        # tmp_path is outside the repo. Previously this returned the path
+        # verbatim, because ``_PROJECT_ROOT / <absolute>`` discards the root.
+        with pytest.raises(ValueError, match="escapes project root"):
+            output_path(str(tmp_path / "evil.txt"))
+
+    def test_sibling_directory_prefix_rejected(self):
+        # "/…/weebot-evil" shares a *string* prefix with "/…/weebot" but is not
+        # inside it. No ".." appears anywhere in this path.
+        import weebot.core.output_path as mod
+
+        sibling = str(mod._PROJECT_ROOT) + "-evil/payload.txt"
+        with pytest.raises(ValueError, match="escapes project root"):
+            output_path(sibling)
 
     def test_backslash_normalized(self):
         result = output_path("Output\\test\\file.txt")

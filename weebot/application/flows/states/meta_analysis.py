@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, StepStatus as EventStepStatus
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,16 @@ class MetaAnalysisState(FlowState):
     the flow always transitions to CompletedState regardless.
     """
 
-    # No status enum value yet — use SUMMARIZING as a reasonable neighbor.
+    # No status enum value yet — SUMMARIZING is the nearest neighbour.
     # A dedicated META_ANALYZING value can be added to AgentStatus later.
-    status = None  # Intentionally None — state transition is transparent
+    #
+    # This was `None`, which the comment above already described as the wrong
+    # value. FlowState types it `AgentStatus`, and plan_act_flow.py:552 reads it
+    # with `getattr(state, "status", AgentStatus.IDLE)` -- the default never
+    # applies, because the attribute exists and holds None. Entering this state
+    # therefore wiped the flow's status rather than leaving the transition
+    # "transparent", and any consumer reaching for `.value` would raise.
+    status: AgentStatus = AgentStatus.SUMMARIZING
 
     async def execute(self, context: PlanActFlow, prompt: str) -> AsyncGenerator[AgentEvent, None]:
 

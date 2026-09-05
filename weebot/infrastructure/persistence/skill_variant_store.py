@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from contextlib import closing
 import uuid
 from pathlib import Path
 
@@ -49,7 +50,7 @@ class SkillVariantStore(SkillVariantStorePort):
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.executescript(_SCHEMA_SQL)
 
     async def insert(self, variant: SkillVariant) -> str:
@@ -58,7 +59,7 @@ class SkillVariantStore(SkillVariantStorePort):
         variant.variant_id = vid
 
         def _insert() -> str:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO skill_variants
                        (variant_id, parent_id, skill_name, skill_content,
@@ -87,7 +88,7 @@ class SkillVariantStore(SkillVariantStorePort):
 
     async def get_by_domain(self, domain: str, limit: int = 50) -> list[SkillVariant]:
         def _query() -> list[dict]:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     "SELECT * FROM skill_variants WHERE domain = ? " "ORDER BY score DESC LIMIT ?",
@@ -102,7 +103,7 @@ class SkillVariantStore(SkillVariantStorePort):
 
     async def get_by_id(self, variant_id: str) -> SkillVariant | None:
         def _query() -> dict | None:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute(
                     "SELECT * FROM skill_variants WHERE variant_id = ?", (variant_id,)
@@ -116,7 +117,7 @@ class SkillVariantStore(SkillVariantStorePort):
 
     async def update_score(self, variant_id: str, score: float) -> None:
         def _update() -> None:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     "UPDATE skill_variants SET score = ? WHERE variant_id = ?", (score, variant_id)
                 )
@@ -127,7 +128,7 @@ class SkillVariantStore(SkillVariantStorePort):
 
     async def increment_children(self, variant_id: str) -> None:
         def _update() -> None:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     "UPDATE skill_variants SET children_count = children_count + 1 "
                     "WHERE variant_id = ?",
@@ -146,7 +147,7 @@ class SkillVariantStore(SkillVariantStorePort):
         """
 
         def _query() -> list[dict]:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     """SELECT * FROM skill_variants

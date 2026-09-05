@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 _log = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class PosteriorRepository:
 
     def _ensure_schema(self) -> None:
         """Create the posteriors table if it doesn't exist."""
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_DDL)
             conn.commit()
@@ -92,7 +93,7 @@ class PosteriorRepository:
             await loop.run_in_executor(None, self._record_sync, category, model, success)
 
     def _record_sync(self, category: str, model: str, success: bool) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             # Read current posterior (or use prior defaults)
             row = conn.execute(
                 "SELECT alpha, beta FROM acr_posteriors WHERE category=? AND model=?",
@@ -144,7 +145,7 @@ class PosteriorRepository:
 
     def _execute(self, query: str, params: tuple = ()):
         """Run a read query against SQLite."""
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             return conn.execute(query, params).fetchone()
 
     async def get_all_posteriors(self) -> dict[str, dict[str, tuple[float, float]]]:
@@ -157,7 +158,7 @@ class PosteriorRepository:
 
     def _get_all_sync(self) -> dict[str, dict[str, tuple[float, float]]]:
         result: dict[str, dict[str, tuple[float, float]]] = {}
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             rows = conn.execute(
                 "SELECT category, model, alpha, beta FROM acr_posteriors"
             ).fetchall()
@@ -176,7 +177,7 @@ class PosteriorRepository:
             await loop.run_in_executor(None, self._decay_all_sync)
 
     def _decay_all_sync(self) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.execute(
                 "UPDATE acr_posteriors SET alpha=alpha*?, beta=beta*?, updated_at=datetime('now')",
                 (self._decay, self._decay),

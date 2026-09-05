@@ -302,6 +302,11 @@ class SQLiteStateRepository(StateRepositoryPort):
                 last_indexed = 0
                 self._fts5_indexed.pop(session.id, None)
             new_events = session.events[last_indexed:]
+            # Count what actually made it in. The watermark used to advance to
+            # len(session.events) whether or not index_event raised, so any event
+            # that failed to index was never retried and stayed permanently absent
+            # from search -- the failure was logged, and then stepped over.
+            indexed_count = 0
             async with pool.acquire_write() as conn:
                 for event in new_events:
                     event_type = getattr(event, "type", "unknown")
@@ -315,7 +320,12 @@ class SQLiteStateRepository(StateRepositoryPort):
                         await index_event(conn, session.id, str(event_type), str(summary), content)
                     except Exception:
                         logger.warning("Failed to index event for FTS5", exc_info=True)
-            self._fts5_indexed[session.id] = len(session.events)
+                        break
+                    indexed_count += 1
+            # Stop at the first failure and advance exactly as far as we got: the
+            # failed event is retried on the next save, and the ones already
+            # indexed are not duplicated.
+            self._fts5_indexed[session.id] = last_indexed + indexed_count
 
     async def load_session(self, session_id: str) -> Session | None:
         await self._init_helpers()

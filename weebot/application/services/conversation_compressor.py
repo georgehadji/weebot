@@ -92,6 +92,17 @@ class ConversationCompressor:
         tail = buffer[total - self._keep_tail :]
 
         summary = await self._summarize(middle)
+        if not summary:
+            # Compression is lossy by design, so a failed summary must be a
+            # no-op rather than a loss: this previously substituted the string
+            # "(compression failed: ...)" for the middle turns and returned a
+            # normally-shaped buffer, which the caller could not distinguish
+            # from success -- so it committed the replacement and those turns
+            # were gone. Returning the buffer unchanged matches the documented
+            # behaviour for a buffer too short to compress.
+            logger.warning("Summarization produced nothing; leaving the buffer uncompressed")
+            return buffer
+
         summary_msg: dict[str, Any] = {
             "role": "system",
             "content": (f"[Context summary — {len(middle)} turns compressed]\n{summary}"),
@@ -133,7 +144,7 @@ class ConversationCompressor:
                 temperature=TEMPERATURE_DETERMINISTIC,
                 max_tokens=MAX_TOKENS_SHORT,
             )
-            return response.content or "(summary unavailable)"
+            return (response.content or "").strip()
         except Exception as exc:
             logger.warning("Compressor LLM call failed: %s", exc)
-            return f"(compression failed: {exc})"
+            return ""

@@ -411,16 +411,13 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.exception_handler(Exception)
-    async def fallback_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("Unhandled exception: %s", exc)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error_code": "internal_error",
-                "detail": "An unexpected error occurred. Check server logs for details.",
-            },
-        )
+    # NOTE: a second @app.exception_handler(Exception) is registered further
+    # down (global_exception_handler). Starlette keys handlers by exception
+    # class, so the later registration replaced this one outright -- this
+    # handler never ran, and the two disagreed on the error_code they returned
+    # ("internal_error" here vs "INTERNAL_ERROR" there). Removed rather than
+    # left as a second, dead contract; the surviving handler also records the
+    # exceptions_total metric.
 
     # CORS middleware — allow only known origins, never wildcard with credentials
     _allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -585,6 +582,21 @@ def create_app() -> FastAPI:
         # WebSocket authentication check
         if not _websocket_auth(websocket, _ws):
             await websocket.close(code=4001, reason="Unauthorized")
+            return
+
+        # Authentication is not authorisation. Any authenticated caller could
+        # subscribe to any session's event stream; the HTTP path for the same
+        # resource verifies ownership (routers/sessions.py:126) and this did not.
+        # _resolve_user() reads only headers, so it works on a WebSocket.
+        try:
+            from weebot.interfaces.web.auth import verify_session_ownership
+
+            _repo = websocket.app.state.container.get(StateRepositoryPort)
+            _sess = await _repo.load_session(session_id)
+            await verify_session_ownership(websocket, getattr(_sess, "user_id", None))
+        except StarletteHTTPException:
+            logger.warning("WebSocket /ws/sessions/%s denied for %s", session_id, client_host)
+            await websocket.close(code=4003, reason="Forbidden")
             return
 
         logger.info("WebSocket /ws/sessions/%s connection from %s", session_id, client_host)

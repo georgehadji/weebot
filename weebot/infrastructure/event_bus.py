@@ -107,11 +107,28 @@ class AsyncEventBus(EventBusPort):
             if getattr(event, "type", None) == event_type:
                 await handler(event)
 
+        # Record what this wrapper stands for. Without it, unsubscribe() -- which
+        # takes the caller's own handler reference -- could never match the
+        # closure, so the subscription was permanent and the "unsubscribed"
+        # handler kept receiving every event. EventBrokerAdapter.subscribe()
+        # documents exactly this call pattern as the way to unsubscribe.
+        filtered_handler._wrapped_handler = handler  # type: ignore[attr-defined]
         self._handlers.append(filtered_handler)
 
     def unsubscribe(self, handler: EventHandler) -> None:
-        if handler in self._handlers:
-            self._handlers.remove(handler)
+        """Remove *handler*, including any subscribe_by_type wrapper around it.
+
+        Removes every registration for the handler: the signature carries no
+        event type, so there is no way to say which one to keep.
+        """
+        # Compare with ==, not `is`. The original `handler in self._handlers`
+        # used equality, and callers pass bound methods -- `obj.method` builds a
+        # new object on every access, so `obj.method is obj.method` is False
+        # while `==` is True. Identity comparison here silently stopped
+        # main.py:304 from detaching the event broadcaster at shutdown.
+        for registered in list(self._handlers):
+            if registered == handler or getattr(registered, "_wrapped_handler", None) == handler:
+                self._handlers.remove(registered)
 
     # ── Domain event support ────────────────────────────────────────
 

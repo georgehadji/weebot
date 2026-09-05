@@ -26,17 +26,26 @@ def output_path(relative: str) -> str:
         Absolute path, e.g. ``"E:/Documents/Vibe-Coding/weebot/Output/deps/file.txt"``.
 
     Raises:
-        ValueError: If *relative* contains ``..`` traversal (security guard).
+        ValueError: If *relative* contains ``..`` traversal, or is an absolute
+            path resolving outside the project root (security guard).
     """
     normalized = relative.replace("\\", "/")
     if ".." in normalized.split("/"):
         raise ValueError(f"Path traversal blocked: {relative}")
 
-    # If already absolute and under the project root, return as-is
-    abs_path = os.path.abspath(relative)
-    project_str = str(_PROJECT_ROOT).replace("\\", "/")
-    if abs_path.replace("\\", "/").startswith(project_str):
-        return abs_path
+    # If already absolute and under the project root, return as-is.
+    # is_relative_to compares path segments; the previous str.startswith test
+    # also accepted any sibling whose name merely extends the root's.
+    abs_path = Path(os.path.abspath(relative))
+    if abs_path.is_relative_to(_PROJECT_ROOT):
+        return str(abs_path)
+
+    # ``_PROJECT_ROOT / relative`` DISCARDS the left operand when *relative* is
+    # absolute (pathlib join semantics), so an absolute path outside the root
+    # was handed back unchanged -- and output_dir() then os.makedirs() its
+    # parent. Reject it instead of appearing to contain it.
+    if os.path.isabs(relative):
+        raise ValueError(f"Path escapes project root: {relative}")
 
     return str(_PROJECT_ROOT / relative)
 

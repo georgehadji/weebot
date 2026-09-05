@@ -1,6 +1,17 @@
 # Weebot — development convenience targets
 .PHONY: help install test test-live lint-imports lint-env-access check-arch check
 
+# Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
+# ceiling, so existing debt does not fail the build but nothing new can be added.
+# Lower these as debt is paid; never raise them.
+#
+# NOTE on --exclude-dir: GNU grep matches it against a directory's BASE NAME, so
+# the previous `--exclude-dir=weebot/GitNexus-main` and `--exclude-dir=weebot/config`
+# never excluded anything. Both are corrected below; the ceilings are measured
+# with the corrected exclusions.
+PRINT_CEILING ?= 143
+ENV_ACCESS_CEILING ?= 73
+
 help:
 	@echo "Available targets:"
 	@echo "  install       Install dependencies"
@@ -39,25 +50,22 @@ lint-async-io:
 	@python scripts/lint_async_io.py
 
 lint-bare-except-pass:
-	@echo "=== Bare except Exception: pass check ==="
-	@! grep -Prn "except\s+(\w+(\.\w+)?|\([^)]+\)):\s*pass\s*$$" \
-	    --include="*.py" \
-	    --exclude-dir=tests \
-	    --exclude-dir=.venv \
-	    --exclude-dir=Output \
-	    weebot/ cli/ \
-	    || (echo "ERROR: except Exception: pass found. Must use logger.debug()." && exit 1)
+	@echo "=== Silent except-handler check (AST, ratcheted) ==="
+	@python scripts/lint_except_pass.py
 
 lint-env-access:
-	@echo "=== Bare os.environ / os.getenv Access Check ==="
-	@! grep -Prn "os\.environ(?!(\.get|\[))|os\.getenv\(" \
+	@echo "=== Bare os.environ / os.getenv Access Check (ratcheted) ==="
+	@count=$$(grep -Prn "os\.environ(?!(\.get|\[))|os\.getenv\(" \
 	    --include="*.py" \
 	    --exclude-dir=tests \
 	    --exclude-dir=.venv \
 	    --exclude-dir=Output \
-	    --exclude-dir=weebot/config \
-	    weebot/ cli/ \
-	    || (echo "ERROR: Bare os.environ/os.getenv found outside weebot/config/. Use SecretAccessor instead." && exit 1)
+	    --exclude-dir=config \
+	    weebot/ cli/ | wc -l); \
+	  echo "$$count bare env read(s) outside weebot/config/; ceiling is $(ENV_ACCESS_CEILING)."; \
+	  if [ "$$count" -gt "$(ENV_ACCESS_CEILING)" ]; then \
+	    echo "ERROR: new bare os.environ/os.getenv. Use SecretAccessor instead."; exit 1; \
+	  fi
 
 check-arch:
 	@echo "=== Architecture Fitness Tests ==="
@@ -73,15 +81,18 @@ check-arch:
 	pytest tests/e2e/test_persistence.py -v --tb=short
 
 lint-no-print:
-	@echo "=== print() statement check ==="
-	@! grep -Prn "^\s*print\(" \
+	@echo "=== print() statement check (ratcheted) ==="
+	@count=$$(grep -Prn "^\s*print\(" \
 	    --include="*.py" \
 	    --exclude-dir=tests \
 	    --exclude-dir=.venv \
 	    --exclude-dir=Output \
-	    --exclude-dir=weebot/GitNexus-main \
-	    weebot/ cli/ \
-	    || (echo "ERROR: print() found in production code. Use logger instead." && exit 1)
+	    --exclude-dir=GitNexus-main \
+	    weebot/ cli/ | wc -l); \
+	  echo "$$count print() call(s) in production code; ceiling is $(PRINT_CEILING)."; \
+	  if [ "$$count" -gt "$(PRINT_CEILING)" ]; then \
+	    echo "ERROR: new print() in production code. Use logger instead."; exit 1; \
+	  fi
 
 check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-env-access lint-no-print
 	@echo "=== All checks passed ==="

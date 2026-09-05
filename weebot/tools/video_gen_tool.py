@@ -211,7 +211,11 @@ class VideoGenTool(BaseTool):
         if ".." in output_path.split("/"):
             raise ValueError(f"Unsafe output_path (contains '..'): {output_path}")
         resolved = Path(output_path).resolve()
-        if not str(resolved).startswith(str(_SAFE_BASE)):
+        # str.startswith is a string prefix test, not path containment: a
+        # sibling directory whose name merely extends the base (".../weebot"
+        # vs ".../weebot-evil") passed it, giving an arbitrary write outside
+        # the workspace with no ".." anywhere in the path.
+        if not resolved.is_relative_to(_SAFE_BASE):
             raise ValueError(f"Output path {resolved} escapes workspace {_SAFE_BASE}")
         return resolved
 

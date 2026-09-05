@@ -19,7 +19,7 @@ from weebot.application.models.tool_collection import ToolCollection
 from weebot.application.services.tool_call_repair import repair_json_string
 from weebot.config.constants import TEMPERATURE_BALANCED
 from weebot.core.egress_guard import is_enforcing
-from weebot.core.trust_boundary import is_untrusted_tool
+from weebot.core.trust_boundary import taints_egress_context
 from weebot.domain.models.event import AgentEvent, MessageEvent
 from weebot.domain.models.tool_result import ToolResult
 
@@ -241,8 +241,11 @@ class ToolExecutor:
 
         # External content has now entered the session; taint it so later egress
         # needs approval even to an already-known recipient. Errors carry no
-        # external content, matching the wrap_untrusted condition in _base.py.
-        if is_untrusted_tool(name) and not getattr(result, "is_error", False):
+        # external content, so they do not taint.
+        #
+        # Narrower than the fence in _base.py by FENCE_ONLY_TOOLS: fencing is
+        # free, this taint is sticky for the rest of the session.
+        if taints_egress_context(name) and not getattr(result, "is_error", False):
             self._untrusted_context_active = True
         return result
 

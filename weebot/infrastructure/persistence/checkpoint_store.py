@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from weebot.application.ports.checkpoint_port import CheckpointPort
@@ -38,7 +39,7 @@ class SQLiteCheckpointStore(CheckpointPort):
 
     def _ensure_schema(self) -> None:
         """Schema managed by Alembic. Verify table exists at first access."""
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             tables = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='flow_checkpoints'"
             ).fetchall()
@@ -69,7 +70,7 @@ class SQLiteCheckpointStore(CheckpointPort):
     def _save_sync(
         self, session_id: str, flow_type: str, current_state: str, json_blob: str
     ) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.execute(
                 """INSERT INTO flow_checkpoints (session_id, flow_type, current_state, checkpoint_json, updated_at)
                    VALUES (?, ?, ?, ?, datetime('now'))
@@ -98,7 +99,7 @@ class SQLiteCheckpointStore(CheckpointPort):
             return None
 
     def _load_sync(self, session_id: str) -> str | None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT checkpoint_json FROM flow_checkpoints WHERE session_id = ?", (session_id,)
@@ -114,7 +115,7 @@ class SQLiteCheckpointStore(CheckpointPort):
         return await loop.run_in_executor(None, self._delete_sync, session_id)
 
     def _delete_sync(self, session_id: str) -> bool:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             cursor = conn.execute(
                 "DELETE FROM flow_checkpoints WHERE session_id = ?", (session_id,)
             )
@@ -130,7 +131,7 @@ class SQLiteCheckpointStore(CheckpointPort):
         return await loop.run_in_executor(None, self._list_sync)
 
     def _list_sync(self) -> list[str]:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             rows = conn.execute(
                 "SELECT session_id FROM flow_checkpoints ORDER BY updated_at DESC"
             ).fetchall()

@@ -193,3 +193,28 @@ class TestV7DefectHuntFixes:
         """Regression: tab-separated safe commands remain safe."""
         risk, _ = guard.evaluate("echo\thello\tworld")
         assert risk == RiskLevel.SAFE
+
+
+class TestUnusablePatternIsVisible:
+    """A malformed pattern used to be dropped with `except re.error: continue`.
+
+    The rule it encoded — including BLOCKED rules — simply stopped being
+    enforced, with nothing in the logs. Skipping is still the only safe action
+    (raising would make the guard unconstructable), but it must be visible.
+    """
+
+    def test_invalid_pattern_is_logged_as_unenforced(self, caplog):
+        with caplog.at_level("ERROR", logger="weebot.core.bash_guard"):
+            BashGuard(custom_patterns=[("rm -rf [", RiskLevel.BLOCKED, "unclosed", "fix")])
+        assert "NOT enforced" in caplog.text
+        assert "rm -rf [" in caplog.text
+
+    def test_valid_patterns_log_nothing(self, caplog):
+        with caplog.at_level("ERROR", logger="weebot.core.bash_guard"):
+            BashGuard()
+        assert caplog.text == ""
+
+    def test_guard_still_functional_after_dropping_a_pattern(self):
+        guard = BashGuard(custom_patterns=[("rm -rf [", RiskLevel.BLOCKED, "unclosed", "fix")])
+        assert guard.is_blocked("rm -rf /") is True
+        assert guard.is_safe("ls -la") is True

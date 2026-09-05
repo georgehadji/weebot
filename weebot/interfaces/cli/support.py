@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -267,7 +268,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
         )
     else:
         try:
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.execute("SELECT name FROM sqlite_master LIMIT 1")
             checks.append(DoctorCheck(name="projects_db", status="ok", details=str(db_path)))
         except Exception as exc:
@@ -381,7 +382,7 @@ def run_doctor(root: Path, fix: bool = False) -> DoctorReport:
                 db_path_fix = root / "projects.db"
                 try:
                     # Create a minimal projects.db with the expected schema
-                    with sqlite3.connect(str(db_path_fix)) as conn:
+                    with closing(sqlite3.connect(str(db_path_fix))) as conn, conn:
                         conn.execute(
                             "CREATE TABLE IF NOT EXISTS projects ("
                             "  id TEXT PRIMARY KEY,"

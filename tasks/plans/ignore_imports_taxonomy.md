@@ -1,8 +1,29 @@
-# ignore_imports Taxonomy — 52 Entries Across 4 Contracts
+# ignore_imports Taxonomy — 67 Entries Across 6 Contracts
+
+> **Re-inventoried 2026-09-05 (defect-hunt Wave 0, item I6).** The header below
+> recorded 52 entries across 4 contracts; the file now carries **67 across 6**.
+> The per-contract tables further down still describe the original 52 and have
+> not been re-derived — treat them as a partial map, not a census.
+>
+> | Contract | Entries |
+> |---|---|
+> | `tools-no-db` | 3 |
+> | `tools-no-infra` | 20 |
+> | `infra-no-app-services` | 8 |
+> | `interfaces-no-infra` | 30 |
+> | `core-no-app` | 5 |
+> | `app-no-interfaces` | 1 |
+> | **Total** | **67** |
+>
+> Enforced ceiling is **72**, asserted by
+> `tests/unit/test_architecture_fitness.py::test_ignore_imports_under_target`.
+> Every exemption is an architecture violation held open by agreement, so the
+> ceiling may be lowered but must never be raised. Defect-hunt waves W1–W8 may
+> not add an entry to make a fix pass; such a fix is `[REQUIRES HUMAN REVIEW]`.
 
 **Source:** `.importlinter`
-**Count:** 9 (tools-no-db) + 10 (infra-no-app-services) + 28 (interfaces-no-infra) + 5 (core-no-app) = **52**
-**Target:** ≤10 remaining after all sprints
+**Count:** 3 (tools-no-db) + 20 (tools-no-infra) + 8 (infra-no-app-services) + 30 (interfaces-no-infra) + 5 (core-no-app) + 1 (app-no-interfaces) = **67**
+**Ceiling:** 72 (enforced) · **Target:** ≤10 remaining after all sprints
 
 ---
 

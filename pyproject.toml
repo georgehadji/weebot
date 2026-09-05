@@ -47,7 +47,7 @@ select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
     "F",    # pyflakes
-    "B",    # flake8-bugbear (includes B110 try-except-pass)
+    "B",    # flake8-bugbear
     "SIM",  # flake8-simplify
     "UP",   # pyupgrade
 ]
@@ -62,12 +62,15 @@ ignore = [
     "UP007",
 ]
 
-# B110: try-except-pass without logging.
-# All bare `except: pass` blocks must log at least at DEBUG level.
-# Violations are errors (not warnings) to block commits via pre-commit.
+# Silent exception handlers: every `except` block must log at least at DEBUG.
+# Ruff does NOT enforce this here. B110 is a *bandit* code, not a ruff one, and
+# ruff's equivalent (S110, flake8-bandit) is not in the `select` list above.
+# Enforcement lives in two places:
+#   - scripts/lint_except_pass.py -- AST check with a ratcheted ceiling (blocking)
+#   - bandit -c pyproject.toml     -- the [tool.bandit] block below (CI, advisory)
 [tool.ruff.lint.per-file-ignores]
-# Tests are allowed to use broad catches without logging
-# B011: bare except: pass without logging — requires logging in production code
+# B011 is `assert-false`; tests may assert False deliberately.
+# SIM is style-only and not worth enforcing on test scaffolding.
 "tests/**/*.py" = ["B011", "SIM"]
 
 [tool.pytest.ini_options]

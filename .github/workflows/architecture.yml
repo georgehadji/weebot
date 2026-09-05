@@ -51,6 +51,17 @@ jobs:
         # Non-blocking — 96 bare os.getenv() calls remain.
         # Will become blocking once count is reduced.
         run: make lint-env-access 2>&1 || echo "lint-env-access violations remain (non-blocking)"
+      - name: Silent except-handler ratchet
+        # Blocking above the ceiling only: existing debt does not fail the build,
+        # but no new silently-swallowed exception can be added. Previously this
+        # gate lived only in `make check` as a grep that could not match the
+        # two-line `except X:` / `pass` form, so it reported clean over 139 sites.
+        run: python scripts/lint_except_pass.py
+      - name: Blocking-I/O-in-async ratchet
+        # Same ratchet contract. This gate was a `make check` prerequisite that
+        # exited 1, so `make check` was red on a clean checkout, and it appeared
+        # nowhere in CI.
+        run: python scripts/lint_async_io.py
 
   unit-tests:
     name: Unit Tests

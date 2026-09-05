@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from contextlib import closing
 import uuid
 from pathlib import Path
 
@@ -45,7 +46,7 @@ class StrategyStore:
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(str(self._db_path)) as conn:
+        with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
             conn.executescript(_SCHEMA_SQL)
 
     async def insert(self, strategy: ImprovementStrategy) -> str:
@@ -53,7 +54,7 @@ class StrategyStore:
         strategy.strategy_id = sid
 
         def _insert() -> str:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO improvement_strategies
                        (strategy_id, source_domain, target_domain,
@@ -83,7 +84,7 @@ class StrategyStore:
         """
 
         def _query() -> list[dict]:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     """SELECT * FROM improvement_strategies
@@ -110,7 +111,7 @@ class StrategyStore:
 
     async def increment_transfer(self, strategy_id: str) -> None:
         def _update() -> None:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.execute(
                     "UPDATE improvement_strategies "
                     "SET transfer_count = transfer_count + 1 "
@@ -122,7 +123,7 @@ class StrategyStore:
 
     async def get_by_id(self, strategy_id: str) -> ImprovementStrategy | None:
         def _query() -> dict | None:
-            with sqlite3.connect(str(self._db_path)) as conn:
+            with closing(sqlite3.connect(str(self._db_path))) as conn, conn:
                 conn.row_factory = sqlite3.Row
                 row = conn.execute(
                     "SELECT * FROM improvement_strategies WHERE strategy_id = ?", (strategy_id,)

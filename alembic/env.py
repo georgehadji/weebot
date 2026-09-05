@@ -13,9 +13,14 @@ from alembic import context
 # Alembic Config object
 config = context.config
 
-# Set up Python logging from alembic.ini
+# Set up Python logging from alembic.ini.
+# disable_existing_loggers defaults to True, which silences every logger already
+# created in the process. That is harmless for a standalone `alembic` command,
+# but this env.py is also loaded in-process (migration tests, programmatic
+# upgrades), where it left every other library's logger disabled for the rest of
+# the run -- and any later assertion on log output silently saw nothing.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Override sqlalchemy.url from weebot settings if available
 try:

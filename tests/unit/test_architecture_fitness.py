@@ -1291,14 +1291,27 @@ def test_core_no_application_imports():
     This test verifies the contract is present in ``.importlinter`` and
     passes — if it's ever missing or broken, the architecture has regressed.
     """
+    import shutil
     import subprocess
+    import sys
+
+    # Resolve the console script next to the running interpreter before falling
+    # back to PATH. `.venv/bin/python -m pytest` does not put the venv's bin/ on
+    # PATH, so a bare "lint-imports" raised FileNotFoundError and this gate
+    # reported a failure that said nothing about the architecture. CI installs
+    # import-linter, so the skip cannot mask a regression there, and
+    # `make lint-imports` remains the enforcing path either way.
+    candidate = Path(sys.executable).parent / "lint-imports"
+    executable = str(candidate) if candidate.exists() else shutil.which("lint-imports")
+    if executable is None:
+        pytest.skip("import-linter not installed; `make lint-imports` is the enforcing gate")
 
     result = subprocess.run(
         # --verbose avoids import-linter 2.13's nested rich Live displays
         # (console.status + Live), which crash with "Only one live display may
         # be active at once" and made this gate report a false failure while
         # checking nothing. Drop the flag once upstream fixes the nesting.
-        ["lint-imports", "--config", ".importlinter", "--verbose"],
+        [executable, "--config", ".importlinter", "--verbose"],
         capture_output=True,
         text=True,
         cwd=ROOT.parent,
