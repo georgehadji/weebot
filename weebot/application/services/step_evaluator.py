@@ -90,8 +90,19 @@ class LLMStepEvaluator(StepEvaluatorPort):
                 model=self._model,
                 temperature=TEMPERATURE_DETERMINISTIC,
             )
-            data = json.loads(resp.content or "{}")
-            score = float(data.get("score", 1.0))
+            # `json.loads(resp.content or "{}")` parsed an empty completion
+            # into {}, and `.get("score", 1.0)` then manufactured a perfect
+            # score -- with no exception raised, so the warning below never
+            # fired. A silently-empty evaluator was indistinguishable from one
+            # passing every step on merit. Route both cases through the logged
+            # fail-open path instead of inventing a verdict.
+            content = (resp.content or "").strip()
+            if not content:
+                raise ValueError("evaluator returned an empty completion")
+            data = json.loads(content)
+            if "score" not in data:
+                raise ValueError(f"evaluator response has no 'score' field: {content[:120]}")
+            score = float(data["score"])
             regression = bool(data.get("regression_detected", False))
             return StepEvaluation(
                 step_id=step.id,

@@ -140,3 +140,73 @@ class TestLLMStepEvaluator:
 
         prompt_text = captured_messages[0][0]["content"]
         assert "setup done" in prompt_text
+
+
+class TestInstrumentFailureIsVisible:
+    """W2: if this gate's own machinery fails, does it report clean?
+
+    `json.loads(resp.content or "{}")` parsed an empty completion into `{}`, and
+    `.get("score", 1.0)` then manufactured a perfect score. No exception was
+    raised, so the fail-open warning never fired and `reasoning` stayed empty --
+    a silently-broken evaluator was indistinguishable from one passing every
+    step on merit. The consumer at flows/states/executing.py:623 routes
+    `not passed` to UpdatingState, so a broken evaluator skipped the plan
+    revision it exists to trigger.
+
+    Failing open on `passed` is documented and intentional; being
+    indistinguishable was not.
+    """
+
+    @staticmethod
+    def _evaluator(content):
+        from weebot.domain.models.llm_response import LLMResponse
+
+        llm = MagicMock()
+        llm.chat = AsyncMock(return_value=LLMResponse(content=content))
+        return LLMStepEvaluator(llm=llm)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("content", ["", None, "   ", "I'm sorry, I can't help."])
+    async def test_unusable_completion_is_reported_as_a_failure(self, content):
+        step = Step(id="s1", description="do the thing")
+        plan = Plan(title="goal", steps=[step])
+
+        result = await self._evaluator(content).evaluate(step, "output", plan, [])
+
+        assert result.reasoning.startswith("evaluation failed:"), (
+            f"a {content!r} completion must be distinguishable from a real pass"
+        )
+
+    @pytest.mark.asyncio
+    async def test_json_without_a_score_field_is_a_failure(self):
+        """`.get("score", 1.0)` invented a perfect score for a scoreless reply."""
+        step = Step(id="s1", description="do the thing")
+        plan = Plan(title="goal", steps=[step])
+
+        result = await self._evaluator('{"reasoning": "looks fine"}').evaluate(
+            step, "output", plan, []
+        )
+
+        assert result.reasoning.startswith("evaluation failed:")
+
+    @pytest.mark.asyncio
+    async def test_fail_open_is_preserved(self):
+        """Execution must still not block on a broken evaluator."""
+        step = Step(id="s1", description="do the thing")
+        plan = Plan(title="goal", steps=[step])
+
+        assert (await self._evaluator("").evaluate(step, "o", plan, [])).passed is True
+
+    @pytest.mark.asyncio
+    async def test_a_real_verdict_is_untouched(self):
+        """No-regression: a well-formed low score still fails the step."""
+        step = Step(id="s1", description="do the thing")
+        plan = Plan(title="goal", steps=[step])
+
+        result = await self._evaluator(
+            '{"score": 0.1, "regression_detected": false, "reasoning": "no progress"}'
+        ).evaluate(step, "output", plan, [])
+
+        assert result.passed is False
+        assert result.score == 0.1
+        assert result.reasoning == "no progress"

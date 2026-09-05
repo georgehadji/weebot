@@ -163,6 +163,11 @@ class TrajectoryExporter:
         messages = [{"role": "assistant", "content": str(e)} for e in middle]
         compressor = ConversationCompressor(llm=llm)
         summary = await compressor._summarize(messages)
+        if not summary:
+            # Same contract as ConversationCompressor.compress(): no summary
+            # means no compression, not a summary event standing in for events
+            # that have been discarded.
+            return events
 
         summary_event = MessageEvent(
             role="assistant",
