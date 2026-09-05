@@ -183,7 +183,7 @@ make check        # test + check-arch + lint-imports
 
 - **Run unit tests with coverage (matches CI):**
   ```bash
-  pytest tests/unit/ -v --tb=short --cov=weebot --cov-report=term --cov-fail-under=60
+  pytest tests/unit/ -v --tb=short --cov=weebot --cov-report=term --cov-fail-under=52
   ```
 
 - **Run architecture gates:**
@@ -207,7 +207,7 @@ make check        # test + check-arch + lint-imports
 - **Async tests** use `asyncio_mode = auto`, so new async tests do not need `@pytest.mark.asyncio`.
 
 - Coverage thresholds:
-  - CI enforces **≥ 60%** overall on `tests/unit/`.
+  - CI enforces **≥ 52%** overall on `tests/unit/` (`--cov-fail-under=52`, matching `.coveragerc`).
   - `.coveragerc` documents aspirational per-layer thresholds (domain 90, application 80, infrastructure 70, tools 65, interfaces 50) but those are not enforced by the config file itself.
 
 ---

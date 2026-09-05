@@ -165,6 +165,11 @@ def test_compile_timeout_returns_result_instead_of_hanging(tmp_path, monkeypatch
     """
     service = LatexCompilerService(timeout_seconds=1)
     monkeypatch.setattr(service._guard, "evaluate", lambda cmd: (RiskLevel.SAFE, "test"))
+    # compile() fails fast on missing fonts before it ever spawns latexmk, so on a
+    # machine without the GFS families this test would assert against that early
+    # return instead of the drain path it exists to guard. The font check is correct
+    # and stays; it just is not what is under test here.
+    monkeypatch.setattr(service, "missing_fonts", lambda: [])
     orphaning_wrapper = (
         "import subprocess, sys; "
         "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], close_fds=False); "

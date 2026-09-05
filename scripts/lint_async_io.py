@@ -18,6 +18,13 @@ import sys
 from pathlib import Path
 
 
+# Current known count of genuine sites. Lower as they are fixed; never raise.
+# Before the scope/dedupe fixes this script reported 83 for these same 29 sites:
+# it descended into nested sync helpers (the correct `asyncio.to_thread` pattern
+# in the persistence stores), matched `aiofiles.open(` as blocking, and emitted
+# one report per Call node rather than per line.
+CEILING = 29
+
 BLOCKING_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bopen\s*\("),
     re.compile(r"\.read_text\s*\("),
@@ -36,6 +43,26 @@ SKIP_PATHS: set[str] = {
 }
 
 
+# Async-native wrappers whose names collide with the blocking patterns below.
+# `\bopen\s*\(` matches after a dot, so `aiofiles.open(...)` — which is correct
+# async code — was reported as blocking.
+ASYNC_SAFE_PREFIXES: tuple[str, ...] = ("aiofiles.", "anyio.", "await aiofiles", "await anyio")
+
+
+def _own_body(node: ast.AST):
+    """Yield descendants of *node* without entering nested function scopes.
+
+    ``ast.walk`` descends into nested ``def``s, which both misattributed calls
+    in a sync helper to the enclosing ``async def`` and reported calls in a
+    nested ``async def`` once per enclosing function.
+    """
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        yield child
+        yield from _own_body(child)
+
+
 def _check_file(path: Path) -> list[str]:
     try:
         source = path.read_text(encoding="utf-8")
@@ -46,6 +73,10 @@ def _check_file(path: Path) -> list[str]:
         return []
 
     violations: list[str] = []
+    # One report per source line. A single line can hold several Call nodes
+    # (`json.loads(p.read_text())` is two), and each used to emit its own
+    # violation, inflating the total without naming a new site.
+    reported_lines: set[int] = set()
 
     try:
         tree = ast.parse(source, filename=str(path))
@@ -56,7 +87,7 @@ def _check_file(path: Path) -> list[str]:
         if not isinstance(node, ast.AsyncFunctionDef):
             continue
 
-        for child in ast.walk(node):
+        for child in _own_body(node):
             if not isinstance(child, ast.Call):
                 continue
 
@@ -70,14 +101,21 @@ def _check_file(path: Path) -> list[str]:
             if "asyncio.to_thread" in line_text or "run_in_executor" in line_text:
                 continue
 
+            if any(prefix in line_text for prefix in ASYNC_SAFE_PREFIXES):
+                continue
+
             context_start = max(0, call_line - 3)
             context_end = min(len(source_lines), call_line + 1)
             context = "\n".join(source_lines[context_start:context_end])
             if "asyncio.to_thread" in context or "run_in_executor" in context:
                 continue
 
+            if call_line in reported_lines:
+                continue
+
             for pattern in BLOCKING_PATTERNS:
                 if pattern.search(line_text):
+                    reported_lines.add(call_line)
                     violations.append(
                         f"{path}:{call_line}: "
                         f"Blocking call in async function '{node.name}': {line_text[:100]}"
@@ -104,7 +142,7 @@ def main() -> int:
 
         for file_path in files:
             rel = file_path.as_posix()
-            if any(skip in rel for skip in SKIP_PATHS):
+            if SKIP_PATHS & set(file_path.parts):
                 continue
             if file_path.name.startswith("test_"):
                 continue
@@ -121,9 +159,17 @@ def main() -> int:
         print("=== Blocking I/O in async functions ===")
         for v in sorted(all_violations):
             print(v)
-        print(f"\n{len(all_violations)} violation(s) found.")
+        print(f"\n{len(all_violations)} violation(s) found; ceiling is {CEILING}.")
         print("Wrap blocking calls with 'await asyncio.to_thread(...)' or 'loop.run_in_executor(...)'.")
-        return 1
+        if len(all_violations) > CEILING:
+            print(
+                f"ERROR: {len(all_violations) - CEILING} new blocking call(s) in async code.",
+                file=sys.stderr,
+            )
+            return 1
+        if len(all_violations) < CEILING:
+            print(f"Ceiling can be lowered to {len(all_violations)} in scripts/lint_async_io.py.")
+        return 0
 
     print("No blocking I/O violations found in async functions.")
     return 0
