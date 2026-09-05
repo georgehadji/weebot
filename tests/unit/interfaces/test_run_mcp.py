@@ -10,9 +10,24 @@ Coverage:
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+
+def _server_mock():
+    """A server double whose method signatures match the real class.
+
+    `MagicMock()` with a bare `AsyncMock()` attribute accepts any call, so
+    these tests passed while `main()` called `run_sse(host=..., port=...)`
+    against a `run_sse(self)` that took neither -- a TypeError in production
+    that no test could see. `spec=` does not help: it constrains which
+    attributes exist, not how they are called. Only autospec binds the real
+    signature.
+    """
+    from weebot.mcp.server import WeebotMCPServer
+
+    return create_autospec(WeebotMCPServer, instance=True)
+
 
 # ---------------------------------------------------------------------------
 # _try_attach
@@ -103,8 +118,7 @@ class TestMain:
         """With no flags, main() calls server.run_stdio()."""
         from run_mcp import main
 
-        mock_server = MagicMock()
-        mock_server.run_stdio = AsyncMock()
+        mock_server = _server_mock()
 
         with (
             patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),
@@ -120,8 +134,7 @@ class TestMain:
         """--transport sse calls server.run_sse()."""
         from run_mcp import main
 
-        mock_server = MagicMock()
-        mock_server.run_sse = AsyncMock()
+        mock_server = _server_mock()
 
         with (
             patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),
@@ -151,8 +164,7 @@ class TestMain:
         """--allow-remote enables explicit non-loopback SSE binding."""
         from run_mcp import main
 
-        mock_server = MagicMock()
-        mock_server.run_sse = AsyncMock()
+        mock_server = _server_mock()
 
         with (
             patch("weebot.config.settings.WeebotSettings.validate_at_least_one_key"),

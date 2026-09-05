@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 try:
+    from mcp.server.auth.provider import AccessToken
+    from mcp.server.auth.settings import AuthSettings
     from mcp.server.fastmcp import FastMCP
     from mcp.types import CallToolResult, TextContent
 except ImportError as _mcp_err:
@@ -31,6 +33,10 @@ from weebot.mcp.resources import (
 )
 from weebot.utils.rate_limiter import check_rate_limit
 from datetime import UTC
+
+# Addresses reachable only from this machine. Binding anything else exposes the
+# server to the network, which `run_sse` refuses to do without an API key.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 # Prometheus metrics — lazy import to avoid circular dependency at module level
 _metrics = None
@@ -55,15 +61,24 @@ class _APIKeyTokenVerifier:
     def __init__(self, api_key: str) -> None:
         self._expected = api_key
 
-    async def verify_token(self, token: str) -> bool:
-        """Return True if *token* matches the configured API key.
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Return an ``AccessToken`` if *token* matches the key, else None.
+
+        The ``TokenVerifier`` protocol requires ``AccessToken | None``, not
+        ``bool``. Returning a bool meant ``BearerAuthBackend.authenticate``
+        reached ``auth_info.expires_at`` on ``True`` -- so a **valid** key
+        raised ``AttributeError`` and produced a 500, while an invalid one was
+        rejected correctly. Authentication failed closed for the wrong reason
+        and could never succeed.
 
         Uses hmac.compare_digest for constant-time comparison to prevent
         timing side-channel attacks on token validation.
         """
         import hmac as _hmac
 
-        return _hmac.compare_digest(token, self._expected)
+        if not _hmac.compare_digest(token, self._expected):
+            return None
+        return AccessToken(token=token, client_id="weebot-mcp", scopes=[])
 
 
 _SERVER_INSTRUCTIONS = (
@@ -126,15 +141,34 @@ class WeebotMCPServer:
         # Falls back to WEEBOT_MCP_API_KEY env var; None = no auth (backward compat).
         self._api_key = api_key or SecretAccessor.get("WEEBOT_MCP_API_KEY")
         # Build a FastMCP TokenVerifier if an API key is set.
+        #
+        # `auth` must be supplied alongside `token_verifier`: FastMCP raises
+        # ValueError("Cannot specify auth_server_provider or token_verifier
+        # without auth settings") otherwise. It was not, so setting
+        # WEEBOT_MCP_API_KEY made this constructor raise -- the only
+        # configuration that started was the unauthenticated one.
+        #
+        # The URLs are advertised metadata for the WWW-Authenticate header, not
+        # part of the check; a static shared key has no real issuer. They are
+        # derived from the bind address so they at least name this server. A
+        # later `run_sse(host=...)` does not update them, which affects only
+        # what clients are told, never whether a token is required.
         _token_verifier = None
+        _auth_settings = None
         if self._api_key:
             _token_verifier = _APIKeyTokenVerifier(self._api_key)
+            _origin = f"http://{'127.0.0.1' if host == '0.0.0.0' else host}:{port}"  # noqa: S104
+            _auth_settings = AuthSettings(
+                issuer_url=_origin,
+                resource_server_url=f"{_origin}/sse",
+            )
         self._mcp: FastMCP = FastMCP(
             "weebot",
             instructions=_SERVER_INSTRUCTIONS,
             host=host,
             port=port,
             token_verifier=_token_verifier,
+            auth=_auth_settings,
         )
         if self._api_key:
             import logging
@@ -160,8 +194,30 @@ class WeebotMCPServer:
         """Run the server over stdio (for Claude Desktop)."""
         await self._mcp.run_stdio_async()
 
-    async def run_sse(self) -> None:
-        """Run the server over SSE/HTTP (for Claude IDE / web clients)."""
+    async def run_sse(self, host: str | None = None, port: int | None = None) -> None:
+        """Run the server over SSE/HTTP (for Claude IDE / web clients).
+
+        Refuses a non-loopback bind when no API key is configured. The guard
+        belongs here, at the point the socket is bound, rather than in
+        ``run_mcp.py`` where it used to live alone: any caller constructing the
+        server directly -- as ``examples/04_mcp_server_demo.py`` demonstrates --
+        bypassed the CLI entirely and got an unauthenticated server on whatever
+        interface it asked for, because ``token_verifier`` is None without a key.
+
+        ``host``/``port`` are accepted because ``run_mcp.py`` has always passed
+        them; the signature did not, so ``--transport sse`` raised TypeError
+        before binding anything.
+        """
+        if host is not None:
+            self._mcp.settings.host = host
+        if port is not None:
+            self._mcp.settings.port = port
+        if self._mcp.settings.host not in _LOOPBACK_HOSTS and not self._api_key:
+            raise RuntimeError(
+                f"Refusing to serve MCP over SSE on {self._mcp.settings.host!r} without "
+                "authentication. Set WEEBOT_MCP_API_KEY (or pass api_key=) to enable a "
+                "token verifier, or bind a loopback address."
+            )
         await self._mcp.run_sse_async()
 
     # ------------------------------------------------------------------

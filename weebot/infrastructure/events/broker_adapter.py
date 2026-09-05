@@ -80,10 +80,21 @@ class EventBrokerAdapter:
                 value=data.get("value"),
             )
 
-        # Fallback: wrap as a NotificationEvent so nothing is silently dropped
+        # Fallback: wrap as a NotificationEvent so nothing is silently dropped.
+        #
+        # `session_id` must be carried through from *data*, as the branch above
+        # already does. An empty one is not neutral: the WebSocket broadcaster
+        # routes on it, and empty means *global* -- deliberately, so that
+        # SessionPresenceEvent can feed a rail watching every session. This
+        # text embeds up to 200 characters of the caller's arbitrary payload,
+        # so leaving it unset would put one session's data on the channel every
+        # authenticated client is listening to.
         logger.debug(
             "EventBrokerAdapter: mapping '%s' from agent '%s' to NotificationEvent",
             event_type,
             agent_id,
         )
-        return NotificationEvent(text=f"[{event_type}] from {agent_id}: {str(data)[:200]}")
+        return NotificationEvent(
+            session_id=data.get("session_id", ""),
+            text=f"[{event_type}] from {agent_id}: {str(data)[:200]}",
+        )

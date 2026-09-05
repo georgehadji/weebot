@@ -1,10 +1,21 @@
-"""Unit tests for M12 MCP SSE authentication."""
+"""Unit tests for M12 MCP SSE authentication.
+
+Three tests here previously asserted ``verify_token`` returned ``True`` /
+``False``. That is not the ``TokenVerifier`` protocol, which requires
+``AccessToken | None`` -- and ``BearerAuthBackend.authenticate`` reads
+``.expires_at`` and ``.scopes`` off the result, so a bool made a **valid**
+token raise ``AttributeError``. The tests did not merely miss the defect; they
+asserted it as the contract, which is why it survived. They now assert the
+protocol.
+"""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
 import pytest
+
+from mcp.server.auth.provider import AccessToken
 
 from weebot.config.secret_accessor import SecretAccessor
 from weebot.mcp.server import _APIKeyTokenVerifier
@@ -14,14 +25,21 @@ class TestAPIKeyTokenVerifier:
     """Tests for the _APIKeyTokenVerifier helper."""
 
     async def test_verifier_accepts_correct_token(self) -> None:
+        """A valid token yields an AccessToken, not True.
+
+        BearerAuthBackend reads `.expires_at` and `.scopes` off this value.
+        """
         verifier = _APIKeyTokenVerifier("secret")
         result = await verifier.verify_token("secret")
-        assert result is True
+        assert isinstance(result, AccessToken)
+        assert result.token == "secret"
+        assert result.scopes == []
+        assert result.expires_at is None
 
     async def test_verifier_rejects_wrong_token(self) -> None:
+        """A bad token yields None -- the protocol's rejection value."""
         verifier = _APIKeyTokenVerifier("secret")
-        result = await verifier.verify_token("wrong")
-        assert result is False
+        assert await verifier.verify_token("wrong") is None
 
     async def test_verifier_uses_compare_digest(self) -> None:
         verifier = _APIKeyTokenVerifier("secret")
@@ -30,7 +48,7 @@ class TestAPIKeyTokenVerifier:
             result = await verifier.verify_token("secret")
 
         mock_compare.assert_called_once_with("secret", "secret")
-        assert result is True
+        assert isinstance(result, AccessToken)
 
 
 class TestMCPSSECLI:
