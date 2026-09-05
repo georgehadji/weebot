@@ -123,11 +123,19 @@ no-regression (pool sharing, distinct paths, clean indexing run) and boundary ca
 
 ### NOT covered — stated plainly
 
-- **S4 was not addressed.** The plan's executably-verified seed — **37 sites across 10 modules**
-  using `with sqlite3.connect(...) as conn:`, where the context manager commits but does **not**
-  close, leaking a connection and file descriptor per call — is untouched. It is the largest
-  single finding in this wave's scope. It was skipped because a 37-site sweep across 10 modules
-  does not fit a ≤15-line-per-fix budget, not because it is disputed.
+- **S4 was not addressed *in this wave* — CLOSED LATER BY W7.** The plan's executably-verified
+  seed — **37 sites across 10 modules** using `with sqlite3.connect(...) as conn:`, where the
+  context manager commits but does **not** close, leaking a connection and file descriptor per
+  call — was the largest single finding in this wave's scope and was skipped here because a
+  37-site sweep across 10 modules does not fit a ≤15-line-per-fix budget, not because it was
+  disputed.
+
+  **Resolution:** [Wave 7](defect_hunt_w7_resources.md) fixed all 37 sites
+  (`with closing(sqlite3.connect(...)) as conn, conn:`) and added a ratchet that fails if a bare
+  site reappears. W7 recorded the same budget deviation this wave used to defer it, on the
+  grounds that deferring it twice would have meant the plan's largest verified seed surviving the
+  whole programme untouched. This entry is left standing rather than deleted: what W4 chose not
+  to do is part of its record.
 - **D32** (`save_session` spans three separate write transactions, so a crash between them leaves
   partial state), **D34** (a truncation rule implemented twice, only one copy resetting the FTS
   watermark), **D36** (a checked-out read connection is never closed by `close()`), **D37**
@@ -158,6 +166,6 @@ no-regression (pool sharing, distinct paths, clean indexing run) and boundary ca
 ### Verdict
 
 **PARTIAL.** Four verified defects fixed and proven against real databases. The wave's own
-headline seed (S4, 37 verified leaks) was not addressed, five candidates were generated but never
-investigated, and the plan's explicitly named test gap — backup/restore, a subsystem whose last
-three defects were CRITICAL — remains open.
+headline seed (S4, 37 verified leaks) was deferred rather than addressed — subsequently closed by
+W7 — five candidates were generated but never investigated, and the plan's explicitly named test
+gap — backup/restore, a subsystem whose last three defects were CRITICAL — remains open.
