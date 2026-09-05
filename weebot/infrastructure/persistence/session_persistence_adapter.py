@@ -23,6 +23,8 @@ import re
 from datetime import datetime, UTC
 from pathlib import Path
 
+import sqlite3
+
 import aiofiles
 
 from weebot.application.ports.state_repo_port import StateRepositoryPort
@@ -31,10 +33,38 @@ from weebot.utils.backoff import RetryWithBackoff, BackoffConfig
 
 logger = logging.getLogger(__name__)
 
+# Errors that will fail identically on every attempt: a malformed session, a
+# constraint violation or a bad call is not going to succeed because we waited
+# 3.5 seconds. Pydantic's ValidationError subclasses ValueError, so it is
+# covered here too.
+_PERMANENT_ERRORS = (
+    TypeError,
+    ValueError,
+    AttributeError,
+    KeyError,
+    sqlite3.IntegrityError,
+    sqlite3.ProgrammingError,
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Retry anything not known to be permanent.
+
+    Deliberately a denylist: an unrecognised error keeps the old retrying
+    behaviour, so this cannot make the adapter *less* resilient than it was.
+    """
+    return not isinstance(exc, _PERMANENT_ERRORS)
+
+
 # Default retry configuration for session persistence:
 # Short delays (sub-second) to avoid blocking the event loop,
 # with 3 attempts before dead-lettering.
-PERSISTENCE_RETRY_CONFIG = BackoffConfig(delays=[0.5, 1.0, 2.0], jitter=0.25)
+#
+# retryable was left unset, which BackoffConfig treats as "retry everything" --
+# so a permanently-invalid session burned all three delays before dead-lettering.
+PERSISTENCE_RETRY_CONFIG = BackoffConfig(
+    delays=[0.5, 1.0, 2.0], jitter=0.25, retryable=_is_transient
+)
 
 
 class SessionPersistenceAdapter:
