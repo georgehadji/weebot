@@ -273,9 +273,29 @@ candidates:
     wave: W3
     location: weebot/infrastructure/watchers/
     claim: "`get_event_loop()` + `create_task` from the watchdog observer thread, swallowed"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W3's budget."
+    status: fixed
+    evidence: tests/unit/test_alerting_dispatch.py::test_an_alert_fired_from_a_worker_thread_reaches_async_handlers
+    verdict_note: >-
+      The recorded location, weebot/infrastructure/watchers/, DOES NOT EXIST, and
+      the note said "generated and read; not triggered within W3's budget" -- so
+      the candidate named a directory rather than a site and was never verified.
+      An AST sweep for the actual shape (asyncio.get_event_loop() plus
+      create_task/ensure_future inside a SYNCHRONOUS function) found exactly one
+      instance in 821 files: AlertManager._dispatch in weebot/core/alerting.py.
+      Verified by execution -- from the loop thread it worked and delivered 1; from
+      a worker thread and from a plain script it raised "RuntimeError: There is no
+      current event loop in thread ..." and delivered 0. The raise came from
+      `loop = asyncio.get_event_loop()`, a variable the function NEVER READ, and
+      it happened inside fire_alert while holding the RLock, after the synchronous
+      handlers had already run: a partial dispatch and an exception, from a dead
+      assignment, in a class whose docstring says "Thread-safe for concurrent
+      access". ensure_future was the other half -- not thread-safe, and the task it
+      returned was dropped, so a failing handler was never heard from. Fixed with
+      the same pattern as D51: an optional bound loop, get_running_loop when there
+      is one, run_coroutine_threadsafe when there is not, an explicit ERROR when
+      no loop exists at all so an undeliverable alert is never silent, and a
+      done-callback that retrieves each handler's exception. 30 threads firing
+      concurrently now deliver 30 alerts.
 
   - id: D24
     wave: W3
@@ -852,3 +872,51 @@ candidates:
       is to say when to stop trusting. Infinities now clamp by sign; only NaN,
       which has no direction, takes the default. Asserted by
       NEWDEFECT/no-fail-open-on-low.
+  - id: D63
+    wave: TierB
+    location: weebot/core/alerting.py:105
+    claim: >-
+      The entire alerting subsystem cannot be imported -- `asyncio.coroutine` was
+      removed in Python 3.11 and is used in a module-level statement
+    status: fixed
+    evidence: tests/unit/test_every_module_imports.py::test_the_module_can_be_imported
+    severity: HIGH
+    reachability: DEAD
+    verdict_note: >-
+      VERIFIED-EXECUTED. `AsyncAlertHandler = Callable[[Alert], asyncio.coroutine]`
+      at module level. asyncio.coroutine was deprecated in 3.8 and REMOVED in 3.11;
+      this project and its CI both run 3.12, so `import weebot.core.alerting`
+      raised AttributeError and the whole subsystem -- AlertManager, severities,
+      grouping, deduplication, handler dispatch -- had never loaded. Nothing caught
+      it: ruff's CI selector (F821, E9) reads it as an ordinary attribute access
+      rather than an undefined name, and no test imported the module. An alerting
+      system that cannot be imported is the failure this audit keeps finding, in
+      the component whose entire job is to report failures. Reach is DEAD -- zero
+      importers anywhere in weebot/, cli/, tests/ or scripts/ -- which is both why
+      it stayed broken and why fixing it is safe. Fixed to Awaitable[None]. Found
+      while trying to trigger D23, which lives in the same file and was therefore
+      hidden behind this.
+  - id: D64
+    wave: TierB
+    location: weebot/application/services/strategy_adaptation.py:13
+    claim: >-
+      Imports `weebot.workflow_planner`, a path retired by the Clean Architecture
+      refactor, so the module raises ModuleNotFoundError at import
+    status: fixed
+    evidence: tests/unit/test_every_module_imports.py::test_the_module_can_be_imported
+    severity: MEDIUM
+    reachability: DEAD
+    verdict_note: >-
+      VERIFIED-EXECUTED. The module moved to
+      weebot.application.flows.workflow_planner and this importer was never
+      updated; nobody noticed because nobody imports strategy_adaptation either.
+      Fixing the path exposed a second constraint: flows/ already imports services/
+      at module level, so a module-level edge back closes an import-time cycle and
+      test_no_services_flows_cycle fails -- which it duly did on my first fix. That
+      test tolerates lazy imports inside functions, so the two construction sites
+      import locally and the annotations rely on `from __future__ import
+      annotations` plus TYPE_CHECKING. Smoke-tested by actually calling
+      adapt_workflow_plan with a real WorkflowPlan, which executes both lazy
+      imports -- the specific risk of a TYPE_CHECKING refactor is an annotation-only
+      import that turns out to be needed at runtime. Found by an importability
+      sweep: 807 modules scanned, exactly 2 unimportable, this and D63.

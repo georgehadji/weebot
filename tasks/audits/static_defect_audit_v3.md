@@ -1022,3 +1022,186 @@ billing path.
 **Requires runtime validation:** nothing here. Separately, CI has now failed
 eight consecutive runs with the infrastructure signature, so no claim in this
 document has been confirmed under the E2E, CQRS, Persistence or Docker suites.
+
+---
+
+## The alerting module that could not be imported
+
+**Scope.** D23, whose recorded location did not exist; and D63 and D64, two
+modules that raise at import time and had never run.
+
+### How this started
+
+D23 read: *"`get_event_loop()` + `create_task` from the watchdog observer thread,
+swallowed"*, at `weebot/infrastructure/watchers/`. That directory **does not
+exist**, and the verdict said *"generated and read; not triggered within W3's
+budget."* The candidate named a region, not a site, and was never verified.
+
+An AST sweep for the actual shape — `asyncio.get_event_loop()` together with
+`create_task`/`ensure_future` inside a **synchronous** function — found exactly
+**one** instance in 821 files: `AlertManager._dispatch`.
+
+Trying to trigger it produced something else entirely.
+
+### D63 — the alerting subsystem has never loaded `[VERIFIED-EXECUTED]`
+
+```
+AttributeError: module 'asyncio' has no attribute 'coroutine'
+```
+
+`weebot/core/alerting.py:105`:
+
+```python
+AsyncAlertHandler = Callable[[Alert], asyncio.coroutine]
+```
+
+`asyncio.coroutine` was deprecated in Python 3.8 and **removed in 3.11**. This
+project runs 3.12.3 and its CI pins `python-version: "3.12"`. The statement is at
+module level, so `import weebot.core.alerting` raises. **The entire alerting
+subsystem — AlertManager, severities, grouping, deduplication, handler dispatch —
+could not load.**
+
+Nothing caught it, and the reasons matter:
+
+- **ruff's CI selector is `F821,E9`.** `asyncio.coroutine` is an ordinary
+  attribute access on a module that exists, not an undefined name. F821 has
+  nothing to say about it.
+- **No test imported the module.** So the suite was green on a file that raises
+  at import.
+- **Nothing in production imports it either** — zero importers across `weebot/`,
+  `cli/`, `tests/` and `scripts/`. That is why it stayed broken for however long,
+  and why fixing it is safe.
+
+An alerting system that cannot be imported is the failure this audit keeps
+finding, in the one component whose job is to report failures.
+
+### D64 — a stale import path from the refactor `[VERIFIED-EXECUTED]`
+
+`strategy_adaptation.py` imports `weebot.workflow_planner`, a path that has not
+existed since the Clean Architecture refactor moved it to
+`weebot.application.flows.workflow_planner`. Also zero importers, also unnoticed.
+
+**Fixing it tripped the architecture gate, correctly.** `flows/` already imports
+`services/` at module level, so a module-level edge back closes an import-time
+cycle — `test_no_services_flows_cycle` failed on my first attempt. That test's
+docstring tolerates lazy imports inside functions, so the two construction sites
+import locally and the annotations rely on `from __future__ import annotations`
+plus `TYPE_CHECKING`. Smoke-tested by actually calling `adapt_workflow_plan` with
+a real `WorkflowPlan`, which executes both lazy imports — the specific risk of a
+`TYPE_CHECKING` refactor is an annotation-only import that turns out to be needed
+at runtime.
+
+### The measurement, and a gate with a real zero
+
+```
+scanned 807 modules
+
+=== BROKEN CODE: 1 ===
+   weebot.core.alerting: AttributeError: module 'asyncio' has no attribute 'coroutine'
+
+=== missing optional dependency: 1 ===
+   weebot.application.services.strategy_adaptation: No module named 'weebot.workflow_planner'
+```
+
+Two out of 807, and the second is misfiled by my own classifier: a missing
+**first-party** module is a stale path, not an optional dependency. The committed
+gate makes that distinction — a missing `weebot.*` or `cli.*` module fails; a
+genuinely absent third-party package skips.
+
+`tests/unit/test_every_module_imports.py` went from **2 failed / 805 passed** to
+**807 passed, 0 skipped**. The ceiling is zero, not a measured baseline: unlike
+the debt ratchets there is no legitimate un-importable module to grandfather.
+
+### D23 — verified at last, and it is the D51 defect again `[VERIFIED-EXECUTED]`
+
+With the module importable, `_dispatch` could finally be run:
+
+```
+from the loop thread    -> ok,        1 async handler delivered
+from a foreign thread   -> RuntimeError: no current event loop in thread 'Thread-worker'.  0 delivered
+from a plain script     -> RuntimeError: no current event loop in thread 'MainThread'.     0 delivered
+```
+
+The raise comes from `loop = asyncio.get_event_loop()` — **a variable the
+function never reads.** And it happens inside `fire_alert`, while holding the
+RLock, *after* the synchronous handlers have already run: a partial dispatch and
+an exception, from a dead assignment, in a class whose docstring says
+*"Thread-safe for concurrent access."*
+
+`ensure_future` was the other half — not thread-safe, and the task it returned
+was dropped, so a failing handler was never heard from.
+
+Fixed with the pattern proven on D51: an optional bound loop (`bind_loop()`),
+`get_running_loop()` when there is one, `run_coroutine_threadsafe` when there is
+not, an explicit ERROR when no loop exists at all so an undeliverable alert is
+never silent, and a done-callback that retrieves each handler's exception.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+Importability: `2 failed, 805 passed` → `807 passed`.
+Dispatch: `4 failed, 2 passed` → `6 passed`.
+
+**One of those two initial passes was passing for the wrong reason.**
+`test_synchronous_handlers_run_with_no_loop` ran on the main thread, where an
+earlier async test leaves a loop *set* (not running), so `get_event_loop()`
+returned it and the test was green for a reason unrelated to the code. Both
+no-loop tests now fire from a brand-new thread, which is the state a plain script
+is actually in.
+
+### The ratchet caught me
+
+My first version of the done-callback contained `except asyncio.CancelledError:
+pass`, and:
+
+```
+silent_except_handlers: 140 exceeds the ceiling of 139 by 1.
+New debt of this kind was added. Fix it -- do not raise the ceiling.
+```
+
+That is the bidirectional ratchet working exactly as designed, on the person who
+has spent this session building gates. Fixed by logging at DEBUG — a cancelled
+handler is still an alert that was not delivered — not by raising the ceiling.
+
+### RAR self-review
+
+13 probes, **13/13 HOLD**. Includes a *closed* loop bound (the alert must survive),
+a failing synchronous handler (must not stop the async ones), a registered
+"async" handler that is not a coroutine function, and 30 threads firing
+concurrently — all 30 delivered.
+
+One probe BROKE on the first run and it was mine: `NEWDEFECT/old-apis-gone`
+grepped the source of `_dispatch` for `get_event_loop()` and matched **the comment
+explaining why it was removed.** Re-checked by parsing the AST for actual calls:
+`{add_done_callback, create_task, error, get_running_loop, is_closed,
+run_coroutine_threadsafe}` — the removed APIs are genuinely gone.
+
+### Verification
+
+- `tests/unit/test_every_module_imports.py` — 807 passed.
+- `tests/unit/test_alerting_dispatch.py` — 6 passed, and again under a different
+  test order to prove no ordering dependence.
+- `tests/unit/test_architecture_fitness.py` — passed after the lazy-import fix.
+- All five ratchets back at their ceilings; ruff CI selector clean; full ruff on
+  the two touched files **4 findings before, 2 after** — the fix removed two.
+- import-linter 7 contracts kept; un-awaited coroutine gate clean.
+
+### Coverage & residual risk
+
+**The alerting subsystem still has zero importers.** It now loads and dispatches
+correctly, and no alert has ever been fired by this application. Making it work
+is not the same as wiring it up, and this pass did not wire it up.
+
+**`bind_loop()` must be called at startup** for off-thread firing to reach async
+handlers. Nothing calls it, because nothing uses the module. When it is wired up,
+that call is a prerequisite — the ERROR log says so by name.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** none. All three were reproduced by execution.
+
+**Real defect most likely missed:** the importability sweep skips
+`GitNexus-main/` and `osworld/` as vendored trees with their own dependency sets.
+If either is actually first-party code, it has never been checked.
+
+**Requires runtime validation:** nothing here. CI has now failed eight
+consecutive runs with the infrastructure signature.
