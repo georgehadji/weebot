@@ -674,9 +674,41 @@ candidates:
     wave: W5
     location: weebot/infrastructure/adapters/llm/
     claim: "No client HTTP timeout on any concrete adapter; the only timeout is the cascade's own"
-    status: deferred
-    evidence: null
-    verdict_note: "Ranked Priority 3 with D39 as the liveness cousin of unbounded spend. Not triggered."
+    status: fixed
+    evidence: tests/unit/adapters/test_retry_amplification.py
+    verdict_note: >-
+      The claim is HALF WRONG and the region is much worse than it. Wrong: the
+      cascade's is NOT the only timeout — ResilientLLMAdapter has always
+      wrapped the inner call in `asyncio.wait_for(..., self._timeout)`.
+      Misleading: no concrete adapter passes `timeout=` to its SDK client, but
+      both SDKs default to `Timeout(connect=5.0, read=600, write=600,
+      pool=600)`, so "no timeout" was never the behaviour. What IS there is
+      four retry/fallback layers, none aware of any other, multiplying:
+      CascadeExecutor (~5 models) x RetryWithBackoff (7 attempts, len(delays)+1)
+      x OpenAIAdapter's OWN 10-model chain x SDK max_retries (3). Measured
+      against a 429-everything transport, one logical chat(): 210 HTTP requests
+      on an OpenRouter-shaped model (the shape every cascade probe uses), 42 on
+      a model with no "/". Post-fix: 7, one per configured attempt. The largest
+      layer is also the architecturally wrong one — OpenAIAdapter answers a
+      rate limit by walking a model chain beneath the CascadeExecutor whose job
+      that is (CLAUDE.md rule 4), so the cascade can receive a response from a
+      model it never selected while the cost is attributed to the one it asked
+      for. Fixed by `_client_policy.apply_client_policy`, applied once in the
+      factory rather than threaded through `_create_inner_adapter`'s eight
+      branches, because a branch that forgets the kwarg is silent. It walks
+      composites (CachingLLMAdapter -> DirectOrFallbackAdapter -> two leaves)
+      and returns the count configured so "applied" is distinguishable from
+      "found nothing". VERIFIED by probe that both SDKs read `self.timeout` and
+      `self.max_retries` per request, so the post-construction set reaches the
+      wire (it lands in the request's `extensions["timeout"]`). The timeout is
+      built as `httpx.Timeout(t, connect=min(5.0, t))`, not the scalar `t`: a
+      scalar replaces the WHOLE Timeout object, widening connect from 5s to t,
+      so the obvious spelling of this fix would have made an unreachable host
+      stall a probe for 90-180s. Residual: two grandfathered bypasses remain
+      (core/tool_agent.py builds AsyncOpenAI directly; osworld/agent_adapter.py
+      builds OpenAIAdapter directly, so its synchronous `_call_llm` has the
+      SDK's 600s read as its only bound). Both are pinned by
+      `test_llm_clients_are_built_by_the_factory` so a THIRD cannot appear.
 
   - id: S3
     wave: W5

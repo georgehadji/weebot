@@ -2306,3 +2306,176 @@ record had the mechanism right and the consequence wrong, which is exactly the
 kind of entry a priority-ordered work list will keep deferring. **UNKNOWN:**
 how many other `deferred` entries in this inventory are mis-categorised the
 same way — a real consequence hiding under a cheaper-sounding label.
+
+## Four retry loops, none of them aware of the others
+
+### D44 — the claim was half wrong, and the region was much worse `[VERIFIED-EXECUTED]`
+
+D44 read: *"No client HTTP timeout on any concrete adapter; the only timeout is
+the cascade's own."* Both halves needed correcting before anything could be
+fixed.
+
+**The second half is false.** `ResilientLLMAdapter._execute_with_timeout` has
+always wrapped the inner call in `asyncio.wait_for(..., timeout=self._timeout)`,
+and the factory computes a per-provider budget (60/90/120/180s) and passes it
+in. The cascade's is not the only timeout; it is the third of three.
+
+**The first half is true of the code and misleading about the behaviour.** No
+concrete adapter passes `timeout=` to its SDK client — but neither SDK is
+timeout-free. Measured:
+
+```
+anthropic 0.117.0  Timeout(connect=5.0, read=600, write=600, pool=600)
+openai    2.54.0   Timeout(connect=5.0, read=600, write=600, pool=600)
+```
+
+Ten minutes of read budget under a 60-second adapter. That is a mismatch worth
+fixing, but it is not "no timeout", and a fix aimed at the claim as written
+would have addressed the smaller problem.
+
+### What is actually there
+
+Four layers, each of which multiplies the next, and none of which knows the
+others exist:
+
+| layer | multiplier | where |
+|---|---|---|
+| `CascadeExecutor` Phase 1 + 2 | ~5 models | `_cascade.py` |
+| `RetryWithBackoff` | **7** attempts (`len(delays) + 1`) | `ResilientLLMAdapter` |
+| a model chain of the adapter's own | **10** models | `OpenAIAdapter.chat` |
+| SDK `max_retries` | **3** attempts (default 2) | openai / anthropic |
+
+Measured on one logical `chat()` against a transport answering 429 to
+everything:
+
+| model shape | pre-fix | post-fix |
+|---|---|---|
+| `z-ai/glm-5.2` — has a `/`, so the chain is all ten | **210** requests | 7 |
+| `gpt-4o-mini` — no `/`, one-entry chain | **42** requests | 7 |
+
+The OpenRouter-shaped row is the ordinary case, not the corner: `is_openrouter`
+is `model.startswith("openrouter/") or "/" in model_name`, and every model the
+cascade probes has a `/`. Multiply by the cascade's own ~5 probes and one agent
+step can reach four figures of HTTP requests.
+
+### The largest layer is also the one that should not exist
+
+```python
+except RateLimitError:
+    ...
+    for fallback_model in fallback_models:      # ten of them
+        kwargs["model"] = fallback_model
+        response = await self._client.chat.completions.create(**kwargs)
+```
+
+`OpenAIAdapter` answers a rate limit by **choosing a different model**, beneath
+the `CascadeExecutor` whose entire job that is — CLAUDE.md design rule 4 names
+`CascadeExecutor.call_with_cascade` as the model-cascading mechanism. So the
+spend is the visible half. The invisible half is that the response the cascade
+receives may come from a model it never selected, while the usage is attributed
+to the model it asked for. Cost accounting and tier logic are both wrong, and
+nothing in the returned `LLMResponse` says which model answered.
+
+This is the same duplicate-rule shape as the three routing tables in the
+section above: one responsibility implemented twice, the copies drifting, and
+no test comparing them.
+
+### The fix, and why it is applied in one place
+
+`_client_policy.apply_client_policy(inner, timeout=…, sdk_max_retries=0,
+model_fallback=False)`, called once in `AdapterFactory.create_adapter`.
+
+It was tempting to thread `timeout=` and `max_retries=` through
+`_create_inner_adapter`'s eight provider branches, which is the more idiomatic
+spelling. It was rejected for the reason this whole audit keeps finding: **a
+branch that forgets the kwarg is silent.** One call site covers every provider,
+including the nested composites — the factory can return
+`CachingLLMAdapter(DirectOrFallbackAdapter(DeepSeekAdapter, OpenRouterAdapter))`,
+and configuring only the outermost object would leave the client that actually
+makes the call on SDK defaults, with no `_client` on the outer object to reveal
+it. `apply_client_policy` walks the composite and **returns the number of
+clients it configured**, so "applied" is distinguishable from "found nothing to
+apply it to".
+
+Mutating an already-constructed client is deliberate, and verified rather than
+assumed — both SDKs read `self.timeout` and `self.max_retries` per request:
+
+```
+default            -> {'connect': 5.0, 'read': 600, 'write': 600, 'pool': 600}
+after post-hoc set -> {'connect': 5.0, 'read': 7.0,  'write': 7.0,  'pool': 7.0}
+```
+
+(the request's `extensions["timeout"]`, which is what httpcore enforces).
+
+### The obvious spelling of this fix would have been a regression
+
+```
+AsyncOpenAI(api_key=k, timeout=90.0).timeout   ->   90.0
+```
+
+A scalar replaces the **whole** `Timeout` object — connect included. Passing
+the factory's 90–180s budget as a float would have widened the connect timeout
+from 5s to 90–180s, so an unreachable host would stall a cascade probe for
+minutes where it now fails in five seconds. Hence
+`httpx.Timeout(t, connect=min(5.0, t))`, and a test that pins it.
+
+### The bypasses, named rather than fixed
+
+`test_llm_clients_are_built_by_the_factory` finds every construction of an SDK
+client or concrete adapter outside `infrastructure/adapters/llm/`. Two exist,
+both grandfathered at their measured count so a **third** fails the build:
+
+| site | what it bypasses |
+|---|---|
+| `core/tool_agent.py:62` | builds `AsyncOpenAI` directly. The module already raises `DeprecationWarning` in `__init__`; the fix is deletion, not plumbing. |
+| `osworld/agent_adapter.py:262` | builds `OpenAIAdapter` directly, so there is no `ResilientLLMAdapter` above it: no circuit breaker, no retry, no sanitiser, and the SDK's 600s read is the only time bound. `_call_llm` is **synchronous**, so that bound is held on the calling thread. |
+
+A companion test fails if a grandfathered entry disappears, so the list cannot
+outlive the bypasses and become mistaken for a design decision.
+
+### Two things worth recording about the harness
+
+**The proxy nearly made the measurement fake.** Swapping `httpx.AsyncClient._transport`
+for a `MockTransport` had no effect: httpx reads `HTTPS_PROXY`/`NO_PROXY` at
+construction and installs mounted transports per URL pattern, and `_mounts` is
+consulted *before* `_transport`. The first probe reported `0 requests` and an
+`APIConnectionError` — it had gone out to the network for real. CI has no
+proxy, so this would have been a bug that appeared only on a developer's
+machine. The helper clears `_mounts` as well, with the reason written down.
+
+**The unfixed measurement was slower than the suite's timeout.** With
+`retry-after: 0` the SDK ignores the header (it honours it only for
+`0 < seconds <= 60`) and falls back to its own exponential backoff — ~140
+sleeps, 80s, past the 60s `pyproject.toml` limit. `retry-after-ms: 1` gets the
+same request count in 3s. The count is the claim; the sleeps are not.
+
+### Coverage & residual risk
+
+- **The cascade layer is untouched.** ~5 probes remain, by design — that is the
+  cascade doing its job. 7 × 5 = 35 requests is still the worst case for one
+  agent step against a fully rate-limited provider.
+- **`enable_retry` and the SDK's retry now differ in behaviour, not just
+  count.** The SDK honours `Retry-After`; `RetryWithBackoff` uses a fixed
+  ladder with jitter and ignores the header entirely. Collapsing to one layer
+  means rate-limit responses no longer get the provider's requested delay.
+  That is a real regression in politeness, traded for a 30× reduction in
+  requests. **UNKNOWN:** whether any provider in use penalises the fixed ladder.
+- **`_enable_model_fallback` defaults to `True`.** Adapters constructed
+  directly keep today's behaviour deliberately — the two bypass sites are not
+  covered by tests, and changing behaviour on an untested path to fix a spend
+  defect is the wrong trade. They keep the 30× amplifier; the gate says so.
+- **Only `OpenAIAdapter` has an internal model chain.** Checked: `anthropic`,
+  `openrouter`, `deepseek`, `moonshot` and the caching adapters have none. But
+  `OpenRouterAdapter`, `DeepSeekAdapter` and `MoonshotAdapter` all *subclass*
+  `OpenAIAdapter`, so all of them inherited it.
+
+### Uncertainty acknowledgment
+
+D44 was ranked "Priority 3, the liveness cousin of unbounded spend" and
+deferred for five waves on a claim that was wrong about where the timeout was.
+The record was not merely incomplete — its second clause was false, and acting
+on it as written would have produced a fix for a defect that was not there
+while leaving a 30× amplifier untouched. **UNKNOWN:** how many other deferred
+entries are load-bearing on a clause nobody re-checked. The two entries closed
+in this session were both mis-stated in the same direction: D39 understated its
+consequence, D44 misstated its mechanism. That is two for two.
