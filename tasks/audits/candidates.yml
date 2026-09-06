@@ -823,3 +823,32 @@ candidates:
       revised twice in this RAR cycle, not the once the protocol allows, and the
       second revision existed only because the first patched the symptom I had
       just seen rather than the class it belonged to.
+  - id: D62
+    wave: TierB
+    location: weebot/core/behavior_reporting.py:get_trust_report
+    claim: >-
+      A readable but wrong-shaped trust.json escapes the handler that exists to
+      substitute a default, and crashes the trust report
+    status: fixed
+    evidence: tests/unit/test_trust_report_survives_a_bad_file.py::test_a_wrong_shaped_trust_file_falls_back_instead_of_raising
+    severity: MEDIUM
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED, all six probes raising. The handler catches
+      JSONDecodeError and FileNotFoundError -- an UNREADABLE file -- and
+      substitutes a default. It does not catch a READABLE file holding the wrong
+      thing, and the `.get` calls that consume the result sit outside it, so
+      `[]`, `"a string"`, `123` and `null` each raised AttributeError past the
+      fallback the handler exists to provide. `{"score": "high"}` got further:
+      `.get(key, default)` substitutes only when the key is ABSENT, so the string
+      reached `"high" * 100`, which is a legal repetition, and the failure
+      surfaced in int() one call later with the message "invalid literal for
+      int() with base 10: 'highhighhigh...'" -- nowhere near the file that caused
+      it. Same class as D61 and as P1's _normalized; found by the sweep described
+      in the audit. Fixed by normalising every field to the default the handler
+      already used. One RAR revision: the first version defaulted an infinity,
+      so a trust.json of {"score": -1e400} reported 100% -- FULLY TRUSTED -- for a
+      corrupt file, which is the fail-open direction in the one number whose job
+      is to say when to stop trusting. Infinities now clamp by sign; only NaN,
+      which has no direction, takes the default. Asserted by
+      NEWDEFECT/no-fail-open-on-low.

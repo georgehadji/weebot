@@ -907,3 +907,118 @@ and has not been swept for.
 
 **Requires runtime validation:** nothing here. Every claim was executed. CI still
 has not scheduled a runner.
+
+---
+
+## The `.get(key, default)` sweep — one defect, and a lesson about sweeps
+
+The previous section named the obvious next step: the D61 shape — a default that
+fires only on absence, never on a present-but-wrong value — had now appeared
+twice (P1's `_normalized`, D61) and had never been swept for. This closes that.
+
+### What the sweep found, honestly
+
+A broad sweep for `.get()` on directly-parsed data with no `isinstance` guard
+returns **163 sites across ~60 files.** That number is nearly worthless as a
+defect count. Most of those `.get` chains sit *inside* the same `try` that wraps
+the parse, so a wrong type raises into a handler that was always going to catch
+it. Reporting 163 as defects would be a fabrication dressed as a measurement.
+
+The defect is the narrower shape, and it is the one D61 was: **the parse guarded
+by a handler, the use outside it.** Narrowing to that gives **22 sites**, of
+which:
+
+- **3** are my own `trajectory_builder` lines, already fixed — the heuristic
+  cannot see validation delegated to a helper (`_validate_analysis`);
+- **several more** are false positives from a second heuristic flaw, found by
+  reading rather than trusting the list.
+
+Two of those false positives are worth naming because they are the code doing
+this *right*: `atomicmail/jmap_request._parse_jmap_envelope` and
+`atomicmail/credentials.parse_credentials_json` both check `isinstance`
+immediately after the try — thorough, layered checks on exactly the untrusted
+inbound data CLAUDE.md flags. My sweep harvested `isinstance` guards only from
+inside the `try` body, so it reported them. Fixed to scan the whole function.
+`format_detector._detect_directory` is a third: two `try` blocks assigning the
+same name, which the sweep cross-matched. Confirmed guarded by execution.
+
+**A sweep that flags correct code is as useless as one that misses defects, just
+louder.** That is the third time in this session a first-draft heuristic of mine
+over-reported. The consistent lesson: my heuristics default to over-reporting,
+which is the opposite failure mode from the codebase's, and equally uninformative.
+
+### D62 — the one verified defect `[VERIFIED-EXECUTED]`
+
+`weebot/core/behavior_reporting.get_trust_report`. Every probe raised:
+
+```
+[]                   -> AttributeError: 'list' object has no attribute 'get'
+"a string"           -> AttributeError: 'str' object has no attribute 'get'
+123                  -> AttributeError: 'int' object has no attribute 'get'
+null                 -> AttributeError: 'NoneType' object has no attribute 'get'
+{"score": "high"}    -> ValueError: invalid literal for int() ... 'highhighhigh...'
+{"score": null}      -> TypeError: unsupported operand type(s) for *: 'NoneType' and 'int'
+```
+
+Compare the control, `format_detector`, which absorbed all six.
+
+The fifth line is the one worth reading twice. `"high" * 100` is a legal string
+repetition, so a wrong-typed field produced a 400-character string and failed one
+call later, in `int()`, **nowhere near the file that caused it.** That is what
+this defect class costs even when it does surface: the error names the wrong
+thing.
+
+Fixed by normalising every field to the default the handler already used for a
+missing file, and saying so once at WARNING.
+
+**One RAR revision, and it mattered.** My first version returned the default for
+any non-finite value. A `trust.json` of `{"score": -1e400}` therefore reported
+**100% — fully trusted** — for a corrupt file. That is the fail-open direction in
+the one number whose entire job is to say when to stop trusting. Infinities now
+clamp by sign; only NaN, which carries no direction, takes the default. The
+probe that caught it is now a permanent assertion
+(`NEWDEFECT/no-fail-open-on-low`), and so is the sign-clamp behaviour.
+
+### RAR self-review
+
+13 probes, **13/13 HOLD** after that one revision. Includes: `True` is not a
+score (it is an `int` subclass and would otherwise read as 1.0); a *directory* at
+the trust path (now caught by an `OSError` branch the original lacked); 20
+concurrent readers; and a check that the reporter never rewrites the file it only
+reads.
+
+### Verification
+
+- `tests/unit/test_trust_report_survives_a_bad_file.py` — 20 passed (was 8 failed
+  / 5 passed; the 5 included all three controls).
+- All five ratchets at their ceilings; ruff CI selector clean; full ruff on the
+  touched file **11 before, 11 after**; import-linter 7 kept; un-awaited gate clean.
+
+### Coverage & residual risk
+
+**19 candidate sites remain unexamined**, in `_cascade.py`,
+`autonomous_learning.py`, `session_constraint_extractor.py`,
+`skill_review_gate.py`, `agentskills_index.py`, `skill_index_github.py` and
+`scheduler.py`. Each needs individual setup to trigger — several take an LLM or
+an HTTP response — and I did not build that. They are recorded as **candidates,
+not defects**: the two I did examine closely both turned out to be correct, so
+the base rate in this list is not high, and nothing here should be read as
+"19 more bugs".
+
+**The sweep is not installed as a gate**, unlike the un-awaited coroutine check.
+It should not be until its false-positive rate is much lower — a gate that cries
+wolf gets disabled, which is worse than not having it.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** none in what was fixed. D62 was reproduced six
+ways before the fix.
+
+**Real defect most likely missed:** whichever of the 19 unexamined candidates is
+real. `_cascade.py:529` (`response.json()` from OpenRouter, outside its handler)
+is the one I would look at first — it is remote, untrusted input on a live
+billing path.
+
+**Requires runtime validation:** nothing here. Separately, CI has now failed
+eight consecutive runs with the infrastructure signature, so no claim in this
+document has been confirmed under the E2E, CQRS, Persistence or Docker suites.
