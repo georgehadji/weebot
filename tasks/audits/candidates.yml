@@ -532,3 +532,60 @@ candidates:
       global socket. One latent hole was fixed in passing (broker_adapter's
       fallback dropped session_id while embedding caller payload); it had no
       production caller. See review_gate_d47_d50.md.
+  - id: D52
+    wave: P1
+    location: weebot/core/gateway_auth.py:36,54; weebot/core/egress_guard.py:208,220
+    claim: >-
+      Security-control state is written with a truncating write and reloaded
+      through a handler that silently substitutes defaults, so one interrupted
+      write permanently erases an operator's allowlist and blocklist
+    status: fixed
+    evidence: tests/unit/core/test_security_state_durability.py
+    verdict_note: >-
+      Two halves of one root cause. `Path.write_text` truncates before writing,
+      so a write that dies partway destroys the previous contents; `_load` then
+      answers the parse failure with defaults, and the next administrative
+      action saves those defaults over the unreadable file. Proven by trigger:
+      a half-completed save left the gateway config unparseable, and a
+      previously approved egress recipient was simply gone with the failure
+      logged and swallowed. Fixed with an atomic replace and by preserving the
+      unreadable file as *.corrupt.bak -- a rule .gitignore already carried for
+      a convention nothing implemented. The RAR invalid-input vector then found
+      a second, pre-existing half: `[]`, `"text"`, `null` and
+      `{"allowed_platforms": null}` are all valid JSON and all raised
+      AttributeError/TypeError out of the authorization decision itself, so
+      `_load` now validates shape. The first draft of that validation was
+      itself fail-open -- a `setdefault` pass put the rejected value straight
+      back -- which is pinned by its own regression test.
+  - id: D53
+    wave: P1
+    location: weebot/core/gateway_auth.py:94
+    claim: >-
+      `is_admin` does not consult `blocked_users`, so blocking a user does not
+      revoke their admin rights
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Real but unreachable: `is_admin` has zero callers in weebot/ or cli/, so
+      reachability caps severity and no fix is warranted yet. `is_user_allowed`
+      and `is_chat_allowed` both check the blocklist first; `is_admin` is the
+      only accessor that does not. Deferred rather than fixed because changing
+      dead code inside a security diff is exactly the unrelated-refactoring the
+      protocol forbids. The first caller to use it inherits the trap, so this
+      must be closed before `is_admin` is wired to anything.
+  - id: D54
+    wave: P1
+    location: weebot/core/bash_guard.py:517
+    claim: >-
+      The security-event callback is invoked under `except Exception: pass`, so
+      an audit record for a DANGEROUS command can be lost silently
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Innocent as a *decision* defect: `max_risk` is computed before the
+      callback and returned regardless, so no swallow can change what the guard
+      decides. The comment states the best-effort contract explicitly. Recorded
+      rather than dropped because it is still an instrument that can fail
+      unobserved -- the telemetry for a dangerous command may never be written
+      and nothing reports it. That is a monitoring gap, not a guard defect, and
+      it belongs to whoever owns the security-event sink.

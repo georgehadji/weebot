@@ -166,3 +166,10 @@ Github projects/
 # catalog replace. Removed on failure, renamed on success; only a killed
 # process leaves one behind.
 weebot/application/services/model_registry/_catalog.py.tmp
+
+# Transient siblings written by weebot.core.durable_state.write_text_atomic
+# during an atomic replace: created in the destination directory, renamed on
+# success, removed on failure. Only a killed process leaves one behind. The
+# egress allowlist defaults to the repo root, so they can land here.
+.*.json.*.tmp
+weebot_egress_allowlist.json
