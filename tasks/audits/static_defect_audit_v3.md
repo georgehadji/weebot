@@ -1345,3 +1345,154 @@ the only red when CI recovers, it is flake, not regression.
 been judged, so it cannot carry a verdict."* It has been judged — investigated,
 verified, and deliberately left — which is `deferred`. That is a real
 distinction and the gate was right to enforce it.
+
+---
+
+## A tool that registers clean and answers nobody
+
+Written after CI recovered from the eight-run Actions outage, against a live
+run (`34037918394`) that exercised the previous six commits for the first time.
+
+### D48 — the claim was wrong, the code was worse `[VERIFIED-EXECUTED]`
+
+The recorded claim was *"dynamic tools forward unvalidated `**kwargs` to
+`tool.execute()`"*. It is **refuted**. Nothing was forwarded, because nothing
+ever reached `execute`.
+
+`_wrap_base_tool` registered `async def wrapper(**kwargs)` with the MCP SDK.
+The SDK derives a tool's advertised JSON Schema by introspecting the
+registered function, and it does not understand `**kwargs`: it read the bare
+`**kwargs` as **one required string field literally named `"kwargs"`**.
+
+Measured on the unmodified code:
+
+```
+SCHEMA: {"properties": {"kwargs": {"title": "kwargs", "type": "string"}},
+         "required": ["kwargs"], "title": "wrapperArguments", "type": "object"}
+WRAPPER SIG: (**kwargs) -> 'CallToolResult'
+
+CALL {'a': 1, 'b': 'x'}            -> ToolError: kwargs  Field required
+CALL {}                            -> ToolError: kwargs  Field required
+CALL {'path': '../../etc/passwd'}  -> ToolError: kwargs  Field required
+```
+
+Every call failed argument validation before dispatch — including the call
+with no arguments at all. `list_tools` advertised a tool that no client could
+invoke under any input. This is the ledger's shape again: registers cleanly,
+reports availability, works never.
+
+**Severity is capped by reach.** `dynamic_tools` is a constructor parameter
+defaulting to `None`, and no caller anywhere in the repository passes it:
+
+```
+weebot/mcp/server.py:120:        dynamic_tools: list | None = None,
+weebot/mcp/server.py:133:        self._dynamic_tools = dynamic_tools or []
+weebot/mcp/server.py:181:        self._register_dynamic_tools()
+weebot/mcp/server.py:251:    def _register_dynamic_tools(self) -> None:
+weebot/mcp/server.py:253:        for tool in self._dynamic_tools:
+```
+
+DEAD reach, so not CRITICAL by the reachability gate. It is fixed anyway
+because it is an advertised public parameter: the next caller to use it would
+have inherited a facility that cannot work, with no signal saying so.
+
+### The fix, and the approach that was ruled out first
+
+The clean fix would be to hand the SDK an explicit schema. **It has no such
+API** — this is the official `mcp.server.fastmcp`, not the third-party
+`fastmcp` package, and `add_tool` takes only `fn`, `name`, `title`,
+`description`, `annotations`, `icons`, `meta`, `structured_output`. Everything
+else is introspected. Measured, not assumed:
+
+```
+--- add_tool ---
+(self, fn, name=None, title=None, description=None, annotations=None,
+ icons=None, meta=None, structured_output=None) -> None
+```
+
+So the only channel into the schema is the signature. `func_metadata` honours
+a synthesized `__signature__`:
+
+```
+SCHEMA: {"properties": {"command": {...,"type":"string"},
+                        "count": {"default": null, ..., "type":"integer"},
+                        "path":  {"default": null, ..., "type":"string"}},
+         "required": ["command"], ...}
+```
+
+`_apply_schema_signature` replays the tool's own `.parameters` — which every
+`BaseTool` already carries as a JSON Schema object — as a keyword-only
+signature. Optional parameters are given a `None` default and then stripped in
+the wrapper, so `execute(**kwargs)` sees exactly what the client sent. That is
+not a new convention: `_run_file_tool`'s own callers at lines 454-463 already
+build kwargs by omitting optional keys rather than passing `None`.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+`tests/unit/interfaces/test_dynamic_mcp_tools_are_callable.py`, 19 tests:
+
+```
+pre-fix  (git stash push -- weebot/mcp/server.py):  18 failed, 1 passed
+post-fix:                                                    19 passed
+```
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | tool with `properties: {}` | `ok:{}` — callable with no args. HOLD |
+| Boundary | `properties` is the string `"not-a-dict"` | degrades to a no-arg tool, no crash. HOLD |
+| Boundary | schema is `None` / `"a string"` / `[]` / `42` / `{}` | empty signature, no raise. HOLD |
+| Invalid input | required arg omitted | rejected, naming `command`. HOLD |
+| Invalid input | `count="not-an-int"` | rejected, naming `count`. HOLD |
+| Invalid input | `path=None` on a `"type":"string"` param | rejected — schema-correct; the tool declared a string. HOLD |
+| Invalid input | property named `bad-name` / `class` | dropped, WARNING names both. HOLD |
+| State | omitted optional | arrives **absent**, not as `None`. HOLD |
+| Regression | tool returns `is_error` | `isError=True`, text `"boom"` — contract unchanged. HOLD |
+| Concurrency | n/a — registration is synchronous and per-instance | not applicable |
+| New defect | undeclared arg `zzz` | dropped by the SDK, never reaches `execute`. HOLD |
+
+Six vectors, no BREAKS, no revision needed.
+
+### Verification
+
+| gate | result |
+|---|---|
+| `ruff check weebot/ cli/ --select F821,E9` | All checks passed |
+| `make lint-unawaited` | clean, 821 files |
+| `lint-imports` | 7 kept, 0 broken |
+| `silent_except_handlers` | 139, at ceiling |
+| `blocking_io_in_async` | 29, at ceiling |
+| `print_in_production` | 143, at ceiling |
+| `bare_env_reads` | 73, at ceiling |
+| `bandit_b110` | 68, at ceiling |
+| candidate inventory | 11 passed |
+
+### Coverage & residual risk
+
+What this does **not** cover:
+
+- **A parameter name that is not a Python identifier still cannot be passed.**
+  `bad-name` and `class` are dropped from the signature. They are named at
+  WARNING rather than dropped silently, but a tool declaring them is still
+  partially unreachable. Fixing that needs an SDK that accepts an explicit
+  schema; this one does not.
+- **`Any` is the fallback annotation** for an unrecognised or absent JSON
+  Schema `type`. That accepts the value as-is rather than rejecting one the
+  tool would have handled — deliberately permissive, since the alternative is
+  rejecting valid input.
+- **Nested object/array schemas are flattened to `dict`/`list`.** A tool
+  declaring `{"type":"object","properties":{...}}` for one parameter gets
+  `dict` — the inner shape is not validated.
+- **Still DEAD reach.** Nothing in the repository registers a dynamic tool, so
+  none of this executes in production today. The tests are the only caller.
+
+### Uncertainty acknowledgment
+
+The claim on record was wrong, and I did not find that by reading — the static
+reading ("`**kwargs` is unvalidated") is a perfectly natural one, and it is
+what I would have written too. It survived until a probe called the tool and
+watched every call fail before `execute`. **UNKNOWN:** whether other refuted
+claims in this inventory hide different defects in the same lines. D48 is one
+data point, not a rate.
+

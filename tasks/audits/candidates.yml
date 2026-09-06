@@ -607,9 +607,25 @@ candidates:
     wave: W6
     location: weebot/mcp/server.py
     claim: "Dynamic tools forward unvalidated `**kwargs` to `tool.execute()`"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/interfaces/test_dynamic_mcp_tools_are_callable.py
+    verdict_note: >-
+      The claim as written is REFUTED: nothing was forwarded to execute(),
+      because nothing ever reached it. Investigating it found a worse defect in
+      the same lines. The MCP SDK derives a tool's advertised JSON Schema by
+      introspecting the registered function and does not understand **kwargs --
+      it read the bare `**kwargs` as one REQUIRED STRING field literally named
+      "kwargs". Measured pre-fix: call with {'a':1,'b':'x'}, with {}, and with
+      {'path':'../../etc/passwd'} all failed identically with "kwargs Field
+      required" before dispatch. So `list_tools` advertised a tool no client
+      could invoke under any arguments, including none. Fixed by replaying the
+      tool's own `.parameters` schema as a keyword-only signature, which is the
+      only channel the SDK reads; omitted optionals are stripped so execute()
+      sees what was sent, matching `_run_file_tool`'s existing convention.
+      Reach is DEAD -- no caller anywhere passes `dynamic_tools`, so severity is
+      capped and no current behaviour changes. Validation now happens and is the
+      tool's own: a missing required arg and a wrong-typed arg are both rejected
+      by name.
 
   - id: D49
     wave: W6
@@ -983,3 +999,28 @@ candidates:
       available moves are widening the tolerance (which weakens the assertion) or
       raising the timeout (a guess). An accurate record is worth more than either.
       If this test is the only red when CI recovers, it is flake, not regression.
+
+  - id: D66
+    wave: CI
+    location: tests/unit/scripts/test_backup_restore_roundtrip.py
+    claim: "The only property test in tests/unit/ has no duration bound of its own and times out under CI's coverage run"
+    status: fixed
+    evidence: tests/unit/scripts/test_backup_restore_roundtrip.py
+    verdict_note: >-
+      Found by CI, not by audit: the first real Unit Tests run after the
+      eight-run Actions outage failed with "Timeout (>60.0s) from
+      pytest-timeout" on this one test, 4812 others passing. NOT caused by this
+      branch -- the test loads scripts/backup.py and scripts/restore.py by file
+      path via spec_from_file_location and imports nothing from weebot/, while
+      all 16 source files this branch changed are under weebot/. Measured cost,
+      cold hypothesis cache, one run each: ~1.0s warm / ~3.0s cold / ~11.2s cold
+      under --cov=weebot, which is exactly the CI invocation. Coverage traces
+      every line the process executes rather than only the measured package, so
+      each of the 60 examples pays it. Against the project-wide timeout = 60 in
+      pyproject.toml that is ~5x headroom on this machine and less on a shared
+      runner. `deadline=None` and a suppressed too_slow health check mean nothing
+      inside hypothesis bounds it either. Fixed with a calibrated
+      @pytest.mark.timeout(240) on that test alone -- proven to take effect by
+      setting it to 1 and observing "Timeout (>1.0s)". max_examples=60 and the
+      property are unchanged; nothing is skipped, disabled or quarantined.
+

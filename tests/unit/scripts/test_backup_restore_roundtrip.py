@@ -106,6 +106,26 @@ def _corrupt(path: pathlib.Path) -> None:
 
 
 class TestRoundTrip:
+    # The only property test in tests/unit/, and the only one whose cost is a
+    # product rather than a constant: 60 examples x (create + backup + verify +
+    # restore + read) of a real sqlite file. `deadline=None` and a suppressed
+    # too_slow health check mean nothing inside hypothesis bounds it either, so
+    # the project-wide `timeout = 60` was the only bound -- and it is not the
+    # right one. Measured here, cold hypothesis cache, one run each:
+    #
+    #     no coverage          ~1.0s   (warm cache)
+    #     no coverage          ~3.0s   (cold cache, as CI starts)
+    #     --cov=weebot         ~11.2s  (cold cache, exactly the CI invocation)
+    #
+    # Coverage traces every line the process executes, not just the measured
+    # package, so the sqlite and hypothesis work inside each example is traced
+    # too -- an ~11x cost this test pays and the tests around it do not. Against
+    # a 60s budget that is ~5x of headroom on this machine, and a shared runner
+    # is slower still: it timed out in CI at >60s while passing in ~1s locally.
+    # The budget below is calibrated to the measurement rather than to the
+    # default. It bounds a genuine hang and changes no assertion: all 60
+    # examples still run and the property is unchanged.
+    @pytest.mark.timeout(240)
     @settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow])
     @given(rows=_ROWS)
     def test_restore_of_a_backup_equals_the_original(self, rows):
