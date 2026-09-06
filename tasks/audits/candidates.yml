@@ -360,10 +360,24 @@ candidates:
     wave: W3
     location: weebot/application/flows/
     claim: "`t.exception()` in a done-callback raises `CancelledError`"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W3's budget."
-
+    status: fixed
+    evidence: tests/unit/test_breaker_key_and_cancelled_task.py::test_cancelling_a_session_does_not_raise_in_the_done_callback
+    verdict_note: >-
+      The note said "generated and read; not triggered within W3's budget", and
+      the location named a directory. Located precisely: there are two
+      `.exception()` calls in weebot/ and cli/, and only ONE is unguarded --
+      task_runner.py:142. The other, _cascade.py:463, already checks
+      `if not pf.cancelled()` inside contextlib.suppress(InvalidStateError,
+      CancelledError) and is correct. Verified by execution: `Task.exception()`
+      RAISES CancelledError on a cancelled task, so the unguarded form pushed
+      ['CancelledError'] into the loop's exception handler while the guarded form
+      pushed []. Cancelling a session is an ordinary operation -- `flow cancel
+      <id>` is a CLI command -- so this fired on a normal path. Severity LOW: the
+      pops above it have already run, so no state is corrupted; the harm is that
+      a real cleanup failure is now one more CancelledError in a stream of
+      identical noise. Fixed by returning early on `t.cancelled()` (logging at
+      DEBUG, since a cancellation is still worth a line) and by calling
+      `t.exception()` once instead of twice.
   - id: S5
     wave: W3
     location: weebot/application/flows/
@@ -481,10 +495,29 @@ candidates:
     wave: W5
     location: weebot/infrastructure/adapters/llm/resilient_adapter.py
     claim: "Breaker keyed on `model or self._model_name`, inspected and reset on `self._model_name`"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W5's budget."
-
+    status: fixed
+    evidence: tests/unit/test_breaker_key_and_cancelled_task.py::test_reset_clears_the_breaker_the_cascade_actually_opened
+    verdict_note: >-
+      VERIFIED-EXECUTED. `chat` keys the breaker on `model or self._model_name`,
+      the RUNTIME model, so each cascade tier gets its own -- deliberate and
+      correct, and the comment above it says so. But get_circuit_state,
+      get_metrics and reset_circuit all read `self._model_name`, the
+      CONSTRUCTION-time name. Under a cascade, which drives one adapter across
+      several models, the breaker that trips is keyed on the runtime model while
+      the operator inspects a different one: eight consecutive failures on
+      "runtime/model" opened its breaker and get_circuit_state() reported the
+      configured model's, which had never been touched. Worse, reset_circuit()
+      -- the manual recovery lever -- reset a breaker that was never open and
+      left the real one rejecting traffic. That is this audit's modal defect
+      applied to an instrument: it reports on a different object than the one
+      being measured, and the recovery control is inert. Fixed by remembering
+      every key this adapter has driven, adding an optional `model` to
+      get_circuit_state and reset_circuit (default None keeps the old
+      behaviour), reporting a `circuit_states` map in get_metrics alongside the
+      existing `circuit_state`, and making a no-argument reset_circuit() clear
+      every key THIS adapter opened -- never another component's, asserted by
+      NEWDEFECT/no-cross-adapter-leak. Zero external callers of all three, so
+      nothing changes behaviour today.
   - id: D42
     wave: W5
     location: weebot/infrastructure/adapters/llm/
@@ -920,3 +953,33 @@ candidates:
       imports -- the specific risk of a TYPE_CHECKING refactor is an annotation-only
       import that turns out to be needed at runtime. Found by an importability
       sweep: 807 modules scanned, exactly 2 unimportable, this and D63.
+  - id: D65
+    wave: TierB
+    location: tests/stress/test_llm_resilience.py::TestMixedFailureModes::test_partial_outage_with_retries
+    claim: >-
+      The test fails roughly one run in seven, against its own comment predicting
+      one in two thousand -- a gate that fires at random carries no information
+    status: deferred
+    severity: MEDIUM
+    reachability: LIVE
+    evidence: null
+    verdict_note: >-
+      NOT MINE and NOT FIXED -- recorded because it is measured, and because a
+      randomly-failing gate is the mirror image of this audit's thesis: an
+      instrument that cannot fail proves nothing, and one that fails at random
+      proves nothing either, while training everyone to ignore red. MEASURED
+      (VERIFIED): 6 failures in 42 isolated runs, 14.3%. Ruled out as mine
+      (VERIFIED): 12 runs on my tree gave 10 passed / 2 failed, and 12 runs on the
+      same commit with my D29/D41 changes stashed gave 10 passed / 2 failed --
+      identical. MEASURED (VERIFIED): the retry really does make 7 attempts, so
+      the comment's 0.5^7 is right about attempt count; from that, P(more than 2
+      of 20 requests fail) is 0.05%, against 14.3% observed -- a factor of ~280.
+      MECHANISM (UNKNOWN): the attempts are evidently not independent trials, but
+      I did not isolate why. HYPOTHESIS, unconfirmed: the 30s per-request timeout
+      combined with exponential backoff under 20-way concurrency truncates some
+      requests before their seventh attempt -- consistent with batches taking over
+      18 seconds, but two attempts to measure it directly exceeded their own time
+      budget and were killed. NOT FIXED deliberately: without the mechanism, the
+      available moves are widening the tolerance (which weakens the assertion) or
+      raising the timeout (a guess). An accurate record is worth more than either.
+      If this test is the only red when CI recovers, it is flake, not regression.

@@ -1205,3 +1205,143 @@ If either is actually first-party code, it has never been checked.
 
 **Requires runtime validation:** nothing here. CI has now failed eight
 consecutive runs with the infrastructure signature.
+
+---
+
+## Two instruments reporting on the wrong object
+
+**Scope.** D29 and D41. Both were recorded with the same note — *"generated and
+read; not triggered within W3's / W5's budget"* — and both named a directory
+rather than a site. Locating them precisely was most of the work.
+
+### D29 — `Task.exception()` on a cancelled task `[VERIFIED-EXECUTED]`
+
+There are exactly two `.exception()` calls in `weebot/` and `cli/`, and only one
+is unguarded. `_cascade.py:463` already reads `if not pf.cancelled()` inside a
+`contextlib.suppress(InvalidStateError, CancelledError)` and is correct.
+`task_runner.py:142` was not.
+
+```
+unguarded form -> loop exception handler saw ['CancelledError']
+guarded form   -> loop exception handler saw []
+```
+
+`Task.exception()` raises `CancelledError` when the task was cancelled, and
+cancelling a session is an ordinary operation — `flow cancel <id>` is a CLI
+command. So this fired on a normal path, every time.
+
+**Severity LOW, and stated as such**: the pops above it have already run, so no
+state is corrupted. The harm is that a real cleanup failure is now one more
+`CancelledError` in a stream of identical ones.
+
+### D41 — the breaker you can see is not the one that tripped `[VERIFIED-EXECUTED]`
+
+`chat` keys the breaker on `model or self._model_name` — the **runtime** model,
+so each cascade tier gets its own. That is deliberate; the comment above it says
+so. But `get_circuit_state`, `get_metrics` and `reset_circuit` all read
+`self._model_name`, the **construction-time** name.
+
+Under a cascade — which is exactly what drives one adapter across several models
+— eight consecutive failures on `"runtime/model"` opened its breaker, and
+`get_circuit_state()` reported the configured model's, which had never been
+touched. It read CLOSED while requests were being rejected.
+
+And `reset_circuit()`, the manual recovery lever, reset a breaker that was never
+open, leaving the real one closed to traffic. **The control did nothing and said
+nothing.**
+
+This is the audit's modal defect applied to an instrument: it reports on a
+different object than the one being measured, and the recovery control is inert.
+
+Fixed by remembering every key the adapter has driven; `model` is now an optional
+argument on `get_circuit_state` and `reset_circuit` (default `None` keeps the old
+behaviour exactly); `get_metrics` gains a `circuit_states` map **alongside** the
+existing `circuit_state`, so no current reader changes; and a no-argument
+`reset_circuit()` clears every key *this adapter* opened — never another
+component's, which is asserted rather than assumed.
+
+Zero external callers of all three, so nothing changes behaviour today.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+`7 failed, 1 passed` → `8 passed`. Worth being precise about that single pass:
+of the two tests written as controls, one (`a healthy model is not reported
+open`) could not run before the fix because it uses the new signature — so it is
+not really a control. The genuine one is `the default key is still the configured
+model`, and it is the one that passed both before and after.
+
+### RAR self-review
+
+15 probes, **15/15 HOLD on the first run**, no revision. Includes: an adapter
+with the breaker disabled entirely; an empty `model_name`; resetting a model that
+was never used; 6 models tripped concurrently then all reset; 50 simultaneous
+cancellations; and a check that one adapter's `reset_circuit()` cannot clear
+another adapter's breaker.
+
+### Verification
+
+- `tests/unit/test_breaker_key_and_cancelled_task.py` — 8 passed.
+- Targeted regression (`task_runner`, `resilient`, `cascade`, `circuit`) — 116
+  passed.
+- All five ratchets at their ceilings; ruff CI selector clean; full ruff on the
+  two touched files **13 before, 13 after**; import-linter 7 kept; un-awaited
+  gate clean.
+
+### Coverage & residual risk
+
+**`circuit_state` in `get_metrics` is still the configured model's.** That was
+deliberate — changing it would alter what an existing reader sees — so the
+misleading value is still present, now beside a correct `circuit_states` map. A
+future change should probably retire it, and that is a decision for whoever owns
+the metrics contract, not for this pass.
+
+**D29's guard is in one place.** Nothing prevents the next done-callback from
+calling `.exception()` unguarded. Unlike the un-awaited coroutine check, this is
+not gated — there are only two such call sites in the whole tree, and a gate for
+a two-instance pattern is more maintenance than it is worth.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** D29, on severity rather than existence. It is
+real and reproduced, but it corrupts nothing; if the log noise does not bother
+anyone, the fix buys little.
+
+**Real defect most likely missed:** whether anything reads `circuit_state` from
+`get_metrics` and acts on it. I found no caller, but `health.py:377` mentions
+`adapter.get_metrics()` in a note, which suggests someone intended to.
+
+**Requires runtime validation:** the cascade's actual per-tier breaker behaviour
+under load. My probes drove the adapter directly rather than through
+`CascadeExecutor`.
+
+### D65 — a test that fails at random, measured but not fixed
+
+Not my defect and not fixed, recorded because it is measured and because it is
+the mirror image of this audit's thesis. An instrument that cannot fail proves
+nothing; **one that fails at random proves nothing either, while training
+everyone to ignore red.**
+
+`tests/stress/test_llm_resilience.py::TestMixedFailureModes::test_partial_outage_with_retries`
+injects a 50% failure rate and asserts ≥18 of 20 requests succeed.
+
+| claim | status | evidence |
+|-------|--------|----------|
+| Fails ~1 run in 7 | **VERIFIED** | 6 failures in 42 isolated runs (14.3%) |
+| Not caused by my changes | **VERIFIED** | 12 runs on my tree: 10/2. 12 runs with my changes stashed: 10/2. Identical. |
+| The retry makes 7 attempts | **VERIFIED** | measured directly with a 100%-failing inner adapter |
+| Predicted rate is 0.05% | **VERIFIED** | 0.5⁷ = 0.0078 per request; P(>2 of 20) = 0.0005 |
+| Attempts are not independent trials | **INFERENCE** | 14.3% observed vs 0.05% predicted — a factor of ~280 |
+| The 30s per-request timeout truncates retries under 20-way concurrency | **HYPOTHESIS** | consistent with batches exceeding 18s, but not isolated |
+| The actual mechanism | **UNKNOWN** | two direct measurement attempts exceeded their own time budget and were killed |
+
+**Deliberately not fixed.** Without the mechanism, the available moves are
+widening the tolerance — which weakens the assertion — or raising the timeout,
+which is a guess. An accurate record is worth more than either. If this test is
+the only red when CI recovers, it is flake, not regression.
+
+**The inventory gate corrected my bookkeeping here.** I first recorded it as
+`open` with a verdict note, and
+`test_open_records_have_no_verdict_note` failed: *"an `open` candidate has not
+been judged, so it cannot carry a verdict."* It has been judged — investigated,
+verified, and deliberately left — which is `deferred`. That is a real
+distinction and the gate was right to enforce it.

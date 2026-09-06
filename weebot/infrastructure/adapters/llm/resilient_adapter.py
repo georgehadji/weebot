@@ -105,6 +105,7 @@ class ResilientLLMAdapter(LLMPort):
         """
         self._inner = inner_adapter
         self._model_name = model_name
+        self._breaker_keys: set[str] = {model_name} if model_name else set()
         self._timeout = timeout
         self._enable_caching = enable_caching
         self._cache = cache
@@ -183,6 +184,11 @@ class ResilientLLMAdapter(LLMPort):
         # This ensures each cascade tier gets its own breaker, preventing
         # one model's failure from poisoning all others.
         _breaker_key: str = model or self._model_name
+        # Remembered so `get_metrics` and `reset_circuit` can reach the breakers
+        # this adapter has actually driven. Without it they only ever saw
+        # `self._model_name`, and a cascade that drives one adapter across
+        # several models trips a breaker nobody can see or clear.
+        self._breaker_keys.add(_breaker_key)
 
         # Step 1: Circuit breaker check
         if self._circuit:
@@ -364,11 +370,18 @@ class ResilientLLMAdapter(LLMPort):
     # Inspection API
     # -------------------------------------------------------------------------
 
-    def get_circuit_state(self) -> str | None:
-        """Get current circuit breaker state for this model."""
+    def get_circuit_state(self, model: str | None = None) -> str | None:
+        """Get the circuit state for *model*, defaulting to the configured one.
+
+        `chat` keys the breaker on the RUNTIME model (`model or
+        self._model_name`) so each cascade tier gets its own, which is
+        deliberate. This used to read `self._model_name` unconditionally, so
+        when the cascade drove one adapter across several models it reported a
+        breaker that had never been touched -- CLOSED, while requests were being
+        rejected by a different one. Passing no model keeps the old behaviour.
+        """
         if self._circuit:
-            state = self._circuit.get_state(self._model_name)
-            return state.value
+            return self._circuit.get_state(model or self._model_name).value
         return None
 
     def get_metrics(self) -> dict[str, Any]:
@@ -383,13 +396,30 @@ class ResilientLLMAdapter(LLMPort):
 
         if self._circuit:
             metrics["circuit_state"] = self._circuit.get_state(self._model_name).value
+            # Every key this adapter has driven, not just the configured name.
+            # `circuit_state` above is kept as-is so existing readers are
+            # unaffected; it is the one that can be misleading under a cascade.
+            metrics["circuit_states"] = {
+                key: self._circuit.get_state(key).value for key in sorted(self._breaker_keys)
+            }
             circuit_metrics = self._circuit.get_metrics()
             metrics["circuit_metrics"] = circuit_metrics
 
         return metrics
 
-    async def reset_circuit(self) -> None:
-        """Manually reset circuit breaker to CLOSED state."""
-        if self._circuit:
-            await self._circuit.reset(self._model_name)
-            logger.info(f"Circuit breaker reset for {self._model_name}")
+    async def reset_circuit(self, model: str | None = None) -> None:
+        """Manually reset a circuit breaker to CLOSED.
+
+        With no *model*, every breaker this adapter has driven is reset -- not
+        only `self._model_name`. This is the manual recovery lever, and under a
+        cascade the breaker that opened is keyed on a runtime model, so the
+        old single-key version reset something that had never opened and left
+        the real one closed to traffic. Resetting more is safe here: these are
+        exactly the keys this adapter opened, never another component's.
+        """
+        if not self._circuit:
+            return
+        keys = [model] if model else sorted(self._breaker_keys)
+        for key in keys:
+            await self._circuit.reset(key)
+            logger.info("Circuit breaker reset for %s", key)
