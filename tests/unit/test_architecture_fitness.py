@@ -1518,3 +1518,67 @@ def test_no_direct_agent_calls_in_mutating_states():
             assert (
                 "context._executor.summarize" not in content
             ), f"{sf}: direct executor call bypassing mediator"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Shell execution — CLAUDE.md rule 3, at a ceiling of zero
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def _shell_execution_sites() -> list[str]:
+    """Every call that hands a string to a shell for interpretation.
+
+    `asyncio.create_subprocess_shell`, `os.system`, and any `subprocess.*`
+    call with `shell=True`. Passing a list to `subprocess.run` is not included:
+    that is the safe form, with no shell to interpret metacharacters.
+    """
+    found: list[str] = []
+    roots = [ROOT, ROOT.parent / "cli"]
+    for root in roots:
+        for path in root.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = ""
+                if isinstance(node.func, ast.Attribute):
+                    name = node.func.attr
+                elif isinstance(node.func, ast.Name):
+                    name = node.func.id
+                rel = path.relative_to(ROOT.parent)
+                if name == "create_subprocess_shell":
+                    found.append(f"{rel}:{node.lineno}: create_subprocess_shell")
+                elif (
+                    name == "system"
+                    and isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "os"
+                ):
+                    found.append(f"{rel}:{node.lineno}: os.system")
+                elif name in {"run", "Popen", "call", "check_call", "check_output"}:
+                    for kw in node.keywords:
+                        if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                            found.append(f"{rel}:{node.lineno}: {name}(shell=True)")
+    return sorted(found)
+
+
+def test_no_shell_execution_outside_the_bash_guard():
+    """CLAUDE.md rule 3: shell commands go through ``weebot/core/bash_guard.py``.
+
+    The rule had no enforcement, and exactly one site violated it:
+    ``state_verifier._execute_verify_command`` re-ran a command the agent had
+    *claimed* to run, to compare return codes. Given a claim about
+    ``rm -f <path>`` it deleted ``<path>``; ``rm -rf /`` reached the same call,
+    which BashGuard rates BLOCKED and which nothing on that path consulted.
+
+    The ceiling is zero rather than ratcheted because there is no legitimate
+    instance to grandfather: a command built from a list needs no shell, and a
+    command that needs a shell needs the guard first.
+    """
+    sites = _shell_execution_sites()
+    assert sites == [], "shell execution outside bash_guard:\n  " + "\n  ".join(sites)

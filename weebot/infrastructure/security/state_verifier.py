@@ -302,30 +302,37 @@ class StateVerifier:
             self._stats["contradictions_found"] += 1
             return self._cache_result(cache_key, result)
 
-        # For critical commands, verify actual return code matches
+        # A command whose effects matter cannot be verified by running it again.
+        # Re-execution does not observe the earlier run -- it performs a second
+        # one, and for anything that mutates state that second run *is* the harm
+        # the check exists to catch. Measured on the code this replaces: given a
+        # claim about `rm -f <path>`, the verifier deleted <path> and then
+        # reported CONTRADICTED, because the second run's return code differed
+        # from the first. Both halves wrong, and `rm -rf /` reached the same
+        # path -- BashGuard rates it BLOCKED and nothing here consulted
+        # BashGuard, so this was the one shell-execution site in the codebase
+        # outside the guard the project rule requires.
+        #
+        # The honest result for such a claim is that it was not independently
+        # verified. Reporting UNVERIFIABLE says so; the previous code's fallback
+        # said VERIFIED at 0.9 confidence whenever re-execution merely raised.
         if is_critical:
-            # Re-execute critical command with timeout to verify
-            try:
-                actual_result = await self._execute_verify_command(claimed.command)
-                if actual_result.returncode != claimed.claimed_returncode:
-                    result = VerificationResult(
-                        status=VerificationStatus.CONTRADICTED,
-                        claimed_outcome=f"Command: {claimed.command}",
-                        actual_state={
-                            "claimed_returncode": claimed.claimed_returncode,
-                            "actual_returncode": actual_result.returncode,
-                            "actual_output": actual_result.stdout[:500],
-                        },
-                        confidence_score=0.2,
-                        discrepancies=[
-                            f"Return code mismatch: claimed {claimed.claimed_returncode}, actual {actual_result.returncode}"
-                        ],
-                        verification_method="re_execution",
-                    )
-                    self._stats["contradictions_found"] += 1
-                    return self._cache_result(cache_key, result)
-            except Exception as e:
-                _log.warning(f"Could not re-execute command for verification: {e}")
+            result = VerificationResult(
+                status=VerificationStatus.UNVERIFIABLE,
+                claimed_outcome=f"Command: {claimed.command}",
+                actual_state={
+                    "claimed_returncode": claimed.claimed_returncode,
+                    "reason": "critical command not re-executed",
+                },
+                confidence_score=0.0,
+                discrepancies=[
+                    "Command performs a critical operation, so it was not "
+                    "re-executed to verify it; re-running it would repeat its "
+                    "effects rather than observe the original run."
+                ],
+                verification_method="not_re_executed",
+            )
+            return self._cache_result(cache_key, result)
 
         # Default: assume claim is accurate if no contradictions found
         result = VerificationResult(
@@ -483,34 +490,15 @@ class StateVerifier:
         return False
 
     def _is_critical_command(self, command: str) -> bool:
-        """Check if command is a critical operation requiring verification."""
-        command_lower = command.lower()
-        return any(op in command_lower for op in self._CRITICAL_OPERATIONS)
+        """Check if command is a critical operation requiring verification.
 
-    async def _execute_verify_command(self, command: str):
-        """Execute a command to verify its actual result.
-
-        Returns a simple result object with .returncode (int),
-        .stdout (str), and .stderr (str) so callers can access
-        decoded output without dealing with asyncio StreamReaders.
+        Matched on word boundaries. Plain substring matching classified
+        `terraform apply` and `echo confirm` as critical operations, because
+        "rm" is a substring of "terraform" and of "confirm". That mattered a
+        great deal when the branch this feeds re-executed what it classified.
         """
-        from collections import namedtuple
-
-        VerifyResult = namedtuple("VerifyResult", ["returncode", "stdout", "stderr"])
-
-        proc = await asyncio.create_subprocess_shell(
-            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-            return VerifyResult(
-                returncode=proc.returncode or -1,
-                stdout=stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else "",
-                stderr=stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "",
-            )
-        except TimeoutError:
-            proc.kill()
-            raise
+        pattern = r"\b(?:" + "|".join(re.escape(op) for op in sorted(self._CRITICAL_OPERATIONS)) + r")\b"
+        return re.search(pattern, command.lower()) is not None
 
 
 # Singleton instance

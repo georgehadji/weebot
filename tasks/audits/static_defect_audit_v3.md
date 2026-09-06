@@ -1496,3 +1496,148 @@ watched every call fail before `execute`. **UNKNOWN:** whether other refuted
 claims in this inventory hide different defects in the same lines. D48 is one
 data point, not a rate.
 
+
+---
+
+## The verifier that ran the command it was verifying
+
+### D8 — the one shell-execution site, and what it did `[VERIFIED-EXECUTED]`
+
+The recorded claim was narrow: *"raw `create_subprocess_shell` outside the
+bash-guard path."* True, and an understatement.
+
+The recorded location no longer existed — the file had moved from
+`weebot/application/services/` to `weebot/infrastructure/security/` — but line
+501 still matched. It was the **only** shell-execution site in `weebot/` or
+`cli/`:
+
+```
+create_subprocess_shell : 1
+shell=True              : 0
+os.system               : 0
+```
+
+`verify_command_execution` took an agent's *claim* that it had run a command
+and, for anything it judged critical, **re-ran that command** and compared
+return codes. Measured on the unmodified code:
+
+```
+marker exists before verification: True
+marker exists AFTER verification:  False
+verification status: CONTRADICTED
+```
+
+Given a claim about `rm -f <marker>`, the verifier deleted `<marker>`, then
+reported the claim CONTRADICTED — because the second run's return code
+differed from the first. Both halves wrong: it caused the effect, then called
+the agent a liar for it.
+
+Three further defects sat in the same branch.
+
+**Classification was substring matching.** `op in command_lower`, over a set
+containing `rm`:
+
+| command | critical? | BashGuard |
+|---|---|---|
+| `npm run format` | **True** — `rm` ⊂ `format` | safe |
+| `echo confirm` | **True** — `rm` ⊂ `confirm` | safe |
+| `terraform apply` | **True** — `rm` ⊂ `terraform` | safe |
+| `ls -la` | False | safe |
+| `rm -rf /` | True | **blocked** |
+| `curl -X POST .../charge` | True | safe |
+
+Every `True` in that column was re-executed. `rm -rf /` is the exact command
+BashGuard exists to stop, and this path never consulted BashGuard —
+CLAUDE.md rule 3 had no enforcement anywhere in the repository.
+
+**And the handler failed open.** When re-execution raised, it logged a warning
+and fell through to `VERIFIED` at `confidence_score=0.9`. The verifier that
+could not verify reported success at 90% confidence.
+
+**Reach is DEAD.** `StateVerifier` has no importer in `weebot/`, `cli/`,
+`tests/` or `scripts/`; `get_state_verifier()` is never called. None of this
+ran. Severity is capped accordingly — but the module is named for security,
+and a future caller would have inherited all four defects at once.
+
+### The fix, and the approach that was rejected
+
+The obvious fix is to route the command through `BashGuard` before re-running
+it. **That is not sufficient**, and the table above says why: `curl -X POST
+.../charge` is guard-SAFE and would still be replayed, as would `terraform
+apply`. Guarding a re-execution makes it survivable, not correct.
+
+The unsoundness is prior to the guard: **re-executing a command does not
+observe the earlier run.** It performs a second one, and for anything that
+mutates state that second run *is* the harm the check exists to catch. There
+is no version of "run it again" that verifies a past side effect.
+
+So the branch does not re-execute. A critical claim now returns
+`UNVERIFIABLE` at confidence `0.0` — a status the enum already had — with the
+reason stated in `discrepancies`. `_execute_verify_command` is deleted, which
+takes the codebase's shell-execution surface to zero and lets the new gate sit
+at a ceiling of zero rather than a ratchet.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+tests/unit/infrastructure/security/test_verification_does_not_re_execute.py
+  pre-fix   6 failed, 7 passed      (the 7 are the genuinely-critical
+                                     classifications, correctly unaffected)
+  post-fix  13 passed
+
+test_architecture_fitness.py -k shell
+  pre-fix   1 failed
+            E  weebot/infrastructure/security/state_verifier.py:501: create_subprocess_shell
+  post-fix  1 passed
+```
+
+The gate was also proven against all three forms it claims to catch, and
+proven *not* to flag the safe one:
+
+```
+E  weebot/_gate_probe_tmp.py:2: create_subprocess_shell
+E  weebot/_gate_probe_tmp.py:3: os.system
+E  weebot/_gate_probe_tmp.py:4: run(shell=True)
+   subprocess.run(["echo", "hi"])   — not flagged
+```
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | claim about a command with no critical verb | unchanged path, still VERIFIED. HOLD |
+| Invalid input | `echo 2 > f && chmod 600 f` (non-idempotent) | file unchanged at "1". HOLD |
+| State | marker file present before and after | present. HOLD |
+| State | status/confidence on a declined claim | UNVERIFIABLE / 0.0 / `is_trusted` False. HOLD |
+| Regression | `rm -rf /`, `git rm`, `chmod 777`, `kill 123` | all still classified critical. HOLD |
+| Regression | `terraform apply`, `echo confirm`, `ls -la`, `cat notes.txt` | all now non-critical. HOLD |
+| Concurrency | n/a — no shared state introduced; a method was removed | not applicable |
+| New defect | ruff `F401` on the module after deleting the helper | clean; `asyncio` still used by `_read_file_async`. HOLD |
+
+Six vectors, no BREAKS.
+
+### Coverage & residual risk
+
+- **`format` is still classified critical**, because it is literally in
+  `_CRITICAL_OPERATIONS` — word boundaries cannot fix a list containing a word
+  that is also a common build target. The cost of that false positive dropped
+  from *re-executing a command* to *reporting UNVERIFIABLE*, which is why it is
+  left alone rather than guessed at.
+- **The module is still dead.** Nothing imports it. These tests are its only
+  caller, and they are the only thing keeping it honest.
+- **The gate covers `weebot/` and `cli/` only** — not `scripts/`, not `tests/`,
+  where a shell call may be legitimate tooling.
+- **`create_subprocess_exec` is not gated.** It takes an argument list and
+  spawns no shell, so it does not carry the metacharacter risk; it is a
+  different question from this one and was not folded in.
+
+### Uncertainty acknowledgment
+
+The claim was recorded in W1 and deferred twice, through W7 and again in this
+run, on the reading that a lone `create_subprocess_shell` in dead code was low
+value. That reading was right about the reach and wrong about everything else:
+the interesting defect was not the missing guard but what the guarded call
+*did*. **UNKNOWN:** whether the other narrow claims still deferred are
+similarly under-described. Reach was the reason for deferring each of them,
+and reach turned out to be the least informative thing about this one.
+

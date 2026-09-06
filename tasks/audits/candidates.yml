@@ -81,14 +81,34 @@ candidates:
 
   - id: D8
     wave: W1
-    location: weebot/application/services/state_verifier.py:501
+    location: weebot/infrastructure/security/state_verifier.py:501
     claim: "Raw `create_subprocess_shell` outside the bash-guard path"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/infrastructure/security/test_verification_does_not_re_execute.py
     verdict_note: >-
-      W1 enumerated 51 subprocess sites but triaged none; regions R1/R2 were
-      declared in scope and not hunted. Deferred to W7, which did not enter it
-      either.
+      Confirmed and much worse than the claim. The recorded path had moved to
+      weebot/infrastructure/security/, and it was the ONLY shell-execution site
+      in weebot/ or cli/ -- zero `shell=True`, zero `os.system`. What it did:
+      `verify_command_execution` took an agent's CLAIM that it had run a
+      command and, for anything it judged critical, RE-RAN that command to
+      compare return codes. Measured: given a claim about `rm -f <marker>`, the
+      marker existed before verification and did not exist after, and the
+      verifier then reported CONTRADICTED because the second run's return code
+      differed from the first. `rm -rf /` reached the same call; BashGuard rates
+      it BLOCKED and nothing on this path consulted BashGuard. Classification
+      was substring matching, so `terraform apply` and `echo confirm` were
+      "critical" ("rm" is inside "terraform" and "confirm") and therefore
+      re-executed; `curl -X POST .../charge` was critical and guard-SAFE, so it
+      would have been replayed. And when re-execution raised, the handler logged
+      a warning and fell through to VERIFIED at confidence 0.9. Reach is DEAD --
+      StateVerifier has no importer in weebot/, cli/, tests/ or scripts/ -- so
+      none of it ran, and severity is capped. Fixed by not re-executing at all
+      (UNVERIFIABLE at confidence 0.0 is the honest result for a claim you
+      decline to reproduce), word-boundary classification, and deleting
+      `_execute_verify_command`, which takes the codebase's shell-execution
+      surface to zero. New ceiling-zero gate
+      test_no_shell_execution_outside_the_bash_guard enforces CLAUDE.md rule 3,
+      which until now had no enforcement anywhere.
 
   - id: D9
     wave: W1
@@ -121,8 +141,40 @@ candidates:
     status: deferred
     evidence: null
     verdict_note: >-
-      Partially defended — no clear-without-pause path exists. W1 left it [UNK]
-      on the resume path specifically; that path was never triggered.
+      The claim as written is REFUTED and the clearing is correct: the flag is
+      cleared inside `if _mail_ap.requires_confirmation:`, immediately before
+      set_status(WAITING) and the WaitForUserEvent yield, and it must be --
+      FlowRouter flips WAITING -> RUNNING and re-enters execute() against the
+      SAME step, so an uncleared flag re-fires forever. The constraint gate
+      below it carries a comment saying exactly this.
+      .
+      W1's [UNK] on the resume path was right to be suspicious, and the defect
+      there is real. VERIFIED-STATIC: resolve_initial_state has three routing
+      priorities. `_product_gate_pending` forwards the user's prompt to
+      ProductGateState(resume_with=prompt). `plan_pending_approval` tests it
+      against _APPROVE_TOKENS and routes to PlanningState with a modification
+      request when it is not an approval. Everything else -- including every
+      session that paused at this gate -- falls to `if last_plan is not None and
+      not last_plan.is_complete(): return ExecutingState(), session`, which
+      never reads `prompt` at all. The gate asks "type 'proceed' to continue, or
+      describe how you'd like to handle it" and honours NEITHER branch: the
+      description is discarded and there is no way to decline. Execution of the
+      untrusted inbound content proceeds identically whatever the user typed.
+      The constraint gate immediately below has the same structure and the same
+      hole, so one defect covers two gates.
+      .
+      NOT FIXED, and deliberately: the fix has to add a routing priority inside
+      resolve_initial_state, the central resume path for every session, and
+      decide what a non-approval means (the plan-approval path's precedent is
+      "re-plan with the response as a modification request"). That is a live
+      behaviour change and a product decision, unlike D8's dead code. Escalated
+      rather than guessed.
+      .
+      Noted in passing, unverified: set_fact writes to context.facts, which
+      SessionContext.get does NOT read -- it reads known fields then
+      context.extra. Any routing flag added for this must live in extra, as
+      _product_gate_pending and plan_pending_approval do. context.facts is also
+      capped at 100 entries with oldest-first eviction.
 
   - id: S1
     wave: W1
