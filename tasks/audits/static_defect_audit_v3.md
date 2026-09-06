@@ -1641,3 +1641,125 @@ the interesting defect was not the missing guard but what the guarded call
 similarly under-described. Reach was the reason for deferring each of them,
 and reach turned out to be the least informative thing about this one.
 
+
+---
+
+## Two gates that asked a question and ignored the answer
+
+### D12, D67 — the resume path never read the reply `[VERIFIED-EXECUTED]`
+
+The recorded claim was that the inbound-mail approval flag is cleared before
+the pause. **Refuted, and the clearing is required**: `FlowRouter` flips
+WAITING → RUNNING and re-enters `execute()` against the same step, so an
+uncleared flag re-fires the gate forever. The constraint gate below it carries
+a comment saying exactly that.
+
+W1 marked the *resume* path `[UNK]` and never triggered it. That is where the
+defect was.
+
+`resolve_initial_state` routed on three things. `_product_gate_pending`
+forwarded the prompt to `ProductGateState(resume_with=prompt)`.
+`plan_pending_approval` tested it against `_APPROVE_TOKENS`. Everything else
+reached:
+
+```python
+if last_plan is not None and not last_plan.is_complete():
+    return ExecutingState(), session
+```
+
+which never reads `prompt`. Neither gate set a routing flag, so both landed
+there. Both prompts say *"type 'proceed' to continue, or describe how you'd
+like to handle it"* — and **neither half was honoured**. The description was
+discarded, and no answer declined. Typing `"that email is a phishing attempt,
+ignore it"` resumed execution on the untrusted content identically to typing
+`proceed`, which is the one thing ADR 006 exists to prevent. The constraint
+gate had the same hole, so a user answering "no, do not do that" got the step
+executed anyway (**D67** — not previously recorded; found in the code
+immediately below D12).
+
+### Why the flag could not simply be the one already there
+
+`set_fact` writes to `context.facts`. `SessionContext.get` reads declared
+fields and then `context.extra`, and **never** `context.facts`. So the gates'
+own pending flags were invisible to the router by construction. A test pins
+this in both directions, because it is the reason the fix needs a second flag
+rather than reusing the first.
+
+### The semantic choice, which was the user's
+
+What a non-approval should *do* is a product decision, not a defect, so it was
+escalated rather than guessed. Green-lit, it follows the codebase's own
+precedent for the identical situation: the plan-approval path re-plans with
+the response as a modification request. Both gates now do that.
+
+**One deliberate divergence.** The plan-approval path treats an empty response
+as approval (`if response in _APPROVE_TOKENS or not response`). These gates do
+not. They guard untrusted input and stated constraints, and silence is not
+consent.
+
+### A short-circuit written and then removed
+
+The first version returned `ExecutingState` directly on approval. A test
+caught it doing so for a session with **no plan to execute** — a state the
+router could not previously produce, because every path to `ExecutingState`
+checks `last_plan is not None and not last_plan.is_complete()` first.
+Approval now clears the flag and *falls through* to those branches. Approval
+means "carry on as before", and the code below already knows what "as before"
+is.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+`tests/unit/application/flows/test_user_gate_answer_is_honoured.py`, 33 tests,
+every case parametrised over both gates:
+
+```
+router reverted:  30 failed, 3 passed
+with the fix:              33 passed
+```
+
+The 3 that pass either way are the two flag-visibility tests and the
+no-gate-pending regression — correctly unaffected by a routing change.
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | `""`, `"   "`, `"\n"` | not approval; re-plans. HOLD |
+| Boundary | `"  PROCEED  "` | approval; case and whitespace tolerated. HOLD |
+| Invalid input | `"no"`, `"stop"`, a free-text instruction | re-plans, instruction carried. HOLD |
+| State | flag consumed after either answer | `_user_gate_pending` is None. HOLD |
+| State | second resume after an answered gate | does not re-route; no livelock. HOLD |
+| Regression | WAITING + incomplete plan, no gate flag | still `ExecutingState`, still RUNNING, no modification request. HOLD |
+| Regression | `set_fact` vs `extra` visibility | pinned both ways. HOLD |
+| Concurrency | n/a — routing is synchronous, per-resume, on an immutable Session | not applicable |
+| New defect | approval with no plan attached | falls through instead of short-circuiting. Found by test, fixed. HOLD |
+
+Nine probes, one BREAK (the short-circuit), revised once, re-run: all HOLD.
+
+### Coverage & residual risk
+
+- **A non-approval always re-plans.** For the constraint gate that is a
+  heavier response than "skip this step and continue", which may be what a
+  user means. Re-planning is the codebase's existing answer to "user did not
+  approve"; a lighter one would be a new behaviour, not a defect fix.
+- **`_APPROVE_TOKENS` is a fixed word list.** "yes please" is not in it and
+  re-plans. Erring toward re-planning is the safe direction at a gate, but it
+  will occasionally re-plan when the user meant to approve.
+- **The constraint gate's per-step ack survives a decline.** If re-planning
+  produces a step with the same id, its gate will not re-fire. Narrow, and not
+  exercised here.
+- **Not covered end to end.** These tests drive `resolve_initial_state`
+  directly. A full pause-then-resume through `PlanActFlow` against a live
+  inbox is not exercised, and the atomic_mail path needs
+  `WEEBOT_ENABLE_ATOMIC_MAIL=1`.
+
+### Uncertainty acknowledgment
+
+W1 recorded the wrong claim and marked the right area unknown. The claim it
+did record — that clearing the flag is a bug — is not merely unproven, it is
+backwards: removing the clear would livelock the gate. The defect was one
+layer further out, in a function the claim never names. **UNKNOWN:** how many
+of the remaining `[UNK]` markers sit next to a refuted claim in the same way.
+Two of the last three defects closed had a refuted claim attached (D48, D12),
+which is a pattern worth more than the two data points establish.
+

@@ -102,9 +102,10 @@ class FlowRouter:
         0. If product_gate_pending is set, route back to ProductGateState
            with the user's clarification.
         1. If plan_pending_approval is set, route based on user response.
-        2. If an incomplete plan exists, resume execution.
-        3. If the session was WAITING with a plan, resume execution.
-        4. Otherwise, start fresh planning.
+        2. If _user_gate_pending is set, route based on user response.
+        3. If an incomplete plan exists, resume execution.
+        4. If the session was WAITING with a plan, resume execution.
+        5. Otherwise, start fresh planning.
 
         Returns:
             (FlowState, Session) — the state to transition to, and the
@@ -151,6 +152,50 @@ class FlowRouter:
                 update={"context": session.context.model_copy(update={"extra": extra_out})}
             )
             return PlanningState(), updated
+
+        # Priority 2: a gate asked the human a question and is awaiting the answer.
+        #
+        # Without this, the resume fell through to the branch below, which
+        # returns ExecutingState without reading `prompt` at all. Both gates
+        # that set this flag ask the user to approve *or* to say how they want
+        # the content handled, and neither half was honoured: the description
+        # was discarded, and no answer declined. For the inbound-mail gate that
+        # meant untrusted email was acted on identically whatever the human
+        # typed, which is the one thing ADR 006 exists to prevent.
+        user_gate = session.context.get("_user_gate_pending")
+        if user_gate:
+            from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
+
+            response = prompt.strip().lower()
+            extra_out = {**(extra or {}), "_user_gate_pending": None}
+
+            # An empty answer is deliberately NOT approval here, though the
+            # plan-approval path above accepts it as one. These gates guard
+            # untrusted input and stated constraints: silence is not consent.
+            if response in _APPROVE_TOKENS:
+                logger.info("User approved the %s gate — resuming execution", user_gate)
+                # Clear the flag and fall through to the ordinary resume logic
+                # below rather than returning ExecutingState here. Approval
+                # means "carry on as before", and the branches below already
+                # know what "as before" is -- they check that a plan exists and
+                # is incomplete first. Short-circuiting would resume execution
+                # for a session with no plan to execute, a state the router
+                # could not previously produce.
+                session = session.model_copy(
+                    update={"context": session.context.model_copy(update={"extra": extra_out})}
+                )
+            else:
+                logger.info(
+                    "User did not approve the %s gate (%r) — re-planning with their instruction",
+                    user_gate,
+                    prompt[:80],
+                )
+                extra_out["_intent_reviewed"] = False
+                extra_out["_plan_modification_request"] = prompt
+                updated = session.model_copy(
+                    update={"context": session.context.model_copy(update={"extra": extra_out})}
+                )
+                return PlanningState(), updated
 
         last_plan = session.get_last_plan()
 

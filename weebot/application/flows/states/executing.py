@@ -85,6 +85,21 @@ def _is_code_step(step: Step, events: list[Any] | None = None) -> bool:
     return False
 
 
+def _mark_user_gate(session: Any, gate: str) -> Any:
+    """Record that the flow is pausing on *gate* and awaiting a human answer.
+
+    The flag lives in ``context.extra`` because that is the store
+    ``SessionContext.get`` reads -- it checks declared fields and then
+    ``extra``, and never ``context.facts``, where ``set_fact`` writes.
+    ``FlowRouter.resolve_initial_state`` keys its routing off this, and a gate
+    that does not set it is resumed by the branch that ignores the user's
+    reply entirely.
+    """
+    new_extra = {**session.context.extra, "_user_gate_pending": gate}
+    new_ctx = session.context.model_copy(update={"extra": new_extra})
+    return session.model_copy(update={"context": new_ctx})
+
+
 def _step_fetched_inbound_mail(events: list[Any]) -> bool:
     """Return True if any event is a completed atomic_mail jmap_request.
 
@@ -275,6 +290,14 @@ class ExecutingState(FlowState):
             if _mail_ap.requires_confirmation:
                 # Clear flag before pausing so the resume call proceeds normally.
                 context._session = context._session.set_fact("atomic_mail_inbound_pending", False)
+                # ...and record *why* we are waiting, where FlowRouter can see
+                # it. `set_fact` writes to context.facts, which
+                # SessionContext.get never reads, so without this the resume
+                # landed in the generic branch of resolve_initial_state — the
+                # one that returns ExecutingState without looking at `prompt`.
+                # The question below then had no answer that changed anything,
+                # in either direction.
+                context._session = _mark_user_gate(context._session, "inbound_mail")
                 context._session = context._session.set_status(SessionStatus.WAITING)
                 yield WaitForUserEvent(
                     question=(
@@ -309,6 +332,7 @@ class ExecutingState(FlowState):
             # the user can never get past it. The inbound-mail gate above
             # clears its pending flag for exactly this reason.
             context._session = context._session.set_fact(_ack_key, True)
+            context._session = _mark_user_gate(context._session, "constraint")
             context._session = context._session.set_status(SessionStatus.WAITING)
             yield WaitForUserEvent(
                 question=(
