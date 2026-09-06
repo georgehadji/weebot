@@ -620,7 +620,19 @@ class ExecutingState(FlowState):
                 plan=context._plan,
                 previous_outputs=_prev_outputs,
             )
-            if not _eval.passed:
+            if _eval.evaluator_failed:
+                # Fail-open by policy: the step proceeds. But it proceeds
+                # UNVERIFIED, and that used to be invisible here -- the only
+                # log was on `not passed`, and a failed evaluator returns
+                # passed=True. An outage silently disabled the progress gate
+                # for every step and nothing said so.
+                logger.warning(
+                    "Step '%s' was NOT evaluated (%s) — progress gate skipped, "
+                    "step allowed through by fail-open policy.",
+                    step.id,
+                    _eval.reasoning,
+                )
+            elif not _eval.passed:
                 logger.warning(
                     "Step '%s' failed progress eval (score=%.2f, regression=%s): %s",
                     step.id,

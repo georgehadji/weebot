@@ -137,13 +137,24 @@ candidates:
     wave: W2
     location: weebot/application/services/step_evaluator.py:104
     claim: "An evaluator exception yields score=1.0, passed=True"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_an_evaluator_outage_is_marked_not_disguised
     verdict_note: >-
-      PARTLY DEFENDED — the fail-open is documented in the module docstring, so
-      it is a policy rather than an oversight. W2 escalated the policy question
-      (its R-2) rather than changing it: whether failing open is right for a
-      *verification* gate is a product decision, not a defect.
+      PARTLY DEFENDED, and the defended part was left alone. W2 escalated whether
+      a verification gate should fail open as a product decision, and that policy
+      is UNCHANGED: an evaluator outage still returns passed=True and the step
+      still proceeds, asserted by a control test so a later edit cannot quietly
+      decide the question. What is fixed is the separate defect underneath it:
+      score=1.0 is the maximum, byte-identical to a step judged perfect, and
+      StepEvaluation had no field that could say otherwise -- so the fail-open
+      was not merely permissive, it was invisible. The live consumer at
+      flows/states/executing.py only logged on `not passed`, and a failed
+      evaluator returns passed=True, so an outage silently disabled the progress
+      gate for every step with nothing in the log at all. Added
+      `evaluator_failed: bool = False` (additive, so every honest verdict is
+      unchanged), set on the exception and empty-completion paths, and a warning
+      at the call site naming the step and the reason. Whatever the policy
+      decision turns out to be, it needs this distinction to be answerable.
 
   - id: D14
     wave: W2
@@ -165,11 +176,22 @@ candidates:
     wave: W2
     location: weebot/application/services/trajectory_builder.py:74
     claim: "Failure yields `failure_modes=[]`, indistinguishable from a clean trajectory"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_an_unanalysed_trajectory_is_not_recorded_as_clean
     verdict_note: >-
-      Read and deferred: it logs a warning, so the failure is not invisible, and
-      the blast radius is a leaky analysis rather than a wrong verdict.
+      Previously deferred as "a leaky analysis rather than a wrong verdict". That
+      undersold it: the analyst prompt in the same module states "failure_modes:
+      empty list if the task succeeded fully", so [] is not an absence of
+      information, it is a positive claim of success -- and it is persisted to
+      SQLite and read back by OptimizerAgent, which counts failure_modes across
+      failed trajectories. Every analyst outage therefore wrote a row asserting a
+      clean run into the dataset the optimizer learns from. Fixed with an explicit
+      ["analysis_unavailable"] marker rather than a new column: it needs no schema
+      change, survives the JSON round trip, and matches the convention
+      verifier_scorer.py already uses with "no_expected_answer". On a failed run
+      the optimizer now sees a named mode instead of a failure with no
+      explanation; on a passed run the query filters it out anyway. The warning
+      log was already there and stays.
 
   - id: D17
     wave: W2
@@ -186,9 +208,21 @@ candidates:
     wave: W2
     location: weebot/models/structured_output.py:430
     claim: "Any failure produces an empty distribution"
-    status: deferred
+    status: cleared
     evidence: null
-    verdict_note: "Not triggered; consumers were never traced, so the blast radius is unknown."
+    verdict_note: >-
+      CLEARED by execution. The deferral said "consumers were never traced, so the
+      blast radius is unknown"; tracing them is what settles it. There is exactly
+      one consumer, VerbalizedSampler, and it does the right thing:
+      parse_sampled_distribution returns an empty SampledDistribution on all four
+      failure paths, the caller tests `if dist:`, logs "VS: empty parse --
+      falling back to single-item distribution" at WARNING, and returns a
+      documented single-item fallback. The one thing that could have made this a
+      live defect was that truthiness test, since a Pydantic BaseModel is truthy
+      by default and the guard would then be dead -- measured, and
+      SampledDistribution defines __bool__, so an empty one is falsy and the guard
+      fires. Confirmed for '', 'not json', '{"nope": 1}' and '{broken'. The empty
+      result is distinguished, logged and handled; no fix warranted.
 
   - id: S2
     wave: W2
@@ -761,3 +795,31 @@ candidates:
       assertion then failed for a second wrong reason -- it demanded one commit per
       entry, which the daily-file design never promised. Both were errors in my
       probe, and the genuine defect they surrounded is the false warning above.
+  - id: D61
+    wave: TierB
+    location: weebot/application/services/trajectory_builder.py:_validate_analysis
+    claim: >-
+      A completion that parsed as valid JSON but was not a usable object escaped
+      the fail-open handler entirely and raised out of `build`
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_a_parsed_but_unusable_analysis_takes_the_fail_open_path
+    severity: MEDIUM
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED, found by the RAR invalid-input vector while checking the
+      D16 fix -- not by reading. The `try` covered the chat call and json.loads,
+      but nothing after it. A completion of [] parses fine, so `analysis` became a
+      list and `analysis.get(...)` raised AttributeError straight through the
+      handler written to absorb analyst failures. The first fix -- rejecting a
+      non-dict -- was insufficient, and the SAME vector caught that too:
+      {"failure_modes": "oops"} is a dict, and `.get(key, default)` substitutes
+      the default only when the key is ABSENT, never when it is present and wrong,
+      so it reached Pydantic and raised ValidationError instead. Same defect one
+      level down. Fixed by validating the whole shape at once -- object,
+      trajectory_text a str, both mode lists lists of str -- and routing any
+      violation through the one marked fallback. A response that gets any of this
+      wrong is not trustworthy for the fields it got right, so a violation
+      invalidates the whole analysis rather than part of it. NOTE ON PROCESS: I
+      revised twice in this RAR cycle, not the once the protocol allows, and the
+      second revision existed only because the first patched the symptom I had
+      just seen rather than the class it belonged to.

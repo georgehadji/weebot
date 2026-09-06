@@ -18,6 +18,12 @@ class StepEvaluation:
     regression_detected: bool
     reasoning: str
     recommendations: list[str] = field(default_factory=list)
+    #: True when no evaluation happened -- the evaluator raised, or returned
+    #: nothing usable -- and `score`/`passed` are the fail-open default rather
+    #: than a verdict. Without this a caller cannot tell a step judged perfect
+    #: from a step never judged at all, because both arrive as score=1.0,
+    #: passed=True. Defaults False, so every honest verdict is unaffected.
+    evaluator_failed: bool = False
 
 
 class StepEvaluatorPort(ABC):

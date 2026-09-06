@@ -730,3 +730,180 @@ boundaries. And CI has not executed this step: the workflow has not scheduled a
 runner for several days, so the step's wiring is verified by
 `scripts/check_ruleset_consistency.py` and by running the target locally, not by
 a green check.
+
+---
+
+## Tier B, second batch — making a degraded result stop impersonating a real one
+
+**Scope.** D13 and D16, the two fail-open verification paths W2 escalated as
+product decisions; D18, cleared by tracing the consumer it was deferred for
+lacking; and D61, found by the RAR invalid-input vector while checking the D16
+fix.
+
+**What this batch does not do.** It does not decide whether a verification gate
+should fail open. That question is the user's, W2 raised it as such, and a
+control test now pins the current answer so a later edit cannot settle it by
+accident. What is fixed is the separate defect underneath: when the instrument
+fails, the value it produces is byte-identical to a real answer.
+
+### D13 — an outage that silently disables the progress gate `[VERIFIED-EXECUTED]`
+
+`LLMStepEvaluator.evaluate` returns `score=1.0, passed=True` on any exception.
+1.0 is the *maximum*: a step never evaluated is indistinguishable from a step
+judged perfect, and `StepEvaluation` had no field that could say otherwise.
+
+The consumer makes it worse. `flows/states/executing.py` reads:
+
+```python
+if not _eval.passed:
+    logger.warning("Step '%s' failed progress eval ...")
+    context.set_state(UpdatingState())
+```
+
+A failed evaluator returns `passed=True`, so this branch is not taken and
+**nothing is logged at the call site at all.** An evaluator outage disables the
+per-step progress gate for the entire run, and the only trace is one WARNING
+inside the evaluator itself, per step, saying it is passing the step.
+
+Fixed additively: `evaluator_failed: bool = False` on `StepEvaluation`, set on
+both the exception and empty-completion paths, and an `elif` at the call site
+that names the step and the reason. `passed` is untouched.
+
+### D16 — an unanalysed trajectory recorded as a clean run `[VERIFIED-EXECUTED]`
+
+Deferred earlier as "a leaky analysis rather than a wrong verdict". That
+undersold it. The analyst prompt, twenty lines above the failure path in the same
+file, says:
+
+> failure_modes: empty list if the task succeeded fully.
+
+So `[]` is not missing information — it is a positive claim of success. And it is
+not transient: `TrajectorySummary.failure_modes` is persisted to SQLite and read
+back by `OptimizerAgent`, which counts modes across failed trajectories. Every
+analyst outage wrote a row asserting a clean run into the dataset the optimizer
+learns from.
+
+Fixed with an explicit `["analysis_unavailable"]` marker instead of a new column:
+no schema change, survives the JSON round trip, and `verifier_scorer.py` already
+uses the field this way with `"no_expected_answer"`. On a failed run the optimizer
+now sees a named mode rather than a failure with no explanation; on a passed run
+the repo query (`WHERE t.passed = 0`) filters it out anyway.
+
+### D18 — cleared by tracing the consumer `[VERIFIED-EXECUTED]`
+
+The deferral was honest about why it was a deferral: *"consumers were never
+traced, so the blast radius is unknown."* Tracing them settles it. There is
+exactly one — `VerbalizedSampler` — and it handles the empty result properly:
+tests `if dist:`, logs at WARNING, returns a documented single-item fallback.
+
+The one thing that could have made this live is that truthiness test, since a
+Pydantic `BaseModel` is truthy by default and the guard would then be dead code.
+Measured rather than assumed:
+
+```
+empty distribution is truthy: False        has __bool__: True
+  parse('')             -> responses=0 truthy=False
+  parse('not json')     -> responses=0 truthy=False
+  parse('{"nope": 1}')  -> responses=0 truthy=False
+  parse('{broken')      -> responses=0 truthy=False
+```
+
+`SampledDistribution` defines `__bool__`. The guard fires. **Cleared, no fix.**
+
+### D61 — the fail-open that could be jumped over `[VERIFIED-EXECUTED]`
+
+Found by the RAR invalid-input vector, not by reading. The `try` in
+`TrajectoryBuilder.build` covered the chat call and `json.loads` — and nothing
+after. A completion of `[]` parses fine, so `analysis` became a list and
+`analysis.get(...)` raised `AttributeError` **straight through the handler
+written to absorb analyst failures.**
+
+My first fix rejected a non-dict. The same vector caught that too:
+`{"failure_modes": "oops"}` *is* a dict, and `.get(key, default)` substitutes the
+default only when the key is **absent**, never when it is present and wrong — so
+it reached Pydantic and raised `ValidationError` instead. The same defect one
+level down, and the same mistake I made in P1's `_normalized`.
+
+Fixed by validating the whole shape at once and routing any violation through the
+one marked fallback. A response that gets any of this wrong is not trustworthy
+for the fields it got right, so a violation invalidates the whole analysis.
+
+**Process note.** I revised twice in this RAR cycle, not the once the protocol
+allows. The second revision existed only because the first patched the symptom I
+had just been shown rather than the class it belonged to. Recording it because
+the protocol's one-revision limit is precisely a check against that habit.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+FAILED test_the_evaluation_model_can_express_that_it_failed
+FAILED test_an_evaluator_outage_is_marked_not_disguised
+FAILED test_an_empty_completion_is_marked_too
+FAILED test_the_flow_warns_when_no_evaluation_happened
+FAILED test_an_unanalysed_trajectory_is_not_recorded_as_clean
+5 failed, 4 passed in 0.45s
+```
+
+After: `18 passed`. The four controls are the ones that keep this batch honest —
+a normal evaluation is not marked, **the fail-open policy is unchanged**, a
+successful analysis still reports its own modes, and a genuinely clean trajectory
+is still recorded as clean.
+
+Two of my first-draft tests called helpers I had invented (`_analyse`,
+`_log_evaluation`). Both were rewritten against the real public API rather than
+adding a seam to the production code to fit the test; `Session` and
+`TrajectoryScored` turned out to be cheap to construct, so no seam was needed.
+
+### RAR self-review — all six vectors
+
+17 probes; **17/17 HOLD** after the revision described above.
+
+| vector | probes | result |
+|--------|--------|--------|
+| Boundary | score at and just below threshold, 0.0/1.0/-1/2, empty and whitespace completions, `{}`, a `None` completion, zero-event session | HOLDS |
+| Invalid input | 11 malformed or wrong-shaped completions, five exception types, and `CancelledError` — which must **not** be swallowed, and is not | HOLDS |
+| State | a failed and a successful evaluation back to back do not contaminate each other; repeated failures stay marked | HOLDS |
+| Regression | every field of a real verdict unchanged, regression still blocks, the new field defaults False and did not reorder the dataclass, a clean trajectory stays unmarked | HOLDS |
+| Concurrency | 40 interleaved evaluations and 20 interleaved trajectory builds, each checked against its own expected marking | HOLDS |
+| New defect | `asdict` + JSON round trip, the marker survives persistence, the marker reaches the optimizer as a named mode rather than a false clean, ruff clean | HOLDS |
+
+### Verification
+
+- `tests/unit/test_degraded_results_are_marked.py` — 18 passed (was 5 failed / 4 passed).
+- Targeted regression on evaluator / trajectory / executing — 16 passed.
+- All five ratchets: 139 / 29 / 143 / 73 / 68, every one at its ceiling.
+- Ruff CI selector clean; import-linter 7 contracts kept; the new un-awaited
+  coroutine gate clean.
+
+### Coverage & residual risk
+
+**The policy question is still open and still the user's.** Three verification
+paths now fail open *visibly*. Whether they should fail open at all is unchanged
+and undecided, and this batch deliberately did not decide it.
+
+**`evaluator_failed` has exactly one reader** — the warning at the call site.
+Nothing routes on it, nothing persists it. That is the intended scope, but it
+means the field's value depends on a future decision that has not been made.
+
+**The marker changes what the optimizer sees.** On failed runs,
+`"analysis_unavailable"` will now appear among `common_failure_modes`. I judge
+that strictly better than a failure with no modes at all — it names the real
+problem, which is that the analyst is down — but it is a change to a
+learning signal, and if the analyst is failing often it will dominate that list.
+That is information, not noise, but it is worth knowing before reading the
+next optimizer report.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** D13. An evaluator that is down arguably *should*
+not block progress, and the marker is only useful once something reads it. The
+counter is that the outage was previously invisible at the call site, which no
+reading of the policy justifies.
+
+**Real defect most likely missed:** the same `.get(key, default)` shape as D61 —
+a default that fires only on absence, never on a present-but-wrong value —
+elsewhere in the codebase. It has now appeared twice (P1's `_normalized`, D61)
+and has not been swept for.
+
+**Requires runtime validation:** nothing here. Every claim was executed. CI still
+has not scheduled a runner.
