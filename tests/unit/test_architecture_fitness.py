@@ -1582,3 +1582,46 @@ def test_no_shell_execution_outside_the_bash_guard():
     """
     sites = _shell_execution_sites()
     assert sites == [], "shell execution outside bash_guard:\n  " + "\n  ".join(sites)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# One routing table, not three
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_there_is_exactly_one_flow_routing_table():
+    """`FlowRouter.resolve_initial_state` is the only routing authority.
+
+    The repository carried three *declared* transition tables and executed
+    none of them: `state_graph.py`'s `build_default_state_graph`,
+    `flow_state_machine.py`'s `_TRANSITION_TABLE`, and
+    `FlowSerializer.to_langgraph`'s hardcoded four-node description of a
+    thirteen-state machine. Against them stood 45 `context.set_state(...)`
+    calls and one if/elif chain, which is what actually ran.
+
+    That is not merely dead weight. The graph had diverged from the router in
+    six measured ways — a declining answer at a security gate routed to
+    ExecutingState under the graph, so the whole ADR 006 refusal path
+    vanished — and `scripts/wire_stategraph.py` existed to swap one for the
+    other. Run against a copy, that script printed "StateGraph wired into
+    FlowRouter.resolve_initial_state()", exited 0, wired nothing, and
+    duplicated both the import and `_get_graph`. A tool that reports success
+    while corrupting the file is the same defect class the tables were.
+
+    A second table is only safe when something proves the two agree. Nothing
+    did, and nothing here asks for one — this asserts the alternatives stay
+    deleted.
+    """
+    banned = {
+        "state_graph.py": "declarative transition table",
+        "flow_state_machine.py": "second transition table",
+        "wire_stategraph.py": "script that swapped the live table for the dead one",
+    }
+    root = ROOT.parent
+    found = [
+        f"{path.relative_to(root)} ({why})"
+        for name, why in banned.items()
+        for path in root.rglob(name)
+        if ".venv" not in path.parts and "__pycache__" not in path.parts
+    ]
+    assert found == [], "a deleted routing table is back:\n  " + "\n  ".join(found)

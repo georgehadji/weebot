@@ -468,9 +468,38 @@ candidates:
     wave: W3
     location: weebot/application/flows/
     claim: "Both declared transition tables are dead code — the architecture documents a machine that does not execute"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/test_architecture_fitness.py
+    verdict_note: >-
+      TRUE and understated: there were THREE, not two. state_graph.py's
+      build_default_state_graph, flow_state_machine.py's _TRANSITION_TABLE, and
+      FlowSerializer.to_langgraph -- a hardcoded four-node description of a
+      thirteen-state machine. VERIFIED: zero external callers for every one of
+      them; FlowRouter._get_graph had no caller anywhere in weebot/, cli/,
+      tests/ or scripts/, and _route_product_gate / _route_plan_approval
+      existed only to feed the graph. Against them stood 45
+      context.set_state(...) calls and one if/elif chain, which is what ran.
+      .
+      Not merely dead weight. The graph had diverged from the live router in
+      six measured ways, the worst being that a DECLINING answer at a security
+      gate routes to ExecutingState under the graph -- the entire ADR 006
+      refusal path vanishes -- and an empty answer becomes consent. And
+      scripts/wire_stategraph.py existed to swap one for the other. Run against
+      a copy of the tree, it printed "StateGraph wired into
+      FlowRouter.resolve_initial_state()", EXITED 0, wired nothing
+      (`graph.resolve` occurrences: 0), and duplicated both the import and
+      _get_graph (1 -> 2 each). A tool that reports success while corrupting
+      the file it edits is the same defect class as the tables themselves.
+      .
+      Fixed by deletion: 359 lines across three files, plus _get_graph,
+      _state_class_map, the two _route_* helpers and to_langgraph. Chosen over
+      wiring the graph (highest blast radius -- the resume path for every
+      session, and ProductGateState(resume_with=prompt) cannot be expressed by
+      a name-returning factory) and over a conformance test (which would pin
+      current behaviour including the shared extra-wipe bug, and a dead table
+      with a green test is more misleading, not less). New gate
+      test_there_is_exactly_one_flow_routing_table keeps them deleted; proven
+      to fire by recreating state_graph.py.
 
   # ── Wave 4 — persistence & data integrity ─────────────────────────────
   - id: D30
@@ -1243,9 +1272,24 @@ candidates:
     wave: review
     location: weebot/application/flows/state_graph.py
     claim: "The declarative transition table that is meant to replace the router's hard-coded priorities has no _user_gate_pending entry"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_architecture_fitness.py
     verdict_note: >-
+      RESOLVED BY DELETION, together with S5 -- the file this defect lives in
+      no longer exists. The divergence was worse than recorded: a differential
+      over 14 sessions found SIX behavioural differences, not the two claimed.
+      The severe ones: a DECLINING answer at a user gate returns ExecutingState
+      under the graph (the whole ADR 006 refusal path vanishes, and the untrusted
+      mail is acted on regardless of the answer); an EMPTY answer becomes
+      consent; the gate flag is never cleared, so it re-fires on every resume;
+      and a plan-approval decline returns WAITING, which breaks the run loop.
+      The claim's "lacks the WAITING -> RUNNING flips" was only 2/3 right --
+      the graph does have one of them.
+      .
+      Fixing the divergence would have meant maintaining two representations
+      of one routing table in agreement forever, with nothing enforcing it.
+      Deleting the dead one removes the class. Superseded reasoning below.
+      .
       Reported independently by three review angles. build_default_state_graph()
       mirrors resolve_initial_state's priorities as data and still registers
       resume_incomplete_plan at priority 2 with no user-gate transition, so

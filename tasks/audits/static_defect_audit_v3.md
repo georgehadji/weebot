@@ -2033,3 +2033,109 @@ finished. **The ranking heuristic that kept them last — "unspecified means
 low value" — was exactly backwards here**, and I do not know whether that is a
 one-off or a property of how this inventory was ordered.
 
+
+---
+
+## Three routing tables, none of them running
+
+### S5 and D70 — resolved by deletion `[VERIFIED-EXECUTED]`
+
+S5 claimed two declared transition tables were dead code. There were **three**:
+
+| table | callers |
+|---|---|
+| `state_graph.py::build_default_state_graph` | 0 (reached only via the dead `FlowRouter._get_graph`) |
+| `flow_state_machine.py::_TRANSITION_TABLE` | 0 |
+| `FlowSerializer.to_langgraph` | 0 — a hardcoded 4-node description of a 13-state machine |
+
+Against them: **45** `context.set_state(...)` calls and one if/elif chain,
+which is what actually ran. `FlowRouter._route_product_gate` and
+`_route_plan_approval` existed only to feed the graph.
+
+### Why this was not merely dead weight
+
+D70 recorded that the graph lacked the user-gate transition and the
+WAITING→RUNNING flips. A differential over 14 sessions found **six**
+divergences, not two, and three of them are security-relevant:
+
+| case | live router | the graph |
+|---|---|---|
+| gate + **declining** answer | `PlanningState`, refusal honoured, acks cleared, mail gate re-armed | **`ExecutingState`** — the whole ADR 006 refusal path vanishes |
+| gate + **empty** answer | `PlanningState` (silence ≠ consent) | **`ExecutingState`** — silence becomes consent |
+| gate + approving answer | flag cleared | **flag left set** — re-fires on every resume |
+| plan-approval decline | RUNNING | **WAITING** — the run loop breaks |
+| `ProductGateState(resume_with=prompt)` | expressible | **not expressible** by a name-returning factory |
+
+The claim's "lacks the flips" was 2/3 right: the graph does have one of them.
+
+### The script that reported success while corrupting the file
+
+`scripts/wire_stategraph.py` existed to swap the live table for the dead one.
+Run against a copy of the tree:
+
+```
+StateGraph wired into FlowRouter.resolve_initial_state()
+--- EXIT CODE: 0 ---
+did it wire anything?      graph.resolve occurrences: 0
+duplicated the import?     1 -> 2
+duplicated _get_graph?     1 -> 2
+```
+
+Its third `str.replace` no longer matches, because `resolve_initial_state`
+grew the `_user_gate_pending` branch since the script was written, and
+`str.replace` returns its input unchanged on no match. The script never
+verifies. So it prints success, wires nothing, and duplicates two blocks — a
+tool with the same failure mode as the tables it was written to install.
+
+### The approach chosen, and the two rejected
+
+**Wiring the graph** was rejected: highest blast radius (the resume path for
+every session), the six divergences are a prerequisite work list, and
+`ProductGateState(resume_with=prompt)` cannot be expressed at all. Its
+`resolve` also swallows `AttributeError`/`KeyError` per transition, which
+would silently downgrade a routing bug to "fresh planning" and discard a live
+plan.
+
+**A conformance test** asserting the table matches the router was rejected
+too: it pins current behaviour *including* the shared `extra`-wipe bug, and a
+dead table with a green test is more misleading than one without.
+
+**Deletion** — 359 lines across three files, plus `_get_graph`,
+`_state_class_map`, both `_route_*` helpers and `to_langgraph`. Removing
+unreachable code cannot change behaviour, and it removes the class rather than
+one instance.
+
+### The gate `[VERIFIED-EXECUTED]`
+
+`test_there_is_exactly_one_flow_routing_table` fails if any of the three files
+returns. Proven by recreating `state_graph.py`:
+
+```
+E  weebot/application/flows/state_graph.py (declarative transition table)
+1 failed
+```
+
+A second table is only safe when something proves the two agree. Nothing did,
+and this gate does not ask for one — it asserts the alternatives stay deleted.
+
+### Coverage & residual risk
+
+- **The docs still describe a declarative machine.** ADRs and module
+  docstrings elsewhere may reference a design that no longer exists; only the
+  `flow_serializer` docstring example was updated.
+- **45 `set_state` calls remain the routing authority**, and they are
+  scattered across sixteen state classes. That is the actual architecture; it
+  is not more legible for the tables being gone, only more honest.
+- **Nothing prevents a *fourth* representation** in a differently-named file.
+  The gate names three specific filenames, which is what makes it cheap and
+  also what bounds it.
+
+### Uncertainty acknowledgment
+
+S5 sat `open` for five waves with the note "dead code — low value". The
+reading was right about reach and wrong about risk: the live artefact was not
+the tables but the script that would install them, and that script had already
+drifted into corrupting the file. **UNKNOWN:** how many other "dead code, low
+value" dismissals in this inventory have a live tool or script attached to
+them that nobody looked for.
+
