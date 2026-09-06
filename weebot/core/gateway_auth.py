@@ -156,7 +156,18 @@ class GatewayAuth:
         return self._rules.get("allow_all_by_default", False)
 
     def is_admin(self, platform: str, user_id: str) -> bool:
-        """Check if a user is an admin on this platform."""
+        """Check if a user is an admin on this platform.
+
+        The blocklist is consulted first, exactly as in `is_user_allowed` and
+        `is_chat_allowed`. Without this, `block_user` revokes the ability to
+        talk to the bot while leaving administrative rights intact -- so a
+        blocked admin still passes every `is_admin` gate, which is the one
+        check that guards privileged commands.
+        """
+        blocked = self._rules.get("blocked_users", {}).get(platform, [])
+        if user_id in blocked:
+            return False
+
         admins = self._rules.get("admin_ids", {}).get(platform, [])
         return user_id in admins
 

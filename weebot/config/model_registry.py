@@ -6,6 +6,7 @@ pricing information, and capabilities for intelligent model selection.
 """
 
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from enum import Enum
 
 
@@ -1513,6 +1514,16 @@ def get_models_by_provider(provider: ModelProvider) -> list[ModelInfo]:
     return [model for model in MODEL_REGISTRY.values() if model.provider == provider]
 
 
+# Derived from ModelInfo rather than written out, so a new `supports_*` field
+# is filterable the moment it exists and can never fall out of step with a
+# hand-maintained list.
+KNOWN_CAPABILITIES: dict[str, str] = {
+    f.name.removeprefix("supports_"): f.name
+    for f in dataclass_fields(ModelInfo)
+    if f.name.startswith("supports_")
+}
+
+
 def get_cheapest_model_for_task(
     input_tokens: int,
     output_tokens: int,
@@ -1531,6 +1542,14 @@ def get_cheapest_model_for_task(
     Returns:
         Cheapest ModelInfo that meets requirements, or None if no model found
     """
+    if required_capabilities:
+        unknown = sorted(set(required_capabilities) - set(KNOWN_CAPABILITIES))
+        if unknown:
+            raise ValueError(
+                f"Unknown capability {unknown!r}; "
+                f"known capabilities are {sorted(KNOWN_CAPABILITIES)!r}"
+            )
+
     candidates = []
 
     for model in MODEL_REGISTRY.values():
@@ -1540,23 +1559,9 @@ def get_cheapest_model_for_task(
 
         # Check if model has required capabilities
         if required_capabilities:
-            has_all_caps = True
-            for cap in required_capabilities:
-                if (
-                    cap == "function_calling"
-                    and not model.supports_function_calling
-                    or cap == "vision"
-                    and not model.supports_vision
-                    or cap == "system_messages"
-                    and not model.supports_system_messages
-                    or cap == "response_schema"
-                    and not model.supports_response_schema
-                    or cap == "prompt_caching"
-                    and not model.supports_prompt_caching
-                ):
-                    has_all_caps = False
-                    break
-            if not has_all_caps:
+            if not all(
+                getattr(model, KNOWN_CAPABILITIES[cap]) for cap in required_capabilities
+            ):
                 continue
 
         # Check if model supports required token counts
@@ -1575,7 +1580,7 @@ def get_cheapest_model_for_task(
     return candidates[0][0]
 
 
-def get_model_cost_info(model_name: str) -> dict[str, float]:
+def get_model_cost_info(model_name: str) -> dict[str, float] | None:
     """
     Get cost information for a specific model.
 
@@ -1583,17 +1588,24 @@ def get_model_cost_info(model_name: str) -> dict[str, float]:
         model_name: Name of the model to look up
 
     Returns:
-        Dictionary with input_cost_per_1k_tokens and output_cost_per_1k_tokens
+        Dictionary with input_cost_per_1k_tokens and output_cost_per_1k_tokens,
+        or None if the model is not in the registry.
+
+    An unknown model returns None rather than a placeholder price. The
+    previous fallback -- $0.01/$0.03 per 1k, roughly a mid-tier 2023 model --
+    is indistinguishable from a real answer at the call site, so a budget
+    check, a cost estimate or a spend report built on it would be silently
+    wrong for every model the registry has never heard of, in either
+    direction. `get_model_info` already returns None for the same condition;
+    this makes the two agree.
     """
     model_info = get_model_info(model_name)
-    if model_info:
-        return {
-            "input_cost_per_1k_tokens": model_info.input_cost_per_token * 1000,
-            "output_cost_per_1k_tokens": model_info.output_cost_per_token * 1000,
-        }
-
-    # Default values if model not found
-    return {"input_cost_per_1k_tokens": 0.01, "output_cost_per_1k_tokens": 0.03}
+    if model_info is None:
+        return None
+    return {
+        "input_cost_per_1k_tokens": model_info.input_cost_per_token * 1000,
+        "output_cost_per_1k_tokens": model_info.output_cost_per_token * 1000,
+    }
 
 
 def list_all_models() -> list[str]:

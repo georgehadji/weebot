@@ -563,16 +563,21 @@ candidates:
     claim: >-
       `is_admin` does not consult `blocked_users`, so blocking a user does not
       revoke their admin rights
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_blocking_a_user_revokes_their_admin_rights
     verdict_note: >-
       Real but unreachable: `is_admin` has zero callers in weebot/ or cli/, so
-      reachability caps severity and no fix is warranted yet. `is_user_allowed`
-      and `is_chat_allowed` both check the blocklist first; `is_admin` is the
-      only accessor that does not. Deferred rather than fixed because changing
-      dead code inside a security diff is exactly the unrelated-refactoring the
-      protocol forbids. The first caller to use it inherits the trap, so this
-      must be closed before `is_admin` is wired to anything.
+      reachability caps severity. `is_user_allowed` and `is_chat_allowed` both
+      check the blocklist first; `is_admin` was the only accessor that did not.
+      Previously deferred on the grounds that changing dead code inside a
+      security diff is unrelated refactoring -- reversed here because the
+      deferral reasoning cut the other way once the batch became the change:
+      the blast radius of a fix is zero precisely because there are no callers,
+      and the first caller to be wired up would inherit the trap silently. Fixed
+      by consulting `blocked_users` first, exactly as the two sibling accessors
+      do. RED confirmed before the fix (blocked user still returned True), GREEN
+      after; the un-blocked-admin control passed in both runs, which is what
+      proves the trigger discriminates.
   - id: D54
     wave: P1
     location: weebot/core/bash_guard.py:517
@@ -624,48 +629,64 @@ candidates:
       The class docstring says candidate paths are resolved against the
       workspace root; only rule patterns are, so a relative candidate silently
       matches nothing
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_a_relative_candidate_is_resolved_against_the_workspace_root
     verdict_note: >-
-      Verified: `check("read", "confidential/keys.txt")` returns allow while
-      `check("read", "<workspace>/confidential/keys.txt")` returns deny, against
-      the same rule. `_path_matches` prefixes a workspace-relative *pattern*
-      with the workspace root; `check` only canonicalises the *candidate*.
-      Harmless today because the sole caller, file_editor, passes an absolute
-      already-resolved path -- but the docstring tells the next caller it may
-      pass a relative one, and that caller would get a silent allow. Found while
-      debugging a test of mine that made exactly that mistake. Deferred rather
-      than fixed: resolving candidates would change matching semantics for every
-      rule, which is beyond a minimal fix and wants its own change.
+      Verified: `check("read", "confidential/keys.txt")` returned allow while
+      `check("read", "<workspace>/confidential/keys.txt")` returned deny, against
+      the same rule. `_path_matches` prefixes a workspace-relative *pattern* with
+      the workspace root; `check` only canonicalised the *candidate*, so the two
+      sides were never in the same frame of reference. Found while debugging a
+      test of mine that made exactly that mistake. Fixed with a `_resolve` step
+      that anchors a relative candidate to the workspace and leaves an absolute
+      one untouched. The earlier deferral worried this "would change matching
+      semantics for every rule"; measurement showed the change is a strict
+      widening -- it can only turn a missed deny into a deny, never a deny into
+      an allow -- and that direction is asserted directly by
+      NEWDEFECT/no-widened-allow in the RAR probe. Paths escaping the workspace
+      (`../secrets/k`) and unrelated absolutes (`/etc/secrets/k`) are still
+      allowed by a workspace-relative rule, so the widening does not overreach.
+      All 90 tests in the three pre-existing suites for the touched modules
+      still pass; none of them passed a relative candidate.
   - id: D57
     wave: P2
     location: weebot/config/model_registry.py:1578-1594
     claim: >-
       `get_model_cost_info` returns a fabricated price for an unknown model,
       indistinguishable from a real one
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_an_unknown_model_has_no_cost_information
     verdict_note: >-
-      Verified: an unknown id returns {input: 0.01, output: 0.03} -- $10/$30 per
+      Verified: an unknown id returned {input: 0.01, output: 0.03} -- $10/$30 per
       million, invented -- with no signal that the model was not found. A caller
       budgeting from this cannot tell a price from a guess, which is the
-      fail-open shape applied to spend. Reach is DEAD: the function has zero
-      callers in weebot/ or cli/, which caps severity and is why it is recorded
-      rather than fixed. Returning None, or raising, is the fix when something
-      first calls it.
+      fail-open shape applied to spend. Reach is DEAD (zero callers), which caps
+      severity and makes the fix free of blast radius rather than making it
+      unnecessary. Fixed by returning None, matching `get_model_info`, which
+      already returns None for the identical condition; the return annotation
+      widened to `dict[str, float] | None` so a type checker points at any future
+      caller that forgets the case. A genuinely zero-priced model still returns
+      an explicit {0.0, 0.0} rather than None, which is the distinction the old
+      code could not express.
   - id: D58
     wave: P2
     location: weebot/config/model_registry.py:1544-1562
     claim: >-
       `get_cheapest_model_for_task` silently accepts any capability name it does
       not recognise, so an unsupported or misspelled requirement filters nothing
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_an_unknown_capability_is_rejected_rather_than_ignored
     verdict_note: >-
-      Verified: required_capabilities=["json_mode"] and ["funtcion_calling"]
-      both return a model, because the chained `cap == "x" and not
-      model.supports_x` clauses all evaluate False for an unknown name and
-      `has_all_caps` stays True. The caller believes a filter was applied and it
-      was not. Reach is DEAD -- zero callers -- so severity is capped and this is
-      recorded, not fixed. The fix is to validate the requested names against the
-      known set and raise on an unknown one, rather than to add another clause.
+      Verified: required_capabilities=["json_mode"] and ["funtcion_calling"] both
+      returned a model, because the chained `cap == "x" and not model.supports_x`
+      clauses all evaluate False for an unknown name and `has_all_caps` stayed
+      True. The caller believes a filter was applied and it was not. Fixed by
+      validating the requested names against KNOWN_CAPABILITIES and raising
+      ValueError naming the unknown entries and the known set. The known set is
+      derived from ModelInfo's `supports_*` dataclass fields rather than written
+      out, so it cannot drift from the model -- asserted by
+      NEWDEFECT/caps-match-dataclass. Deriving it also closed a second silent
+      hole the deferral had not recorded: the hand-written chain covered five of
+      the seven `supports_*` fields, so `audio_input` and `audio_output` were
+      accepted and ignored exactly like a misspelling. Both now filter. Reach is
+      DEAD (zero callers), so no caller changes behaviour today.

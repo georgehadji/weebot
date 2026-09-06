@@ -335,3 +335,164 @@ concurrency interleavings, resource lifetimes, injection.
 **Requires runtime validation:** nothing outstanding — every claim was executed.
 CI has still not scheduled a runner since 21:33Z, so no claim here has been
 confirmed under the E2E, CQRS, Persistence or Docker suites.
+
+---
+
+## Tier A — the four latent traps, closed
+
+**Scope.** Not a region pass. This closes the four candidates that P1 and P2 had
+recorded as `deferred` on identical reasoning: each was verified by execution, and
+each was left alone because it was unreachable — no caller in `weebot/` or `cli/`.
+
+**Why the deferral was reversed.** The deferral reasoning cut the other way once
+these became the change rather than a detour inside one. `is_admin`,
+`get_model_cost_info` and `get_cheapest_model_for_task` have zero production
+callers, so a fix cannot break anything — the blast radius *is* the reachability,
+and it is zero. That same zero is what makes them dangerous left in place: the
+first caller inherits the trap, and not one of the four fails loudly. D56's
+deferral additionally rested on a prediction ("would change matching semantics for
+every rule") that measurement contradicted; see below.
+
+Reachability still caps severity. None of these is CRITICAL and none is claimed to
+be. They are latent, and this closes them before something reaches them.
+
+### The four
+
+| id | site | fail-open shape |
+|----|------|-----------------|
+| D53 | `weebot/core/gateway_auth.py` `is_admin` | blocking a user left their admin rights intact |
+| D56 | `weebot/application/services/fs_permission_checker.py` `check` | a relative candidate matched no workspace-relative rule |
+| D57 | `weebot/config/model_registry.py` `get_model_cost_info` | an unknown model reported an invented price |
+| D58 | `weebot/config/model_registry.py` `get_cheapest_model_for_task` | an unknown capability filtered nothing |
+
+All four are the same defect class this audit keeps finding: **the gate reports
+clean when it did not run.** D53 is an authorization check that skips the
+blocklist; D56 is a deny rule that cannot see the path it names; D57 is a price
+that is a guess; D58 is a filter that filtered nothing. In each case the caller
+receives a well-formed, plausible answer and has no way to tell it apart from a
+real one.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+`tests/unit/test_latent_trap_fixes.py`, against unmodified code:
+
+```
+FAILED test_blocking_a_user_revokes_their_admin_rights
+FAILED test_a_relative_candidate_is_resolved_against_the_workspace_root
+FAILED test_an_unknown_model_has_no_cost_information
+FAILED test_an_unknown_capability_is_rejected_rather_than_ignored
+FAILED test_a_misspelled_capability_is_rejected
+5 failed, 9 passed in 1.25s
+```
+
+The nine passes are controls, and they are the load-bearing half: an un-blocked
+admin is still an admin, an absolute candidate is unchanged, a known model still
+reports a cost, each supported capability still filters, and a call with no
+requirements still returns the cheapest model. A trigger that fires on everything
+proves nothing; these fired on exactly the five claims.
+
+After the fixes: `14 passed in 0.50s`.
+
+### What the fixes do
+
+- **D53** — consult `blocked_users` before `admin_ids`, matching `is_user_allowed`
+  and `is_chat_allowed` verbatim. A block on a *different* platform must not
+  revoke admin here, and does not (BOUNDARY/D53).
+- **D56** — a new `_resolve` anchors a relative candidate to the workspace root
+  and leaves an absolute one untouched. This is a **strict widening**: it can turn
+  a missed deny into a deny, never a deny into an allow. That direction is
+  asserted, not assumed — NEWDEFECT/no-widened-allow re-checks four previously
+  denied paths. Paths escaping the workspace (`../secrets/k`) and unrelated
+  absolutes (`/etc/secrets/k`) stay allowed by a workspace-relative rule, so the
+  widening does not overreach. The class docstring has promised this resolution
+  all along; only the pattern side implemented it.
+- **D57** — return `None`, matching `get_model_info`, which already returns `None`
+  for the identical condition. Annotation widened to `dict[str, float] | None` so
+  a type checker points at any future caller that forgets the case. A genuinely
+  zero-priced model still returns an explicit `{0.0, 0.0}` — the distinction the
+  old code could not express.
+- **D58** — validate against `KNOWN_CAPABILITIES` and raise `ValueError` naming
+  both the unknown entries and the known set. The set is *derived* from
+  `ModelInfo`'s `supports_*` dataclass fields rather than written out, so it
+  cannot drift; NEWDEFECT/caps-match-dataclass asserts the derivation.
+
+### A second hole, found by the fix
+
+Deriving D58's known set from the dataclass exposed something the original
+deferral had not recorded. The hand-written chain covered **five** of the seven
+`supports_*` fields. `audio_input` and `audio_output` were accepted and silently
+ignored — indistinguishable from a misspelling. A caller asking for an
+audio-capable model got a text-only one and no error. Both filter now.
+
+This is worth stating plainly because it is an argument against the deferral
+policy that produced it: the defect was inside a function already read, already
+triaged, already written up. It surfaced only when the code was replaced rather
+than described.
+
+### RAR self-review — all six vectors
+
+19 probes, `scripts`-external, run against the patched tree. **19/19 HOLD on the
+first run; no revision was needed.**
+
+| vector | probes | result |
+|--------|--------|--------|
+| Boundary | empty/absent lists, cross-platform block, `""`, `.`, `..`, workspace escape, zero-priced model, empty capability list, all 7 caps, impossible token count | HOLDS |
+| Invalid input | `admin_ids` as str, as non-dict, `blocked_users: null`, `[]`, `"a string"`, `null`, corrupt JSON, NUL byte in path, backslashes, `~`, `//`, `None` capability, 500-char model name | HOLDS |
+| State | block → durable across reload, `allow_user` does not silently unblock, default-cwd workspace, cross-workspace isolation | HOLDS |
+| Regression | absolute rules, `filter_paths`, known-model shape, every capability returns a model that actually has it | HOLDS |
+| Concurrency | 40 threads interleaving `block_user`/`is_admin` — file still parses, every blocked user is non-admin on reload; 8×400 concurrent `check` calls all `deny` | HOLDS |
+| New defect | no deny became an allow; the three modules import cleanly in a fresh interpreter; known set equals the dataclass | HOLDS |
+
+The invalid-input vector is the one that matters most here: every malformed
+config still yields a `bool` from `is_admin`, and a corrupt file yields `False` —
+the deny-by-default recovery path from D52 covers the new branch too.
+
+### Verification
+
+- `tests/unit/test_latent_trap_fixes.py` — 14 passed (was 5 failed / 9 passed).
+- `tests/unit/test_fs_permissions.py`, `test_gateway_session.py`,
+  `test_gateway_adapters.py` — **90 passed**. These are the pre-existing suites
+  for the touched modules. None passes a relative candidate to `check()`, which
+  is why the D56 code fix is safe and not merely the docstring fix.
+- `weebot/config/model_registry.py` has no pre-existing suite; that is a gap, not
+  a clean bill.
+- Ruff, CI selector (`--select F821,E9` on `weebot/ cli/`) — passed.
+- Ruff, full ruleset on the three touched modules — **53 findings before, 53
+  after**: zero introduced. All 53 are pre-existing E501s that CI does not gate
+  on.
+- All five ratchets measured, not assumed: 139 / 29 / 143 / 73 / 68 — every one
+  **at** its ceiling. No ceiling moved, because nothing moved.
+
+### Coverage & residual risk
+
+**What this does not claim.** Three of the four fixes change no behaviour that
+anything currently observes. Their correctness rests on the tests and the RAR
+probe, not on a passing production path, because there is no production path. If
+`get_cheapest_model_for_task` is later wired up, its first real caller is the
+first genuine test of D58.
+
+**D56 is the only fix with a live caller.** `file_editor` passes absolute paths,
+which `_resolve` returns unchanged, so its behaviour is bit-identical. That is
+argued from reading the one call site and confirmed by the 90 passing tests — it
+is not a proof that no other caller exists in code not yet read.
+
+**The registry reconciliation is still open.** P2 named it the highest-value next
+step in that region and this pass did not touch it. The six registries still
+disagree in ≥14 documented places.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** none. All four were reproduced by execution before
+the fix and all four triggers went red then green.
+
+**Weakest as a defect:** D53 — an admin who has been blocked can be argued to be
+a state the operator would not create. The counter-argument is that the two
+sibling accessors already treat it as reachable and guard against it, so the
+inconsistency is the defect regardless of how the state arises.
+
+**Real defect most likely missed:** the same one P2 named — `settings.py` (46
+importers) and `model_refs.py` (41) remain unread by any wave.
+
+**Requires runtime validation:** nothing outstanding here. Separately, CI has
+still not scheduled a runner, so no claim in this document has been confirmed
+under the E2E, CQRS, Persistence or Docker suites.
