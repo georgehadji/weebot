@@ -108,14 +108,12 @@ class EventPublisher:
 
     @staticmethod
     def _apply_credential_sanitization(event: AgentEvent) -> AgentEvent:
-        if isinstance(event, MessageEvent) and event.role == "user":
-            from weebot.core.credential_sanitizer import sanitize
+        from weebot.core.credential_sanitizer import sanitize_event
 
-            sanitized = sanitize(event.message or "")
-            if sanitized != event.message:
-                event = event.model_copy(update={"message": sanitized})
-                logger.info("Credential sanitizer redacted user input")
-        return event
+        sanitized = sanitize_event(event)
+        if sanitized is not event:
+            logger.info("Credential sanitizer redacted a %s event", event.type)
+        return sanitized
 
     # ── Step 3: Checkpoint ─────────────────────────────────────────────────
 

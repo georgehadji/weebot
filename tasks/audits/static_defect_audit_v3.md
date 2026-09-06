@@ -1890,3 +1890,146 @@ how many other conclusions in this audit rest on an untested premise about a
 neighbouring mechanism. The rate at which recorded claims have proven wrong
 in this backlog (nine of sixteen) suggests the answer is not zero.
 
+
+---
+
+## The region that was named and never opened
+
+### R6 — secret classification and event sanitisation `[VERIFIED-EXECUTED]`
+
+W1 recorded two candidates, D9 and D10, against "region R6" and never wrote
+down a claim for either. They sat `open` through eight waves because there was
+nothing to confirm. Opening the region found the most severe unshipped
+defects in this backlog.
+
+### R6-C5 — sanitisation covered the one field the human types
+
+All **three** emit pipelines carried the same gate:
+
+```python
+isinstance(event, MessageEvent) and event.role == "user"
+```
+
+So a credential was scrubbed only when the *human* typed it. Everything the
+agent produced went out raw — above all `ToolEvent.result`, which is tool
+stdout, and therefore the output of `cat .env`, `env` or `git remote -v`. That
+reached the event bus, the WebSocket broadcast to the web UI, and SQLite,
+while `EventPublisher`'s own docstring listed credential sanitisation as an
+unconditional pipeline stage.
+
+Also uncovered: `ErrorEvent.error`, `StepEvent.description`,
+`WaitForUserEvent.question`, and an **assistant** `MessageEvent` — the model
+echoing back a key it had just been shown.
+
+Three copies of the gate now collapse to one `sanitize_event()` in core that
+knows which fields of each event type carry free text.
+
+### R6-C3 — one rule, two copies, and the copies drifted
+
+Measured, both forks on the same input:
+
+```
+core.sanitize      : auth failed for ***REDACTED-API-KEY***
+adapter._sanitize  : auth failed for sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+`resilient_adapter`'s character class is `sk-[a-zA-Z0-9]{20,}` — no `-`, no
+`_` — so it fails at the third character of every Anthropic key, while
+`weebot/core`'s `sk-[a-zA-Z0-9_-]{20,}` catches it. Neither copy is tested
+against the other's inputs, which is what makes R2 invisible. The fork is
+deleted; the adapter calls core.
+
+### R6-C4 — the live sanitiser was thinner than the dead one
+
+Each of these passed through `sanitize()` unchanged:
+
+```
+LEAK   GitHub PAT      ghp_16C7e42F292c6912E7710c838347Ae178B4a
+LEAK   Google API key  AIzaSyD-1234567890abcdefghijklmnopqrstu
+LEAK   Slack bot       xoxb-...-...-...   (truncated: push protection)
+LEAK   Basic auth      Authorization: Basic dXNlcjpwYXNzd29yZA==
+```
+
+The **dead** `SecretRedactor` has a Bearer rule. The live one did not.
+
+**And a defect found only by writing the test.** The JWT pattern required 20+
+characters after `eyJ` in the header segment, so whether a JWT was redacted
+depended on its header's *length*:
+
+```
+header {"alg":"HS256"}                  -> 17 chars after eyJ   LEAK
+header {"alg":"HS256","typ":"JWT"}      -> 33 chars after eyJ   REDACTED
+```
+
+Both are ordinary headers. My first test case happened to use the short one
+and failed; the correct response was to fix the pattern, not the test. The
+`eyJ` prefix plus three base64url segments was always the specificity — the
+length was never doing that work.
+
+### R6-C2 — a sanitiser that cannot reach a computed message
+
+`_sanitize_error` rewrites `exc.args[0]`, which does nothing for an exception
+whose `__str__` is computed from stored state — i.e. every httpx/openai
+wrapper:
+
+```
+after sanitise: GET failed https://api.x/v1?api_key=sk-abcdefghij0123456789XY
+```
+
+The exception type cannot be swapped, because `ErrorClassifier` keys retry
+decisions off it. `sanitized_message(exc)` is the honest escape hatch: callers
+that log the text rather than the object are safe whatever the shape.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+pre-fix:  ImportError: cannot import name 'sanitize_event'
+          plus, behaviourally: LEAK GitHub / Google / Slack / JWT(short hdr)
+post-fix: 22 passed
+```
+
+### Deliberately not fixed, and the order that forces it
+
+`SecretRedactor` is 184 lines with **zero callers**, while `settings.py`
+declares `secret_redaction_enabled: bool = True`, described as redacting
+secrets "in tool output and logs". The configuration reports a control that
+has never run.
+
+It is not wired in here, because it is broken in two ways that only matter
+once it runs: `redact()` collapses every newline and tab and redacts any 3–4
+digit integer as a CVV (`port 8080` → `port [CVV_REDACTED]`), and
+`redact_dict` skips non-`str` scalars, dict keys, and anything below one list
+level while presenting the result as sanitised. **Wiring C1 before fixing
+C7/C8 would ship a log-corruption bug on the same commit.** Order: C5 →
+C3/C4 → C7/C8 → C1.
+
+`R6-C6` is also deferred, for a different reason: the `*_URL` / `*_HOST`
+allowlist is a deny-by-shape heuristic used as an allow rule, and
+`tests/unit/test_secret_accessor.py:98` currently *asserts it is correct*.
+Changing it means overruling a test that encodes the defect as the contract —
+a judgement about intent, not a repair. Mitigated meanwhile: C4's new
+URL-credential pattern redacts `scheme://user:pass@host` even though the
+classifier still calls the key non-secret.
+
+### Coverage & residual risk
+
+- **Sanitisation is field-driven.** A new event type with a free-text field
+  gets no coverage until it is added to `_SANITISED_EVENT_FIELDS`. Nothing
+  enforces that; a fitness test asserting every `str` field of every event
+  type is either listed or explicitly exempted would.
+- **`function_args` is not sanitised.** A `ToolEvent` carries its arguments as
+  a dict, and a credential passed *into* a tool sits there. Only `result` is
+  covered.
+- **Patterns are a denylist.** Everything in this region is; a token shape
+  nobody anticipated still leaks. The entropy check in the dead redactor is
+  the only non-denylist mechanism in the codebase, and it remains unwired.
+
+### Uncertainty acknowledgment
+
+D9 and D10 were the last two `open` records and the easiest to leave alone,
+because a candidate with no claim cannot be refuted and therefore never looks
+urgent. They were also the only two pointing at a security region no wave had
+finished. **The ranking heuristic that kept them last — "unspecified means
+low value" — was exactly backwards here**, and I do not know whether that is a
+one-off or a property of how this inventory was ordered.
+

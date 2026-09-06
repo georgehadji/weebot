@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from weebot.application.middleware.event_middleware import EventMiddleware
-from weebot.domain.models.event import AgentEvent, MessageEvent
+from weebot.domain.models.event import AgentEvent
 
 
 class CredentialSanitizerMiddleware(EventMiddleware):
@@ -15,14 +15,12 @@ class CredentialSanitizerMiddleware(EventMiddleware):
     """
 
     async def process(self, event: AgentEvent, context: dict[str, Any]) -> AgentEvent:
-        if isinstance(event, MessageEvent) and event.role == "user":
-            from weebot.core.credential_sanitizer import sanitize
+        from weebot.core.credential_sanitizer import sanitize_event
 
-            sanitized = sanitize(event.message or "")
-            if sanitized != event.message:
-                event = event.model_copy(update={"message": sanitized})
-                flow = context.get("flow")
-                if flow:
-                    flow._log.info("Credential sanitizer redacted user input")
+        sanitized = sanitize_event(event)
+        if sanitized is not event:
+            flow = context.get("flow")
+            if flow:
+                flow._log.info("Credential sanitizer redacted a %s event", event.type)
 
-        return event
+        return sanitized
