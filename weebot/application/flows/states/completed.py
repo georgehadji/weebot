@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.flows.states.base import AgentStatus, FlowState
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
-from weebot.domain.models.plan import PlanStatus
+from weebot.domain.models.plan import PlanStatus, StepStatus
 from weebot.domain.models.session import SessionStatus
 from weebot.domain.models.event import ProductDecisionEvent
 from datetime import UTC
@@ -185,10 +185,19 @@ class CompletedState(FlowState):
                     import json as _json
                     import uuid as _uuid
 
-                    # Compute success score from step completion ratio
+                    # Compute success score from step completion ratio.
+                    #
+                    # This counted `s.is_done()`, and `Step.is_done()` is
+                    # `COMPLETED or FAILED` — so a plan in which every step
+                    # failed scored **1.0** and was stored as a template for
+                    # reuse. The failure was not merely reported as a success,
+                    # it was learned from as one and would be preferentially
+                    # retrieved for the next similar task.
                     total_steps = len(context._plan.steps)
-                    completed_steps = sum(1 for s in context._plan.steps if s.is_done())
-                    score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
+                    succeeded_steps = sum(
+                        1 for s in context._plan.steps if s.status == StepStatus.COMPLETED
+                    )
+                    score = round(succeeded_steps / total_steps, 2) if total_steps > 0 else 0.5
                     template = PlanTemplate(
                         template_id=str(_uuid.uuid4()),
                         task_hash=compute_task_hash(prompt),
@@ -206,7 +215,24 @@ class CompletedState(FlowState):
                 except Exception as exc:
                     logger.debug("Plan template save skipped: %s", exc)
 
-        context._session = context._session.set_status(SessionStatus.COMPLETED)
+        # A plan that ran out of runnable steps is not the same as one that
+        # worked. `Plan.is_complete()` is `all(is_done())` and `is_done()`
+        # counts FAILED, so every terminal plan reached here reporting success
+        # — including one where nothing succeeded at all.
+        #
+        # `PlanStatus` has no failure member (created/updated/running/
+        # completed), so the plan object above cannot say this; `SessionStatus`
+        # can, and both the API and the web UI already understand `failed`.
+        failed = context._plan.failed_steps() if context._plan else []
+        if failed:
+            logger.warning(
+                "Session %s finished with %d failed step(s): %s",
+                context._session.id,
+                len(failed),
+                ", ".join(s.id for s in failed[:5]),
+            )
+        terminal = SessionStatus.COMPLETED if not failed else SessionStatus.FAILED
+        context._session = context._session.set_status(terminal)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
         context._step_execution_counts.clear()  # Reset for next run

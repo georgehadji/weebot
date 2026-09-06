@@ -36,6 +36,11 @@ _EXPECTED = {
     "print_in_production",
     "bare_env_reads",
     "bandit_b110",
+    # ruff F841 — locals assigned and never read. Added after the same defect
+    # was found twice in one session (an MCP server process bound to a local
+    # nothing could reach, and a steering prompt built, logged, and not sent),
+    # both of which ruff had been reporting while CI's selector never asked.
+    "unused_locals",
 }
 
 

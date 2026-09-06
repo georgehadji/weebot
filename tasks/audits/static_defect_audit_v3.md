@@ -2633,3 +2633,177 @@ understated its consequence, D44 misstated its mechanism, S5 undercounted its
 instances, D37 mislocated its file. **UNKNOWN:** how many `deferred` entries
 point at paths that no longer exist, and would be closed as "cannot reproduce"
 by anyone who trusted the location field.
+
+## The plan that failed completely and was learned from as a success
+
+### P3 — silent false success, and what the record got wrong `[VERIFIED-EXECUTED]`
+
+The recorded claim (ex-D21) was that the flow reaches `CompletedState` with a
+step still RUNNING. It named the wrong mechanism. Executed truth table:
+
+| plan | `get_next_step()` | `is_complete()` |
+|---|---|---|
+| all COMPLETED | None | True |
+| one RUNNING | s1 | False |
+| COMPLETED + RUNNING | s2 | False |
+| **one FAILED** | **None** | **True** |
+| **COMPLETED + FAILED** | **None** | **True** |
+| empty plan | None | False |
+
+`get_next_step()` and `is_complete()` **agree** on RUNNING — both say not done,
+so a RUNNING step does not slip past either. The route the record described is
+not open.
+
+The route that *is* open is the fourth row. `Step.is_done()` is:
+
+```python
+return self.status in (StepStatus.COMPLETED, StepStatus.FAILED)
+```
+
+That is correct for its main caller — `get_next_step()` needs to know what is
+still **runnable**, and a failed step must not be handed back or the flow
+retries it forever. It is wrong in every place that read it as **succeeded**,
+and three places did.
+
+### The sharp end is not the status, it is the score
+
+```python
+completed_steps = sum(1 for s in context._plan.steps if s.is_done())
+score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
+```
+
+Measured:
+
+| plan | `is_complete()` | template `success_score` |
+|---|---|---|
+| every step FAILED | True | **1.0** |
+| 1 done, 1 failed | True | **1.0** |
+| all completed | True | 1.0 |
+
+That score is written to the plan-template cache and keyed by task hash. So a
+plan in which **nothing succeeded** was stored as a perfect template and would
+be preferentially retrieved for the next similar task. The failure was not
+merely reported as a success; it was **learned from** as one. Three identical
+scores for three materially different outcomes is the whole defect in one row.
+
+### The fix, and the fix that was tempting and wrong
+
+The tempting fix is to change `Step.is_done()` to mean COMPLETED only. It would
+have made `get_next_step()` return failed steps forever. A regression guard
+pins that:
+
+```python
+assert _plan(StepStatus.FAILED).is_complete() is True
+assert _plan(StepStatus.FAILED).get_next_step() is None
+```
+
+What was actually missing was a *second* predicate, not a changed one:
+`Plan.is_successful()` (every step COMPLETED) and `Plan.failed_steps()`.
+`CompletedState` now scores on COMPLETED and ends the session
+`SessionStatus.FAILED` when any step failed.
+
+### The domain cannot say "failed"
+
+```
+PlanStatus members: ['created', 'updated', 'running', 'completed']
+```
+
+There is no failure member. `CompletedState` stamps `PlanStatus.COMPLETED`
+unconditionally because there is nothing else to stamp — the plan object has no
+vocabulary for the outcome. `SessionStatus` does
+(`pending/running/waiting/completed/failed`), and both the API and the web UI
+already understand it, so that is the lever used here.
+
+**Adding `PlanStatus.FAILED` is left open, and it is the user's call**, because
+it crosses stacks: `weebot-ui/src/types/events.ts:5` declares
+`PlanStatus = 'created' | 'updated' | 'completed'` — which is *already* out of
+sync with the backend, missing `running`. A domain enum whose TypeScript mirror
+is hand-maintained and already drifted is not a change to make silently.
+
+### The steering that was collected, acknowledged, and thrown away
+
+Found by running `ruff --select F841`, which CI does not select:
+
+```python
+effective_prompt = prompt
+if context._steering is not None:
+    steering_msg = await context._steering.poll(context._session.id)
+    if steering_msg:
+        logger.info("Steering received for session %s: %s", ...)
+        effective_prompt = f"{prompt}\n\n[STEERING — the user says: {steering_msg}. ...]"
+...
+    user_input=prompt,          # ← the ORIGINAL
+```
+
+`effective_prompt` is assigned twice and read nowhere. Phase 5 polls the
+steering channel, **logs that it received the user's message**, formats it into
+an augmented prompt, and sends the original. A user correcting an agent
+mid-run got a log line saying they were heard and no change in behaviour. The
+fix is one word.
+
+### `inner_facts`, and why wiring it would have been worse
+
+Assigned `{}` at one line, read via `.items()` at another, never written —
+confirmed by AST rather than grep. The loop always ran zero times, under a
+comment reading "Persist any facts extracted by the executor".
+
+Deleted rather than wired. No command or handler in `application/cqrs/` returns
+facts, so there is nothing to receive; and `set_fact` writes to
+`context.facts`, while `SessionContext.get` reads declared fields and then
+`context.extra` and **never** `facts`. Wiring it would have produced an
+apparently working fact pipeline over a store nothing reads — a fail-open
+control assembled deliberately.
+
+### The gate for the class, not the instance
+
+Both `proc` (D38) and `effective_prompt` were F841 findings. ruff has been
+reporting them the whole time; CI runs `--select F821,E9`.
+
+`scripts/lint_unused_locals.py`, ceiling **33**, bidirectional, wired into the
+architecture workflow beside the other ratchets. Proven to bite both ways:
+
+```
+unused_locals: 34 exceeds the ceiling of 33 by 1. New debt of this kind was added.
+unused_locals: 33 is BELOW the ceiling of 34. ... set unused_locals = 33
+```
+
+An unused local is not always a defect. It is always *work the author wrote and
+the program does not do*, which is why it gets a ceiling rather than a ban: the
+33 that remain are an inventory to triage, and no new one may join them.
+
+**One honest fragility, written into the script rather than hidden:** this
+ratchet counts a third-party tool's output and `requirements.txt` pins only
+`ruff>=0.8.0`, so an upgrade can move the number with no code change. The
+script prints the ruff version with every count (`ruff 0.16.6`) and its failure
+message says to check it before touching the ceiling.
+
+### Coverage & residual risk
+
+- **`PlanStatus.COMPLETED` is still stamped on a failed plan.** The session
+  says `failed`; the plan object still says `completed`. Anything reading the
+  plan's status rather than the session's still sees a success.
+- **Three orphaned background tasks in `CompletedState`** (`ensure_future` at
+  the retention review, skill-gap processing and the dream scan) are created
+  and never referenced, awaited or cancelled — the D39 class again, and each
+  builds a `Container()` and live LLM adapters. Recorded as `P3-4`, **not
+  fixed**: unlike D39 these are *meant* to outlive the flow, so the fix is an
+  owner, not a cancel, and that is a design decision. They are what made the
+  P3 test hang until suppressed explicitly.
+- **The empty-plan row is untouched.** `get_next_step()` returns None and
+  `is_complete()` returns False, so a plan with no steps still transitions to
+  Verifying → Completed. It now ends `SessionStatus.COMPLETED` with a score of
+  0.5, which is arguably the least wrong of the available answers and is not a
+  considered one.
+- **32 F841 findings remain**, one of which may be another `effective_prompt`.
+  The ratchet stops the 34th; it does not triage the 33.
+
+### Uncertainty acknowledgment
+
+This is the fifth record in this session found wrong in some particular, and
+the second whose *mechanism* was misstated. The record said RUNNING; the
+executed truth table says FAILED, and the two predicates it accused of
+disagreeing actually agree. Had the fix been written to the claim, it would
+have guarded a path that is not open and left a plan-template cache learning
+from total failures at a perfect score. **UNKNOWN:** how many of the remaining
+`open` entries were written from reading rather than from running, and would
+survive an executed truth table no better than this one did.

@@ -1548,3 +1548,80 @@ candidates:
       Stripe key one list deeper is never visited. The caller receives a dict
       the function presents as sanitised. Same latency caveat as R6-C7: fix
       before C1.
+
+  # ── P3 — flow defects found by opening the region, not by the record ──
+  - id: P3-1
+    wave: P3
+    location: weebot/domain/models/plan.py, weebot/application/flows/states/completed.py
+    claim: "A plan whose every step FAILED reports complete, is stamped COMPLETED, and is stored as a template with success_score 1.0"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_is_not_a_success.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and it replaces the recorded D21 claim, which named
+      the wrong mechanism. `Step.is_done()` is `COMPLETED or FAILED` — correct
+      for `get_next_step()`, which must know what is still RUNNABLE, and wrong
+      everywhere it was read as "succeeded". Measured: every-step-FAILED gives
+      is_complete=True and a template success_score of 1.0, identical to a plan
+      where everything worked. So the failure was not merely reported as a
+      success, it was written to the plan-template cache with a perfect score
+      and would be preferentially retrieved for the next similar task. Fixed by
+      adding the missing predicates (`Plan.is_successful`, `Plan.failed_steps`)
+      rather than changing `is_done()` — changing it would make a failed step
+      runnable again and loop forever. `CompletedState` now scores on COMPLETED
+      and ends the session `SessionStatus.FAILED` when any step failed.
+      OPEN, and the user's call: `PlanStatus` has NO failure member
+      (created/updated/running/completed), so the plan object still cannot say
+      it failed and is stamped COMPLETED regardless. Adding one crosses into
+      `weebot-ui/src/types/events.ts`, whose `PlanStatus` union is already out
+      of sync with the backend (it omits `running`). `SessionStatus` was used
+      instead because both stacks already understand `failed`.
+
+  - id: P3-2
+    wave: P3
+    location: weebot/application/flows/states/executing.py:382
+    claim: "Phase 5 steering is polled, logged, formatted into a prompt, and discarded"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_is_not_a_success.py
+    verdict_note: >-
+      NOT IN ANY RECORD. Found by running `ruff --select F841`, which CI does
+      not select. `effective_prompt` was assigned from `prompt`, reassigned
+      with the user's steering message, and read nowhere;
+      `ExecuteStepCommand(user_input=prompt)` sent the ORIGINAL. So
+      mid-execution steering was collected from the channel, acknowledged in
+      the log at INFO ("Steering received for session %s"), and thrown away —
+      a fail-open control with a log line that says it worked. One-word fix.
+      The class is now gated: `scripts/lint_unused_locals.py`, ceiling 33.
+
+  - id: P3-3
+    wave: P3
+    location: weebot/application/flows/states/executing.py:427
+    claim: "`inner_facts` is initialised, iterated, and never written"
+    status: fixed
+    evidence: tasks/audits/static_defect_audit_v3.md
+    verdict_note: >-
+      VERIFIED by AST, not grep: one assignment (`{}`) and one read
+      (`.items()`). The loop always ran zero times under a comment reading
+      "Persist any facts extracted by the executor". Deleted rather than wired,
+      and the reason matters: no command or handler in `application/cqrs/`
+      returns facts, and wiring it would write through `set_fact`, which stores
+      into `context.facts`, while `SessionContext.get` reads declared fields
+      then `context.extra` and never `facts`. Wiring would have produced an
+      apparently working fact pipeline over a store nothing reads — worse than
+      an obviously absent one.
+
+  - id: P3-4
+    wave: P3
+    location: weebot/application/flows/states/completed.py:401,417,422
+    claim: "Three `asyncio.ensure_future(...)` results are never referenced, awaited or cancelled"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Found while making the P3 test hermetic: retention review, skill-gap
+      processing and the dream scan are each spawned and dropped. Same orphaned
+      task class as D39 in `_cascade.py`, in a different file — and each builds
+      a `Container()` and live LLM adapters, so an orphan here is spend as well
+      as an unowned task. NOT FIXED: unlike D39 these are intended to outlive
+      the flow ("Background task — never blocks CompletedState"), so the fix is
+      an owner for them, not a cancel, and that is a design decision rather
+      than a repair.
+

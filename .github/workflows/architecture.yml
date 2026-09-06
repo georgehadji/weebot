@@ -70,6 +70,14 @@ jobs:
         # gate lived only in `make check` as a grep that could not match the
         # two-line `except X:` / `pass` form, so it reported clean over 139 sites.
         run: python scripts/lint_except_pass.py
+      - name: Unused-local ratchet
+        # BLOCKING. ruff has always been able to see these; the selector above
+        # is `F821,E9`, so it was never asked. Two real defects were found this
+        # way in one session -- an MCP server process bound to a local nothing
+        # could reach, and a steering prompt built, logged at INFO, and then
+        # not sent. Same bidirectional contract as the ratchets around it.
+        run: python scripts/lint_unused_locals.py
+
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that
         # exited 1, so `make check` was red on a clean checkout, and it appeared

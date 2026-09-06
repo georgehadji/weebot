@@ -424,7 +424,6 @@ class ExecutingState(FlowState):
         # Initialize flags before the event consumption paths
         hitl_paused = False
         execution_failed = False
-        inner_facts = {}
         inner_should_terminate = False
 
         # --- CQRS: execute step through mediator (REQUIRED) ---
@@ -451,7 +450,9 @@ class ExecutingState(FlowState):
                 step_id=step.id,
                 model=context._model or MODEL_BUDGET,
                 tools=[t.name for t in context._tools],
-                user_input=prompt,
+                # `effective_prompt`, not `prompt`: this sent the ORIGINAL,
+                # so steering was polled, logged and dropped (P3-2 in the audit).
+                user_input=effective_prompt,
             )
         )
         _step_elapsed = _time.monotonic() - _step_t0
@@ -722,9 +723,9 @@ class ExecutingState(FlowState):
                 },
             )
 
-        # Persist any facts extracted by the executor BEFORE checking termination
-        for key, value in inner_facts.items():
-            context._session = context._session.set_fact(key, value)
+        # A dead "persist executor facts" loop was deleted here; deleted
+        # rather than wired because `set_fact` writes where `.get` never reads
+        # (P3-3 in tasks/audits/static_defect_audit_v3.md).
 
         # ── Capability 2: Knowledge Graph — upsert discovered facts ──
         if context._knowledge_graph is not None:

@@ -197,7 +197,31 @@ class Plan(BaseModel):
         return self.model_copy(update={"steps": retained + fresh, "status": PlanStatus.UPDATED})
 
     def is_complete(self) -> bool:
+        """Every step has reached a terminal status — succeeded OR failed.
+
+        This is the right predicate for "stop running", and `get_next_step()`
+        agrees with it. It is the WRONG predicate for "it worked", because
+        `Step.is_done()` counts FAILED as done — so a plan in which every
+        single step failed returns True here. Use `is_successful()` when the
+        question is whether the goal was achieved.
+        """
         return len(self.steps) > 0 and all(s.is_done() for s in self.steps)
+
+    def is_successful(self) -> bool:
+        """Every step actually COMPLETED. Nothing failed.
+
+        The predicate that was missing. Without it, three places read
+        `is_complete()` as success: the auto-terminate gate, the plan status
+        stamped by `CompletedState`, and the template cache's success score —
+        which scored an all-failed plan **1.0** and stored it for reuse, so a
+        failure was not merely reported as a success, it was learned from as
+        one.
+        """
+        return len(self.steps) > 0 and all(s.status == StepStatus.COMPLETED for s in self.steps)
+
+    def failed_steps(self) -> list[Step]:
+        """Steps that reached FAILED. Empty when the plan succeeded."""
+        return [s for s in self.steps if s.status == StepStatus.FAILED]
 
     # ── Domain validation methods (migrated from application layer) ──
 

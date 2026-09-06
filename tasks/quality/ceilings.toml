@@ -46,3 +46,14 @@ bare_env_reads = 73
 # The sets overlap heavily but are not equal, so the two move independently.
 # Measured by: scripts/lint_bandit_b110.py
 bandit_b110 = 68
+
+# Locals assigned but never read (ruff F841) in weebot/ and cli/.
+# Found twice in one session as real dropped work: an MCP server process bound
+# to a local nothing could reach, and a steering prompt built, logged, and then
+# not sent. CI's ruff selector was `F821,E9`, so the linter reported both and
+# the gate never asked.
+# NOTE: counts a third-party tool's output; `requirements.txt` pins only
+# `ruff>=0.8.0`, so an upgrade can move this number with no code change. The
+# script prints the ruff version with every count.
+# Measured by: scripts/lint_unused_locals.py
+unused_locals = 33
