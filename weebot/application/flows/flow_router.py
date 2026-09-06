@@ -151,7 +151,12 @@ class FlowRouter:
             updated = session.model_copy(
                 update={"context": session.context.model_copy(update={"extra": extra_out})}
             )
-            return PlanningState(), updated
+            # RUNNING for the same reason the approve branch above states: the
+            # run loop breaks on WAITING (plan_act_flow.py), and PlanReviewState
+            # leaves the session WAITING before it pauses. Without this, asking
+            # for a plan change re-planned once and then halted -- the user saw
+            # a new plan and nothing after it.
+            return PlanningState(), updated.set_status(SessionStatus.RUNNING)
 
         # Priority 2: a gate asked the human a question and is awaiting the answer.
         #
@@ -167,7 +172,11 @@ class FlowRouter:
             from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
 
             response = prompt.strip().lower()
-            extra_out = {**(extra or {}), "_user_gate_pending": None}
+            # Merge onto the session's own extra rather than replacing it with
+            # the caller's. The two branches above spell this `{**(extra or
+            # {}), ...}`, which erases every other key when a caller omits the
+            # kwarg -- latent only because the one production caller passes it.
+            extra_out = {**session.context.extra, **(extra or {}), "_user_gate_pending": None}
 
             # An empty answer is deliberately NOT approval here, though the
             # plan-approval path above accepts it as one. These gates guard
@@ -195,7 +204,27 @@ class FlowRouter:
                 updated = session.model_copy(
                     update={"context": session.context.model_copy(update={"extra": extra_out})}
                 )
-                return PlanningState(), updated
+                # The plan that tripped the gate is being discarded, so the
+                # per-step acks recorded against it must not survive into its
+                # replacement. Step ids are positional (`step-N`, planner.py),
+                # so a re-planned step-3 would inherit the old step-3's ack and
+                # skip the very gate the user just refused.
+                for key in list(updated.context.facts):
+                    if key.startswith("constraint_gate_ack:"):
+                        updated = updated.set_fact(key, False)
+                # Declining must not disarm the mail gate either. The fetched
+                # message is still in the transcript and is about to be handed
+                # to the planner, so whatever the new plan does with it has to
+                # be gated again. The gate cleared this flag before pausing,
+                # which is right for approval and wrong for a refusal.
+                if user_gate == "inbound_mail":
+                    updated = updated.set_fact("atomic_mail_inbound_pending", True)
+                # RUNNING, for the same reason the approve branch of Priority 1
+                # says: the run loop breaks on WAITING. Returning PlanningState
+                # while still WAITING re-plans once and then halts, so the user
+                # gets a new plan and silence. Priority 1's own decline branch
+                # has this defect too and is fixed with it, just below.
+                return PlanningState(), updated.set_status(SessionStatus.RUNNING)
 
         last_plan = session.get_last_plan()
 

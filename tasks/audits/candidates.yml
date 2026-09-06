@@ -1108,3 +1108,94 @@ candidates:
       names only the inbound-mail gate, and marking that one record "fixed"
       would otherwise leave this instance undocumented.
 
+
+  - id: D68
+    wave: review
+    location: weebot/application/flows/flow_router.py
+    claim: "A decline returns PlanningState while the session is still WAITING, and the run loop breaks on WAITING"
+    status: fixed
+    evidence: tests/unit/application/flows/test_user_gate_answer_is_honoured.py
+    verdict_note: >-
+      Found by /code-review against the D12/D67 fix, and confirmed by execution:
+      `resolve_initial_state(gate session, "no, use staging instead")` returned
+      `(PlanningState, status=WAITING)` while plan_act_flow.py:800 breaks on
+      WAITING. The re-plan therefore ran once and the loop halted -- the user
+      saw a new plan and nothing after it.
+      .
+      NOT introduced by the D12 fix, contrary to how two review angles framed
+      it. Measured on the pre-existing Priority 1: the plan-approval DECLINE
+      branch returns (PlanningState, WAITING) too, while its APPROVE branch
+      sets RUNNING with a comment saying exactly why. The D12 branch copied the
+      decline shape. Both are fixed here, since the D12 change multiplied the
+      defect's reach onto two security gates.
+      .
+      My own test pinned the bug rather than catching it: it asserted
+      `status is not SessionStatus.RUNNING`, which the broken behaviour
+      satisfies. Replaced with the positive assertion. A second test was
+      vacuous -- `assert not (isinstance(state_2, PlanningState) and answer ==
+      "proceed")` is trivially true for answer="no", the half where a surviving
+      flag would actually re-route -- and now asserts ExecutingState directly.
+      .
+      Three further review findings fixed with it, each confirmed by probe
+      before being acted on: `constraint_gate_ack:<step.id>` survived a decline
+      and step ids are positional, so a re-planned step-3 inherited the old
+      step-3's ack and skipped the gate the user had just refused;
+      `atomic_mail_inbound_pending` stayed False after a decline, so declining
+      DISARMED the mail gate while the fetched content went on to shape the new
+      plan -- a refusal widening the untrusted content's reach; and
+      `{**(extra or {}), ...}` replaces context.extra wholesale, erasing
+      task_route and every other key when a caller omits the kwarg (measured:
+      extra became `{'_user_gate_pending': None}`). The last is fixed only in
+      the new branch; the two pre-existing branches still carry it, latent
+      because the one production caller passes `extra`.
+      .
+      Red before green: 7 of 41 failed against the pushed router. Full suite
+      4975 passed / 0 failed -- notably no existing test depended on the old
+      WAITING behaviour of the plan-approval decline path.
+
+  - id: D69
+    wave: review
+    location: weebot/application/flows/states/executing.py
+    claim: "Neither gate persists the session before pausing, so a resume that reloads from the repository cannot see what the gate recorded"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Raised by /code-review against the D12 fix and NOT resolved. VERIFIED-
+      STATIC: PlanReviewState calls `await context._state_repo.save_session(...)`
+      before it pauses (plan_review.py:121-122); neither gate in executing.py
+      has any save_session call; and agent_runner.resume_session loads from the
+      repository and raises "is not waiting" unless the loaded status is
+      WAITING.
+      .
+      Reduced rather than chased: the routing flag and the WAITING status are
+      set on the SAME immutable session one line apart, so whatever persists
+      one persists the other. The new flag's durability is therefore exactly
+      that of the gates' pre-existing WAITING persistence. If that is broken
+      the gates were already broken before this change and resume would always
+      reject; if it works, the flag rides along. Either way this is a
+      pre-existing property of the gates, not something the D12 fix introduced.
+      .
+      UNKNOWN, and the reason this is open: which of the two it is. Deciding it
+      needs an end-to-end pause-then-resume against a real state repository,
+      which the unit tests here deliberately do not exercise -- they call
+      resolve_initial_state directly. Until that is run, D12 is proven at the
+      router and unproven at the seam.
+
+  - id: D70
+    wave: review
+    location: weebot/application/flows/state_graph.py
+    claim: "The declarative transition table that is meant to replace the router's hard-coded priorities has no _user_gate_pending entry"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Reported independently by three review angles. build_default_state_graph()
+      mirrors resolve_initial_state's priorities as data and still registers
+      resume_incomplete_plan at priority 2 with no user-gate transition, so
+      wiring it would silently revert both gates to the pre-fix behaviour while
+      all 41 new tests kept passing -- they call resolve_initial_state directly.
+      Currently inert: FlowRouter._get_graph() has no caller anywhere in
+      weebot/, cli/ or tests/. Deferred rather than fixed because adding a
+      transition to a table nothing reads is speculative, and the real defect is
+      that two representations of the routing table exist at all.
+      scripts/wire_stategraph.py is a committed script whose whole purpose is to
+      swap one for the other, which is what makes this worth recording.

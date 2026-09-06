@@ -115,7 +115,21 @@ def test_a_declining_answer_does_not_resume_execution(gate, answer):
     """The defect in one assertion: this used to return ExecutingState."""
     state, updated = _resolve(_waiting_session_at_gate(gate), answer)
     assert isinstance(state, PlanningState)
-    assert updated.status is not SessionStatus.RUNNING
+
+
+@pytest.mark.parametrize("gate", ["inbound_mail", "constraint"])
+@pytest.mark.parametrize("answer", ["no", "use staging instead"])
+def test_a_decline_leaves_the_session_runnable(gate, answer):
+    """Re-planning is useless if the run loop stops before it happens.
+
+    `PlanActFlow.run()` breaks on WAITING, and both gates leave the session
+    WAITING before they pause. Returning PlanningState without flipping to
+    RUNNING re-plans exactly once and then halts, so the user is shown a new
+    plan and nothing after it. The first version of this test asserted
+    `status is not RUNNING`, which pinned that bug instead of catching it.
+    """
+    _, updated = _resolve(_waiting_session_at_gate(gate), answer)
+    assert updated.status is SessionStatus.RUNNING
 
 
 @pytest.mark.parametrize("gate", ["inbound_mail", "constraint"])
@@ -153,10 +167,79 @@ def test_the_gate_does_not_re_fire_after_it_is_answered(gate, answer):
     _, updated = _resolve(_waiting_session_at_gate(gate), answer)
     assert updated.context.get("_user_gate_pending") is None
 
+    # The first version of this was `assert not (isinstance(state_2,
+    # PlanningState) and answer == "proceed")`, which is vacuously true for
+    # answer="no" — the half where a surviving flag would actually re-route.
+    # Asserting the positive covers both parametrisations and is stronger.
     state_2, _ = _resolve(updated, "proceed")
-    assert not (
-        isinstance(state_2, PlanningState) and answer == "proceed"
+    assert isinstance(
+        state_2, ExecutingState
     ), "an answered gate re-routed on the next resume"
+
+
+# --------------------------------------------------------------------------
+# A decline must not disarm the gate it declined.
+# --------------------------------------------------------------------------
+
+
+def test_declining_clears_the_per_step_constraint_acks():
+    """Step ids are positional, so acks cannot outlive their plan.
+
+    `planner.py` numbers steps `step-N`, and the ack is a session fact that
+    survives re-planning. Left in place, a re-planned `step-3` inherits the
+    old `step-3`'s ack and executes with no gate — the user is never asked
+    about the step that actually runs, having just refused its predecessor.
+    """
+    session = _waiting_session_at_gate("constraint").set_fact(
+        "constraint_gate_ack:step-2", True
+    )
+    _, updated = _resolve(session, "no, never touch production")
+    assert not updated.get_fact("constraint_gate_ack:step-2")
+
+
+def test_declining_the_mail_gate_re_arms_it():
+    """The fetched message is still in the transcript and is about to be fed
+    to the planner, so the new plan's first step has to be gated again.
+
+    The gate clears `atomic_mail_inbound_pending` before pausing, which is
+    right for approval and wrong for a refusal: declining would otherwise
+    *widen* the untrusted content's reach — it shapes the next plan — while
+    removing the only check that guarded it.
+    """
+    session = _waiting_session_at_gate("inbound_mail").set_fact(
+        "atomic_mail_inbound_pending", False
+    )
+    _, updated = _resolve(session, "that email is a phishing attempt, ignore it")
+    assert updated.get_fact("atomic_mail_inbound_pending") is True
+
+
+def test_approving_does_not_re_arm_the_mail_gate():
+    """The converse: approval is consent, and must not re-ask on every step."""
+    session = _waiting_session_at_gate("inbound_mail").set_fact(
+        "atomic_mail_inbound_pending", False
+    )
+    _, updated = _resolve(session, "proceed")
+    assert not updated.get_fact("atomic_mail_inbound_pending")
+
+
+def test_unrelated_context_survives_when_the_caller_omits_extra():
+    """`{**(extra or {}), ...}` replaces context.extra wholesale.
+
+    The two pre-existing branches share that shape, so a caller invoking
+    resolve_initial_state without the kwarg silently erases task_route and
+    every other key. Latent today because the one production caller passes
+    it; this branch merges instead.
+    """
+    session = _waiting_session_at_gate("constraint")
+    session = session.model_copy(
+        update={
+            "context": session.context.model_copy(
+                update={"extra": {**session.context.extra, "task_route": "coding"}}
+            )
+        }
+    )
+    _, updated = FlowRouter.resolve_initial_state(session=session, prompt="proceed")
+    assert updated.context.get("task_route") == "coding"
 
 
 # --------------------------------------------------------------------------
