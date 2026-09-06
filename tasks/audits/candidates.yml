@@ -497,9 +497,24 @@ candidates:
     wave: D26
     location: weebot/interfaces/web/routers/behavior_router.py:391-400
     claim: "`_tracker_tasks` grows once per filesystem event and is never awaited, pruned or cancelled"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_a_filesystem_event_reaches_the_websocket_broadcast
+    verdict_note: >-
+      The recorded mechanism was WRONG and execution corrected it. `_tracker_tasks`
+      never grows, because `asyncio.get_event_loop()` raises RuntimeError ("no
+      current event loop in thread 'Thread-1'") on the watchdog observer thread,
+      before the append. Measured: 6 filesystem events produced 0 broadcasts, 0
+      appended tasks and 6 RuntimeErrors swallowed at DEBUG. So the defect is not
+      an unbounded list, it is that the behaviour WebSocket has never delivered a
+      single event -- a client sees the `connected` frame and its own pongs and
+      nothing else. `loop.create_task` would have been wrong regardless: it is not
+      thread-safe. Fixed by capturing the running loop in the enclosing async
+      function and using `asyncio.run_coroutine_threadsafe`, with a done-callback
+      that discards the future and retrieves its exception, so the tracking set
+      cannot grow without bound either. Reach: `behavior_router.start_session_tracking`
+      has zero callers -- the live path is `weebot/core/behavior_integration.py` --
+      so severity stays capped and nothing changes behaviour today. 200 events
+      fired from a foreign thread now deliver 200 broadcasts.
 
   - id: D48
     wave: W6
@@ -690,3 +705,59 @@ candidates:
       the seven `supports_*` fields, so `audio_input` and `audio_output` were
       accepted and ignored exactly like a misspelling. Both now filter. Reach is
       DEAD (zero callers), so no caller changes behaviour today.
+  - id: D59
+    wave: TierB
+    location: weebot/core/behavior_tracker.py:27,182-192,257-258,328-329
+    claim: >-
+      Every one of the ledger's nine git calls invoked an `async def` helper
+      without `await` from a synchronous method, so no git command has ever run
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_an_appended_event_becomes_a_commit
+    severity: HIGH
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED. `LedgerManager` is documented as "the git-backed action
+      ledger" and writes a README calling itself an "Immutable record of agent
+      actions". `_run_git_async` was an `async def`; all nine call sites are inside
+      `def _ensure_repo`, `def append` and `def mark_override`, plain functions
+      reached from the watchdog observer thread where no loop is running. None can
+      await. Calling a coroutine function without awaiting builds a coroutine
+      object, runs no code and raises nothing -- so `git init` never ran, no
+      repository was ever created, no commit was ever made, and the immutability
+      guarantee did not exist. Three consequences compounded it: `logger.debug("Ledger:
+      committed %s")` fired unconditionally, reporting a commit that had not
+      happened; the `except Exception: logger.warning("Git commit failed")` guard
+      was unreachable, because building a coroutine cannot fail; and `_ensure_repo`
+      re-ran its whole init path on every construction forever, since `.git` never
+      appeared. Found while triggering D51 -- the RuntimeWarnings for the un-awaited
+      coroutine appeared in that probe's output. Fixed by making the helper
+      synchronous, which is what its callers always required, and by returning
+      whether git actually ran so `append` reports a real outcome. Verified by red
+      (7 failed) then green (10 passed).
+  - id: D60
+    wave: TierB
+    location: weebot/core/behavior_tracker.py:_commit
+    claim: >-
+      Concurrent appends share one daily ledger file, so a peer's commit carries
+      this entry's text and `git commit` then exits 1 with "nothing to commit"
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_concurrent_appends_are_all_committed
+    severity: LOW
+    reachability: LIVE
+    verdict_note: >-
+      A defect introduced by the D59 fix and caught by the concurrency vector,
+      not present before it (nothing committed at all before). 12 parallel appends
+      produced 12 entries, 3 commits and 10 warnings saying the entries were "NOT
+      version-controlled" -- while `git status` was clean and every entry was in
+      the committed tree. The warning was a false alarm: the inverse of the
+      fail-open, but still a report that does not match reality. Fixed by treating
+      an empty staging area after `git add` as success, since the content is
+      already in HEAD, and by serializing the add/commit pair with a module-level
+      lock -- the lock is not optional decoration here, it is what makes the
+      staged-emptiness check sound, since without it a peer could stage between the
+      add and the check. NOTE ON PROCESS: the first RAR run reported 21/21 HOLD
+      while the log showed dropped commits, because the assertion checked that the
+      markdown survived rather than that the commit happened. The strengthened
+      assertion then failed for a second wrong reason -- it demanded one commit per
+      entry, which the daily-file design never promised. Both were errors in my
+      probe, and the genuine defect they surrounded is the false warning above.

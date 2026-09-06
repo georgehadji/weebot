@@ -184,13 +184,31 @@ class TestFixClaimsPointAtRealProof:
         assert unproven == [], f"marked fixed with no evidence path: {unproven}"
 
     def test_every_evidence_path_exists(self):
-        missing = [
-            f"{r['id']} -> {r['evidence']}"
-            for r in _records()
-            if r.get("evidence") and not (_ROOT / r["evidence"]).is_file()
-        ]
+        """Evidence is `path` or the more precise `path::test_name`.
+
+        A bare path only promises the file exists; a nodeid names the single
+        test that proves the claim, and is checked to that depth -- the
+        function must be defined in the file. Accepting the nodeid without
+        verifying it would be worse than not allowing it, because a typo would
+        read as stronger evidence than a plain path while proving less.
+        """
+        missing = []
+        for r in _records():
+            evidence = r.get("evidence")
+            if not evidence:
+                continue
+            path, _, nodeid = evidence.partition("::")
+            target = _ROOT / path
+            if not target.is_file():
+                missing.append(f"{r['id']} -> {evidence} (no such file)")
+                continue
+            if nodeid:
+                name = nodeid.rpartition("::")[2]
+                source = target.read_text(encoding="utf-8")
+                if f"def {name}(" not in source:
+                    missing.append(f"{r['id']} -> {evidence} (no such test in the file)")
         assert missing == [], (
-            "evidence files named by the inventory do not exist. A renamed or "
+            "evidence named by the inventory does not exist. A renamed or "
             f"deleted proof test leaves a fix claim with nothing behind it:\n  {missing}"
         )
 

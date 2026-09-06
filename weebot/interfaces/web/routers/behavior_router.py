@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import Future
 import json
 import logging
 from datetime import datetime, UTC
@@ -402,17 +403,38 @@ async def start_session_tracking(session_id: str, working_dir: str) -> BehaviorT
     """Start tracking for a new session."""
     from pathlib import Path
 
-    # Set up event callback to broadcast to WebSockets
-    _tracker_tasks: list[asyncio.Task] = []
+    # Set up event callback to broadcast to WebSockets.
+    #
+    # `on_event` is invoked by watchdog on the observer's own thread, not on
+    # the event loop. `asyncio.get_event_loop()` there raises RuntimeError
+    # ("no current event loop in thread 'Thread-N'"), which the except below
+    # swallowed at DEBUG -- so no event ever reached a connected client, and
+    # the list of tasks it was meant to accumulate never gained an entry.
+    # `loop.create_task` would have been wrong regardless: it is not
+    # thread-safe. Capture the loop here, where one is running, and hand work
+    # to it with the cross-thread API.
+    loop = asyncio.get_running_loop()
+    _tracker_futures: set[Future] = set()
+
+    def _done(fut: Future) -> None:
+        _tracker_futures.discard(fut)
+        try:
+            fut.result()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Behavior broadcast failed: %s", exc)
 
     def on_event(event: BehaviorEvent):
-        # Schedule broadcast in event loop
         try:
-            loop = asyncio.get_event_loop()
-            task = loop.create_task(broadcast_event(event))
-            _tracker_tasks.append(task)
-        except Exception as e:
-            logger.debug(f"Failed to broadcast event: {e}")
+            future = asyncio.run_coroutine_threadsafe(broadcast_event(event), loop)
+        except RuntimeError as exc:
+            # The loop is closed -- the session outlived the server. Nothing to
+            # broadcast to, and nothing to retry.
+            logger.debug("Behavior broadcast skipped, loop is gone: %s", exc)
+            return
+        # Held only until the broadcast settles, so the set cannot grow without
+        # bound; the callback is what retrieves the exception as well.
+        _tracker_futures.add(future)
+        future.add_done_callback(_done)
 
     tracker = create_tracker(session_id, Path(working_dir).resolve(), on_event)
     tracker.start()
