@@ -1763,3 +1763,130 @@ of the remaining `[UNK]` markers sit next to a refuted claim in the same way.
 Two of the last three defects closed had a refuted claim attached (D48, D12),
 which is a pattern worth more than the two data points establish.
 
+
+---
+
+## The pause that never reached the database
+
+### D69 — a shipped fix that did not run `[VERIFIED-EXECUTED]`
+
+The previous entry reduced this rather than chasing it: the routing flag and
+the WAITING status are set on the same immutable session one line apart, so
+whatever persists one persists the other, and the flag's durability is
+therefore the gates' pre-existing durability. That reasoning was sound and
+its premise was false. **Nothing persisted.**
+
+Measured against a real `SQLiteStateRepository`:
+
+```
+IN-MEMORY   status=waiting  gate='inbound_mail'  mail_pending=False
+IN DB       status=pending  gate=None            mail_pending=True
+DB event types: ['plan']          <- the WaitForUserEvent never landed
+```
+
+Every path traced: `event_publisher._persist_session` is reachable only from
+`emit()`, and the gates `yield`; `PlanActFlow.run()` has no `save_session`
+anywhere; `AgentRunner`'s post-loop save never runs, because
+`cli/commands/flow.py` breaks the `async for` on the `WaitForUserEvent` and
+post-loop code in a generator is skipped; the gateways call `save_session`
+zero times. Only `TaskRunner._run_flow` persisted.
+
+Three consequences, all measured:
+
+1. `weebot flow run` raised `ValueError: Session ... is not waiting` on the
+   user's answer.
+2. Both gates re-fired on every resume, **unboundedly** — each turn builds a
+   fresh flow, so `max_iterations` cannot bound it.
+3. The D12/D67 Priority-2 branch was unreachable on any DB-mediated resume.
+   **ADR 006 did not hold in production**, for the four hours it was merged.
+
+### Why 41 green tests missed it
+
+Every test for these gates drives `ExecutingState` or
+`resolve_initial_state` in memory and asserts on `ctx._session`. None crossed
+the seam the feature depends on. The unit test was green and the feature was
+dead; that is the whole finding, and the fix is worth less than the test that
+now guards it.
+
+### The test was wrong first, in the same way
+
+The first draft of `test_gate_pause_survives_the_seam.py` built its context
+from a `SimpleNamespace`. It took the in-memory fallback and proved nothing —
+reproducing, inside the test written to catch the defect, the exact mistake
+that hid it. The warning fired and gave it away:
+
+```
+WARNING Flow SimpleNamespace has no _pause_for_user; pausing in memory only.
+```
+
+It now drives a real `PlanActFlow`, and its `_context` helper says in a
+docstring why it must never go back to a stub.
+
+### The fix, and the gate that shaped it
+
+`collaborators/user_pause.py` holds both halves of the contract:
+`pause_flow_for_user` sets WAITING, emits **once** (`EventPublisher.emit`
+already calls `add_event`, so `PlanReviewState` adding *and* emitting writes
+the pause twice), then persists authoritatively and lets a failed write raise
+rather than downgrade to a warning — a pause that cannot be saved will not
+survive, and that is the failure this exists to prevent. `pause_for_user` is
+the gate-side shim; a context without the contract still pauses in memory and
+says so at WARNING.
+
+Both halves live in one module so a future gate cannot implement one and
+forget the other — which is precisely how this arose. The two gates copied a
+pause that set WAITING and yielded, from a state (`PlanReviewState`) that also
+persisted, and whose comment explains exactly why it has to.
+
+**`test_god_modules_under_800_lines` fired on the first attempt** —
+`plan_act_flow.py` at 1023/1000 and `executing.py` at 820/800. The ceiling was
+not raised. That gate is the reason the logic is a collaborator rather than
+two inlined methods, and the result is better than what it rejected.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+pre-fix source:   5 failed, 1 passed
+with the fix:              6 passed
+```
+
+The one that passes either way is the no-repository case, which is correct:
+a sub-agent flow with `_state_repo=None` must still pause, just not durably.
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | `_state_repo=None` | still pauses, WARNING names the loss. HOLD |
+| State | reload status after the mail gate | WAITING in the DB. HOLD |
+| State | reload `_user_gate_pending` | `'inbound_mail'`. HOLD |
+| State | reload the cleared `atomic_mail_inbound_pending` | falsy. HOLD |
+| State | reload after the constraint gate | WAITING, `'constraint'`, ack present. HOLD |
+| Invalid input | pause event count in the transcript | exactly 1, not 2. HOLD |
+| Regression | the 41 existing gate/router tests | all pass unchanged. HOLD |
+| Regression | `test_god_modules_under_800_lines` | fired, then satisfied by extraction. HOLD |
+| Concurrency | n/a — one pause per state entry, on an immutable session | not applicable |
+
+### Coverage & residual risk
+
+- **`PlanReviewState` still double-adds.** It was the model for the fix and
+  keeps its own defect; folding it onto `pause_flow_for_user` is a separate,
+  safe change not made here.
+- **The fallback is still a fallback.** A production flow type that fails to
+  implement `_pause_for_user` pauses non-durably and only warns. The seam test
+  covers the real path; nothing forces a *new* flow type through it.
+- **The HITL branch at `executing.py:510-525` was not converted.** It sets
+  WAITING and returns without yielding a `WaitForUserEvent`, so it is a
+  different shape; it has the same durability gap and is not fixed here.
+- **Only the CLI path is proven.** The gateways still call `save_session` zero
+  times; whether they resume correctly is untested.
+
+### Uncertainty acknowledgment
+
+I reduced this defect away once, with an argument I still think was well
+formed, and shipped a fix that did not run. The premise I did not test —
+"the pre-existing persistence works" — was the whole question. **UNKNOWN:**
+how many other conclusions in this audit rest on an untested premise about a
+neighbouring mechanism. The rate at which recorded claims have proven wrong
+in this backlog (nine of sixteen) suggests the answer is not zero.
+

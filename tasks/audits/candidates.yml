@@ -1157,11 +1157,49 @@ candidates:
     wave: review
     location: weebot/application/flows/states/executing.py
     claim: "Neither gate persists the session before pausing, so a resume that reloads from the repository cannot see what the gate recorded"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/e2e/test_gate_pause_survives_the_seam.py
     verdict_note: >-
-      Raised by /code-review against the D12 fix and NOT resolved. VERIFIED-
-      STATIC: PlanReviewState calls `await context._state_repo.save_session(...)`
+      CONFIRMED AND FIXED. The reduction below was wrong on the one point that
+      mattered: it assumed the gates' pre-existing WAITING persistence worked,
+      so the flag would ride along. Measured against a real
+      SQLiteStateRepository, NOTHING persisted -- the session reached the
+      database with status PENDING while the code believed WAITING, and the
+      WaitForUserEvent never landed at all. Every path was traced:
+      event_publisher._persist_session is only reachable from emit() and the
+      gates yield rather than emit; PlanActFlow.run() has no save_session
+      anywhere; AgentRunner's post-loop save never runs because
+      cli/commands/flow.py breaks the async-for on WaitForUserEvent, so
+      post-loop code is skipped; the gateways call save_session zero times.
+      Only TaskRunner._run_flow persisted.
+      .
+      Three measured consequences: `weebot flow run` raised "Session ... is not
+      waiting" on the user's answer; both gates re-fired on every resume
+      unboundedly, since each turn builds a fresh flow so max_iterations cannot
+      bound it; and the D12/D67 Priority-2 branch was unreachable on any
+      DB-mediated resume, so ADR 006 did not hold in production.
+      .
+      Fixed with collaborators/user_pause.py: pause_flow_for_user sets WAITING,
+      emits once (EventPublisher.emit already calls add_event, so PlanReviewState
+      adding AND emitting writes the pause twice), then persists
+      authoritatively and lets a failed write raise rather than downgrade to a
+      warning -- a pause that cannot be saved will not survive. pause_for_user
+      is the gate-side shim; a context without the contract still pauses in
+      memory and says so at WARNING. Both halves live in one module so a future
+      gate cannot implement one and forget the other, which is exactly how this
+      arose: two gates copied a pause that set WAITING and yielded, from a
+      state that also persisted.
+      .
+      Red before green: 5 of 6 failed against the pre-fix source; all 6 pass
+      after. The test itself was wrong first -- it used a SimpleNamespace and
+      took the in-memory fallback, reproducing inside the test the very mistake
+      that hid the defect. It now drives a real PlanActFlow. The god-module
+      gate also fired (plan_act_flow 1023/1000, executing 820/800), which is
+      why the logic is in a collaborator rather than inlined; the ceiling was
+      not raised.
+      .
+      Superseded reasoning, kept because it was wrong in an instructive way --
+      VERIFIED-STATIC: PlanReviewState calls `await context._state_repo.save_session(...)`
       before it pauses (plan_review.py:121-122); neither gate in executing.py
       has any save_session call; and agent_runner.resume_session loads from the
       repository and raises "is not waiting" unless the loaded status is

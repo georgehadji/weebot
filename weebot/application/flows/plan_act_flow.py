@@ -442,6 +442,16 @@ class PlanActFlow(BaseFlow):
             )
         return self._event_publisher
 
+    async def _pause_for_user(self, question: str) -> AgentEvent:
+        """Pause for a human answer, durably. See `collaborators/user_pause.py`.
+
+        Callers must mutate `self._session` with whatever has to survive
+        before calling this, then `yield` the event it returns.
+        """
+        from weebot.application.flows.collaborators.user_pause import pause_flow_for_user
+
+        return await pause_flow_for_user(self, question)
+
     async def _emit(self, event: AgentEvent) -> None:
         """Emit an event through the middleware pipeline.
 
