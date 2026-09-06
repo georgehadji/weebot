@@ -592,11 +592,32 @@ candidates:
     wave: W5
     location: weebot/application/agents/executor/_cascade.py
     claim: "Orphaned probes on the `FIRST_COMPLETED` path keep running and billing"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/agents/test_cascade_does_not_bill_orphans.py
     verdict_note: >-
-      Ranked Priority 3 by the residual-work plan as unbounded spend (T4). Not
-      triggered.
+      VERIFIED-EXECUTED, and worse than the claim. The claim says probes are
+      orphaned; the measurement says a *successful* one was thrown away.
+      Cancellation lived inside the `resp is not None` branch, so the
+      first-completed-is-a-failure path fell through to Phase 2 with every probe
+      still running. That is the common case, not the rare one:
+      `_cascade_try_chat` returns None for every failure and never raises, and a
+      429/503 returns in ~200ms against seconds for a real completion, so the
+      first future to finish is preferentially the fastest FAILURE. Measured
+      with five probes, the fastest failing and two slow ones succeeding —
+      pre-fix 5 sent / 5 billed / 0 cancelled, both successes discarded, no
+      answer returned; post-fix 5 sent / 3 billed / 2 cancelled, the success
+      returned. The old drain loop under the cancel was a no-op:
+      `pf.cancelled()` is still False immediately after `cancel()`, and
+      `pf.exception()` on a task that is not done raises InvalidStateError,
+      which the `contextlib.suppress` swallowed. Fix harvests until a probe
+      SUCCEEDS and cancels the rest in a `finally`, bounded by
+      `asyncio.wait(..., timeout=5.0)` so an adapter that swallows
+      CancelledError cannot hang the cascade. Cost: latency in exactly the case
+      where the alternative was another paid call. Honest limit: cancelling
+      aborts client-side, so tokens the provider already generated may still
+      bill — this reduces spend, it does not provably zero it. Sound only while
+      nothing shields the call (`asyncio.shield` defeats cancellation, VERIFIED
+      by probe).
 
   - id: D40
     wave: W5

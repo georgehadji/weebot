@@ -2139,3 +2139,170 @@ drifted into corrupting the file. **UNKNOWN:** how many other "dead code, low
 value" dismissals in this inventory have a live tool or script attached to
 them that nobody looked for.
 
+
+## The race that threw away the answer it had paid for
+
+### D39 — orphaned probes on `FIRST_COMPLETED` `[VERIFIED-EXECUTED]`
+
+D39 sat `deferred` for five waves as "unbounded spend" — a cost defect, ranked
+Priority 3. The measurement says the money was the *smaller* half.
+
+`CascadeExecutor.call_with_cascade` fans out Phase 1 probes and takes the first
+future to complete. Cancellation of the losers lived **inside** the
+`resp is not None` branch:
+
+```python
+done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+for fut in done:
+    resp = fut.result()
+    if resp is not None:
+        for pf in pending:
+            pf.cancel()
+        ...
+        return resp
+# ← first-completed was a failure: falls through with `pending` still running
+```
+
+So the branch where the first future to finish is a **failure** fell through to
+Phase 2 with every other probe alive.
+
+### Why that is the common path, not the rare one
+
+Two properties of the surrounding code make the failure branch the *likely*
+one, and both are in the file:
+
+- `_cascade_try_chat` returns `None` for every failure and never raises, so a
+  failure is indistinguishable from a slow success at the `asyncio.wait`
+  boundary — it is just a future that completed;
+- a 429 or 503 comes back in ~200ms, against seconds for a real completion.
+
+The fastest probe to return is therefore preferentially the fastest *rejection*.
+The defect does not need an unlucky day.
+
+### What it cost, measured
+
+Five probes, the fastest failing, two slow ones succeeding:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| requests sent | 5 | 5 |
+| completions billed | **5** | 3 |
+| cancelled | **0** | 2 |
+| probes that succeeded | **2, both discarded** | 1, returned |
+| result | `AllModelsTrippedError` | the successful response |
+
+Two probes had **succeeded**. Their responses were dropped on the floor and the
+cascade went on to buy the answer again on a higher tier. The spend is the part
+that shows up on an invoice; the part that does not is that a cascade holding a
+valid completion reported total failure.
+
+### The drain loop under the cancel was a no-op
+
+```python
+for pf in pending:
+    if not pf.cancelled():
+        with contextlib.suppress(asyncio.InvalidStateError, asyncio.CancelledError):
+            pf.exception()
+```
+
+`pf.cancelled()` is still `False` immediately after `cancel()` — cancellation
+is delivered on the next loop iteration, not synchronously — so the guard
+always passed. `pf.exception()` on a task that is not done raises
+`InvalidStateError`, which the `suppress` swallowed. The loop retrieved nothing
+and suppressed nothing that mattered. It read as care and did no work: the same
+shape as the gates in the section above.
+
+### The fix, and what it trades
+
+Harvest until a probe **succeeds**; cancel the rest in a `finally` so it runs on
+every exit, bounded rather than gathered:
+
+```python
+finally:
+    for pf in pending:
+        pf.cancel()
+    if pending:
+        await asyncio.wait(pending, timeout=5.0)
+```
+
+`asyncio.wait(..., timeout=5.0)` rather than `gather`: an adapter that swallows
+`CancelledError` would otherwise hang the cascade forever on the cleanup path.
+
+**The trade is real and worth stating.** Waiting for a success costs latency
+in exactly the case that used to return fast — worst case the slowest probe's
+90s cap instead of the fastest probe's return. That is p99 spent to avoid a
+further paid call plus another round-trip, which is the better side of the
+trade, but it is not free.
+
+### Two asyncio facts the fix rests on, both `[VERIFIED-EXECUTED]` by probe
+
+- A pending task left uncancelled **runs to completion**. It does not stop
+  because nobody is awaiting it — which is why the orphans billed.
+- `asyncio.shield` **defeats cancellation entirely**. The fix is sound only
+  while nothing between here and the HTTP call shields it. Nothing does today;
+  a future `shield` would silently restore the defect.
+
+### The gate
+
+`tests/unit/agents/test_cascade_does_not_bill_orphans.py`, three tests, and the
+harness took three attempts to become honest — worth recording, because each
+failure produced a *green* test that proved nothing:
+
+1. The fake LLM defaulted unknown models to a fast success, so the role
+   cascade's own default models won every race. The test measured them, not
+   the probes.
+2. `get_model_cascade_for_role` was patched on `_cascade`, but `_cascade`
+   imports it *inside* the method, so it never becomes an attribute there. The
+   patch bound nothing.
+3. Worst: the successful model landed in `role_fallback2`, which is Phase **2**,
+   outside the parallel set — so Phase 2 rescued it and the test passed against
+   the unfixed code. Fixed by making the role cascade a single never-succeeding
+   model, every tier constant that same model, and supplying the probes through
+   the ACR list, so Phase 2's candidates are all already in `parallel` and it
+   has nothing to rescue with. A success can then only come from Phase 1.
+
+Only after (3) did red-before-green discriminate:
+
+```
+=== RED first, before believing anything ===
+FAILED ...::test_a_slow_success_is_used_instead_of_escalating
+1 failed, 2 passed
+=== then GREEN ===
+3 passed
+```
+
+The other two tests are labelled in the file as what they are: a **regression
+guard** for the success path, which already cancelled its losers and passes
+against the unfixed code, and a terminal-state check that also passes unfixed
+(when every probe fails they all finish on their own, so there is nothing to
+orphan). Test 3's first assertion filtered `asyncio.all_tasks()` by
+`"chat" in repr(t)`, which never matches a task's repr — vacuous, and it would
+have passed with probes still running. Replaced with `started` vs
+`completed | cancelled` accounting and proven non-vacuous by injecting an
+unaccounted probe.
+
+### Coverage & residual risk
+
+- **Cancelling does not provably zero the spend.** It aborts the request
+  client-side; tokens the provider has already generated may still bill. The
+  claim is *reduces*, not *eliminates*.
+- **`estimate_cost()` returns `0.0` for most reachable models**, so this saving
+  will not appear in the cascade's own telemetry. That is a separate open
+  defect; it does not affect the fix, only the ability to *see* it in
+  production. (It does not affect the proof either: the test counts requests
+  and cancellations directly.)
+- **Phase 2 is untouched.** It is sequential, so it has no orphan class — but
+  it also has no harvest, and a Phase 2 model that fails still burns its call.
+- **The 5s cleanup bound is a guess.** It is long enough for a cooperative
+  adapter and short enough not to hang the cascade; nothing measured what a
+  real adapter takes to honour a cancellation.
+
+### Uncertainty acknowledgment
+
+D39's recorded claim — "orphaned probes keep running and billing" — was true
+and *understated the defect by a category*. Ranked as spend, it was really a
+correctness defect: the cascade returned failure while holding a success. The
+record had the mechanism right and the consequence wrong, which is exactly the
+kind of entry a priority-ordered work list will keep deferring. **UNKNOWN:**
+how many other `deferred` entries in this inventory are mis-categorised the
+same way — a real consequence hiding under a cheaper-sounding label.

@@ -260,12 +260,17 @@ or wire it; do not leave it.
 | fastest probe succeeds | 5 | 1 | 4 |
 | fastest probe **fails** | 6 | **6** | **0** |
 
+*(Six-probe harness. The closing measurement in
+`tasks/audits/static_defect_audit_v3.md` uses five probes and reads 5/5/0
+pre-fix — the same defect, a different probe count. Cite the audit's numbers,
+not these, when quoting the fix.)*
+
 `_cascade_try_chat` returns `None` for *every* failure and never raises, and a
 429/503 returns in ~200ms against seconds for a real completion — so the
 first-completed future is preferentially the fastest **failure**, and that
 branch falls through to Phase 2 with `pending` neither cancelled nor awaited. In
 the measured run both slow probes *succeeded*, were discarded, and the cascade
-escalated to a sixth paid call.
+escalated to a further paid call.
 
 Fix: cancel-and-drain **outside** the success branch, bounded by
 `asyncio.wait(pending, timeout=…)` so a `CancelledError`-swallowing adapter
