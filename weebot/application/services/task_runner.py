@@ -139,8 +139,20 @@ class TaskRunner:
             if remaining <= 0:
                 self._flow_factories.pop(session_id, None)
                 self._retry_counts.pop(session_id, None)
-            if t.exception():
-                logger.error("Session %s failed: %s", session_id, t.exception())
+            # `Task.exception()` RAISES CancelledError when the task was
+            # cancelled, and cancelling a session is an ordinary operation --
+            # `flow cancel <id>` is a CLI command. Unguarded, every cancellation
+            # pushed a CancelledError into the loop's exception handler from
+            # inside this callback. It corrupted nothing, because the cleanup
+            # above had already run, but it filled the log with a spurious error
+            # on a normal path -- which buries a real cleanup failure in a stream
+            # of identical noise.
+            if t.cancelled():
+                logger.debug("Session %s was cancelled", session_id)
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error("Session %s failed: %s", session_id, exc)
 
         task.add_done_callback(_cleanup)
         return session

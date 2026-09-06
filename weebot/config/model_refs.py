@@ -153,9 +153,6 @@ $3/$15 per 1M tokens, 200K context. Use when Sonar returns insufficient results.
 MODEL_KWAIPILOT_KAT_CODER_PRO: str = "kwaipilot/kat-coder-pro-v2.5"
 """KwaiPilot KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model."""
 
-MODEL_KWAIPILOT_KAT_CODER_AIR: str = "kwaipilot/kat-coder-air-v2.5"
-"""KwaiPilot KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding model."""
-
 # ========================================================================
 # Per-Agent (Role) Model Selection
 # ========================================================================
@@ -197,7 +194,6 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro
         "poolside/laguna-xs-2.1",  # fallback 2: Laguna XS 2.1 — coding
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 3: KAT-Coder-Air
         "minimax/minimax-m3",  # fallback 4: MiniMax M3 — budget
         "deepseek/deepseek-v4-flash",  # fallback 4: DeepSeek V4 Flash
         "moonshotai/kimi-k2.6",  # fallback 5: Kimi K2.6
@@ -207,7 +203,6 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
         "z-ai/glm-5.2:thinking",  # primary: GLM 5.2 :thinking
         "google/gemini-3.5-flash",  # fallback 1: Gemini 3.5 Flash — 1M ctx
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 2: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking — fast reasoning
         "moonshotai/kimi-k2.6:thinking",  # fallback 4: Kimi K2.6 :thinking — structured + CoT
     ],
@@ -226,7 +221,6 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "automation": [
         "x-ai/grok-build-0.1",  # primary: Grok Build — fast agentic SWE
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding model
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash",  # fallback 3: DeepSeek V4 Flash — instruction following
         "moonshotai/kimi-k2.6",  # fallback 4: Kimi K2.6
     ],
@@ -238,28 +232,24 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "product_manager": [
         "moonshotai/kimi-k2.6",
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash",
         "minimax/minimax-m3",
     ],
     "planner": [
         "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — structured planning + CoT
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — enterprise-grade agentic coding
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5 — high-speed, cost-efficient agentic coding
         "deepseek/deepseek-v4-flash:thinking",  # fallback 3: DeepSeek V4 Flash :thinking
         "x-ai/grok-build-0.1",  # fallback 4: Grok Build — agentic
     ],
     "planner_sub": [
         "moonshotai/kimi-k2.6:thinking",
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-build-0.1",
     ],
     "designer": [
         "deepseek/deepseek-v4-flash",  # primary: fast, cheap
         "kwaipilot/kat-coder-pro-v2.5",  # fallback 1: KAT-Coder-Pro V2.5 — layout & visual design experts
-        "kwaipilot/kat-coder-air-v2.5",  # fallback 2: KAT-Coder-Air V2.5
         "moonshotai/kimi-k2.6",
         "minimax/minimax-m3",  # fallback 4: MiniMax M3 — paid, $0.30/$1.20
     ],
@@ -317,7 +307,6 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "qwen/qwen3.8-max",
     "x-ai/grok-4.3",
     "kwaipilot/kat-coder-pro-v2.5",
-    "kwaipilot/kat-coder-air-v2.5",
     "minimax/minimax-m3",
     "deepseek/deepseek-v4-flash-0731",  # 1M ctx / 384K out, same price as base V4 Flash
     "qwen/qwen3.7-flash",  # cheapest fallback of last resort
@@ -859,7 +848,6 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
         "openai/gpt-4.1-nano",
         "poolside/laguna-xs-2.1",  # Laguna XS 2.1 — $0.10/1M coding agent
         "google/gemini-2.5-flash-lite",  # Gemini 2.5 Flash Lite — subagent
-        "kwaipilot/kat-coder-air-v2.5",  # KAT-Coder-Air
         "minimax/minimax-m3",  # MiniMax M3 — budget 1M ctx
         "deepseek/deepseek-v4-flash:thinking",
         "qwen/qwen3-coder-30b-a3b-instruct",

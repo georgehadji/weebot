@@ -8,6 +8,7 @@ Transport options:
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 try:
     from mcp.server.auth.provider import AccessToken
@@ -37,6 +38,18 @@ from datetime import UTC
 # Addresses reachable only from this machine. Binding anything else exposes the
 # server to the network, which `run_sse` refuses to do without an API key.
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+# JSON Schema primitive -> the Python annotation the MCP SDK introspects.
+# An absent or unrecognized type maps to `Any`, which accepts the value as-is
+# rather than rejecting one the tool would have handled.
+_JSON_TYPE_TO_PYTHON: dict[str, object] = {
+    "string": str,
+    "integer": int,
+    "number": float,
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+}
 
 # Prometheus metrics — lazy import to avoid circular dependency at module level
 _metrics = None
@@ -255,6 +268,76 @@ class WeebotMCPServer:
             self._mcp.add_tool(wrapper, name=tool.name, description=tool.description)
 
     @staticmethod
+    def _apply_schema_signature(fn: Callable, schema: object, tool_name: str) -> set[str]:
+        """Give *fn* the signature described by *schema*, and name its optionals.
+
+        The MCP SDK builds a tool's advertised JSON Schema by introspecting the
+        registered function, and it does not understand ``**kwargs``: a bare
+        ``**kwargs`` is read as one *required string* parameter literally named
+        "kwargs". Every call then fails argument validation before
+        ``tool.execute`` is reached, so the tool is advertised by ``list_tools``
+        and callable by nobody. Every BaseTool already carries the schema it
+        wants in ``.parameters``; replaying it as a keyword-only signature is
+        the only channel the SDK reads.
+
+        Returns the names given a ``None`` default, so the caller can tell an
+        omitted argument from one a client actually sent.
+        """
+        import inspect
+        import keyword
+        import logging
+
+        properties: dict = {}
+        required: list = []
+        if isinstance(schema, dict):
+            if isinstance(schema.get("properties"), dict):
+                properties = schema["properties"]
+            if isinstance(schema.get("required"), list):
+                required = schema["required"]
+
+        params: list[inspect.Parameter] = []
+        annotations: dict[str, object] = {}
+        optional: set[str] = set()
+        unrepresentable: list[str] = []
+        for name, spec in properties.items():
+            # A parameter that is not a Python identifier cannot appear in a
+            # signature at all. Dropping it silently would advertise a tool that
+            # ignores part of its own schema, so it is named at WARNING.
+            if not isinstance(name, str) or not name.isidentifier() or keyword.iskeyword(name):
+                unrepresentable.append(str(name))
+                continue
+            declared = spec.get("type") if isinstance(spec, dict) else None
+            annotation = _JSON_TYPE_TO_PYTHON.get(declared, Any)
+            if name in required:
+                params.append(
+                    inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, annotation=annotation)
+                )
+            else:
+                optional.add(name)
+                params.append(
+                    inspect.Parameter(
+                        name,
+                        inspect.Parameter.KEYWORD_ONLY,
+                        annotation=annotation,
+                        default=None,
+                    )
+                )
+            annotations[name] = annotation
+
+        if unrepresentable:
+            logging.getLogger(__name__).warning(
+                "MCP tool %r declares parameter(s) %s that are not valid Python "
+                "identifiers. They cannot be expressed in the signature the MCP "
+                "SDK introspects, so clients cannot supply them.",
+                tool_name,
+                ", ".join(sorted(unrepresentable)),
+            )
+
+        fn.__signature__ = inspect.Signature(params)
+        fn.__annotations__ = dict(annotations)
+        return optional
+
+    @staticmethod
     def _wrap_base_tool(tool):
         """Wrap a weebot BaseTool so it can be registered with FastMCP.
 
@@ -263,7 +346,13 @@ class WeebotMCPServer:
         """
 
         async def wrapper(**kwargs) -> CallToolResult:
-            result = await tool.execute(**kwargs)
+            # The SDK materialises every declared parameter, so an argument the
+            # client omitted arrives as an explicit None. Dropping those keeps
+            # `execute(**kwargs)` seeing exactly what was sent -- the same
+            # omit-rather-than-pass-None convention `_run_file_tool`'s callers
+            # already follow.
+            supplied = {k: v for k, v in kwargs.items() if not (k in optional and v is None)}
+            result = await tool.execute(**supplied)
             if result.is_error:
                 return CallToolResult(
                     content=[
@@ -273,6 +362,9 @@ class WeebotMCPServer:
                 )
             return WeebotMCPServer._tool_success_response(result.output)
 
+        optional = WeebotMCPServer._apply_schema_signature(
+            wrapper, getattr(tool, "parameters", None), getattr(tool, "name", "<unnamed>")
+        )
         return wrapper
 
     def _register_tools(self) -> None:

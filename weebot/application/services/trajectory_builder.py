@@ -36,6 +36,37 @@ Rules:
 """
 
 
+def _validate_analysis(analysis: object) -> None:
+    """Reject a completion that parsed but cannot be used.
+
+    `json.loads` happily returns a list, a string or a number, and the builder
+    then calls `.get` on whatever comes back -- so a valid but wrong-shaped
+    completion escaped the fail-open entirely and raised out of `build`, past
+    the very handler meant to absorb analyst failures. `.get(key, default)`
+    does not help: it substitutes the default only when the key is ABSENT, so
+    `{"failure_modes": "oops"}` sails through to Pydantic and raises there
+    instead.
+
+    Both were found by the RAR invalid-input vector, one after the other -- the
+    container type first, then the field types, which is the same defect one
+    level down. Checking the whole shape at once is the only version that ends
+    the sequence.
+
+    A response that gets any of this wrong is not trustworthy for the fields it
+    did get right, so a violation invalidates the whole analysis rather than
+    part of it.
+    """
+    if not isinstance(analysis, dict):
+        raise TypeError(f"analyst returned {type(analysis).__name__}, expected a JSON object")
+    text = analysis.get("trajectory_text", "")
+    if not isinstance(text, str):
+        raise TypeError(f"trajectory_text is {type(text).__name__}, expected str")
+    for key in ("failure_modes", "success_patterns"):
+        value = analysis.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise TypeError(f"{key} is not a list of strings: {value!r}")
+
+
 class TrajectoryBuilder:
     """Builds TrajectorySummary from a completed session.
 
@@ -71,11 +102,20 @@ class TrajectoryBuilder:
                 max_tokens=MAX_TOKENS_SHORT,
             )
             analysis = json.loads(response.content)
+            _validate_analysis(analysis)
         except Exception as exc:
             logger.warning("Trajectory analysis LLM call failed: %s", exc)
+            # NOT an empty list. The analyst prompt above defines
+            # "failure_modes: empty list if the task succeeded fully", and this
+            # value is persisted and read back by the optimizer -- so `[]` here
+            # asserts a clean run for a trajectory nothing ever looked at, and
+            # dilutes the dataset with rows that silently claim success. An
+            # explicit marker is greppable, survives the round trip through
+            # SQLite, and needs no schema change; `verifier_scorer` already uses
+            # the field this way with "no_expected_answer".
             analysis = {
                 "trajectory_text": scored_event.trajectory_summary,
-                "failure_modes": [],
+                "failure_modes": ["analysis_unavailable"],
                 "success_patterns": [],
             }
 

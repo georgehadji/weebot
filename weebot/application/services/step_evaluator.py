@@ -120,4 +120,10 @@ class LLMStepEvaluator(StepEvaluatorPort):
                 passed=True,
                 regression_detected=False,
                 reasoning=f"evaluation failed: {exc}",
+                # The fail-open policy is unchanged -- whether a verification
+                # gate should fail open is a product decision, escalated as
+                # such. What changes is that the result no longer impersonates
+                # a real one: score=1.0 is the maximum, byte-identical to a
+                # step judged perfect, and nothing downstream could tell.
+                evaluator_failed=True,
             )

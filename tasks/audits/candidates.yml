@@ -81,14 +81,34 @@ candidates:
 
   - id: D8
     wave: W1
-    location: weebot/application/services/state_verifier.py:501
+    location: weebot/infrastructure/security/state_verifier.py:501
     claim: "Raw `create_subprocess_shell` outside the bash-guard path"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/infrastructure/security/test_verification_does_not_re_execute.py
     verdict_note: >-
-      W1 enumerated 51 subprocess sites but triaged none; regions R1/R2 were
-      declared in scope and not hunted. Deferred to W7, which did not enter it
-      either.
+      Confirmed and much worse than the claim. The recorded path had moved to
+      weebot/infrastructure/security/, and it was the ONLY shell-execution site
+      in weebot/ or cli/ -- zero `shell=True`, zero `os.system`. What it did:
+      `verify_command_execution` took an agent's CLAIM that it had run a
+      command and, for anything it judged critical, RE-RAN that command to
+      compare return codes. Measured: given a claim about `rm -f <marker>`, the
+      marker existed before verification and did not exist after, and the
+      verifier then reported CONTRADICTED because the second run's return code
+      differed from the first. `rm -rf /` reached the same call; BashGuard rates
+      it BLOCKED and nothing on this path consulted BashGuard. Classification
+      was substring matching, so `terraform apply` and `echo confirm` were
+      "critical" ("rm" is inside "terraform" and "confirm") and therefore
+      re-executed; `curl -X POST .../charge` was critical and guard-SAFE, so it
+      would have been replayed. And when re-execution raised, the handler logged
+      a warning and fell through to VERIFIED at confidence 0.9. Reach is DEAD --
+      StateVerifier has no importer in weebot/, cli/, tests/ or scripts/ -- so
+      none of it ran, and severity is capped. Fixed by not re-executing at all
+      (UNVERIFIABLE at confidence 0.0 is the honest result for a claim you
+      decline to reproduce), word-boundary classification, and deleting
+      `_execute_verify_command`, which takes the codebase's shell-execution
+      surface to zero. New ceiling-zero gate
+      test_no_shell_execution_outside_the_bash_guard enforces CLAUDE.md rule 3,
+      which until now had no enforcement anywhere.
 
   - id: D9
     wave: W1
@@ -121,8 +141,40 @@ candidates:
     status: deferred
     evidence: null
     verdict_note: >-
-      Partially defended — no clear-without-pause path exists. W1 left it [UNK]
-      on the resume path specifically; that path was never triggered.
+      The claim as written is REFUTED and the clearing is correct: the flag is
+      cleared inside `if _mail_ap.requires_confirmation:`, immediately before
+      set_status(WAITING) and the WaitForUserEvent yield, and it must be --
+      FlowRouter flips WAITING -> RUNNING and re-enters execute() against the
+      SAME step, so an uncleared flag re-fires forever. The constraint gate
+      below it carries a comment saying exactly this.
+      .
+      W1's [UNK] on the resume path was right to be suspicious, and the defect
+      there is real. VERIFIED-STATIC: resolve_initial_state has three routing
+      priorities. `_product_gate_pending` forwards the user's prompt to
+      ProductGateState(resume_with=prompt). `plan_pending_approval` tests it
+      against _APPROVE_TOKENS and routes to PlanningState with a modification
+      request when it is not an approval. Everything else -- including every
+      session that paused at this gate -- falls to `if last_plan is not None and
+      not last_plan.is_complete(): return ExecutingState(), session`, which
+      never reads `prompt` at all. The gate asks "type 'proceed' to continue, or
+      describe how you'd like to handle it" and honours NEITHER branch: the
+      description is discarded and there is no way to decline. Execution of the
+      untrusted inbound content proceeds identically whatever the user typed.
+      The constraint gate immediately below has the same structure and the same
+      hole, so one defect covers two gates.
+      .
+      NOT FIXED, and deliberately: the fix has to add a routing priority inside
+      resolve_initial_state, the central resume path for every session, and
+      decide what a non-approval means (the plan-approval path's precedent is
+      "re-plan with the response as a modification request"). That is a live
+      behaviour change and a product decision, unlike D8's dead code. Escalated
+      rather than guessed.
+      .
+      Noted in passing, unverified: set_fact writes to context.facts, which
+      SessionContext.get does NOT read -- it reads known fields then
+      context.extra. Any routing flag added for this must live in extra, as
+      _product_gate_pending and plan_pending_approval do. context.facts is also
+      capped at 100 entries with oldest-first eviction.
 
   - id: S1
     wave: W1
@@ -137,13 +189,24 @@ candidates:
     wave: W2
     location: weebot/application/services/step_evaluator.py:104
     claim: "An evaluator exception yields score=1.0, passed=True"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_an_evaluator_outage_is_marked_not_disguised
     verdict_note: >-
-      PARTLY DEFENDED — the fail-open is documented in the module docstring, so
-      it is a policy rather than an oversight. W2 escalated the policy question
-      (its R-2) rather than changing it: whether failing open is right for a
-      *verification* gate is a product decision, not a defect.
+      PARTLY DEFENDED, and the defended part was left alone. W2 escalated whether
+      a verification gate should fail open as a product decision, and that policy
+      is UNCHANGED: an evaluator outage still returns passed=True and the step
+      still proceeds, asserted by a control test so a later edit cannot quietly
+      decide the question. What is fixed is the separate defect underneath it:
+      score=1.0 is the maximum, byte-identical to a step judged perfect, and
+      StepEvaluation had no field that could say otherwise -- so the fail-open
+      was not merely permissive, it was invisible. The live consumer at
+      flows/states/executing.py only logged on `not passed`, and a failed
+      evaluator returns passed=True, so an outage silently disabled the progress
+      gate for every step with nothing in the log at all. Added
+      `evaluator_failed: bool = False` (additive, so every honest verdict is
+      unchanged), set on the exception and empty-completion paths, and a warning
+      at the call site naming the step and the reason. Whatever the policy
+      decision turns out to be, it needs this distinction to be answerable.
 
   - id: D14
     wave: W2
@@ -165,11 +228,22 @@ candidates:
     wave: W2
     location: weebot/application/services/trajectory_builder.py:74
     claim: "Failure yields `failure_modes=[]`, indistinguishable from a clean trajectory"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_an_unanalysed_trajectory_is_not_recorded_as_clean
     verdict_note: >-
-      Read and deferred: it logs a warning, so the failure is not invisible, and
-      the blast radius is a leaky analysis rather than a wrong verdict.
+      Previously deferred as "a leaky analysis rather than a wrong verdict". That
+      undersold it: the analyst prompt in the same module states "failure_modes:
+      empty list if the task succeeded fully", so [] is not an absence of
+      information, it is a positive claim of success -- and it is persisted to
+      SQLite and read back by OptimizerAgent, which counts failure_modes across
+      failed trajectories. Every analyst outage therefore wrote a row asserting a
+      clean run into the dataset the optimizer learns from. Fixed with an explicit
+      ["analysis_unavailable"] marker rather than a new column: it needs no schema
+      change, survives the JSON round trip, and matches the convention
+      verifier_scorer.py already uses with "no_expected_answer". On a failed run
+      the optimizer now sees a named mode instead of a failure with no
+      explanation; on a passed run the query filters it out anyway. The warning
+      log was already there and stays.
 
   - id: D17
     wave: W2
@@ -186,9 +260,21 @@ candidates:
     wave: W2
     location: weebot/models/structured_output.py:430
     claim: "Any failure produces an empty distribution"
-    status: deferred
+    status: cleared
     evidence: null
-    verdict_note: "Not triggered; consumers were never traced, so the blast radius is unknown."
+    verdict_note: >-
+      CLEARED by execution. The deferral said "consumers were never traced, so the
+      blast radius is unknown"; tracing them is what settles it. There is exactly
+      one consumer, VerbalizedSampler, and it does the right thing:
+      parse_sampled_distribution returns an empty SampledDistribution on all four
+      failure paths, the caller tests `if dist:`, logs "VS: empty parse --
+      falling back to single-item distribution" at WARNING, and returns a
+      documented single-item fallback. The one thing that could have made this a
+      live defect was that truthiness test, since a Pydantic BaseModel is truthy
+      by default and the guard would then be dead -- measured, and
+      SampledDistribution defines __bool__, so an empty one is falsy and the guard
+      fires. Confirmed for '', 'not json', '{"nope": 1}' and '{broken'. The empty
+      result is distinguished, logged and handled; no fix warranted.
 
   - id: S2
     wave: W2
@@ -239,9 +325,29 @@ candidates:
     wave: W3
     location: weebot/infrastructure/watchers/
     claim: "`get_event_loop()` + `create_task` from the watchdog observer thread, swallowed"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W3's budget."
+    status: fixed
+    evidence: tests/unit/test_alerting_dispatch.py::test_an_alert_fired_from_a_worker_thread_reaches_async_handlers
+    verdict_note: >-
+      The recorded location, weebot/infrastructure/watchers/, DOES NOT EXIST, and
+      the note said "generated and read; not triggered within W3's budget" -- so
+      the candidate named a directory rather than a site and was never verified.
+      An AST sweep for the actual shape (asyncio.get_event_loop() plus
+      create_task/ensure_future inside a SYNCHRONOUS function) found exactly one
+      instance in 821 files: AlertManager._dispatch in weebot/core/alerting.py.
+      Verified by execution -- from the loop thread it worked and delivered 1; from
+      a worker thread and from a plain script it raised "RuntimeError: There is no
+      current event loop in thread ..." and delivered 0. The raise came from
+      `loop = asyncio.get_event_loop()`, a variable the function NEVER READ, and
+      it happened inside fire_alert while holding the RLock, after the synchronous
+      handlers had already run: a partial dispatch and an exception, from a dead
+      assignment, in a class whose docstring says "Thread-safe for concurrent
+      access". ensure_future was the other half -- not thread-safe, and the task it
+      returned was dropped, so a failing handler was never heard from. Fixed with
+      the same pattern as D51: an optional bound loop, get_running_loop when there
+      is one, run_coroutine_threadsafe when there is not, an explicit ERROR when
+      no loop exists at all so an undeliverable alert is never silent, and a
+      done-callback that retrieves each handler's exception. 30 threads firing
+      concurrently now deliver 30 alerts.
 
   - id: D24
     wave: W3
@@ -306,10 +412,24 @@ candidates:
     wave: W3
     location: weebot/application/flows/
     claim: "`t.exception()` in a done-callback raises `CancelledError`"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W3's budget."
-
+    status: fixed
+    evidence: tests/unit/test_breaker_key_and_cancelled_task.py::test_cancelling_a_session_does_not_raise_in_the_done_callback
+    verdict_note: >-
+      The note said "generated and read; not triggered within W3's budget", and
+      the location named a directory. Located precisely: there are two
+      `.exception()` calls in weebot/ and cli/, and only ONE is unguarded --
+      task_runner.py:142. The other, _cascade.py:463, already checks
+      `if not pf.cancelled()` inside contextlib.suppress(InvalidStateError,
+      CancelledError) and is correct. Verified by execution: `Task.exception()`
+      RAISES CancelledError on a cancelled task, so the unguarded form pushed
+      ['CancelledError'] into the loop's exception handler while the guarded form
+      pushed []. Cancelling a session is an ordinary operation -- `flow cancel
+      <id>` is a CLI command -- so this fired on a normal path. Severity LOW: the
+      pops above it have already run, so no state is corrupted; the harm is that
+      a real cleanup failure is now one more CancelledError in a stream of
+      identical noise. Fixed by returning early on `t.cancelled()` (logging at
+      DEBUG, since a cancellation is still worth a line) and by calling
+      `t.exception()` once instead of twice.
   - id: S5
     wave: W3
     location: weebot/application/flows/
@@ -427,10 +547,29 @@ candidates:
     wave: W5
     location: weebot/infrastructure/adapters/llm/resilient_adapter.py
     claim: "Breaker keyed on `model or self._model_name`, inspected and reset on `self._model_name`"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W5's budget."
-
+    status: fixed
+    evidence: tests/unit/test_breaker_key_and_cancelled_task.py::test_reset_clears_the_breaker_the_cascade_actually_opened
+    verdict_note: >-
+      VERIFIED-EXECUTED. `chat` keys the breaker on `model or self._model_name`,
+      the RUNTIME model, so each cascade tier gets its own -- deliberate and
+      correct, and the comment above it says so. But get_circuit_state,
+      get_metrics and reset_circuit all read `self._model_name`, the
+      CONSTRUCTION-time name. Under a cascade, which drives one adapter across
+      several models, the breaker that trips is keyed on the runtime model while
+      the operator inspects a different one: eight consecutive failures on
+      "runtime/model" opened its breaker and get_circuit_state() reported the
+      configured model's, which had never been touched. Worse, reset_circuit()
+      -- the manual recovery lever -- reset a breaker that was never open and
+      left the real one rejecting traffic. That is this audit's modal defect
+      applied to an instrument: it reports on a different object than the one
+      being measured, and the recovery control is inert. Fixed by remembering
+      every key this adapter has driven, adding an optional `model` to
+      get_circuit_state and reset_circuit (default None keeps the old
+      behaviour), reporting a `circuit_states` map in get_metrics alongside the
+      existing `circuit_state`, and making a no-argument reset_circuit() clear
+      every key THIS adapter opened -- never another component's, asserted by
+      NEWDEFECT/no-cross-adapter-leak. Zero external callers of all three, so
+      nothing changes behaviour today.
   - id: D42
     wave: W5
     location: weebot/infrastructure/adapters/llm/
@@ -497,17 +636,48 @@ candidates:
     wave: D26
     location: weebot/interfaces/web/routers/behavior_router.py:391-400
     claim: "`_tracker_tasks` grows once per filesystem event and is never awaited, pruned or cancelled"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_a_filesystem_event_reaches_the_websocket_broadcast
+    verdict_note: >-
+      The recorded mechanism was WRONG and execution corrected it. `_tracker_tasks`
+      never grows, because `asyncio.get_event_loop()` raises RuntimeError ("no
+      current event loop in thread 'Thread-1'") on the watchdog observer thread,
+      before the append. Measured: 6 filesystem events produced 0 broadcasts, 0
+      appended tasks and 6 RuntimeErrors swallowed at DEBUG. So the defect is not
+      an unbounded list, it is that the behaviour WebSocket has never delivered a
+      single event -- a client sees the `connected` frame and its own pongs and
+      nothing else. `loop.create_task` would have been wrong regardless: it is not
+      thread-safe. Fixed by capturing the running loop in the enclosing async
+      function and using `asyncio.run_coroutine_threadsafe`, with a done-callback
+      that discards the future and retrieves its exception, so the tracking set
+      cannot grow without bound either. Reach: `behavior_router.start_session_tracking`
+      has zero callers -- the live path is `weebot/core/behavior_integration.py` --
+      so severity stays capped and nothing changes behaviour today. 200 events
+      fired from a foreign thread now deliver 200 broadcasts.
 
   - id: D48
     wave: W6
     location: weebot/mcp/server.py
     claim: "Dynamic tools forward unvalidated `**kwargs` to `tool.execute()`"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/interfaces/test_dynamic_mcp_tools_are_callable.py
+    verdict_note: >-
+      The claim as written is REFUTED: nothing was forwarded to execute(),
+      because nothing ever reached it. Investigating it found a worse defect in
+      the same lines. The MCP SDK derives a tool's advertised JSON Schema by
+      introspecting the registered function and does not understand **kwargs --
+      it read the bare `**kwargs` as one REQUIRED STRING field literally named
+      "kwargs". Measured pre-fix: call with {'a':1,'b':'x'}, with {}, and with
+      {'path':'../../etc/passwd'} all failed identically with "kwargs Field
+      required" before dispatch. So `list_tools` advertised a tool no client
+      could invoke under any arguments, including none. Fixed by replaying the
+      tool's own `.parameters` schema as a keyword-only signature, which is the
+      only channel the SDK reads; omitted optionals are stripped so execute()
+      sees what was sent, matching `_run_file_tool`'s existing convention.
+      Reach is DEAD -- no caller anywhere passes `dynamic_tools`, so severity is
+      capped and no current behaviour changes. Validation now happens and is the
+      tool's own: a missing required arg and a wrong-typed arg are both rejected
+      by name.
 
   - id: D49
     wave: W6
@@ -532,3 +702,377 @@ candidates:
       global socket. One latent hole was fixed in passing (broker_adapter's
       fallback dropped session_id while embedding caller payload); it had no
       production caller. See review_gate_d47_d50.md.
+  - id: D52
+    wave: P1
+    location: weebot/core/gateway_auth.py:36,54; weebot/core/egress_guard.py:208,220
+    claim: >-
+      Security-control state is written with a truncating write and reloaded
+      through a handler that silently substitutes defaults, so one interrupted
+      write permanently erases an operator's allowlist and blocklist
+    status: fixed
+    evidence: tests/unit/core/test_security_state_durability.py
+    verdict_note: >-
+      Two halves of one root cause. `Path.write_text` truncates before writing,
+      so a write that dies partway destroys the previous contents; `_load` then
+      answers the parse failure with defaults, and the next administrative
+      action saves those defaults over the unreadable file. Proven by trigger:
+      a half-completed save left the gateway config unparseable, and a
+      previously approved egress recipient was simply gone with the failure
+      logged and swallowed. Fixed with an atomic replace and by preserving the
+      unreadable file as *.corrupt.bak -- a rule .gitignore already carried for
+      a convention nothing implemented. The RAR invalid-input vector then found
+      a second, pre-existing half: `[]`, `"text"`, `null` and
+      `{"allowed_platforms": null}` are all valid JSON and all raised
+      AttributeError/TypeError out of the authorization decision itself, so
+      `_load` now validates shape. The first draft of that validation was
+      itself fail-open -- a `setdefault` pass put the rejected value straight
+      back -- which is pinned by its own regression test.
+  - id: D53
+    wave: P1
+    location: weebot/core/gateway_auth.py:94
+    claim: >-
+      `is_admin` does not consult `blocked_users`, so blocking a user does not
+      revoke their admin rights
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_blocking_a_user_revokes_their_admin_rights
+    verdict_note: >-
+      Real but unreachable: `is_admin` has zero callers in weebot/ or cli/, so
+      reachability caps severity. `is_user_allowed` and `is_chat_allowed` both
+      check the blocklist first; `is_admin` was the only accessor that did not.
+      Previously deferred on the grounds that changing dead code inside a
+      security diff is unrelated refactoring -- reversed here because the
+      deferral reasoning cut the other way once the batch became the change:
+      the blast radius of a fix is zero precisely because there are no callers,
+      and the first caller to be wired up would inherit the trap silently. Fixed
+      by consulting `blocked_users` first, exactly as the two sibling accessors
+      do. RED confirmed before the fix (blocked user still returned True), GREEN
+      after; the un-blocked-admin control passed in both runs, which is what
+      proves the trigger discriminates.
+  - id: D54
+    wave: P1
+    location: weebot/core/bash_guard.py:517
+    claim: >-
+      The security-event callback is invoked under `except Exception: pass`, so
+      an audit record for a DANGEROUS command can be lost silently
+    status: cleared
+    evidence: null
+    verdict_note: >-
+      Innocent as a *decision* defect: `max_risk` is computed before the
+      callback and returned regardless, so no swallow can change what the guard
+      decides. The comment states the best-effort contract explicitly. Recorded
+      rather than dropped because it is still an instrument that can fail
+      unobserved -- the telemetry for a dangerous command may never be written
+      and nothing reports it. That is a monitoring gap, not a guard defect, and
+      it belongs to whoever owns the security-event sink.
+  - id: D55
+    wave: P2
+    location: weebot/config/fs_permissions.py:82-95; weebot/tools/file_editor.py:140
+    claim: >-
+      A filesystem policy file that exists but does not parse is treated as no
+      policy at all, so one bad indent silently disables every deny rule
+    status: fixed
+    evidence: tests/unit/config/test_fs_policy_fail_closed.py
+    verdict_note: >-
+      `load_rules` returned [] both when the file was absent -- the documented
+      default, where allow-by-default is deliberate -- and when it existed but
+      could not be read. `file_editor.execute` skips the entire gate on
+      `if _perm.has_rules:`, so a two-rule deny policy with one missing space
+      allowed every read and write with a WARNING as the only trace. Proven:
+      the valid policy enforced 2 rules, the same file with one bad indent
+      enforced 0. Two further shapes raised AttributeError out of the loader
+      because `data.get("rules")` sat outside the try -- valid YAML that is a
+      bare list or scalar. The codebase already states the right principle in
+      two places: PermissionMode says a caller with no approval path "MUST fail
+      closed", and file_editor's interrupt branch reasons that treating an
+      unanswered gate as permission inverts the rule's intent. A policy that
+      cannot be loaded is an unanswered gate. Now raises FSPolicyUnreadable and
+      installs a deny-everything rule set, logged at ERROR. A zero-byte file --
+      what a truncated write leaves behind -- also fails closed, while an
+      explicit `rules: []` is respected. The per-rule tolerance is unchanged and
+      pinned by its own test: a single malformed rule never enforced anything,
+      so dropping it is still right. Accepted cost, stated: a typo in the policy
+      now blocks gated file operations until it is fixed.
+  - id: D56
+    wave: P2
+    location: weebot/application/services/fs_permission_checker.py:10-16,check()
+    claim: >-
+      The class docstring says candidate paths are resolved against the
+      workspace root; only rule patterns are, so a relative candidate silently
+      matches nothing
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_a_relative_candidate_is_resolved_against_the_workspace_root
+    verdict_note: >-
+      Verified: `check("read", "confidential/keys.txt")` returned allow while
+      `check("read", "<workspace>/confidential/keys.txt")` returned deny, against
+      the same rule. `_path_matches` prefixes a workspace-relative *pattern* with
+      the workspace root; `check` only canonicalised the *candidate*, so the two
+      sides were never in the same frame of reference. Found while debugging a
+      test of mine that made exactly that mistake. Fixed with a `_resolve` step
+      that anchors a relative candidate to the workspace and leaves an absolute
+      one untouched. The earlier deferral worried this "would change matching
+      semantics for every rule"; measurement showed the change is a strict
+      widening -- it can only turn a missed deny into a deny, never a deny into
+      an allow -- and that direction is asserted directly by
+      NEWDEFECT/no-widened-allow in the RAR probe. Paths escaping the workspace
+      (`../secrets/k`) and unrelated absolutes (`/etc/secrets/k`) are still
+      allowed by a workspace-relative rule, so the widening does not overreach.
+      All 90 tests in the three pre-existing suites for the touched modules
+      still pass; none of them passed a relative candidate.
+  - id: D57
+    wave: P2
+    location: weebot/config/model_registry.py:1578-1594
+    claim: >-
+      `get_model_cost_info` returns a fabricated price for an unknown model,
+      indistinguishable from a real one
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_an_unknown_model_has_no_cost_information
+    verdict_note: >-
+      Verified: an unknown id returned {input: 0.01, output: 0.03} -- $10/$30 per
+      million, invented -- with no signal that the model was not found. A caller
+      budgeting from this cannot tell a price from a guess, which is the
+      fail-open shape applied to spend. Reach is DEAD (zero callers), which caps
+      severity and makes the fix free of blast radius rather than making it
+      unnecessary. Fixed by returning None, matching `get_model_info`, which
+      already returns None for the identical condition; the return annotation
+      widened to `dict[str, float] | None` so a type checker points at any future
+      caller that forgets the case. A genuinely zero-priced model still returns
+      an explicit {0.0, 0.0} rather than None, which is the distinction the old
+      code could not express.
+  - id: D58
+    wave: P2
+    location: weebot/config/model_registry.py:1544-1562
+    claim: >-
+      `get_cheapest_model_for_task` silently accepts any capability name it does
+      not recognise, so an unsupported or misspelled requirement filters nothing
+    status: fixed
+    evidence: tests/unit/test_latent_trap_fixes.py::test_an_unknown_capability_is_rejected_rather_than_ignored
+    verdict_note: >-
+      Verified: required_capabilities=["json_mode"] and ["funtcion_calling"] both
+      returned a model, because the chained `cap == "x" and not model.supports_x`
+      clauses all evaluate False for an unknown name and `has_all_caps` stayed
+      True. The caller believes a filter was applied and it was not. Fixed by
+      validating the requested names against KNOWN_CAPABILITIES and raising
+      ValueError naming the unknown entries and the known set. The known set is
+      derived from ModelInfo's `supports_*` dataclass fields rather than written
+      out, so it cannot drift from the model -- asserted by
+      NEWDEFECT/caps-match-dataclass. Deriving it also closed a second silent
+      hole the deferral had not recorded: the hand-written chain covered five of
+      the seven `supports_*` fields, so `audio_input` and `audio_output` were
+      accepted and ignored exactly like a misspelling. Both now filter. Reach is
+      DEAD (zero callers), so no caller changes behaviour today.
+  - id: D59
+    wave: TierB
+    location: weebot/core/behavior_tracker.py:27,182-192,257-258,328-329
+    claim: >-
+      Every one of the ledger's nine git calls invoked an `async def` helper
+      without `await` from a synchronous method, so no git command has ever run
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_an_appended_event_becomes_a_commit
+    severity: HIGH
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED. `LedgerManager` is documented as "the git-backed action
+      ledger" and writes a README calling itself an "Immutable record of agent
+      actions". `_run_git_async` was an `async def`; all nine call sites are inside
+      `def _ensure_repo`, `def append` and `def mark_override`, plain functions
+      reached from the watchdog observer thread where no loop is running. None can
+      await. Calling a coroutine function without awaiting builds a coroutine
+      object, runs no code and raises nothing -- so `git init` never ran, no
+      repository was ever created, no commit was ever made, and the immutability
+      guarantee did not exist. Three consequences compounded it: `logger.debug("Ledger:
+      committed %s")` fired unconditionally, reporting a commit that had not
+      happened; the `except Exception: logger.warning("Git commit failed")` guard
+      was unreachable, because building a coroutine cannot fail; and `_ensure_repo`
+      re-ran its whole init path on every construction forever, since `.git` never
+      appeared. Found while triggering D51 -- the RuntimeWarnings for the un-awaited
+      coroutine appeared in that probe's output. Fixed by making the helper
+      synchronous, which is what its callers always required, and by returning
+      whether git actually ran so `append` reports a real outcome. Verified by red
+      (7 failed) then green (10 passed).
+  - id: D60
+    wave: TierB
+    location: weebot/core/behavior_tracker.py:_commit
+    claim: >-
+      Concurrent appends share one daily ledger file, so a peer's commit carries
+      this entry's text and `git commit` then exits 1 with "nothing to commit"
+    status: fixed
+    evidence: tests/unit/test_behavior_ledger_git.py::test_concurrent_appends_are_all_committed
+    severity: LOW
+    reachability: LIVE
+    verdict_note: >-
+      A defect introduced by the D59 fix and caught by the concurrency vector,
+      not present before it (nothing committed at all before). 12 parallel appends
+      produced 12 entries, 3 commits and 10 warnings saying the entries were "NOT
+      version-controlled" -- while `git status` was clean and every entry was in
+      the committed tree. The warning was a false alarm: the inverse of the
+      fail-open, but still a report that does not match reality. Fixed by treating
+      an empty staging area after `git add` as success, since the content is
+      already in HEAD, and by serializing the add/commit pair with a module-level
+      lock -- the lock is not optional decoration here, it is what makes the
+      staged-emptiness check sound, since without it a peer could stage between the
+      add and the check. NOTE ON PROCESS: the first RAR run reported 21/21 HOLD
+      while the log showed dropped commits, because the assertion checked that the
+      markdown survived rather than that the commit happened. The strengthened
+      assertion then failed for a second wrong reason -- it demanded one commit per
+      entry, which the daily-file design never promised. Both were errors in my
+      probe, and the genuine defect they surrounded is the false warning above.
+  - id: D61
+    wave: TierB
+    location: weebot/application/services/trajectory_builder.py:_validate_analysis
+    claim: >-
+      A completion that parsed as valid JSON but was not a usable object escaped
+      the fail-open handler entirely and raised out of `build`
+    status: fixed
+    evidence: tests/unit/test_degraded_results_are_marked.py::test_a_parsed_but_unusable_analysis_takes_the_fail_open_path
+    severity: MEDIUM
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED, found by the RAR invalid-input vector while checking the
+      D16 fix -- not by reading. The `try` covered the chat call and json.loads,
+      but nothing after it. A completion of [] parses fine, so `analysis` became a
+      list and `analysis.get(...)` raised AttributeError straight through the
+      handler written to absorb analyst failures. The first fix -- rejecting a
+      non-dict -- was insufficient, and the SAME vector caught that too:
+      {"failure_modes": "oops"} is a dict, and `.get(key, default)` substitutes
+      the default only when the key is ABSENT, never when it is present and wrong,
+      so it reached Pydantic and raised ValidationError instead. Same defect one
+      level down. Fixed by validating the whole shape at once -- object,
+      trajectory_text a str, both mode lists lists of str -- and routing any
+      violation through the one marked fallback. A response that gets any of this
+      wrong is not trustworthy for the fields it got right, so a violation
+      invalidates the whole analysis rather than part of it. NOTE ON PROCESS: I
+      revised twice in this RAR cycle, not the once the protocol allows, and the
+      second revision existed only because the first patched the symptom I had
+      just seen rather than the class it belonged to.
+  - id: D62
+    wave: TierB
+    location: weebot/core/behavior_reporting.py:get_trust_report
+    claim: >-
+      A readable but wrong-shaped trust.json escapes the handler that exists to
+      substitute a default, and crashes the trust report
+    status: fixed
+    evidence: tests/unit/test_trust_report_survives_a_bad_file.py::test_a_wrong_shaped_trust_file_falls_back_instead_of_raising
+    severity: MEDIUM
+    reachability: LIVE
+    verdict_note: >-
+      VERIFIED-EXECUTED, all six probes raising. The handler catches
+      JSONDecodeError and FileNotFoundError -- an UNREADABLE file -- and
+      substitutes a default. It does not catch a READABLE file holding the wrong
+      thing, and the `.get` calls that consume the result sit outside it, so
+      `[]`, `"a string"`, `123` and `null` each raised AttributeError past the
+      fallback the handler exists to provide. `{"score": "high"}` got further:
+      `.get(key, default)` substitutes only when the key is ABSENT, so the string
+      reached `"high" * 100`, which is a legal repetition, and the failure
+      surfaced in int() one call later with the message "invalid literal for
+      int() with base 10: 'highhighhigh...'" -- nowhere near the file that caused
+      it. Same class as D61 and as P1's _normalized; found by the sweep described
+      in the audit. Fixed by normalising every field to the default the handler
+      already used. One RAR revision: the first version defaulted an infinity,
+      so a trust.json of {"score": -1e400} reported 100% -- FULLY TRUSTED -- for a
+      corrupt file, which is the fail-open direction in the one number whose job
+      is to say when to stop trusting. Infinities now clamp by sign; only NaN,
+      which has no direction, takes the default. Asserted by
+      NEWDEFECT/no-fail-open-on-low.
+  - id: D63
+    wave: TierB
+    location: weebot/core/alerting.py:105
+    claim: >-
+      The entire alerting subsystem cannot be imported -- `asyncio.coroutine` was
+      removed in Python 3.11 and is used in a module-level statement
+    status: fixed
+    evidence: tests/unit/test_every_module_imports.py::test_the_module_can_be_imported
+    severity: HIGH
+    reachability: DEAD
+    verdict_note: >-
+      VERIFIED-EXECUTED. `AsyncAlertHandler = Callable[[Alert], asyncio.coroutine]`
+      at module level. asyncio.coroutine was deprecated in 3.8 and REMOVED in 3.11;
+      this project and its CI both run 3.12, so `import weebot.core.alerting`
+      raised AttributeError and the whole subsystem -- AlertManager, severities,
+      grouping, deduplication, handler dispatch -- had never loaded. Nothing caught
+      it: ruff's CI selector (F821, E9) reads it as an ordinary attribute access
+      rather than an undefined name, and no test imported the module. An alerting
+      system that cannot be imported is the failure this audit keeps finding, in
+      the component whose entire job is to report failures. Reach is DEAD -- zero
+      importers anywhere in weebot/, cli/, tests/ or scripts/ -- which is both why
+      it stayed broken and why fixing it is safe. Fixed to Awaitable[None]. Found
+      while trying to trigger D23, which lives in the same file and was therefore
+      hidden behind this.
+  - id: D64
+    wave: TierB
+    location: weebot/application/services/strategy_adaptation.py:13
+    claim: >-
+      Imports `weebot.workflow_planner`, a path retired by the Clean Architecture
+      refactor, so the module raises ModuleNotFoundError at import
+    status: fixed
+    evidence: tests/unit/test_every_module_imports.py::test_the_module_can_be_imported
+    severity: MEDIUM
+    reachability: DEAD
+    verdict_note: >-
+      VERIFIED-EXECUTED. The module moved to
+      weebot.application.flows.workflow_planner and this importer was never
+      updated; nobody noticed because nobody imports strategy_adaptation either.
+      Fixing the path exposed a second constraint: flows/ already imports services/
+      at module level, so a module-level edge back closes an import-time cycle and
+      test_no_services_flows_cycle fails -- which it duly did on my first fix. That
+      test tolerates lazy imports inside functions, so the two construction sites
+      import locally and the annotations rely on `from __future__ import
+      annotations` plus TYPE_CHECKING. Smoke-tested by actually calling
+      adapt_workflow_plan with a real WorkflowPlan, which executes both lazy
+      imports -- the specific risk of a TYPE_CHECKING refactor is an annotation-only
+      import that turns out to be needed at runtime. Found by an importability
+      sweep: 807 modules scanned, exactly 2 unimportable, this and D63.
+  - id: D65
+    wave: TierB
+    location: tests/stress/test_llm_resilience.py::TestMixedFailureModes::test_partial_outage_with_retries
+    claim: >-
+      The test fails roughly one run in seven, against its own comment predicting
+      one in two thousand -- a gate that fires at random carries no information
+    status: deferred
+    severity: MEDIUM
+    reachability: LIVE
+    evidence: null
+    verdict_note: >-
+      NOT MINE and NOT FIXED -- recorded because it is measured, and because a
+      randomly-failing gate is the mirror image of this audit's thesis: an
+      instrument that cannot fail proves nothing, and one that fails at random
+      proves nothing either, while training everyone to ignore red. MEASURED
+      (VERIFIED): 6 failures in 42 isolated runs, 14.3%. Ruled out as mine
+      (VERIFIED): 12 runs on my tree gave 10 passed / 2 failed, and 12 runs on the
+      same commit with my D29/D41 changes stashed gave 10 passed / 2 failed --
+      identical. MEASURED (VERIFIED): the retry really does make 7 attempts, so
+      the comment's 0.5^7 is right about attempt count; from that, P(more than 2
+      of 20 requests fail) is 0.05%, against 14.3% observed -- a factor of ~280.
+      MECHANISM (UNKNOWN): the attempts are evidently not independent trials, but
+      I did not isolate why. HYPOTHESIS, unconfirmed: the 30s per-request timeout
+      combined with exponential backoff under 20-way concurrency truncates some
+      requests before their seventh attempt -- consistent with batches taking over
+      18 seconds, but two attempts to measure it directly exceeded their own time
+      budget and were killed. NOT FIXED deliberately: without the mechanism, the
+      available moves are widening the tolerance (which weakens the assertion) or
+      raising the timeout (a guess). An accurate record is worth more than either.
+      If this test is the only red when CI recovers, it is flake, not regression.
+
+  - id: D66
+    wave: CI
+    location: tests/unit/scripts/test_backup_restore_roundtrip.py
+    claim: "The only property test in tests/unit/ has no duration bound of its own and times out under CI's coverage run"
+    status: fixed
+    evidence: tests/unit/scripts/test_backup_restore_roundtrip.py
+    verdict_note: >-
+      Found by CI, not by audit: the first real Unit Tests run after the
+      eight-run Actions outage failed with "Timeout (>60.0s) from
+      pytest-timeout" on this one test, 4812 others passing. NOT caused by this
+      branch -- the test loads scripts/backup.py and scripts/restore.py by file
+      path via spec_from_file_location and imports nothing from weebot/, while
+      all 16 source files this branch changed are under weebot/. Measured cost,
+      cold hypothesis cache, one run each: ~1.0s warm / ~3.0s cold / ~11.2s cold
+      under --cov=weebot, which is exactly the CI invocation. Coverage traces
+      every line the process executes rather than only the measured package, so
+      each of the 60 examples pays it. Against the project-wide timeout = 60 in
+      pyproject.toml that is ~5x headroom on this machine and less on a shared
+      runner. `deadline=None` and a suppressed too_slow health check mean nothing
+      inside hypothesis bounds it either. Fixed with a calibrated
+      @pytest.mark.timeout(240) on that test alone -- proven to take effect by
+      setting it to 1 and observing "Timeout (>1.0s)". max_examples=60 and the
+      property are unchanged; nothing is skipped, disabled or quarantined.
+

@@ -5,13 +5,29 @@ This module provides dynamic strategy adjustment capabilities
 based on task outcomes, performance metrics, and environmental factors.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 import logging
-from weebot.workflow_planner import WorkflowPlan, PlannedTask
+
 from weebot.application.services.nlp_understanding import IntentRecognitionResult
+
+# `weebot.workflow_planner` has not existed since the Clean Architecture
+# refactor moved it under application/flows/, so this module raised
+# ModuleNotFoundError at import. Nothing noticed, because nothing imports this
+# module either.
+#
+# The corrected path cannot be a module-level import: `flows/` already imports
+# `services/` at module level, and a matching edge back would close an
+# import-time cycle -- `test_no_services_flows_cycle` fails on exactly that
+# pair. It tolerates lazy imports inside functions, which is what the two
+# construction sites below use; annotations need no runtime import at all now
+# that this module has `from __future__ import annotations`.
+if TYPE_CHECKING:
+    from weebot.application.flows.workflow_planner import PlannedTask, WorkflowPlan
 
 
 class AdaptationTrigger(Enum):
@@ -335,6 +351,8 @@ class StrategyAdapter:
             adapted_tasks.append(adapted_task)
 
         # Create adapted plan
+        from weebot.application.flows.workflow_planner import WorkflowPlan
+
         adapted_plan = WorkflowPlan(
             id=f"{plan.id}_adapted_{datetime.now().strftime('%H%M%S')}",
             name=f"{plan.name} (Adapted)",
@@ -366,6 +384,8 @@ class StrategyAdapter:
         # Add retry information to parameters
         new_parameters = task.parameters.copy()
         new_parameters["max_retries"] = retry_attempts
+
+        from weebot.application.flows.workflow_planner import PlannedTask
 
         return PlannedTask(
             id=task.id,
@@ -419,7 +439,7 @@ if __name__ == "__main__":
     adapter = StrategyAdapter()
 
     # Simulate recording some performance metrics
-    from weebot.workflow_planner import PlannedTask, TaskCategory, WorkflowPlan
+    from weebot.application.flows.workflow_planner import PlannedTask, TaskCategory, WorkflowPlan
 
     # Create a sample task
     task = PlannedTask(

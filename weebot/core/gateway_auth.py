@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from weebot.core.durable_state import preserve_unreadable, write_text_atomic
 from weebot.domain.models.gateway_session import GatewaySessionKey
 
 logger = logging.getLogger(__name__)
@@ -34,12 +35,27 @@ class GatewayAuth:
         self._rules: dict[str, Any] = self._load()
 
     def _load(self) -> dict[str, Any]:
-        """Load auth rules from disk."""
+        """Load auth rules from disk, preserving a file that will not parse.
+
+        Falling back to defaults is the right *decision* -- the defaults deny by
+        default, so a damaged config cannot admit anyone. But the damaged file
+        is the only remaining record of the allowlist and blocklist an operator
+        built, and the next administrative action saves over it. It is moved
+        aside first, and the loss is reported at ERROR: an access-control list
+        disappearing is not a warning.
+        """
         if self._config_path.exists():
             try:
-                return json.loads(self._config_path.read_text(encoding="utf-8"))
+                return self._normalized(json.loads(self._config_path.read_text(encoding="utf-8")))
             except Exception as exc:
-                logger.warning("Failed to load gateway auth config: %s", exc)
+                kept = preserve_unreadable(self._config_path)
+                logger.error(
+                    "Gateway auth config could not be parsed (%s); falling back to "
+                    "deny-by-default rules. The unreadable file was kept at %s. "
+                    "Any allowlist or blocklist it held is NOT in effect.",
+                    exc,
+                    kept if kept is not None else "<could not be preserved>",
+                )
         return {
             "allowed_platforms": ["telegram", "discord", "slack", "whatsapp", "signal", "email"],
             "allowed_chats": {},  # platform -> [chat_id]
@@ -49,10 +65,58 @@ class GatewayAuth:
             "allow_all_by_default": False,
         }
 
+    @staticmethod
+    def _normalized(raw: Any) -> dict[str, Any]:
+        """Coerce a parsed config to the shape the accessors assume.
+
+        JSON that parses is not JSON that is *shaped* right. ``[]``, ``"text"``
+        and ``null`` are all valid JSON and all made ``self._rules.get(...)``
+        raise AttributeError out of the authorization decision; a well-formed
+        object with ``"allowed_platforms": null`` made ``in`` raise TypeError.
+        An access-control gate must not be crashable by editing its own config
+        file, so anything of the wrong type falls back to its default -- which
+        denies -- rather than propagating.
+        """
+        if not isinstance(raw, dict):
+            raise TypeError(f"expected a JSON object, got {type(raw).__name__}")
+        shape: dict[str, type] = {
+            "allowed_platforms": list,
+            "allowed_chats": dict,
+            "allowed_users": dict,
+            "blocked_users": dict,
+            "admin_ids": dict,
+            "allow_all_by_default": bool,
+        }
+        rules: dict[str, Any] = {}
+        for key, expected in shape.items():
+            value = raw.get(key)
+            if isinstance(value, expected):
+                rules[key] = value
+            elif key in raw:
+                logger.error(
+                    "Gateway auth config: %r is %s, expected %s — using the "
+                    "deny-by-default value for it.",
+                    key,
+                    type(value).__name__,
+                    expected.__name__,
+                )
+        # Only keys this class does not interpret are carried through verbatim.
+        # `setdefault` over the whole payload would put a rejected value straight
+        # back -- the recovery path re-admitting exactly what it just rejected.
+        for key, value in raw.items():
+            if key not in shape:
+                rules[key] = value
+        return rules
+
     def _save(self) -> None:
-        """Persist auth rules to disk."""
-        self._config_path.write_text(
-            json.dumps(self._rules, indent=2, default=str), encoding="utf-8"
+        """Persist auth rules to disk, atomically.
+
+        A write that dies partway must not destroy the rules it was replacing:
+        `block_user` is durable by contract, and a truncated config reads as no
+        blocklist at all.
+        """
+        write_text_atomic(
+            self._config_path, json.dumps(self._rules, indent=2, default=str)
         )
 
     def is_platform_allowed(self, platform: str) -> bool:
@@ -92,7 +156,18 @@ class GatewayAuth:
         return self._rules.get("allow_all_by_default", False)
 
     def is_admin(self, platform: str, user_id: str) -> bool:
-        """Check if a user is an admin on this platform."""
+        """Check if a user is an admin on this platform.
+
+        The blocklist is consulted first, exactly as in `is_user_allowed` and
+        `is_chat_allowed`. Without this, `block_user` revokes the ability to
+        talk to the bot while leaving administrative rights intact -- so a
+        blocked admin still passes every `is_admin` gate, which is the one
+        check that guards privileged commands.
+        """
+        blocked = self._rules.get("blocked_users", {}).get(platform, [])
+        if user_id in blocked:
+            return False
+
         admins = self._rules.get("admin_ids", {}).get(platform, [])
         return user_id in admins
 

@@ -42,6 +42,13 @@ jobs:
         run: pip-audit 2>&1 | head -20
       - name: Run import-linter
         run: make lint-imports
+      - name: Un-awaited coroutine check
+        # BLOCKING at zero, not ratcheted. A coroutine function called without
+        # `await` runs no code and raises nothing -- the behaviour ledger's nine
+        # git calls were built and dropped this way, so no commit was ever made
+        # while the log reported one. There is no legitimate instance to
+        # grandfather, so the ceiling is zero.
+        run: make lint-unawaited
       - name: Secret scan
         run: bash scripts/check-secrets.sh --ci
       - name: Run architecture fitness tests

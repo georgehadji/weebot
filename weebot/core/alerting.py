@@ -34,8 +34,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from enum import Enum
 from typing import Any
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from collections import defaultdict
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -100,9 +101,17 @@ class Alert:
         self.ends_at = datetime.now(UTC)
 
 
-# Type alias for alert handlers
+# Type alias for alert handlers.
+#
+# `asyncio.coroutine` was deprecated in 3.8 and REMOVED in 3.11, and this is a
+# module-level statement -- so importing this module raised AttributeError on
+# every supported interpreter, and the whole alerting subsystem could not load.
+# Nothing caught it: ruff's CI selector reads it as an ordinary attribute
+# access, not an undefined name, and no test imported the module. An alerting
+# system that cannot be imported is the failure this audit keeps finding, in
+# the component whose job is to report failures.
 AlertHandler = Callable[[Alert], None]
-AsyncAlertHandler = Callable[[Alert], asyncio.coroutine]
+AsyncAlertHandler = Callable[[Alert], Awaitable[None]]
 
 
 class AlertManager:
@@ -120,6 +129,18 @@ class AlertManager:
         self._lock = threading.RLock()
         self._grouping: dict[str, list[Alert]] = defaultdict(list)
         self._group_by: list[str] = ["name", "severity"]
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def bind_loop(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        """Record the loop that async handlers should run on.
+
+        Alerts are fired from wherever the failure happened -- a worker thread,
+        a watchdog observer, a plain synchronous script. None of those has a
+        running loop, and an async handler needs one. Binding it once, from the
+        thread that owns it, is what lets `_dispatch` hand work across safely
+        instead of demanding that every caller already be on the loop.
+        """
+        self._loop = loop or asyncio.get_running_loop()
 
     def register_handler(self, handler: AlertHandler) -> None:
         """Register a synchronous alert handler."""
@@ -236,16 +257,74 @@ class AlertManager:
             except Exception as e:
                 logger.error("Alert handler failed: handler=%s error=%s", handler.__name__, str(e))
 
-        # Asynchronous handlers
-        if self._async_handlers:
-            loop = asyncio.get_event_loop()
-            for handler in self._async_handlers:
-                try:
-                    asyncio.ensure_future(handler(alert))
-                except Exception as e:
-                    logger.error(
-                        "Async alert handler failed: handler=%s error=%s", handler.__name__, str(e)
-                    )
+        # Asynchronous handlers.
+        #
+        # This used to open with `loop = asyncio.get_event_loop()` -- a variable
+        # it never read. That call raises RuntimeError in any thread without a
+        # running loop, so firing an alert from a worker thread raised out of
+        # `fire_alert`, while holding the lock, after the synchronous handlers
+        # had already run. A partial dispatch and an exception, from a dead
+        # assignment, in a class whose docstring promises thread safety.
+        # `ensure_future` was the other half: not thread-safe, and the task it
+        # returned was dropped, so a failing handler was never heard from.
+        if not self._async_handlers:
+            return
+
+        try:
+            running: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        target = running or self._loop
+
+        if target is None or target.is_closed():
+            # Say so. An async handler that cannot run is a notification that
+            # will not be delivered, and silence here is the failure mode this
+            # whole class exists to prevent.
+            logger.error(
+                "Alert '%s' fired but %d async handler(s) could not run: no event "
+                "loop is available on this thread and none is bound. Call "
+                "AlertManager.bind_loop() from the loop thread at startup.",
+                alert.name,
+                len(self._async_handlers),
+            )
+            return
+
+        for handler in self._async_handlers:
+            try:
+                if running is target:
+                    future: Any = target.create_task(handler(alert))
+                else:
+                    # Called off the loop's thread; this is the only safe API.
+                    future = asyncio.run_coroutine_threadsafe(handler(alert), target)
+            except Exception as e:
+                logger.error(
+                    "Async alert handler failed: handler=%s error=%s",
+                    getattr(handler, "__name__", handler),
+                    str(e),
+                )
+                continue
+            future.add_done_callback(partial(self._log_handler_outcome, handler, alert))
+
+    @staticmethod
+    def _log_handler_outcome(handler: AsyncAlertHandler, alert: Alert, future: Any) -> None:
+        """Retrieve the handler's exception so it is reported, not swallowed."""
+        try:
+            future.result()
+        except asyncio.CancelledError:
+            # Shutdown, not a handler fault -- but not nothing either, since a
+            # cancelled handler is still an alert that was not delivered.
+            logger.debug(
+                "Async alert handler cancelled: handler=%s alert=%s",
+                getattr(handler, "__name__", handler),
+                alert.name,
+            )
+        except Exception as exc:
+            logger.error(
+                "Async alert handler failed: handler=%s alert=%s error=%s",
+                getattr(handler, "__name__", handler),
+                alert.name,
+                exc,
+            )
 
     def clear_resolved(self) -> int:
         """

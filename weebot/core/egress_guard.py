@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from weebot.config.secret_accessor import SecretAccessor
+from weebot.core.durable_state import preserve_unreadable, write_text_atomic
 
 _log = logging.getLogger(__name__)
 
@@ -212,12 +213,18 @@ class RecipientAllowlist:
                 if isinstance(data, dict):
                     self._allowed = {k.lower(): float(v) for k, v in data.items()}
         except Exception:
-            _log.debug("egress_guard: allowlist load failed, starting empty", exc_info=True)
+            kept = preserve_unreadable(self._path)
+            _log.warning(
+                "egress_guard: allowlist could not be parsed; starting empty and keeping "
+                "the unreadable file at %s. Previously approved recipients will be "
+                "prompted for again.",
+                kept if kept is not None else "<could not be preserved>",
+                exc_info=True,
+            )
 
     def _save(self) -> None:
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(json.dumps(self._allowed, indent=2), encoding="utf-8")
+            write_text_atomic(self._path, json.dumps(self._allowed, indent=2))
         except Exception:
             _log.warning("egress_guard: allowlist save failed", exc_info=True)
 

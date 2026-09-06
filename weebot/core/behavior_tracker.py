@@ -11,6 +11,8 @@ import fnmatch
 import json
 import logging
 import os
+import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
@@ -24,28 +26,80 @@ from watchdog.observers import Observer
 logger = logging.getLogger(__name__)
 
 
-async def _run_git_async(args: list[str], *, cwd: Path) -> None:
-    """Run a git command asynchronously and log failures without crashing."""
+# git's index is one file per repository, and two processes staging at once
+# lose the race: the loser fails with "Unable to create '.git/index.lock'".
+# The watchdog observer dispatches on a single thread, but `mark_override`
+# runs on the web or CLI thread and commits into the same repository, so the
+# contention is real. Found by the concurrency vector: 12 parallel appends
+# produced 12 ledger entries and 5 commits, and every dropped commit was
+# correctly reported -- honest, but a tamper-evident record with most of its
+# history missing is still not tamper-evident.
+_GIT_LOCK = threading.Lock()
+
+
+def _commit(paths: list[str], message: str, *, cwd: Path) -> bool:
+    """Stage *paths* and commit them as one unit, serialized per process.
+
+    The lock spans the pair, not each command: staging and committing are one
+    logical operation against a shared index, and a lock around each half
+    separately would still interleave them.
+    """
+    with _GIT_LOCK:
+        if not _run_git(["add", "--", *paths], cwd=cwd):
+            return False
+        # Entries share one file per day, so a concurrent peer's commit may
+        # already carry this text. git then exits 1 with "nothing to commit",
+        # which is success for our purpose -- the entry is version-controlled --
+        # and reporting it as a failure would be a false alarm in the other
+        # direction. `diff --cached --quiet` exits 0 when nothing is staged.
+        # This check is only sound because the lock spans it: without one, a
+        # peer could stage between the add and the check.
+        if _run_git(["diff", "--cached", "--quiet"], cwd=cwd):
+            return True
+        return _run_git(["commit", "-m", message], cwd=cwd)
+
+
+def _run_git(args: list[str], *, cwd: Path) -> bool:
+    """Run a git command, log failures without crashing, report success.
+
+    Synchronous on purpose. Every caller -- `LedgerManager._ensure_repo`,
+    `LedgerManager.append`, `TrustManager.mark_override` -- is a plain `def`
+    reached from the watchdog observer thread, where there is no running event
+    loop. This was an `async def` that none of them could await, so calling it
+    only built a coroutine object: no git command ever ran, nothing raised, and
+    the ledger reported commits it had not made. A helper whose only callers
+    cannot await it is not asynchronous, it is unreachable.
+
+    Returns True only if git ran and exited 0, so a caller can tell a commit
+    from a failure instead of assuming one.
+    """
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            *args,
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell, agent-owned dir
+            ["git", *args],
             cwd=str(cwd),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            capture_output=True,
+            timeout=30,
+            check=False,
         )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            logger.debug(
-                "Git command 'git %s' failed (exit %d): %s",
-                " ".join(args),
-                proc.returncode,
-                stderr.decode(errors="replace")[:200],
-            )
     except FileNotFoundError:
         logger.debug("Git not found on PATH — skipping git commit")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.warning("Git command 'git %s' timed out after 30s", " ".join(args))
+        return False
     except Exception as exc:
         logger.debug("Git command 'git %s' error: %s", " ".join(args), exc)
+        return False
+
+    if proc.returncode != 0:
+        logger.debug(
+            "Git command 'git %s' failed (exit %d): %s",
+            " ".join(args),
+            proc.returncode,
+            proc.stderr.decode(errors="replace")[:200],
+        )
+        return False
+    return True
 
 
 # Weebot ledger location
@@ -179,17 +233,24 @@ class LedgerManager:
         git_dir = LEDGER_DIR / ".git"
         if not git_dir.exists():
             logger.info("Initializing behavior ledger git repository")
-            _run_git_async(["git", "init"], cwd=LEDGER_DIR)
-            _run_git_async(
-                ["git", "config", "user.name", "Weebot Behavior Tracker"], cwd=LEDGER_DIR
-            )
-            _run_git_async(["git", "config", "user.email", "weebot@localhost"], cwd=LEDGER_DIR)
+            if not _run_git(["init"], cwd=LEDGER_DIR):
+                # Without a repository there is no ledger, only a pile of
+                # markdown. Say so once, here, rather than letting every later
+                # commit fail quietly into a debug log.
+                logger.warning(
+                    "Behavior ledger git repository could not be created at %s — "
+                    "entries will still be written but are NOT version-controlled "
+                    "and carry no immutability guarantee.",
+                    LEDGER_DIR,
+                )
+                return
+            _run_git(["config", "user.name", "Weebot Behavior Tracker"], cwd=LEDGER_DIR)
+            _run_git(["config", "user.email", "weebot@localhost"], cwd=LEDGER_DIR)
 
             # Initial commit
             readme = LEDGER_DIR / "README.md"
             readme.write_text("# Weebot Behavior Ledger\n\nImmutable record of agent actions.\n")
-            _run_git_async(["git", "add", "README.md"], cwd=LEDGER_DIR)
-            _run_git_async(["git", "commit", "-m", "Initial commit"], cwd=LEDGER_DIR)
+            _commit(["README.md"], "Initial commit", cwd=LEDGER_DIR)
 
     def _format_entry(self, event: BehaviorEvent) -> str:
         """Format event as ledger entry."""
@@ -252,14 +313,17 @@ class LedgerManager:
                 f.write("\n")
             f.write(entry_text + "\n")
 
-        # Git commit
-        try:
-            _run_git_async(["git", "add", md_file.name], cwd=LEDGER_DIR)
-            _run_git_async(["git", "commit", "-m", action_label], cwd=LEDGER_DIR)
-        except Exception as e:
-            logger.warning(f"Git commit failed: {e}")
-
-        logger.debug(f"Ledger: committed {action_label}")
+        # Git commit. The entry is on disk either way; what the commit adds is
+        # the tamper-evidence, so a failure to commit must not be logged as one.
+        committed = _commit([md_file.name], action_label, cwd=LEDGER_DIR)
+        if committed:
+            logger.debug("Ledger: committed %s", action_label)
+        else:
+            logger.warning(
+                "Ledger: wrote %s but the git commit failed — the entry is on "
+                "disk and is not version-controlled.",
+                action_label,
+            )
         return True
 
 
@@ -324,13 +388,10 @@ class TrustManager:
                 md_file.write_text(new_content)
 
                 # Commit the change
-                try:
-                    _run_git_async(["git", "add", md_file.name], cwd=LEDGER_DIR)
-                    _run_git_async(
-                        ["git", "commit", "-m", f"Override: {timestamp}"], cwd=LEDGER_DIR
+                if not _commit([md_file.name], f"Override: {timestamp}", cwd=LEDGER_DIR):
+                    logger.warning(
+                        "Override for %s was written but the git commit failed.", timestamp
                     )
-                except Exception as e:
-                    logger.warning(f"Git commit for override failed: {e}")
 
                 # Update trust score
                 trust = self.load()

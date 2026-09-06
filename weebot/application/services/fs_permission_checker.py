@@ -82,7 +82,7 @@ class FSPermissionChecker:
         """
         if not self._rules:
             return "allow"
-        candidate = _canonical(path)
+        candidate = self._resolve(path)
         for rule in self._rules:
             if operation not in rule.operations:
                 continue
@@ -100,6 +100,25 @@ class FSPermissionChecker:
         if not self._rules:
             return paths
         return [p for p in paths if self.check(operation, p) == "allow"]
+
+    def _resolve(self, path: str) -> str:
+        """Reduce *path* to the same frame of reference the patterns use.
+
+        `_path_matches` anchors a workspace-relative *pattern* to the
+        workspace root, so a relative *candidate* left un-anchored can never
+        match it: a rule denying `secrets/**` becomes `/work/secrets/**`
+        while the candidate stays `secrets/key`. The docstring above has
+        always promised this resolution; only the pattern side implemented
+        it. Absolute candidates are unchanged, so this is a strict widening
+        of what matches -- it can turn a missed deny into a deny, never the
+        reverse.
+        """
+        canonical = _canonical(path)
+        if os.path.isabs(path) or canonical.startswith("/"):
+            return canonical
+        if os.name == "nt" and len(canonical) > 1 and canonical[1] == ":":
+            return canonical
+        return _canonical(f"{self._workspace}/{canonical}")
 
     def _path_matches(self, candidate: str, patterns: list[str]) -> bool:
         """Check if the canonical *candidate* matches any glob in *patterns*."""

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -14,6 +15,32 @@ from pathlib import Path
 from weebot.core.behavior_tracker import LEDGER_DIR, TRUST_FILE, WEEBOT_DIR, SELF_KNOWLEDGE_FILE
 
 logger = logging.getLogger(__name__)
+
+
+def _as_number(value: object, *, default: float, low: float, high: float) -> float:
+    """Coerce *value* to a finite float in [low, high], or return *default*.
+
+    `bool` is excluded deliberately: it is a subclass of `int`, so `True` would
+    otherwise read as a perfect trust score.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    number = float(value)
+    if math.isnan(number):
+        return default
+    # An infinity is clamped by sign rather than defaulted. The sign carries
+    # the meaning: -inf is "as untrusted as possible", and returning the
+    # default there would report a corrupt file as FULLY TRUSTED -- the
+    # fail-open direction, in the one number whose whole job is to say when to
+    # stop trusting. NaN has no direction, so it takes the default.
+    return min(max(number, low), high)
+
+
+def _as_count(value: object) -> int:
+    """Coerce *value* to a non-negative int, or 0."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return 0
+    return value
 
 # Regex patterns for parsing ledger entries
 ENTRY_HEADER = re.compile(r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]$")
@@ -259,23 +286,56 @@ class BehaviorReporter:
         }
 
     def get_trust_report(self) -> dict:
-        """Get full trust report."""
+        """Get full trust report.
+
+        The handler below catches an unreadable file. It did not catch a
+        READABLE one holding the wrong thing: `[]`, `"a string"`, `123` and
+        `null` are all valid JSON, so `json.loads` succeeded and the `.get`
+        calls -- which sit outside the handler -- raised AttributeError past
+        the fallback the handler exists to provide. `.get(key, default)`
+        substitutes only when the key is ABSENT, never when it is present and
+        wrong, so `{"score": "high"}` got further still: `"high" * 100` is a
+        legal string repetition, and the failure surfaced in `int()` one call
+        later, nowhere near the file that caused it.
+
+        Every unusable value now falls back to the same default the handler
+        already used, and says so once.
+        """
         try:
             trust_data = json.loads(TRUST_FILE.read_text())
         except (json.JSONDecodeError, FileNotFoundError):
-            trust_data = {"score": 1.0, "total": 0, "overrides": 0, "last_updated": ""}
+            trust_data = {}
+        except OSError as exc:
+            logger.warning("Trust file %s could not be read: %s", TRUST_FILE, exc)
+            trust_data = {}
+
+        if not isinstance(trust_data, dict):
+            logger.warning(
+                "Trust file %s holds a %s, not an object — reporting the default "
+                "trust score. The file was not modified.",
+                TRUST_FILE,
+                type(trust_data).__name__,
+            )
+            trust_data = {}
+
+        score = _as_number(trust_data.get("score"), default=1.0, low=0.0, high=1.0)
+        total = _as_count(trust_data.get("total"))
+        overrides = _as_count(trust_data.get("overrides"))
+        last_updated = trust_data.get("last_updated", "")
+        if not isinstance(last_updated, str):
+            last_updated = ""
 
         entries = self._get_all_entries()
         normal_entries = [e for e in entries if not e.watcher_died]
 
-        score_pct = int(trust_data.get("score", 1.0) * 100)
+        score_pct = int(score * 100)
 
         return {
             "score_percentage": score_pct,
-            "score": trust_data.get("score", 1.0),
-            "total_actions": trust_data.get("total", 0),
-            "overrides": trust_data.get("overrides", 0),
-            "last_updated": trust_data.get("last_updated", ""),
+            "score": score,
+            "total_actions": total,
+            "overrides": overrides,
+            "last_updated": last_updated,
             "status": (
                 "trusted" if score_pct >= 90 else "review" if score_pct >= 70 else "supervision"
             ),
