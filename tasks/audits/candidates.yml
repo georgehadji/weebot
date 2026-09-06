@@ -560,21 +560,55 @@ candidates:
 
   - id: D37
     wave: W4
-    location: weebot/infrastructure/adapters/playwright/
+    location: weebot/infrastructure/browser/playwright_adapter.py
     claim: "Playwright `start()` has no cleanup if `new_context`/`new_page` raises after `launch()`"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/infrastructure/test_child_process_and_browser_teardown.py
     verdict_note: >-
-      Deferred by W4 to W7 as a resource-lifecycle candidate; W7 spent its
-      budget on S4 (37 sites) and did not enter it either.
+      VERIFIED-EXECUTED. The recorded LOCATION was wrong —
+      `weebot/infrastructure/adapters/playwright/` does not exist; the file is
+      `weebot/infrastructure/browser/playwright_adapter.py`. The claim itself
+      holds: `start()` had no failure path, so a raise from `new_context` or
+      `new_page` left a live browser process attached to `self`, and neither
+      caller closes a `start()` that raised (`tools/advanced_browser.py:370`
+      and `tools/browser_inspector.py:283` both call it bare). Two more found
+      while reading it. (1) `close()` was sequential, so a context that failed
+      to close stranded the browser process AND the Playwright driver behind
+      it — one stuck page taking down the whole tree, from the cleanup path.
+      (2) `record_har=True` opened a page, dropped it unassigned, and never set
+      `record_har_path`, under a comment stating HAR is configured at context
+      level. It is; it wasn't. So the flag recorded nothing and leaked one page
+      per start — a fail-open control (C2) hiding inside a resource leak.
+      Fixed: acquisition wrapped so a failure closes what was acquired and
+      re-raises without masking the original error; teardown made
+      step-independent; `record_har_path` actually set, before `new_context`,
+      because Playwright cannot enable it afterwards.
 
   - id: D38
     wave: W4
-    location: weebot/ (subprocess sites)
+    location: weebot/qmd_integration/mcp_client.py
     claim: "`subprocess.Popen` assigned to a local, never waited or terminated; `terminate()` without `wait()` leaves a zombie"
-    status: deferred
-    evidence: null
-    verdict_note: "Deferred by W4 to W7; W7 did not enter it either."
+    status: fixed
+    evidence: tests/unit/infrastructure/test_child_process_and_browser_teardown.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, both halves. `_start_mcp_http` bound its child to a
+      LOCAL, so `close()` could not reach it and every start leaked a
+      `qmd mcp --http` holding the port; nothing checked for an existing one
+      either, so repeated calls started more. ruff reports that as F841 — the
+      linter has been able to see it all along, and CI selects only F821,E9, so
+      nothing asked. The zombie half measured directly: `terminate()` then `ps`
+      shows state `Z`; after `wait()` the entry is gone. One defunct entry per
+      start/stop cycle in a long-lived agent. A third, unclaimed: both Popen
+      calls wired `stderr=PIPE` with nothing ever reading it, and an undrained
+      pipe blocks the child once its 64KB buffer fills — a deadlock presenting
+      as a slow server. Fixed by tracking both children, `poll()`-guarding the
+      start, DEVNULL for streams nothing reads, and a shared
+      `weebot/core/process_lifecycle.reap_process` (terminate, wait, escalate
+      to kill, close the pipes, never raise). The helper is shared for a
+      reason: `infrastructure/document/latex_compiler.py` had ALREADY learned
+      this and written it down 200 lines away, and the knowledge did not
+      travel. Its `_kill_process_tree` now delegates to the same module, so the
+      rule has one home rather than two copies free to drift.
 
   - id: S4
     wave: W4

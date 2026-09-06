@@ -2479,3 +2479,157 @@ while leaving a 30× amplifier untouched. **UNKNOWN:** how many other deferred
 entries are load-bearing on a clause nobody re-checked. The two entries closed
 in this session were both mis-stated in the same direction: D39 understated its
 consequence, D44 misstated its mechanism. That is two for two.
+
+## Two paths that acquired something and never gave it back
+
+### D37 and D38 — resource lifecycle `[VERIFIED-EXECUTED]`
+
+Both were generated in W4, deferred to W7, and W7 spent its budget on S4's
+thirty-seven connection sites. They sat `deferred` for four waves. They are the
+same shape, and each turned out to contain a second defect the claim did not
+mention.
+
+### D38 — the child nothing could reach
+
+```python
+async def _start_mcp_http(self) -> None:
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    await asyncio.sleep(2)
+```
+
+`proc` is a **local**. Nothing else in the class references it, so `close()` —
+which does reach `self._process`, the *stdio* child — could not see this one. A
+`qmd mcp --http` server outlived every client that started it, holding the
+port. And with no handle there was nothing to check, so a second call started a
+second server.
+
+**ruff has been reporting this the whole time.** `F841 Local variable 'proc' is
+assigned to but never used`, at that exact line. CI runs
+`ruff check weebot/ cli/ --select F821,E9`. The linter could see it; the gate
+did not ask. That is the fail-open shape again, this time in the tooling rather
+than in the code.
+
+The zombie half of the claim, measured rather than asserted:
+
+```
+after terminate() with no wait():   Z    sleep
+after wait():                       (gone)
+```
+
+`Z` is defunct — the process is dead but its entry survives, holding a PID,
+until the parent reaps it. One per start/stop cycle in a process designed to
+run for a long time.
+
+**A third thing, not in the claim.** Both `Popen` calls wire
+`stderr=subprocess.PIPE`, and nothing ever reads stderr. An undrained pipe
+blocks the writer once its 64KB buffer fills, so a server that logs enough
+stops responding — a deadlock that presents as a slow server. The HTTP one
+wires `stdout=PIPE` too, and nothing reads that either.
+
+### The fix, and why the helper is shared
+
+`weebot/core/process_lifecycle.reap_process` — terminate, wait, escalate to
+`kill` on timeout, close the pipes, never raise (teardown that throws leaves
+the *rest* of the teardown undone).
+
+It is a shared module rather than a local function for a reason worth stating
+plainly: **`infrastructure/document/latex_compiler.py` had already learned
+this**, and written it down —
+
+> ``proc.kill()`` alone only terminates the direct child (e.g. latexmk);
+> grandchildren (xelatex, biber, pygmentize) survive, keep the stdout/stderr
+> pipes open, and the post-kill ``communicate()`` blocks forever…
+
+— two hundred lines away from a module calling `terminate()` with no `wait()`
+at all. The knowledge existed in the repository and did not travel. Adding a
+*second* private reaper would have reproduced the duplicate-rule pattern this
+audit has now named three times, so `_kill_process_tree` was moved into the
+shared module and `latex_compiler` delegates to it. One rule, one home.
+
+### D37 — the browser that survived its own failed start
+
+`PlaywrightAdapter.start()` acquires four things in sequence — driver, browser,
+context, page — with no `try`. A raise from `new_context` or `new_page` leaves
+a **live browser process** attached to `self`, and neither caller closes a
+`start()` that raised:
+
+| caller | shape |
+|---|---|
+| `tools/advanced_browser.py:370` | `await self.browser.start(config)` — bare |
+| `tools/browser_inspector.py:283` | `await self.browser.start(BrowserConfig(headless=True))` — bare |
+
+So nothing else would have cleaned it up either.
+
+**`close()` had the same defect in reverse.** It closed context, then browser,
+then driver, sequentially and unguarded — so a context that failed to close
+stranded the browser process *and* the Playwright driver behind it. A cleanup
+path where one stuck page takes down the whole teardown is worse than no
+cleanup path, because it looks like one.
+
+### The defect found by reading, not by the claim
+
+```python
+if self._config.record_har:
+    await self._context.new_page()
+    # HAR recording is set up at context level in Playwright
+```
+
+The comment is correct. The code does not do it. `record_har_path` is never
+placed in `context_options` — compare `record_video`, three lines above, which
+does set `record_video_dir`. So `record_har=True`:
+
+- recorded nothing at all, and
+- opened a page, discarded the reference, and leaked it — one per `start()`.
+
+A configuration flag that reports a capability it has never had is the same
+fail-open class as the gates in the earlier sections; it just happened to be
+sitting inside a resource leak. It is now set properly, before `new_context`,
+because Playwright cannot enable HAR on a context after creation.
+
+### The ratchet caught me
+
+The first version of `reap_process` used `except (ProcessLookupError, OSError):
+pass` in three places. The bidirectional silent-except ratchet went red:
+
+```
+silent_except_handlers: 142 exceeds the ceiling of 139 by 3.
+New debt of this kind was added. Fix it -- do not raise the ceiling.
+```
+
+Three DEBUG logs later it is back at 139. Worth recording because the gate did
+exactly what it was built for, against the person who has spent this session
+building gates, and the temptation to raise a ceiling by three is precisely
+what `quality_ceilings.py --verify-not-raised` exists to make visible.
+
+**And the piped-exit-code trap recurred.** Reading the ratchets through
+`| tail -1` showed an advice line and no failure; `rc` was `tail`'s. The counts
+above were re-taken by running each gate unpiped and reading `$?`. This is the
+third time in this session that a pipeline has hidden a non-zero exit.
+
+### Coverage & residual risk
+
+- **`_call_stdio` still does blocking I/O in an `async def`** — `write`,
+  `flush` and `readline` on the child's pipes, on the event loop. It is inside
+  the `blocking_io_in_async` ratchet's 29 and is not fixed here.
+- **`reap_process` does not kill process trees.** `qmd` is assumed not to
+  spawn grandchildren; `kill_process_tree` is the tool if that turns out to be
+  false, and it requires the child to be started in its own process group,
+  which `mcp_client` does not do.
+- **The HAR path is `./har/<uuid>.har`, relative to the working directory**,
+  mirroring `record_video`'s `./videos`. Both inherit that convention's
+  weakness: an agent that changes directory writes elsewhere.
+- **The Playwright tests use fakes, not a browser.** They pin the *ordering and
+  cleanup contract* — that a failed acquisition closes what it acquired, that
+  teardown steps are independent — not that Playwright itself behaves as
+  modelled.
+
+### Uncertainty acknowledgment
+
+D37's recorded location did not exist:
+`weebot/infrastructure/adapters/playwright/` is not a directory in this
+repository. The claim was still true, of a file at a different path. That is
+the fourth record in this session found wrong in some particular — D39
+understated its consequence, D44 misstated its mechanism, S5 undercounted its
+instances, D37 mislocated its file. **UNKNOWN:** how many `deferred` entries
+point at paths that no longer exist, and would be closed as "cannot reproduce"
+by anyone who trusted the location field.

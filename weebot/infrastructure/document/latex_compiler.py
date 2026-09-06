@@ -24,6 +24,7 @@ _FONT_COMMAND_RE = re.compile(
 )
 
 from weebot.core.bash_guard import BashGuard, RiskLevel
+from weebot.core.process_lifecycle import kill_process_tree
 from weebot.domain.models.book import CompileError, CompileErrorCategory, CompileResult
 from weebot.infrastructure.document.log_parser import parse_log
 
@@ -31,25 +32,13 @@ _DRAIN_TIMEOUT_SECONDS = 5
 
 
 def _kill_process_tree(proc: subprocess.Popen) -> None:
-    """Kill *proc* and every descendant it spawned.
+    """Kill *proc* and every descendant it spawned (see finding G).
 
-    ``proc.kill()`` alone only terminates the direct child (e.g. latexmk);
-    grandchildren (xelatex, biber, pygmentize) survive, keep the stdout/
-    stderr pipes open, and the post-kill ``communicate()`` blocks forever
-    waiting for EOF on a pipe an orphan still holds (see finding G).
+    Delegates to `weebot.core.process_lifecycle`. The knowledge written down
+    here did not reach `qmd_integration/mcp_client.py`, which called
+    `terminate()` with no `wait()` at all; both now read the same rule.
     """
-    if os.name == "nt":
-        subprocess.run(
-            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-            capture_output=True,
-        )
-    else:
-        import signal
-
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    kill_process_tree(proc)
 
 
 class LatexCompilerService:
