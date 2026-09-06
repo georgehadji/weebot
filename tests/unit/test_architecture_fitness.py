@@ -886,7 +886,8 @@ def test_god_modules_under_800_lines():
     # Tracked — will shrink via WP-2 decomposition
     line_allowlist: dict[str, int] = {
         "model_selection.py": 100,  # re-export shim (was 3265)
-        "_catalog.py": 4200,  # data catalog (347 model configs — pure data, grows with the model list)
+        # data catalog: 426 model configs, pure data, grows with the model list
+        "_catalog.py": 4800,
         # Was 5900 while a one-off black run had wrapped every multi-item
         # strengths=[...] list one-entry-per-line. The generator emits them on a
         # single line, so restoring generated form brought the file back to 3491

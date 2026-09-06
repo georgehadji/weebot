@@ -295,12 +295,13 @@ class TestQualityProfiles:
         assert pro_profile.axes.get("coding") == 9.5
         assert air_profile.axes.get("coding") == 9.0
 
-        # Check catalog
+        # Check catalog. Only Pro is asserted: OpenRouter retired
+        # kwaipilot/kat-coder-air-v2.5, so the catalog refresh dropped it and the
+        # cascades that listed it (as a rung below Pro) no longer reference it.
+        # The capability profile above is deliberately kept -- it costs nothing
+        # and is ready if the model returns.
         assert "kwaipilot/kat-coder-pro-v2.5" in MODELS
-        assert "kwaipilot/kat-coder-air-v2.5" in MODELS
+        assert "kwaipilot/kat-coder-air-v2.5" not in MODELS
         pro_cfg = MODELS["kwaipilot/kat-coder-pro-v2.5"]
-        air_cfg = MODELS["kwaipilot/kat-coder-air-v2.5"]
         assert pro_cfg.tier == ModelTier.STANDARD
-        assert air_cfg.tier == ModelTier.STANDARD
         assert TaskType.CODE_GENERATION in pro_cfg.strengths
-        assert TaskType.CODE_GENERATION in air_cfg.strengths

@@ -258,7 +258,24 @@ def pricing_to_cost(pricing: dict, cost_model: str = "max") -> float:
     return cost * 1000
 
 
-def determine_strengths(modality: str, model_id: str) -> list[str]:
+def output_modalities(architecture: dict) -> list[str]:
+    """What the model emits, from the structured field or the modality string.
+
+    OpenRouter gives both ``output_modalities`` (a list) and ``modality`` (an
+    ``in->out`` string). Prefer the list; fall back to the half of the string
+    after the arrow so a payload saved before the field existed still works.
+    """
+    listed = architecture.get("output_modalities")
+    if isinstance(listed, list) and listed:
+        return [str(m) for m in listed]
+    modality = str(architecture.get("modality") or "text->text")
+    _, _, out = modality.partition("->")
+    return [part for part in (out or "text").split("+") if part]
+
+
+def determine_strengths(
+    modality: str, model_id: str, outputs: list[str] | None = None
+) -> list[str]:
     """Derive TaskType strengths, as enum member names, from modality and id.
 
     Coarse by construction: the API says nothing about task suitability, so this
@@ -266,7 +283,19 @@ def determine_strengths(modality: str, model_id: str) -> list[str]:
     has actually measured, correct that model in ``PINNED_FIELDS`` rather than
     adding another rule here. Note that this cannot produce ``AGENTIC`` at all;
     every agentic model in the catalog is there because a human said so.
+
+    ``outputs`` is what the model emits. A model that emits audio or images is a
+    media generator, and giving it CHAT/REASONING/ARCHITECTURE put it in the
+    running for tasks it cannot do: ``google/lyria-3-clip-preview`` is a
+    music-generation model priced at zero with a 1M context window, and with a
+    CHAT strength it won ``QualityOptimized`` for chat at ``budget=0``. Such
+    models get CREATIVE and nothing else -- the direction that costs least if
+    the judgement is wrong is declining to route text work to an audio model.
     """
+    emitted = [m for m in (outputs or ["text"])]
+    if any(m != "text" for m in emitted):
+        return ["CREATIVE"]
+
     strengths = ["CHAT"]
 
     if "image" in modality or "vision" in modality or "multimodal" in modality:
@@ -365,7 +394,9 @@ def build_entries(models: list[dict], cost_model: str) -> dict[str, dict]:
             "cost_per_1k_tokens": cost,
             "context_window": 4096 if context is None else context,
             "strengths": determine_strengths(
-                architecture.get("modality") or "text->text", model_id
+                architecture.get("modality") or "text->text",
+                model_id,
+                output_modalities(architecture),
             ),
             "tier": "FAST" if cost == 0 else "STANDARD",
             "api_key_env": PROVIDER_API_KEY.get(provider, "OPENROUTER_API_KEY"),

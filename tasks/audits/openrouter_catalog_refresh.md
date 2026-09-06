@@ -1,4 +1,4 @@
-# Updating the models from OpenRouter — blocked upstream, instrument repaired
+# Updating the models from OpenRouter — instrument repaired, then run
 
 Request: *"update the llm models from openrouter"*, with five documentation
 links (models list endpoint, models overview, reasoning tokens, server-tool web
@@ -168,6 +168,82 @@ selection strategies and was not made unasked.
 
 ---
 
+## Third round: the refresh actually ran `[VF]`
+
+The payload was supplied by hand (`--from-file`), so the egress block below is
+now historical for this refresh and live for the next one. 431 models,
+`total_count` 431, `links.next` null -- a complete list, not a page.
+
+**Result: 347 -> 426 models, +119 / -40.** Rendered, verified by import before
+the write and again against the installed file, exit 0.
+
+### What the hardening caught on real data
+
+| | |
+|---|---|
+| `openrouter/auto-beta` | a **fifth** meta-router at `-1`, not in `SUPPRESSED_MODELS` and unknown to me. The pricing guard dropped it unaided -- the generalisation earning its keep. |
+| the other four routers | dropped by `SUPPRESSED_MODELS` before pricing was consulted. |
+| all 19 hand-maintained models | survived. |
+| the 8 overrides the API now lists | got their pins applied. Without the pin-order fix they would have silently lost `AGENTIC`, `PREMIUM` and their measured `tool_use_score`. |
+
+### Two claims from the previous round were wrong `[VF]`
+
+**The `~*-latest` aliases are not "a weebot convention the API cannot return".**
+OpenRouter lists all ten. They are still worth keeping in `EXTRA_MODELS` -- an
+alias that disappears upstream should not silently vanish here -- but the stated
+reason was wrong.
+
+**The pricing fix does *not* rescue the lyria models.** The previous round said
+it "probably covers them -- but 'probably' is the problem". The payload settles
+it: `google/lyria-3-{clip,pro}-preview` are priced `{"prompt": "0",
+"completion": "0"}`. Genuinely free, not unparseable, so `is_unpriced` never
+fires and they would have shipped free + FAST + `CHAT` exactly as before.
+
+The actual root cause was the one named and left unfixed: `determine_strengths`
+ignored what a model *emits*. The payload carries `architecture.output_modalities`,
+so it is now fixed at the root -- a model that emits audio or images gets
+`CREATIVE` and nothing else. 13 models are affected, among them `openai/gpt-audio`
+and six Gemini/GPT image models, none of which should have been competing for
+chat, reasoning or architecture work.
+
+### The refresh found a live configuration defect `[VF]`
+
+`kwaipilot/kat-coder-air-v2.5` has been retired by OpenRouter. It was a **rung
+in seven role cascades** (`coder`, `executor`, `automation`, `product_manager`,
+`planner`, `planner_sub`, `designer`), a member of two flat model lists, a
+constant in `model_refs.py`, and an entry in `model_cascade_config.py`.
+`CatalogValidator` caught it the moment the catalog no longer contained it --
+the gate working exactly as designed, on the first refresh that could exercise it.
+
+It was removed rather than substituted, and the distinction matters:
+`kwaipilot/kat-coder-pro-v2.5` is already listed in **every one of those seven
+roles, at a better rung than Air** (verified), so deleting the dead rung
+introduces no model anyone had not already chosen and invents no ordering.
+Choosing a *replacement* would have been a routing decision, and that was not
+mine to make.
+
+One consequence is stated rather than buried: Air sat at index 2 in five of the
+seven roles, and `_cascade.py` reads index 2 as `fallback2`. Removing it
+promotes the next already-configured model into that slot -- `automation` and
+`planner` now fall back to DeepSeek V4 Flash. The alternative was leaving
+`fallback2` pointing at a model that 404s.
+
+### A recorded payload now closes provenance `[VF]`
+
+`tests/fixtures/openrouter_models.json` holds the payload, trimmed to the five
+fields the generator reads (`pricing` kept whole, so the caching and web-search
+rates ride along) and sorted by id: 431 models, 218 KB, 10.5k reviewable lines.
+
+`test_the_shipped_catalog_is_exactly_what_the_recorded_payload_renders` renders
+it and compares the whole file. This is the gate the previous round said it
+could not build: the earlier test reconstructed entries *from the catalog*, so
+it pinned format and could never notice a cost edited by hand. Every value must
+now be derivable from the recorded payload plus `_catalog_overrides.py`.
+
+The cost is real and worth naming: 218 KB of fixture, and a refresh must update
+the fixture and the catalog in the same commit or the test fails. That coupling
+is the feature -- this file has been silently hand-edited across five commits.
+
 ## Second round: what a code review found in the fix itself `[VF]`
 
 The first round's fix was reviewed across ten independent angles. It did not
@@ -310,13 +386,10 @@ budget filters. A mutated instance that bypasses construction still cannot win.
 
 ## Not done
 
-- **No model data was refreshed.** Blocked, as above.
-- **The five linked doc pages were not read**, so nothing here covers reasoning
-  tokens, server-tool web search, or prompt caching. `ModelConfig` has no field
-  for any of them and none was invented — the repo's only knowledge of the API
-  shape is the five fields the generator reads (`id`, `name`, `context_length`,
-  `pricing.{prompt,completion}`, `architecture.modality`), and there is no
-  recorded payload fixture to check against.
+- ~~No model data was refreshed~~ — **done in round 3** from a hand-supplied
+  payload: 347 → 426 models. `openrouter.ai` is still blocked from this
+  environment, so the *next* refresh needs the egress opened or another
+  `--from-file`.
 - **The other five sources of truth were not touched**, and they disagree with
   the catalog in at least fourteen documented places. Independently verified
   samples: `x-ai/grok-4.3` costed `0.0025` here against `$2/M in + $10/M out`
@@ -329,30 +402,28 @@ budget filters. A mutated instance that bypasses construction still cannot win.
 - **`routers/models.py:43`** sorts on `tier_order` containing a `"free"` key
   that no `ModelTier` member produces, and sorts `local` last by fallback.
   Cosmetic; left alone.
-- **`determine_strengths` gives `CHAT` to every model, whatever its modality.**
-  `modality` is consulted only to add `CREATIVE`, so an audio- or image-only
-  model is recorded as good at chat, reasoning, code review, documentation and
-  architecture. This is why
-  `QualityOptimized().select(..., TaskType.CHAT, budget=0.0)` returns
-  `google/lyria-3-clip-preview` — a music model — on the shipped catalog:
-  `+100` for the bogus CHAT strength plus `1048576/10000` for context beats
-  every other *free* model. Without a budget it loses to
-  `meta-llama/llama-4-scout` (1125 vs 204.86), so the exposure is free-tier
-  requests, not all of them. `[VF]`
-
-  Two of those models are still in the catalog. The pricing fix means a future
-  regeneration excludes anything not token-priced, which probably covers them —
-  but "probably" is the problem: their pricing cannot be checked while the API
-  is unreachable, and removing entries on a hypothesis is the same class of
-  mistake as the hand-edits this work exists to stop. Fixing the rule properly
-  needs `architecture.modality` per model, which is in the payload and not in
-  the catalog. **Both need the payload; neither was guessed at.**
-- **The regeneration gate pins format, not provenance.** The new byte-for-byte
-  test re-renders the entries it reads *from the file*, so it cannot detect a
-  hand-changed cost that is still well-formed. A committed payload fixture
-  (`--save-payload` exists for this) plus a CI job that renders and diffs would
-  close it completely, and would need no network at review time — only once, to
-  capture the fixture.
+- ~~`determine_strengths` gives `CHAT` to every model, whatever its modality~~ —
+  **fixed in round 3**, once the payload supplied `architecture.output_modalities`.
+  A model that emits audio or images now gets `CREATIVE` and nothing else; 13
+  models were affected. Note that the earlier guess recorded here — that the
+  pricing fix would "probably" exclude the lyria models — was **wrong**: they
+  are priced `{"prompt": "0", "completion": "0"}`, genuinely free rather than
+  unparseable, so only the modality rule could have fixed them.
+- ~~The regeneration gate pins format, not provenance~~ — **closed in round 3**
+  by `tests/fixtures/openrouter_models.json`, which the catalog must render from
+  byte-for-byte.
+- **The five linked doc pages were still never read.** The payload happens to
+  carry the fields they describe — `pricing.input_cache_read` and
+  `input_cache_write` (262 and 80 models), `pricing.web_search` (160), a
+  `reasoning` block (305), and `supported_parameters` containing `reasoning` /
+  `reasoning_effort` (304) — but `ModelConfig` has no field for any of them and
+  none was added. Wiring them up means changing a domain dataclass and every
+  consumer that constructs it: a larger change than a catalog refresh, and not
+  made unasked. The fixture keeps `pricing` whole, so the data is there when
+  someone decides.
+- **The cost model is still `max`, and now matters more.** 262 of 426 models
+  publish a cache-read rate an order of magnitude below their prompt rate, so
+  one collapsed number is further from the truth than it was at 347 models.
 
 ---
 
@@ -360,21 +431,27 @@ budget filters. A mutated instance that bypasses construction still cannot win.
 
 ```
 tests/unit/                                    3905 passed / 0 failed
-  test_generate_catalog.py                       69 passed  (was 0 before this work)
-  test_model_config_guards.py                    14 passed  (new)
+  test_generate_catalog.py                       70 passed  (0 before this work)
+  test_model_config_guards.py                    14 passed
   test_catalog_validator.py                      11 passed
   test_architecture_fitness.py                   51 passed
-coverage                                       55.87%  (gate: 52%)
+coverage gate --cov-fail-under=52              passed
 ruff check --select F821,E9 weebot/ cli/       clean
 lint-imports                                   7 kept / 0 broken
 ratchets    139 / 29 / 143 / 73 / 68           all unchanged, at ceiling
-_catalog.py line ceiling                       5900 -> 4200 (file is 3491)
+ruleset / workflow consistency                 required checks match exactly
+_catalog.py                                    4281 lines, 426 models, sorted
+_catalog.py line ceiling                       4200 -> 4800 (grew with the model list)
 ```
 
-The catalog rewrite was checked for semantic equivalence rather than trusted:
-both versions were loaded and compared field by field.
+Round 2 checked the catalog rewrite for semantic equivalence rather than
+trusting it — both versions loaded and compared field by field:
 
 ```
 old=347  new=347   added: []   removed: []
 field differences (excluding the 28 deduped strengths lists): 0
 ```
+
+Round 3 replaces that check with a stronger one that runs in CI on every
+commit: the shipped catalog must be byte-for-byte what
+`tests/fixtures/openrouter_models.json` renders.

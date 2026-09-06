@@ -464,41 +464,38 @@ def test_the_shipped_overrides_pass_the_real_validator():
     catgen.validate_entries({**{f"filler/{i}": _full_override() for i in range(60)}, **extra})
 
 
-def test_every_hand_maintained_model_agrees_with_the_shipped_catalog():
-    """EXTRA_MODELS duplicates entries that are also live in _catalog.py. Nothing
-    keeps the two copies in step, so a correction to one is reverted by the next
-    regeneration -- the data-loss class this file exists to close."""
+def _live(model_id: str, key: str):
     from weebot.application.services.model_registry._catalog import MODELS
 
-    extra, _, _ = catgen.load_overrides()
-    mismatched = {}
-    for model_id, fields in extra.items():
-        live = MODELS.get(model_id)
-        if live is None:
-            continue
-        for key, expected in fields.items():
-            actual = getattr(live, key)
-            if key == "strengths":
-                actual = [t.name for t in actual]
-            elif key == "tier":
-                actual = actual.name
-            if actual != expected:
-                mismatched[f"{model_id}.{key}"] = (expected, actual)
-    assert mismatched == {}
+    value = getattr(MODELS[model_id], key)
+    if key == "strengths":
+        return [t.name for t in value]
+    if key == "tier":
+        return value.name
+    return value
 
 
-def test_a_regeneration_keeps_every_model_the_api_cannot_supply():
-    """The regression that motivated all of this. Rendering a payload of only the
-    ids OpenRouter can return must not drop the hand-maintained ones -- and the
-    ten `~*-latest` aliases were missed on the first pass because the baseline
-    they were diffed against had been hand-edited too.
+def test_every_pinned_field_survives_into_the_shipped_catalog():
+    """PINNED_FIELDS is the mechanism that keeps hand-measured values alive once
+    OpenRouter starts listing a model -- ``EXTRA_MODELS`` merges with
+    ``setdefault``, so without a pin the payload silently wins.
+
+    This is the invariant that matters now that the API supplies 18 of the 19
+    hand-maintained entries: the fields nobody can derive (AGENTIC strengths, a
+    PREMIUM tier, a measured tool_use_score) must be what the file says.
     """
     from weebot.application.services.model_registry._catalog import MODELS
 
-    extra, _, suppressed = catgen.load_overrides()
-    api_supplied = [_model(m) for m in MODELS if m not in extra and m not in suppressed]
-    rendered = catgen.model_ids(catgen.generate_catalog(api_supplied))
-    assert set(MODELS) - rendered == set(), "a regeneration would delete these"
+    _, pinned, _ = catgen.load_overrides()
+    assert pinned, "no pins to check -- has the overrides file been emptied?"
+    mismatched = {
+        f"{model_id}.{key}": (expected, _live(model_id, key))
+        for model_id, fields in pinned.items()
+        if model_id in MODELS
+        for key, expected in fields.items()
+        if _live(model_id, key) != expected
+    }
+    assert mismatched == {}
 
 
 # ── Cost model: the choice is explicit, and recorded ─────────────────────────
@@ -686,38 +683,38 @@ def test_a_zero_budget_cannot_select_a_paid_model():
     assert MODELS[picked].cost_per_1k_tokens == 0.0
 
 
-def test_the_shipped_catalog_is_byte_for_byte_what_the_generator_would_render():
+FIXTURE = PROJECT_ROOT / "tests/fixtures/openrouter_models.json"
+
+
+def test_the_shipped_catalog_is_exactly_what_the_recorded_payload_renders():
     """The banner says DO NOT EDIT MANUALLY. This is what makes that true.
 
     Every earlier guard was advisory: the file carried the banner through five
     commits of hand-editing while its header count sat frozen at 343 and the
-    real count ran 343 -> 349 -> 343 -> 345 -> 351. Re-rendering the installed
-    entries and comparing the whole text catches any edit that is not something
-    the generator would produce -- reordering, reformatting, a stray field, a
-    header that disagrees with the body.
+    real count ran 343 -> 349 -> 343 -> 345 -> 351.
 
-    What it deliberately does *not* claim: the entries are reconstructed from
-    the file, so this pins format and internal consistency, not provenance. It
-    cannot tell that a cost was hand-changed to a wrong number. That needs a
-    committed OpenRouter payload fixture to render from, which needs the API to
-    be reachable -- see tasks/audits/openrouter_catalog_refresh.md.
+    Rendering the recorded OpenRouter payload and comparing the whole file is a
+    *provenance* check, not merely a format one: every value in the catalog must
+    be derivable from that payload plus _catalog_overrides.py. A cost edited by
+    hand fails here even though it is perfectly well-formed, which reconstructing
+    the entries from the file itself could never catch.
+
+    When the catalog is refreshed, the fixture is refreshed in the same commit --
+    that is the point. A diff to one without the other fails.
     """
-    from weebot.application.services.model_registry._catalog import MODELS
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
+    assert catgen.generate_catalog(payload, "max") == _catalog_text()
 
-    entries = {
-        model_id: {
-            "name": cfg.name,
-            "provider": cfg.provider,
-            "cost_per_1k_tokens": cfg.cost_per_1k_tokens,
-            "context_window": cfg.context_window,
-            "strengths": [t.name for t in cfg.strengths],
-            "tier": cfg.tier.name,
-            "api_key_env": cfg.api_key_env,
-            "tool_use_score": cfg.tool_use_score,
-        }
-        for model_id, cfg in MODELS.items()
-    }
-    assert catgen.render_catalog(entries, "max") == _catalog_text()
+
+def test_the_fixture_carries_only_the_fields_the_generator_reads():
+    """It is a test fixture, not an API archive: everything else is weight.
+
+    ``pricing`` is kept whole so the caching and web-search rates ride along for
+    whenever they are wired up.
+    """
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
+    allowed = {"id", "name", "context_length", "pricing", "architecture"}
+    assert {k for m in payload for k in m} <= allowed
 
 
 def test_a_dry_run_still_verifies_that_the_output_imports(
