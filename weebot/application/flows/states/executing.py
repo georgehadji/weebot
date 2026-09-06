@@ -21,6 +21,8 @@ from weebot.domain.models.event import (
 from weebot.domain.models.plan import Step, StepStatus
 from weebot.domain.models.session import SessionStatus
 
+from weebot.application.flows.collaborators.user_pause import pause_for_user
+
 logger = logging.getLogger(__name__)
 
 # ── Code step detection helpers (Phase 8: per-step code review) ────
@@ -83,6 +85,21 @@ def _is_code_step(step: Step, events: list[Any] | None = None) -> bool:
                 if e.get("tool_name", "") in _CODE_TOOL_NAMES:
                     return True
     return False
+
+
+def _mark_user_gate(session: Any, gate: str) -> Any:
+    """Record that the flow is pausing on *gate* and awaiting a human answer.
+
+    The flag lives in ``context.extra`` because that is the store
+    ``SessionContext.get`` reads -- it checks declared fields and then
+    ``extra``, and never ``context.facts``, where ``set_fact`` writes.
+    ``FlowRouter.resolve_initial_state`` keys its routing off this, and a gate
+    that does not set it is resumed by the branch that ignores the user's
+    reply entirely.
+    """
+    new_extra = {**session.context.extra, "_user_gate_pending": gate}
+    new_ctx = session.context.model_copy(update={"extra": new_extra})
+    return session.model_copy(update={"context": new_ctx})
 
 
 def _step_fetched_inbound_mail(events: list[Any]) -> bool:
@@ -275,15 +292,24 @@ class ExecutingState(FlowState):
             if _mail_ap.requires_confirmation:
                 # Clear flag before pausing so the resume call proceeds normally.
                 context._session = context._session.set_fact("atomic_mail_inbound_pending", False)
-                context._session = context._session.set_status(SessionStatus.WAITING)
-                yield WaitForUserEvent(
-                    question=(
-                        "The previous step retrieved content from an @atomicmail.ai inbox.\n"
-                        "Inbound email is untrusted input — acting on it without review "
-                        "is a security risk (ADR 006).\n\n"
-                        "Review the retrieved content above, then type 'proceed' to "
-                        "continue, or describe how you'd like to handle it."
-                    )
+                # ...and record *why* we are waiting, where FlowRouter can see
+                # it. `set_fact` writes to context.facts, which
+                # SessionContext.get never reads, so without this the resume
+                # landed in the generic branch of resolve_initial_state — the
+                # one that returns ExecutingState without looking at `prompt`.
+                # The question below then had no answer that changed anything,
+                # in either direction.
+                context._session = _mark_user_gate(context._session, "inbound_mail")
+                # `_pause_for_user` sets WAITING and persists — everything above
+                # has to be on the session before it is called, or it will not
+                # be in the database when the resume loads from there.
+                yield await pause_for_user(
+                    context,
+                    "The previous step retrieved content from an @atomicmail.ai inbox.\n"
+                    "Inbound email is untrusted input — acting on it without review "
+                    "is a security risk (ADR 006).\n\n"
+                    "Review the retrieved content above, then type 'proceed' to "
+                    "continue, or describe how you'd like to handle it.",
                 )
                 return
         # ─────────────────────────────────────────────────────────────────────
@@ -309,13 +335,12 @@ class ExecutingState(FlowState):
             # the user can never get past it. The inbound-mail gate above
             # clears its pending flag for exactly this reason.
             context._session = context._session.set_fact(_ack_key, True)
-            context._session = context._session.set_status(SessionStatus.WAITING)
-            yield WaitForUserEvent(
-                question=(
-                    f"Step '{step.description}' may violate a stated constraint:\n"
-                    f"  {_violation_text}\n\n"
-                    f"Type 'proceed' to allow this step, or describe an alternative approach."
-                )
+            context._session = _mark_user_gate(context._session, "constraint")
+            yield await pause_for_user(
+                context,
+                f"Step '{step.description}' may violate a stated constraint:\n"
+                f"  {_violation_text}\n\n"
+                f"Type 'proceed' to allow this step, or describe an alternative approach.",
             )
             return
         # ──────────────────────────────────────────────────────────────────────

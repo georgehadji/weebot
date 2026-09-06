@@ -102,9 +102,10 @@ class FlowRouter:
         0. If product_gate_pending is set, route back to ProductGateState
            with the user's clarification.
         1. If plan_pending_approval is set, route based on user response.
-        2. If an incomplete plan exists, resume execution.
-        3. If the session was WAITING with a plan, resume execution.
-        4. Otherwise, start fresh planning.
+        2. If _user_gate_pending is set, route based on user response.
+        3. If an incomplete plan exists, resume execution.
+        4. If the session was WAITING with a plan, resume execution.
+        5. Otherwise, start fresh planning.
 
         Returns:
             (FlowState, Session) — the state to transition to, and the
@@ -150,7 +151,80 @@ class FlowRouter:
             updated = session.model_copy(
                 update={"context": session.context.model_copy(update={"extra": extra_out})}
             )
-            return PlanningState(), updated
+            # RUNNING for the same reason the approve branch above states: the
+            # run loop breaks on WAITING (plan_act_flow.py), and PlanReviewState
+            # leaves the session WAITING before it pauses. Without this, asking
+            # for a plan change re-planned once and then halted -- the user saw
+            # a new plan and nothing after it.
+            return PlanningState(), updated.set_status(SessionStatus.RUNNING)
+
+        # Priority 2: a gate asked the human a question and is awaiting the answer.
+        #
+        # Without this, the resume fell through to the branch below, which
+        # returns ExecutingState without reading `prompt` at all. Both gates
+        # that set this flag ask the user to approve *or* to say how they want
+        # the content handled, and neither half was honoured: the description
+        # was discarded, and no answer declined. For the inbound-mail gate that
+        # meant untrusted email was acted on identically whatever the human
+        # typed, which is the one thing ADR 006 exists to prevent.
+        user_gate = session.context.get("_user_gate_pending")
+        if user_gate:
+            from weebot.application.flows.states.plan_review import _APPROVE_TOKENS
+
+            response = prompt.strip().lower()
+            # Merge onto the session's own extra rather than replacing it with
+            # the caller's. The two branches above spell this `{**(extra or
+            # {}), ...}`, which erases every other key when a caller omits the
+            # kwarg -- latent only because the one production caller passes it.
+            extra_out = {**session.context.extra, **(extra or {}), "_user_gate_pending": None}
+
+            # An empty answer is deliberately NOT approval here, though the
+            # plan-approval path above accepts it as one. These gates guard
+            # untrusted input and stated constraints: silence is not consent.
+            if response in _APPROVE_TOKENS:
+                logger.info("User approved the %s gate — resuming execution", user_gate)
+                # Clear the flag and fall through to the ordinary resume logic
+                # below rather than returning ExecutingState here. Approval
+                # means "carry on as before", and the branches below already
+                # know what "as before" is -- they check that a plan exists and
+                # is incomplete first. Short-circuiting would resume execution
+                # for a session with no plan to execute, a state the router
+                # could not previously produce.
+                session = session.model_copy(
+                    update={"context": session.context.model_copy(update={"extra": extra_out})}
+                )
+            else:
+                logger.info(
+                    "User did not approve the %s gate (%r) — re-planning with their instruction",
+                    user_gate,
+                    prompt[:80],
+                )
+                extra_out["_intent_reviewed"] = False
+                extra_out["_plan_modification_request"] = prompt
+                updated = session.model_copy(
+                    update={"context": session.context.model_copy(update={"extra": extra_out})}
+                )
+                # The plan that tripped the gate is being discarded, so the
+                # per-step acks recorded against it must not survive into its
+                # replacement. Step ids are positional (`step-N`, planner.py),
+                # so a re-planned step-3 would inherit the old step-3's ack and
+                # skip the very gate the user just refused.
+                for key in list(updated.context.facts):
+                    if key.startswith("constraint_gate_ack:"):
+                        updated = updated.set_fact(key, False)
+                # Declining must not disarm the mail gate either. The fetched
+                # message is still in the transcript and is about to be handed
+                # to the planner, so whatever the new plan does with it has to
+                # be gated again. The gate cleared this flag before pausing,
+                # which is right for approval and wrong for a refusal.
+                if user_gate == "inbound_mail":
+                    updated = updated.set_fact("atomic_mail_inbound_pending", True)
+                # RUNNING, for the same reason the approve branch of Priority 1
+                # says: the run loop breaks on WAITING. Returning PlanningState
+                # while still WAITING re-plans once and then halts, so the user
+                # gets a new plan and silence. Priority 1's own decline branch
+                # has this defect too and is fixed with it, just below.
+                return PlanningState(), updated.set_status(SessionStatus.RUNNING)
 
         last_plan = session.get_last_plan()
 

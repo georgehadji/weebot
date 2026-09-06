@@ -1641,3 +1641,252 @@ the interesting defect was not the missing guard but what the guarded call
 similarly under-described. Reach was the reason for deferring each of them,
 and reach turned out to be the least informative thing about this one.
 
+
+---
+
+## Two gates that asked a question and ignored the answer
+
+### D12, D67 — the resume path never read the reply `[VERIFIED-EXECUTED]`
+
+The recorded claim was that the inbound-mail approval flag is cleared before
+the pause. **Refuted, and the clearing is required**: `FlowRouter` flips
+WAITING → RUNNING and re-enters `execute()` against the same step, so an
+uncleared flag re-fires the gate forever. The constraint gate below it carries
+a comment saying exactly that.
+
+W1 marked the *resume* path `[UNK]` and never triggered it. That is where the
+defect was.
+
+`resolve_initial_state` routed on three things. `_product_gate_pending`
+forwarded the prompt to `ProductGateState(resume_with=prompt)`.
+`plan_pending_approval` tested it against `_APPROVE_TOKENS`. Everything else
+reached:
+
+```python
+if last_plan is not None and not last_plan.is_complete():
+    return ExecutingState(), session
+```
+
+which never reads `prompt`. Neither gate set a routing flag, so both landed
+there. Both prompts say *"type 'proceed' to continue, or describe how you'd
+like to handle it"* — and **neither half was honoured**. The description was
+discarded, and no answer declined. Typing `"that email is a phishing attempt,
+ignore it"` resumed execution on the untrusted content identically to typing
+`proceed`, which is the one thing ADR 006 exists to prevent. The constraint
+gate had the same hole, so a user answering "no, do not do that" got the step
+executed anyway (**D67** — not previously recorded; found in the code
+immediately below D12).
+
+### Why the flag could not simply be the one already there
+
+`set_fact` writes to `context.facts`. `SessionContext.get` reads declared
+fields and then `context.extra`, and **never** `context.facts`. So the gates'
+own pending flags were invisible to the router by construction. A test pins
+this in both directions, because it is the reason the fix needs a second flag
+rather than reusing the first.
+
+### The semantic choice, which was the user's
+
+What a non-approval should *do* is a product decision, not a defect, so it was
+escalated rather than guessed. Green-lit, it follows the codebase's own
+precedent for the identical situation: the plan-approval path re-plans with
+the response as a modification request. Both gates now do that.
+
+**One deliberate divergence.** The plan-approval path treats an empty response
+as approval (`if response in _APPROVE_TOKENS or not response`). These gates do
+not. They guard untrusted input and stated constraints, and silence is not
+consent.
+
+### A short-circuit written and then removed
+
+The first version returned `ExecutingState` directly on approval. A test
+caught it doing so for a session with **no plan to execute** — a state the
+router could not previously produce, because every path to `ExecutingState`
+checks `last_plan is not None and not last_plan.is_complete()` first.
+Approval now clears the flag and *falls through* to those branches. Approval
+means "carry on as before", and the code below already knows what "as before"
+is.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+`tests/unit/application/flows/test_user_gate_answer_is_honoured.py`, 33 tests,
+every case parametrised over both gates:
+
+```
+router reverted:  30 failed, 3 passed
+with the fix:              33 passed
+```
+
+The 3 that pass either way are the two flag-visibility tests and the
+no-gate-pending regression — correctly unaffected by a routing change.
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | `""`, `"   "`, `"\n"` | not approval; re-plans. HOLD |
+| Boundary | `"  PROCEED  "` | approval; case and whitespace tolerated. HOLD |
+| Invalid input | `"no"`, `"stop"`, a free-text instruction | re-plans, instruction carried. HOLD |
+| State | flag consumed after either answer | `_user_gate_pending` is None. HOLD |
+| State | second resume after an answered gate | does not re-route; no livelock. HOLD |
+| Regression | WAITING + incomplete plan, no gate flag | still `ExecutingState`, still RUNNING, no modification request. HOLD |
+| Regression | `set_fact` vs `extra` visibility | pinned both ways. HOLD |
+| Concurrency | n/a — routing is synchronous, per-resume, on an immutable Session | not applicable |
+| New defect | approval with no plan attached | falls through instead of short-circuiting. Found by test, fixed. HOLD |
+
+Nine probes, one BREAK (the short-circuit), revised once, re-run: all HOLD.
+
+### Coverage & residual risk
+
+- **A non-approval always re-plans.** For the constraint gate that is a
+  heavier response than "skip this step and continue", which may be what a
+  user means. Re-planning is the codebase's existing answer to "user did not
+  approve"; a lighter one would be a new behaviour, not a defect fix.
+- **`_APPROVE_TOKENS` is a fixed word list.** "yes please" is not in it and
+  re-plans. Erring toward re-planning is the safe direction at a gate, but it
+  will occasionally re-plan when the user meant to approve.
+- **The constraint gate's per-step ack survives a decline.** If re-planning
+  produces a step with the same id, its gate will not re-fire. Narrow, and not
+  exercised here.
+- **Not covered end to end.** These tests drive `resolve_initial_state`
+  directly. A full pause-then-resume through `PlanActFlow` against a live
+  inbox is not exercised, and the atomic_mail path needs
+  `WEEBOT_ENABLE_ATOMIC_MAIL=1`.
+
+### Uncertainty acknowledgment
+
+W1 recorded the wrong claim and marked the right area unknown. The claim it
+did record — that clearing the flag is a bug — is not merely unproven, it is
+backwards: removing the clear would livelock the gate. The defect was one
+layer further out, in a function the claim never names. **UNKNOWN:** how many
+of the remaining `[UNK]` markers sit next to a refuted claim in the same way.
+Two of the last three defects closed had a refuted claim attached (D48, D12),
+which is a pattern worth more than the two data points establish.
+
+
+---
+
+## The pause that never reached the database
+
+### D69 — a shipped fix that did not run `[VERIFIED-EXECUTED]`
+
+The previous entry reduced this rather than chasing it: the routing flag and
+the WAITING status are set on the same immutable session one line apart, so
+whatever persists one persists the other, and the flag's durability is
+therefore the gates' pre-existing durability. That reasoning was sound and
+its premise was false. **Nothing persisted.**
+
+Measured against a real `SQLiteStateRepository`:
+
+```
+IN-MEMORY   status=waiting  gate='inbound_mail'  mail_pending=False
+IN DB       status=pending  gate=None            mail_pending=True
+DB event types: ['plan']          <- the WaitForUserEvent never landed
+```
+
+Every path traced: `event_publisher._persist_session` is reachable only from
+`emit()`, and the gates `yield`; `PlanActFlow.run()` has no `save_session`
+anywhere; `AgentRunner`'s post-loop save never runs, because
+`cli/commands/flow.py` breaks the `async for` on the `WaitForUserEvent` and
+post-loop code in a generator is skipped; the gateways call `save_session`
+zero times. Only `TaskRunner._run_flow` persisted.
+
+Three consequences, all measured:
+
+1. `weebot flow run` raised `ValueError: Session ... is not waiting` on the
+   user's answer.
+2. Both gates re-fired on every resume, **unboundedly** — each turn builds a
+   fresh flow, so `max_iterations` cannot bound it.
+3. The D12/D67 Priority-2 branch was unreachable on any DB-mediated resume.
+   **ADR 006 did not hold in production**, for the four hours it was merged.
+
+### Why 41 green tests missed it
+
+Every test for these gates drives `ExecutingState` or
+`resolve_initial_state` in memory and asserts on `ctx._session`. None crossed
+the seam the feature depends on. The unit test was green and the feature was
+dead; that is the whole finding, and the fix is worth less than the test that
+now guards it.
+
+### The test was wrong first, in the same way
+
+The first draft of `test_gate_pause_survives_the_seam.py` built its context
+from a `SimpleNamespace`. It took the in-memory fallback and proved nothing —
+reproducing, inside the test written to catch the defect, the exact mistake
+that hid it. The warning fired and gave it away:
+
+```
+WARNING Flow SimpleNamespace has no _pause_for_user; pausing in memory only.
+```
+
+It now drives a real `PlanActFlow`, and its `_context` helper says in a
+docstring why it must never go back to a stub.
+
+### The fix, and the gate that shaped it
+
+`collaborators/user_pause.py` holds both halves of the contract:
+`pause_flow_for_user` sets WAITING, emits **once** (`EventPublisher.emit`
+already calls `add_event`, so `PlanReviewState` adding *and* emitting writes
+the pause twice), then persists authoritatively and lets a failed write raise
+rather than downgrade to a warning — a pause that cannot be saved will not
+survive, and that is the failure this exists to prevent. `pause_for_user` is
+the gate-side shim; a context without the contract still pauses in memory and
+says so at WARNING.
+
+Both halves live in one module so a future gate cannot implement one and
+forget the other — which is precisely how this arose. The two gates copied a
+pause that set WAITING and yielded, from a state (`PlanReviewState`) that also
+persisted, and whose comment explains exactly why it has to.
+
+**`test_god_modules_under_800_lines` fired on the first attempt** —
+`plan_act_flow.py` at 1023/1000 and `executing.py` at 820/800. The ceiling was
+not raised. That gate is the reason the logic is a collaborator rather than
+two inlined methods, and the result is better than what it rejected.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+pre-fix source:   5 failed, 1 passed
+with the fix:              6 passed
+```
+
+The one that passes either way is the no-repository case, which is correct:
+a sub-agent flow with `_state_repo=None` must still pause, just not durably.
+
+### RAR self-review
+
+| vector | probe | result |
+|---|---|---|
+| Boundary | `_state_repo=None` | still pauses, WARNING names the loss. HOLD |
+| State | reload status after the mail gate | WAITING in the DB. HOLD |
+| State | reload `_user_gate_pending` | `'inbound_mail'`. HOLD |
+| State | reload the cleared `atomic_mail_inbound_pending` | falsy. HOLD |
+| State | reload after the constraint gate | WAITING, `'constraint'`, ack present. HOLD |
+| Invalid input | pause event count in the transcript | exactly 1, not 2. HOLD |
+| Regression | the 41 existing gate/router tests | all pass unchanged. HOLD |
+| Regression | `test_god_modules_under_800_lines` | fired, then satisfied by extraction. HOLD |
+| Concurrency | n/a — one pause per state entry, on an immutable session | not applicable |
+
+### Coverage & residual risk
+
+- **`PlanReviewState` still double-adds.** It was the model for the fix and
+  keeps its own defect; folding it onto `pause_flow_for_user` is a separate,
+  safe change not made here.
+- **The fallback is still a fallback.** A production flow type that fails to
+  implement `_pause_for_user` pauses non-durably and only warns. The seam test
+  covers the real path; nothing forces a *new* flow type through it.
+- **The HITL branch at `executing.py:510-525` was not converted.** It sets
+  WAITING and returns without yielding a `WaitForUserEvent`, so it is a
+  different shape; it has the same durability gap and is not fixed here.
+- **Only the CLI path is proven.** The gateways still call `save_session` zero
+  times; whether they resume correctly is untested.
+
+### Uncertainty acknowledgment
+
+I reduced this defect away once, with an argument I still think was well
+formed, and shipped a fix that did not run. The premise I did not test —
+"the pre-existing persistence works" — was the whole question. **UNKNOWN:**
+how many other conclusions in this audit rest on an untested premise about a
+neighbouring mechanism. The rate at which recorded claims have proven wrong
+in this backlog (nine of sixteen) suggests the answer is not zero.
+
