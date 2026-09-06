@@ -175,6 +175,13 @@ jobs:
         run: pytest tests/e2e/test_flow_e2e.py::TestConcurrentFlows -v --tb=short --timeout=120
       - name: Run chaos recovery test
         run: pytest tests/e2e/test_flow_e2e.py::TestChaosRecovery -v --tb=short --timeout=60
+      - name: Run resilience stress tests
+        # `tests/stress/` was referenced by NO workflow, so 35 tests covering
+        # the circuit breaker, retry backoff and timeout enforcement could not
+        # redden anything -- including the one that failed roughly one run in
+        # seven. Wired in now that the flake is fixed: the whole directory runs
+        # in ~11s, so the cost of knowing is negligible.
+        run: pytest tests/stress/ -v --tb=short --timeout=120
 
   frontend:
     name: Frontend Quality Gates

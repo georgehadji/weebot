@@ -13,6 +13,7 @@ import asyncio
 import time
 from typing import Any
 from unittest.mock import patch
+from weebot.utils.backoff import BackoffConfig, RetryWithBackoff
 
 import pytest
 
@@ -518,18 +519,43 @@ class TestMixedFailureModes:
 
     @pytest.mark.asyncio
     async def test_partial_outage_with_retries(self):
-        """50% failure rate — retries should recover most requests."""
+        """50% failure rate — retries should recover most requests.
+
+        The sub-second ladder is what makes this test mean anything. On the
+        default `[1, 2, 4, 8, 15, 30]` it failed roughly one run in seven —
+        measured 2 in 12, and both failures were `Timeout (>60.0s)`, never the
+        assertion below. The ladder sums to **exactly 60.0s** and
+        `pyproject.toml` sets `timeout = 60`, so the test was racing the wall
+        clock; observed durations cluster on the ladder's prefix sums
+        {1, 3, 7, 15, 30, 60} — 18s, 34s, 62s.
+
+        The comment beneath is not miscalculated. It models a different and
+        irrelevant failure mode: P(successes < 18) from 0.5^7 per request is
+        about 1 in 2400, which is what the comment says and is not what was
+        failing. A gate that fires at random carries no information and trains
+        everyone to ignore red — the mirror image of a gate that cannot fire.
+
+        Same ladder the other retry tests in this file already use. This test
+        measures the retry policy, not `asyncio.sleep`.
+        """
         inner = FakeInnerAdapter()
         inner.set_behavior("fail_rate", fail_rate=0.5)
         adapter = _make_resilient(inner, timeout=30.0, circuit_breaker=False)
+        adapter._retry = RetryWithBackoff(
+            BackoffConfig(
+                delays=[0.01, 0.02, 0.04, 0.08, 0.1, 0.2],
+                jitter=0.1,
+                retryable=adapter._is_retryable_error,
+            )
+        )
 
         results = await asyncio.gather(
             *[adapter.chat(MESSAGES) for _ in range(20)], return_exceptions=True
         )
 
         successes = [r for r in results if isinstance(r, LLMResponse)]
-        # With 50% fail rate and 7 attempts, P(all 7 fail) = 0.5^7 ≈ 0.8%
-        # So ~99.2% of 20 requests should succeed — allow 2 failures
+        # Seven attempts at a 50% fail rate: P(all seven fail) = 0.5^7 ~ 0.8%,
+        # so ~99.2% of 20 requests should succeed. Allow two failures.
         assert len(successes) >= 18, f"Only {len(successes)}/20 succeeded at 50% fail rate"
 
     @pytest.mark.asyncio

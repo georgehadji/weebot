@@ -2807,3 +2807,131 @@ have guarded a path that is not open and left a plan-template cache learning
 from total failures at a perfect score. **UNKNOWN:** how many of the remaining
 `open` entries were written from reading rather than from running, and would
 survive an executed truth table no better than this one did.
+
+## The gate that fired at random, and the suite nothing ran
+
+### D65 — the mechanism was the wall clock `[VERIFIED-EXECUTED]`
+
+D65 recorded a stress test failing about one run in seven against its own
+comment predicting one in two thousand, and left the mechanism explicitly
+**UNKNOWN** — two attempts to measure it had exceeded their own time budget and
+been killed.
+
+The mechanism is arithmetic. `RetryWithBackoff`'s default ladder is
+`[1, 2, 4, 8, 15, 30]`, which sums to **exactly 60.0 seconds**, and
+`pyproject.toml` sets `timeout = 60`.
+
+Twelve isolated runs:
+
+```
+  run 1: PASS  18.08s
+  run 4: FAIL  63.57s  Timeout (>60.0s)
+  run 7: FAIL  63.77s  Timeout (>60.0s)
+  run 9: PASS  62.34s
+  ...
+pass=10 fail=2
+```
+
+Every failure is `Timeout (>60.0s)`. **Not once** is it the assertion,
+`Only N/20 succeeded`. And the durations cluster on the ladder's prefix sums
+{1, 3, 7, 15, 30, 60} — 18s, 34s, 62s — which is the ladder's fingerprint. Run
+9 passed at 62.34s wall having finished its body just inside the limit, which is
+what a race against a clock looks like from the winning side.
+
+### The comment is not wrong, it is about something else
+
+> `# With 50% fail rate and 7 attempts, P(all 7 fail) = 0.5^7 ≈ 0.8%`
+> `# So ~99.2% of 20 requests should succeed — allow 2 failures`
+
+That arithmetic is correct, and P(successes < 18) is about 1 in 2400 — which is
+what the original note observed the comment predicting. It models the assertion
+failing. The assertion never fails. The comment describes a real and irrelevant
+failure mode, which is why the discrepancy looked like a factor of ~280 and was
+actually a category error.
+
+### The fix
+
+The sub-second ladder the other two retry tests in the same file already use:
+
+```python
+adapter._retry = RetryWithBackoff(
+    BackoffConfig(delays=[0.01, 0.02, 0.04, 0.08, 0.1, 0.2], jitter=0.1, ...)
+)
+```
+
+Twenty runs after the change: **20 passed, slowest 4.0s** against a 60s limit —
+a fifteen-fold margin where there had been none. The test measures the retry
+policy, not `asyncio.sleep`.
+
+### The suite that could not go red
+
+`tests/stress/` was referenced by **no workflow**. Thirty-five tests covering
+the circuit breaker, retry backoff and timeout enforcement — including the one
+failing one run in seven — could not redden anything. That is why a randomly
+failing gate survived: nobody was watching it fail.
+
+It is wired into the E2E job now that the flake is gone. The whole directory
+runs in **10.65s**, so the cost of knowing is negligible, and it was never the
+reason it was left out.
+
+A gate that fires at random and a gate that cannot fire are the same defect
+wearing different clothes: neither carries information, and the first is worse,
+because it trains everyone to ignore red.
+
+### S2 — cleared, and the larger thing behind it
+
+S2 claimed `parse_agent_output` never raises, so a caller cannot tell "the model
+reported PARTIAL" from "we failed to parse". Literally true, and about **dead
+code**: `parse_agent_output` has zero callers outside its own re-export, and
+`OutputParseError` is defined, re-exported, and **never constructed anywhere**.
+The distinction is also weaker than the claim suggests — the failure path
+already writes `confidence=0.3` and a `"Failed to parse JSON: …"` prefix.
+Hardening a parser nobody calls buys nothing.
+
+But the reason nobody calls it is the finding. **CLAUDE.md rule 2** states:
+
+> Agents MUST return structured JSON validated via Pydantic models in
+> `weebot/models/structured_output.py`
+
+What agents actually do:
+
+```
+weebot/application/agents/dreamer.py:120           data = json.loads(raw)
+weebot/application/agents/goal_agent.py:116        return json.loads(content)
+weebot/application/agents/layer_editor_agent.py:129  return json.loads(content)
+weebot/application/agents/optimizer_agent.py:183    parsed = json.loads(response.content)
+```
+
+Three modules import from `structured_output` at all, and only for
+`VisionReflection` and the verbalized-sampler models. The documented mandatory
+protocol is not the one in use.
+
+This is the same shape as the three routing tables and the two process
+reapers: **one rule, two implementations, nothing comparing them.** It is
+recorded as `P5-1` and deliberately **not fixed** — migrating every agent is
+cross-cutting, and the alternative (amending the rule to match reality) is a
+decision about intent rather than a repair. Both need the owner's direction on
+which of the two is the real one.
+
+### Coverage & residual risk
+
+- **The other stress tests were never measured for flakiness.** Only the one
+  D65 named was. Wiring the suite into CI is what will find the rest, which is
+  a cost the first red build will pay.
+- **The 60s limit is global** (`pyproject.toml`), so any other test whose
+  design brushes it is in the same position and equally invisible while its
+  suite is unwired.
+- **`parse_agent_output` is left in place.** It is a public re-export, and
+  deleting it is only worth doing as part of resolving `P5-1` in one direction
+  or the other.
+
+### Uncertainty acknowledgment
+
+The original D65 note was careful and honest — it labelled the mechanism
+UNKNOWN and said so rather than guessing, and its HYPOTHESIS (timeout plus
+backoff under concurrency truncating attempts) was in the right neighbourhood
+without being right. What it lacked was one cheap measurement: reading *which*
+failure the failures were. Twelve runs printing the failure line answered in
+ten minutes a question two abandoned deep-dives could not. **The lesson is not
+that the note was wrong; it is that "measure the symptom before modelling the
+cause" would have closed this four waves earlier.**

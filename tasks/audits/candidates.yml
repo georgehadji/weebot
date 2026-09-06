@@ -314,9 +314,19 @@ candidates:
     wave: W2
     location: weebot/models/structured_output.py
     claim: "`parse_agent_output` never raises, so a caller cannot distinguish \"the model reported PARTIAL\" from \"we failed to parse\""
-    status: open
+    status: cleared
     evidence: null
-    verdict_note: null
+    verdict_note: >-
+      Literally true and about DEAD CODE, so the severity is nil. VERIFIED:
+      `parse_agent_output` has zero callers outside its own re-export in
+      `weebot/models/__init__.py`, and `OutputParseError` is defined and
+      re-exported but never constructed anywhere in weebot/, cli/ or tests/.
+      The distinction is also weaker than the claim suggests: the failure path
+      already writes `confidence=0.3` and a `"Failed to parse JSON: ..."`
+      prefix, so it is fragile rather than absent. Cleared rather than fixed --
+      hardening a parser nobody calls buys nothing. NOT deleted: it is a public
+      re-export, and the larger issue recorded as P5-1 is about what agents use
+      INSTEAD, which is where the work belongs.
 
   # ── Wave 3 — flow state machine & concurrency ─────────────────────────
   - id: D19
@@ -1177,12 +1187,24 @@ candidates:
     claim: >-
       The test fails roughly one run in seven, against its own comment predicting
       one in two thousand -- a gate that fires at random carries no information
-    status: deferred
+    status: fixed
     severity: MEDIUM
     reachability: LIVE
-    evidence: null
+    evidence: tests/stress/test_llm_resilience.py
     verdict_note: >-
-      NOT MINE and NOT FIXED -- recorded because it is measured, and because a
+      FIXED. The mechanism the original note left UNKNOWN is the wall clock, not
+      the assertion. The default ladder [1,2,4,8,15,30] sums to EXACTLY 60.0s
+      and pyproject.toml sets timeout = 60. Measured on 12 isolated runs: 2
+      failures, both `Timeout (>60.0s)`, never `Only N/20`; durations cluster on
+      the ladder prefix sums {1,3,7,15,30,60} at 18s / 34s / 62s. The comment
+      predicting "1 in 2000" is not miscalculated -- it models P(successes < 18)
+      from 0.5^7 per request, which is about 1 in 2400 and is a different,
+      irrelevant failure mode. Fixed with the sub-second ladder the other two
+      retry tests in the same file already use: 20/20 pass, slowest run 4.0s
+      against a 60s limit. Also wired `tests/stress/` into CI, which no workflow
+      referenced -- 35 tests over the breaker, retry and timeout could not redden
+      anything, this one included. The whole directory runs in ~11s.
+      ORIGINAL NOTE, kept: NOT MINE -- recorded because it is measured, and because a
       randomly-failing gate is the mirror image of this audit's thesis: an
       instrument that cannot fail proves nothing, and one that fails at random
       proves nothing either, while training everyone to ignore red. MEASURED
@@ -1624,4 +1646,27 @@ candidates:
       the flow ("Background task — never blocks CompletedState"), so the fix is
       an owner for them, not a cancel, and that is a design decision rather
       than a repair.
+
+  - id: P5-1
+    wave: P5
+    location: weebot/application/agents/, weebot/models/structured_output.py
+    claim: "CLAUDE.md rule 2 mandates Pydantic-validated structured output; agents call bare json.loads instead"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      VERIFIED-STATIC, found while clearing S2. CLAUDE.md states agents "MUST
+      return structured JSON validated via Pydantic models in
+      weebot/models/structured_output.py". In practice `dreamer.py`,
+      `goal_agent.py`, `layer_editor_agent.py` and `optimizer_agent.py` parse
+      with bare `json.loads(...)`, and only three modules import from
+      structured_output at all -- for `VisionReflection` and the
+      verbalized-sampler models, never for `parse_agent_output`. So the
+      documented mandatory protocol is not the one in use, and the module that
+      defines it has an unused parser and an unconstructed error type (S2).
+      NOT FIXED: migrating every agent to the declared protocol is a
+      cross-cutting change, and the alternative -- amending the rule to match
+      reality -- is a decision about intent, not a repair. This is the same
+      shape as the three routing tables and the duplicate reaper: one rule,
+      two implementations, and nothing comparing them. Needs the owner's
+      direction on which of the two is the real one.
 
