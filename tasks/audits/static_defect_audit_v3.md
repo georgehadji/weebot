@@ -191,3 +191,147 @@ been observed because CI has been unable to schedule runners since 21:33Z.
 **What static analysis could not determine:** whether a partial write is
 *likely* in this deployment (needs disk/eviction telemetry); whether two gateway
 processes ever run concurrently against one config.
+
+---
+
+## P2 — `weebot/config/`
+
+**Diversity mode:** `1A: ON · B: ON · C: OFF · k=6`
+**Surface:** `weebot/config/`, 16 files, 4,682 lines. `settings.py` has 46
+importers, `model_refs.py` 41.
+
+### Summary
+
+| | |
+|---|---|
+| Findings (survived innocence) | **4** — VERIFIED-EXECUTED and fixed: 1 · deferred: 3 |
+| Cleared | 0 |
+| Fix packages provided | **1** (D55) |
+| Deferred — manual review | **3** (D56 latent, D57/D58 unreachable) |
+
+### D55 — one bad indent disables every filesystem deny rule `[VERIFIED-EXECUTED]`
+
+**Violated property:** *a filesystem policy that exists is enforced, or the
+operation is refused.* Never silently neither.
+
+**Severity:** HIGH · **Reach:** REACHABLE from `weebot/tools/file_editor.py:140`,
+the gate on every agent file read and write.
+
+`load_rules` returned `[]` for two opposite situations:
+
+- **the file is absent** — the documented default. `FSPermissionChecker` allows
+  by default on purpose: its rules are *"opt-in restrictions layered on top of
+  the tool layer's own workspace containment, not a standalone allowlist"*.
+- **the file exists and could not be read** — an operator wrote a policy and it
+  is not in force.
+
+`file_editor.execute` then skips the entire gate on `if _perm.has_rules:`.
+
+Measured, on the same policy:
+
+```
+valid policy (2 deny rules)    -> 2 rule(s) enforced
+one bad indent (whole file)    -> 0 rule(s) enforced      <- every read and write allowed
+YAML is a bare list            -> AttributeError: 'list' object has no attribute 'get'
+YAML is a bare string          -> AttributeError: 'str' object has no attribute 'get'
+```
+
+The last two because `data.get("rules")` sat **outside** the `try`, so valid YAML
+of the wrong shape raised out of the loader and up through the tool call.
+
+**The codebase already states the correct principle, twice.** `PermissionMode`:
+*"Callers with no approval path of their own MUST fail closed and treat it as
+deny."* And `file_editor`'s `interrupt` branch reasons explicitly that *"treating
+an unanswered gate as permission would invert the rule's intent"*. A policy that
+cannot be loaded is exactly an unanswered gate — the fail-closed reasoning was
+applied to one branch of the gate and not to the loading of the gate itself.
+
+**Fix.** `load_rules` raises `FSPolicyUnreadable` when a file exists but yields
+no rules; `load_fs_permission_checker` catches it, logs at ERROR and installs a
+deny-everything rule set. A **zero-byte** file fails closed too — that is what a
+truncated write leaves behind, and "no rules" is already expressible by having no
+file. An explicit `rules: []` is respected. Per-rule tolerance is unchanged and
+pinned by its own test: a single malformed rule never enforced anything.
+
+**Accepted cost, stated plainly:** a typo in the policy now blocks gated file
+operations until it is fixed. The alternative is an operator who believes they
+are protected and is not.
+
+### Deferred
+
+| ID | Finding | Why not fixed |
+|---|---|---|
+| **D56** | `FSPermissionChecker`'s docstring claims candidate paths are resolved against the workspace root. Only *patterns* are — `check("read", "confidential/k")` allows where the absolute path denies | Harmless today (the sole caller passes absolute paths) but the docstring invites the next caller to make the mistake. Resolving candidates changes matching semantics for every rule — beyond a minimal fix |
+| **D57** | `get_model_cost_info` returns a **fabricated** `{0.01, 0.03}` for an unknown model, indistinguishable from a real price | **Reach: DEAD** — zero callers. The fail-open shape applied to spend |
+| **D58** | `get_cheapest_model_for_task` silently accepts any capability name it does not recognise: `required_capabilities=["json_mode"]` filters nothing | **Reach: DEAD** — zero callers |
+
+D57 and D58 are real and executed, and are recorded rather than fixed for the
+same reason as D53 in P1: editing dead code inside a security diff is the
+unrelated refactoring the protocol forbids. Both must close before anything calls
+them.
+
+### RAR self-review — six vectors
+
+| Vector | Verdict |
+|---|---|
+| Boundary (absent / zero-byte / `rules: []` / `rules: null`) | FIX HOLDS |
+| Invalid input (7 malformed documents) | FIX HOLDS |
+| State (valid policy still enforced, non-matching path still allowed) | FIX HOLDS |
+| Regression (default install: no file, no rules, allow) | FIX HOLDS |
+| Concurrency (8 threads × 30 cached loads) | FIX HOLDS |
+| New defect (module-level deny list not mutable by callers; per-rule tolerance intact) | FIX HOLDS |
+
+### Verification
+
+```
+tests/unit/config/test_fs_policy_fail_closed.py   7 failed / 1 passed -> 10 passed
+tests/unit/test_fs_permissions.py                 37 passed (pre-existing, unchanged)
+tests/unit/test_candidate_inventory.py            11 passed
+```
+
+The red run's **1 passed** matters: `test_a_valid_policy_is_enforced` and the
+absent-file control passed before the fix, so the failures were the defect and
+not a broken harness. An earlier draft of the test had all controls failing —
+because it passed *relative* candidate paths — which is how D56 was found.
+
+### Coverage & residual risk
+
+**Surface audited:** `fs_permissions.py` and the `FSPermissionChecker` /
+`file_editor` gate end to end; the spend path in `model_registry.py`
+(`calculate_cost`, `get_cheapest_model_for_task`, `get_model_cost_info`); a
+whole-package AST sweep for fail-open handlers (2 sites, both read).
+
+**Surface NOT audited:** `model_registry.py`'s 1,616 lines of model data;
+`model_refs.py` (869, 41 importers); `settings.py` (527, 46 importers);
+`capability_profiles.py`, `constants.py`, `secret_accessor.py` beyond the
+`get`/`_get_source` contract read during P1; `feature_flags.py`,
+`harness/schema.py`, `gitnexus_config.py`, `task_preset_registry.py`,
+`tool_config.py`, `learning.py`, `api_endpoints.py`.
+
+**Clean-claim scope:** *the filesystem-policy loader and the model-cost/selection
+functions in P2 were audited for fail-open error paths and instrument failure,
+with one VERIFIED-EXECUTED defect found and fixed.* Nothing is claimed about the
+~3,900 unread lines.
+
+**The six-registry disagreement was not addressed.** P2's stated rationale
+included reconciling registries that disagree in ≥14 documented places. This pass
+found a higher-severity defect first and spent its budget there. The
+reconciliation remains open and is the highest-value next step in this region.
+
+### Uncertainty acknowledgment
+
+**Most likely false positive:** none of the four. All were reproduced by
+execution. D56 is the weakest as a *defect* — it is a documentation error with a
+latent consequence rather than a live fault.
+
+**Real defect most likely missed:** `settings.py` (46 importers) and
+`model_refs.py` (41) were not read. Between them they configure nearly
+everything, and neither has been audited by any wave.
+
+**Tail coverage:** Toggle C was OFF for this pass, per the plan. Probed: fail-open
+error paths, instrument failure, type confusion in config parsing. Not probed:
+concurrency interleavings, resource lifetimes, injection.
+
+**Requires runtime validation:** nothing outstanding — every claim was executed.
+CI has still not scheduled a runner since 21:33Z, so no claim here has been
+confirmed under the E2E, CQRS, Persistence or Docker suites.

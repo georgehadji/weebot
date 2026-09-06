@@ -589,3 +589,83 @@ candidates:
       unobserved -- the telemetry for a dangerous command may never be written
       and nothing reports it. That is a monitoring gap, not a guard defect, and
       it belongs to whoever owns the security-event sink.
+  - id: D55
+    wave: P2
+    location: weebot/config/fs_permissions.py:82-95; weebot/tools/file_editor.py:140
+    claim: >-
+      A filesystem policy file that exists but does not parse is treated as no
+      policy at all, so one bad indent silently disables every deny rule
+    status: fixed
+    evidence: tests/unit/config/test_fs_policy_fail_closed.py
+    verdict_note: >-
+      `load_rules` returned [] both when the file was absent -- the documented
+      default, where allow-by-default is deliberate -- and when it existed but
+      could not be read. `file_editor.execute` skips the entire gate on
+      `if _perm.has_rules:`, so a two-rule deny policy with one missing space
+      allowed every read and write with a WARNING as the only trace. Proven:
+      the valid policy enforced 2 rules, the same file with one bad indent
+      enforced 0. Two further shapes raised AttributeError out of the loader
+      because `data.get("rules")` sat outside the try -- valid YAML that is a
+      bare list or scalar. The codebase already states the right principle in
+      two places: PermissionMode says a caller with no approval path "MUST fail
+      closed", and file_editor's interrupt branch reasons that treating an
+      unanswered gate as permission inverts the rule's intent. A policy that
+      cannot be loaded is an unanswered gate. Now raises FSPolicyUnreadable and
+      installs a deny-everything rule set, logged at ERROR. A zero-byte file --
+      what a truncated write leaves behind -- also fails closed, while an
+      explicit `rules: []` is respected. The per-rule tolerance is unchanged and
+      pinned by its own test: a single malformed rule never enforced anything,
+      so dropping it is still right. Accepted cost, stated: a typo in the policy
+      now blocks gated file operations until it is fixed.
+  - id: D56
+    wave: P2
+    location: weebot/application/services/fs_permission_checker.py:10-16,check()
+    claim: >-
+      The class docstring says candidate paths are resolved against the
+      workspace root; only rule patterns are, so a relative candidate silently
+      matches nothing
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Verified: `check("read", "confidential/keys.txt")` returns allow while
+      `check("read", "<workspace>/confidential/keys.txt")` returns deny, against
+      the same rule. `_path_matches` prefixes a workspace-relative *pattern*
+      with the workspace root; `check` only canonicalises the *candidate*.
+      Harmless today because the sole caller, file_editor, passes an absolute
+      already-resolved path -- but the docstring tells the next caller it may
+      pass a relative one, and that caller would get a silent allow. Found while
+      debugging a test of mine that made exactly that mistake. Deferred rather
+      than fixed: resolving candidates would change matching semantics for every
+      rule, which is beyond a minimal fix and wants its own change.
+  - id: D57
+    wave: P2
+    location: weebot/config/model_registry.py:1578-1594
+    claim: >-
+      `get_model_cost_info` returns a fabricated price for an unknown model,
+      indistinguishable from a real one
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Verified: an unknown id returns {input: 0.01, output: 0.03} -- $10/$30 per
+      million, invented -- with no signal that the model was not found. A caller
+      budgeting from this cannot tell a price from a guess, which is the
+      fail-open shape applied to spend. Reach is DEAD: the function has zero
+      callers in weebot/ or cli/, which caps severity and is why it is recorded
+      rather than fixed. Returning None, or raising, is the fix when something
+      first calls it.
+  - id: D58
+    wave: P2
+    location: weebot/config/model_registry.py:1544-1562
+    claim: >-
+      `get_cheapest_model_for_task` silently accepts any capability name it does
+      not recognise, so an unsupported or misspelled requirement filters nothing
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      Verified: required_capabilities=["json_mode"] and ["funtcion_calling"]
+      both return a model, because the chained `cap == "x" and not
+      model.supports_x` clauses all evaluate False for an unknown name and
+      `has_all_caps` stays True. The caller believes a filter was applied and it
+      was not. Reach is DEAD -- zero callers -- so severity is capped and this is
+      recorded, not fixed. The fix is to validate the requested names against the
+      known set and raise on an unknown one, rather than to add another clause.
