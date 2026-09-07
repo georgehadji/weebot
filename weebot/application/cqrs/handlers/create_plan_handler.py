@@ -59,33 +59,45 @@ class CreatePlanHandler(CommandHandler):
 
             # ── Seed planner from template cache ─────────────────
             # meta_notes is passed to PlannerAgent.create_plan(), not __init__().
+            #
+            # Gated: see PLAN_TEMPLATE_CACHE_ENABLED in config/feature_flags.py.
+            # This is the half that changes the planner's inputs — with the
+            # flag on, `build_meta_notes` output is appended to `meta_notes` on
+            # every task. The guard is a plain `if` rather than a raise into the
+            # handler below, so a feature that is switched off never reports
+            # itself as a failure.
             meta_list = list(command.meta_notes or [])
-            try:
-                from weebot.domain.services.plan_template_cache import (
-                    build_meta_notes,
-                    find_matching_templates,
-                )
+            from weebot.config.feature_flags import is_enabled as _flag_enabled
 
-                templates = await find_matching_templates(self._state_repo, command.prompt)
-                template_notes = build_meta_notes(templates)
-                if template_notes:
-                    meta_list.append(template_notes)
-                    # Increment use_count for matched templates (best-effort)
-                    for tpl in templates:
-                        try:
-                            await self._state_repo.increment_template_use(tpl.template_id)
-                        except Exception:
-                            logger.debug("Failed to increment template use count", exc_info=True)
-                    logger.info(
-                        "Seeding planner with %d template(s) for %s",
-                        len(templates),
-                        command.session_id[:8],
+            if _flag_enabled("PLAN_TEMPLATE_CACHE_ENABLED"):
+                try:
+                    from weebot.domain.services.plan_template_cache import (
+                        build_meta_notes,
+                        find_matching_templates,
                     )
-            except Exception as exc:
-                # WARNING, not DEBUG. Both calls in this block raised TypeError
-                # against the repository's real signatures, and at DEBUG that
-                # was indistinguishable from "no templates matched". (D76.)
-                logger.warning("Template cache lookup failed: %s", exc, exc_info=True)
+
+                    templates = await find_matching_templates(self._state_repo, command.prompt)
+                    template_notes = build_meta_notes(templates)
+                    if template_notes:
+                        meta_list.append(template_notes)
+                        # Increment use_count for matched templates (best-effort)
+                        for tpl in templates:
+                            try:
+                                await self._state_repo.increment_template_use(tpl.template_id)
+                            except Exception:
+                                logger.debug(
+                                    "Failed to increment template use count", exc_info=True
+                                )
+                        logger.info(
+                            "Seeding planner with %d template(s) for %s",
+                            len(templates),
+                            command.session_id[:8],
+                        )
+                except Exception as exc:
+                    # WARNING, not DEBUG. Both calls in this block raised
+                    # TypeError against the repository's real signatures, and at
+                    # DEBUG that was indistinguishable from "no match". (D76.)
+                    logger.warning("Template cache lookup failed: %s", exc, exc_info=True)
 
             planner = PlannerAgent(llm=self._llm, event_bus=self._event_bus, **planner_cfg)
 
