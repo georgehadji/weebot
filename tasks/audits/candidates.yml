@@ -532,9 +532,30 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/sqlite_state_repo.py
     claim: "`save_session` spans three separate write transactions; a crash between them leaves partial state"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_save_session_write_ordering.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and the measurement found something the record did not:
+      TRANSACTION 1 HAD NEVER COMMITTED ANYTHING. `save_commitment` raised
+      `sqlite3.ProgrammingError: Error binding parameter 7: type
+      'CommitmentStatus' is not supported` on every call, because
+      `CommitmentStatus` was a bare `Enum` while every sibling —
+      SessionStatus, PlanStatus, StepStatus, AuditVerdict — is `str, Enum`, and
+      sqlite3 binds a str subclass and refuses a bare one. `save_session`
+      wrapped the whole block in `except Exception: logger.debug(...)`, so a
+      total feature outage left one DEBUG line and nothing else. Measured: the
+      extractor returns 1 commitment for "I'll follow up with you tomorrow."
+      and the commitments table stayed empty. The duplicate-rule pattern again
+      — four sibling enums, one written differently. THREE FIXES: the enum is
+      `str, Enum`; the commitment write moved AFTER the session write, so the
+      only reachable partial state is a session with no commitments rather than
+      rows referencing a session that does not exist (which is the record's
+      actual claim, and only became reachable once transaction 1 worked); and
+      the handler logs at WARNING with the session id instead of DEBUG — fail
+      open, loudly, per the Phase 0 policy. NOT CHANGED: the three writes are
+      still three transactions. SQLite gives no cross-connection atomicity
+      here, and the FTS watermark already retries on failure, so ordering the
+      dependent write last is the available guarantee rather than a partial fix.
 
   - id: D33
     wave: W4
@@ -1798,19 +1819,28 @@ candidates:
     wave: Phase0
     location: weebot/application/services/harness_safety_gate.py, weebot/application/flows/harness_opt_flow.py:206
     claim: "The safety gate reaches the right verdict and nothing enforces it"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/application/flows/test_the_safety_gate_actually_blocks.py
     verdict_note: >-
-      SURVEYED, NOT FIXED. `HarnessSafetyGate.check` correctly gates unknown
-      surfaces (`# Unknown surface — treat as gated (fail-safe)`) and sets
-      requires_approval=True. The caller yields a WaitForUserEvent on line 206
-      and calls `await self._target.save(candidate)` on line 208 —
-      UNCONDITIONALLY, on the next statement. Its own comment says so: "This is
-      a NOTIFICATION, not a blocking gate ... then optimistically saves." So an
-      edit to a safety-critical surface is persisted whether or not anyone
-      approves. This is not a fail-open in the gate; it is a gate with no
-      enforcement point, which needs the durable-pause treatment D69 gave the
-      flow gates rather than a one-line change.
+      VERIFIED-EXECUTED, and worse than surveyed. `HarnessSafetyGate.check`
+      classifies correctly, including the fail-safe branch for an unrecognised
+      surface. The caller yielded WaitForUserEvent on line 206 and called
+      `await self._target.save(candidate)` on line 208 — unconditionally, next
+      statement — with the comment "Callers that want to block must stop
+      iterating after receiving WaitForUserEvent." ZERO CALLERS DID. The only
+      production consumer, `cli/commands/harness.py`, iterates with
+      `if hasattr(event, "message") and event.message`, and WaitForUserEvent
+      carries `question`, NOT `message` — so the approval prompt was not even
+      DISPLAYED before the edit to a safety-critical surface was persisted.
+      A gate whose enforcement is delegated to every caller is not a gate.
+      Fixed by declining to apply a gated edit at all: this flow has no session
+      or state repository, so there is no durable pause to resume from, and the
+      honest behaviour is to report the proposal and hold it.
+      `held_for_approval()` exposes them and the CLI now prints both the prompt
+      and the held list. The pre-existing
+      `test_gated_edit_yields_wait_for_user_event` asserted only that the event
+      was yielded, so it passed against the broken behaviour — the same shape
+      as the Phase 0 control tests.
 
   # ── Phase 0, quality half — fail open, never silently ────────────────
   - id: PH0-7

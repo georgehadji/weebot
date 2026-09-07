@@ -249,26 +249,6 @@ class SQLiteStateRepository(StateRepositoryPort):
         sq = self._session_queries
         assert sq is not None
 
-        # ── Extract commitments from assistant messages ───────────
-        try:
-            from weebot.domain.services.commitment_extractor import extract_commitments
-            from weebot.domain.models.event import MessageEvent
-
-            for event in session.events:
-                if isinstance(event, MessageEvent) and getattr(event, "role", "") == "assistant":
-                    text = getattr(event, "message", "") or ""
-                    if text:
-                        commitments = extract_commitments(
-                            text,
-                            context="Session: " + (session.title or "")[:200],
-                            source_session_id=session.id,
-                            source_event_id=getattr(event, "event_id", None),
-                        )
-                        for cmt in commitments:
-                            await self.save_commitment(cmt)
-        except Exception as exc:
-            logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
-
         # ── Event bloat guard ─────────────────────────────────────
         events_data = [e.model_dump() for e in session.events]
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
@@ -286,6 +266,47 @@ class SQLiteStateRepository(StateRepositoryPort):
 
         # ── Persist session ───────────────────────────────────────
         await sq.save(session)
+
+        # ── Extract commitments from assistant messages ───────────
+        #
+        # AFTER the session row, not before. `save_session` runs three separate
+        # write transactions — commitments, the session, the FTS index — and a
+        # crash between them leaves partial state. Commitments carry
+        # `source_session_id`, so writing them first meant a crash in between
+        # left rows pointing at a session that does not exist. Ordering the
+        # dependent write second makes the only reachable partial state a
+        # session with no commitments, which is a missing side-feature rather
+        # than a dangling reference.
+        #
+        # Still non-fatal — a session must persist even if commitment
+        # extraction breaks — but no longer INVISIBLE. This was
+        # `except Exception: logger.debug(...)`, and it hid a
+        # `sqlite3.ProgrammingError` on every single call for the life of the
+        # feature. Fail open, loudly.
+        try:
+            from weebot.domain.services.commitment_extractor import extract_commitments
+            from weebot.domain.models.event import MessageEvent
+
+            for event in session.events:
+                if isinstance(event, MessageEvent) and getattr(event, "role", "") == "assistant":
+                    text = getattr(event, "message", "") or ""
+                    if text:
+                        commitments = extract_commitments(
+                            text,
+                            context="Session: " + (session.title or "")[:200],
+                            source_session_id=session.id,
+                            source_event_id=getattr(event, "event_id", None),
+                        )
+                        for cmt in commitments:
+                            await self.save_commitment(cmt)
+        except Exception as exc:
+            logger.warning(
+                "Commitment extraction failed for session %s — the session is saved, "
+                "the commitments are not: %s",
+                session.id,
+                exc,
+                exc_info=True,
+            )
 
         # ── Index new events for FTS5 ─────────────────────────────
         pool = await self._get_pool()

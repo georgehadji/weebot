@@ -12,8 +12,21 @@ from datetime import datetime, UTC
 from enum import Enum
 
 
-class CommitmentStatus(Enum):
-    """Lifecycle of a commitment."""
+class CommitmentStatus(str, Enum):
+    """Lifecycle of a commitment.
+
+    `str, Enum`, like every sibling — SessionStatus, PlanStatus, StepStatus and
+    AuditVerdict are all mixin enums; this one alone was not. sqlite3 binds a
+    `str` subclass and refuses a bare Enum:
+
+        sqlite3.ProgrammingError: Error binding parameter 7:
+        type 'CommitmentStatus' is not supported
+
+    So EVERY `save_commitment` raised, and `save_session` wrapped the whole
+    extraction block in `except Exception: logger.debug(...)`. The commitment
+    feature has never persisted a single row, and the only trace was a DEBUG
+    line nobody reads.
+    """
 
     PENDING = "pending"  # Extracted, awaiting due time
     IN_PROGRESS = "in_progress"  # Due time has arrived, follow-up in progress

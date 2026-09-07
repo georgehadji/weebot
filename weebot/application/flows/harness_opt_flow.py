@@ -116,6 +116,9 @@ class HarnessOptFlow(BaseFlow):
         self._max_proposals = max_proposals
         self._code_quality_signal = code_quality_signal
         self._done = False
+        # Edits the regression gate accepted and the safety gate held back.
+        # Exposed so a caller can report or act on them deliberately.
+        self._held_for_approval: list[HarnessEdit] = []
 
         # Injected gate; defaults to stub (always-accept) when no gate
         # or task_runner is provided.  The task_runner callable is what
@@ -196,14 +199,37 @@ class HarnessOptFlow(BaseFlow):
             )
 
             if decision.accepted:
-                # ── Safety gate: notify if gated surfaces were modified ──
-                # This is a NOTIFICATION, not a blocking gate.  The flow
-                # yields WaitForUserEvent to inform the caller, then
-                # optimistically saves.  Callers that want to block must
-                # stop iterating after receiving WaitForUserEvent.
+                # ── Safety gate: gated surfaces are NOT auto-promoted ──
+                #
+                # This used to be a notification. The flow yielded
+                # WaitForUserEvent and then called `save(candidate)` on the
+                # very next statement, unconditionally, with the comment
+                # "Callers that want to block must stop iterating after
+                # receiving WaitForUserEvent."
+                #
+                # Zero callers did. `cli/commands/harness.py` iterates with
+                # `if hasattr(event, "message")`, and WaitForUserEvent carries
+                # `question`, not `message` — so the approval prompt was not
+                # even DISPLAYED, and the edit to a safety-critical surface
+                # (runtime_control, subagents, or any unrecognised surface,
+                # which `check` gates as fail-safe) was persisted regardless.
+                #
+                # A gate whose enforcement is delegated to every caller is not
+                # a gate. This flow has no session or state repository, so
+                # there is no durable pause to resume from; the honest
+                # behaviour is to report the proposal and decline to apply it.
                 safety_result = HarnessSafetyGate.check([edit])
                 if safety_result.requires_approval:
                     yield WaitForUserEvent(question=safety_result.approval_prompt)
+                    yield MessageEvent(
+                        message=(
+                            f"⏸ Held for approval: {edit.target_surface} — accepted by the "
+                            f"regression gate but NOT applied, because it touches a "
+                            f"safety-critical surface. Apply it deliberately if you want it."
+                        )
+                    )
+                    self._held_for_approval.append(edit)
+                    continue
 
                 saved = await self._target.save(candidate)
                 yield MessageEvent(
@@ -218,6 +244,14 @@ class HarnessOptFlow(BaseFlow):
         yield DoneEvent()
 
     # ── Internal stages ───────────────────────────────────────────────
+
+    def held_for_approval(self) -> list[HarnessEdit]:
+        """Edits the regression gate accepted and the safety gate held back.
+
+        Empty on a run where nothing touched a gated surface. A caller that
+        wants these applied must do so deliberately — this flow will not.
+        """
+        return list(self._held_for_approval)
 
     def _make_task_runner(self) -> Callable:
         """Return a callable for the RegressionGate's task_runner protocol.

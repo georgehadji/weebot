@@ -3421,3 +3421,162 @@ that writing the fix, rather than writing the report, produced the finding.
 **UNKNOWN:** how much of what remains recorded as "surveyed, not fixed" holds
 the same kind of adjacent defect, invisible until someone edits the line next
 to it.
+
+## A gate nobody enforced, and a table nothing had ever written to
+
+### PH0-6 — enforcement delegated to callers who do not enforce `[VERIFIED-EXECUTED]`
+
+`HarnessSafetyGate.check` classifies correctly, fail-safe branch included:
+
+```python
+else:
+    # Unknown surface — treat as gated (fail-safe)
+    gated.append(edit)
+```
+
+Its caller:
+
+```python
+if safety_result.requires_approval:
+    yield WaitForUserEvent(question=safety_result.approval_prompt)
+
+saved = await self._target.save(candidate)     # ← next statement
+```
+
+with the comment *"Callers that want to block must stop iterating after
+receiving WaitForUserEvent."*
+
+**Zero callers do.** The only production consumer is
+`cli/commands/harness.py`:
+
+```python
+async for event in flow.run():
+    if hasattr(event, "message") and event.message:
+        console.print(f"  {event.message}")
+```
+
+`WaitForUserEvent` carries `question`, not `message`. So the approval prompt
+was **not even displayed** — silently filtered out — and then the edit to
+`runtime_control`, `subagents`, or any unrecognised surface was persisted
+anyway.
+
+A gate whose enforcement is delegated to every caller is not a gate. It is a
+notification that happens to have the word "gate" in its class name.
+
+`HarnessOptFlow` has no session and no state repository, so there is no durable
+pause to resume from the way D69 built for the flow gates. The available honest
+behaviour is to decline: a gated edit is reported, held in
+`held_for_approval()`, and **not applied**. Autonomous surfaces still promote
+unattended, which is the loop's whole purpose — a fix that blocked those would
+be worse than the defect.
+
+**The existing test asserted only that the event was yielded**, so it passed
+against the broken behaviour. Third time in this programme a test has pinned a
+notification and said nothing about enforcement.
+
+### D32 — the record was right, and transaction 1 had never committed
+
+The claim: *"`save_session` spans three separate write transactions; a crash
+between them leaves partial state."* True. The measurement found something
+underneath it:
+
+```
+sqlite3.ProgrammingError: Error binding parameter 7:
+type 'CommitmentStatus' is not supported
+```
+
+`CommitmentStatus` was a bare `Enum`. Every sibling is a mixin:
+
+| enum | declaration |
+|---|---|
+| `SessionStatus` | `class SessionStatus(str, Enum)` |
+| `PlanStatus` | `class PlanStatus(str, Enum)` |
+| `StepStatus` | `class StepStatus(str, Enum)` |
+| `AuditVerdict` | `class AuditVerdict(str, Enum)` |
+| **`CommitmentStatus`** | **`class CommitmentStatus(Enum)`** |
+
+sqlite3 binds a `str` subclass and refuses a bare one. So **every**
+`save_commitment` raised — and `save_session` wrapped the whole extraction
+block in:
+
+```python
+except Exception as exc:
+    logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
+```
+
+A total feature outage, for the life of the feature, leaving one DEBUG line.
+Measured: the extractor returns 1 commitment for *"I'll follow up with you
+tomorrow."*, and the commitments table stays empty.
+
+The duplicate-rule pattern for the fifth time in this session — five sibling
+enums, one written differently, and nothing comparing them.
+
+### Three fixes, and what the ordering one is actually for
+
+1. **`str, Enum`.** The table can be written to.
+2. **The commitment write moved after the session write.** This is the record's
+   actual claim, and it only became *reachable* once transaction 1 worked:
+   commitments carry `source_session_id`, so writing them first meant a crash
+   in between left rows pointing at a session that does not exist. Ordering the
+   dependent write second makes the only reachable partial state a session with
+   no commitments — a missing side-feature, not a dangling reference.
+3. **WARNING, not DEBUG**, with the session id. Fail open — a session must
+   persist even when extraction breaks — but per the Phase 0 policy, loudly.
+
+### A probe that measured nothing, twice
+
+Worth recording because both errors were mine and both looked like findings:
+
+- The first probe used *"I will write the report tomorrow."* and reported zero
+  commitments. That is not the defect — `_COMMITMENT_PATTERNS` wants specific
+  verbs (`follow up`, `check back`, `monitor`, `notify`), so the input simply
+  matched nothing. Had I stopped there I would have reported an inert
+  extractor.
+- The probe then hung at interpreter shutdown, because `aiosqlite`'s
+  connection worker threads are non-daemon and the pool was never closed. That
+  is **D36's shape**, met by accident: `close()` drains only the idle queue.
+
+### The inventory gate caught me deleting a record
+
+The D32 edit spliced between "the D32 claim" and "the next `- id: D34`" — and
+**D33 sat between them**. It was silently removed, and
+`test_every_id_in_the_audits_is_in_the_inventory` failed on the next run:
+
+```
+these candidate ids appear in the audits but not in candidates.yml
+    D33: ['defect_hunt_w4_persistence.md']
+```
+
+Restored from `git show HEAD:`. Eighth time one of this repository's own gates
+has caught this work, and the first time one caught a *record* being destroyed
+rather than code being broken.
+
+### Coverage & residual risk
+
+- **The three writes are still three transactions.** SQLite gives no
+  cross-connection atomicity here, and the FTS watermark already retries on
+  failure, so ordering the dependent write last is the available guarantee, not
+  a complete one. A crash between the session write and the FTS write still
+  leaves an unindexed session — recoverable, because the watermark does not
+  advance.
+- **Commitments now write for the first time.** Nothing downstream has ever
+  seen a non-empty commitments table, so any consumer of it is untested against
+  real data. That is a new exposure created by fixing this, and it is the
+  honest cost of the fix rather than a reason not to make it.
+- **`held_for_approval()` has one consumer**, the CLI. A programmatic caller
+  that ignores it gets the safe behaviour by default, which is the right way
+  round, but nothing forces it to look.
+- **D34 is adjacent and untouched.** The truncation rule in
+  `sqlite_state_repo.save_session` computes a truncated `events_data` that it
+  then never passes to `sq.save(session)`, which truncates again from the
+  original. Two implementations of one rule, in one call path.
+
+### Uncertainty acknowledgment
+
+D32's record described the hazard correctly and could not have known the first
+of its three transactions was inert — that took running it. **The record was
+not wrong; it was incomplete in a direction reading cannot reach.** That is a
+different failure from the nine mis-stated records earlier in this session, and
+a more forgivable one. **UNKNOWN:** how many other correctly-described hazards
+sit on top of a step that has never executed, where the described risk is
+latent rather than live and the real defect is the silence.
