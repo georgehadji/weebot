@@ -22,20 +22,44 @@ class SessionQueries:
     def __init__(self, pool: SQLiteConnectionPool):
         self._pool = pool
 
-    async def save(self, session: Session) -> None:
-        """Upsert a session row."""
+    async def save(self, session: Session) -> int:
+        """Upsert a session row. Returns how many oldest events were dropped.
+
+        The ``MAX_EVENTS_JSON_BYTES`` ceiling is enforced HERE and only here.
+        ``SQLiteStateRepository.save_session`` used to run a byte-for-byte
+        identical loop of its own immediately before calling this one, and then
+        throw the result away — it passes the ``Session``, not the trimmed list,
+        so this loop always re-did the work from the original events. One rule,
+        two implementations, and the copy that ran first was the one nothing
+        read.
+
+        Returning the count is what lets the caller act on the outcome instead
+        of recomputing it.
+        """
         events_data = [e.model_dump() for e in session.events]
         from weebot.config.constants import MAX_EVENTS_JSON_BYTES
 
         events_json = json.dumps(events_data, default=str)
+        original_count = len(events_data)
+        original_bytes = len(events_json)
         while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
-            logger.warning(
-                "Session %s events_json is %d bytes — truncating oldest events",
-                session.id,
-                len(events_json),
-            )
             events_data = events_data[1:]
             events_json = json.dumps(events_data, default=str)
+        dropped = original_count - len(events_data)
+        if dropped:
+            # One line for the whole truncation, not one per dropped event.
+            # With the duplicate loop in place this logged 2N lines for N
+            # dropped events, from two different module names, which read like
+            # two separate faults.
+            logger.warning(
+                "Session %s events_json was %d bytes over the %d-byte ceiling — "
+                "dropped the %d oldest of %d events to fit the row",
+                session.id,
+                original_bytes,
+                MAX_EVENTS_JSON_BYTES,
+                dropped,
+                original_count,
+            )
 
         async with self._pool.acquire_write() as conn:
             await conn.execute(
@@ -63,6 +87,7 @@ class SessionQueries:
                     "updated_at": session.updated_at.isoformat(),
                 },
             )
+        return dropped
 
     async def load(self, session_id: str) -> dict[str, Any] | None:
         """Load a session row by ID.

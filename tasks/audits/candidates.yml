@@ -569,9 +569,17 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/sqlite_state_repo.py
     claim: "A truncation rule implemented twice, only one copy resetting the FTS watermark"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_one_truncation_rule.py
+    verdict_note: null
+
+  - id: D71
+    wave: W4
+    location: weebot/infrastructure/persistence/sqlite_state_repo.py
+    claim: "`_fts5_indexed` is per-instance memory, so the first save after any restart re-indexes every event of every session it touches"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_fts_index_is_idempotent.py
+    verdict_note: null
 
   - id: D35
     wave: W4
