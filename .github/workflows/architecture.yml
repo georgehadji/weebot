@@ -70,6 +70,15 @@ jobs:
         # gate lived only in `make check` as a grep that could not match the
         # two-line `except X:` / `pass` form, so it reported clean over 139 sites.
         run: python scripts/lint_except_pass.py
+      - name: Agent structured-output ratchet
+        # BLOCKING. CLAUDE.md rule 2 mandates Pydantic-validated structured
+        # output from agents. Measured before the migration: three of five
+        # malformed responses escaped `GoalAgent`'s own `except
+        # json.JSONDecodeError` and crashed, because `.get(key, default)`
+        # substitutes the default only when a key is ABSENT. Four agents were
+        # migrated; this pins the rest so the divergence cannot grow back.
+        run: python scripts/lint_agent_json_parsing.py
+
       - name: Unused-local ratchet
         # BLOCKING. ruff has always been able to see these; the selector above
         # is `F821,E9`, so it was never asked. Two real defects were found this

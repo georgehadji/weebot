@@ -10,12 +10,12 @@ Model: MODEL_CASCADE_TIER1 (Owl Alpha — free, agentic, tool-aware).
 
 from __future__ import annotations
 
-import json
 import logging
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_DEFAULT
 from weebot.domain.models.swarm import SwarmSpec, SubGoal
+from weebot.models.structured_output import GoalDecomposition, parse_structured
 
 logger = logging.getLogger(__name__)
 
@@ -79,23 +79,28 @@ class GoalAgent:
             max_tokens=MAX_TOKENS_EXTENDED,
         )
 
-        content = response.content or ""
-        try:
-            data = self._parse_json(content)
-        except json.JSONDecodeError:
-            logger.warning("GoalAgent: unparseable response, using fallback")
+        # Validated against a Pydantic model rather than read field by field.
+        # The fieldwise version caught only `JSONDecodeError`, and three of five
+        # malformed responses escaped it: `"priority": "high"` raised ValueError
+        # from `int()`, `"goals": "oops"` raised AttributeError from `.get`, and
+        # `"tools": "web_search"` was accepted silently as a list of characters.
+        # `.get(key, default)` substitutes the default only when a key is
+        # ABSENT, never when it is present and wrong.
+        decomposition = parse_structured(
+            response.content, GoalDecomposition, context="GoalAgent.decompose"
+        )
+        if decomposition is None:
             return self._fallback_spec(prompt)
 
-        goals = []
-        for g in data.get("goals", [])[:max_goals]:
-            goals.append(
-                SubGoal(
-                    description=str(g.get("description", "")),
-                    role=str(g.get("role", "researcher")),
-                    tools=[str(t) for t in g.get("tools", ["web_search"])],
-                    priority=int(g.get("priority", 0)),
-                )
+        goals = [
+            SubGoal(
+                description=g.description,
+                role=g.role,
+                tools=g.tools,
+                priority=g.priority,
             )
+            for g in decomposition.goals[:max_goals]
+        ]
 
         if not goals:
             return self._fallback_spec(prompt)
@@ -103,26 +108,9 @@ class GoalAgent:
         return SwarmSpec(
             original_prompt=prompt,
             goals=goals,
-            max_concurrency=int(data.get("max_concurrency", 4)),
-            synthesis_strategy=str(data.get("synthesis_strategy", "cluster")),
+            max_concurrency=decomposition.max_concurrency,
+            synthesis_strategy=decomposition.synthesis_strategy,
         )
-
-    @staticmethod
-    def _parse_json(content: str) -> dict:
-        """Extract JSON object from potentially noisy LLM output."""
-        content = content.strip()
-        # Try direct parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-        # Extract from markdown code block
-        if "```" in content:
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            if start != -1 and end > start:
-                return json.loads(content[start:end])
-        raise json.JSONDecodeError("No JSON found", content, 0)
 
     @staticmethod
     def _fallback_spec(prompt: str) -> SwarmSpec:

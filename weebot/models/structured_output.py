@@ -10,13 +10,18 @@ Based on patterns from The Dev Squad analysis.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from datetime import datetime, UTC
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class TaskStatus(str, Enum):
@@ -143,6 +148,174 @@ class OutputParseError(BaseModel):
     )
 
 
+# ── Agent payload schemas (CLAUDE.md rule 2) ──────────────────────────
+#
+# One model per agent payload, all in this module, because rule 2 names this
+# module as where they live. They are NOT `WeebotOutput` subclasses: an idea
+# list and a goal decomposition do not have a status/message/reasoning shape,
+# and forcing them into one would be worse code rather than more compliant.
+#
+# What they replace is four hand-rolled parsers doing fieldwise
+# `.get(key, default)`, which substitutes the default only when a key is
+# ABSENT. Measured on `GoalAgent.decompose` before this existed — three of five
+# malformed responses ESCAPED the `except json.JSONDecodeError` written to
+# absorb them:
+#
+#     priority is a word      -> ValueError: invalid literal for int()
+#     goals is a string       -> AttributeError: 'str' object has no attribute 'get'
+#     max_concurrency is word -> ValueError: invalid literal for int()
+#     tools is a string       -> accepted silently, one goal built from characters
+#     unparseable             -> fallback (the only case that worked)
+
+
+class GoalSpec(BaseModel):
+    """One sub-goal in a `GoalAgent` decomposition."""
+
+    description: str = ""
+    role: str = "researcher"
+    tools: list[str] = Field(default_factory=lambda: ["web_search"])
+    priority: int = 0
+
+
+class GoalDecomposition(BaseModel):
+    """`GoalAgent`'s response payload."""
+
+    goals: list[GoalSpec] = Field(default_factory=list)
+    max_concurrency: int = 4
+    synthesis_strategy: str = "cluster"
+
+
+class IdeaProposal(BaseModel):
+    """One idea from `DreamerAgent`. Bounds live here, not at the call site."""
+
+    title: str = "Untitled"
+    prompt: str = ""
+    source: str = "opportunity_proposal"
+    evidence: list[str] = Field(default_factory=list)
+    heat_score: float = 0.0
+    estimated_effort: str = "medium"
+
+    @field_validator("heat_score")
+    @classmethod
+    def _clamp(cls, v: float) -> float:
+        return min(1.0, max(0.0, v))
+
+
+class IdeaProposalList(BaseModel):
+    """`DreamerAgent` is prompted for a bare array; some models wrap it.
+
+    The old code handled that with `data.get("ideas", data.get("contracts", []))`
+    after an `isinstance(data, dict)` check. Both shapes are declared here
+    instead, and `from_payload` is the one place that knows about it.
+    """
+
+    ideas: list[IdeaProposal] = Field(default_factory=list)
+
+    @classmethod
+    def from_payload(cls, data: Any) -> IdeaProposalList:
+        if isinstance(data, list):
+            return cls.model_validate({"ideas": data})
+        if isinstance(data, dict):
+            for key in ("ideas", "contracts"):
+                if key in data:
+                    return cls.model_validate({"ideas": data[key]})
+        return cls.model_validate(data)
+
+
+class HarnessEditProposal(BaseModel):
+    """`LayerEditorAgent`'s response payload."""
+
+    target: str = ""
+    change: str = ""
+    rationale: str = ""
+    estimated_impact: str = "medium"
+
+
+class EvaluatorPromptImprovement(BaseModel):
+    """`OptimizerAgent`'s evaluator-reflection payload."""
+
+    new_prompt: str = ""
+    rationale: str = "Evaluator prompt improvement"
+
+
+class EditSelection(BaseModel):
+    """`OptimizerAgent`'s edit-ranking payload."""
+
+    selected_indices: list[int] = Field(default_factory=list)
+
+
+def extract_json_text(text: str) -> str:
+    """Pull the JSON payload out of a model response.
+
+    Handles a ```json fence, a bare object, and plain JSON — in that order.
+    Returns *text* unchanged when it finds no delimiters, so the caller's
+    `json.loads` produces the real error rather than one about extraction.
+
+    Shared on purpose. Before this, FOUR modules each had their own version and
+    no two agreed: `dreamer` split the fence on a newline, `goal_agent` tried a
+    direct parse and then scanned for braces, `layer_editor_agent` scanned only
+    when the text started with a fence, and `parse_agent_output` used these
+    regexes. A model that wraps its answer differently succeeded in some and
+    failed in others, for no reason a reader could see.
+    """
+    fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if fenced:
+        return fenced.group(1).strip()
+    braced = re.search(r"[\[{].*[\]}]", text, re.DOTALL)
+    if braced:
+        return braced.group(0)
+    return text
+
+
+def parse_structured(
+    raw_text: str | None,
+    model: type[_ModelT],
+    *,
+    context: str = "",
+) -> _ModelT | None:
+    """Validate a model response against *model*, or return None.
+
+    This is what CLAUDE.md rule 2 asks for — "structured JSON validated via
+    Pydantic models in weebot/models/structured_output.py" — for agents whose
+    payload is not `WeebotOutput`. Forcing an idea list or a goal decomposition
+    into `WeebotOutput`'s status/message/reasoning shape would be worse code,
+    not more compliant.
+
+    Returns None rather than raising, because every caller already has a
+    defined fallback (`_fallback_spec`, an empty list, a support-count sort)
+    and a `None` they must handle is more honest than an exception they will
+    wrap in a bare `except`. The failure is logged at WARNING, so a model that
+    starts returning garbage is visible rather than silently degrading.
+
+    What this replaces is not just four extractors but four fieldwise
+    `.get(key, default)` readings, which substitute the default only when a key
+    is ABSENT — never when it is present and wrong. `{"goals": "oops"}` reached
+    the domain model as a string in the old code; here it fails validation.
+    """
+    if not raw_text or not raw_text.strip():
+        logger.warning("Structured parse got an empty response%s.", f" ({context})" if context else "")
+        return None
+    try:
+        data = json.loads(extract_json_text(raw_text.strip()))
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Structured parse found no valid JSON%s: %s",
+            f" ({context})" if context else "",
+            exc,
+        )
+        return None
+    try:
+        return model.model_validate(data)
+    except ValidationError as exc:
+        logger.warning(
+            "Structured parse failed validation against %s%s: %s",
+            model.__name__,
+            f" ({context})" if context else "",
+            exc,
+        )
+        return None
+
+
 def parse_agent_output(raw_text: str) -> WeebotOutput:
     """Parse agent output into structured format.
 
@@ -178,17 +351,7 @@ def parse_agent_output(raw_text: str) -> WeebotOutput:
             confidence=0.0,
         )
 
-    # Try to extract JSON from markdown code block
-    json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    if json_match:
-        json_str = json_match.group(1).strip()
-    else:
-        # Try to find raw JSON (look for opening brace)
-        brace_match = re.search(r"\{.*\}", text, re.DOTALL)
-        if brace_match:
-            json_str = brace_match.group(0)
-        else:
-            json_str = text
+    json_str = extract_json_text(text)
 
     # Try to parse as JSON
     try:
@@ -506,6 +669,15 @@ __all__ = [
     "WeebotOutput",
     "OutputParseError",
     "parse_agent_output",
+    "GoalSpec",
+    "GoalDecomposition",
+    "IdeaProposal",
+    "IdeaProposalList",
+    "HarnessEditProposal",
+    "EvaluatorPromptImprovement",
+    "EditSelection",
+    "parse_structured",
+    "extract_json_text",
     "create_system_prompt",
     "STRUCTURED_OUTPUT_PROMPT",
     # Verbalized Sampling

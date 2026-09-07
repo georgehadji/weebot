@@ -436,6 +436,8 @@ class BashGuard:
         # Compile patterns for performance
         self._compiled_patterns: list[tuple[re.Pattern, RiskLevel, str, str]] = []
         self._on_security_event = on_security_event
+        # Patterns that would have blocked something and could not be compiled.
+        self._dropped_blocking: list[str] = []
         for pattern, risk, desc, suggestion in self._all_patterns:
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
@@ -443,9 +445,18 @@ class BashGuard:
             except re.error as exc:
                 # A malformed pattern silently removed the rule it encoded —
                 # including BLOCKED rules — leaving the guard weaker with no
-                # trace. Skipping is still the only safe action here (raising
-                # would make the whole guard unconstructable), but it must be
-                # visible.
+                # trace. An earlier pass made that visible in the log and kept
+                # skipping, on the reasoning that raising would make the whole
+                # guard unconstructable. That reasoning is sound and the
+                # conclusion was still fail-open: the log went to a file and
+                # the command ran.
+                #
+                # Construction still succeeds. What changes is that a guard
+                # missing a BLOCKING rule can no longer certify anything as
+                # safe — `evaluate` refuses instead. Built-in patterns all
+                # compile (pinned by a test), so in practice this fires only on
+                # a caller's `custom_patterns`, where it is their bug to fix and
+                # a loud failure is the useful one.
                 _log.error(
                     "bash_guard: dropping unusable %s pattern %r (%s) — "
                     "the rule it encodes is NOT enforced",
@@ -453,6 +464,8 @@ class BashGuard:
                     pattern,
                     exc,
                 )
+                if risk in (RiskLevel.BLOCKED, RiskLevel.DANGEROUS):
+                    self._dropped_blocking.append(pattern)
                 continue
 
     @staticmethod
@@ -487,6 +500,20 @@ class BashGuard:
             The highest_risk_level is the most severe risk found.
         """
         command = self._normalize(command)
+        if self._dropped_blocking:
+            # The gate cannot run its own rules, so it does not report clean.
+            return RiskLevel.BLOCKED, [
+                SafetyCheck(
+                    pattern="<uncompilable>",
+                    risk_level=RiskLevel.BLOCKED,
+                    description=(
+                        f"{len(self._dropped_blocking)} blocking pattern(s) failed to "
+                        "compile; the guard cannot evaluate this command."
+                    ),
+                    suggestion="Fix the malformed pattern(s) in custom_patterns.",
+                )
+            ]
+
         if not command or not command.strip():
             return RiskLevel.SAFE, []
 

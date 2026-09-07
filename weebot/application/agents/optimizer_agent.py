@@ -16,6 +16,11 @@ import json
 import logging
 from collections import Counter
 
+from weebot.models.structured_output import (
+    EditSelection,
+    EvaluatorPromptImprovement,
+    parse_structured,
+)
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
@@ -175,22 +180,20 @@ class OptimizerAgent(OptimizerPort):
                 temperature=0.3,
                 max_tokens=1000,
             )
-            if not response or not response.content:
-                return []
-
-            import json
-
-            parsed = json.loads(response.content)
-            new_prompt = parsed.get("new_prompt", "")
-            if not new_prompt:
+            improvement = parse_structured(
+                getattr(response, "content", None),
+                EvaluatorPromptImprovement,
+                context="OptimizerAgent.reflect_on_evaluator",
+            )
+            if improvement is None or not improvement.new_prompt:
                 return []
 
             return [
                 SkillEdit(
                     op="replace",
                     target="evaluator_prompt",
-                    content=new_prompt,
-                    description=parsed.get("rationale", "Evaluator prompt improvement"),
+                    content=improvement.new_prompt,
+                    description=improvement.rationale,
                 )
             ]
         except Exception as exc:
@@ -239,14 +242,21 @@ class OptimizerAgent(OptimizerPort):
             max_tokens=MAX_TOKENS_STANDARD,
         )
 
-        try:
-            data = json.loads(response.content)
-            indices = data.get("selected_indices", [])[:budget]
-            return [edits[i] for i in indices if i < len(edits)]
-        except Exception as exc:
-            logger.warning("Ranking LLM call failed: %s — falling back to support_count sort", exc)
-            sorted_edits = sorted(edits, key=lambda e: e.support_count, reverse=True)
-            return sorted_edits[:budget]
+        selection = parse_structured(
+            getattr(response, "content", None),
+            EditSelection,
+            context="OptimizerAgent.rank_edits",
+        )
+        if selection is not None:
+            # `i < len(edits)` accepted negative indices, which Python reads
+            # from the END of the list — a model answering `-1` silently
+            # selected the last edit rather than being rejected.
+            return [
+                edits[i] for i in selection.selected_indices[:budget] if 0 <= i < len(edits)
+            ]
+        logger.warning("Edit ranking unusable — falling back to support_count sort")
+        sorted_edits = sorted(edits, key=lambda e: e.support_count, reverse=True)
+        return sorted_edits[:budget]
 
     async def plan_edits(
         self, batch: OptimizationBatch, current_skill: Skill, evolution_context: str = ""

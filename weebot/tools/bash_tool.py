@@ -198,37 +198,46 @@ class BashTool(BaseTool):
                     "Use plain, readable commands only."
                 )
 
-        # Check for suspicious base64-like strings
+        # Check for suspicious base64-like strings.
+        #
+        # Both decode failures used to `continue` / `pass` and fall through to
+        # `return True, ""` — so a 100+ character base64-looking blob that
+        # neither decoder could read was reported as CLEAN. That is the one
+        # outcome an obfuscation check must never produce: the payload it
+        # cannot read is precisely the one worth refusing.
         base64_pattern = r"[A-Za-z0-9+/]{100,}={0,2}"
         matches = re.findall(base64_pattern, command)
         for match in matches:
-            # Try to decode and check for shell commands
-            try:
-                import base64
+            import base64
 
-                # Try both standard and urlsafe base64
-                for decoder in [base64.b64decode, base64.urlsafe_b64decode]:
-                    try:
-                        decoded = decoder(match).decode("utf-8", errors="ignore")
-                        shell_keywords = [
-                            "bash",
-                            "sh",
-                            "cmd",
-                            "powershell",
-                            "eval",
-                            "exec",
-                            "rm -rf",
-                            "format",
-                        ]
-                        if any(keyword in decoded.lower() for keyword in shell_keywords):
-                            return False, (
-                                "Security Error: Suspicious encoded shell command detected. "
-                                "Use plain text commands only."
-                            )
-                    except Exception:
-                        continue
-            except Exception:
-                pass
+            decoded_any = False
+            for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+                try:
+                    decoded = decoder(match).decode("utf-8", errors="ignore")
+                except Exception:
+                    continue
+                decoded_any = True
+                shell_keywords = [
+                    "bash",
+                    "sh",
+                    "cmd",
+                    "powershell",
+                    "eval",
+                    "exec",
+                    "rm -rf",
+                    "format",
+                ]
+                if any(keyword in decoded.lower() for keyword in shell_keywords):
+                    return False, (
+                        "Security Error: Suspicious encoded shell command detected. "
+                        "Use plain text commands only."
+                    )
+            if not decoded_any:
+                return False, (
+                    "Security Error: Command contains a large encoded blob this check "
+                    "could not decode. A check that cannot read a payload does not "
+                    "report it clean. Use plain, readable commands only."
+                )
 
         return True, ""
 
@@ -282,13 +291,20 @@ class BashTool(BaseTool):
                 return True, ""
 
             except Exception as e:
-                # If security analysis fails, fall back to legacy validation
+                # The analyzer crashing used to downgrade silently to a
+                # 13-regex legacy check — a weaker gate substituted for a
+                # stronger one with nothing but a log line to say so. A
+                # security gate that cannot run refuses; it does not quietly
+                # run a lesser one and report its verdict as the real thing.
                 import logging
 
                 logging.getLogger(__name__).error(
-                    f"Security analysis failed: {e}. Falling back to legacy validation."
+                    f"Security analysis failed: {e}. Refusing the command.", exc_info=True
                 )
-                return self._legacy_validate_no_encoded_commands(command)
+                return False, (
+                    "Security Error: the command analyzer failed, so this command "
+                    "could not be checked. It is refused rather than run unchecked."
+                )
         else:
             # FALLBACK: Use legacy validation
             return self._legacy_validate_no_encoded_commands(command)

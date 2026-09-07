@@ -145,6 +145,58 @@ async def test_the_session_ends_failed_when_a_step_failed(monkeypatch):
     assert await _drive(_plan(StepStatus.COMPLETED, StepStatus.FAILED)) == SessionStatus.FAILED
 
 
+@pytest.mark.asyncio
+async def test_the_plan_itself_records_that_it_failed(monkeypatch):
+    """`PlanStatus` had no failure member, so the plan object could not say it.
+
+    `CompletedState` stamped COMPLETED unconditionally — not carelessness, the
+    enum offered nothing else. Fixed backend-only by decision:
+    `weebot-ui/src/types/events.ts` keeps its stale union (it already omits
+    `running`), so the UI sees `failed` as an unknown value and
+    `SessionStatus.FAILED`, which both stacks understand, carries the
+    user-facing outcome. That gap is recorded, not overlooked.
+    """
+    import asyncio
+
+    from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfig
+    from weebot.application.flows.states.completed import CompletedState
+    from weebot.application.models.tool_collection import ToolCollection
+    from weebot.domain.models.plan import PlanStatus
+    from weebot.domain.models.session import Session
+
+    monkeypatch.setattr(asyncio, "ensure_future", lambda coro: coro.close())
+
+    async def _stamp(plan: Plan) -> tuple[PlanStatus, PlanStatus]:
+        flow = PlanActFlow(
+            PlanActFlowConfig(
+                llm=_DummyLLM(),
+                tools=ToolCollection(),
+                session=Session(id="sess-stamp", task="t"),
+                max_iterations=1,
+            )
+        )
+        flow._plan = plan
+        flow._llm = None
+        flow._mediator = None
+        emitted: list = []
+        async for event in CompletedState().execute(flow, "t"):
+            status = getattr(event, "status", None)
+            if isinstance(status, PlanStatus):
+                emitted.append(status)
+        return flow._plan.status, emitted[0]
+
+    stamped, event_status = await _stamp(_plan(StepStatus.FAILED, StepStatus.FAILED))
+    assert stamped == PlanStatus.FAILED, "a wholly failed plan still stamped itself completed"
+    assert event_status == PlanStatus.FAILED, "the PlanEvent told consumers it succeeded"
+
+    stamped, event_status = await _stamp(_plan(StepStatus.COMPLETED, StepStatus.FAILED))
+    assert stamped == PlanStatus.FAILED, "one failed step is still not a success"
+
+    stamped, event_status = await _stamp(_plan(StepStatus.COMPLETED))
+    assert stamped == PlanStatus.COMPLETED
+    assert event_status == PlanStatus.COMPLETED
+
+
 class _DummyLLM:
     """The flow requires an LLMPort; nothing here calls it."""
 

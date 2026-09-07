@@ -21,6 +21,18 @@ class PlanStatus(str, Enum):
     UPDATED = "updated"
     RUNNING = "running"
     COMPLETED = "completed"
+    # Added because there was no way to say a plan did not work. `CompletedState`
+    # stamped COMPLETED unconditionally — not from carelessness, but because
+    # this enum offered nothing else, so a plan in which every step failed
+    # ended up indistinguishable from one that succeeded.
+    #
+    # BACKEND ONLY, deliberately: `weebot-ui/src/types/events.ts` declares
+    # `PlanStatus = 'created' | 'updated' | 'completed'`, which is already out
+    # of sync (it omits `running`). Widening it is a separate, decided-later
+    # change; until then the UI sees `failed` as an unknown value, and
+    # `SessionStatus.FAILED` — which both stacks do understand — carries the
+    # outcome for anything user-facing.
+    FAILED = "failed"
 
 
 class ContextScope(str, Enum):

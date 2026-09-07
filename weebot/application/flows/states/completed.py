@@ -151,8 +151,14 @@ class CompletedState(FlowState):
         if self._termination_reason:
             logger.info("Flow terminated: %s", self._termination_reason)
 
+        # Computed before the plan is stamped, because the stamp depends on it.
+        # `Plan.is_complete()` is `all(is_done())` and `is_done()` counts
+        # FAILED, so "we stopped" and "it worked" were the same predicate here.
+        failed_steps = context._plan.failed_steps() if context._plan else []
+
         if context._plan:
-            context._plan = context._plan.model_copy(update={"status": PlanStatus.COMPLETED})
+            terminal_plan_status = PlanStatus.FAILED if failed_steps else PlanStatus.COMPLETED
+            context._plan = context._plan.model_copy(update={"status": terminal_plan_status})
 
             # ── AWM: induce workflow template from completed session ────
             if context._llm is not None and context._session is not None:
@@ -173,7 +179,7 @@ class CompletedState(FlowState):
             plan_dump = context._plan.model_dump()
             # Emit and yield the SAME event object so event bus consumers
             # and flow callers see identical event IDs / timestamps.
-            completed = PlanEvent(status=PlanStatus.COMPLETED, plan=plan_dump)
+            completed = PlanEvent(status=terminal_plan_status, plan=plan_dump)
             await context._emit(completed)
             yield completed
 
@@ -223,7 +229,7 @@ class CompletedState(FlowState):
         # `PlanStatus` has no failure member (created/updated/running/
         # completed), so the plan object above cannot say this; `SessionStatus`
         # can, and both the API and the web UI already understand `failed`.
-        failed = context._plan.failed_steps() if context._plan else []
+        failed = failed_steps
         if failed:
             logger.warning(
                 "Session %s finished with %d failed step(s): %s",

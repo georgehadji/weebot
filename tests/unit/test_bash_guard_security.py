@@ -199,8 +199,13 @@ class TestUnusablePatternIsVisible:
     """A malformed pattern used to be dropped with `except re.error: continue`.
 
     The rule it encoded — including BLOCKED rules — simply stopped being
-    enforced, with nothing in the logs. Skipping is still the only safe action
-    (raising would make the guard unconstructable), but it must be visible.
+    enforced, with nothing in the logs. An earlier pass made it visible and
+    kept skipping, reasoning that raising would make the guard unconstructable.
+
+    POLICY CHANGE, Phase 0. That reasoning was sound and the outcome was still
+    fail-open: the log went to a file and the command ran. Construction still
+    succeeds — what changed is that a guard missing a BLOCKING rule no longer
+    certifies anything as safe.
     """
 
     def test_invalid_pattern_is_logged_as_unenforced(self, caplog):
@@ -214,7 +219,20 @@ class TestUnusablePatternIsVisible:
             BashGuard()
         assert caplog.text == ""
 
-    def test_guard_still_functional_after_dropping_a_pattern(self):
+    def test_a_guard_missing_a_blocking_rule_certifies_nothing(self):
+        """Was `test_guard_still_functional_after_dropping_a_pattern`.
+
+        "Still functional" was the fail-open: `is_safe("ls -la") is True` from a
+        guard that had just lost a BLOCKED rule is the guard vouching for a
+        command it can no longer fully check.
+        """
         guard = BashGuard(custom_patterns=[("rm -rf [", RiskLevel.BLOCKED, "unclosed", "fix")])
         assert guard.is_blocked("rm -rf /") is True
+        assert guard.is_safe("ls -la") is False, "a degraded guard must not certify safety"
+        assert guard.is_blocked("ls -la") is True
+
+    def test_a_healthy_guard_is_unaffected(self):
+        """REGRESSION GUARD: the refusal must be scoped to the degraded case."""
+        guard = BashGuard()
         assert guard.is_safe("ls -la") is True
+        assert guard.is_blocked("rm -rf /") is True

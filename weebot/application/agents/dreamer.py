@@ -12,6 +12,9 @@ import json
 import logging
 from typing import Any
 
+from pydantic import ValidationError
+
+from weebot.models.structured_output import IdeaProposalList, extract_json_text
 from weebot.application.ports.dreamer_port import DreamerPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_MODERATE, TEMPERATURE_BALANCED
@@ -114,23 +117,32 @@ class DreamerAgent(DreamerPort):
     def _parse_contracts(self, content: str | None, session_id: str) -> list[IdeaContract]:
         if not content:
             return []
-        raw = content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1].rsplit("\n```", 1)[0]
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            data = data.get("ideas", data.get("contracts", []))
+        # `json.loads` here had NO try/except: a model that answered in prose
+        # raised JSONDecodeError straight out of `_parse_contracts`. The fence
+        # strip was also a third variant of the same idea — split on the first
+        # newline and rsplit on the last — which failed on a single-line fenced
+        # response that the shared extractor handles.
+        payload = extract_json_text(content.strip())
+        try:
+            proposals = IdeaProposalList.from_payload(json.loads(payload)).ideas
+        except (json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("DreamerAgent: unusable idea payload: %s", exc)
+            return []
+
         contracts = []
-        for item in data[: self._max_contracts]:
+        for item in proposals[: self._max_contracts]:
             try:
                 contracts.append(
                     IdeaContract(
-                        title=item.get("title", "Untitled"),
-                        prompt=item.get("prompt", ""),
-                        source=IdeaSource(item.get("source", "opportunity_proposal")),
-                        evidence=item.get("evidence", []),
-                        heat_score=min(1.0, max(0.0, float(item.get("heat_score", 0.0)))),
-                        estimated_effort=item.get("estimated_effort", "medium"),
+                        title=item.title,
+                        prompt=item.prompt,
+                        # Not a declared field on IdeaProposal: an unknown source
+                        # is the model's choice, and IdeaSource is the authority
+                        # on what exists. A bad one drops that idea, not the batch.
+                        source=IdeaSource(item.source),
+                        evidence=item.evidence,
+                        heat_score=item.heat_score,
+                        estimated_effort=item.estimated_effort,
                         dreamer_session_id=session_id,
                     )
                 )

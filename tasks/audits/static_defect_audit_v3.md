@@ -3117,3 +3117,173 @@ category that is harder to catch, because a deferral is not re-read the way a
 fix is. **UNKNOWN:** how many other `deferred` entries rest on a stated
 obstacle that would evaporate on one `grep`. This one took thirty seconds to
 check and had survived a phase.
+
+## The question that was escalated four waves ago, answered
+
+### Phase 0 / D13–D16 — fail open or fail closed `[VERIFIED-EXECUTED]`
+
+W2 asked one governing question of every gate:
+
+> *If this gate's own machinery fails, does it report a violation or report clean?*
+
+It investigated four of the thirteen modules it named, fixed three defects, and
+recorded the policy question itself as **escalated, not answered** — D13's own
+note says the fail-open behaviour "is UNCHANGED ... asserted by a control test
+so a later edit cannot quietly decide the question."
+
+The decision taken: **security gates fail closed; quality gates fail open with a
+loud, distinguishable marker.** This section covers the security half.
+
+The enumeration W2 left unfinished was completed first — all ten uninvestigated
+modules plus the security-side guards. Six live findings, six more in modules
+with no production callers.
+
+### The one that mattered most
+
+```python
+def _get_egress_guard(self):
+    if self._egress_guard_resolved:
+        return self._egress_guard
+    self._egress_guard_resolved = True     # ← BEFORE the try
+    ...
+        except Exception:
+            logger.error("egress_guard: unavailable — outbound tool calls will NOT be gated")
+            self._egress_guard = None
+```
+
+The latch is set before the attempt. If both the DI lookup and the direct
+construction fail, `_egress_guard` stays `None`, the early return hands `None`
+back on every later call, and the call site's `if guard is not None:` skips
+classification **for the rest of the session**. The log line states the
+consequence in plain words and then the session continues sending.
+
+Verified by reading the source rather than trusting the survey. Fixed by
+latching only a *successful* resolution — so a transient failure self-heals —
+and, when the guard is still unavailable and enforcement is on, refusing tools
+in a conservative outbound-name set.
+
+That set is deliberately broader than `EgressGuard._detect_egress`: without the
+guard there is no way to inspect a bash command or a browser action. It is also
+deliberately not "everything" — `file_editor`, `python_execute` and
+`web_search` still run, so an unrelated import error does not brick the agent.
+
+### Three more, each a correct comment with the wrong conclusion
+
+| gate | the comment | the consequence |
+|---|---|---|
+| `approval_policy.py:218` | *"fail-open: the bad rule is ignored, all other rules still apply"* | the rules include DENY entries, so a typo turns a denial into an auto-approval |
+| `bash_guard.py:443` | *"Skipping is still the only safe action here (raising would make the whole guard unconstructable)"* | true, and the log went to a file while the command ran |
+| `bash_tool.py` legacy check | — | both decoders failing fell through to `return True, ""`: a blob it could not read was reported **clean** |
+
+Each was fixed without the consequence the comment feared:
+
+- **The approval policy** records the breakage and asks a human for every
+  command while any rule is broken. We cannot know what a rule that will not
+  compile was meant to catch, so "ask" is the only honest verdict.
+- **The bash guard** still constructs. What changes is that a guard missing a
+  BLOCKED rule no longer certifies anything as safe — `evaluate` refuses. In
+  practice this fires only on a caller's `custom_patterns`, because a test now
+  pins that every built-in compiles.
+- **The obfuscation check** refuses what it cannot decode. The payload a check
+  cannot read is exactly the one worth refusing, and `_validate_security` no
+  longer answers an analyzer crash by silently running a 13-regex substitute
+  and reporting its verdict as the real thing.
+
+### What was surveyed and deliberately not fixed
+
+Six further fail-open gates, all in modules with **no production callers**:
+
+| module | the failure |
+|---|---|
+| `trust_boundary_scanner` | `except Exception: return None` — and `None` *is* the contract for "clean" |
+| `agent_sanitizer` | no error channel at all; `quarantine_agent` is a silent no-op when disabled, and `is_quarantined` is never called |
+| `identity_verifier` | an unknown `source_type` yields `{}` policy and verifies VALID; it also has a cache branch nothing writes to |
+| `state_verifier` | fails closed on exception — but its default tail stamps an *unverified* claim `VERIFIED` at 0.9 |
+| `chain_of_verification` | `(response, [])` on every failure, byte-identical to a clean verification |
+| `security_validators.CommandValidator` | a PowerShell indicator anywhere in the string short-circuits bash validation to `VALID` |
+
+This programme's own rule is that a DEAD reach cannot be CRITICAL, and that is
+why they are recorded rather than repaired. It is also the R6-C1 ordering trap
+in a new place: **wiring any of these up without fixing its failure path first
+would ship the fail-open with it.** The record now says so, so the next person
+to reach for one finds the warning before the wire.
+
+### The gate with the right verdict and no enforcement
+
+`HarnessSafetyGate.check` gates unknown surfaces correctly —
+`# Unknown surface — treat as gated (fail-safe)`. Its caller:
+
+```python
+yield WaitForUserEvent(...)                    # line 206
+saved = await self._target.save(candidate)     # line 208
+```
+
+Unconditionally, on the next statement. The comment above it says so: *"This is
+a NOTIFICATION, not a blocking gate ... then optimistically saves."* An edit to
+a safety-critical surface is persisted whether or not anyone approves.
+
+Not fixed here, and not because it is small: this is a gate with no enforcement
+point, which needs the durable-pause treatment D69 gave the flow gates rather
+than a one-line change. Recorded as `PH0-6`.
+
+### The control tests fired, exactly as designed
+
+Three existing tests went red, and they are the ones D13's note described:
+
+> the fail-open policy *is UNCHANGED* ... asserted by a control test so a later
+> edit cannot quietly decide the question.
+
+| test | what it pinned |
+|---|---|
+| `test_invalid_regex_does_not_raise_on_evaluate` | `approved is True` after a rule was dropped |
+| `test_multiple_invalid_regexes_all_skipped` | three broken rules, still auto-approved |
+| `test_guard_still_functional_after_dropping_a_pattern` | `is_safe("ls -la") is True` from a guard that had just lost a BLOCKED rule |
+
+They did their job. A control test is not a contract to preserve — it is a
+tripwire on an *undecided* question, and the question is now decided, so the
+assertions record the decision rather than the placeholder. Each was rewritten
+with the reason written into it, not flipped silently:
+
+- "Still functional" was itself the fail-open. `is_safe()` returning `True`
+  from a degraded guard is the guard vouching for a command it can no longer
+  fully check.
+- `test_invalid_regex_does_not_block_valid_literal_rules` still passes, and now
+  **for a different reason** — the command is refused because the policy is
+  broken, not because the literal rule matched. That is noted in the test
+  rather than left to look like continuity.
+
+Distinguishing "the test caught a real regression" from "the test pinned a
+decision that has since been made" is the whole difficulty here, and getting it
+wrong in either direction is bad: flip a real guard and you ship the bug;
+preserve a placeholder and the decision can never be implemented.
+
+### Coverage & residual risk
+
+- **Only the security half is done.** The quality half — `plan_critic`
+  returning `confidence=0.8, verdict="approved"` on any exception, which routes
+  to the *proceed* branch and is byte-identical to a clean approval; the
+  evidence auditor's three silent skips returning `score=1.0`; `verifying.py`'s
+  outcome and artifact gates returning `None`/`[]` — is surveyed and not yet
+  changed.
+- **`verification_status` is written and never read.** `verifying.py` stamps
+  NOT_RUN, and `SessionStamp` has `model_config = {"extra": "forbid"}` with no
+  status field, so the marker cannot reach the stamp even if something wanted
+  it. A distinguishable failure nobody can distinguish.
+- **The conservative egress set is a name list.** A new outbound tool that is
+  not in it, and not in `EgressGuard`'s own sets, is unguarded on the failure
+  path — the same shape as the stale `"browser_tool"` entry already sitting in
+  `_BROWSER_EGRESS_TOOLS` beside the real `"browser_navigator"`.
+- **Refusing on analyzer failure is a real availability trade.** If the
+  analyzer is flaky, bash stops working rather than degrading. That is the
+  decision applied honestly, not an oversight.
+
+### Uncertainty acknowledgment
+
+Two subagents surveyed these modules and their reports were detailed and, where
+checked, accurate. **Every finding acted on here was re-verified against the
+source before a line was changed**, and that is not ceremony: this programme
+has now found nine records wrong in some particular, and a survey is a record
+like any other. The two spot-checks confirmed both claims exactly, which raises
+confidence in the rest without establishing it. **UNKNOWN:** whether the six
+unfixed findings are as precisely characterised as the four verified ones —
+they were not checked line by line, because nothing was built on them.

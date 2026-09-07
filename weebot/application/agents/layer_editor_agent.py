@@ -12,9 +12,9 @@ Each edit is validated against regression tasks before acceptance.
 
 from __future__ import annotations
 
-import json
 import logging
 
+from weebot.models.structured_output import HarnessEditProposal, parse_structured
 from weebot.application.agents.layer_diagnostics_agent import FailureLayer
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_SHORT, TEMPERATURE_DEFAULT
@@ -103,27 +103,19 @@ class LayerEditorAgent:
             max_tokens=MAX_TOKENS_SHORT,
         )
 
-        try:
-            data = self._parse_json(response.content or "")
-            target = data.get("target", "")
-            change = data.get("change", "")
-            rationale = data.get("rationale", "")
-            return HarnessEdit(
-                layer=layer,
-                target=target,
-                change=change,
-                evidence=f"{rationale} | {trajectory_summary[:300]}",
-            )
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning("Failed to parse harness edit proposal: %s", exc)
+        # `except (json.JSONDecodeError, Exception)` was just `except Exception`
+        # — the first class is a subclass of the second, so naming it bought
+        # nothing and read as if two cases were handled. The parse now reports
+        # its own reason at WARNING and returns None, which this method already
+        # treats as "no proposal".
+        proposal = parse_structured(
+            response.content, HarnessEditProposal, context="LayerEditorAgent.propose"
+        )
+        if proposal is None:
             return None
-
-    @staticmethod
-    def _parse_json(content: str) -> dict:
-        content = content.strip()
-        if content.startswith("```"):
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            if start != -1 and end > start:
-                return json.loads(content[start:end])
-        return json.loads(content)
+        return HarnessEdit(
+            layer=layer,
+            target=proposal.target,
+            change=proposal.change,
+            evidence=f"{proposal.rationale} | {trajectory_summary[:300]}",
+        )

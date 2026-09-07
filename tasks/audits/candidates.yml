@@ -1689,3 +1689,126 @@ candidates:
       direction on which of the two is the real one.
 
   # ── R6 remainder — the redactor that was declared and could not be wired ──
+
+  # ── Phase 0 / D13-D16 — the fail-open policy, decided ────────────────
+  - id: PH0-1
+    wave: Phase0
+    location: weebot/application/agents/executor/_tool_executor.py:90
+    claim: "A failed EgressGuard construction latches, ungating outbound tool calls for the whole session"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED by reading the source, not by taking the survey's word for it.
+      `self._egress_guard_resolved = True` was set BEFORE the try. If both the
+      DI lookup and the direct `EgressGuard()` construction failed,
+      `_egress_guard` stayed None and the early return handed None back on
+      every later call — and the call site's `if guard is not None:` skipped
+      classification entirely. The log said so in plain words: "outbound tool
+      calls will NOT be gated". One construction hiccup ungated every
+      subsequent send for the rest of the session. Fixed by latching only a
+      SUCCESSFUL resolution (a transient failure now self-heals) and, when the
+      guard is still unavailable and enforcement is on, refusing tools in a
+      conservative outbound-name set rather than allowing them. The set is
+      deliberately broader than `EgressGuard._detect_egress` — without the
+      guard there is no way to inspect a bash command or a browser action — but
+      narrow enough that an unrelated import error does not brick the agent:
+      file_editor, python_execute and web_search still run.
+
+  - id: PH0-2
+    wave: Phase0
+    location: weebot/core/approval_policy.py:218
+    claim: "An uncompilable approval rule is skipped, turning a DENY into an auto-approval"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED. The comment described the behaviour accurately and drew the
+      wrong conclusion from it: "fail-open: the bad rule is ignored, all other
+      rules still apply". The rule set includes DENY entries, so a typo in one
+      became an auto-approval with nothing downstream able to tell. Fixed by
+      recording the breakage and returning requires_confirmation=True for every
+      command while any rule is broken — we cannot know what a rule that will
+      not compile was meant to catch, so the only honest verdict is "ask".
+      RELATED, NOT CHANGED: `get_category_approval_mode` defaults to
+      AUTO_APPROVE on an unknown category. That default is defensible — most
+      categories genuinely are ordinary — but the ADR-006 inbound-mail gate in
+      executing.py rests ENTIRELY on `TOOL_CATEGORIES["inbound_mail"]` being
+      present, and would stop firing silently if the key were renamed. Pinned
+      by a test instead of changing the default.
+
+  - id: PH0-3
+    wave: Phase0
+    location: weebot/core/bash_guard.py:443
+    claim: "A malformed pattern drops the rule it encodes, including BLOCKED rules"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED. An earlier pass had already made this visible in the log and
+      kept skipping, reasoning that raising would make the whole guard
+      unconstructable. That reasoning is sound and the outcome was still
+      fail-open: the log went to a file and the command ran. Fixed without
+      changing constructability — the guard records dropped BLOCKED/DANGEROUS
+      patterns and `evaluate` then refuses every command rather than certifying
+      any as safe. Built-ins all compile (pinned by a test), so in practice
+      this fires only on a caller's `custom_patterns`, where it is their bug and
+      a loud failure is the useful one.
+
+  - id: PH0-4
+    wave: Phase0
+    location: weebot/tools/bash_tool.py
+    claim: "An undecodable base64 blob is reported clean; an analyzer crash downgrades to a weaker check"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED, two defects. (1) `_legacy_validate_no_encoded_commands` had
+      `except Exception: continue` and `except Exception: pass` around its two
+      base64 decoders, then `return True, ""` — so a 100+ character blob
+      NEITHER decoder could read was reported CLEAN. That is the one outcome an
+      obfuscation check must never produce: the payload it cannot read is
+      exactly the one worth refusing. (2) `_validate_security` caught every
+      analyzer exception and fell back to that same 13-regex legacy check — a
+      weaker gate silently substituted for a stronger one, its verdict reported
+      as the real thing. Both now refuse. Regression guards pin that plain
+      commands, decodable harmless base64, and the encoded-shell detection are
+      all unaffected.
+
+  - id: PH0-5
+    wave: Phase0
+    location: weebot/infrastructure/security/, weebot/application/services/
+    claim: "Six more gates fail open; all are in modules with no production callers"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      SURVEYED, NOT FIXED, and the reason is reachability — this programme's own
+      rule is that a DEAD reach cannot be CRITICAL. `trust_boundary_scanner`
+      (`except Exception: return None`, and None IS the contract for "clean"),
+      `agent_sanitizer` (no error channel at all; `quarantine_agent` is a silent
+      no-op when disabled and `is_quarantined` is never called),
+      `identity_verifier` (an unknown source_type yields `{}` policy and
+      verifies VALID; also has a cache branch nothing ever writes to),
+      `state_verifier` (fails closed on exception, but its default tail stamps
+      an unverified claim VERIFIED at 0.9), `chain_of_verification` (returns
+      `(response, [])` on every failure, byte-identical to a clean
+      verification), and `security_validators.CommandValidator` (a PowerShell
+      indicator anywhere in the string short-circuits bash validation to VALID).
+      NONE has a production caller. Wiring any of them up without fixing the
+      failure path first would ship the fail-open with it — the same ordering
+      trap as R6-C1.
+
+  - id: PH0-6
+    wave: Phase0
+    location: weebot/application/services/harness_safety_gate.py, weebot/application/flows/harness_opt_flow.py:206
+    claim: "The safety gate reaches the right verdict and nothing enforces it"
+    status: deferred
+    evidence: null
+    verdict_note: >-
+      SURVEYED, NOT FIXED. `HarnessSafetyGate.check` correctly gates unknown
+      surfaces (`# Unknown surface — treat as gated (fail-safe)`) and sets
+      requires_approval=True. The caller yields a WaitForUserEvent on line 206
+      and calls `await self._target.save(candidate)` on line 208 —
+      UNCONDITIONALLY, on the next statement. Its own comment says so: "This is
+      a NOTIFICATION, not a blocking gate ... then optimistically saves." So an
+      edit to a safety-critical surface is persisted whether or not anyone
+      approves. This is not a fail-open in the gate; it is a gate with no
+      enforcement point, which needs the durable-pause treatment D69 gave the
+      flow gates rather than a one-line change.
+

@@ -41,6 +41,10 @@ _EXPECTED = {
     # nothing could reach, and a steering prompt built, logged, and not sent),
     # both of which ruff had been reporting while CI's selector never asked.
     "unused_locals",
+    # Bare json.loads under application/agents/. CLAUDE.md rule 2 mandates
+    # Pydantic-validated output; four agents were migrated and the rest are
+    # pinned so the divergence cannot grow back.
+    "agent_json_parsing",
 }
 
 

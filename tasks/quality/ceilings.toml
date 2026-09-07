@@ -26,7 +26,7 @@
 
 # Handlers whose body is exactly `pass` or `...`, by AST.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 139
+silent_except_handlers = 137
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -45,7 +45,7 @@ bare_env_reads = 73
 # body is exactly `pass`/`...` by AST, while B110 is bandit's own detection.
 # The sets overlap heavily but are not equal, so the two move independently.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 68
+bandit_b110 = 67
 
 # Locals assigned but never read (ruff F841) in weebot/ and cli/.
 # Found twice in one session as real dropped work: an MCP server process bound
@@ -57,3 +57,12 @@ bandit_b110 = 68
 # script prints the ruff version with every count.
 # Measured by: scripts/lint_unused_locals.py
 unused_locals = 33
+
+# Bare `json.loads` / `json.load` under weebot/application/agents/.
+# CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
+# divergence had reached ten modules before anyone measured it. Four were
+# migrated by decision; the rest are an inventory to triage. Not every call is
+# a defect (tool-call arguments are a different payload), which is why this is
+# a ceiling and not a ban.
+# Measured by: scripts/lint_agent_json_parsing.py
+agent_json_parsing = 17
