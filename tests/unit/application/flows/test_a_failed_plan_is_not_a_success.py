@@ -95,24 +95,25 @@ async def test_the_session_ends_failed_when_a_step_failed(monkeypatch):
 
     from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfig
     from weebot.application.flows.states.completed import CompletedState
+    from weebot.application.services import background_tasks as _bg
 
-    # `CompletedState` fires three `asyncio.ensure_future(...)` calls at the
-    # end — retention review, skill-gap processing and a dream scan — each of
-    # which builds a `Container()` and, through it, live LLM adapters. None is
-    # under test, and the dream scan blocks here. Suppressed explicitly so the
-    # test says what it is not exercising.
+    # `CompletedState` starts three background jobs at the end — retention
+    # review, skill-gap processing and a dream scan — each of which builds a
+    # `Container()` and, through it, live LLM adapters. None is under test, and
+    # the dream scan blocks here. Suppressed explicitly so the test says what it
+    # is not exercising.
     #
-    # Worth noting rather than only working around: those three futures are
-    # created and never referenced, awaited or cancelled — the same orphaned
-    # task class as D39 in `_cascade.py`, in a different file.
+    # This used to monkeypatch `asyncio.ensure_future` itself, because the three
+    # jobs were spawned with no owner to reach for (P3-4). They now go through
+    # `BackgroundTasks`, so the suppression can name exactly what it suppresses.
     spawned: list = []
 
-    def _record_instead_of_running(coro):
-        spawned.append(coro)
+    def _record_instead_of_running(self, coro, *, name=""):
+        spawned.append(name)
         coro.close()
         return None
 
-    monkeypatch.setattr(asyncio, "ensure_future", _record_instead_of_running)
+    monkeypatch.setattr(_bg.BackgroundTasks, "spawn", _record_instead_of_running)
     from weebot.domain.models.session import Session, SessionStatus
     from weebot.application.models.tool_collection import ToolCollection
 
@@ -161,10 +162,13 @@ async def test_the_plan_itself_records_that_it_failed(monkeypatch):
     from weebot.application.flows.plan_act_flow import PlanActFlow, PlanActFlowConfig
     from weebot.application.flows.states.completed import CompletedState
     from weebot.application.models.tool_collection import ToolCollection
+    from weebot.application.services import background_tasks as _bg
     from weebot.domain.models.plan import PlanStatus
     from weebot.domain.models.session import Session
 
-    monkeypatch.setattr(asyncio, "ensure_future", lambda coro: coro.close())
+    monkeypatch.setattr(
+        _bg.BackgroundTasks, "spawn", lambda self, coro, *, name="": coro.close()
+    )
 
     async def _stamp(plan: Plan) -> tuple[PlanStatus, PlanStatus]:
         flow = PlanActFlow(

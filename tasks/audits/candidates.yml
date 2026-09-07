@@ -1697,17 +1697,19 @@ candidates:
     wave: P3
     location: weebot/application/flows/states/completed.py:401,417,422
     claim: "Three `asyncio.ensure_future(...)` results are never referenced, awaited or cancelled"
-    status: deferred
-    evidence: null
-    verdict_note: >-
-      Found while making the P3 test hermetic: retention review, skill-gap
-      processing and the dream scan are each spawned and dropped. Same orphaned
-      task class as D39 in `_cascade.py`, in a different file — and each builds
-      a `Container()` and live LLM adapters, so an orphan here is spend as well
-      as an unowned task. NOT FIXED: unlike D39 these are intended to outlive
-      the flow ("Background task — never blocks CompletedState"), so the fix is
-      an owner for them, not a cancel, and that is a design decision rather
-      than a repair.
+    status: fixed
+    evidence: tests/unit/application/services/test_background_work_is_owned.py
+    verdict_note: null
+    correction: >-
+      The consequence was worse than "unowned". Measured in a CLI-shaped
+      process, `asyncio.run()` cancels every one of them at teardown — even a
+      task needing 10ms — so the retention review, skill-gap processing and
+      dream scan never completed at all, after each had already built a
+      `Container()` and live LLM adapters. A failing orphan also bypassed the
+      application logger entirely. The garbage-collection hazard that motivates
+      holding a reference did not reproduce in a short probe and is recorded as
+      documented, not measured. A fourth spawn of the same shape was found in
+      `interfaces/cli/agent_runner.py`.
 
   - id: P5-1
     wave: P5

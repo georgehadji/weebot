@@ -18,6 +18,18 @@ from datetime import UTC
 logger = logging.getLogger(__name__)
 
 
+def _background():
+    """The owner for this state's post-completion work.
+
+    Imported lazily so `completed.py` keeps its current import cost and the
+    services package is not pulled in by anything that merely imports the flow
+    states.
+    """
+    from weebot.application.services.background_tasks import get_background_tasks
+
+    return get_background_tasks()
+
+
 async def _run_retention_review(
     agent, session_id, session_summary, trust_report, error_count, tool_count
 ) -> None:
@@ -409,9 +421,12 @@ class CompletedState(FlowState):
                 if _plan_for_retention
                 else "unknown"
             )
-            import asyncio as _aio
-
-            _aio.ensure_future(
+            # Owned, not orphaned. A bare `ensure_future` here is cancelled at
+            # `asyncio.run()` teardown, so in the CLI this work never ran at
+            # all — the Container and LLM adapters below were built and thrown
+            # away — and any exception surfaced from the loop's default handler
+            # instead of this module's logger. See BackgroundTasks.
+            _background().spawn(
                 _run_retention_review(
                     agent=context._retention_agent,
                     session_id=context._session.id,
@@ -419,20 +434,20 @@ class CompletedState(FlowState):
                     trust_report=_trust_extra,
                     error_count=_error_count_ret,
                     tool_count=_tool_count_ret,
-                )
+                ),
+                name=f"retention-review:{context._session.id[:8]}",
             )
 
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
         _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
         if _gaps:
-            import asyncio as _aio
-
-            _aio.ensure_future(_run_skill_gap_processing(list(_gaps), context._session.id))
+            _background().spawn(
+                _run_skill_gap_processing(list(_gaps), context._session.id),
+                name=f"skill-gaps:{context._session.id[:8]}",
+            )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
-        import asyncio as _aio
-
-        _aio.ensure_future(_run_dream_scan())
+        _background().spawn(_run_dream_scan(), name="dream-scan")
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:
