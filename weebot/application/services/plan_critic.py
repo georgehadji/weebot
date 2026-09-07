@@ -6,6 +6,7 @@ for common failure modes before they reach the executor.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -62,13 +63,22 @@ class PlanCriticService(PlanCriticPort):
         """
         try:
             prompt = self._build_critique_prompt(plan, context)
-            response = await self._llm.chat(
-                messages=[
-                    {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=MAX_TOKENS_SHORT,
-                temperature=TEMPERATURE_PRECISE,
+            # `self._timeout_seconds` was stored in __init__ and never used,
+            # while the constructor docstring promised "Max seconds to wait for
+            # the critic LLM call. On timeout, the plan proceeds without
+            # critique." There was no `wait_for` anywhere in this module — a
+            # documented bound that did not exist, so a hung critic held the
+            # whole flow for however long the adapter allowed.
+            response = await asyncio.wait_for(
+                self._llm.chat(
+                    messages=[
+                        {"role": "system", "content": _CRITIC_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=MAX_TOKENS_SHORT,
+                    temperature=TEMPERATURE_PRECISE,
+                ),
+                timeout=self._timeout_seconds,
             )
 
             raw = response.content.strip()
@@ -88,15 +98,31 @@ class PlanCriticService(PlanCriticPort):
             )
 
         except Exception as exc:
+            # FAIL OPEN — the plan proceeds, because a critic is a quality gate
+            # and blocking every run on a flaky LLM call is the worse trade.
+            #
+            # But LOUDLY, and this is what changed. The old fallback returned
+            # `overall_confidence=0.8, verdict="approved"`, and 0.8 is EXACTLY
+            # `ConfidentThresholds.WARN_THRESHOLD` — so a critic outage landed
+            # in the highest routing branch and logged "Plan approved with high
+            # confidence". Against a genuine clean approval the only difference
+            # was an empty `step_scores`, which no caller reads. The gate
+            # fabricated a verdict it had never formed.
+            #
+            # `degraded=True` and the flaw entry make it visible to the router,
+            # to the ThoughtEvent the user sees, and to anything downstream.
             logger.warning(
-                "Plan critic failed (timeout or parse error): %s. " "Proceeding without critique.",
+                "Plan critic failed (%s) — PROCEEDING WITHOUT CRITIQUE. The plan is "
+                "unreviewed, not approved.",
                 exc,
+                exc_info=True,
             )
             return PlanCritique(
                 plan_id=plan.title,
+                degraded=True,
                 overall_confidence=0.8,
-                verdict="approved",
-                flaws=[],
+                verdict="unreviewed",
+                flaws=[f"Plan critic did not run: {type(exc).__name__}. This plan is unreviewed."],
                 suggestions=[],
             )
 

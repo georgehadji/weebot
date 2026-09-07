@@ -267,6 +267,12 @@ class CompletedState(FlowState):
             extra = getattr(context._session.context, "extra", {}) or {}
             scores_raw = extra.get("verification_scores", {})
             gate_failures = extra.get("gate_failures", [])
+            # `verifying.py` has always computed this and written it here, and
+            # nothing read it — `SessionStamp` forbids extra keys and had no
+            # field for it, so a NOT_RUN marker could not reach the stamp even
+            # if a consumer wanted it. An empty `gate_failures` means "no gate
+            # failed", which is also what a gate that never ran produces.
+            verification_status = str(extra.get("verification_status", "") or "")
 
             verif_scores = (
                 VerificationScores(
@@ -296,6 +302,7 @@ class CompletedState(FlowState):
                 plan_fingerprint=fingerprint,
                 verification=verif_scores,
                 gate_failures=gate_failures,
+                verification_status=verification_status,
                 tool_calls=tool_count,
                 errors=error_count,
                 duration_ms=0,

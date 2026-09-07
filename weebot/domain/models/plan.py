@@ -132,6 +132,15 @@ class PlanCritique(BaseModel):
     step_scores: dict[str, float] = Field(
         default_factory=dict, description="step_id -> 0.0-1.0 confidence score"
     )
+    degraded: bool = Field(
+        default=False,
+        description=(
+            "True when the critic did not actually run — an LLM failure, a timeout, "
+            "or unparseable output. The verdict fields then carry a default, not a "
+            "judgement, and a consumer that cannot tell the two apart is reading a "
+            "fabricated approval."
+        ),
+    )
     flaws: list[str] = Field(default_factory=list, description="Specific concerns about the plan")
     suggestions: list[str] = Field(
         default_factory=list, description="Concrete fixes for identified flaws"

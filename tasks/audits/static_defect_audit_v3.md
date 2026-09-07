@@ -3287,3 +3287,137 @@ like any other. The two spot-checks confirmed both claims exactly, which raises
 confidence in the rest without establishing it. **UNKNOWN:** whether the six
 unfixed findings are as precisely characterised as the four verified ones —
 they were not checked line by line, because nothing was built on them.
+
+## The other half: fail open, but never silently
+
+### Phase 0, quality gates `[VERIFIED-EXECUTED]`
+
+The decision was **split by kind**, and a decision implemented halfway is a
+decision not implemented. The security half refuses; this half proceeds — a
+quality gate blocking every run on its own flaky LLM call is the worse trade —
+but it may no longer *fabricate a verdict it never formed*, which is what all
+three of these did.
+
+### The critic that approved plans it never read
+
+```python
+except Exception as exc:
+    logger.warning("Plan critic failed ... Proceeding without critique.")
+    return PlanCritique(plan_id=plan.title, overall_confidence=0.8, verdict="approved", ...)
+```
+
+`ConfidentThresholds.WARN_THRESHOLD` is **exactly 0.8**. So the fallback did not
+land somewhere cautious — it landed in the *highest* routing branch:
+
+```python
+if critique.overall_confidence >= _warn:
+    logger.info("Plan approved with high confidence")
+```
+
+Against a genuine clean approval the only difference was an empty
+`step_scores`, and no caller reads it. The outage was routing-identical **and**
+display-identical to a careful review that found nothing wrong.
+
+It fails open still. It now says so: `degraded=True`, `verdict="unreviewed"`,
+the exception type in `flaws` so it reaches the executor prompt and the
+ThoughtEvent, a WARNING that reads *"the plan is unreviewed, not approved"*,
+and a dedicated branch in `critiquing.py` that no longer claims confidence it
+does not have.
+
+### The timeout that was documented, stored, and never applied
+
+```python
+def __init__(self, llm: LLMPort, timeout_seconds: float = 5.0) -> None:
+    """...
+        timeout_seconds: Max seconds to wait for the critic LLM call.
+                         On timeout, the plan proceeds without critique.
+    """
+    self._timeout_seconds = timeout_seconds
+```
+
+`grep -c wait_for` over the module: **0**. The bound was in the docstring, in
+the parameter name, and in the failure log — *"Plan critic failed (timeout or
+parse error)"* — and nowhere in the code. A hung critic held the flow for
+whatever the adapter allowed. Now wired, and measured: **0.20s against a 30s
+hang.**
+
+This is the same shape as `record_har` and `secret_redaction_enabled`. Three
+times in this programme a feature has been fully described — parameter,
+docstring, log message — and not implemented. A reader has no way to tell those
+apart from the outside, which is the whole reason the audit runs the code.
+
+### The auditor whose PASS meant two different things
+
+| skip | line |
+|---|---|
+| `except OSError: continue` on a path | 114 |
+| `if not out_path: continue` | 183 |
+| `if fsize is None ...: continue` | 186 |
+| `except (OSError, ValueError, UnicodeDecodeError): continue` | 191 |
+
+If those were the only findings, the result was
+`AuditReport(verdict=PASS, score=1.0, violations=[], summary="Evidence supports
+completion.")` — identical, field for field, to an audit that ran every check
+and found nothing.
+
+And this gate is **blocking**: `executing.py` routes a non-PASS to a retry and
+then to `UNVERIFIED`, so an identical PASS marked the step **COMPLETED** on
+evidence nobody had checked.
+
+`AuditReport.checks_skipped` now records each one, the summary differs, and a
+skip logs at WARNING. The verdict is unchanged, which is the decision.
+
+**A third defect, found while fixing it:** `await self._files.size(out_path)`
+had no guard, and `LocalFileStorageAdapter._resolve` raises `ValueError` on a
+traversal. It propagated out of `audit_step`, through
+`_gate_artifact_verification`, and out of `run()` — which catches only
+`PlanStuckError`. A gate that crashes is neither open nor closed; it takes the
+flow with it.
+
+### The marker that could not reach a reader
+
+`verifying.py` computes `NOT_RUN` / `passed` / `failed` and writes it to
+`ctx.extra["verification_status"]` on every path. Nothing in `weebot/` reads
+that key. And `SessionStamp`:
+
+```python
+gate_failures: list[str] = Field(default_factory=list)
+model_config = {"extra": "forbid"}
+```
+
+No field for it, and extras forbidden — so the marker could not reach the stamp
+**even if a consumer had wanted it**. The only thing recorded was
+`gate_failures == []`, which is what "no gate failed" and "no gate ran" both
+produce. The one key that could tell them apart was unreachable by
+construction. `SessionStamp` now carries it.
+
+### Coverage & residual risk
+
+- **The individual gates still cannot say which of them did not run.**
+  `_gate_outcome_verification` returns `None` on exception and `None` *means*
+  passed; `_gate_artifact_verification` returns `[]` on a missing dependency and
+  `[]` *means* no violations. The stamp can now say verification did not run;
+  it still cannot say which gate.
+- **`degraded` is advisory.** Nothing refuses to execute an unreviewed plan,
+  because that is what fail-open means here. What changed is that the operator
+  and the executor prompt can both see it.
+- **`checks_skipped` has no consumer yet** beyond the log and the report
+  object. It is recorded so a consumer *can* exist — which is exactly the
+  complaint `PH0-9` makes about `verification_status`, and worth watching that
+  it does not become the same defect one level up.
+- **`meta_critic`, `premortem` and `chain_of_verification` are untouched.**
+  All three return an empty result on failure that is byte-identical to a clean
+  one, and all three are advisory with no branch reading them — `premortem`
+  says so in its own docstring. Nothing acts on them, so nothing was
+  misinformed.
+
+### Uncertainty acknowledgment
+
+The security half took four fixes and the quality half took three, and the
+quality half found **two defects the survey had not named** — the unimplemented
+timeout and the unguarded `size()`. Both were found by fixing the neighbouring
+line, not by reading. That is now the third and fourth time in this session
+that writing the fix, rather than writing the report, produced the finding.
+**UNKNOWN:** how much of what remains recorded as "surveyed, not fixed" holds
+the same kind of adjacent defect, invisible until someone edits the line next
+to it.

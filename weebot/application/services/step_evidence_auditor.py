@@ -55,16 +55,36 @@ class StepEvidenceAuditor(StepAuditPort):
         self, step: Step | None, events: Sequence[ToolEvent], session_id: str = ""
     ) -> AuditReport:
         violations: list[Violation] = []
-        violations += await self._gate_written_files(events)
+        # Checks that could not run. FAIL OPEN — a step is not failed because a
+        # path was unreadable — but not SILENTLY: three skips used to `continue`
+        # and produce `AuditReport(verdict=PASS, score=1.0, violations=[])`,
+        # byte-identical to an audit that ran every check and found nothing.
+        # This gate is blocking at `executing.py`, so that identical PASS marked
+        # the step COMPLETED.
+        skipped: list[str] = []
+        violations += await self._gate_written_files(events, skipped)
         violations += self._gate_test_output(events)
-        violations += await self._gate_image_quality(events)
+        violations += await self._gate_image_quality(events, skipped)
+
+        if skipped:
+            _log.warning(
+                "Step audit passed with %d check(s) skipped — the evidence was not "
+                "fully verified: %s",
+                len(skipped),
+                "; ".join(skipped),
+            )
 
         if not violations:
             return AuditReport(
                 session_id=session_id,
                 verdict=AuditVerdict.PASS,
-                summary="Evidence supports completion.",
+                summary=(
+                    "Evidence supports completion."
+                    if not skipped
+                    else f"Evidence supports completion; {len(skipped)} check(s) could not run."
+                ),
                 score=1.0,
+                checks_skipped=skipped,
             )
 
         critical = sum(1 for v in violations if v.severity == ViolationSeverity.CRITICAL)
@@ -75,9 +95,12 @@ class StepEvidenceAuditor(StepAuditPort):
             violations=violations,
             summary="; ".join(v.description for v in violations),
             score=0.0 if critical else 0.5,
+            checks_skipped=skipped,
         )
 
-    async def _gate_written_files(self, events: Sequence[ToolEvent]) -> list[Violation]:
+    async def _gate_written_files(
+        self, events: Sequence[ToolEvent], skipped: list[str]
+    ) -> list[Violation]:
         """Gate A: files written by write tools must still exist on disk."""
         written_paths: list[str] = []
         for event in events:
@@ -113,10 +136,13 @@ class StepEvidenceAuditor(StepAuditPort):
                 continue
             except OSError:
                 # Genuinely malformed path — the agent's problem to have
-                # already failed on, not the gate's. Skip without blocking.
+                # already failed on, not the gate's. Skip without blocking,
+                # but RECORD it: a PASS with skipped checks is not the same
+                # claim as a PASS with none, and these were indistinguishable.
                 _log.debug(
                     "Invalid path in step audit — skipping without blocking: %s", p, exc_info=True
                 )
+                skipped.append(f"file existence not checked (unreadable path): {p}")
                 continue
             if not exists:
                 violations.append(
@@ -159,7 +185,9 @@ class StepEvidenceAuditor(StepAuditPort):
                 ]
         return []
 
-    async def _gate_image_quality(self, events: Sequence[ToolEvent]) -> list[Violation]:
+    async def _gate_image_quality(
+        self, events: Sequence[ToolEvent], skipped: list[str]
+    ) -> list[Violation]:
         """Gate C: image_gen outputs must not be undersized SVG placeholders."""
         violations: list[Violation] = []
         for event in events:
@@ -180,15 +208,28 @@ class StepEvidenceAuditor(StepAuditPort):
 
             out_path = (event.function_args or {}).get("output_path", "")
             if not out_path:
+                skipped.append("image quality not checked (no output_path on the tool call)")
                 continue
 
-            fsize = await self._files.size(out_path)
-            if fsize is None or not (0 < fsize < _IMAGE_QUALITY_MIN_BYTES):
+            # `size()` had no guard at all: `LocalFileStorageAdapter._resolve`
+            # raises ValueError on a traversal, and it propagated out of
+            # `audit_step` — a gate taking down the flow, which is neither
+            # open nor closed.
+            try:
+                fsize = await self._files.size(out_path)
+            except (OSError, ValueError):
+                skipped.append(f"image quality not checked (size unavailable): {out_path}")
+                continue
+            if fsize is None:
+                skipped.append(f"image quality not checked (size unknown): {out_path}")
+                continue
+            if not (0 < fsize < _IMAGE_QUALITY_MIN_BYTES):
                 continue
 
             try:
                 head = (await self._files.read_text(out_path))[:200]
             except (OSError, ValueError, UnicodeDecodeError):
+                skipped.append(f"image quality not checked (unreadable): {out_path}")
                 continue
             if "<?xml" in head or "<svg" in head[:100]:
                 violations.append(

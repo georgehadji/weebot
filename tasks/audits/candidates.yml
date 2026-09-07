@@ -1812,3 +1812,72 @@ candidates:
       enforcement point, which needs the durable-pause treatment D69 gave the
       flow gates rather than a one-line change.
 
+  # ── Phase 0, quality half — fail open, never silently ────────────────
+  - id: PH0-7
+    wave: Phase0
+    location: weebot/application/services/plan_critic.py:90
+    claim: "A critic outage returns overall_confidence=0.8, verdict='approved' — the highest routing branch"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. `ConfidentThresholds.WARN_THRESHOLD` is exactly 0.8, and the
+      exception fallback returned exactly 0.8, so any critic failure landed in
+      the `>= _warn` branch and logged "Plan approved with high confidence" for
+      a critic that had never answered. Against a genuine clean approval the
+      only difference was an empty `step_scores`, which no caller reads — so it
+      was routing-identical AND display-identical. The gate fabricated a
+      verdict it had not formed. FAIL OPEN is kept (a quality gate blocking
+      every run on a flaky LLM call is the worse trade) and made LOUD:
+      `PlanCritique.degraded`, `verdict="unreviewed"`, the reason in `flaws`,
+      a WARNING, and a dedicated branch in `critiquing.py` that no longer
+      claims high confidence. SECOND DEFECT, not in any record:
+      `self._timeout_seconds` was stored in __init__ and NEVER USED while the
+      constructor docstring promised "Max seconds to wait for the critic LLM
+      call. On timeout, the plan proceeds without critique." There was no
+      `wait_for` anywhere in the module — grep count zero — so a hung critic
+      held the flow for however long the adapter allowed. Now wired; measured
+      at 0.20s against a 30s hang.
+
+  - id: PH0-8
+    wave: Phase0
+    location: weebot/application/services/step_evidence_auditor.py
+    claim: "Three silent skips produce a PASS byte-identical to a full clean audit"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. An OSError on a path, a missing `output_path`, a `size()` that
+      returned None, and an unreadable file each `continue`d, and if they were
+      the only findings the report was
+      `AuditReport(verdict=PASS, score=1.0, violations=[], summary="Evidence
+      supports completion.")` — indistinguishable from an audit that ran every
+      check. This gate is BLOCKING at `executing.py:677-706`, so that identical
+      PASS marked the step COMPLETED on evidence nobody had checked. Fixed with
+      `AuditReport.checks_skipped`, a differing summary, and a WARNING. THIRD
+      DEFECT: `await self._files.size(out_path)` had NO try/except, and
+      `LocalFileStorageAdapter._resolve` raises ValueError on a traversal — so
+      it propagated out of `audit_step`, through `_gate_artifact_verification`,
+      and out of `run()`, which catches only PlanStuckError. A gate crashing is
+      neither open nor closed; it took the flow with it.
+
+  - id: PH0-9
+    wave: Phase0
+    location: weebot/application/flows/states/verifying.py:200, weebot/domain/models/stamp.py
+    claim: "`verification_status` is written on every path and read nowhere"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. `verifying.py` computes NOT_RUN / passed / failed and writes it
+      to `ctx.extra["verification_status"]` at :200 and :250. Nothing in
+      `weebot/` reads that key, and `SessionStamp` has
+      `model_config = {"extra": "forbid"}` with no field for it — so the marker
+      could not reach the stamp even if a consumer had wanted it. The one key
+      that COULD distinguish "verification passed" from "verification never
+      ran" was unreachable by construction, while `gate_failures == []` (which
+      both cases produce) was the only thing recorded. Fixed by giving
+      `SessionStamp` the field and having `completed.py` carry it through.
+      NOT FIXED, recorded: `_gate_outcome_verification` returns None on
+      exception and None MEANS PASSED; `_gate_artifact_verification` returns []
+      on a missing dependency and [] MEANS NO VIOLATIONS. Both are still
+      byte-identical to a clean run; the stamp can now say verification did not
+      run, but the individual gates still cannot say which of them did not.
+

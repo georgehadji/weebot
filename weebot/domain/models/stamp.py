@@ -36,6 +36,18 @@ class SessionStamp(BaseModel):
     )
     verification: VerificationScores | None = Field(default=None)
     gate_failures: list[str] = Field(default_factory=list)
+    verification_status: str = Field(
+        default="",
+        description=(
+            "Whether verification actually RAN: '', 'passed', 'failed' or 'not_run'. "
+            "`verifying.py` has always computed this and written it to "
+            "`context.extra['verification_status']`, and nothing read it — this model "
+            "forbids extra keys and had no field for it, so the NOT_RUN marker could "
+            "not reach the stamp even if a consumer had wanted it. An empty "
+            "`gate_failures` list means 'no gate failed', which is what a gate that "
+            "could not run also produces."
+        ),
+    )
     tool_calls: int = Field(default=0)
     errors: int = Field(default=0)
     duration_ms: int = Field(default=0)
