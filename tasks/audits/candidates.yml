@@ -1817,24 +1817,33 @@ candidates:
     wave: Phase0
     location: weebot/infrastructure/security/, weebot/application/services/
     claim: "Six more gates fail open; all are in modules with no production callers"
-    status: deferred
-    evidence: null
-    verdict_note: >-
-      SURVEYED, NOT FIXED, and the reason is reachability — this programme's own
-      rule is that a DEAD reach cannot be CRITICAL. `trust_boundary_scanner`
-      (`except Exception: return None`, and None IS the contract for "clean"),
-      `agent_sanitizer` (no error channel at all; `quarantine_agent` is a silent
-      no-op when disabled and `is_quarantined` is never called),
-      `identity_verifier` (an unknown source_type yields `{}` policy and
-      verifies VALID; also has a cache branch nothing ever writes to),
-      `state_verifier` (fails closed on exception, but its default tail stamps
-      an unverified claim VERIFIED at 0.9), `chain_of_verification` (returns
-      `(response, [])` on every failure, byte-identical to a clean
-      verification), and `security_validators.CommandValidator` (a PowerShell
-      indicator anywhere in the string short-circuits bash validation to VALID).
-      NONE has a production caller. Wiring any of them up without fixing the
-      failure path first would ship the fail-open with it — the same ordering
-      trap as R6-C1.
+    status: fixed
+    evidence: tests/unit/security/test_dormant_gates_fail_closed.py
+    verdict_note: null
+    correction: >-
+      Fixed in the order the R6-C1 trap requires: failure paths first, nothing
+      wired up. Two of the six were worse than surveyed.
+      `identity_verifier` did not merely default an unknown source_type to a
+      `{}` policy — `_determine_verification_level` escalates every UNTRUSTED
+      source to STRONG, and `_verify_strong` had no trust check at all, so
+      escalation BYPASSED the rejection in `_verify_standard`:
+      `source_type="external"` was measured verifying VALID at confidence 0.95
+      holding ['read', 'write', 'delete', 'exec', 'network'], the widest grant
+      in the module. Its CRITICAL branch also returned is_valid=True beside a
+      comment saying MFA was not implemented.
+      `security_validators.CommandValidator` was not only short-circuiting on a
+      PowerShell indicator — the test was `any(ind in command.lower() ...)`
+      over prefixes including "set-", so appending `# get-help` to
+      `dd if=/dev/zero of=/dev/sda` returned VALID, and `touch offset-1`
+      disabled validation of the `base64 -d | sh` beside it. A genuine
+      PowerShell command was waved through without the PowerShell checks
+      running either.
+      Two reachability false positives were caught while asserting the
+      "no production caller" premise: `soul_provider.py` has a constructor
+      parameter named `scan_for_injection` (and its own sixth copy of the
+      injection patterns), and `file_editor.py` imports `PathValidator` from
+      the same module as `CommandValidator`. The premise holds; the gate that
+      asserts it now matches on the imported symbol via the AST.
 
   - id: PH0-6
     wave: Phase0

@@ -334,16 +334,37 @@ class StateVerifier:
             )
             return self._cache_result(cache_key, result)
 
-        # Default: assume claim is accurate if no contradictions found
+        # Default: nothing contradicted the claim — which is not the same as
+        # having checked it.
+        #
+        # This stamped VERIFIED at confidence 0.9, and `is_verified` is
+        # `status == VERIFIED and confidence >= 0.8`, so the claim passed. The
+        # only thing this method actually did was run
+        # `_check_suspicious_success` over the agent's OWN claimed output: a
+        # regex looking for failure words in text the agent wrote. Nothing here
+        # observes the system. Absence of a red flag in a self-report is not
+        # verification, and this module exists precisely to catch "agents
+        # report success but the command failed" — the sentence in its own
+        # docstring.
+        #
+        # UNVERIFIABLE with the method named is the honest answer. A caller
+        # that wants a verdict has `verify_file_operation` and
+        # `verify_network_operation`, which observe the file system and the
+        # network respectively, and earn their VERIFIED.
         result = VerificationResult(
-            status=VerificationStatus.VERIFIED,
+            status=VerificationStatus.UNVERIFIABLE,
             claimed_outcome=f"Command: {claimed.command}",
             actual_state={
                 "returncode": claimed.claimed_returncode,
                 "output_length": len(claimed.claimed_output),
+                "reason": "no independent observation of the command's effects",
             },
-            confidence_score=0.9,
-            verification_method="claim_validation",
+            confidence_score=0.0,
+            discrepancies=[
+                "The claim was screened for suspicious output and nothing was "
+                "found, but no state outside the claim itself was observed."
+            ],
+            verification_method="claim_screening_only",
         )
         return self._cache_result(cache_key, result)
 
