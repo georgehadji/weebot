@@ -285,18 +285,36 @@ class AgentMemorySanitizer:
 
         return None
 
-    def quarantine_agent(self, agent_id: str, reason: str = "contamination_detected") -> None:
+    def quarantine_agent(self, agent_id: str, reason: str = "contamination_detected") -> bool:
         """
         Quarantine an agent that has shown contamination.
 
         Args:
             agent_id: ID of the agent to quarantine
             reason: Reason for quarantine
+
+        Returns:
+            True if the agent was quarantined; False if quarantine is disabled.
+
+        This returned None either way. A caller that had just detected
+        contamination and asked for the agent to be contained got the same
+        answer whether it was contained or silently ignored, and the only
+        record of the refusal was that no log line appeared. Returning the
+        outcome — and logging the refusal at WARNING — is what lets a caller
+        decide what to do when containment is off.
         """
-        if self._enable_quarantine:
-            self._quarantined_agents.add(agent_id)
-            _log.warning(f"Agent {agent_id} quarantined: {reason}")
-            self._log_contamination(agent_id, "quarantine", [{"reason": reason}])
+        if not self._enable_quarantine:
+            _log.warning(
+                "Quarantine is disabled: agent %s was NOT contained despite %s",
+                agent_id,
+                reason,
+            )
+            return False
+
+        self._quarantined_agents.add(agent_id)
+        _log.warning(f"Agent {agent_id} quarantined: {reason}")
+        self._log_contamination(agent_id, "quarantine", [{"reason": reason}])
+        return True
 
     def is_quarantined(self, agent_id: str) -> bool:
         """Check if an agent is quarantined."""

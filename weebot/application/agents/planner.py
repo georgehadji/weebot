@@ -20,6 +20,7 @@ from weebot.domain.models.event import (
     TitleEvent,
 )
 from weebot.domain.models.plan import ContextScope, Plan, Step
+from weebot.models.structured_output import extract_json_text
 
 logger = logging.getLogger(__name__)
 
@@ -160,61 +161,32 @@ class PlannerAgent:
         if self._event_bus:
             await self._event_bus.publish(event)
 
-    @staticmethod
-    def _strip_code_fences(content: str) -> str:
-        stripped = content.strip()
-        if stripped.startswith("```"):
-            lines = stripped.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            return "\n".join(lines).strip()
-        return stripped
-
     @classmethod
     def _parse_json_content(cls, content: str) -> dict[str, Any]:
-        cleaned = cls._strip_code_fences(content)
+        """Extract the plan object from a model response.
 
-        # Fast path: strict parse
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
+        This was a four-strategy extractor of its own — strict parse,
+        raw_decode, a brace-depth scan, then rfind — and one of four such
+        functions in this codebase, no two of which agreed on what a model
+        response looks like (CLAUDE.md rule 2; P5-1).
 
-        # raw_decode: stops at first complete JSON object (handles trailing text)
-        try:
-            decoder = json.JSONDecoder()
-            obj, _ = decoder.raw_decode(cleaned)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            pass
-
-        # Brace-depth matching: find first { and its matching }
-        start = cleaned.find("{")
-        if start != -1:
-            depth = 0
-            for i in range(start, len(cleaned)):
-                if cleaned[i] == "{":
-                    depth += 1
-                elif cleaned[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            return json.loads(cleaned[start : i + 1])
-                        except json.JSONDecodeError:
-                            break
-
-        # Last resort: rfind approach (handles most cases)
-        end = cleaned.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(cleaned[start : end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        raise ValueError(f"Could not extract valid JSON from: {cleaned[:200]}")
+        It is now one function. `extract_json_text` gained this version's
+        raw_decode step first, because without it the shared extractor was
+        measurably weaker: it failed on `{"a": 1} and also {"b": 2}` and on a
+        nested object followed by a stray brace, which this one handled. With
+        that step the two agree on every shape tested. The brace-depth scan is
+        subsumed by raw_decode (both start at the same delimiter and both need
+        the span to parse), and the rfind last resort is what the shared
+        extractor's greedy regex already does.
+        """
+        parsed = json.loads(extract_json_text(content.strip()))
+        if not isinstance(parsed, dict):
+            # The callers all pass this to `_parse_plan`, which indexes it.
+            raise ValueError(
+                f"Expected a JSON object in the plan response, got "
+                f"{type(parsed).__name__}: {content.strip()[:200]}"
+            )
+        return parsed
 
     async def _request_json_retry(self, memory: list[dict[str, Any]]) -> dict[str, Any]:
         retry_memory = list(memory)

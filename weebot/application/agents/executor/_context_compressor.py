@@ -265,13 +265,15 @@ class ContextCompressor:
             )
 
         try:
-            import json
+            # The validation here was already right; only the extraction was a
+            # local fifth copy of "find the JSON in a model response".
+            from weebot.models.structured_output import parse_structured
 
-            raw = (response.content or "").strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-            data = json.loads(raw)
-            result = VisionReflection.model_validate(data)
+            result = parse_structured(
+                response.content, VisionReflection, context=f"vision reflection {tool_name}"
+            )
+            if result is None:
+                return None
             self._last_expected_outcome = result.plan.expected_outcome
             return result
         except Exception:

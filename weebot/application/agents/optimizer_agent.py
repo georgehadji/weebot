@@ -16,6 +16,14 @@ import json
 import logging
 from collections import Counter
 
+from weebot.models.structured_output import (
+    EditSelection,
+    EvaluatorPromptImprovement,
+    GuidanceContent,
+    SkillEditList,
+    extract_json_text,
+    parse_structured,
+)
 from weebot.application.ports.event_bus_port import EventBusPort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.optimizer_port import OptimizerPort
@@ -175,22 +183,20 @@ class OptimizerAgent(OptimizerPort):
                 temperature=0.3,
                 max_tokens=1000,
             )
-            if not response or not response.content:
-                return []
-
-            import json
-
-            parsed = json.loads(response.content)
-            new_prompt = parsed.get("new_prompt", "")
-            if not new_prompt:
+            improvement = parse_structured(
+                getattr(response, "content", None),
+                EvaluatorPromptImprovement,
+                context="OptimizerAgent.reflect_on_evaluator",
+            )
+            if improvement is None or not improvement.new_prompt:
                 return []
 
             return [
                 SkillEdit(
                     op="replace",
                     target="evaluator_prompt",
-                    content=new_prompt,
-                    description=parsed.get("rationale", "Evaluator prompt improvement"),
+                    content=improvement.new_prompt,
+                    description=improvement.rationale,
                 )
             ]
         except Exception as exc:
@@ -239,14 +245,21 @@ class OptimizerAgent(OptimizerPort):
             max_tokens=MAX_TOKENS_STANDARD,
         )
 
-        try:
-            data = json.loads(response.content)
-            indices = data.get("selected_indices", [])[:budget]
-            return [edits[i] for i in indices if i < len(edits)]
-        except Exception as exc:
-            logger.warning("Ranking LLM call failed: %s — falling back to support_count sort", exc)
-            sorted_edits = sorted(edits, key=lambda e: e.support_count, reverse=True)
-            return sorted_edits[:budget]
+        selection = parse_structured(
+            getattr(response, "content", None),
+            EditSelection,
+            context="OptimizerAgent.rank_edits",
+        )
+        if selection is not None:
+            # `i < len(edits)` accepted negative indices, which Python reads
+            # from the END of the list — a model answering `-1` silently
+            # selected the last edit rather than being rejected.
+            return [
+                edits[i] for i in selection.selected_indices[:budget] if 0 <= i < len(edits)
+            ]
+        logger.warning("Edit ranking unusable — falling back to support_count sort")
+        sorted_edits = sorted(edits, key=lambda e: e.support_count, reverse=True)
+        return sorted_edits[:budget]
 
     async def plan_edits(
         self, batch: OptimizationBatch, current_skill: Skill, evolution_context: str = ""
@@ -280,7 +293,11 @@ class OptimizerAgent(OptimizerPort):
                 temperature=TEMPERATURE_DEFAULT,
                 max_tokens=MAX_TOKENS_SHORT,
             )
-            json.loads(response.content)  # validate parseable
+            # Parseability only: the caller re-parses this string through
+            # `_parse_edits`, which is where validation belongs. Using the
+            # shared extractor means a fenced response is judged by the same
+            # rule there and here.
+            json.loads(extract_json_text(response.content or ""))
             return response.content
         except Exception as exc:
             logger.warning("plan_edits LLM call failed: %s — skipping planning step", exc)
@@ -342,23 +359,27 @@ class OptimizerAgent(OptimizerPort):
 
     @staticmethod
     def _parse_edits(raw: str) -> list[SkillEdit]:
-        """Parse a JSON response into SkillEdit objects."""
-        try:
-            data = json.loads(raw)
-            edits_data = data.get("edits", [])
-            return [
-                SkillEdit(
-                    op=e["op"],
-                    target=e.get("target"),
-                    content=e.get("content", ""),
-                    support_count=e.get("support_count", 1),
-                    source_type=e.get("source_type", "failure"),
-                )
-                for e in edits_data
-            ]
-        except Exception as exc:
-            logger.warning("Failed to parse edits from LLM response: %s", exc)
+        """Parse a JSON response into SkillEdit objects.
+
+        Every malformed shape used to collapse to `[]` from inside one bare
+        `except`: `{"edits": "append everything"}`, an `op` outside the
+        literal, and `"support_count": "many"` were each measured returning
+        zero edits with a single generic warning. Because the comprehension sat
+        inside the try, one bad member discarded the whole batch.
+        """
+        parsed = parse_structured(raw, SkillEditList, context="skill edits")
+        if parsed is None:
             return []
+        return [
+            SkillEdit(
+                op=e.op,
+                target=e.target,
+                content=e.content,
+                support_count=e.support_count,
+                source_type=e.source_type,
+            )
+            for e in parsed.edits
+        ]
 
     async def _merge_group(self, system_prompt: str, edits: list[SkillEdit]) -> list[SkillEdit]:
         """Merge a group of edits (Stage 1 or 2)."""
@@ -439,13 +460,12 @@ class OptimizerAgent(OptimizerPort):
                 temperature=TEMPERATURE_DEFAULT,
                 max_tokens=MAX_TOKENS_STANDARD,
             )
-            data = json.loads(response.content)
-            field = (
-                data.get("slow_update_content")
-                or data.get("meta_skill_content")
-                or data.get("content", "")
+            # `str(field)` on a `.get` chain turned a dict or list under any
+            # of these keys into its Python repr and returned it as guidance.
+            parsed = parse_structured(
+                response.content, GuidanceContent, context="optimizer guidance"
             )
-            return str(field)
+            return parsed.text() if parsed is not None else ""
         except Exception as exc:
             logger.warning("Guidance generation failed: %s", exc)
             return ""

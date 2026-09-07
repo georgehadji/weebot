@@ -208,23 +208,47 @@ class ExecApprovalPolicy:
         self._rules = list(rules or []) + list(_DEFAULT_RULES)
 
         # Pre-compile regex patterns at init time so evaluate() never raises
-        # re.error at runtime.  Invalid patterns are logged and silently skipped
-        # (fail-open: the bad rule is ignored, all other rules still apply).
+        # re.error at runtime.
+        #
+        # An uncompilable rule used to be logged and SKIPPED, described in this
+        # comment as "fail-open: the bad rule is ignored, all other rules still
+        # apply". The rules include DENY entries, so a typo in one turned a
+        # denial into an auto-approval, and nothing downstream could tell.
+        #
+        # We cannot know what a rule that will not compile was meant to catch.
+        # The policy therefore records the breakage and asks a human for every
+        # command while any rule is broken — a security gate that cannot run
+        # its own rules does not report clean.
         self._compiled: dict[int, re.Pattern] = {}
+        self._broken_rules: list[str] = []
         for i, rule in enumerate(self._rules):
             if rule.is_regex:
                 try:
                     self._compiled[i] = re.compile(rule.pattern, re.IGNORECASE)
                 except re.error as exc:
+                    self._broken_rules.append(rule.pattern)
                     logger.error(
                         "ExecApprovalPolicy: invalid regex pattern %r "
-                        "(rule index %d) will be SKIPPED — %s",
+                        "(rule index %d) — the policy will ASK for every command "
+                        "until it is fixed: %s",
                         rule.pattern,
                         i,
                         exc,
                     )
 
     def evaluate(self, command: str, tool_category: str = "") -> ApprovalResult:
+        if self._broken_rules:
+            return ApprovalResult(
+                command=command,
+                approved=False,
+                requires_confirmation=True,
+                undo_hint="",
+                reason=(
+                    f"{len(self._broken_rules)} approval rule(s) failed to compile; "
+                    "the policy cannot evaluate this command safely."
+                ),
+            )
+
         # ── Tool-category override: financial tools always ask ──────
         if tool_category:
             category_mode = get_category_approval_mode(tool_category)

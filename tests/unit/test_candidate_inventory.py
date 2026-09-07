@@ -224,5 +224,12 @@ def test_report_the_open_count(capsys):
         print(f"\n  candidate inventory: {len(records)} records")
         for status in sorted(counts):
             print(f"    {status:13} {counts[status]:3}")
-        outstanding = counts.get("open", 0) + counts.get("deferred", 0)
+        # Every status that is not a finished disposition. `confirmed` and
+        # `investigating` were missing here, so a defect verified as real and
+        # left unfixed printed as closed — the same accounting gap this
+        # inventory exists to close.
+        outstanding = sum(
+            counts.get(status, 0)
+            for status in ("open", "deferred", "confirmed", "investigating")
+        )
         print(f"    {'-> not closed':13} {outstanding:3}")

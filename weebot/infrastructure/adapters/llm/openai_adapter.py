@@ -52,6 +52,11 @@ class OpenAIAdapter(LLMPort):
 
         self._client = AsyncOpenAI(api_key=key, base_url=url)
         self._default_model = default_model
+        # This adapter walks a model chain of its own on RateLimitError, beneath
+        # the CascadeExecutor whose job that is. Under the factory the flag is
+        # turned off (see `_client_policy.apply_client_policy`); left on here so
+        # an adapter constructed directly keeps the behaviour it has today.
+        self._enable_model_fallback = True
 
     def _build_kwargs(
         self,
@@ -196,6 +201,8 @@ class OpenAIAdapter(LLMPort):
         except RateLimitError:
             # OpenRouter free models are often rate-limited upstream.
             # Use provider-safe fallbacks first.
+            if not self._enable_model_fallback:
+                raise
             model_name = str(kwargs.get("model", ""))
             is_openrouter = model_name.startswith("openrouter/") or "/" in model_name
 
@@ -292,6 +299,8 @@ class OpenAIAdapter(LLMPort):
             )
             raise
         except RateLimitError:
+            if not self._enable_model_fallback:
+                raise
             model_name = str(kwargs.get("model", ""))
             is_openrouter = model_name.startswith("openrouter/") or "/" in model_name
             if is_openrouter:

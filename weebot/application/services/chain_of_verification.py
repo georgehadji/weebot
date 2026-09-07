@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import (
@@ -140,6 +141,32 @@ def _extract_json_object(text: str) -> dict:
         return {"inconsistencies": [], "corrected_response": text}
 
 
+@dataclass(frozen=True)
+class CoVeResult:
+    """The outcome of a Chain-of-Verification pass.
+
+    `verify()` used to return a bare `(response, [])` on every failure path —
+    when question planning produced nothing, and when the cross-check call
+    raised — which is byte-identical to what a clean verification returns. A
+    caller could not tell "I checked this and found no inconsistencies" from "I
+    never checked". For a service whose entire job is verification, those are
+    the two answers that must never look alike.
+
+    `verified` is the discriminator. It unpacks as the documented
+    `(corrected_response, inconsistencies)` pair, so the tuple contract still
+    holds for anything that only wants those two.
+    """
+
+    corrected_response: str
+    inconsistencies: list[dict]
+    verified: bool
+    reason: str = ""
+
+    def __iter__(self):
+        yield self.corrected_response
+        yield self.inconsistencies
+
+
 class ChainOfVerificationService:
     """Orchestrates the 4-step CoVe pipeline.
 
@@ -153,7 +180,7 @@ class ChainOfVerificationService:
 
     async def verify(
         self, query: str, response: str, max_questions: int = 5
-    ) -> tuple[str, list[dict]]:
+    ) -> CoVeResult:
         """Run the full CoVe pipeline.
 
         Args:
@@ -162,26 +189,33 @@ class ChainOfVerificationService:
             max_questions: Cap on verification questions (avoids token blow-up).
 
         Returns:
-            (corrected_response, inconsistencies) where inconsistencies is
-            a list of {"claim", "correction", "verification_question"} dicts.
+            A `CoVeResult`. It unpacks as the documented
+            `(corrected_response, inconsistencies)` pair, and carries
+            `verified` so a caller can tell a clean pass from one that never
+            ran — the two used to be indistinguishable.
         """
         # ── Step 2: Plan verifications ──
         questions = await self._plan_verifications(query, response)
         questions = questions[:max_questions]
         if not questions:
-            logger.info("CoVe: no verification questions generated — skipping")
-            return response, []
+            logger.warning(
+                "CoVe: no verification questions were generated — the response is "
+                "UNVERIFIED, not clean"
+            )
+            return CoVeResult(response, [], verified=False, reason="no questions generated")
 
         # ── Step 3: Execute verifications (factored) ──
         qa_pairs = await self._execute_verifications(questions)
 
         # ── Step 4: Cross-check and final verified response ──
-        corrected, inconsistencies = await self._cross_check(query, response, qa_pairs)
+        corrected, inconsistencies, checked = await self._cross_check(query, response, qa_pairs)
+        if not checked:
+            return CoVeResult(response, [], verified=False, reason="cross-check failed")
 
         logger.info(
             "CoVe: %d questions, %d inconsistencies found", len(questions), len(inconsistencies)
         )
-        return corrected, inconsistencies
+        return CoVeResult(corrected, inconsistencies, verified=True)
 
     async def _plan_verifications(self, query: str, response: str) -> list[str]:
         """Step 2: Generate verification questions from query + baseline."""
@@ -223,8 +257,13 @@ class ChainOfVerificationService:
 
     async def _cross_check(
         self, query: str, response: str, qa_pairs: list[dict]
-    ) -> tuple[str, list[dict]]:
-        """Step 4: Cross-check answers against baseline, produce corrected response."""
+    ) -> tuple[str, list[dict], bool]:
+        """Step 4: Cross-check answers against baseline, produce corrected response.
+
+        The third element says whether the cross-check actually ran. Without it
+        the caller could not distinguish a failed call, which returns the
+        baseline and no inconsistencies, from a successful one that found none.
+        """
         qa_text = "\n".join(f"Q: {p['question']}\nA: {p['answer']}" for p in qa_pairs)
         prompt = _fmt(_CROSS_CHECK_PROMPT, query=query, response=response, verification_qa=qa_text)
         try:
@@ -236,7 +275,7 @@ class ChainOfVerificationService:
             data = _extract_json_object(llm_response.content)
             corrected = data.get("corrected_response", response)
             inconsistencies = data.get("inconsistencies", [])
-            return corrected, inconsistencies
+            return corrected, inconsistencies, True
         except Exception as exc:
             logger.warning("CoVe cross-check failed: %s", exc)
-            return response, []
+            return response, [], False

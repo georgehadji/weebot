@@ -1582,3 +1582,142 @@ def test_no_shell_execution_outside_the_bash_guard():
     """
     sites = _shell_execution_sites()
     assert sites == [], "shell execution outside bash_guard:\n  " + "\n  ".join(sites)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# One routing table, not three
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_there_is_exactly_one_flow_routing_table():
+    """`FlowRouter.resolve_initial_state` is the only routing authority.
+
+    The repository carried three *declared* transition tables and executed
+    none of them: `state_graph.py`'s `build_default_state_graph`,
+    `flow_state_machine.py`'s `_TRANSITION_TABLE`, and
+    `FlowSerializer.to_langgraph`'s hardcoded four-node description of a
+    thirteen-state machine. Against them stood 45 `context.set_state(...)`
+    calls and one if/elif chain, which is what actually ran.
+
+    That is not merely dead weight. The graph had diverged from the router in
+    six measured ways — a declining answer at a security gate routed to
+    ExecutingState under the graph, so the whole ADR 006 refusal path
+    vanished — and `scripts/wire_stategraph.py` existed to swap one for the
+    other. Run against a copy, that script printed "StateGraph wired into
+    FlowRouter.resolve_initial_state()", exited 0, wired nothing, and
+    duplicated both the import and `_get_graph`. A tool that reports success
+    while corrupting the file is the same defect class the tables were.
+
+    A second table is only safe when something proves the two agree. Nothing
+    did, and nothing here asks for one — this asserts the alternatives stay
+    deleted.
+    """
+    banned = {
+        "state_graph.py": "declarative transition table",
+        "flow_state_machine.py": "second transition table",
+        "wire_stategraph.py": "script that swapped the live table for the dead one",
+    }
+    root = ROOT.parent
+    found = [
+        f"{path.relative_to(root)} ({why})"
+        for name, why in banned.items()
+        for path in root.rglob(name)
+        if ".venv" not in path.parts and "__pycache__" not in path.parts
+    ]
+    assert found == [], "a deleted routing table is back:\n  " + "\n  ".join(found)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Every LLM client comes from the factory
+# ═════════════════════════════════════════════════════════════════════════════
+
+# The factory is where the timeout budget, the retry budget and the credential
+# sanitiser are applied. An LLM client built anywhere else has none of them —
+# not a weaker version, none — and nothing about the call site says so.
+#
+# Both entries below are real bypasses, grandfathered at their measured count
+# so that a NEW one fails. Neither is endorsed:
+#
+#   core/tool_agent.py     — constructs AsyncOpenAI directly. The module is
+#                            already deprecated (it raises DeprecationWarning
+#                            in __init__); the fix is deletion, not plumbing.
+#   osworld/agent_adapter.py — constructs OpenAIAdapter directly, so the call
+#                            has no ResilientLLMAdapter above it: no circuit
+#                            breaker, no retry, and its only time bound is the
+#                            SDK's 600s read. `_call_llm` is synchronous, so
+#                            that bound is held on the calling thread.
+_SDK_CLIENT_CLASSES = {"AsyncOpenAI", "OpenAI", "AsyncAnthropic", "Anthropic"}
+_CONCRETE_ADAPTERS = {
+    "OpenAIAdapter",
+    "AnthropicAdapter",
+    "DeepSeekAdapter",
+    "MoonshotAdapter",
+    "OpenRouterAdapter",
+}
+_ADAPTER_PACKAGE = ("infrastructure", "adapters", "llm")
+_GRANDFATHERED_BYPASSES = {
+    "core/tool_agent.py": "AsyncOpenAI",
+    "osworld/agent_adapter.py": "OpenAIAdapter",
+}
+
+
+def _llm_client_construction_sites() -> dict[str, str]:
+    """Every construction of an SDK client or concrete adapter, by file."""
+    sites: dict[str, str] = {}
+    for path in ROOT.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        rel_parts = path.relative_to(ROOT).parts
+        if rel_parts[: len(_ADAPTER_PACKAGE)] == _ADAPTER_PACKAGE:
+            continue  # the factory and the adapters themselves
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            name = node.func.id
+            if name in _SDK_CLIENT_CLASSES or name in _CONCRETE_ADAPTERS:
+                sites[f"{path.relative_to(ROOT).as_posix()}:{node.lineno}"] = name
+    return sites
+
+
+def test_llm_clients_are_built_by_the_factory():
+    """Nothing new may construct an LLM client outside the adapter package.
+
+    Measured against the four layers this gate exists because of: one logical
+    `chat()` against a rate-limited OpenRouter-shaped model issued **210** HTTP
+    requests, because `RetryWithBackoff` (7), `OpenAIAdapter`'s own model chain
+    (10) and the SDK's `max_retries` (3) all ran without knowing about each
+    other. `apply_client_policy` collapses the last two — but only for clients
+    the factory builds. A client built elsewhere keeps all of it, and keeps the
+    SDK's 600s read budget as its only time bound.
+    """
+    found = _llm_client_construction_sites()
+    unexpected = {
+        where: what
+        for where, what in found.items()
+        if _GRANDFATHERED_BYPASSES.get(where.rsplit(":", 1)[0]) != what
+    }
+    assert unexpected == {}, (
+        "LLM client built outside the factory — it gets no timeout budget, no "
+        "retry budget and no sanitiser:\n  "
+        + "\n  ".join(f"{w}: {n}(...)" for w, n in sorted(unexpected.items()))
+    )
+
+
+def test_the_known_bypasses_have_not_multiplied():
+    """The grandfathered list is exact in both directions.
+
+    A ratchet that only fails upward lets a fixed bypass sit in the list
+    forever, and the next reader takes the list for a design decision. If one
+    of these is removed, this fails and the list is updated with it.
+    """
+    found = _llm_client_construction_sites()
+    still_present = {where.rsplit(":", 1)[0] for where in found}
+    stale = sorted(set(_GRANDFATHERED_BYPASSES) - still_present)
+    assert stale == [], (
+        "a grandfathered bypass is gone — remove it from _GRANDFATHERED_BYPASSES:\n  "
+        + "\n  ".join(stale)
+    )

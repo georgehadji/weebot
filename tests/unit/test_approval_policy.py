@@ -69,20 +69,37 @@ class TestInvalidRegexHandling:
 
     Before the fix, re.search(bad_pattern, ...) would raise re.error at
     runtime, propagating through BashTool.execute() and killing the agent.
+
+    POLICY CHANGE, Phase 0. These tests used to assert that a broken rule was
+    skipped and the command auto-approved. That was the *undecided* behaviour:
+    W2 escalated "should a gate that cannot run report clean?" as a product
+    question and left the tests pinning the status quo so nobody could answer
+    it by accident. The answer is now taken — security gates fail closed — so
+    the assertions record the decision instead of the placeholder.
+
+    The rules include DENY entries. Skipping one turned a denial into an
+    auto-approval, and nothing downstream could tell.
     """
 
     def test_invalid_regex_does_not_raise_on_evaluate(self):
-        """A rule with an invalid regex pattern must be silently skipped."""
+        """Still must not raise. It must now ASK rather than auto-approve."""
         policy = ExecApprovalPolicy(
             rules=[CommandRule(pattern="[unclosed", mode=ApprovalMode.DENY, is_regex=True)]
         )
-        # Must not raise — the invalid rule is skipped, falls through to auto-approve
         result = policy.evaluate("any command here")
-        assert result.approved is True
-        assert result.requires_confirmation is False
+        assert result.approved is False
+        assert result.requires_confirmation is True
+        assert "failed to compile" in result.reason
 
     def test_invalid_regex_does_not_block_valid_literal_rules(self):
-        """An invalid regex rule must not prevent valid literal rules from matching."""
+        """An invalid regex rule must not prevent valid literal rules from matching.
+
+        NOTE: this now passes for a different reason than it used to. The
+        command is still not approved, but because the whole policy refuses
+        while a rule is broken — not because the literal rule matched. The
+        distinction is recorded rather than hidden; the valid-rule path is
+        covered by the healthy-policy tests elsewhere in this file.
+        """
         policy = ExecApprovalPolicy(
             rules=[
                 CommandRule(pattern="(dangling", mode=ApprovalMode.DENY, is_regex=True),
@@ -103,8 +120,12 @@ class TestInvalidRegexHandling:
         result = policy.evaluate("rm -rf /important")
         assert result.approved is False
 
-    def test_multiple_invalid_regexes_all_skipped(self):
-        """Multiple invalid patterns must not cause cumulative failures."""
+    def test_multiple_invalid_regexes_are_reported_not_skipped(self):
+        """Multiple invalid patterns must not cause cumulative failures.
+
+        They must also not be quietly ignored: the count reaches the caller so
+        the message says how much of the policy is not running.
+        """
         policy = ExecApprovalPolicy(
             rules=[
                 CommandRule(pattern="[a", mode=ApprovalMode.DENY, is_regex=True),
@@ -112,9 +133,9 @@ class TestInvalidRegexHandling:
                 CommandRule(pattern="*c", mode=ApprovalMode.DENY, is_regex=True),
             ]
         )
-        # All three custom rules are invalid and skipped; built-in defaults still apply.
         result = policy.evaluate("ls -la")
-        assert result.approved is True
+        assert result.requires_confirmation is True
+        assert "3 approval rule(s) failed to compile" in result.reason
 
 
 class TestOutputDirectoryAllowlist:

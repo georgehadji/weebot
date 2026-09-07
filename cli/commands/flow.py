@@ -25,21 +25,34 @@ _container: Container | None = None
 
 
 def _run_async(coro_factory) -> None:
-    """Run an async CLI command body, guaranteeing DB pool teardown.
+    """Run an async CLI command body, draining background work and DB pools.
 
     aiosqlite worker threads are non-daemon, so a connection pool left open
     keeps the interpreter alive at shutdown — Python joins those threads and
     hangs forever. Closing pools inside the same event loop (on both success
     and failure paths) ensures the process always exits cleanly, even when a
     query raises (e.g. a corrupt database).
+
+    Background tasks are drained first, for the opposite reason: asyncio.run()
+    cancels whatever is still pending when the body returns, so without a
+    bounded wait here the post-completion work is started and then killed.
     """
 
     async def _wrapper() -> None:
         try:
             await coro_factory()
         finally:
+            from weebot.application.services.background_tasks import get_background_tasks
             from weebot.infrastructure.persistence.connection_pool import close_all_pools
 
+            # Before the pools, because the post-completion work (retention
+            # review, skill-gap processing, the dream scan) reads the database.
+            # Without this drain those tasks did not merely go unowned — they
+            # were cancelled outright when asyncio.run() returned, so the CLI
+            # paid to build a Container and start LLM adapters for work that
+            # never finished. Bounded, so a slow background job delays exit but
+            # cannot prevent it.
+            await get_background_tasks().drain()
             await close_all_pools()
 
     asyncio.run(_wrapper())

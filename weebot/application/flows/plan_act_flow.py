@@ -249,9 +249,6 @@ class PlanActFlow(BaseFlow):
         # ── Timing bookkeeping ────────────────────────────────────
         self._state_entered_at: float | None = None
         self._flow_started_at: float = 0.0
-        # ── Per-state prompt tracking: reset on state transition ─────
-        self._last_state_type: type | None = None
-        # ──────────────────────────────────────────────────────────
         self._planner = PlannerAgent(
             llm=self._llm,
             event_bus=self._event_bus,
@@ -560,8 +557,6 @@ class PlanActFlow(BaseFlow):
         self._state = state
         self._state_entered_at = now
         self.status = getattr(state, "status", AgentStatus.IDLE)
-        # Track state type for prompt_consumed reset in run()
-        self._last_state_type = type(state)
 
         if prev_duration > 0.001:
             self._log.info(
@@ -695,23 +690,36 @@ class PlanActFlow(BaseFlow):
         max_iterations = self._max_iterations
         iteration_count = 0
 
-        # Track if the prompt has been "consumed" by a state that needs it.
-        # This prevents an answer to step 1 from being injected as a prompt to step 2.
-        # Reset on state transition so each new state gets one chance at the prompt.
+        # Track whether this turn's user input has been "consumed" by a state.
+        # It is handed to one state and to no other: `prompt` here means "what
+        # the user said on this turn", so re-handing it to a later state would
+        # replay the user's words as though they had just been said again.
+        #
+        # There used to be a reset here — `if type(self._state) !=
+        # self._last_state_type: prompt_consumed = False` — meant to give each
+        # new state type its own shot at the prompt. It never fired, because
+        # `set_state` writes `_last_state_type` in the same call that writes
+        # `_state`, so the comparison's two sides were always equal by the time
+        # the loop looked. Both it and the field it read are gone. (D74.)
+        #
+        # It is deleted rather than repaired because making it fire is the
+        # wrong repair. Two of the three uses of `prompt` in `ExecutingState`
+        # want exactly this turn-input meaning and are correct today: the
+        # executor appends it as a user turn "so the LLM sees the answer
+        # instead of calling ask_human again", and the behavioural learner
+        # passes it to `learn_from_correction`. Re-handing the original task on
+        # every re-entry to ExecutingState would replay it to the model mid-plan
+        # and mine it for behavioural rules as if it were a correction.
+        #
+        # The states that were starved by this are the ones that wanted the
+        # *task*, not the turn input, and they now say so: see `task_text` in
+        # states/base.py.
         prompt_consumed = False
 
         while iteration_count <= max_iterations:
             iteration_count += 1
 
-            # ── Reset prompt_consumed on state transition ────────────
-            # Each FlowState gets one chance at the prompt.  When the state
-            # type changes (e.g. ProductGateState → PlanningState), reset
-            # so the new state can receive the task prompt even if the
-            # previous state yielded events that consumed it.
             current_state_type = type(self._state)
-            if current_state_type != self._last_state_type:
-                prompt_consumed = False
-                self._last_state_type = current_state_type
 
             # ── Build iteration context snapshot ──────────────────────
             ctx = IterationContext(

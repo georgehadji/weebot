@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.application.services.plan_critic import PlanCriticService
 from weebot.domain.models.event import AgentEvent, ErrorEvent
 from weebot.domain.models.plan import PlanCritique
@@ -67,7 +67,7 @@ class CritiquingState(FlowState):
 
         # Build critique context
         critique_context = {
-            "task": prompt,
+            "task": task_text(context, prompt),
             "tools": (
                 [t.name for t in context._tools] if hasattr(context._tools, "__iter__") else []
             ),
@@ -92,7 +92,23 @@ class CritiquingState(FlowState):
             _revise = getattr(_preset, "critique_revise_threshold", _revise)
 
         # ── Route based on confidence ──
-        if critique.overall_confidence >= _warn:
+        if getattr(critique, "degraded", False):
+            # FAIL OPEN, LOUDLY. The critic did not run, so `overall_confidence`
+            # is a default and not a judgement. Routing is unchanged — a quality
+            # gate does not block on its own outage — but nothing downstream is
+            # allowed to read this as an approval. The old fallback returned
+            # exactly WARN_THRESHOLD and logged "Plan approved with high
+            # confidence" for a critic that had never answered.
+            logger.warning(
+                "Plan critic did not run — proceeding with an UNREVIEWED plan (%s)",
+                "; ".join(critique.flaws) or "no reason recorded",
+            )
+            context._plan_critique = critique
+            from weebot.application.flows.states.premortem import PremortmState
+
+            context.set_state(PremortmState())
+
+        elif critique.overall_confidence >= _warn:
             # High confidence — proceed to pre-mortem then execution
             logger.info("Plan approved with high confidence")
             from weebot.application.flows.states.premortem import PremortmState

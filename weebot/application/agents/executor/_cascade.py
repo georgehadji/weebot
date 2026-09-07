@@ -8,7 +8,6 @@ isolate LLM-calling logic from step orchestration.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 
 from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
@@ -449,21 +448,58 @@ class CascadeExecutor:
             tasks = {
                 asyncio.ensure_future(_try(m, 90.0, tier=CascadeTier.FREE)): m for m in parallel
             }
-            done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
-            for fut in done:
-                resp = fut.result()
-                if resp is not None:
-                    for pf in pending:
-                        pf.cancel()
-                    for pf in pending:
-                        if not pf.cancelled():
-                            with contextlib.suppress(
-                                asyncio.InvalidStateError, asyncio.CancelledError
-                            ):
-                                pf.exception()
-                    if self._on_success:
-                        await self._on_success(resp)
-                    return resp
+            # Wait for a probe that actually SUCCEEDS, not merely one that
+            # finishes first.
+            #
+            # `_cascade_try_chat` returns None for every failure and never
+            # raises, and a 429 or 503 comes back in ~200ms against seconds for
+            # a real completion — so the first future to complete is
+            # preferentially the fastest *failure*. Cancellation used to live
+            # inside the `resp is not None` branch, so that common case fell
+            # through to Phase 2 with every probe still running. Measured on
+            # this code with the fastest probe failing (five probes, two of
+            # them slow successes):
+            #
+            #     requests sent  5     billed  5     cancelled  0
+            #
+            # Both slow probes had *succeeded*; their responses were discarded
+            # and the cascade fell through to Phase 2 to buy the answer again.
+            #
+            # Waiting for a success instead spends the probes already paid for.
+            # The cost is latency in exactly the case where escalating was the
+            # alternative: worst case is the slowest probe's 90s cap rather than
+            # the fastest probe's return.
+            pending = set(tasks.keys())
+            winner = None
+            try:
+                while pending and winner is None:
+                    done, pending = await asyncio.wait(
+                        pending, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for fut in done:
+                        resp = fut.result()
+                        if resp is not None:
+                            winner = resp
+                            break
+            finally:
+                # Always, on every exit: a probe left uncancelled runs to
+                # completion and bills. The old drain loop below this was a
+                # no-op — `pf.cancelled()` is still False immediately after
+                # `cancel()`, and `pf.exception()` on a task that is not done
+                # raises InvalidStateError, which the suppress swallowed.
+                #
+                # Bounded rather than gathered: `asyncio.wait` gives the
+                # cancellations a chance to land without hanging the cascade on
+                # an adapter that swallows CancelledError.
+                for pf in pending:
+                    pf.cancel()
+                if pending:
+                    await asyncio.wait(pending, timeout=5.0)
+
+            if winner is not None:
+                if self._on_success:
+                    await self._on_success(winner)
+                return winner
 
         # ── Phase 2: sequential fallback (60s) ──────────────────────
         remaining = [

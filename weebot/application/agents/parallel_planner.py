@@ -14,11 +14,14 @@ This module produces ``PlanCandidate`` objects.  The companion module
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import re
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.models.structured_output import (
+    SubtaskDecomposition,
+    SubtaskPlan,
+    parse_structured,
+)
 from weebot.domain.models.plan import Plan, Step, StepStatus, PlanStatus
 
 logger = logging.getLogger(__name__)
@@ -127,16 +130,15 @@ class ParallelPlanner:
             response = await self._llm.chat(
                 messages=[{"role": "user", "content": sys_prompt}], max_tokens=1000
             )
-            text = response.content.strip()
-            if text.startswith("```"):
-                text = re.sub(r"^```(?:json)?\s*", "", text)
-                text = re.sub(r"\s*```$", "", text)
-            data = json.loads(text)
-            subtasks_data = data.get("subtasks", [])
+            parsed = parse_structured(
+                response.content, SubtaskDecomposition, context="DPPM decomposition"
+            )
+            if parsed is None:
+                return []
             return [
-                SubtaskDefinition(title=s.get("title", ""), description=s.get("description", ""))
-                for s in subtasks_data
-                if s.get("title") and s.get("description")
+                SubtaskDefinition(title=s.title, description=s.description)
+                for s in parsed.subtasks
+                if s.title and s.description
             ]
         except Exception as exc:
             logger.warning("DPPM decomposition failed: %s", exc)
@@ -164,12 +166,17 @@ class ParallelPlanner:
             response = await self._llm.chat(
                 messages=[{"role": "user", "content": sys_prompt}], max_tokens=800
             )
-            text = response.content.strip()
-            if text.startswith("```"):
-                text = re.sub(r"^```(?:json)?\s*", "", text)
-                text = re.sub(r"\s*```$", "", text)
-            data = json.loads(text)
-            return data.get("steps", [])
+            # `data.get("steps", [])` returned whatever was under the key.
+            # Measured: a string, a dict and a list of ints each escaped this
+            # function's declared `list[dict[str, str]] | None` and reached
+            # `_assemble_candidates`, because `.get` substitutes its default
+            # only when the key is ABSENT, never when it is present and wrong.
+            parsed = parse_structured(
+                response.content,
+                SubtaskPlan,
+                context=f"DPPM subtask plan for {subtask.title[:40]}",
+            )
+            return parsed.steps if parsed is not None else None
         except Exception as exc:
             logger.warning("DPPM subtask planning failed for %s: %s", subtask.title, exc)
             return None

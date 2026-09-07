@@ -73,4 +73,13 @@ class AuditReport(BaseModel):
     violations: list[Violation] = Field(default_factory=list)
     summary: str = Field(default="")
     score: float = Field(default=1.0, ge=0.0, le=1.0)
+    checks_skipped: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Checks the auditor could not run — an unreadable path, a size lookup that "
+            "returned nothing, an undecodable file. A PASS with a non-empty list is not "
+            "the same claim as a PASS with an empty one, and before this field the two "
+            "were byte-identical."
+        ),
+    )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

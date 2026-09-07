@@ -8,14 +8,26 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
-from weebot.domain.models.plan import PlanStatus
+from weebot.domain.models.plan import PlanStatus, StepStatus
 from weebot.domain.models.session import SessionStatus
 from weebot.domain.models.event import ProductDecisionEvent
 from datetime import UTC
 
 logger = logging.getLogger(__name__)
+
+
+def _background():
+    """The owner for this state's post-completion work.
+
+    Imported lazily so `completed.py` keeps its current import cost and the
+    services package is not pulled in by anything that merely imports the flow
+    states.
+    """
+    from weebot.application.services.background_tasks import get_background_tasks
+
+    return get_background_tasks()
 
 
 async def _run_retention_review(
@@ -151,8 +163,14 @@ class CompletedState(FlowState):
         if self._termination_reason:
             logger.info("Flow terminated: %s", self._termination_reason)
 
+        # Computed before the plan is stamped, because the stamp depends on it.
+        # `Plan.is_complete()` is `all(is_done())` and `is_done()` counts
+        # FAILED, so "we stopped" and "it worked" were the same predicate here.
+        failed_steps = context._plan.failed_steps() if context._plan else []
+
         if context._plan:
-            context._plan = context._plan.model_copy(update={"status": PlanStatus.COMPLETED})
+            terminal_plan_status = PlanStatus.FAILED if failed_steps else PlanStatus.COMPLETED
+            context._plan = context._plan.model_copy(update={"status": terminal_plan_status})
 
             # ── AWM: induce workflow template from completed session ────
             if context._llm is not None and context._session is not None:
@@ -173,7 +191,7 @@ class CompletedState(FlowState):
             plan_dump = context._plan.model_dump()
             # Emit and yield the SAME event object so event bus consumers
             # and flow callers see identical event IDs / timestamps.
-            completed = PlanEvent(status=PlanStatus.COMPLETED, plan=plan_dump)
+            completed = PlanEvent(status=terminal_plan_status, plan=plan_dump)
             await context._emit(completed)
             yield completed
 
@@ -185,18 +203,43 @@ class CompletedState(FlowState):
                     import json as _json
                     import uuid as _uuid
 
-                    # Compute success score from step completion ratio
+                    # Compute success score from step completion ratio.
+                    #
+                    # This counted `s.is_done()`, and `Step.is_done()` is
+                    # `COMPLETED or FAILED` — so a plan in which every step
+                    # failed scored **1.0** and was stored as a template for
+                    # reuse. The failure was not merely reported as a success,
+                    # it was learned from as one and would be preferentially
+                    # retrieved for the next similar task.
                     total_steps = len(context._plan.steps)
-                    completed_steps = sum(1 for s in context._plan.steps if s.is_done())
-                    score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
+                    succeeded_steps = sum(
+                        1 for s in context._plan.steps if s.status == StepStatus.COMPLETED
+                    )
+                    score = round(succeeded_steps / total_steps, 2) if total_steps > 0 else 0.5
+
+                    # `prompt` is "" here — CompletedState is never a run's
+                    # first state — so this keyed every template it ever tried
+                    # to write on `compute_task_hash("")`, with an empty
+                    # description for the Jaccard fallback to match on. (D74.)
+                    _task = task_text(context, prompt)
                     template = PlanTemplate(
                         template_id=str(_uuid.uuid4()),
-                        task_hash=compute_task_hash(prompt),
-                        task_description=prompt[:500],
+                        task_hash=compute_task_hash(_task),
+                        task_description=_task[:500],
                         plan_json=_json.dumps(context._plan.model_dump(), default=str),
                         success_score=score,
                     )
-                    await context._state_repo.save_plan_template(template)
+                    # One positional argument where the repository declares
+                    # four. Every call raised TypeError into the handler below,
+                    # which logged it at DEBUG — so the plan_templates table has
+                    # never held a row. (D75.)
+                    await context._state_repo.save_plan_template(
+                        template.template_id,
+                        template.task_hash,
+                        template.task_description,
+                        template.plan_json,
+                        template.success_score,
+                    )
                     logger.info(
                         "Saved plan template (hash=%s, score=%.2f) for session %s",
                         template.task_hash,
@@ -204,9 +247,29 @@ class CompletedState(FlowState):
                         context._session.id[:8],
                     )
                 except Exception as exc:
-                    logger.debug("Plan template save skipped: %s", exc)
+                    # WARNING, not DEBUG. A save that cannot happen is worth
+                    # one line in a normal log; at DEBUG this hid a TypeError
+                    # on every completed run for the life of the feature.
+                    logger.warning("Plan template save failed: %s", exc, exc_info=True)
 
-        context._session = context._session.set_status(SessionStatus.COMPLETED)
+        # A plan that ran out of runnable steps is not the same as one that
+        # worked. `Plan.is_complete()` is `all(is_done())` and `is_done()`
+        # counts FAILED, so every terminal plan reached here reporting success
+        # — including one where nothing succeeded at all.
+        #
+        # `PlanStatus` has no failure member (created/updated/running/
+        # completed), so the plan object above cannot say this; `SessionStatus`
+        # can, and both the API and the web UI already understand `failed`.
+        failed = failed_steps
+        if failed:
+            logger.warning(
+                "Session %s finished with %d failed step(s): %s",
+                context._session.id,
+                len(failed),
+                ", ".join(s.id for s in failed[:5]),
+            )
+        terminal = SessionStatus.COMPLETED if not failed else SessionStatus.FAILED
+        context._session = context._session.set_status(terminal)
         if context._state_repo:
             await context._state_repo.save_session(context._session)
         context._step_execution_counts.clear()  # Reset for next run
@@ -235,6 +298,12 @@ class CompletedState(FlowState):
             extra = getattr(context._session.context, "extra", {}) or {}
             scores_raw = extra.get("verification_scores", {})
             gate_failures = extra.get("gate_failures", [])
+            # `verifying.py` has always computed this and written it here, and
+            # nothing read it — `SessionStamp` forbids extra keys and had no
+            # field for it, so a NOT_RUN marker could not reach the stamp even
+            # if a consumer wanted it. An empty `gate_failures` means "no gate
+            # failed", which is also what a gate that never ran produces.
+            verification_status = str(extra.get("verification_status", "") or "")
 
             verif_scores = (
                 VerificationScores(
@@ -264,6 +333,7 @@ class CompletedState(FlowState):
                 plan_fingerprint=fingerprint,
                 verification=verif_scores,
                 gate_failures=gate_failures,
+                verification_status=verification_status,
                 tool_calls=tool_count,
                 errors=error_count,
                 duration_ms=0,
@@ -370,9 +440,12 @@ class CompletedState(FlowState):
                 if _plan_for_retention
                 else "unknown"
             )
-            import asyncio as _aio
-
-            _aio.ensure_future(
+            # Owned, not orphaned. A bare `ensure_future` here is cancelled at
+            # `asyncio.run()` teardown, so in the CLI this work never ran at
+            # all — the Container and LLM adapters below were built and thrown
+            # away — and any exception surfaced from the loop's default handler
+            # instead of this module's logger. See BackgroundTasks.
+            _background().spawn(
                 _run_retention_review(
                     agent=context._retention_agent,
                     session_id=context._session.id,
@@ -380,20 +453,20 @@ class CompletedState(FlowState):
                     trust_report=_trust_extra,
                     error_count=_error_count_ret,
                     tool_count=_tool_count_ret,
-                )
+                ),
+                name=f"retention-review:{context._session.id[:8]}",
             )
 
         # ── Phase 2: skill-gap processing (background, flag-gated) ────
         _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
         if _gaps:
-            import asyncio as _aio
-
-            _aio.ensure_future(_run_skill_gap_processing(list(_gaps), context._session.id))
+            _background().spawn(
+                _run_skill_gap_processing(list(_gaps), context._session.id),
+                name=f"skill-gaps:{context._session.id[:8]}",
+            )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
-        import asyncio as _aio
-
-        _aio.ensure_future(_run_dream_scan())
+        _background().spawn(_run_dream_scan(), name="dream-scan")
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:

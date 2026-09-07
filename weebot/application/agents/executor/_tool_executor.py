@@ -84,10 +84,21 @@ class ToolExecutor:
     # ── Egress guard ───────────────────────────────────────────────
 
     def _get_egress_guard(self):
-        """Resolve the DI-managed EgressGuard singleton, once, lazily."""
+        """Resolve the DI-managed EgressGuard singleton, lazily.
+
+        Only a SUCCESSFUL resolution latches. The previous version set
+        `_egress_guard_resolved = True` before the `try`, so if both the DI
+        lookup and the direct construction failed, `_egress_guard` stayed None
+        and the early return above handed None back for the rest of the
+        session — with `if guard is not None:` at the call site skipping
+        classification entirely. The log said so in plain words: "outbound tool
+        calls will NOT be gated". One construction hiccup ungated every
+        subsequent send.
+
+        Retrying is cheap next to that, and a transient failure now self-heals.
+        """
         if self._egress_guard_resolved:
             return self._egress_guard
-        self._egress_guard_resolved = True
         from weebot.core.egress_guard import EgressGuard
 
         try:
@@ -104,11 +115,35 @@ class ToolExecutor:
                 self._egress_guard = EgressGuard()
             except Exception:
                 logger.error(
-                    "egress_guard: unavailable — outbound tool calls will NOT be gated",
+                    "egress_guard: unavailable — outbound tool calls will be BLOCKED "
+                    "while enforcement is on",
                     exc_info=True,
                 )
                 self._egress_guard = None
+                return None
+        self._egress_guard_resolved = True
         return self._egress_guard
+
+    @staticmethod
+    def _could_be_egress(tool_name: str) -> bool:
+        """Conservative name check for when the guard itself is unavailable.
+
+        A security gate that cannot run must not report clean. Without the
+        guard there is no way to inspect a bash command or a browser action, so
+        the whole family is treated as outbound. Deliberately broader than
+        `EgressGuard._detect_egress`: this runs only when the real classifier
+        could not be built, and being wrong in the permissive direction is the
+        failure this replaces.
+        """
+        from weebot.core.egress_guard import (
+            _BROWSER_EGRESS_TOOLS,
+            _NOTIFICATION_TOOLS,
+        )
+
+        lowered = tool_name.lower()
+        if lowered in _BROWSER_EGRESS_TOOLS or lowered in _NOTIFICATION_TOOLS:
+            return True
+        return lowered in {"atomic_mail", "bash", "bash_tool", "powershell", "shell"}
 
     # ── Batch execution ────────────────────────────────────────────
 
@@ -195,7 +230,21 @@ class ToolExecutor:
         # first-time recipients, and any egress from a session that has already
         # ingested untrusted content.
         guard = self._get_egress_guard()
-        if guard is not None:
+        if guard is None:
+            # The gate could not be built. Under the fail-closed policy for
+            # security gates, an outbound-capable tool is refused rather than
+            # waved through; everything else proceeds, so an unrelated import
+            # error does not brick the agent.
+            if is_enforcing() and self._could_be_egress(name):
+                logger.error(
+                    "egress_guard: unavailable — refusing possibly-outbound tool %r", name
+                )
+                _msg = (
+                    f"Egress guard unavailable — '{name}' refused. A security gate "
+                    f"that cannot verify does not report clean."
+                )
+                return ToolResult.error_result(error=_msg, output=_msg, tool_name=name)
+        else:
             decision = guard.classify(
                 name, args, untrusted_context_active=self._untrusted_context_active
             )

@@ -22,27 +22,38 @@ try:
 except ImportError:
     CACHE_AVAILABLE = False
 
-# Credential redaction patterns
-_CREDENTIAL_REDACTIONS = [
-    (
-        re.compile(r"(api[_-]?key|token|secret|password)[=:]\s*\S+", re.IGNORECASE),
-        r"\1=***REDACTED***",
-    ),
-    (re.compile(r"(sk-[a-zA-Z0-9]{20,})"), "sk-***REDACTED***"),
-]
-
-
 def _sanitize_error(exc: BaseException) -> None:
-    """Redact credential patterns from exception messages in-place."""
-    msg = str(exc)
-    for pattern, replacement in _CREDENTIAL_REDACTIONS:
-        msg = pattern.sub(replacement, msg)
+    """Redact credentials from an exception message, in place where possible.
+
+    This used to keep its own two-pattern fork of the sanitiser, and the fork
+    had drifted: its `sk-[a-zA-Z0-9]{20,}` excludes `-` and `_`, so it could
+    not match `sk-ant-...` — an Anthropic key survived here while the same key
+    was redacted by `weebot.core.credential_sanitizer`. One rule now, in one
+    place.
+
+    Mutating `args[0]` only reaches exceptions whose `__str__` *is* `args[0]`.
+    A provider exception that computes `__str__` from a stored request keeps
+    the secret, which is why `sanitized_message` exists: callers that log the
+    text rather than the object should use it.
+    """
+    msg = sanitize(str(exc))
     if msg != str(exc):
         try:
             exc.args = (msg,) + exc.args[1:]
         except (AttributeError, TypeError):
             pass
 
+
+def sanitized_message(exc: BaseException) -> str:
+    """The exception's message with credentials redacted, regardless of shape.
+
+    Safe for any exception, including one whose `__str__` is computed and so
+    cannot be fixed by rewriting `args`.
+    """
+    return sanitize(str(exc))
+
+
+from weebot.core.credential_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 

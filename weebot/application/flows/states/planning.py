@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus
 
@@ -89,14 +89,13 @@ class PlanningState(FlowState):
             )
             return
 
-        # ── Prompt fallback: when a pre-planning gate (ProductGateState)
-        # yields events before transitioning here, the run-loop's
-        # prompt_consumed flag starves us of the task prompt.  Fall back
-        # to original_task or last_prompt stored in the session context.
+        # ── Prompt fallback ────────────────────────────────────────────
+        # When a pre-planning gate (ProductGateState) yields events before
+        # transitioning here, the run loop hands this state "". This fallback
+        # was written inline here first; `task_text` is the same rule, now
+        # shared with the five other states that were still reading "". (D74.)
         if not prompt.strip():
-            prompt = context._session.context.get(
-                "_original_task", ""
-            ) or context._session.context.get("last_prompt", "")
+            prompt = task_text(context, prompt)
             logger.debug("PlanningState prompt was empty — using fallback: %.80s", prompt)
 
         # ── Intent disambiguation gate (Enhancement 2 — S2 fix) ──────────────

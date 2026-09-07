@@ -20,6 +20,7 @@ from weebot.infrastructure.persistence.connection_pool import (
     get_or_create_pool,
 )
 from weebot.infrastructure.persistence.fts5_search import (
+    clear_session_events,
     ensure_fts5_table,
     index_event,
     search_events,
@@ -249,7 +250,46 @@ class SQLiteStateRepository(StateRepositoryPort):
         sq = self._session_queries
         assert sq is not None
 
+        # ── Persist session ───────────────────────────────────────
+        #
+        # The events_json byte ceiling is enforced in SessionQueries.save and
+        # nowhere else. An identical truncation loop used to sit right here,
+        # and its trimmed event list was discarded on the very next line —
+        # `sq.save(session)` takes the Session, so the ceiling was applied a
+        # second time from the original events. The dead copy was not merely
+        # redundant. Each iteration also did `self._fts5_indexed.pop(...)`,
+        # resetting the FTS watermark, so the indexing block below re-indexed
+        # every event of an over-ceiling session on every save. Measured on a
+        # 12-event session held over the ceiling: event_fts grew 12 -> 24 -> 36
+        # rows across three saves of the same unchanged session, and one save
+        # logged 14 truncation warnings for 7 dropped events.
+        #
+        # Truncation trims the ROW; it does not touch `session.events`, which
+        # is what the watermark counts. So a drop here is deliberately NOT a
+        # reason to reset the watermark. While this repository lives, the index
+        # keeps the text of events the row can no longer hold, and
+        # `search_history` returns that text inline rather than re-reading the
+        # session, so those entries stay useful. They do not outlive the
+        # process: see the full-re-index branch below, which replaces a
+        # session's entries once the watermark is gone.
+        await sq.save(session)
+
         # ── Extract commitments from assistant messages ───────────
+        #
+        # AFTER the session row, not before. `save_session` runs three separate
+        # write transactions — commitments, the session, the FTS index — and a
+        # crash between them leaves partial state. Commitments carry
+        # `source_session_id`, so writing them first meant a crash in between
+        # left rows pointing at a session that does not exist. Ordering the
+        # dependent write second makes the only reachable partial state a
+        # session with no commitments, which is a missing side-feature rather
+        # than a dangling reference.
+        #
+        # Still non-fatal — a session must persist even if commitment
+        # extraction breaks — but no longer INVISIBLE. This was
+        # `except Exception: logger.debug(...)`, and it hid a
+        # `sqlite3.ProgrammingError` on every single call for the life of the
+        # feature. Fail open, loudly.
         try:
             from weebot.domain.services.commitment_extractor import extract_commitments
             from weebot.domain.models.event import MessageEvent
@@ -267,40 +307,56 @@ class SQLiteStateRepository(StateRepositoryPort):
                         for cmt in commitments:
                             await self.save_commitment(cmt)
         except Exception as exc:
-            logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
-
-        # ── Event bloat guard ─────────────────────────────────────
-        events_data = [e.model_dump() for e in session.events]
-        from weebot.config.constants import MAX_EVENTS_JSON_BYTES
-
-        events_json = json.dumps(events_data, default=str)
-        while len(events_json) > MAX_EVENTS_JSON_BYTES and len(events_data) > 1:
             logger.warning(
-                "Session %s events_json is %d bytes — truncating oldest events",
+                "Commitment extraction failed for session %s — the session is saved, "
+                "the commitments are not: %s",
                 session.id,
-                len(events_json),
+                exc,
+                exc_info=True,
             )
-            events_data = events_data[1:]
-            events_json = json.dumps(events_data, default=str)
-            self._fts5_indexed.pop(session.id, None)
-
-        # ── Persist session ───────────────────────────────────────
-        await sq.save(session)
 
         # ── Index new events for FTS5 ─────────────────────────────
         pool = await self._get_pool()
         if session.id not in self._fts5_locks:
             self._fts5_locks[session.id] = asyncio.Lock()
         async with self._fts5_locks[session.id]:
+            # `_fts5_indexed` is per-instance memory: nothing persists it, so
+            # the first save of a session by a fresh repository always starts
+            # from zero and re-walks every event. That is unavoidable, but
+            # appending the result was not — `index_event` only ever INSERTs,
+            # so each restart added a second full copy of the session to
+            # `event_fts`. Measured: a 6-event session indexed once by one
+            # repository reached 12 rows after a second repository loaded and
+            # saved it, and would have kept climbing per restart, filling
+            # `search_history`'s result window with copies of one event.
+            #
+            # So a full re-index REPLACES rather than appends. Note the cost
+            # this pays: rows for events since dropped by the events_json
+            # ceiling are cleared too, because a reloaded session no longer
+            # carries them. The index converges on what the row holds. The
+            # alternative — keeping them — was never durable anyway, since the
+            # watermark that would have protected them dies with the process.
+            known = session.id in self._fts5_indexed
             last_indexed = self._fts5_indexed.get(session.id, 0)
             if len(session.events) < last_indexed:
                 # Event list shrank (compaction) — the old watermark no longer
-                # lines up with these positions. Same reset as the bloat-guard
-                # branch above: re-index from scratch rather than silently
-                # adopting a lower watermark and leaving the new event content
-                # permanently unindexed.
+                # lines up with these positions. Re-index from scratch rather
+                # than silently adopting a lower watermark and leaving the new
+                # event content permanently unindexed.
                 last_indexed = 0
+                known = False
                 self._fts5_indexed.pop(session.id, None)
+            if not known and last_indexed == 0:
+                try:
+                    async with pool.acquire_write() as conn:
+                        await clear_session_events(conn, session.id)
+                except Exception:
+                    logger.warning(
+                        "Could not clear stale FTS entries for session %s before a full "
+                        "re-index — search results for it may contain duplicates",
+                        session.id,
+                        exc_info=True,
+                    )
             new_events = session.events[last_indexed:]
             # Count what actually made it in. The watermark used to advance to
             # len(session.events) whether or not index_event raised, so any event
@@ -370,7 +426,7 @@ class SQLiteStateRepository(StateRepositoryPort):
         try:
             pool = await self._get_pool()
             async with pool.acquire_write() as conn:
-                await conn.execute("DELETE FROM event_fts WHERE session_id = ?", (session_id,))
+                await clear_session_events(conn, session_id)
         except Exception:
             logger.debug("FTS5 cleanup skipped for %s", session_id)
 
@@ -533,18 +589,25 @@ class SQLiteStateRepository(StateRepositoryPort):
     # ── Plan templates ───────────────────────────────────────────
 
     async def save_plan_template(
-        self, template_id: str, task_hash: str, task_description: str, plan_json: str
+        self,
+        template_id: str,
+        task_hash: str,
+        task_description: str,
+        plan_json: str,
+        success_score: float = 1.0,
     ) -> None:
         await self._init_helpers()
-        await self._plan_templates.save(template_id, task_hash, task_description, plan_json)  # type: ignore[union-attr]
+        await self._plan_templates.save(  # type: ignore[union-attr]
+            template_id, task_hash, task_description, plan_json, success_score
+        )
 
-    async def find_plan_templates_by_hash(self, task_hash: str) -> dict | None:
+    async def find_plan_templates_by_hash(self, task_hash: str, limit: int = 3) -> list[dict]:
         await self._init_helpers()
-        return await self._plan_templates.find_by_hash(task_hash)  # type: ignore[union-attr]
+        return await self._plan_templates.find_by_hash(task_hash, limit)  # type: ignore[union-attr]
 
-    async def list_all_plan_templates(self) -> list[dict]:
+    async def list_all_plan_templates(self, limit: int = 200) -> list[dict]:
         await self._init_helpers()
-        return await self._plan_templates.list_all()  # type: ignore[union-attr]
+        return await self._plan_templates.list_all(limit)  # type: ignore[union-attr]
 
     async def increment_template_use(self, template_id: str) -> None:
         await self._init_helpers()

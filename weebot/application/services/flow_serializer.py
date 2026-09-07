@@ -26,7 +26,6 @@ class FlowSerializer:
         serializer = FlowSerializer()
         mermaid = serializer.to_mermaid(session, plan)
         trace = serializer.to_json_trace(session, plan, events)
-        langgraph = serializer.to_langgraph(session)
     """
 
     # ── Mermaid ───────────────────────────────────────────────────────
@@ -185,42 +184,3 @@ class FlowSerializer:
 
     # ── LangGraph ─────────────────────────────────────────────────────
 
-    def to_langgraph(self, session: Session) -> dict[str, Any]:
-        """Produce a LangGraph-compatible ``StateGraph`` definition.
-
-        Returns a dict that can be passed to ``StateGraph.__init__()`` or
-        serialized to JSON for handoff to a LangGraph project.
-
-        Nodes represent flow states; edges represent transitions.  The
-        output is a structural definition only — the actual LLM-calling
-        logic must be implemented in a LangGraph node function.
-        """
-        session_id = getattr(session, "id", "unknown")
-
-        nodes = [
-            {"id": "planning", "description": "Generate a task plan"},
-            {"id": "executing", "description": "Execute plan steps in order"},
-            {"id": "updating", "description": "Revise plan based on execution results"},
-            {"id": "summarizing", "description": "Produce final summary"},
-        ]
-
-        edges = [
-            {"from": "planning", "to": "executing"},
-            {"from": "executing", "to": "updating", "condition": "step_failed"},
-            {"from": "updating", "to": "executing", "condition": "plan_revised"},
-            {"from": "executing", "to": "summarizing", "condition": "all_steps_done"},
-            {"from": "summarizing", "to": "__end__"},
-        ]
-
-        return {
-            "session_id": session_id,
-            "graph_name": f"PlanActFlow_{session_id[:8]}",
-            "nodes": nodes,
-            "edges": edges,
-            "entry_point": "planning",
-            "note": (
-                "Structural definition only. Implement node functions "
-                "(planning_node, executing_node, updating_node, summarizing_node) "
-                "with LLM calls matching weebot's PlannerAgent / ExecutorAgent logic."
-            ),
-        }

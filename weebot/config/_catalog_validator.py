@@ -229,9 +229,11 @@ class CatalogValidator:
             "anthropic": "openrouter",
             "openai": "openrouter",
             "cohere": "openrouter",
-            "poolside": "openrouter",
+            # "poolside" and "thinkingmachines" were repeated here with the
+            # same value they already carry above — harmless by accident. The
+            # duplicates are removed so that the next repeat, if it carries a
+            # DIFFERENT value and silently drops one, is not buried in noise.
             "meituan": "openrouter",
-            "thinkingmachines": "openrouter",
             "meta": "openrouter",
         }
 

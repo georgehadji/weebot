@@ -25,8 +25,11 @@
 [ceilings]
 
 # Handlers whose body is exactly `pass` or `...`, by AST.
+# 137 -> 134 with the P5-1 agent migration: `parse_structured` replaced the
+# bare `except json.JSONDecodeError: pass` blocks that the hand-rolled JSON
+# extractors in planner.py and synthesizer_agent.py used to fall through.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 139
+silent_except_handlers = 134
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -45,4 +48,29 @@ bare_env_reads = 73
 # body is exactly `pass`/`...` by AST, while B110 is bandit's own detection.
 # The sets overlap heavily but are not equal, so the two move independently.
 # Measured by: scripts/lint_bandit_b110.py
-bandit_b110 = 68
+bandit_b110 = 67
+
+# Locals assigned but never read (ruff F841) in weebot/ and cli/.
+# Found twice in one session as real dropped work: an MCP server process bound
+# to a local nothing could reach, and a steering prompt built, logged, and then
+# not sent. CI's ruff selector was `F821,E9`, so the linter reported both and
+# the gate never asked.
+# NOTE: counts a third-party tool's output; `requirements.txt` pins only
+# `ruff>=0.8.0`, so an upgrade can move this number with no code change. The
+# script prints the ruff version with every count.
+# 33 -> 32 with PH0-5: `identity_verifier._determine_verification_level` built
+# `required_idx` from `level_order.index(required_level)` and then returned
+# `required_level` without ever reading it; the lookup is now an actual guard.
+# Measured by: scripts/lint_unused_locals.py
+unused_locals = 32
+
+# Bare `json.loads` / `json.load` under weebot/application/agents/.
+# CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
+# divergence had reached ten modules before anyone measured it. The migration
+# is now complete (P5-1) and the seven that remain were each triaged and kept:
+# `dreamer` and `planner` feed a validated model on the very next line,
+# `optimizer_agent` checks parseability only, and the four in `executor/` are
+# tool-call arguments — a different payload with its own repair path. That is
+# why this is a ceiling and not a ban: a count cannot tell those apart.
+# Measured by: scripts/lint_agent_json_parsing.py
+agent_json_parsing = 7

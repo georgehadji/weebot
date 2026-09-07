@@ -8,11 +8,27 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, ErrorEvent, PlanEvent
 from weebot.domain.models.plan import Plan, PlanStatus, StepStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _leave_unhandled(plan: Plan, step, reason: str) -> Plan:
+    """Mark a step FAILED when its plan update produced no revision.
+
+    Both failure paths in this state need this and neither had it. Returning to
+    ExecutingState with the plan untouched meant `Plan.get_next_step()` — which
+    skips only COMPLETED and FAILED steps — handed back the very same step, so
+    the flow re-ran it, failed the update again, and spun until
+    `_max_step_repetitions` (3) tripped, paying for a plan-update model call on
+    every pass. Measured: a step left RUNNING, UNVERIFIED or PENDING was
+    re-selected; a step already FAILED was not.
+    """
+    if step is None or step.is_done():
+        return plan
+    return plan.update_step_status(step.id, StepStatus.FAILED, result=reason)
 
 
 class UpdatingState(FlowState):
@@ -107,6 +123,11 @@ class UpdatingState(FlowState):
             _update_elapsed = _time.monotonic() - _update_t0
             if not cmd_result.success:
                 yield ErrorEvent(error=f"Plan update rejected: {cmd_result.error}")
+                context._plan = _leave_unhandled(
+                    context._plan,
+                    last_step,
+                    f"Plan update rejected: {cmd_result.error}",
+                )
                 context.set_state(ExecutingState())
                 return
 
@@ -168,16 +189,30 @@ class UpdatingState(FlowState):
                     context._plan = Plan.model_validate(event.plan)
                     update_success = True
                 elif isinstance(event, ErrorEvent):
-                    logger.warning("Plan update failed, continuing with existing plan")
-                    update_success = True
+                    # NOT update_success. This branch used to set it True, so a
+                    # planner that yielded nothing but an ErrorEvent left the
+                    # failing step COMPLETED with result "Handled by plan
+                    # update" and the plan byte-identical — a failed update
+                    # laundered into a completed step, which every downstream
+                    # verification then took at face value.
+                    logger.warning(
+                        "Plan update failed (%s); the step stays unhandled", event.error
+                    )
 
-        if not update_success:
-            logger.warning("Plan update did not produce valid result, continuing")
-
-        # Mark the failing/running step as handled if we got an update
-        if last_step and last_step.status in (StepStatus.FAILED, StepStatus.RUNNING):
-            context._plan = context._plan.update_step_status(
-                last_step.id, StepStatus.COMPLETED, result="Handled by plan update"
+        # A step is "handled" only if the update actually produced a revised
+        # plan. Marking it COMPLETED regardless is what turned a failed update
+        # into a completed step.
+        if update_success:
+            if last_step and last_step.status in (StepStatus.FAILED, StepStatus.RUNNING):
+                context._plan = context._plan.update_step_status(
+                    last_step.id, StepStatus.COMPLETED, result="Handled by plan update"
+                )
+        else:
+            logger.warning("Plan update did not produce a revised plan; step stays failed")
+            context._plan = _leave_unhandled(
+                context._plan,
+                last_step,
+                f"Plan update produced no revision{failure_msg}",
             )
 
         # ── Phase 2: Post-revision critique (reuses CritiquingState logic) ──
@@ -186,7 +221,7 @@ class UpdatingState(FlowState):
                 from weebot.application.flows.states.critiquing import ConfidentThresholds
 
                 critique_context = {
-                    "task": prompt,
+                    "task": task_text(context, prompt),
                     "tools": (
                         [t.name for t in context._tools]
                         if hasattr(context._tools, "__iter__")

@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from weebot.application.ports.llm_port import LLMPort
+from weebot.infrastructure.adapters.llm._client_policy import apply_client_policy
 from weebot.infrastructure.adapters.llm.caching_llm_adapter import (
     CachingLLMAdapter,
     supports_prompt_caching,
@@ -160,6 +161,17 @@ class AdapterFactory:
         # Create concrete adapter
         inner_adapter = self._create_inner_adapter(
             provider=provider, model=model, api_key=api_key, **kwargs
+        )
+
+        # Push this provider's timeout budget down to the SDK client, and turn
+        # off the two retry/fallback layers the wrappers above already own.
+        # Without this, `timeout` bounded only the `asyncio.wait_for` below
+        # while the SDK kept its own 600s read budget and its own
+        # `max_retries=2`, and `OpenAIAdapter` kept a 10-model fallback chain of
+        # its own — four layers whose product, measured against a 429, was 210
+        # HTTP requests for one logical `chat()`. See `_client_policy`.
+        apply_client_policy(
+            inner_adapter, timeout=timeout, sdk_max_retries=0, model_fallback=False
         )
 
         # Conditionally wrap with prompt-caching adapter (Anthropic-only).

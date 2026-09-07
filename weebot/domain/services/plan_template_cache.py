@@ -126,6 +126,28 @@ def jaccard_similarity(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(a | b)
 
 
+def row_to_template(row: Any) -> PlanTemplate:
+    """Build a `PlanTemplate` from a `plan_templates` row.
+
+    The repository speaks rows and this module speaks `PlanTemplate`, and
+    nothing converted between them: `find_matching_templates` returned the
+    repository's value straight out of a function annotated
+    `list[PlanTemplate]`, then called `tpl.task_description` on it. Both sides
+    were reached through `repo: Any`, so no type checker had anything to
+    compare. (D76.)
+    """
+    if isinstance(row, PlanTemplate):
+        return row
+    return PlanTemplate(
+        template_id=str(row["template_id"]),
+        task_hash=str(row["task_hash"]),
+        task_description=str(row["task_description"] or ""),
+        plan_json=str(row["plan_json"] or ""),
+        success_score=float(row["success_score"] if row["success_score"] is not None else 1.0),
+        use_count=int(row["use_count"] or 0),
+    )
+
+
 async def find_matching_templates(
     repo: Any, task_description: str, threshold: float = 0.4, max_results: int = 3
 ) -> list[PlanTemplate]:
@@ -149,11 +171,11 @@ async def find_matching_templates(
     # Exact hash match (fast path)
     exact = await repo.find_plan_templates_by_hash(task_hash, limit=max_results)
     if exact:
-        return exact
+        return [row_to_template(r) for r in exact]
 
     # Jaccard similarity fallback (slower)
     query_tokens = tokenize(task_description)
-    all_templates = await repo.list_all_plan_templates(limit=200)
+    all_templates = [row_to_template(r) for r in await repo.list_all_plan_templates(limit=200)]
     scored: list[tuple[float, PlanTemplate]] = []
 
     for tpl in all_templates:

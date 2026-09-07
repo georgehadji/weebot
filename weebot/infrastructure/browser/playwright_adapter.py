@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
+import uuid
+from pathlib import Path
 from typing import Any
 
 from weebot.application.ports.browser_port import (
@@ -15,6 +18,8 @@ from weebot.application.ports.browser_port import (
     ElementInfo,
     NavigationResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PlaywrightAdapter(BrowserPort):
@@ -79,7 +84,22 @@ class PlaywrightAdapter(BrowserPort):
         self._config = config or BrowserConfig()
 
         self._playwright = await async_playwright().start()
+        try:
+            await self._launch()
+        except BaseException:
+            # A failure after `launch()` used to leave a LIVE browser process
+            # attached to `self`, and no caller cleans up a `start()` that
+            # raised — `advanced_browser.py` and `browser_inspector.py` both
+            # call it bare. `close()` here is best-effort and must not mask the
+            # original error.
+            try:
+                await self.close()
+            except Exception:
+                logger.debug("Cleanup after a failed start() also failed.", exc_info=True)
+            raise
 
+    async def _launch(self) -> None:
+        """Acquire browser, context and page. Called only from `start()`."""
         # Launch browser based on type
         if self._config.browser_type == BrowserType.FIREFOX:
             browser_type = self._playwright.firefox
@@ -128,29 +148,46 @@ class PlaywrightAdapter(BrowserPort):
         if self._config.record_video:
             context_options["record_video_dir"] = "./videos"
 
-        self._context = await self._browser.new_context(**context_options)
-
-        # Start HAR recording if requested
+        # HAR recording IS a context option, and this is where it was missed:
+        # the flag used to open a page and drop it on the floor
+        # (`await self._context.new_page()`, unassigned) with a comment saying
+        # HAR is configured at context level — which is true, and it was never
+        # configured. So `record_har=True` recorded nothing and leaked one page
+        # per start. Set before `new_context`, because Playwright cannot turn
+        # it on afterwards.
         if self._config.record_har:
-            await self._context.new_page()
-            # HAR recording is set up at context level in Playwright
+            har_dir = Path("./har")
+            har_dir.mkdir(parents=True, exist_ok=True)
+            context_options["record_har_path"] = str(har_dir / f"{uuid.uuid4().hex}.har")
 
+        self._context = await self._browser.new_context(**context_options)
         self._page = await self._context.new_page()
 
     async def close(self) -> None:
-        """Close the browser session and cleanup resources."""
+        """Close the browser session and cleanup resources.
+
+        Each step runs even if an earlier one raises. Sequentially, a context
+        that failed to close would leave the browser process and the Playwright
+        driver alive — one stuck page stranding the whole tree, which is the
+        opposite of what a cleanup path is for.
+        """
         async with self._lock:
-            if self._context:
-                await self._context.close()
-                self._context = None
-
-            if self._browser:
-                await self._browser.close()
-                self._browser = None
-
-            if self._playwright:
-                await self._playwright.stop()
-                self._playwright = None
+            for name in ("_context", "_browser", "_playwright"):
+                resource = getattr(self, name, None)
+                if resource is None:
+                    continue
+                setattr(self, name, None)
+                closer = getattr(resource, "close", None) or getattr(resource, "stop", None)
+                if closer is None:
+                    continue
+                try:
+                    await closer()
+                except Exception:
+                    logger.warning(
+                        "Closing %s failed; continuing with the rest of the teardown.",
+                        name,
+                        exc_info=True,
+                    )
 
             self._page = None
 

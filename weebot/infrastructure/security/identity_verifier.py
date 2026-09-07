@@ -20,6 +20,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 _log = logging.getLogger(__name__)
 
 
@@ -196,7 +198,14 @@ class IdentityVerifier:
         Returns:
             VerificationResult with verification status
         """
-        # Check cache
+        # Check cache.
+        #
+        # NOTE: `_verification_cache` is read here and written nowhere, so
+        # `enable_caching` is inert. Left as a read rather than made to work,
+        # because the TTL below compares against the CLAIM's timestamp rather
+        # than the time the entry was stored — a claim carrying a future
+        # timestamp would never expire — and a caching policy for security
+        # verdicts is a decision for whoever gives this module a caller.
         if self._enable_caching:
             cache_key = self._get_cache_key(claim)
             if cache_key in self._verification_cache:
@@ -204,8 +213,26 @@ class IdentityVerifier:
                 if datetime.now() - cached.claim.timestamp < self._cache_ttl:
                     return cached
 
-        # Get policy for source type
-        policy = self._source_policies.get(claim.source_type, {})
+        # Get policy for source type.
+        #
+        # An unrecognised source_type used to fall through here with an EMPTY
+        # policy and still verify VALID: `webhook`, `ADMIN` and `""` were each
+        # measured returning is_valid=True at confidence 0.9. A type this
+        # module has no policy for is a type it has no basis to verify, so it
+        # is rejected rather than defaulted.
+        policy = self._source_policies.get(claim.source_type)
+        if policy is None:
+            logger.warning(
+                "identity: no policy for source_type %r — rejecting the claim",
+                claim.source_type,
+            )
+            return VerificationResult(
+                is_valid=False,
+                level=required_level,
+                claim=claim,
+                reason=f"Unknown source type: {claim.source_type!r}",
+                confidence=0.0,
+            )
 
         # Determine verification level needed
         effective_level = self._determine_verification_level(claim, required_level)
@@ -392,7 +419,9 @@ class IdentityVerifier:
             VerificationLevel.CRITICAL,
         ]
 
-        required_idx = level_order.index(required_level)
+        if required_level not in level_order:
+            # Defensive: an unrecognised level is not a reason to verify less.
+            return VerificationLevel.CRITICAL
         return required_level
 
     def _verify_basic(self, claim: IdentityClaim, policy: dict[str, Any]) -> VerificationResult:
@@ -441,7 +470,29 @@ class IdentityVerifier:
     def _verify_strong(
         self, claim: IdentityClaim, policy: dict[str, Any], level: VerificationLevel
     ) -> VerificationResult:
-        """Perform strong verification (multi-factor)."""
+        """Perform strong verification (multi-factor).
+
+        This had no source-trust check at all. `_determine_verification_level`
+        escalates every UNTRUSTED source straight to STRONG, which routed it
+        here — past the rejection in `_verify_standard` — and this method then
+        returned is_valid=True with `default_permissions + sensitive_actions`,
+        the widest grant in the module. Measured: `source_type="external"`
+        verified VALID at confidence 0.95 holding
+        ['read', 'write', 'delete', 'exec', 'network'], and `"unknown"`
+        verified VALID as well. Escalating an untrusted source to a stronger
+        level has to mean a stronger check, not a bypass of the weaker one.
+        """
+        if claim.source_type in self._UNTRUSTED_SOURCES:
+            self._track_failed_verification(claim.source_id)
+            return VerificationResult(
+                is_valid=False,
+                level=level,
+                claim=claim,
+                reason=f"Untrusted source type: {claim.source_type}",
+                confidence=0.0,
+                requires_additional_verification=True,
+            )
+
         # Check for failed verifications
         failed_count = len(self._failed_verifications.get(claim.source_id, []))
         if failed_count >= 3:
@@ -454,16 +505,25 @@ class IdentityVerifier:
                 requires_additional_verification=True,
             )
 
-        # For critical level, require additional verification
+        # For critical level, require additional verification.
+        #
+        # This returned is_valid=True beside a comment reading "in production,
+        # this would trigger MFA" — granting validity for a check that was
+        # never performed, in the one path that asks for the strongest one.
+        # Until something implements the additional factor, CRITICAL is not
+        # satisfied: `requires_additional_verification` is the caller's cue to
+        # obtain it, not a footnote on an approval.
         if level == VerificationLevel.CRITICAL:
-            # In production, this would trigger MFA or additional checks
             return VerificationResult(
-                is_valid=True,
+                is_valid=False,
                 level=level,
                 claim=claim,
-                verified_permissions=policy.get("default_permissions", []),
-                reason="Critical verification: additional checks required",
-                confidence=0.7,
+                verified_permissions=[],
+                reason=(
+                    "Critical verification requires an additional factor, which is "
+                    "not implemented"
+                ),
+                confidence=0.0,
                 requires_additional_verification=True,
             )
 

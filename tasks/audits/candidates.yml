@@ -114,17 +114,37 @@ candidates:
     wave: W1
     location: "region R6 — secret classification & event sanitisation"
     claim: "not recorded — W1 names only the region, never an individual claim"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: cleared
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      Closed by re-auditing the region rather than by fixing the claim, because
+      there is no claim: W1 named only "R6 — secret classification & event
+      sanitisation" and never recorded an individual defect, so there was
+      nothing to confirm or refute. The region has now been mapped (~1211 lines
+      across 9 modules) and triaged under V3, and what it contained is recorded
+      as R6-C1 through R6-C8 -- four of them fixed, four deferred with the
+      order they must be fixed in. Marking D9/D10 "cleared" records that the
+      region was audited; the findings live under their own ids, where they can
+      be tracked. See R6-C5 for the most severe: tool stdout reached the event
+      bus, the WebSocket and SQLite unsanitised.
 
   - id: D10
     wave: W1
     location: "region R6 — secret classification & event sanitisation"
     claim: "not recorded — W1 names only the region, never an individual claim"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: cleared
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      Closed by re-auditing the region rather than by fixing the claim, because
+      there is no claim: W1 named only "R6 — secret classification & event
+      sanitisation" and never recorded an individual defect, so there was
+      nothing to confirm or refute. The region has now been mapped (~1211 lines
+      across 9 modules) and triaged under V3, and what it contained is recorded
+      as R6-C1 through R6-C8 -- four of them fixed, four deferred with the
+      order they must be fixed in. Marking D9/D10 "cleared" records that the
+      region was audited; the findings live under their own ids, where they can
+      be tracked. See R6-C5 for the most severe: tool stdout reached the event
+      bus, the WebSocket and SQLite unsanitised.
 
   - id: D11
     wave: W1
@@ -294,9 +314,19 @@ candidates:
     wave: W2
     location: weebot/models/structured_output.py
     claim: "`parse_agent_output` never raises, so a caller cannot distinguish \"the model reported PARTIAL\" from \"we failed to parse\""
-    status: open
+    status: cleared
     evidence: null
-    verdict_note: null
+    verdict_note: >-
+      Literally true and about DEAD CODE, so the severity is nil. VERIFIED:
+      `parse_agent_output` has zero callers outside its own re-export in
+      `weebot/models/__init__.py`, and `OutputParseError` is defined and
+      re-exported but never constructed anywhere in weebot/, cli/ or tests/.
+      The distinction is also weaker than the claim suggests: the failure path
+      already writes `confidence=0.3` and a `"Failed to parse JSON: ..."`
+      prefix, so it is fragile rather than absent. Cleared rather than fixed --
+      hardening a parser nobody calls buys nothing. NOT deleted: it is a public
+      re-export, and the larger issue recorded as P5-1 is about what agents use
+      INSTEAD, which is where the work belongs.
 
   # ── Wave 3 — flow state machine & concurrency ─────────────────────────
   - id: D19
@@ -309,19 +339,115 @@ candidates:
 
   - id: D20
     wave: W3
-    location: weebot/application/flows/states/
+    location: weebot/application/flows/plan_act_flow.py:712
     claim: "Terminate-with-next-step returns without `set_state`, so `prompt_consumed` is never reset"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; W3 stopped at its investigation budget before triggering it."
+    status: cleared
+    evidence: tests/unit/application/flows/test_a_state_gets_the_value_it_asks_for.py
+    verdict_note: >-
+      Cleared as recorded and REPLACED by D74: the conclusion is right and the
+      mechanism is backwards. `prompt_consumed` is indeed never reset, but not
+      because a state returns without `set_state` — because `set_state` itself
+      assigns `_last_state_type = type(state)`, so the run loop's
+      `type(self._state) != self._last_state_type` is never true when it looks.
+
+  - id: D74
+    wave: W3
+    location: weebot/application/flows/plan_act_flow.py:712, weebot/application/flows/agent_session_manager.py:76
+    claim: "The run loop's prompt_consumed reset is dead: set_state writes both sides of the comparison it depends on"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_state_gets_the_value_it_asks_for.py
+    verdict_note: null
+    correction: >-
+      The mechanism was right and the repair was not the obvious one. Making the
+      reset fire would have been wrong: measured against the code that reads the
+      value, `prompt` carries two incompatible meanings. Two of the three uses in
+      `ExecutingState` want the TURN INPUT and are correct today — the executor
+      appends it as a user turn "so the LLM sees the answer instead of calling
+      ask_human again", and `learn_from_correction` mines it for behavioural
+      rules — so re-handing the original task on every re-entry would replay the
+      task to the model mid-plan and record it as a correction. Six other states
+      (Critiquing, Reviewing, Updating, Premortm, MetaAnalysis, Completed) want
+      the TASK and were reading ''.
+      Measured through the real run loop before the fix: 1 of 13 state
+      activations received anything at all. The dead reset and the
+      `_last_state_type` field that existed only to serve it are deleted; the six
+      task-wanting sites now call `task_text`, which is the fallback
+      `PlanningState` had already written inline with a comment naming the flag.
+      The turn-input contract is pinned by its own test, which fails if either
+      site is switched to `task_text`.
+
+  - id: D75
+    wave: W3
+    location: weebot/application/flows/states/completed.py:226
+    claim: "CompletedState calls save_plan_template(template) — one argument against a four-parameter method — so no plan template has ever been stored"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      Found while measuring D74, whose value at `CompletedState` this call is the
+      only consumer of. VERIFIED-EXECUTED: the call raises
+      "save_plan_template() missing 3 required positional arguments: 'task_hash',
+      'task_description', and 'plan_json'" into an `except Exception:
+      logger.debug(...)`, on every completed run, so the `plan_templates` table
+      has never held a row. The handler now logs at WARNING with a traceback.
+
+  - id: D76
+    wave: W3
+    location: weebot/domain/services/plan_template_cache.py:150, weebot/application/cqrs/handlers/create_plan_handler.py:69
+    claim: "find_matching_templates calls the repository with arguments it does not accept, then treats rows as PlanTemplate objects"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      Three defects in one function. VERIFIED-EXECUTED:
+      "find_plan_templates_by_hash() got an unexpected keyword argument 'limit'".
+      Past that, `find_by_hash` returned `dict | None` and its value was returned
+      straight out of a function annotated `list[PlanTemplate]`, and the Jaccard
+      path called `tpl.task_description` on dict rows. Both sides reach each
+      other through `repo: Any`, which is why nothing compared the call to the
+      signature; the new tests bind the AST call site against
+      `inspect.signature` so a future divergence fails at test time rather than
+      in a DEBUG log. The handler now logs at WARNING with a traceback.
+
+  - id: D77
+    wave: W3
+    location: weebot/infrastructure/persistence/_behavioral_rule_repo.py:116
+    claim: "PlanTemplateRepo.save never persisted success_score, against a column declared NOT NULL DEFAULT 1.0"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      The parameter was absent from the signature and the column from the INSERT.
+      Had the write in D75 ever run, every template would have been stored as a
+      perfect one — which is precisely the failure P3 fixed one layer up, where
+      `CompletedState` computes the score from the ratio of COMPLETED steps so a
+      mostly-failed plan is not retrieved as a model to copy. P3's fix was
+      correct and would have been discarded at the persistence boundary.
+      After: a plan with 2 of 3 steps COMPLETED persists 0.67, and the exact-hash
+      lookup orders by success_score DESC.
 
   - id: D21
     wave: W3
     location: weebot/application/flows/states/updating.py
     claim: "`UpdatePlanCommand` failure sends `ExecutingState` back to the same failing step — livelock"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W3's budget."
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_update_is_not_progress.py
+    verdict_note: null
+    correction: >-
+      The loop is real but the recorded mechanism was wrong twice. It is a step
+      left RUNNING, UNVERIFIED or PENDING that gets handed back, not a FAILED
+      one — `Plan.get_next_step()` skips FAILED. And it is bounded, not a
+      livelock: `_step_execution_counts` trips at `_max_step_repetitions` (3),
+      so the cost is up to three wasted plan-update model calls per run, and the
+      bound resets on each new flow instance.
+
+  - id: D72
+    wave: W3
+    location: weebot/application/flows/states/updating.py
+    claim: "An ErrorEvent from the fallback planner set `update_success = True`, marking the failing step COMPLETED with 'Handled by plan update' while the plan was unchanged"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_update_is_not_progress.py
+    verdict_note: null
 
   - id: D22
     wave: W3
@@ -448,9 +574,38 @@ candidates:
     wave: W3
     location: weebot/application/flows/
     claim: "Both declared transition tables are dead code — the architecture documents a machine that does not execute"
-    status: open
-    evidence: null
-    verdict_note: null
+    status: fixed
+    evidence: tests/unit/test_architecture_fitness.py
+    verdict_note: >-
+      TRUE and understated: there were THREE, not two. state_graph.py's
+      build_default_state_graph, flow_state_machine.py's _TRANSITION_TABLE, and
+      FlowSerializer.to_langgraph -- a hardcoded four-node description of a
+      thirteen-state machine. VERIFIED: zero external callers for every one of
+      them; FlowRouter._get_graph had no caller anywhere in weebot/, cli/,
+      tests/ or scripts/, and _route_product_gate / _route_plan_approval
+      existed only to feed the graph. Against them stood 45
+      context.set_state(...) calls and one if/elif chain, which is what ran.
+      .
+      Not merely dead weight. The graph had diverged from the live router in
+      six measured ways, the worst being that a DECLINING answer at a security
+      gate routes to ExecutingState under the graph -- the entire ADR 006
+      refusal path vanishes -- and an empty answer becomes consent. And
+      scripts/wire_stategraph.py existed to swap one for the other. Run against
+      a copy of the tree, it printed "StateGraph wired into
+      FlowRouter.resolve_initial_state()", EXITED 0, wired nothing
+      (`graph.resolve` occurrences: 0), and duplicated both the import and
+      _get_graph (1 -> 2 each). A tool that reports success while corrupting
+      the file it edits is the same defect class as the tables themselves.
+      .
+      Fixed by deletion: 359 lines across three files, plus _get_graph,
+      _state_class_map, the two _route_* helpers and to_langgraph. Chosen over
+      wiring the graph (highest blast radius -- the resume path for every
+      session, and ProductGateState(resume_with=prompt) cannot be expressed by
+      a name-returning factory) and over a conformance test (which would pin
+      current behaviour including the shared extra-wipe bug, and a dead table
+      with a green test is more misleading, not less). New gate
+      test_there_is_exactly_one_flow_routing_table keeps them deleted; proven
+      to fire by recreating state_graph.py.
 
   # ── Wave 4 — persistence & data integrity ─────────────────────────────
   - id: D30
@@ -473,9 +628,30 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/sqlite_state_repo.py
     claim: "`save_session` spans three separate write transactions; a crash between them leaves partial state"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_save_session_write_ordering.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and the measurement found something the record did not:
+      TRANSACTION 1 HAD NEVER COMMITTED ANYTHING. `save_commitment` raised
+      `sqlite3.ProgrammingError: Error binding parameter 7: type
+      'CommitmentStatus' is not supported` on every call, because
+      `CommitmentStatus` was a bare `Enum` while every sibling —
+      SessionStatus, PlanStatus, StepStatus, AuditVerdict — is `str, Enum`, and
+      sqlite3 binds a str subclass and refuses a bare one. `save_session`
+      wrapped the whole block in `except Exception: logger.debug(...)`, so a
+      total feature outage left one DEBUG line and nothing else. Measured: the
+      extractor returns 1 commitment for "I'll follow up with you tomorrow."
+      and the commitments table stayed empty. The duplicate-rule pattern again
+      — four sibling enums, one written differently. THREE FIXES: the enum is
+      `str, Enum`; the commitment write moved AFTER the session write, so the
+      only reachable partial state is a session with no commitments rather than
+      rows referencing a session that does not exist (which is the record's
+      actual claim, and only became reachable once transaction 1 worked); and
+      the handler logs at WARNING with the session id instead of DEBUG — fail
+      open, loudly, per the Phase 0 policy. NOT CHANGED: the three writes are
+      still three transactions. SQLite gives no cross-connection atomicity
+      here, and the FTS watermark already retries on failure, so ordering the
+      dependent write last is the available guarantee rather than a partial fix.
 
   - id: D33
     wave: W4
@@ -489,9 +665,17 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/sqlite_state_repo.py
     claim: "A truncation rule implemented twice, only one copy resetting the FTS watermark"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_one_truncation_rule.py
+    verdict_note: null
+
+  - id: D71
+    wave: W4
+    location: weebot/infrastructure/persistence/sqlite_state_repo.py
+    claim: "`_fts5_indexed` is per-instance memory, so the first save after any restart re-indexes every event of every session it touches"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_fts_index_is_idempotent.py
+    verdict_note: null
 
   - id: D35
     wave: W4
@@ -505,27 +689,61 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/connection_pool.py
     claim: "`close()` drains only the idle queue; a checked-out read connection leaks its worker thread"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_pool_close_reaches_every_connection.py
+    verdict_note: null
 
   - id: D37
     wave: W4
-    location: weebot/infrastructure/adapters/playwright/
+    location: weebot/infrastructure/browser/playwright_adapter.py
     claim: "Playwright `start()` has no cleanup if `new_context`/`new_page` raises after `launch()`"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/infrastructure/test_child_process_and_browser_teardown.py
     verdict_note: >-
-      Deferred by W4 to W7 as a resource-lifecycle candidate; W7 spent its
-      budget on S4 (37 sites) and did not enter it either.
+      VERIFIED-EXECUTED. The recorded LOCATION was wrong —
+      `weebot/infrastructure/adapters/playwright/` does not exist; the file is
+      `weebot/infrastructure/browser/playwright_adapter.py`. The claim itself
+      holds: `start()` had no failure path, so a raise from `new_context` or
+      `new_page` left a live browser process attached to `self`, and neither
+      caller closes a `start()` that raised (`tools/advanced_browser.py:370`
+      and `tools/browser_inspector.py:283` both call it bare). Two more found
+      while reading it. (1) `close()` was sequential, so a context that failed
+      to close stranded the browser process AND the Playwright driver behind
+      it — one stuck page taking down the whole tree, from the cleanup path.
+      (2) `record_har=True` opened a page, dropped it unassigned, and never set
+      `record_har_path`, under a comment stating HAR is configured at context
+      level. It is; it wasn't. So the flag recorded nothing and leaked one page
+      per start — a fail-open control (C2) hiding inside a resource leak.
+      Fixed: acquisition wrapped so a failure closes what was acquired and
+      re-raises without masking the original error; teardown made
+      step-independent; `record_har_path` actually set, before `new_context`,
+      because Playwright cannot enable it afterwards.
 
   - id: D38
     wave: W4
-    location: weebot/ (subprocess sites)
+    location: weebot/qmd_integration/mcp_client.py
     claim: "`subprocess.Popen` assigned to a local, never waited or terminated; `terminate()` without `wait()` leaves a zombie"
-    status: deferred
-    evidence: null
-    verdict_note: "Deferred by W4 to W7; W7 did not enter it either."
+    status: fixed
+    evidence: tests/unit/infrastructure/test_child_process_and_browser_teardown.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, both halves. `_start_mcp_http` bound its child to a
+      LOCAL, so `close()` could not reach it and every start leaked a
+      `qmd mcp --http` holding the port; nothing checked for an existing one
+      either, so repeated calls started more. ruff reports that as F841 — the
+      linter has been able to see it all along, and CI selects only F821,E9, so
+      nothing asked. The zombie half measured directly: `terminate()` then `ps`
+      shows state `Z`; after `wait()` the entry is gone. One defunct entry per
+      start/stop cycle in a long-lived agent. A third, unclaimed: both Popen
+      calls wired `stderr=PIPE` with nothing ever reading it, and an undrained
+      pipe blocks the child once its 64KB buffer fills — a deadlock presenting
+      as a slow server. Fixed by tracking both children, `poll()`-guarding the
+      start, DEVNULL for streams nothing reads, and a shared
+      `weebot/core/process_lifecycle.reap_process` (terminate, wait, escalate
+      to kill, close the pipes, never raise). The helper is shared for a
+      reason: `infrastructure/document/latex_compiler.py` had ALREADY learned
+      this and written it down 200 lines away, and the knowledge did not
+      travel. Its `_kill_process_tree` now delegates to the same module, so the
+      rule has one home rather than two copies free to drift.
 
   - id: S4
     wave: W4
@@ -543,11 +761,32 @@ candidates:
     wave: W5
     location: weebot/application/agents/executor/_cascade.py
     claim: "Orphaned probes on the `FIRST_COMPLETED` path keep running and billing"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/agents/test_cascade_does_not_bill_orphans.py
     verdict_note: >-
-      Ranked Priority 3 by the residual-work plan as unbounded spend (T4). Not
-      triggered.
+      VERIFIED-EXECUTED, and worse than the claim. The claim says probes are
+      orphaned; the measurement says a *successful* one was thrown away.
+      Cancellation lived inside the `resp is not None` branch, so the
+      first-completed-is-a-failure path fell through to Phase 2 with every probe
+      still running. That is the common case, not the rare one:
+      `_cascade_try_chat` returns None for every failure and never raises, and a
+      429/503 returns in ~200ms against seconds for a real completion, so the
+      first future to finish is preferentially the fastest FAILURE. Measured
+      with five probes, the fastest failing and two slow ones succeeding —
+      pre-fix 5 sent / 5 billed / 0 cancelled, both successes discarded, no
+      answer returned; post-fix 5 sent / 3 billed / 2 cancelled, the success
+      returned. The old drain loop under the cancel was a no-op:
+      `pf.cancelled()` is still False immediately after `cancel()`, and
+      `pf.exception()` on a task that is not done raises InvalidStateError,
+      which the `contextlib.suppress` swallowed. Fix harvests until a probe
+      SUCCEEDS and cancels the rest in a `finally`, bounded by
+      `asyncio.wait(..., timeout=5.0)` so an adapter that swallows
+      CancelledError cannot hang the cascade. Cost: latency in exactly the case
+      where the alternative was another paid call. Honest limit: cancelling
+      aborts client-side, so tokens the provider already generated may still
+      bill — this reduces spend, it does not provably zero it. Sound only while
+      nothing shields the call (`asyncio.shield` defeats cancellation, VERIFIED
+      by probe).
 
   - id: D40
     wave: W5
@@ -604,9 +843,41 @@ candidates:
     wave: W5
     location: weebot/infrastructure/adapters/llm/
     claim: "No client HTTP timeout on any concrete adapter; the only timeout is the cascade's own"
-    status: deferred
-    evidence: null
-    verdict_note: "Ranked Priority 3 with D39 as the liveness cousin of unbounded spend. Not triggered."
+    status: fixed
+    evidence: tests/unit/adapters/test_retry_amplification.py
+    verdict_note: >-
+      The claim is HALF WRONG and the region is much worse than it. Wrong: the
+      cascade's is NOT the only timeout — ResilientLLMAdapter has always
+      wrapped the inner call in `asyncio.wait_for(..., self._timeout)`.
+      Misleading: no concrete adapter passes `timeout=` to its SDK client, but
+      both SDKs default to `Timeout(connect=5.0, read=600, write=600,
+      pool=600)`, so "no timeout" was never the behaviour. What IS there is
+      four retry/fallback layers, none aware of any other, multiplying:
+      CascadeExecutor (~5 models) x RetryWithBackoff (7 attempts, len(delays)+1)
+      x OpenAIAdapter's OWN 10-model chain x SDK max_retries (3). Measured
+      against a 429-everything transport, one logical chat(): 210 HTTP requests
+      on an OpenRouter-shaped model (the shape every cascade probe uses), 42 on
+      a model with no "/". Post-fix: 7, one per configured attempt. The largest
+      layer is also the architecturally wrong one — OpenAIAdapter answers a
+      rate limit by walking a model chain beneath the CascadeExecutor whose job
+      that is (CLAUDE.md rule 4), so the cascade can receive a response from a
+      model it never selected while the cost is attributed to the one it asked
+      for. Fixed by `_client_policy.apply_client_policy`, applied once in the
+      factory rather than threaded through `_create_inner_adapter`'s eight
+      branches, because a branch that forgets the kwarg is silent. It walks
+      composites (CachingLLMAdapter -> DirectOrFallbackAdapter -> two leaves)
+      and returns the count configured so "applied" is distinguishable from
+      "found nothing". VERIFIED by probe that both SDKs read `self.timeout` and
+      `self.max_retries` per request, so the post-construction set reaches the
+      wire (it lands in the request's `extensions["timeout"]`). The timeout is
+      built as `httpx.Timeout(t, connect=min(5.0, t))`, not the scalar `t`: a
+      scalar replaces the WHOLE Timeout object, widening connect from 5s to t,
+      so the obvious spelling of this fix would have made an unreachable host
+      stall a probe for 90-180s. Residual: two grandfathered bypasses remain
+      (core/tool_agent.py builds AsyncOpenAI directly; osworld/agent_adapter.py
+      builds OpenAIAdapter directly, so its synchronous `_call_llm` has the
+      SDK's 600s read as its only bound). Both are pinned by
+      `test_llm_clients_are_built_by_the_factory` so a THIRD cannot appear.
 
   - id: S3
     wave: W5
@@ -1041,12 +1312,24 @@ candidates:
     claim: >-
       The test fails roughly one run in seven, against its own comment predicting
       one in two thousand -- a gate that fires at random carries no information
-    status: deferred
+    status: fixed
     severity: MEDIUM
     reachability: LIVE
-    evidence: null
+    evidence: tests/stress/test_llm_resilience.py
     verdict_note: >-
-      NOT MINE and NOT FIXED -- recorded because it is measured, and because a
+      FIXED. The mechanism the original note left UNKNOWN is the wall clock, not
+      the assertion. The default ladder [1,2,4,8,15,30] sums to EXACTLY 60.0s
+      and pyproject.toml sets timeout = 60. Measured on 12 isolated runs: 2
+      failures, both `Timeout (>60.0s)`, never `Only N/20`; durations cluster on
+      the ladder prefix sums {1,3,7,15,30,60} at 18s / 34s / 62s. The comment
+      predicting "1 in 2000" is not miscalculated -- it models P(successes < 18)
+      from 0.5^7 per request, which is about 1 in 2400 and is a different,
+      irrelevant failure mode. Fixed with the sub-second ladder the other two
+      retry tests in the same file already use: 20/20 pass, slowest run 4.0s
+      against a 60s limit. Also wired `tests/stress/` into CI, which no workflow
+      referenced -- 35 tests over the breaker, retry and timeout could not redden
+      anything, this one included. The whole directory runs in ~11s.
+      ORIGINAL NOTE, kept: NOT MINE -- recorded because it is measured, and because a
       randomly-failing gate is the mirror image of this audit's thesis: an
       instrument that cannot fail proves nothing, and one that fails at random
       proves nothing either, while training everyone to ignore red. MEASURED
@@ -1223,9 +1506,24 @@ candidates:
     wave: review
     location: weebot/application/flows/state_graph.py
     claim: "The declarative transition table that is meant to replace the router's hard-coded priorities has no _user_gate_pending entry"
-    status: deferred
-    evidence: null
+    status: fixed
+    evidence: tests/unit/test_architecture_fitness.py
     verdict_note: >-
+      RESOLVED BY DELETION, together with S5 -- the file this defect lives in
+      no longer exists. The divergence was worse than recorded: a differential
+      over 14 sessions found SIX behavioural differences, not the two claimed.
+      The severe ones: a DECLINING answer at a user gate returns ExecutingState
+      under the graph (the whole ADR 006 refusal path vanishes, and the untrusted
+      mail is acted on regardless of the answer); an EMPTY answer becomes
+      consent; the gate flag is never cleared, so it re-fires on every resume;
+      and a plan-approval decline returns WAITING, which breaks the run loop.
+      The claim's "lacks the WAITING -> RUNNING flips" was only 2/3 right --
+      the graph does have one of them.
+      .
+      Fixing the divergence would have meant maintaining two representations
+      of one routing table in agreement forever, with nothing enforcing it.
+      Deleting the dead one removes the class. Superseded reasoning below.
+      .
       Reported independently by three review angles. build_default_state_graph()
       mirrors resolve_initial_state's priorities as data and still registers
       resume_incomplete_plan at priority 2 with no user-gate transition, so
@@ -1237,3 +1535,490 @@ candidates:
       that two representations of the routing table exist at all.
       scripts/wire_stategraph.py is a committed script whose whole purpose is to
       swap one for the other, which is what makes this worth recording.
+
+  # ── Region R6 — secret classification & event sanitisation ────────────
+  # The region W1 named as D9/D10 without ever recording a claim. Mapped and
+  # triaged under the V3 protocol; every leak below was reproduced by
+  # execution before being acted on.
+
+  - id: R6-C1
+    wave: R6
+    location: weebot/core/secret_redaction.py, weebot/core/credential_sanitizer.py
+    claim: "`SecretRedactor` has zero callers while settings.py declares secret_redaction_enabled = True"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
+    verdict_note: >-
+      PARTIALLY wired, and the plan's own precondition turned out to be
+      insufficient. The plan said fix C7/C8, then wire. C7/C8 are necessary and
+      NOT sufficient: measured against this codebase's own tool output, the
+      ENTROPY pass redacts commit SHAs, session UUIDs, sha256 digests and FILE
+      PATHS (`/home/user/weebot/.../x.py` -> `[HIGH_ENTROPY_REDACTED]`).
+      Redacting file paths from a coding agent's tool output would leave it
+      unable to work, and it is not a threshold to tune — a hex digest and a
+      hex key have the same character distribution, so no threshold separates
+      them. So the PATTERN passes are wired into `credential_sanitizer.sanitize`
+      (reaching all three emit pipelines through one call site) and the entropy
+      pass is opt-in via `enable_entropy`, defaulting False, with
+      `_NOT_A_SECRET_SHAPES` covering path/hex/uuid for anyone who enables it.
+      What the wiring adds is not duplication: Luhn-checked PANs, Stripe keys
+      and labelled CVVs, none of which the denylist covered. Writing the test
+      found that the path shape missed the `:line:col` suffix — the commonest
+      shape in tool output.
+
+  - id: R6-C2
+    wave: R6
+    location: weebot/infrastructure/adapters/llm/resilient_adapter.py
+    claim: "_sanitize_error silently no-ops on any exception whose __str__ is not args[0], and the caller re-raises it as though sanitised"
+    status: fixed
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      VERIFIED by execution: an exception computing __str__ from a stored
+      request -- i.e. every httpx/openai wrapper -- kept its secret in full
+      after _sanitize_error ran, because the function rewrites args[0] only.
+      Measured: `GET failed https://api.x/v1?api_key=sk-abcdefghij0123456789XY`
+      survived unchanged.
+      .
+      The exception type cannot be replaced: ErrorClassifier keys retry
+      decisions off it. So `sanitized_message(exc)` was added as the honest
+      escape hatch -- callers that log the text rather than the object use it
+      and are safe whatever the exception's shape. _sanitize_error still fixes
+      args in place for the common case.
+
+  - id: R6-C3
+    wave: R6
+    location: weebot/infrastructure/adapters/llm/resilient_adapter.py:30
+    claim: "The adapter's `sk-[a-zA-Z0-9]{20,}` cannot match an Anthropic key; it is a drifted fork of the core sanitiser's pattern"
+    status: fixed
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      VERIFIED by execution, both forks side by side on the same input:
+      core.sanitize redacted `sk-ant-api03-...`; the adapter's copy returned it
+      verbatim. Its character class excludes `-` and `_`, so the match fails at
+      the third character of every Anthropic key. R2 exactly: one rule, two
+      copies, the copies drifted, and the drift is invisible because each is
+      tested against its own inputs.
+      .
+      Fixed by deleting the fork -- resilient_adapter now calls
+      weebot.core.credential_sanitizer.sanitize. One rule, one place.
+
+  - id: R6-C4
+    wave: R6
+    location: weebot/core/credential_sanitizer.py
+    claim: "The live pattern set has no Bearer, Authorization, GitHub, Google or Slack rule; the DEAD redactor has broader coverage than the live one"
+    status: fixed
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      VERIFIED by execution -- each of these passed through sanitize()
+      unchanged: a GitHub PAT (ghp_...), a Google API key (AIzaSy...), a Slack
+      bot token (xoxb-...), and `Authorization: Basic dXNlcjpwYXNzd29yZA==`.
+      Added those plus Slack webhook URLs and credentials embedded in a URL
+      (`postgres://user:pass@host`), which is the shape R6-C6's *_URL allowlist
+      makes reachable.
+      .
+      Found while testing, not recorded before and worth its own line: the JWT
+      pattern required 20+ characters after `eyJ` in the header segment, so
+      whether a JWT was redacted depended on its header's LENGTH rather than on
+      it being a JWT. `{"alg":"HS256"}` encodes to 17 and LEAKED;
+      `{"alg":"HS256","typ":"JWT"}` reaches 33 and was caught. Both are
+      ordinary headers. Minimum lowered to 8; the `eyJ` prefix plus three
+      base64url segments was always the specificity, the length was not doing
+      that work.
+
+  - id: R6-C5
+    wave: R6
+    location: weebot/application/flows/event_publisher.py
+    claim: "Sanitisation is gated on MessageEvent with role == 'user', so tool output is never sanitised"
+    status: fixed
+    evidence: tests/unit/core/test_every_event_field_is_sanitised.py
+    verdict_note: >-
+      The highest-value defect in the region, and VERIFIED. All THREE emit
+      pipelines -- event_publisher.py, collaborators/event_emitter.py and
+      middlewares/credential_sanitizer.py -- carried the same gate,
+      `isinstance(event, MessageEvent) and event.role == "user"`. So a
+      credential was scrubbed only when the human typed it, and everything the
+      agent produced went out raw: above all ToolEvent.result, which is tool
+      stdout and therefore the output of `cat .env`, `env` or `git remote -v`.
+      That reached the event bus, the WebSocket broadcast to the web UI, and
+      SQLite -- while EventPublisher's own docstring listed credential
+      sanitisation as an unconditional pipeline stage.
+      .
+      Also uncovered: ErrorEvent.error, StepEvent.description, an ASSISTANT
+      MessageEvent (the model echoing a key), and WaitForUserEvent.question.
+      .
+      Fixed with one `sanitize_event(event)` in core that knows which fields of
+      each event type carry free text; all three pipelines call it. Three
+      copies of the gate collapse to one rule -- the R2 class this region is
+      full of.
+
+  - id: R6-C6
+    wave: R6
+    location: weebot/config/secret_accessor.py
+    claim: "The `*_URL` / `*_HOST` allowlist is a deny-by-shape heuristic used as an allow rule"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and the REASON IT WAS DEFERRED IS FALSE. The plan said
+      changing it would overrule `tests/unit/test_secret_accessor.py:98`, which
+      "asserts the defect is correct". That test asserts `TIMEOUT = 30` is
+      logged plainly — a legitimate non-secret. NO test in that file mentions
+      URL at all, so nothing defended the defect and the deferral had no basis.
+      Measured at DEBUG: `DATABASE_URL = postgres://admin:hunter2@...`,
+      `REDIS_URL = rediss://:s3cr3tpassword@...`, and a complete Slack webhook
+      URL, all logged in full because their names end in `URL`. A Slack webhook
+      URL has no non-secret part. Fixed WITHOUT arguing with the allowlist: the
+      value is sanitised even on the allowed path, so the host stays visible
+      (which is why the allowlist exists) and the credential does not.
+      Found while fixing it: the URL-credential pattern added earlier in this
+      programme required a NON-EMPTY username (`[^\s:/@]+`), so
+      `rediss://:password@host` — the shape Redis and AMQP use — matched
+      nothing. Widened to `*`.
+
+  - id: R6-C7
+    wave: R6
+    location: weebot/core/secret_redaction.py
+    claim: "`redact()` corrupts the text it sanitises: whitespace collapsed, every 3-4 digit integer redacted as a CVV"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and there were four defects, not two.
+      (1) `_redact_high_entropy` did `text.split()` then `" ".join(...)`, so
+      every newline, tab and space run collapsed — a multi-line log came out as
+      one line. (2) `_CVV_RE` was `\b\d{3,4}\b`, which redacted `port 8080`,
+      `HTTP 404`, `year 2026`, `took 250 ms`. A CVV cannot be recognised from
+      digits alone, so the rule now requires a cvv/cvc/csc label. (3) NOT IN
+      THE RECORD: redaction output fed back into redaction input. The
+      entropy guard skipped tokens that `startswith("[")`, which misses a
+      marker substituted mid-token — `file.py:123` is 11 chars, under the
+      20-char threshold, but the CVV rule made it `file.py:[CVV_REDACTED]` at
+      22 chars, which then vanished as `[HIGH_ENTROPY_REDACTED]`. A source
+      location was destroyed because an earlier redaction lengthened it.
+      (4) NOT IN THE RECORD: `_PASSWORD_RE.sub` wrote a literal
+      `password=[REDACTED]`, so `secret: x` and `pwd=x` both came out claiming
+      to be a password — the sanitiser rewriting the log around the secret.
+
+  - id: R6-C8
+    wave: R6
+    location: weebot/core/secret_redaction.py
+    claim: "`redact_dict` skips non-str scalars, dict keys, and anything below one list level"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, all of it, plus tuples. Measured, four shapes passing
+      through untouched while the result was presented as sanitised: a secret
+      as a dict KEY (`{"sk_live_...": ...}`), a `bytes` value, a dict below TWO
+      list levels (`[[{...}]]`), and a tuple. An int that is a valid PAN also
+      survived. Fixed with one recursive `_redact_value` over str/bytes/dict/
+      list/tuple/set plus key redaction, preserving each value's type unless a
+      secret was actually found. Key redaction introduced a hazard the fix has
+      to answer: two distinct secret keys redact to the SAME marker, so
+      collapsing them would make this a data-destroying sanitiser. Collisions
+      are disambiguated rather than merged, and a test pins that no value is
+      dropped.
+
+  - id: P3-1
+    wave: P3
+    location: weebot/domain/models/plan.py, weebot/application/flows/states/completed.py
+    claim: "A plan whose every step FAILED reports complete, is stamped COMPLETED, and is stored as a template with success_score 1.0"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_is_not_a_success.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and it replaces the recorded D21 claim, which named
+      the wrong mechanism. `Step.is_done()` is `COMPLETED or FAILED` — correct
+      for `get_next_step()`, which must know what is still RUNNABLE, and wrong
+      everywhere it was read as "succeeded". Measured: every-step-FAILED gives
+      is_complete=True and a template success_score of 1.0, identical to a plan
+      where everything worked. So the failure was not merely reported as a
+      success, it was written to the plan-template cache with a perfect score
+      and would be preferentially retrieved for the next similar task. Fixed by
+      adding the missing predicates (`Plan.is_successful`, `Plan.failed_steps`)
+      rather than changing `is_done()` — changing it would make a failed step
+      runnable again and loop forever. `CompletedState` now scores on COMPLETED
+      and ends the session `SessionStatus.FAILED` when any step failed.
+      OPEN, and the user's call: `PlanStatus` has NO failure member
+      (created/updated/running/completed), so the plan object still cannot say
+      it failed and is stamped COMPLETED regardless. Adding one crosses into
+      `weebot-ui/src/types/events.ts`, whose `PlanStatus` union is already out
+      of sync with the backend (it omits `running`). `SessionStatus` was used
+      instead because both stacks already understand `failed`.
+
+  - id: P3-2
+    wave: P3
+    location: weebot/application/flows/states/executing.py:382
+    claim: "Phase 5 steering is polled, logged, formatted into a prompt, and discarded"
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_failed_plan_is_not_a_success.py
+    verdict_note: >-
+      NOT IN ANY RECORD. Found by running `ruff --select F841`, which CI does
+      not select. `effective_prompt` was assigned from `prompt`, reassigned
+      with the user's steering message, and read nowhere;
+      `ExecuteStepCommand(user_input=prompt)` sent the ORIGINAL. So
+      mid-execution steering was collected from the channel, acknowledged in
+      the log at INFO ("Steering received for session %s"), and thrown away —
+      a fail-open control with a log line that says it worked. One-word fix.
+      The class is now gated: `scripts/lint_unused_locals.py`, ceiling 33.
+
+  - id: P3-3
+    wave: P3
+    location: weebot/application/flows/states/executing.py:427
+    claim: "`inner_facts` is initialised, iterated, and never written"
+    status: fixed
+    evidence: tasks/audits/static_defect_audit_v3.md
+    verdict_note: >-
+      VERIFIED by AST, not grep: one assignment (`{}`) and one read
+      (`.items()`). The loop always ran zero times under a comment reading
+      "Persist any facts extracted by the executor". Deleted rather than wired,
+      and the reason matters: no command or handler in `application/cqrs/`
+      returns facts, and wiring it would write through `set_fact`, which stores
+      into `context.facts`, while `SessionContext.get` reads declared fields
+      then `context.extra` and never `facts`. Wiring would have produced an
+      apparently working fact pipeline over a store nothing reads — worse than
+      an obviously absent one.
+
+  - id: P3-4
+    wave: P3
+    location: weebot/application/flows/states/completed.py:401,417,422
+    claim: "Three `asyncio.ensure_future(...)` results are never referenced, awaited or cancelled"
+    status: fixed
+    evidence: tests/unit/application/services/test_background_work_is_owned.py
+    verdict_note: null
+    correction: >-
+      The consequence was worse than "unowned". Measured in a CLI-shaped
+      process, `asyncio.run()` cancels every one of them at teardown — even a
+      task needing 10ms — so the retention review, skill-gap processing and
+      dream scan never completed at all, after each had already built a
+      `Container()` and live LLM adapters. A failing orphan also bypassed the
+      application logger entirely. The garbage-collection hazard that motivates
+      holding a reference did not reproduce in a short probe and is recorded as
+      documented, not measured. A fourth spawn of the same shape was found in
+      `interfaces/cli/agent_runner.py`.
+
+  - id: P5-1
+    wave: P5
+    location: weebot/application/agents/, weebot/models/structured_output.py
+    claim: "CLAUDE.md rule 2 mandates Pydantic-validated structured output; agents call bare json.loads instead"
+    status: fixed
+    evidence: tests/unit/agents/test_agents_validate_their_json.py
+    verdict_note: null
+    correction: >-
+      The owner's direction was that the rule is real, so the agents were
+      migrated. Measured before each migration, with the sharpest first:
+      `ParallelPlanner._plan_subtask` is declared `list[dict[str, str]] | None`
+      and was observed returning a str, a dict and a list of ints, all three
+      escaping into `_assemble_candidates`. `SwarmResult` was constructed
+      outside the synthesizer's try block, so a wrong-typed `clusters` or
+      `synthesis` raised out of `synthesize()` and lost the whole swarm.
+      `OptimizerAgent._parse_edits` collapsed three different malformed shapes
+      to `[]` with one generic warning. `PlannerAgent` carried a fourth JSON
+      extractor that was measurably STRONGER than the shared one on two real
+      shapes, so `extract_json_text` gained its raw_decode step before the
+      planner's copy was deleted. Ceiling 17 -> 7; the seven that remain were
+      each triaged and kept.
+
+  - id: PH0-1
+    wave: Phase0
+    location: weebot/application/agents/executor/_tool_executor.py:90
+    claim: "A failed EgressGuard construction latches, ungating outbound tool calls for the whole session"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED by reading the source, not by taking the survey's word for it.
+      `self._egress_guard_resolved = True` was set BEFORE the try. If both the
+      DI lookup and the direct `EgressGuard()` construction failed,
+      `_egress_guard` stayed None and the early return handed None back on
+      every later call — and the call site's `if guard is not None:` skipped
+      classification entirely. The log said so in plain words: "outbound tool
+      calls will NOT be gated". One construction hiccup ungated every
+      subsequent send for the rest of the session. Fixed by latching only a
+      SUCCESSFUL resolution (a transient failure now self-heals) and, when the
+      guard is still unavailable and enforcement is on, refusing tools in a
+      conservative outbound-name set rather than allowing them. The set is
+      deliberately broader than `EgressGuard._detect_egress` — without the
+      guard there is no way to inspect a bash command or a browser action — but
+      narrow enough that an unrelated import error does not brick the agent:
+      file_editor, python_execute and web_search still run.
+
+  - id: PH0-2
+    wave: Phase0
+    location: weebot/core/approval_policy.py:218
+    claim: "An uncompilable approval rule is skipped, turning a DENY into an auto-approval"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED. The comment described the behaviour accurately and drew the
+      wrong conclusion from it: "fail-open: the bad rule is ignored, all other
+      rules still apply". The rule set includes DENY entries, so a typo in one
+      became an auto-approval with nothing downstream able to tell. Fixed by
+      recording the breakage and returning requires_confirmation=True for every
+      command while any rule is broken — we cannot know what a rule that will
+      not compile was meant to catch, so the only honest verdict is "ask".
+      RELATED, NOT CHANGED: `get_category_approval_mode` defaults to
+      AUTO_APPROVE on an unknown category. That default is defensible — most
+      categories genuinely are ordinary — but the ADR-006 inbound-mail gate in
+      executing.py rests ENTIRELY on `TOOL_CATEGORIES["inbound_mail"]` being
+      present, and would stop firing silently if the key were renamed. Pinned
+      by a test instead of changing the default.
+
+  - id: PH0-3
+    wave: Phase0
+    location: weebot/core/bash_guard.py:443
+    claim: "A malformed pattern drops the rule it encodes, including BLOCKED rules"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED. An earlier pass had already made this visible in the log and
+      kept skipping, reasoning that raising would make the whole guard
+      unconstructable. That reasoning is sound and the outcome was still
+      fail-open: the log went to a file and the command ran. Fixed without
+      changing constructability — the guard records dropped BLOCKED/DANGEROUS
+      patterns and `evaluate` then refuses every command rather than certifying
+      any as safe. Built-ins all compile (pinned by a test), so in practice
+      this fires only on a caller's `custom_patterns`, where it is their bug and
+      a loud failure is the useful one.
+
+  - id: PH0-4
+    wave: Phase0
+    location: weebot/tools/bash_tool.py
+    claim: "An undecodable base64 blob is reported clean; an analyzer crash downgrades to a weaker check"
+    status: fixed
+    evidence: tests/unit/security/test_security_gates_fail_closed.py
+    verdict_note: >-
+      VERIFIED, two defects. (1) `_legacy_validate_no_encoded_commands` had
+      `except Exception: continue` and `except Exception: pass` around its two
+      base64 decoders, then `return True, ""` — so a 100+ character blob
+      NEITHER decoder could read was reported CLEAN. That is the one outcome an
+      obfuscation check must never produce: the payload it cannot read is
+      exactly the one worth refusing. (2) `_validate_security` caught every
+      analyzer exception and fell back to that same 13-regex legacy check — a
+      weaker gate silently substituted for a stronger one, its verdict reported
+      as the real thing. Both now refuse. Regression guards pin that plain
+      commands, decodable harmless base64, and the encoded-shell detection are
+      all unaffected.
+
+  - id: PH0-5
+    wave: Phase0
+    location: weebot/infrastructure/security/, weebot/application/services/
+    claim: "Six more gates fail open; all are in modules with no production callers"
+    status: fixed
+    evidence: tests/unit/security/test_dormant_gates_fail_closed.py
+    verdict_note: null
+    correction: >-
+      Fixed in the order the R6-C1 trap requires: failure paths first, nothing
+      wired up. Two of the six were worse than surveyed.
+      `identity_verifier` did not merely default an unknown source_type to a
+      `{}` policy — `_determine_verification_level` escalates every UNTRUSTED
+      source to STRONG, and `_verify_strong` had no trust check at all, so
+      escalation BYPASSED the rejection in `_verify_standard`:
+      `source_type="external"` was measured verifying VALID at confidence 0.95
+      holding ['read', 'write', 'delete', 'exec', 'network'], the widest grant
+      in the module. Its CRITICAL branch also returned is_valid=True beside a
+      comment saying MFA was not implemented.
+      `security_validators.CommandValidator` was not only short-circuiting on a
+      PowerShell indicator — the test was `any(ind in command.lower() ...)`
+      over prefixes including "set-", so appending `# get-help` to
+      `dd if=/dev/zero of=/dev/sda` returned VALID, and `touch offset-1`
+      disabled validation of the `base64 -d | sh` beside it. A genuine
+      PowerShell command was waved through without the PowerShell checks
+      running either.
+      Two reachability false positives were caught while asserting the
+      "no production caller" premise: `soul_provider.py` has a constructor
+      parameter named `scan_for_injection` (and its own sixth copy of the
+      injection patterns), and `file_editor.py` imports `PathValidator` from
+      the same module as `CommandValidator`. The premise holds; the gate that
+      asserts it now matches on the imported symbol via the AST.
+
+  - id: PH0-6
+    wave: Phase0
+    location: weebot/application/services/harness_safety_gate.py, weebot/application/flows/harness_opt_flow.py:206
+    claim: "The safety gate reaches the right verdict and nothing enforces it"
+    status: fixed
+    evidence: tests/unit/application/flows/test_the_safety_gate_actually_blocks.py
+    verdict_note: >-
+      VERIFIED-EXECUTED, and worse than surveyed. `HarnessSafetyGate.check`
+      classifies correctly, including the fail-safe branch for an unrecognised
+      surface. The caller yielded WaitForUserEvent on line 206 and called
+      `await self._target.save(candidate)` on line 208 — unconditionally, next
+      statement — with the comment "Callers that want to block must stop
+      iterating after receiving WaitForUserEvent." ZERO CALLERS DID. The only
+      production consumer, `cli/commands/harness.py`, iterates with
+      `if hasattr(event, "message") and event.message`, and WaitForUserEvent
+      carries `question`, NOT `message` — so the approval prompt was not even
+      DISPLAYED before the edit to a safety-critical surface was persisted.
+      A gate whose enforcement is delegated to every caller is not a gate.
+      Fixed by declining to apply a gated edit at all: this flow has no session
+      or state repository, so there is no durable pause to resume from, and the
+      honest behaviour is to report the proposal and hold it.
+      `held_for_approval()` exposes them and the CLI now prints both the prompt
+      and the held list. The pre-existing
+      `test_gated_edit_yields_wait_for_user_event` asserted only that the event
+      was yielded, so it passed against the broken behaviour — the same shape
+      as the Phase 0 control tests.
+
+  # ── Phase 0, quality half — fail open, never silently ────────────────
+  - id: PH0-7
+    wave: Phase0
+    location: weebot/application/services/plan_critic.py:90
+    claim: "A critic outage returns overall_confidence=0.8, verdict='approved' — the highest routing branch"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. `ConfidentThresholds.WARN_THRESHOLD` is exactly 0.8, and the
+      exception fallback returned exactly 0.8, so any critic failure landed in
+      the `>= _warn` branch and logged "Plan approved with high confidence" for
+      a critic that had never answered. Against a genuine clean approval the
+      only difference was an empty `step_scores`, which no caller reads — so it
+      was routing-identical AND display-identical. The gate fabricated a
+      verdict it had not formed. FAIL OPEN is kept (a quality gate blocking
+      every run on a flaky LLM call is the worse trade) and made LOUD:
+      `PlanCritique.degraded`, `verdict="unreviewed"`, the reason in `flaws`,
+      a WARNING, and a dedicated branch in `critiquing.py` that no longer
+      claims high confidence. SECOND DEFECT, not in any record:
+      `self._timeout_seconds` was stored in __init__ and NEVER USED while the
+      constructor docstring promised "Max seconds to wait for the critic LLM
+      call. On timeout, the plan proceeds without critique." There was no
+      `wait_for` anywhere in the module — grep count zero — so a hung critic
+      held the flow for however long the adapter allowed. Now wired; measured
+      at 0.20s against a 30s hang.
+
+  - id: PH0-8
+    wave: Phase0
+    location: weebot/application/services/step_evidence_auditor.py
+    claim: "Three silent skips produce a PASS byte-identical to a full clean audit"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. An OSError on a path, a missing `output_path`, a `size()` that
+      returned None, and an unreadable file each `continue`d, and if they were
+      the only findings the report was
+      `AuditReport(verdict=PASS, score=1.0, violations=[], summary="Evidence
+      supports completion.")` — indistinguishable from an audit that ran every
+      check. This gate is BLOCKING at `executing.py:677-706`, so that identical
+      PASS marked the step COMPLETED on evidence nobody had checked. Fixed with
+      `AuditReport.checks_skipped`, a differing summary, and a WARNING. THIRD
+      DEFECT: `await self._files.size(out_path)` had NO try/except, and
+      `LocalFileStorageAdapter._resolve` raises ValueError on a traversal — so
+      it propagated out of `audit_step`, through `_gate_artifact_verification`,
+      and out of `run()`, which catches only PlanStuckError. A gate crashing is
+      neither open nor closed; it took the flow with it.
+
+  - id: PH0-9
+    wave: Phase0
+    location: weebot/application/flows/states/verifying.py:200, weebot/domain/models/stamp.py
+    claim: "`verification_status` is written on every path and read nowhere"
+    status: fixed
+    evidence: tests/unit/application/flows/test_quality_gates_are_loud.py
+    verdict_note: >-
+      VERIFIED. `verifying.py` computes NOT_RUN / passed / failed and writes it
+      to `ctx.extra["verification_status"]` at :200 and :250. Nothing in
+      `weebot/` reads that key, and `SessionStamp` has
+      `model_config = {"extra": "forbid"}` with no field for it — so the marker
+      could not reach the stamp even if a consumer had wanted it. The one key
+      that COULD distinguish "verification passed" from "verification never
+      ran" was unreachable by construction, while `gate_failures == []` (which
+      both cases produce) was the only thing recorded. Fixed by giving
+      `SessionStamp` the field and having `completed.py` carry it through.
+      NOT FIXED, recorded: `_gate_outcome_verification` returns None on
+      exception and None MEANS PASSED; `_gate_artifact_verification` returns []
+      on a missing dependency and [] MEANS NO VIOLATIONS. Both are still
+      byte-identical to a clean run; the stamp can now say verification did not
+      run, but the individual gates still cannot say which of them did not.
+

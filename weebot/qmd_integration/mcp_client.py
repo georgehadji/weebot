@@ -21,6 +21,8 @@ import logging
 import os
 import subprocess
 import threading
+
+from weebot.core.process_lifecycle import reap_process
 from dataclasses import dataclass, field
 from typing import Any, Union
 
@@ -119,6 +121,11 @@ class QMDMCPClient:
         self._timeout = timeout
 
         self._process: subprocess.Popen | None = None
+        # The HTTP server is a SECOND child process, and it used to be assigned
+        # to a local in `_start_mcp_http` — so `close()` could not reach it and
+        # every start leaked a `qmd mcp --http` holding the port. ruff's F841
+        # reports it; CI selects only F821,E9, so nothing asked.
+        self._http_process: subprocess.Popen | None = None
         self._lock = threading.Lock()
 
         # Check if QMD is available
@@ -169,7 +176,14 @@ class QMDMCPClient:
 
         try:
             self._process = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                # DEVNULL, not PIPE: `_call_stdio` reads stdout, but nothing
+                # ever reads stderr. An undrained pipe blocks the writer once
+                # the 64KB buffer fills, so a chatty server would hang the
+                # client permanently — a deadlock dressed as a slow response.
+                stderr=subprocess.DEVNULL,
             )
             _log.info("QMD MCP server started (stdio)")
         except Exception as e:
@@ -235,8 +249,15 @@ class QMDMCPClient:
         """Start QMD MCP server in HTTP mode."""
         cmd = [self._qmd_path, "mcp", "--http", "--port", str(self._port)]
 
+        if self._http_process is not None and self._http_process.poll() is None:
+            return
+
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # DEVNULL rather than PIPE: nothing reads either stream, and an
+            # undrained pipe blocks the child once its 64KB buffer fills.
+            self._http_process = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             # Wait for server to start
             await asyncio.sleep(2)
             _log.info(f"QMD MCP server started on port {self._port}")
@@ -512,11 +533,20 @@ class QMDMCPClient:
         return self._qmd_available
 
     def close(self) -> None:
-        """Close MCP connection."""
+        """Close MCP connection, reaping both child processes.
+
+        `terminate()` alone leaves the child in state ``Z`` — defunct, holding
+        a PID until the parent exits. Verified: a terminated child with no
+        ``wait()`` shows ``Z`` in ``ps``; after ``wait()`` it is gone. In a
+        long-lived agent process each start/stop cycle leaked one entry.
+        """
         with self._lock:
-            if self._process:
-                self._process.terminate()
-                self._process = None
+            for attr in ("_process", "_http_process"):
+                proc = getattr(self, attr, None)
+                if proc is None:
+                    continue
+                setattr(self, attr, None)
+                reap_process(proc)
 
 
 # Singleton instance

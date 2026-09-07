@@ -127,10 +127,19 @@ class AgentRunner:
             if hasattr(session.updated_at, "timestamp"):
                 age_hours = (_time.time() - session.updated_at.timestamp()) / 3600
                 if age_hours > 24 and self._retention_agent:
-                    import asyncio as _aio
+                    from weebot.application.services.background_tasks import (
+                        get_background_tasks,
+                    )
 
                     _session_summary = session.title or session.id
-                    _aio.ensure_future(self._run_retention(session.id, _session_summary))
+                    # Same orphan shape as the three in CompletedState: dropped
+                    # on the floor, so it was cancelled at asyncio.run()
+                    # teardown and any failure went to the loop's default
+                    # handler rather than this logger.
+                    get_background_tasks().spawn(
+                        self._run_retention(session.id, _session_summary),
+                        name=f"retention-review:{session.id[:8]}",
+                    )
 
         if session is None:
             session = Session(

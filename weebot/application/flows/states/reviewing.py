@@ -16,7 +16,7 @@ from collections.abc import AsyncGenerator
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
 
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.application.ports.code_reviewer_port import CodeReviewerPort
 from weebot.domain.models.code_review import CodeReviewResult
 from weebot.domain.models.event import AgentEvent, CorrectionPatternDetected, ThoughtEvent
@@ -78,7 +78,7 @@ class ReviewingState(FlowState):
         # ── Build review context dict ────────────────────────────────
         completed_count = len(context._plan.get_completed_steps())
         review_context: dict[str, Any] = {
-            "task": prompt,
+            "task": task_text(context, prompt),
             "plan_title": context._plan.title,
             "completed_steps": completed_count,
             "step_events": self._step_events,

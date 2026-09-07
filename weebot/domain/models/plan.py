@@ -21,6 +21,18 @@ class PlanStatus(str, Enum):
     UPDATED = "updated"
     RUNNING = "running"
     COMPLETED = "completed"
+    # Added because there was no way to say a plan did not work. `CompletedState`
+    # stamped COMPLETED unconditionally — not from carelessness, but because
+    # this enum offered nothing else, so a plan in which every step failed
+    # ended up indistinguishable from one that succeeded.
+    #
+    # BACKEND ONLY, deliberately: `weebot-ui/src/types/events.ts` declares
+    # `PlanStatus = 'created' | 'updated' | 'completed'`, which is already out
+    # of sync (it omits `running`). Widening it is a separate, decided-later
+    # change; until then the UI sees `failed` as an unknown value, and
+    # `SessionStatus.FAILED` — which both stacks do understand — carries the
+    # outcome for anything user-facing.
+    FAILED = "failed"
 
 
 class ContextScope(str, Enum):
@@ -120,6 +132,15 @@ class PlanCritique(BaseModel):
     step_scores: dict[str, float] = Field(
         default_factory=dict, description="step_id -> 0.0-1.0 confidence score"
     )
+    degraded: bool = Field(
+        default=False,
+        description=(
+            "True when the critic did not actually run — an LLM failure, a timeout, "
+            "or unparseable output. The verdict fields then carry a default, not a "
+            "judgement, and a consumer that cannot tell the two apart is reading a "
+            "fabricated approval."
+        ),
+    )
     flaws: list[str] = Field(default_factory=list, description="Specific concerns about the plan")
     suggestions: list[str] = Field(
         default_factory=list, description="Concrete fixes for identified flaws"
@@ -197,7 +218,31 @@ class Plan(BaseModel):
         return self.model_copy(update={"steps": retained + fresh, "status": PlanStatus.UPDATED})
 
     def is_complete(self) -> bool:
+        """Every step has reached a terminal status — succeeded OR failed.
+
+        This is the right predicate for "stop running", and `get_next_step()`
+        agrees with it. It is the WRONG predicate for "it worked", because
+        `Step.is_done()` counts FAILED as done — so a plan in which every
+        single step failed returns True here. Use `is_successful()` when the
+        question is whether the goal was achieved.
+        """
         return len(self.steps) > 0 and all(s.is_done() for s in self.steps)
+
+    def is_successful(self) -> bool:
+        """Every step actually COMPLETED. Nothing failed.
+
+        The predicate that was missing. Without it, three places read
+        `is_complete()` as success: the auto-terminate gate, the plan status
+        stamped by `CompletedState`, and the template cache's success score —
+        which scored an all-failed plan **1.0** and stored it for reuse, so a
+        failure was not merely reported as a success, it was learned from as
+        one.
+        """
+        return len(self.steps) > 0 and all(s.status == StepStatus.COMPLETED for s in self.steps)
+
+    def failed_steps(self) -> list[Step]:
+        """Steps that reached FAILED. Empty when the plan succeeded."""
+        return [s for s in self.steps if s.status == StepStatus.FAILED]
 
     # ── Domain validation methods (migrated from application layer) ──
 

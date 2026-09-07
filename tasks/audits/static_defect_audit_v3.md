@@ -1890,3 +1890,1693 @@ how many other conclusions in this audit rest on an untested premise about a
 neighbouring mechanism. The rate at which recorded claims have proven wrong
 in this backlog (nine of sixteen) suggests the answer is not zero.
 
+
+---
+
+## The region that was named and never opened
+
+### R6 — secret classification and event sanitisation `[VERIFIED-EXECUTED]`
+
+W1 recorded two candidates, D9 and D10, against "region R6" and never wrote
+down a claim for either. They sat `open` through eight waves because there was
+nothing to confirm. Opening the region found the most severe unshipped
+defects in this backlog.
+
+### R6-C5 — sanitisation covered the one field the human types
+
+All **three** emit pipelines carried the same gate:
+
+```python
+isinstance(event, MessageEvent) and event.role == "user"
+```
+
+So a credential was scrubbed only when the *human* typed it. Everything the
+agent produced went out raw — above all `ToolEvent.result`, which is tool
+stdout, and therefore the output of `cat .env`, `env` or `git remote -v`. That
+reached the event bus, the WebSocket broadcast to the web UI, and SQLite,
+while `EventPublisher`'s own docstring listed credential sanitisation as an
+unconditional pipeline stage.
+
+Also uncovered: `ErrorEvent.error`, `StepEvent.description`,
+`WaitForUserEvent.question`, and an **assistant** `MessageEvent` — the model
+echoing back a key it had just been shown.
+
+Three copies of the gate now collapse to one `sanitize_event()` in core that
+knows which fields of each event type carry free text.
+
+### R6-C3 — one rule, two copies, and the copies drifted
+
+Measured, both forks on the same input:
+
+```
+core.sanitize      : auth failed for ***REDACTED-API-KEY***
+adapter._sanitize  : auth failed for sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+`resilient_adapter`'s character class is `sk-[a-zA-Z0-9]{20,}` — no `-`, no
+`_` — so it fails at the third character of every Anthropic key, while
+`weebot/core`'s `sk-[a-zA-Z0-9_-]{20,}` catches it. Neither copy is tested
+against the other's inputs, which is what makes R2 invisible. The fork is
+deleted; the adapter calls core.
+
+### R6-C4 — the live sanitiser was thinner than the dead one
+
+Each of these passed through `sanitize()` unchanged:
+
+```
+LEAK   GitHub PAT      ghp_16C7e42F292c6912E7710c838347Ae178B4a
+LEAK   Google API key  AIzaSyD-1234567890abcdefghijklmnopqrstu
+LEAK   Slack bot       xoxb-...-...-...   (truncated: push protection)
+LEAK   Basic auth      Authorization: Basic dXNlcjpwYXNzd29yZA==
+```
+
+The **dead** `SecretRedactor` has a Bearer rule. The live one did not.
+
+**And a defect found only by writing the test.** The JWT pattern required 20+
+characters after `eyJ` in the header segment, so whether a JWT was redacted
+depended on its header's *length*:
+
+```
+header {"alg":"HS256"}                  -> 17 chars after eyJ   LEAK
+header {"alg":"HS256","typ":"JWT"}      -> 33 chars after eyJ   REDACTED
+```
+
+Both are ordinary headers. My first test case happened to use the short one
+and failed; the correct response was to fix the pattern, not the test. The
+`eyJ` prefix plus three base64url segments was always the specificity — the
+length was never doing that work.
+
+### R6-C2 — a sanitiser that cannot reach a computed message
+
+`_sanitize_error` rewrites `exc.args[0]`, which does nothing for an exception
+whose `__str__` is computed from stored state — i.e. every httpx/openai
+wrapper:
+
+```
+after sanitise: GET failed https://api.x/v1?api_key=sk-abcdefghij0123456789XY
+```
+
+The exception type cannot be swapped, because `ErrorClassifier` keys retry
+decisions off it. `sanitized_message(exc)` is the honest escape hatch: callers
+that log the text rather than the object are safe whatever the shape.
+
+### Red before green `[VERIFIED-EXECUTED]`
+
+```
+pre-fix:  ImportError: cannot import name 'sanitize_event'
+          plus, behaviourally: LEAK GitHub / Google / Slack / JWT(short hdr)
+post-fix: 22 passed
+```
+
+### Deliberately not fixed, and the order that forces it
+
+`SecretRedactor` is 184 lines with **zero callers**, while `settings.py`
+declares `secret_redaction_enabled: bool = True`, described as redacting
+secrets "in tool output and logs". The configuration reports a control that
+has never run.
+
+It is not wired in here, because it is broken in two ways that only matter
+once it runs: `redact()` collapses every newline and tab and redacts any 3–4
+digit integer as a CVV (`port 8080` → `port [CVV_REDACTED]`), and
+`redact_dict` skips non-`str` scalars, dict keys, and anything below one list
+level while presenting the result as sanitised. **Wiring C1 before fixing
+C7/C8 would ship a log-corruption bug on the same commit.** Order: C5 →
+C3/C4 → C7/C8 → C1.
+
+`R6-C6` is also deferred, for a different reason: the `*_URL` / `*_HOST`
+allowlist is a deny-by-shape heuristic used as an allow rule, and
+`tests/unit/test_secret_accessor.py:98` currently *asserts it is correct*.
+Changing it means overruling a test that encodes the defect as the contract —
+a judgement about intent, not a repair. Mitigated meanwhile: C4's new
+URL-credential pattern redacts `scheme://user:pass@host` even though the
+classifier still calls the key non-secret.
+
+### Coverage & residual risk
+
+- **Sanitisation is field-driven.** A new event type with a free-text field
+  gets no coverage until it is added to `_SANITISED_EVENT_FIELDS`. Nothing
+  enforces that; a fitness test asserting every `str` field of every event
+  type is either listed or explicitly exempted would.
+- **`function_args` is not sanitised.** A `ToolEvent` carries its arguments as
+  a dict, and a credential passed *into* a tool sits there. Only `result` is
+  covered.
+- **Patterns are a denylist.** Everything in this region is; a token shape
+  nobody anticipated still leaks. The entropy check in the dead redactor is
+  the only non-denylist mechanism in the codebase, and it remains unwired.
+
+### Uncertainty acknowledgment
+
+D9 and D10 were the last two `open` records and the easiest to leave alone,
+because a candidate with no claim cannot be refuted and therefore never looks
+urgent. They were also the only two pointing at a security region no wave had
+finished. **The ranking heuristic that kept them last — "unspecified means
+low value" — was exactly backwards here**, and I do not know whether that is a
+one-off or a property of how this inventory was ordered.
+
+
+---
+
+## Three routing tables, none of them running
+
+### S5 and D70 — resolved by deletion `[VERIFIED-EXECUTED]`
+
+S5 claimed two declared transition tables were dead code. There were **three**:
+
+| table | callers |
+|---|---|
+| `state_graph.py::build_default_state_graph` | 0 (reached only via the dead `FlowRouter._get_graph`) |
+| `flow_state_machine.py::_TRANSITION_TABLE` | 0 |
+| `FlowSerializer.to_langgraph` | 0 — a hardcoded 4-node description of a 13-state machine |
+
+Against them: **45** `context.set_state(...)` calls and one if/elif chain,
+which is what actually ran. `FlowRouter._route_product_gate` and
+`_route_plan_approval` existed only to feed the graph.
+
+### Why this was not merely dead weight
+
+D70 recorded that the graph lacked the user-gate transition and the
+WAITING→RUNNING flips. A differential over 14 sessions found **six**
+divergences, not two, and three of them are security-relevant:
+
+| case | live router | the graph |
+|---|---|---|
+| gate + **declining** answer | `PlanningState`, refusal honoured, acks cleared, mail gate re-armed | **`ExecutingState`** — the whole ADR 006 refusal path vanishes |
+| gate + **empty** answer | `PlanningState` (silence ≠ consent) | **`ExecutingState`** — silence becomes consent |
+| gate + approving answer | flag cleared | **flag left set** — re-fires on every resume |
+| plan-approval decline | RUNNING | **WAITING** — the run loop breaks |
+| `ProductGateState(resume_with=prompt)` | expressible | **not expressible** by a name-returning factory |
+
+The claim's "lacks the flips" was 2/3 right: the graph does have one of them.
+
+### The script that reported success while corrupting the file
+
+`scripts/wire_stategraph.py` existed to swap the live table for the dead one.
+Run against a copy of the tree:
+
+```
+StateGraph wired into FlowRouter.resolve_initial_state()
+--- EXIT CODE: 0 ---
+did it wire anything?      graph.resolve occurrences: 0
+duplicated the import?     1 -> 2
+duplicated _get_graph?     1 -> 2
+```
+
+Its third `str.replace` no longer matches, because `resolve_initial_state`
+grew the `_user_gate_pending` branch since the script was written, and
+`str.replace` returns its input unchanged on no match. The script never
+verifies. So it prints success, wires nothing, and duplicates two blocks — a
+tool with the same failure mode as the tables it was written to install.
+
+### The approach chosen, and the two rejected
+
+**Wiring the graph** was rejected: highest blast radius (the resume path for
+every session), the six divergences are a prerequisite work list, and
+`ProductGateState(resume_with=prompt)` cannot be expressed at all. Its
+`resolve` also swallows `AttributeError`/`KeyError` per transition, which
+would silently downgrade a routing bug to "fresh planning" and discard a live
+plan.
+
+**A conformance test** asserting the table matches the router was rejected
+too: it pins current behaviour *including* the shared `extra`-wipe bug, and a
+dead table with a green test is more misleading than one without.
+
+**Deletion** — 359 lines across three files, plus `_get_graph`,
+`_state_class_map`, both `_route_*` helpers and `to_langgraph`. Removing
+unreachable code cannot change behaviour, and it removes the class rather than
+one instance.
+
+### The gate `[VERIFIED-EXECUTED]`
+
+`test_there_is_exactly_one_flow_routing_table` fails if any of the three files
+returns. Proven by recreating `state_graph.py`:
+
+```
+E  weebot/application/flows/state_graph.py (declarative transition table)
+1 failed
+```
+
+A second table is only safe when something proves the two agree. Nothing did,
+and this gate does not ask for one — it asserts the alternatives stay deleted.
+
+### Coverage & residual risk
+
+- **The docs still describe a declarative machine.** ADRs and module
+  docstrings elsewhere may reference a design that no longer exists; only the
+  `flow_serializer` docstring example was updated.
+- **45 `set_state` calls remain the routing authority**, and they are
+  scattered across sixteen state classes. That is the actual architecture; it
+  is not more legible for the tables being gone, only more honest.
+- **Nothing prevents a *fourth* representation** in a differently-named file.
+  The gate names three specific filenames, which is what makes it cheap and
+  also what bounds it.
+
+### Uncertainty acknowledgment
+
+S5 sat `open` for five waves with the note "dead code — low value". The
+reading was right about reach and wrong about risk: the live artefact was not
+the tables but the script that would install them, and that script had already
+drifted into corrupting the file. **UNKNOWN:** how many other "dead code, low
+value" dismissals in this inventory have a live tool or script attached to
+them that nobody looked for.
+
+
+## The race that threw away the answer it had paid for
+
+### D39 — orphaned probes on `FIRST_COMPLETED` `[VERIFIED-EXECUTED]`
+
+D39 sat `deferred` for five waves as "unbounded spend" — a cost defect, ranked
+Priority 3. The measurement says the money was the *smaller* half.
+
+`CascadeExecutor.call_with_cascade` fans out Phase 1 probes and takes the first
+future to complete. Cancellation of the losers lived **inside** the
+`resp is not None` branch:
+
+```python
+done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+for fut in done:
+    resp = fut.result()
+    if resp is not None:
+        for pf in pending:
+            pf.cancel()
+        ...
+        return resp
+# ← first-completed was a failure: falls through with `pending` still running
+```
+
+So the branch where the first future to finish is a **failure** fell through to
+Phase 2 with every other probe alive.
+
+### Why that is the common path, not the rare one
+
+Two properties of the surrounding code make the failure branch the *likely*
+one, and both are in the file:
+
+- `_cascade_try_chat` returns `None` for every failure and never raises, so a
+  failure is indistinguishable from a slow success at the `asyncio.wait`
+  boundary — it is just a future that completed;
+- a 429 or 503 comes back in ~200ms, against seconds for a real completion.
+
+The fastest probe to return is therefore preferentially the fastest *rejection*.
+The defect does not need an unlucky day.
+
+### What it cost, measured
+
+Five probes, the fastest failing, two slow ones succeeding:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| requests sent | 5 | 5 |
+| completions billed | **5** | 3 |
+| cancelled | **0** | 2 |
+| probes that succeeded | **2, both discarded** | 1, returned |
+| result | `AllModelsTrippedError` | the successful response |
+
+Two probes had **succeeded**. Their responses were dropped on the floor and the
+cascade went on to buy the answer again on a higher tier. The spend is the part
+that shows up on an invoice; the part that does not is that a cascade holding a
+valid completion reported total failure.
+
+### The drain loop under the cancel was a no-op
+
+```python
+for pf in pending:
+    if not pf.cancelled():
+        with contextlib.suppress(asyncio.InvalidStateError, asyncio.CancelledError):
+            pf.exception()
+```
+
+`pf.cancelled()` is still `False` immediately after `cancel()` — cancellation
+is delivered on the next loop iteration, not synchronously — so the guard
+always passed. `pf.exception()` on a task that is not done raises
+`InvalidStateError`, which the `suppress` swallowed. The loop retrieved nothing
+and suppressed nothing that mattered. It read as care and did no work: the same
+shape as the gates in the section above.
+
+### The fix, and what it trades
+
+Harvest until a probe **succeeds**; cancel the rest in a `finally` so it runs on
+every exit, bounded rather than gathered:
+
+```python
+finally:
+    for pf in pending:
+        pf.cancel()
+    if pending:
+        await asyncio.wait(pending, timeout=5.0)
+```
+
+`asyncio.wait(..., timeout=5.0)` rather than `gather`: an adapter that swallows
+`CancelledError` would otherwise hang the cascade forever on the cleanup path.
+
+**The trade is real and worth stating.** Waiting for a success costs latency
+in exactly the case that used to return fast — worst case the slowest probe's
+90s cap instead of the fastest probe's return. That is p99 spent to avoid a
+further paid call plus another round-trip, which is the better side of the
+trade, but it is not free.
+
+### Two asyncio facts the fix rests on, both `[VERIFIED-EXECUTED]` by probe
+
+- A pending task left uncancelled **runs to completion**. It does not stop
+  because nobody is awaiting it — which is why the orphans billed.
+- `asyncio.shield` **defeats cancellation entirely**. The fix is sound only
+  while nothing between here and the HTTP call shields it. Nothing does today;
+  a future `shield` would silently restore the defect.
+
+### The gate
+
+`tests/unit/agents/test_cascade_does_not_bill_orphans.py`, three tests, and the
+harness took three attempts to become honest — worth recording, because each
+failure produced a *green* test that proved nothing:
+
+1. The fake LLM defaulted unknown models to a fast success, so the role
+   cascade's own default models won every race. The test measured them, not
+   the probes.
+2. `get_model_cascade_for_role` was patched on `_cascade`, but `_cascade`
+   imports it *inside* the method, so it never becomes an attribute there. The
+   patch bound nothing.
+3. Worst: the successful model landed in `role_fallback2`, which is Phase **2**,
+   outside the parallel set — so Phase 2 rescued it and the test passed against
+   the unfixed code. Fixed by making the role cascade a single never-succeeding
+   model, every tier constant that same model, and supplying the probes through
+   the ACR list, so Phase 2's candidates are all already in `parallel` and it
+   has nothing to rescue with. A success can then only come from Phase 1.
+
+Only after (3) did red-before-green discriminate:
+
+```
+=== RED first, before believing anything ===
+FAILED ...::test_a_slow_success_is_used_instead_of_escalating
+1 failed, 2 passed
+=== then GREEN ===
+3 passed
+```
+
+The other two tests are labelled in the file as what they are: a **regression
+guard** for the success path, which already cancelled its losers and passes
+against the unfixed code, and a terminal-state check that also passes unfixed
+(when every probe fails they all finish on their own, so there is nothing to
+orphan). Test 3's first assertion filtered `asyncio.all_tasks()` by
+`"chat" in repr(t)`, which never matches a task's repr — vacuous, and it would
+have passed with probes still running. Replaced with `started` vs
+`completed | cancelled` accounting and proven non-vacuous by injecting an
+unaccounted probe.
+
+### Coverage & residual risk
+
+- **Cancelling does not provably zero the spend.** It aborts the request
+  client-side; tokens the provider has already generated may still bill. The
+  claim is *reduces*, not *eliminates*.
+- **`estimate_cost()` returns `0.0` for most reachable models**, so this saving
+  will not appear in the cascade's own telemetry. That is a separate open
+  defect; it does not affect the fix, only the ability to *see* it in
+  production. (It does not affect the proof either: the test counts requests
+  and cancellations directly.)
+- **Phase 2 is untouched.** It is sequential, so it has no orphan class — but
+  it also has no harvest, and a Phase 2 model that fails still burns its call.
+- **The 5s cleanup bound is a guess.** It is long enough for a cooperative
+  adapter and short enough not to hang the cascade; nothing measured what a
+  real adapter takes to honour a cancellation.
+
+### Uncertainty acknowledgment
+
+D39's recorded claim — "orphaned probes keep running and billing" — was true
+and *understated the defect by a category*. Ranked as spend, it was really a
+correctness defect: the cascade returned failure while holding a success. The
+record had the mechanism right and the consequence wrong, which is exactly the
+kind of entry a priority-ordered work list will keep deferring. **UNKNOWN:**
+how many other `deferred` entries in this inventory are mis-categorised the
+same way — a real consequence hiding under a cheaper-sounding label.
+
+## Four retry loops, none of them aware of the others
+
+### D44 — the claim was half wrong, and the region was much worse `[VERIFIED-EXECUTED]`
+
+D44 read: *"No client HTTP timeout on any concrete adapter; the only timeout is
+the cascade's own."* Both halves needed correcting before anything could be
+fixed.
+
+**The second half is false.** `ResilientLLMAdapter._execute_with_timeout` has
+always wrapped the inner call in `asyncio.wait_for(..., timeout=self._timeout)`,
+and the factory computes a per-provider budget (60/90/120/180s) and passes it
+in. The cascade's is not the only timeout; it is the third of three.
+
+**The first half is true of the code and misleading about the behaviour.** No
+concrete adapter passes `timeout=` to its SDK client — but neither SDK is
+timeout-free. Measured:
+
+```
+anthropic 0.117.0  Timeout(connect=5.0, read=600, write=600, pool=600)
+openai    2.54.0   Timeout(connect=5.0, read=600, write=600, pool=600)
+```
+
+Ten minutes of read budget under a 60-second adapter. That is a mismatch worth
+fixing, but it is not "no timeout", and a fix aimed at the claim as written
+would have addressed the smaller problem.
+
+### What is actually there
+
+Four layers, each of which multiplies the next, and none of which knows the
+others exist:
+
+| layer | multiplier | where |
+|---|---|---|
+| `CascadeExecutor` Phase 1 + 2 | ~5 models | `_cascade.py` |
+| `RetryWithBackoff` | **7** attempts (`len(delays) + 1`) | `ResilientLLMAdapter` |
+| a model chain of the adapter's own | **10** models | `OpenAIAdapter.chat` |
+| SDK `max_retries` | **3** attempts (default 2) | openai / anthropic |
+
+Measured on one logical `chat()` against a transport answering 429 to
+everything:
+
+| model shape | pre-fix | post-fix |
+|---|---|---|
+| `z-ai/glm-5.2` — has a `/`, so the chain is all ten | **210** requests | 7 |
+| `gpt-4o-mini` — no `/`, one-entry chain | **42** requests | 7 |
+
+The OpenRouter-shaped row is the ordinary case, not the corner: `is_openrouter`
+is `model.startswith("openrouter/") or "/" in model_name`, and every model the
+cascade probes has a `/`. Multiply by the cascade's own ~5 probes and one agent
+step can reach four figures of HTTP requests.
+
+### The largest layer is also the one that should not exist
+
+```python
+except RateLimitError:
+    ...
+    for fallback_model in fallback_models:      # ten of them
+        kwargs["model"] = fallback_model
+        response = await self._client.chat.completions.create(**kwargs)
+```
+
+`OpenAIAdapter` answers a rate limit by **choosing a different model**, beneath
+the `CascadeExecutor` whose entire job that is — CLAUDE.md design rule 4 names
+`CascadeExecutor.call_with_cascade` as the model-cascading mechanism. So the
+spend is the visible half. The invisible half is that the response the cascade
+receives may come from a model it never selected, while the usage is attributed
+to the model it asked for. Cost accounting and tier logic are both wrong, and
+nothing in the returned `LLMResponse` says which model answered.
+
+This is the same duplicate-rule shape as the three routing tables in the
+section above: one responsibility implemented twice, the copies drifting, and
+no test comparing them.
+
+### The fix, and why it is applied in one place
+
+`_client_policy.apply_client_policy(inner, timeout=…, sdk_max_retries=0,
+model_fallback=False)`, called once in `AdapterFactory.create_adapter`.
+
+It was tempting to thread `timeout=` and `max_retries=` through
+`_create_inner_adapter`'s eight provider branches, which is the more idiomatic
+spelling. It was rejected for the reason this whole audit keeps finding: **a
+branch that forgets the kwarg is silent.** One call site covers every provider,
+including the nested composites — the factory can return
+`CachingLLMAdapter(DirectOrFallbackAdapter(DeepSeekAdapter, OpenRouterAdapter))`,
+and configuring only the outermost object would leave the client that actually
+makes the call on SDK defaults, with no `_client` on the outer object to reveal
+it. `apply_client_policy` walks the composite and **returns the number of
+clients it configured**, so "applied" is distinguishable from "found nothing to
+apply it to".
+
+Mutating an already-constructed client is deliberate, and verified rather than
+assumed — both SDKs read `self.timeout` and `self.max_retries` per request:
+
+```
+default            -> {'connect': 5.0, 'read': 600, 'write': 600, 'pool': 600}
+after post-hoc set -> {'connect': 5.0, 'read': 7.0,  'write': 7.0,  'pool': 7.0}
+```
+
+(the request's `extensions["timeout"]`, which is what httpcore enforces).
+
+### The obvious spelling of this fix would have been a regression
+
+```
+AsyncOpenAI(api_key=k, timeout=90.0).timeout   ->   90.0
+```
+
+A scalar replaces the **whole** `Timeout` object — connect included. Passing
+the factory's 90–180s budget as a float would have widened the connect timeout
+from 5s to 90–180s, so an unreachable host would stall a cascade probe for
+minutes where it now fails in five seconds. Hence
+`httpx.Timeout(t, connect=min(5.0, t))`, and a test that pins it.
+
+### The bypasses, named rather than fixed
+
+`test_llm_clients_are_built_by_the_factory` finds every construction of an SDK
+client or concrete adapter outside `infrastructure/adapters/llm/`. Two exist,
+both grandfathered at their measured count so a **third** fails the build:
+
+| site | what it bypasses |
+|---|---|
+| `core/tool_agent.py:62` | builds `AsyncOpenAI` directly. The module already raises `DeprecationWarning` in `__init__`; the fix is deletion, not plumbing. |
+| `osworld/agent_adapter.py:262` | builds `OpenAIAdapter` directly, so there is no `ResilientLLMAdapter` above it: no circuit breaker, no retry, no sanitiser, and the SDK's 600s read is the only time bound. `_call_llm` is **synchronous**, so that bound is held on the calling thread. |
+
+A companion test fails if a grandfathered entry disappears, so the list cannot
+outlive the bypasses and become mistaken for a design decision.
+
+### Two things worth recording about the harness
+
+**The proxy nearly made the measurement fake.** Swapping `httpx.AsyncClient._transport`
+for a `MockTransport` had no effect: httpx reads `HTTPS_PROXY`/`NO_PROXY` at
+construction and installs mounted transports per URL pattern, and `_mounts` is
+consulted *before* `_transport`. The first probe reported `0 requests` and an
+`APIConnectionError` — it had gone out to the network for real. CI has no
+proxy, so this would have been a bug that appeared only on a developer's
+machine. The helper clears `_mounts` as well, with the reason written down.
+
+**The unfixed measurement was slower than the suite's timeout.** With
+`retry-after: 0` the SDK ignores the header (it honours it only for
+`0 < seconds <= 60`) and falls back to its own exponential backoff — ~140
+sleeps, 80s, past the 60s `pyproject.toml` limit. `retry-after-ms: 1` gets the
+same request count in 3s. The count is the claim; the sleeps are not.
+
+### Coverage & residual risk
+
+- **The cascade layer is untouched.** ~5 probes remain, by design — that is the
+  cascade doing its job. 7 × 5 = 35 requests is still the worst case for one
+  agent step against a fully rate-limited provider.
+- **`enable_retry` and the SDK's retry now differ in behaviour, not just
+  count.** The SDK honours `Retry-After`; `RetryWithBackoff` uses a fixed
+  ladder with jitter and ignores the header entirely. Collapsing to one layer
+  means rate-limit responses no longer get the provider's requested delay.
+  That is a real regression in politeness, traded for a 30× reduction in
+  requests. **UNKNOWN:** whether any provider in use penalises the fixed ladder.
+- **`_enable_model_fallback` defaults to `True`.** Adapters constructed
+  directly keep today's behaviour deliberately — the two bypass sites are not
+  covered by tests, and changing behaviour on an untested path to fix a spend
+  defect is the wrong trade. They keep the 30× amplifier; the gate says so.
+- **Only `OpenAIAdapter` has an internal model chain.** Checked: `anthropic`,
+  `openrouter`, `deepseek`, `moonshot` and the caching adapters have none. But
+  `OpenRouterAdapter`, `DeepSeekAdapter` and `MoonshotAdapter` all *subclass*
+  `OpenAIAdapter`, so all of them inherited it.
+
+### Uncertainty acknowledgment
+
+D44 was ranked "Priority 3, the liveness cousin of unbounded spend" and
+deferred for five waves on a claim that was wrong about where the timeout was.
+The record was not merely incomplete — its second clause was false, and acting
+on it as written would have produced a fix for a defect that was not there
+while leaving a 30× amplifier untouched. **UNKNOWN:** how many other deferred
+entries are load-bearing on a clause nobody re-checked. The two entries closed
+in this session were both mis-stated in the same direction: D39 understated its
+consequence, D44 misstated its mechanism. That is two for two.
+
+## Two paths that acquired something and never gave it back
+
+### D37 and D38 — resource lifecycle `[VERIFIED-EXECUTED]`
+
+Both were generated in W4, deferred to W7, and W7 spent its budget on S4's
+thirty-seven connection sites. They sat `deferred` for four waves. They are the
+same shape, and each turned out to contain a second defect the claim did not
+mention.
+
+### D38 — the child nothing could reach
+
+```python
+async def _start_mcp_http(self) -> None:
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    await asyncio.sleep(2)
+```
+
+`proc` is a **local**. Nothing else in the class references it, so `close()` —
+which does reach `self._process`, the *stdio* child — could not see this one. A
+`qmd mcp --http` server outlived every client that started it, holding the
+port. And with no handle there was nothing to check, so a second call started a
+second server.
+
+**ruff has been reporting this the whole time.** `F841 Local variable 'proc' is
+assigned to but never used`, at that exact line. CI runs
+`ruff check weebot/ cli/ --select F821,E9`. The linter could see it; the gate
+did not ask. That is the fail-open shape again, this time in the tooling rather
+than in the code.
+
+The zombie half of the claim, measured rather than asserted:
+
+```
+after terminate() with no wait():   Z    sleep
+after wait():                       (gone)
+```
+
+`Z` is defunct — the process is dead but its entry survives, holding a PID,
+until the parent reaps it. One per start/stop cycle in a process designed to
+run for a long time.
+
+**A third thing, not in the claim.** Both `Popen` calls wire
+`stderr=subprocess.PIPE`, and nothing ever reads stderr. An undrained pipe
+blocks the writer once its 64KB buffer fills, so a server that logs enough
+stops responding — a deadlock that presents as a slow server. The HTTP one
+wires `stdout=PIPE` too, and nothing reads that either.
+
+### The fix, and why the helper is shared
+
+`weebot/core/process_lifecycle.reap_process` — terminate, wait, escalate to
+`kill` on timeout, close the pipes, never raise (teardown that throws leaves
+the *rest* of the teardown undone).
+
+It is a shared module rather than a local function for a reason worth stating
+plainly: **`infrastructure/document/latex_compiler.py` had already learned
+this**, and written it down —
+
+> ``proc.kill()`` alone only terminates the direct child (e.g. latexmk);
+> grandchildren (xelatex, biber, pygmentize) survive, keep the stdout/stderr
+> pipes open, and the post-kill ``communicate()`` blocks forever…
+
+— two hundred lines away from a module calling `terminate()` with no `wait()`
+at all. The knowledge existed in the repository and did not travel. Adding a
+*second* private reaper would have reproduced the duplicate-rule pattern this
+audit has now named three times, so `_kill_process_tree` was moved into the
+shared module and `latex_compiler` delegates to it. One rule, one home.
+
+### D37 — the browser that survived its own failed start
+
+`PlaywrightAdapter.start()` acquires four things in sequence — driver, browser,
+context, page — with no `try`. A raise from `new_context` or `new_page` leaves
+a **live browser process** attached to `self`, and neither caller closes a
+`start()` that raised:
+
+| caller | shape |
+|---|---|
+| `tools/advanced_browser.py:370` | `await self.browser.start(config)` — bare |
+| `tools/browser_inspector.py:283` | `await self.browser.start(BrowserConfig(headless=True))` — bare |
+
+So nothing else would have cleaned it up either.
+
+**`close()` had the same defect in reverse.** It closed context, then browser,
+then driver, sequentially and unguarded — so a context that failed to close
+stranded the browser process *and* the Playwright driver behind it. A cleanup
+path where one stuck page takes down the whole teardown is worse than no
+cleanup path, because it looks like one.
+
+### The defect found by reading, not by the claim
+
+```python
+if self._config.record_har:
+    await self._context.new_page()
+    # HAR recording is set up at context level in Playwright
+```
+
+The comment is correct. The code does not do it. `record_har_path` is never
+placed in `context_options` — compare `record_video`, three lines above, which
+does set `record_video_dir`. So `record_har=True`:
+
+- recorded nothing at all, and
+- opened a page, discarded the reference, and leaked it — one per `start()`.
+
+A configuration flag that reports a capability it has never had is the same
+fail-open class as the gates in the earlier sections; it just happened to be
+sitting inside a resource leak. It is now set properly, before `new_context`,
+because Playwright cannot enable HAR on a context after creation.
+
+### The ratchet caught me
+
+The first version of `reap_process` used `except (ProcessLookupError, OSError):
+pass` in three places. The bidirectional silent-except ratchet went red:
+
+```
+silent_except_handlers: 142 exceeds the ceiling of 139 by 3.
+New debt of this kind was added. Fix it -- do not raise the ceiling.
+```
+
+Three DEBUG logs later it is back at 139. Worth recording because the gate did
+exactly what it was built for, against the person who has spent this session
+building gates, and the temptation to raise a ceiling by three is precisely
+what `quality_ceilings.py --verify-not-raised` exists to make visible.
+
+**And the piped-exit-code trap recurred.** Reading the ratchets through
+`| tail -1` showed an advice line and no failure; `rc` was `tail`'s. The counts
+above were re-taken by running each gate unpiped and reading `$?`. This is the
+third time in this session that a pipeline has hidden a non-zero exit.
+
+### Coverage & residual risk
+
+- **`_call_stdio` still does blocking I/O in an `async def`** — `write`,
+  `flush` and `readline` on the child's pipes, on the event loop. It is inside
+  the `blocking_io_in_async` ratchet's 29 and is not fixed here.
+- **`reap_process` does not kill process trees.** `qmd` is assumed not to
+  spawn grandchildren; `kill_process_tree` is the tool if that turns out to be
+  false, and it requires the child to be started in its own process group,
+  which `mcp_client` does not do.
+- **The HAR path is `./har/<uuid>.har`, relative to the working directory**,
+  mirroring `record_video`'s `./videos`. Both inherit that convention's
+  weakness: an agent that changes directory writes elsewhere.
+- **The Playwright tests use fakes, not a browser.** They pin the *ordering and
+  cleanup contract* — that a failed acquisition closes what it acquired, that
+  teardown steps are independent — not that Playwright itself behaves as
+  modelled.
+
+### Uncertainty acknowledgment
+
+D37's recorded location did not exist:
+`weebot/infrastructure/adapters/playwright/` is not a directory in this
+repository. The claim was still true, of a file at a different path. That is
+the fourth record in this session found wrong in some particular — D39
+understated its consequence, D44 misstated its mechanism, S5 undercounted its
+instances, D37 mislocated its file. **UNKNOWN:** how many `deferred` entries
+point at paths that no longer exist, and would be closed as "cannot reproduce"
+by anyone who trusted the location field.
+
+## The plan that failed completely and was learned from as a success
+
+### P3 — silent false success, and what the record got wrong `[VERIFIED-EXECUTED]`
+
+The recorded claim (ex-D21) was that the flow reaches `CompletedState` with a
+step still RUNNING. It named the wrong mechanism. Executed truth table:
+
+| plan | `get_next_step()` | `is_complete()` |
+|---|---|---|
+| all COMPLETED | None | True |
+| one RUNNING | s1 | False |
+| COMPLETED + RUNNING | s2 | False |
+| **one FAILED** | **None** | **True** |
+| **COMPLETED + FAILED** | **None** | **True** |
+| empty plan | None | False |
+
+`get_next_step()` and `is_complete()` **agree** on RUNNING — both say not done,
+so a RUNNING step does not slip past either. The route the record described is
+not open.
+
+The route that *is* open is the fourth row. `Step.is_done()` is:
+
+```python
+return self.status in (StepStatus.COMPLETED, StepStatus.FAILED)
+```
+
+That is correct for its main caller — `get_next_step()` needs to know what is
+still **runnable**, and a failed step must not be handed back or the flow
+retries it forever. It is wrong in every place that read it as **succeeded**,
+and three places did.
+
+### The sharp end is not the status, it is the score
+
+```python
+completed_steps = sum(1 for s in context._plan.steps if s.is_done())
+score = round(completed_steps / total_steps, 2) if total_steps > 0 else 0.5
+```
+
+Measured:
+
+| plan | `is_complete()` | template `success_score` |
+|---|---|---|
+| every step FAILED | True | **1.0** |
+| 1 done, 1 failed | True | **1.0** |
+| all completed | True | 1.0 |
+
+That score is written to the plan-template cache and keyed by task hash. So a
+plan in which **nothing succeeded** was stored as a perfect template and would
+be preferentially retrieved for the next similar task. The failure was not
+merely reported as a success; it was **learned from** as one. Three identical
+scores for three materially different outcomes is the whole defect in one row.
+
+### The fix, and the fix that was tempting and wrong
+
+The tempting fix is to change `Step.is_done()` to mean COMPLETED only. It would
+have made `get_next_step()` return failed steps forever. A regression guard
+pins that:
+
+```python
+assert _plan(StepStatus.FAILED).is_complete() is True
+assert _plan(StepStatus.FAILED).get_next_step() is None
+```
+
+What was actually missing was a *second* predicate, not a changed one:
+`Plan.is_successful()` (every step COMPLETED) and `Plan.failed_steps()`.
+`CompletedState` now scores on COMPLETED and ends the session
+`SessionStatus.FAILED` when any step failed.
+
+### The domain cannot say "failed"
+
+```
+PlanStatus members: ['created', 'updated', 'running', 'completed']
+```
+
+There is no failure member. `CompletedState` stamps `PlanStatus.COMPLETED`
+unconditionally because there is nothing else to stamp — the plan object has no
+vocabulary for the outcome. `SessionStatus` does
+(`pending/running/waiting/completed/failed`), and both the API and the web UI
+already understand it, so that is the lever used here.
+
+**Adding `PlanStatus.FAILED` is left open, and it is the user's call**, because
+it crosses stacks: `weebot-ui/src/types/events.ts:5` declares
+`PlanStatus = 'created' | 'updated' | 'completed'` — which is *already* out of
+sync with the backend, missing `running`. A domain enum whose TypeScript mirror
+is hand-maintained and already drifted is not a change to make silently.
+
+### The steering that was collected, acknowledged, and thrown away
+
+Found by running `ruff --select F841`, which CI does not select:
+
+```python
+effective_prompt = prompt
+if context._steering is not None:
+    steering_msg = await context._steering.poll(context._session.id)
+    if steering_msg:
+        logger.info("Steering received for session %s: %s", ...)
+        effective_prompt = f"{prompt}\n\n[STEERING — the user says: {steering_msg}. ...]"
+...
+    user_input=prompt,          # ← the ORIGINAL
+```
+
+`effective_prompt` is assigned twice and read nowhere. Phase 5 polls the
+steering channel, **logs that it received the user's message**, formats it into
+an augmented prompt, and sends the original. A user correcting an agent
+mid-run got a log line saying they were heard and no change in behaviour. The
+fix is one word.
+
+### `inner_facts`, and why wiring it would have been worse
+
+Assigned `{}` at one line, read via `.items()` at another, never written —
+confirmed by AST rather than grep. The loop always ran zero times, under a
+comment reading "Persist any facts extracted by the executor".
+
+Deleted rather than wired. No command or handler in `application/cqrs/` returns
+facts, so there is nothing to receive; and `set_fact` writes to
+`context.facts`, while `SessionContext.get` reads declared fields and then
+`context.extra` and **never** `facts`. Wiring it would have produced an
+apparently working fact pipeline over a store nothing reads — a fail-open
+control assembled deliberately.
+
+### The gate for the class, not the instance
+
+Both `proc` (D38) and `effective_prompt` were F841 findings. ruff has been
+reporting them the whole time; CI runs `--select F821,E9`.
+
+`scripts/lint_unused_locals.py`, ceiling **33**, bidirectional, wired into the
+architecture workflow beside the other ratchets. Proven to bite both ways:
+
+```
+unused_locals: 34 exceeds the ceiling of 33 by 1. New debt of this kind was added.
+unused_locals: 33 is BELOW the ceiling of 34. ... set unused_locals = 33
+```
+
+An unused local is not always a defect. It is always *work the author wrote and
+the program does not do*, which is why it gets a ceiling rather than a ban: the
+33 that remain are an inventory to triage, and no new one may join them.
+
+**One honest fragility, written into the script rather than hidden:** this
+ratchet counts a third-party tool's output and `requirements.txt` pins only
+`ruff>=0.8.0`, so an upgrade can move the number with no code change. The
+script prints the ruff version with every count (`ruff 0.16.6`) and its failure
+message says to check it before touching the ceiling.
+
+### Coverage & residual risk
+
+- **`PlanStatus.COMPLETED` is still stamped on a failed plan.** The session
+  says `failed`; the plan object still says `completed`. Anything reading the
+  plan's status rather than the session's still sees a success.
+- **Three orphaned background tasks in `CompletedState`** (`ensure_future` at
+  the retention review, skill-gap processing and the dream scan) are created
+  and never referenced, awaited or cancelled — the D39 class again, and each
+  builds a `Container()` and live LLM adapters. Recorded as `P3-4`, **not
+  fixed**: unlike D39 these are *meant* to outlive the flow, so the fix is an
+  owner, not a cancel, and that is a design decision. They are what made the
+  P3 test hang until suppressed explicitly.
+- **The empty-plan row is untouched.** `get_next_step()` returns None and
+  `is_complete()` returns False, so a plan with no steps still transitions to
+  Verifying → Completed. It now ends `SessionStatus.COMPLETED` with a score of
+  0.5, which is arguably the least wrong of the available answers and is not a
+  considered one.
+- **32 F841 findings remain**, one of which may be another `effective_prompt`.
+  The ratchet stops the 34th; it does not triage the 33.
+
+### Uncertainty acknowledgment
+
+This is the fifth record in this session found wrong in some particular, and
+the second whose *mechanism* was misstated. The record said RUNNING; the
+executed truth table says FAILED, and the two predicates it accused of
+disagreeing actually agree. Had the fix been written to the claim, it would
+have guarded a path that is not open and left a plan-template cache learning
+from total failures at a perfect score. **UNKNOWN:** how many of the remaining
+`open` entries were written from reading rather than from running, and would
+survive an executed truth table no better than this one did.
+
+## The gate that fired at random, and the suite nothing ran
+
+### D65 — the mechanism was the wall clock `[VERIFIED-EXECUTED]`
+
+D65 recorded a stress test failing about one run in seven against its own
+comment predicting one in two thousand, and left the mechanism explicitly
+**UNKNOWN** — two attempts to measure it had exceeded their own time budget and
+been killed.
+
+The mechanism is arithmetic. `RetryWithBackoff`'s default ladder is
+`[1, 2, 4, 8, 15, 30]`, which sums to **exactly 60.0 seconds**, and
+`pyproject.toml` sets `timeout = 60`.
+
+Twelve isolated runs:
+
+```
+  run 1: PASS  18.08s
+  run 4: FAIL  63.57s  Timeout (>60.0s)
+  run 7: FAIL  63.77s  Timeout (>60.0s)
+  run 9: PASS  62.34s
+  ...
+pass=10 fail=2
+```
+
+Every failure is `Timeout (>60.0s)`. **Not once** is it the assertion,
+`Only N/20 succeeded`. And the durations cluster on the ladder's prefix sums
+{1, 3, 7, 15, 30, 60} — 18s, 34s, 62s — which is the ladder's fingerprint. Run
+9 passed at 62.34s wall having finished its body just inside the limit, which is
+what a race against a clock looks like from the winning side.
+
+### The comment is not wrong, it is about something else
+
+> `# With 50% fail rate and 7 attempts, P(all 7 fail) = 0.5^7 ≈ 0.8%`
+> `# So ~99.2% of 20 requests should succeed — allow 2 failures`
+
+That arithmetic is correct, and P(successes < 18) is about 1 in 2400 — which is
+what the original note observed the comment predicting. It models the assertion
+failing. The assertion never fails. The comment describes a real and irrelevant
+failure mode, which is why the discrepancy looked like a factor of ~280 and was
+actually a category error.
+
+### The fix
+
+The sub-second ladder the other two retry tests in the same file already use:
+
+```python
+adapter._retry = RetryWithBackoff(
+    BackoffConfig(delays=[0.01, 0.02, 0.04, 0.08, 0.1, 0.2], jitter=0.1, ...)
+)
+```
+
+Twenty runs after the change: **20 passed, slowest 4.0s** against a 60s limit —
+a fifteen-fold margin where there had been none. The test measures the retry
+policy, not `asyncio.sleep`.
+
+### The suite that could not go red
+
+`tests/stress/` was referenced by **no workflow**. Thirty-five tests covering
+the circuit breaker, retry backoff and timeout enforcement — including the one
+failing one run in seven — could not redden anything. That is why a randomly
+failing gate survived: nobody was watching it fail.
+
+It is wired into the E2E job now that the flake is gone. The whole directory
+runs in **10.65s**, so the cost of knowing is negligible, and it was never the
+reason it was left out.
+
+A gate that fires at random and a gate that cannot fire are the same defect
+wearing different clothes: neither carries information, and the first is worse,
+because it trains everyone to ignore red.
+
+### S2 — cleared, and the larger thing behind it
+
+S2 claimed `parse_agent_output` never raises, so a caller cannot tell "the model
+reported PARTIAL" from "we failed to parse". Literally true, and about **dead
+code**: `parse_agent_output` has zero callers outside its own re-export, and
+`OutputParseError` is defined, re-exported, and **never constructed anywhere**.
+The distinction is also weaker than the claim suggests — the failure path
+already writes `confidence=0.3` and a `"Failed to parse JSON: …"` prefix.
+Hardening a parser nobody calls buys nothing.
+
+But the reason nobody calls it is the finding. **CLAUDE.md rule 2** states:
+
+> Agents MUST return structured JSON validated via Pydantic models in
+> `weebot/models/structured_output.py`
+
+What agents actually do:
+
+```
+weebot/application/agents/dreamer.py:120           data = json.loads(raw)
+weebot/application/agents/goal_agent.py:116        return json.loads(content)
+weebot/application/agents/layer_editor_agent.py:129  return json.loads(content)
+weebot/application/agents/optimizer_agent.py:183    parsed = json.loads(response.content)
+```
+
+Three modules import from `structured_output` at all, and only for
+`VisionReflection` and the verbalized-sampler models. The documented mandatory
+protocol is not the one in use.
+
+This is the same shape as the three routing tables and the two process
+reapers: **one rule, two implementations, nothing comparing them.** It is
+recorded as `P5-1` and deliberately **not fixed** — migrating every agent is
+cross-cutting, and the alternative (amending the rule to match reality) is a
+decision about intent rather than a repair. Both need the owner's direction on
+which of the two is the real one.
+
+### Coverage & residual risk
+
+- **The other stress tests were never measured for flakiness.** Only the one
+  D65 named was. Wiring the suite into CI is what will find the rest, which is
+  a cost the first red build will pay.
+- **The 60s limit is global** (`pyproject.toml`), so any other test whose
+  design brushes it is in the same position and equally invisible while its
+  suite is unwired.
+- **`parse_agent_output` is left in place.** It is a public re-export, and
+  deleting it is only worth doing as part of resolving `P5-1` in one direction
+  or the other.
+
+### Uncertainty acknowledgment
+
+The original D65 note was careful and honest — it labelled the mechanism
+UNKNOWN and said so rather than guessing, and its HYPOTHESIS (timeout plus
+backoff under concurrency truncating attempts) was in the right neighbourhood
+without being right. What it lacked was one cheap measurement: reading *which*
+failure the failures were. Twelve runs printing the failure line answered in
+ten minutes a question two abandoned deep-dives could not. **The lesson is not
+that the note was wrong; it is that "measure the symptom before modelling the
+cause" would have closed this four waves earlier.**
+
+## The security control that was declared, never ran, and could not have
+
+### R6 C7/C8/C1/C6 `[VERIFIED-EXECUTED]`
+
+`settings.py` declares `secret_redaction_enabled: bool = True`, described as
+redacting secrets "in tool output and logs". `SecretRedactor` is 184 lines with
+**zero callers**. A configuration reporting a control that has never run.
+
+The earlier phase of R6 deliberately did not wire it, on the grounds that
+wiring a corrupting redactor ships a log-corruption bug on the same commit as a
+security fix. That judgement was right, and the corruption was worse than
+recorded.
+
+### C7 — four ways `redact()` rewrote the log around the secret
+
+| input | output, before |
+|---|---|
+| `line one\nline two\tindented` | `line one line two indented` |
+| `listening on port 8080` | `listening on port [CVV_REDACTED]` |
+| `HTTP 404 Not Found` | `HTTP [CVV_REDACTED] Not Found` |
+| `year 2026` / `took 250 ms` | `[CVV_REDACTED]` in both |
+| `file.py:123` | `[HIGH_ENTROPY_REDACTED]` |
+| `passwd: abc` and `secret: abc` | `password=[REDACTED]` — **both** |
+
+The whitespace one is `text.split()` followed by `" ".join(...)`: every
+newline, tab and run of spaces becomes one space, so a multi-line log arrives
+as a single line.
+
+The CVV one is `\b\d{3,4}\b`. A CVV cannot be recognised from digits alone —
+it is three or four digits, and so is every port, status code, year, line
+number and millisecond count. Context is the only thing that makes the
+detection possible, so context is now required.
+
+**`file.py:123` is the one worth pausing on**, and it was not in the record.
+The token is eleven characters, well under the twenty-character entropy
+threshold. The CVV rule fired first and produced `file.py:[CVV_REDACTED]` —
+twenty-two characters, not alphabetic — which then tripped the entropy rule and
+disappeared entirely. The guard against this was `if not word.startswith("[")`,
+which only catches a marker at the *start* of a token.
+
+**Redaction output fed back into redaction input.** A source location was
+destroyed because an earlier redaction had lengthened it past a threshold.
+
+The label rewrite was not recorded either: `_PASSWORD_RE.sub` wrote the literal
+`password=[REDACTED]`, so a log line saying `secret: x` came out claiming to be
+a password. A sanitiser is allowed to remove the secret. It is not allowed to
+rewrite the sentence around it.
+
+### C8 — four shapes presented as sanitised and left intact
+
+| shape | what survived |
+|---|---|
+| `{"sk_live_AAAA…": "…"}` | the secret was the **key**; keys were never looked at |
+| `b"password=hunter2"` | **bytes**; only `str` was handled |
+| `[[{"note": "pw=x"}]]` | a dict below **two** list levels; one was recursed |
+| `("password=hunter2",)` | a **tuple**; only `list` was recursed |
+
+An `int` that is a valid PAN survived too. One recursive `_redact_value` now
+covers str, bytes, dict, list, tuple and set, preserving each value's type
+unless a secret was actually found — so `port: 8080` stays an int and
+`pan: 4111111111111111` becomes a marker.
+
+Redacting keys introduces a hazard the fix has to answer rather than create:
+two distinct secret keys redact to the *same* marker, and collapsing them would
+turn a sanitiser into a data-destroying one. Collisions are disambiguated, and
+a test pins that no value is dropped.
+
+### C1 — the plan's precondition was necessary and not sufficient
+
+The plan said: fix C7/C8, then wire. Having fixed C7/C8, wiring it still would
+not have been safe, and the measurement is unambiguous. Against text this
+codebase's own tools produce:
+
+```
+commit b91a29ae9713861b86bc73dbf10be8a7b4823310   -> [HIGH_ENTROPY_REDACTED]
+/home/user/weebot/.../_client_policy.py           -> [HIGH_ENTROPY_REDACTED]
+session a779ecbb-1b3a-5bd9-a2db-8bff1bb2fbce      -> [HIGH_ENTROPY_REDACTED]
+sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b…  -> [HIGH_ENTROPY_REDACTED]
+```
+
+**Redacting file paths and commit SHAs from a coding agent's tool output would
+leave it unable to work.** And this is not a threshold to tune: a forty-character
+hex digest and a forty-character hex key have the same character distribution,
+so no threshold separates them. The heuristic is being asked to do something
+information-theoretically impossible.
+
+So the split: the **pattern** passes are wired into
+`credential_sanitizer.sanitize`, which reaches all three emit pipelines through
+one call site, and the **entropy** pass is opt-in (`enable_entropy=False`),
+with `_NOT_A_SECRET_SHAPES` covering paths, hex digests and UUIDs for anyone
+who turns it on.
+
+What the wiring adds is not duplication of the existing denylist:
+Luhn-checked card numbers, Stripe keys and labelled CVVs, none of which it
+covered.
+
+**Writing the test found one more.** The path shape did not cover the
+`:line` / `:line:col` suffix — `some/path/file.py:123` was still redacted with
+the pass on, and that is the single commonest shape in a coding agent's tool
+output. Third time in this programme that the test, not the reading, found the
+defect.
+
+### C6 — the deferral's stated reason was false
+
+C6 was deferred because changing it "overrules a test that encodes the defect
+as the contract" — `tests/unit/test_secret_accessor.py:98`.
+
+That test asserts `TIMEOUT = 30` is logged plainly. It is a legitimate
+non-secret. **No test in that file mentions URL at all.** Nothing defended the
+defect; the deferral had no basis, and a real leak sat behind it for a phase.
+
+`_is_non_secret` waves through any key ending in `URL`, `HOST`, `PORT`, `DIR`,
+`MODE` or `TIMEOUT`, and logs its value in full at DEBUG. Measured:
+
+```
+DATABASE_URL      = 'postgres://admin:hunter2@db.internal:5432/prod'
+REDIS_URL         = 'rediss://:s3cr3tpassword@cache.internal:6379/0'
+SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/T00/B00/XXXXXXXX…'
+```
+
+All three *are* the credential. A Slack webhook URL has no non-secret part at
+all. This is a deny-by-shape heuristic ("a name ending in URL is config") used
+as an **allow** rule ("so print the whole thing") — and a name is not evidence
+about a value.
+
+The fix does not argue with the allowlist. The reason to log a `*_URL` plainly
+is to see which host you are talking to, and that survives; only the credential
+inside it does not.
+
+**And it exposed a gap in my own earlier work.** The URL-credential pattern
+added in the first R6 commit required a non-empty username:
+
+```python
+r"\b([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+):([^\s@]+)@"
+                                     # ^ requires a user
+```
+
+Redis and AMQP put the password in with no username at all —
+`rediss://:s3cr3tpassword@host` matched nothing and logged in full. `+` → `*`.
+
+### Coverage & residual risk
+
+- **The entropy pass is still unwired**, so the only non-denylist mechanism in
+  the codebase remains unused. `settings.secret_redaction_entropy_threshold`
+  now configures something that does not run by default — a smaller version of
+  the defect C1 was about, and it is deliberate rather than overlooked.
+- **`_NOT_A_SECRET_SHAPES` is itself a denylist inside a heuristic that existed
+  to avoid denylists.** It covers paths, hex digests and UUIDs because those
+  are what this codebase emits; another codebase would need its own.
+- **Key redaction changes the shape of logged data.** Collisions are
+  disambiguated with a `#2` suffix, which is visible but not pretty, and a
+  consumer parsing those keys would see them change.
+- **`ToolEvent.function_args` is still not sanitised** — a credential passed
+  *into* a tool sits there untouched, as recorded in the first R6 commit.
+
+### Three of the repo's own gates caught this, again
+
+- **`test_ids_are_unique`** — the four records were *appended* rather than
+  updated, so `R6-C1`, `C6`, `C7` and `C8` each appeared twice with different
+  statuses. Two rows with the same id means one of them is invisible and which
+  one a reader believes is arbitrary. Merged in place, keeping wave order.
+- **`test_core_no_global_singletons_outside_di`** — the lazy `SecretRedactor`
+  was a module `global`. `lru_cache(maxsize=1)` has the same one-instance
+  behaviour, is clearable in a test, and cannot be reassigned from elsewhere.
+- **`test_run_mcp.py` failed with "--allow-remote requires WEEBOT_MCP_API_KEY"**,
+  and that one was the most instructive: `SecretAccessor.set_source` is
+  process-wide, the C6 tests installed a fixture dict, and nothing reset it —
+  so every later test in the run was answered from this file's dict instead of
+  the environment. `tests/unit/test_secret_accessor.py` already had the
+  autouse reset fixture for exactly this reason; the knowledge did not travel
+  the one directory it needed to. Same shape as the two process reapers.
+
+### Uncertainty acknowledgment
+
+C6's deferral note asserted a test existed that did not. That is the sixth
+record in this session found wrong in some particular, and the first where the
+error was in the *reason for not acting* rather than in the claim itself — a
+category that is harder to catch, because a deferral is not re-read the way a
+fix is. **UNKNOWN:** how many other `deferred` entries rest on a stated
+obstacle that would evaporate on one `grep`. This one took thirty seconds to
+check and had survived a phase.
+
+## The question that was escalated four waves ago, answered
+
+### Phase 0 / D13–D16 — fail open or fail closed `[VERIFIED-EXECUTED]`
+
+W2 asked one governing question of every gate:
+
+> *If this gate's own machinery fails, does it report a violation or report clean?*
+
+It investigated four of the thirteen modules it named, fixed three defects, and
+recorded the policy question itself as **escalated, not answered** — D13's own
+note says the fail-open behaviour "is UNCHANGED ... asserted by a control test
+so a later edit cannot quietly decide the question."
+
+The decision taken: **security gates fail closed; quality gates fail open with a
+loud, distinguishable marker.** This section covers the security half.
+
+The enumeration W2 left unfinished was completed first — all ten uninvestigated
+modules plus the security-side guards. Six live findings, six more in modules
+with no production callers.
+
+### The one that mattered most
+
+```python
+def _get_egress_guard(self):
+    if self._egress_guard_resolved:
+        return self._egress_guard
+    self._egress_guard_resolved = True     # ← BEFORE the try
+    ...
+        except Exception:
+            logger.error("egress_guard: unavailable — outbound tool calls will NOT be gated")
+            self._egress_guard = None
+```
+
+The latch is set before the attempt. If both the DI lookup and the direct
+construction fail, `_egress_guard` stays `None`, the early return hands `None`
+back on every later call, and the call site's `if guard is not None:` skips
+classification **for the rest of the session**. The log line states the
+consequence in plain words and then the session continues sending.
+
+Verified by reading the source rather than trusting the survey. Fixed by
+latching only a *successful* resolution — so a transient failure self-heals —
+and, when the guard is still unavailable and enforcement is on, refusing tools
+in a conservative outbound-name set.
+
+That set is deliberately broader than `EgressGuard._detect_egress`: without the
+guard there is no way to inspect a bash command or a browser action. It is also
+deliberately not "everything" — `file_editor`, `python_execute` and
+`web_search` still run, so an unrelated import error does not brick the agent.
+
+### Three more, each a correct comment with the wrong conclusion
+
+| gate | the comment | the consequence |
+|---|---|---|
+| `approval_policy.py:218` | *"fail-open: the bad rule is ignored, all other rules still apply"* | the rules include DENY entries, so a typo turns a denial into an auto-approval |
+| `bash_guard.py:443` | *"Skipping is still the only safe action here (raising would make the whole guard unconstructable)"* | true, and the log went to a file while the command ran |
+| `bash_tool.py` legacy check | — | both decoders failing fell through to `return True, ""`: a blob it could not read was reported **clean** |
+
+Each was fixed without the consequence the comment feared:
+
+- **The approval policy** records the breakage and asks a human for every
+  command while any rule is broken. We cannot know what a rule that will not
+  compile was meant to catch, so "ask" is the only honest verdict.
+- **The bash guard** still constructs. What changes is that a guard missing a
+  BLOCKED rule no longer certifies anything as safe — `evaluate` refuses. In
+  practice this fires only on a caller's `custom_patterns`, because a test now
+  pins that every built-in compiles.
+- **The obfuscation check** refuses what it cannot decode. The payload a check
+  cannot read is exactly the one worth refusing, and `_validate_security` no
+  longer answers an analyzer crash by silently running a 13-regex substitute
+  and reporting its verdict as the real thing.
+
+### What was surveyed and deliberately not fixed
+
+Six further fail-open gates, all in modules with **no production callers**:
+
+| module | the failure |
+|---|---|
+| `trust_boundary_scanner` | `except Exception: return None` — and `None` *is* the contract for "clean" |
+| `agent_sanitizer` | no error channel at all; `quarantine_agent` is a silent no-op when disabled, and `is_quarantined` is never called |
+| `identity_verifier` | an unknown `source_type` yields `{}` policy and verifies VALID; it also has a cache branch nothing writes to |
+| `state_verifier` | fails closed on exception — but its default tail stamps an *unverified* claim `VERIFIED` at 0.9 |
+| `chain_of_verification` | `(response, [])` on every failure, byte-identical to a clean verification |
+| `security_validators.CommandValidator` | a PowerShell indicator anywhere in the string short-circuits bash validation to `VALID` |
+
+This programme's own rule is that a DEAD reach cannot be CRITICAL, and that is
+why they are recorded rather than repaired. It is also the R6-C1 ordering trap
+in a new place: **wiring any of these up without fixing its failure path first
+would ship the fail-open with it.** The record now says so, so the next person
+to reach for one finds the warning before the wire.
+
+### The gate with the right verdict and no enforcement
+
+`HarnessSafetyGate.check` gates unknown surfaces correctly —
+`# Unknown surface — treat as gated (fail-safe)`. Its caller:
+
+```python
+yield WaitForUserEvent(...)                    # line 206
+saved = await self._target.save(candidate)     # line 208
+```
+
+Unconditionally, on the next statement. The comment above it says so: *"This is
+a NOTIFICATION, not a blocking gate ... then optimistically saves."* An edit to
+a safety-critical surface is persisted whether or not anyone approves.
+
+Not fixed here, and not because it is small: this is a gate with no enforcement
+point, which needs the durable-pause treatment D69 gave the flow gates rather
+than a one-line change. Recorded as `PH0-6`.
+
+### The control tests fired, exactly as designed
+
+Three existing tests went red, and they are the ones D13's note described:
+
+> the fail-open policy *is UNCHANGED* ... asserted by a control test so a later
+> edit cannot quietly decide the question.
+
+| test | what it pinned |
+|---|---|
+| `test_invalid_regex_does_not_raise_on_evaluate` | `approved is True` after a rule was dropped |
+| `test_multiple_invalid_regexes_all_skipped` | three broken rules, still auto-approved |
+| `test_guard_still_functional_after_dropping_a_pattern` | `is_safe("ls -la") is True` from a guard that had just lost a BLOCKED rule |
+
+They did their job. A control test is not a contract to preserve — it is a
+tripwire on an *undecided* question, and the question is now decided, so the
+assertions record the decision rather than the placeholder. Each was rewritten
+with the reason written into it, not flipped silently:
+
+- "Still functional" was itself the fail-open. `is_safe()` returning `True`
+  from a degraded guard is the guard vouching for a command it can no longer
+  fully check.
+- `test_invalid_regex_does_not_block_valid_literal_rules` still passes, and now
+  **for a different reason** — the command is refused because the policy is
+  broken, not because the literal rule matched. That is noted in the test
+  rather than left to look like continuity.
+
+Distinguishing "the test caught a real regression" from "the test pinned a
+decision that has since been made" is the whole difficulty here, and getting it
+wrong in either direction is bad: flip a real guard and you ship the bug;
+preserve a placeholder and the decision can never be implemented.
+
+### Coverage & residual risk
+
+- **Only the security half is done.** The quality half — `plan_critic`
+  returning `confidence=0.8, verdict="approved"` on any exception, which routes
+  to the *proceed* branch and is byte-identical to a clean approval; the
+  evidence auditor's three silent skips returning `score=1.0`; `verifying.py`'s
+  outcome and artifact gates returning `None`/`[]` — is surveyed and not yet
+  changed.
+- **`verification_status` is written and never read.** `verifying.py` stamps
+  NOT_RUN, and `SessionStamp` has `model_config = {"extra": "forbid"}` with no
+  status field, so the marker cannot reach the stamp even if something wanted
+  it. A distinguishable failure nobody can distinguish.
+- **The conservative egress set is a name list.** A new outbound tool that is
+  not in it, and not in `EgressGuard`'s own sets, is unguarded on the failure
+  path — the same shape as the stale `"browser_tool"` entry already sitting in
+  `_BROWSER_EGRESS_TOOLS` beside the real `"browser_navigator"`.
+- **Refusing on analyzer failure is a real availability trade.** If the
+  analyzer is flaky, bash stops working rather than degrading. That is the
+  decision applied honestly, not an oversight.
+
+### Uncertainty acknowledgment
+
+Two subagents surveyed these modules and their reports were detailed and, where
+checked, accurate. **Every finding acted on here was re-verified against the
+source before a line was changed**, and that is not ceremony: this programme
+has now found nine records wrong in some particular, and a survey is a record
+like any other. The two spot-checks confirmed both claims exactly, which raises
+confidence in the rest without establishing it. **UNKNOWN:** whether the six
+unfixed findings are as precisely characterised as the four verified ones —
+they were not checked line by line, because nothing was built on them.
+
+## The other half: fail open, but never silently
+
+### Phase 0, quality gates `[VERIFIED-EXECUTED]`
+
+The decision was **split by kind**, and a decision implemented halfway is a
+decision not implemented. The security half refuses; this half proceeds — a
+quality gate blocking every run on its own flaky LLM call is the worse trade —
+but it may no longer *fabricate a verdict it never formed*, which is what all
+three of these did.
+
+### The critic that approved plans it never read
+
+```python
+except Exception as exc:
+    logger.warning("Plan critic failed ... Proceeding without critique.")
+    return PlanCritique(plan_id=plan.title, overall_confidence=0.8, verdict="approved", ...)
+```
+
+`ConfidentThresholds.WARN_THRESHOLD` is **exactly 0.8**. So the fallback did not
+land somewhere cautious — it landed in the *highest* routing branch:
+
+```python
+if critique.overall_confidence >= _warn:
+    logger.info("Plan approved with high confidence")
+```
+
+Against a genuine clean approval the only difference was an empty
+`step_scores`, and no caller reads it. The outage was routing-identical **and**
+display-identical to a careful review that found nothing wrong.
+
+It fails open still. It now says so: `degraded=True`, `verdict="unreviewed"`,
+the exception type in `flaws` so it reaches the executor prompt and the
+ThoughtEvent, a WARNING that reads *"the plan is unreviewed, not approved"*,
+and a dedicated branch in `critiquing.py` that no longer claims confidence it
+does not have.
+
+### The timeout that was documented, stored, and never applied
+
+```python
+def __init__(self, llm: LLMPort, timeout_seconds: float = 5.0) -> None:
+    """...
+        timeout_seconds: Max seconds to wait for the critic LLM call.
+                         On timeout, the plan proceeds without critique.
+    """
+    self._timeout_seconds = timeout_seconds
+```
+
+`grep -c wait_for` over the module: **0**. The bound was in the docstring, in
+the parameter name, and in the failure log — *"Plan critic failed (timeout or
+parse error)"* — and nowhere in the code. A hung critic held the flow for
+whatever the adapter allowed. Now wired, and measured: **0.20s against a 30s
+hang.**
+
+This is the same shape as `record_har` and `secret_redaction_enabled`. Three
+times in this programme a feature has been fully described — parameter,
+docstring, log message — and not implemented. A reader has no way to tell those
+apart from the outside, which is the whole reason the audit runs the code.
+
+### The auditor whose PASS meant two different things
+
+| skip | line |
+|---|---|
+| `except OSError: continue` on a path | 114 |
+| `if not out_path: continue` | 183 |
+| `if fsize is None ...: continue` | 186 |
+| `except (OSError, ValueError, UnicodeDecodeError): continue` | 191 |
+
+If those were the only findings, the result was
+`AuditReport(verdict=PASS, score=1.0, violations=[], summary="Evidence supports
+completion.")` — identical, field for field, to an audit that ran every check
+and found nothing.
+
+And this gate is **blocking**: `executing.py` routes a non-PASS to a retry and
+then to `UNVERIFIED`, so an identical PASS marked the step **COMPLETED** on
+evidence nobody had checked.
+
+`AuditReport.checks_skipped` now records each one, the summary differs, and a
+skip logs at WARNING. The verdict is unchanged, which is the decision.
+
+**A third defect, found while fixing it:** `await self._files.size(out_path)`
+had no guard, and `LocalFileStorageAdapter._resolve` raises `ValueError` on a
+traversal. It propagated out of `audit_step`, through
+`_gate_artifact_verification`, and out of `run()` — which catches only
+`PlanStuckError`. A gate that crashes is neither open nor closed; it takes the
+flow with it.
+
+### The marker that could not reach a reader
+
+`verifying.py` computes `NOT_RUN` / `passed` / `failed` and writes it to
+`ctx.extra["verification_status"]` on every path. Nothing in `weebot/` reads
+that key. And `SessionStamp`:
+
+```python
+gate_failures: list[str] = Field(default_factory=list)
+model_config = {"extra": "forbid"}
+```
+
+No field for it, and extras forbidden — so the marker could not reach the stamp
+**even if a consumer had wanted it**. The only thing recorded was
+`gate_failures == []`, which is what "no gate failed" and "no gate ran" both
+produce. The one key that could tell them apart was unreachable by
+construction. `SessionStamp` now carries it.
+
+### Coverage & residual risk
+
+- **The individual gates still cannot say which of them did not run.**
+  `_gate_outcome_verification` returns `None` on exception and `None` *means*
+  passed; `_gate_artifact_verification` returns `[]` on a missing dependency and
+  `[]` *means* no violations. The stamp can now say verification did not run;
+  it still cannot say which gate.
+- **`degraded` is advisory.** Nothing refuses to execute an unreviewed plan,
+  because that is what fail-open means here. What changed is that the operator
+  and the executor prompt can both see it.
+- **`checks_skipped` has no consumer yet** beyond the log and the report
+  object. It is recorded so a consumer *can* exist — which is exactly the
+  complaint `PH0-9` makes about `verification_status`, and worth watching that
+  it does not become the same defect one level up.
+- **`meta_critic`, `premortem` and `chain_of_verification` are untouched.**
+  All three return an empty result on failure that is byte-identical to a clean
+  one, and all three are advisory with no branch reading them — `premortem`
+  says so in its own docstring. Nothing acts on them, so nothing was
+  misinformed.
+
+### Uncertainty acknowledgment
+
+The security half took four fixes and the quality half took three, and the
+quality half found **two defects the survey had not named** — the unimplemented
+timeout and the unguarded `size()`. Both were found by fixing the neighbouring
+line, not by reading. That is now the third and fourth time in this session
+that writing the fix, rather than writing the report, produced the finding.
+**UNKNOWN:** how much of what remains recorded as "surveyed, not fixed" holds
+the same kind of adjacent defect, invisible until someone edits the line next
+to it.
+
+## A gate nobody enforced, and a table nothing had ever written to
+
+### PH0-6 — enforcement delegated to callers who do not enforce `[VERIFIED-EXECUTED]`
+
+`HarnessSafetyGate.check` classifies correctly, fail-safe branch included:
+
+```python
+else:
+    # Unknown surface — treat as gated (fail-safe)
+    gated.append(edit)
+```
+
+Its caller:
+
+```python
+if safety_result.requires_approval:
+    yield WaitForUserEvent(question=safety_result.approval_prompt)
+
+saved = await self._target.save(candidate)     # ← next statement
+```
+
+with the comment *"Callers that want to block must stop iterating after
+receiving WaitForUserEvent."*
+
+**Zero callers do.** The only production consumer is
+`cli/commands/harness.py`:
+
+```python
+async for event in flow.run():
+    if hasattr(event, "message") and event.message:
+        console.print(f"  {event.message}")
+```
+
+`WaitForUserEvent` carries `question`, not `message`. So the approval prompt
+was **not even displayed** — silently filtered out — and then the edit to
+`runtime_control`, `subagents`, or any unrecognised surface was persisted
+anyway.
+
+A gate whose enforcement is delegated to every caller is not a gate. It is a
+notification that happens to have the word "gate" in its class name.
+
+`HarnessOptFlow` has no session and no state repository, so there is no durable
+pause to resume from the way D69 built for the flow gates. The available honest
+behaviour is to decline: a gated edit is reported, held in
+`held_for_approval()`, and **not applied**. Autonomous surfaces still promote
+unattended, which is the loop's whole purpose — a fix that blocked those would
+be worse than the defect.
+
+**The existing test asserted only that the event was yielded**, so it passed
+against the broken behaviour. Third time in this programme a test has pinned a
+notification and said nothing about enforcement.
+
+### D32 — the record was right, and transaction 1 had never committed
+
+The claim: *"`save_session` spans three separate write transactions; a crash
+between them leaves partial state."* True. The measurement found something
+underneath it:
+
+```
+sqlite3.ProgrammingError: Error binding parameter 7:
+type 'CommitmentStatus' is not supported
+```
+
+`CommitmentStatus` was a bare `Enum`. Every sibling is a mixin:
+
+| enum | declaration |
+|---|---|
+| `SessionStatus` | `class SessionStatus(str, Enum)` |
+| `PlanStatus` | `class PlanStatus(str, Enum)` |
+| `StepStatus` | `class StepStatus(str, Enum)` |
+| `AuditVerdict` | `class AuditVerdict(str, Enum)` |
+| **`CommitmentStatus`** | **`class CommitmentStatus(Enum)`** |
+
+sqlite3 binds a `str` subclass and refuses a bare one. So **every**
+`save_commitment` raised — and `save_session` wrapped the whole extraction
+block in:
+
+```python
+except Exception as exc:
+    logger.debug("Commitment extraction skipped (non-fatal): %s", exc)
+```
+
+A total feature outage, for the life of the feature, leaving one DEBUG line.
+Measured: the extractor returns 1 commitment for *"I'll follow up with you
+tomorrow."*, and the commitments table stays empty.
+
+The duplicate-rule pattern for the fifth time in this session — five sibling
+enums, one written differently, and nothing comparing them.
+
+### Three fixes, and what the ordering one is actually for
+
+1. **`str, Enum`.** The table can be written to.
+2. **The commitment write moved after the session write.** This is the record's
+   actual claim, and it only became *reachable* once transaction 1 worked:
+   commitments carry `source_session_id`, so writing them first meant a crash
+   in between left rows pointing at a session that does not exist. Ordering the
+   dependent write second makes the only reachable partial state a session with
+   no commitments — a missing side-feature, not a dangling reference.
+3. **WARNING, not DEBUG**, with the session id. Fail open — a session must
+   persist even when extraction breaks — but per the Phase 0 policy, loudly.
+
+### A probe that measured nothing, twice
+
+Worth recording because both errors were mine and both looked like findings:
+
+- The first probe used *"I will write the report tomorrow."* and reported zero
+  commitments. That is not the defect — `_COMMITMENT_PATTERNS` wants specific
+  verbs (`follow up`, `check back`, `monitor`, `notify`), so the input simply
+  matched nothing. Had I stopped there I would have reported an inert
+  extractor.
+- The probe then hung at interpreter shutdown, because `aiosqlite`'s
+  connection worker threads are non-daemon and the pool was never closed. That
+  is **D36's shape**, met by accident: `close()` drains only the idle queue.
+
+### The inventory gate caught me deleting a record
+
+The D32 edit spliced between "the D32 claim" and "the next `- id: D34`" — and
+**D33 sat between them**. It was silently removed, and
+`test_every_id_in_the_audits_is_in_the_inventory` failed on the next run:
+
+```
+these candidate ids appear in the audits but not in candidates.yml
+    D33: ['defect_hunt_w4_persistence.md']
+```
+
+Restored from `git show HEAD:`. Eighth time one of this repository's own gates
+has caught this work, and the first time one caught a *record* being destroyed
+rather than code being broken.
+
+### Coverage & residual risk
+
+- **The three writes are still three transactions.** SQLite gives no
+  cross-connection atomicity here, and the FTS watermark already retries on
+  failure, so ordering the dependent write last is the available guarantee, not
+  a complete one. A crash between the session write and the FTS write still
+  leaves an unindexed session — recoverable, because the watermark does not
+  advance.
+- **Commitments now write for the first time.** Nothing downstream has ever
+  seen a non-empty commitments table, so any consumer of it is untested against
+  real data. That is a new exposure created by fixing this, and it is the
+  honest cost of the fix rather than a reason not to make it.
+- **`held_for_approval()` has one consumer**, the CLI. A programmatic caller
+  that ignores it gets the safe behaviour by default, which is the right way
+  round, but nothing forces it to look.
+- **D34 is adjacent and untouched.** The truncation rule in
+  `sqlite_state_repo.save_session` computes a truncated `events_data` that it
+  then never passes to `sq.save(session)`, which truncates again from the
+  original. Two implementations of one rule, in one call path.
+
+### Uncertainty acknowledgment
+
+D32's record described the hazard correctly and could not have known the first
+of its three transactions was inert — that took running it. **The record was
+not wrong; it was incomplete in a direction reading cannot reach.** That is a
+different failure from the nine mis-stated records earlier in this session, and
+a more forgivable one. **UNKNOWN:** how many other correctly-described hazards
+sit on top of a step that has never executed, where the described risk is
+latent rather than live and the real defect is the silence.

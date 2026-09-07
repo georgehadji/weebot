@@ -74,14 +74,13 @@ class EventEmitter:
                 )
                 event = event.model_copy(update={"message": result.bound_text})
 
-        # 2. Credential redaction for user input
-        if isinstance(event, MessageEvent) and event.role == "user":
-            from weebot.core.credential_sanitizer import sanitize
+        # 2. Credential redaction — every free-text field, not just user input
+        from weebot.core.credential_sanitizer import sanitize_event
 
-            sanitized = sanitize(event.message or "")
-            if sanitized != event.message:
-                event = event.model_copy(update={"message": sanitized})
-                self._log.info("Credential sanitizer redacted user input")
+        _sanitized = sanitize_event(event)
+        if _sanitized is not event:
+            self._log.info("Credential sanitizer redacted a %s event", event.type)
+            event = _sanitized
 
         # 3. Append to in-memory session
         session = session.add_event(event)

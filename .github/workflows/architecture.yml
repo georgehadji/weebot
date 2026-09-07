@@ -70,6 +70,23 @@ jobs:
         # gate lived only in `make check` as a grep that could not match the
         # two-line `except X:` / `pass` form, so it reported clean over 139 sites.
         run: python scripts/lint_except_pass.py
+      - name: Agent structured-output ratchet
+        # BLOCKING. CLAUDE.md rule 2 mandates Pydantic-validated structured
+        # output from agents. Measured before the migration: three of five
+        # malformed responses escaped `GoalAgent`'s own `except
+        # json.JSONDecodeError` and crashed, because `.get(key, default)`
+        # substitutes the default only when a key is ABSENT. Four agents were
+        # migrated; this pins the rest so the divergence cannot grow back.
+        run: python scripts/lint_agent_json_parsing.py
+
+      - name: Unused-local ratchet
+        # BLOCKING. ruff has always been able to see these; the selector above
+        # is `F821,E9`, so it was never asked. Two real defects were found this
+        # way in one session -- an MCP server process bound to a local nothing
+        # could reach, and a steering prompt built, logged at INFO, and then
+        # not sent. Same bidirectional contract as the ratchets around it.
+        run: python scripts/lint_unused_locals.py
+
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that
         # exited 1, so `make check` was red on a clean checkout, and it appeared
@@ -167,6 +184,13 @@ jobs:
         run: pytest tests/e2e/test_flow_e2e.py::TestConcurrentFlows -v --tb=short --timeout=120
       - name: Run chaos recovery test
         run: pytest tests/e2e/test_flow_e2e.py::TestChaosRecovery -v --tb=short --timeout=60
+      - name: Run resilience stress tests
+        # `tests/stress/` was referenced by NO workflow, so 35 tests covering
+        # the circuit breaker, retry backoff and timeout enforcement could not
+        # redden anything -- including the one that failed roughly one run in
+        # seven. Wired in now that the flake is fixed: the whole directory runs
+        # in ~11s, so the cost of knowing is negligible.
+        run: pytest tests/stress/ -v --tb=short --timeout=120
 
   frontend:
     name: Frontend Quality Gates

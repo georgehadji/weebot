@@ -280,11 +280,27 @@ def harness_evolve(
 
             try:
                 async for event in flow.run():
-                    if hasattr(event, "message") and event.message:
+                    # `WaitForUserEvent` carries `question`, not `message`, so
+                    # the previous `hasattr(event, "message")` filter dropped
+                    # every approval prompt silently — while the flow saved the
+                    # gated edit anyway. Both halves are fixed; this is the
+                    # half that makes the hold visible.
+                    question = getattr(event, "question", "")
+                    if question:
+                        console.print(f"\n[yellow]⏸ Approval required:[/yellow]\n{question}")
+                    elif getattr(event, "message", ""):
                         console.print(f"  {event.message}")
             except Exception as exc:
                 console.print(f"[red]Iteration failed: {exc}[/red]")
                 break
+
+            held = flow.held_for_approval()
+            if held:
+                console.print(
+                    f"[yellow]{len(held)} edit(s) held for approval and NOT applied: "
+                    + ", ".join(e.target_surface for e in held)
+                    + "[/yellow]"
+                )
 
             if flow.is_done():
                 console.print(f"[green]✓ Iteration {iteration + 1} complete[/green]")
