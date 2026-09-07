@@ -11,20 +11,20 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@base-ui/react": "^1.6.0",
+    "@base-ui/react": "^1.7.0",
     "@monaco-editor/react": "^4.7.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
-    "lucide-react": "^1.24.0",
-    "next": "16.2.10",
+    "lucide-react": "^1.40.0",
+    "next": "16.3.4",
     "react": "^19",
     "react-dom": "^19",
     "react-syntax-highlighter": "^16.1.1",
     "reactflow": "^11.11.4",
-    "recharts": "^3.9.2",
-    "shadcn": "^4.13.0",
+    "recharts": "^3.10.1",
+    "shadcn": "^4.21.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
