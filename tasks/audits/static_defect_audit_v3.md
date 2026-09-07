@@ -2935,3 +2935,185 @@ failure the failures were. Twelve runs printing the failure line answered in
 ten minutes a question two abandoned deep-dives could not. **The lesson is not
 that the note was wrong; it is that "measure the symptom before modelling the
 cause" would have closed this four waves earlier.**
+
+## The security control that was declared, never ran, and could not have
+
+### R6 C7/C8/C1/C6 `[VERIFIED-EXECUTED]`
+
+`settings.py` declares `secret_redaction_enabled: bool = True`, described as
+redacting secrets "in tool output and logs". `SecretRedactor` is 184 lines with
+**zero callers**. A configuration reporting a control that has never run.
+
+The earlier phase of R6 deliberately did not wire it, on the grounds that
+wiring a corrupting redactor ships a log-corruption bug on the same commit as a
+security fix. That judgement was right, and the corruption was worse than
+recorded.
+
+### C7 — four ways `redact()` rewrote the log around the secret
+
+| input | output, before |
+|---|---|
+| `line one\nline two\tindented` | `line one line two indented` |
+| `listening on port 8080` | `listening on port [CVV_REDACTED]` |
+| `HTTP 404 Not Found` | `HTTP [CVV_REDACTED] Not Found` |
+| `year 2026` / `took 250 ms` | `[CVV_REDACTED]` in both |
+| `file.py:123` | `[HIGH_ENTROPY_REDACTED]` |
+| `passwd: abc` and `secret: abc` | `password=[REDACTED]` — **both** |
+
+The whitespace one is `text.split()` followed by `" ".join(...)`: every
+newline, tab and run of spaces becomes one space, so a multi-line log arrives
+as a single line.
+
+The CVV one is `\b\d{3,4}\b`. A CVV cannot be recognised from digits alone —
+it is three or four digits, and so is every port, status code, year, line
+number and millisecond count. Context is the only thing that makes the
+detection possible, so context is now required.
+
+**`file.py:123` is the one worth pausing on**, and it was not in the record.
+The token is eleven characters, well under the twenty-character entropy
+threshold. The CVV rule fired first and produced `file.py:[CVV_REDACTED]` —
+twenty-two characters, not alphabetic — which then tripped the entropy rule and
+disappeared entirely. The guard against this was `if not word.startswith("[")`,
+which only catches a marker at the *start* of a token.
+
+**Redaction output fed back into redaction input.** A source location was
+destroyed because an earlier redaction had lengthened it past a threshold.
+
+The label rewrite was not recorded either: `_PASSWORD_RE.sub` wrote the literal
+`password=[REDACTED]`, so a log line saying `secret: x` came out claiming to be
+a password. A sanitiser is allowed to remove the secret. It is not allowed to
+rewrite the sentence around it.
+
+### C8 — four shapes presented as sanitised and left intact
+
+| shape | what survived |
+|---|---|
+| `{"sk_live_AAAA…": "…"}` | the secret was the **key**; keys were never looked at |
+| `b"password=hunter2"` | **bytes**; only `str` was handled |
+| `[[{"note": "pw=x"}]]` | a dict below **two** list levels; one was recursed |
+| `("password=hunter2",)` | a **tuple**; only `list` was recursed |
+
+An `int` that is a valid PAN survived too. One recursive `_redact_value` now
+covers str, bytes, dict, list, tuple and set, preserving each value's type
+unless a secret was actually found — so `port: 8080` stays an int and
+`pan: 4111111111111111` becomes a marker.
+
+Redacting keys introduces a hazard the fix has to answer rather than create:
+two distinct secret keys redact to the *same* marker, and collapsing them would
+turn a sanitiser into a data-destroying one. Collisions are disambiguated, and
+a test pins that no value is dropped.
+
+### C1 — the plan's precondition was necessary and not sufficient
+
+The plan said: fix C7/C8, then wire. Having fixed C7/C8, wiring it still would
+not have been safe, and the measurement is unambiguous. Against text this
+codebase's own tools produce:
+
+```
+commit b91a29ae9713861b86bc73dbf10be8a7b4823310   -> [HIGH_ENTROPY_REDACTED]
+/home/user/weebot/.../_client_policy.py           -> [HIGH_ENTROPY_REDACTED]
+session a779ecbb-1b3a-5bd9-a2db-8bff1bb2fbce      -> [HIGH_ENTROPY_REDACTED]
+sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b…  -> [HIGH_ENTROPY_REDACTED]
+```
+
+**Redacting file paths and commit SHAs from a coding agent's tool output would
+leave it unable to work.** And this is not a threshold to tune: a forty-character
+hex digest and a forty-character hex key have the same character distribution,
+so no threshold separates them. The heuristic is being asked to do something
+information-theoretically impossible.
+
+So the split: the **pattern** passes are wired into
+`credential_sanitizer.sanitize`, which reaches all three emit pipelines through
+one call site, and the **entropy** pass is opt-in (`enable_entropy=False`),
+with `_NOT_A_SECRET_SHAPES` covering paths, hex digests and UUIDs for anyone
+who turns it on.
+
+What the wiring adds is not duplication of the existing denylist:
+Luhn-checked card numbers, Stripe keys and labelled CVVs, none of which it
+covered.
+
+**Writing the test found one more.** The path shape did not cover the
+`:line` / `:line:col` suffix — `some/path/file.py:123` was still redacted with
+the pass on, and that is the single commonest shape in a coding agent's tool
+output. Third time in this programme that the test, not the reading, found the
+defect.
+
+### C6 — the deferral's stated reason was false
+
+C6 was deferred because changing it "overrules a test that encodes the defect
+as the contract" — `tests/unit/test_secret_accessor.py:98`.
+
+That test asserts `TIMEOUT = 30` is logged plainly. It is a legitimate
+non-secret. **No test in that file mentions URL at all.** Nothing defended the
+defect; the deferral had no basis, and a real leak sat behind it for a phase.
+
+`_is_non_secret` waves through any key ending in `URL`, `HOST`, `PORT`, `DIR`,
+`MODE` or `TIMEOUT`, and logs its value in full at DEBUG. Measured:
+
+```
+DATABASE_URL      = 'postgres://admin:hunter2@db.internal:5432/prod'
+REDIS_URL         = 'rediss://:s3cr3tpassword@cache.internal:6379/0'
+SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/T00/B00/XXXXXXXX…'
+```
+
+All three *are* the credential. A Slack webhook URL has no non-secret part at
+all. This is a deny-by-shape heuristic ("a name ending in URL is config") used
+as an **allow** rule ("so print the whole thing") — and a name is not evidence
+about a value.
+
+The fix does not argue with the allowlist. The reason to log a `*_URL` plainly
+is to see which host you are talking to, and that survives; only the credential
+inside it does not.
+
+**And it exposed a gap in my own earlier work.** The URL-credential pattern
+added in the first R6 commit required a non-empty username:
+
+```python
+r"\b([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+):([^\s@]+)@"
+                                     # ^ requires a user
+```
+
+Redis and AMQP put the password in with no username at all —
+`rediss://:s3cr3tpassword@host` matched nothing and logged in full. `+` → `*`.
+
+### Coverage & residual risk
+
+- **The entropy pass is still unwired**, so the only non-denylist mechanism in
+  the codebase remains unused. `settings.secret_redaction_entropy_threshold`
+  now configures something that does not run by default — a smaller version of
+  the defect C1 was about, and it is deliberate rather than overlooked.
+- **`_NOT_A_SECRET_SHAPES` is itself a denylist inside a heuristic that existed
+  to avoid denylists.** It covers paths, hex digests and UUIDs because those
+  are what this codebase emits; another codebase would need its own.
+- **Key redaction changes the shape of logged data.** Collisions are
+  disambiguated with a `#2` suffix, which is visible but not pretty, and a
+  consumer parsing those keys would see them change.
+- **`ToolEvent.function_args` is still not sanitised** — a credential passed
+  *into* a tool sits there untouched, as recorded in the first R6 commit.
+
+### Three of the repo's own gates caught this, again
+
+- **`test_ids_are_unique`** — the four records were *appended* rather than
+  updated, so `R6-C1`, `C6`, `C7` and `C8` each appeared twice with different
+  statuses. Two rows with the same id means one of them is invisible and which
+  one a reader believes is arbitrary. Merged in place, keeping wave order.
+- **`test_core_no_global_singletons_outside_di`** — the lazy `SecretRedactor`
+  was a module `global`. `lru_cache(maxsize=1)` has the same one-instance
+  behaviour, is clearable in a test, and cannot be reassigned from elsewhere.
+- **`test_run_mcp.py` failed with "--allow-remote requires WEEBOT_MCP_API_KEY"**,
+  and that one was the most instructive: `SecretAccessor.set_source` is
+  process-wide, the C6 tests installed a fixture dict, and nothing reset it —
+  so every later test in the run was answered from this file's dict instead of
+  the environment. `tests/unit/test_secret_accessor.py` already had the
+  autouse reset fixture for exactly this reason; the knowledge did not travel
+  the one directory it needed to. Same shape as the two process reapers.
+
+### Uncertainty acknowledgment
+
+C6's deferral note asserted a test existed that did not. That is the sixth
+record in this session found wrong in some particular, and the first where the
+error was in the *reason for not acting* rather than in the claim itself — a
+category that is harder to catch, because a deferral is not re-read the way a
+fix is. **UNKNOWN:** how many other `deferred` entries rest on a stated
+obstacle that would evaporate on one `grep`. This one took thirty seconds to
+check and had survived a phase.

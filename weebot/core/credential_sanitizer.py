@@ -8,11 +8,15 @@ password bug where ``ask_human`` responses were stored in plaintext.
 
 from __future__ import annotations
 
+import logging
 import re
+from functools import lru_cache
 from typing import Any
 
 # ── Patterns adapted from weebot/infrastructure/adapters/llm/resilient_adapter.py
 #    and weebot/infrastructure/security/agent_sanitizer.py ──────────────
+
+logger = logging.getLogger(__name__)
 
 _CREDENTIAL_PATTERNS: list[tuple[re.Pattern, str]] = [
     # password=value / password: value / passwd=value
@@ -57,8 +61,13 @@ _CREDENTIAL_PATTERNS: list[tuple[re.Pattern, str]] = [
         "***REDACTED-SLACK-WEBHOOK***",
     ),
     # Credentials embedded in a URL: scheme://user:password@host
+    #
+    # The username part is `*`, not `+`. It was `+`, which requires a non-empty
+    # user — and Redis, AMQP and several others put the password in with NO
+    # username: `rediss://:s3cr3tpassword@cache.internal:6379/0` matched
+    # nothing and logged in full.
     (
-        re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+):([^\s@]+)@"),
+        re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]*):([^\s@]+)@"),
         r"\1:***REDACTED***@",
     ),
 ]
@@ -78,15 +87,53 @@ _SANITISED_EVENT_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
+@lru_cache(maxsize=1)
+def _secret_redactor() -> Any:
+    """The `SecretRedactor` singleton, built lazily.
+
+    Lazy because `SecretRedactor.from_settings()` constructs `WeebotSettings`,
+    and this module is imported from three emit pipelines that must not pay for
+    settings resolution at import time.
+
+    `lru_cache` rather than a module global: `test_core_no_global_singletons_outside_di`
+    bans `global` in `core/`, and it is right to — a cached function has the
+    same one-instance behaviour, is clearable in a test via `.cache_clear()`,
+    and cannot be reassigned from anywhere else.
+    """
+    from weebot.core.secret_redaction import SecretRedactor
+
+    return SecretRedactor.from_settings()
+
+
 def sanitize(text: str) -> str:
     """Apply all credential-redaction patterns to *text*.
 
     Returns the sanitized string.  If no patterns match, the original
     string is returned unchanged.
+
+    Runs `SecretRedactor`'s pattern passes after this module's own. That class
+    is 184 lines that had **zero callers** while `settings.py` declared
+    `secret_redaction_enabled: bool = True`, described as redacting secrets "in
+    tool output and logs" — a configuration reporting a control that had never
+    run. What it adds here is not duplication: Luhn-checked card numbers,
+    Stripe keys and labelled CVVs, none of which the denylist above covers.
+
+    Its ENTROPY pass stays off, and that is the measured reason rather than
+    caution. On this codebase's own tool output it redacts commit SHAs, session
+    UUIDs, sha256 digests and **file paths** — see `SecretRedactor.from_settings`.
+    Wiring it before that was understood would have shipped a log-corruption
+    bug on the same commit as a security fix.
     """
     for pattern, replacement in _CREDENTIAL_PATTERNS:
         text = pattern.sub(replacement, text)
-    return text
+    try:
+        return _secret_redactor().redact(text)
+    except Exception:
+        # A sanitiser that raises is a sanitiser that gets removed. The
+        # denylist result above is already applied, so the fallback still
+        # redacts; it just loses the PAN and Stripe passes.
+        logger.debug("SecretRedactor pass failed; returning the denylist result.", exc_info=True)
+        return text
 
 
 def sanitize_event(event: Any) -> Any:

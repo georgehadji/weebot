@@ -57,6 +57,36 @@ _NON_SECRET_KEYS: set[str] = {
 _REDACTED = "<REDACTED>"
 
 
+def _sanitize_non_secret(value: str) -> str:
+    """Scrub credentials out of a value the name-based allowlist waved through.
+
+    `_is_non_secret` is a deny-by-shape heuristic ("a name ending in URL is
+    config") used as an ALLOW rule ("so log the whole thing"). Names are not
+    evidence about values, and URLs are where credentials live. Measured, at
+    DEBUG, before this existed:
+
+        DATABASE_URL      = 'postgres://admin:hunter2@db.internal:5432/prod'
+        REDIS_URL         = 'rediss://:s3cr3tpassword@cache.internal:6379/0'
+        SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/T00/B00/XXXX…'
+
+    All three are the credential itself, and a Slack webhook URL has no
+    non-secret part at all.
+
+    The allowlist is left alone rather than argued with: the point of logging
+    a `*_URL` plainly is to see the host you are talking to, and that survives.
+    Only the credential inside it does not.
+    """
+    try:
+        from weebot.core.credential_sanitizer import sanitize
+
+        return sanitize(value)
+    except Exception:
+        # Never let the log path raise. Falling back to the redaction marker is
+        # the safe direction: worse diagnostics, no leak.
+        logger.debug("Sanitising a non-secret value failed.", exc_info=True)
+        return _REDACTED
+
+
 def _is_non_secret(key: str) -> bool:
     """Return True if *key* is considered non-secret for logging."""
     if key in _NON_SECRET_KEYS:
@@ -185,6 +215,6 @@ class SecretAccessor:
         if value is None:
             logger.debug("SecretAccessor: %s = <NOT SET>", key)
         elif _is_non_secret(key):
-            logger.debug("SecretAccessor: %s = %r", key, value)
+            logger.debug("SecretAccessor: %s = %r", key, _sanitize_non_secret(value))
         else:
             logger.debug("SecretAccessor: %s = %s (len=%d)", key, _REDACTED, len(value))

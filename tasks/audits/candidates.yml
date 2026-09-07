@@ -1418,24 +1418,27 @@ candidates:
 
   - id: R6-C1
     wave: R6
-    location: weebot/core/secret_redaction.py
-    claim: "SecretRedactor has zero callers while settings.py declares secret_redaction_enabled = True"
-    status: deferred
-    evidence: null
+    location: weebot/core/secret_redaction.py, weebot/core/credential_sanitizer.py
+    claim: "`SecretRedactor` has zero callers while settings.py declares secret_redaction_enabled = True"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
     verdict_note: >-
-      VERIFIED-STATIC: 184 lines implementing PAN/Luhn, CVV, Stripe, AWS, JWT,
-      Bearer and entropy detection, and nothing constructs SecretRedactor or
-      calls redact()/redact_dict() anywhere in weebot/, cli/ or tests/. The
-      only reference outside the module is settings.py:419-423, where
-      `secret_redaction_enabled: bool = True` is described as "Redact secrets
-      (PANs, API keys) in tool output and logs". The configuration reports a
-      control that has never run -- the C2 shape in its purest form.
-      .
-      DELIBERATELY NOT FIXED YET, and the order matters: wiring this module in
-      before R6-C7 and R6-C8 are fixed would ship a log-corruption bug on the
-      same commit, because redact() destroys all non-space whitespace and
-      redacts every 3-4 digit integer as a CVV. Sequence is C5 -> C3/C4 ->
-      C7/C8 -> C1.
+      PARTIALLY wired, and the plan's own precondition turned out to be
+      insufficient. The plan said fix C7/C8, then wire. C7/C8 are necessary and
+      NOT sufficient: measured against this codebase's own tool output, the
+      ENTROPY pass redacts commit SHAs, session UUIDs, sha256 digests and FILE
+      PATHS (`/home/user/weebot/.../x.py` -> `[HIGH_ENTROPY_REDACTED]`).
+      Redacting file paths from a coding agent's tool output would leave it
+      unable to work, and it is not a threshold to tune — a hex digest and a
+      hex key have the same character distribution, so no threshold separates
+      them. So the PATTERN passes are wired into `credential_sanitizer.sanitize`
+      (reaching all three emit pipelines through one call site) and the entropy
+      pass is opt-in via `enable_entropy`, defaulting False, with
+      `_NOT_A_SECRET_SHAPES` covering path/hex/uuid for anyone who enables it.
+      What the wiring adds is not duplication: Luhn-checked PANs, Stripe keys
+      and labelled CVVs, none of which the denylist covered. Writing the test
+      found that the path shape missed the `:line:col` suffix — the commonest
+      shape in tool output.
 
   - id: R6-C2
     wave: R6
@@ -1525,53 +1528,68 @@ candidates:
   - id: R6-C6
     wave: R6
     location: weebot/config/secret_accessor.py
-    claim: "The non-secret classifier allowlists every key ending in URL or HOST, and credential-bearing URLs are then logged verbatim"
-    status: deferred
-    evidence: null
+    claim: "The `*_URL` / `*_HOST` allowlist is a deny-by-shape heuristic used as an allow rule"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
     verdict_note: >-
-      VERIFIED: DATABASE_URL, REDIS_URL, SLACK_WEBHOOK_URL, JMAP_URL and
-      SMTP_HOST all classify non_secret=True and are logged in plaintext via
-      %r, while OPENAI_API_KEY correctly classifies as secret. A deny-by-shape
-      heuristic used as an ALLOW rule: `postgres://user:pass@host/db` and a
-      webhook URL with an embedded token are exactly the shape of `*_URL`.
-      .
-      Deferred rather than fixed because
-      tests/unit/test_secret_accessor.py:98 currently ASSERTS this behaviour is
-      correct, so the fix has to change a test that encodes the defect as the
-      contract -- a judgement about intended behaviour, not a repair. Mitigated
-      meanwhile: R6-C4 added a URL-credential pattern, so a logged
-      `scheme://user:pass@host` is now redacted by the sanitiser even though
-      the classifier still calls the key non-secret.
+      VERIFIED-EXECUTED, and the REASON IT WAS DEFERRED IS FALSE. The plan said
+      changing it would overrule `tests/unit/test_secret_accessor.py:98`, which
+      "asserts the defect is correct". That test asserts `TIMEOUT = 30` is
+      logged plainly — a legitimate non-secret. NO test in that file mentions
+      URL at all, so nothing defended the defect and the deferral had no basis.
+      Measured at DEBUG: `DATABASE_URL = postgres://admin:hunter2@...`,
+      `REDIS_URL = rediss://:s3cr3tpassword@...`, and a complete Slack webhook
+      URL, all logged in full because their names end in `URL`. A Slack webhook
+      URL has no non-secret part. Fixed WITHOUT arguing with the allowlist: the
+      value is sanitised even on the allowed path, so the host stays visible
+      (which is why the allowlist exists) and the credential does not.
+      Found while fixing it: the URL-credential pattern added earlier in this
+      programme required a NON-EMPTY username (`[^\s:/@]+`), so
+      `rediss://:password@host` — the shape Redis and AMQP use — matched
+      nothing. Widened to `*`.
 
   - id: R6-C7
     wave: R6
-    location: weebot/core/secret_redaction.py:147,160
-    claim: "redact() destroys all non-space whitespace in every input and redacts every 3-4 digit integer as a CVV"
-    status: deferred
-    evidence: null
+    location: weebot/core/secret_redaction.py
+    claim: "`redact()` corrupts the text it sanitises: whitespace collapsed, every 3-4 digit integer redacted as a CVV"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
     verdict_note: >-
-      VERIFIED: `'line one\nline two\tport 8080 and status 404'` becomes
-      `'line one line two port [CVV_REDACTED] and status [CVV_REDACTED]'`.
-      text.split() / " ".join() at :147,160 collapses newlines and tabs
-      unconditionally, and _CVV_RE matches any 3-4 digit run. Currently
-      unreachable (R6-C1), which is the only reason it is not a live defect --
-      and precisely why it must be fixed BEFORE C1 wires the module in.
+      VERIFIED-EXECUTED, and there were four defects, not two.
+      (1) `_redact_high_entropy` did `text.split()` then `" ".join(...)`, so
+      every newline, tab and space run collapsed — a multi-line log came out as
+      one line. (2) `_CVV_RE` was `\b\d{3,4}\b`, which redacted `port 8080`,
+      `HTTP 404`, `year 2026`, `took 250 ms`. A CVV cannot be recognised from
+      digits alone, so the rule now requires a cvv/cvc/csc label. (3) NOT IN
+      THE RECORD: redaction output fed back into redaction input. The
+      entropy guard skipped tokens that `startswith("[")`, which misses a
+      marker substituted mid-token — `file.py:123` is 11 chars, under the
+      20-char threshold, but the CVV rule made it `file.py:[CVV_REDACTED]` at
+      22 chars, which then vanished as `[HIGH_ENTROPY_REDACTED]`. A source
+      location was destroyed because an earlier redaction lengthened it.
+      (4) NOT IN THE RECORD: `_PASSWORD_RE.sub` wrote a literal
+      `password=[REDACTED]`, so `secret: x` and `pwd=x` both came out claiming
+      to be a password — the sanitiser rewriting the log around the secret.
 
   - id: R6-C8
     wave: R6
-    location: weebot/core/secret_redaction.py:162-184
-    claim: "redact_dict returns a dict it presents as redacted while skipping non-str scalars, dict keys, and anything below one list level"
-    status: deferred
-    evidence: null
+    location: weebot/core/secret_redaction.py
+    claim: "`redact_dict` skips non-str scalars, dict keys, and anything below one list level"
+    status: fixed
+    evidence: tests/unit/core/test_the_redactor_is_safe_to_wire.py
     verdict_note: >-
-      VERIFIED: `redact_dict({"card": 4111111111111111, "nested":
-      [["sk_live_" + "a"*30]]})` returns both values untouched -- a
-      JSON-numeric PAN survives the `else: result[key] = value` branch, and a
-      Stripe key one list deeper is never visited. The caller receives a dict
-      the function presents as sanitised. Same latency caveat as R6-C7: fix
-      before C1.
+      VERIFIED-EXECUTED, all of it, plus tuples. Measured, four shapes passing
+      through untouched while the result was presented as sanitised: a secret
+      as a dict KEY (`{"sk_live_...": ...}`), a `bytes` value, a dict below TWO
+      list levels (`[[{...}]]`), and a tuple. An int that is a valid PAN also
+      survived. Fixed with one recursive `_redact_value` over str/bytes/dict/
+      list/tuple/set plus key redaction, preserving each value's type unless a
+      secret was actually found. Key redaction introduced a hazard the fix has
+      to answer: two distinct secret keys redact to the SAME marker, so
+      collapsing them would make this a data-destroying sanitiser. Collisions
+      are disambiguated rather than merged, and a test pins that no value is
+      dropped.
 
-  # ── P3 — flow defects found by opening the region, not by the record ──
   - id: P3-1
     wave: P3
     location: weebot/domain/models/plan.py, weebot/application/flows/states/completed.py
@@ -1670,3 +1688,4 @@ candidates:
       two implementations, and nothing comparing them. Needs the owner's
       direction on which of the two is the real one.
 
+  # ── R6 remainder — the redactor that was declared and could not be wired ──
