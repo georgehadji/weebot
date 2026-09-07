@@ -339,11 +339,41 @@ candidates:
 
   - id: D20
     wave: W3
-    location: weebot/application/flows/states/
+    location: weebot/application/flows/plan_act_flow.py:712
     claim: "Terminate-with-next-step returns without `set_state`, so `prompt_consumed` is never reset"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; W3 stopped at its investigation budget before triggering it."
+    status: cleared
+    evidence: tests/unit/application/flows/test_the_prompt_reset_is_dead.py
+    verdict_note: >-
+      Cleared as recorded and REPLACED by D74: the conclusion is right and the
+      mechanism is backwards. `prompt_consumed` is indeed never reset, but not
+      because a state returns without `set_state` — because `set_state` itself
+      assigns `_last_state_type = type(state)`, so the run loop's
+      `type(self._state) != self._last_state_type` is never true when it looks.
+
+  - id: D74
+    wave: W3
+    location: weebot/application/flows/plan_act_flow.py:712, weebot/application/flows/agent_session_manager.py:76
+    claim: "The run loop's prompt_consumed reset is dead: set_state writes both sides of the comparison it depends on"
+    status: confirmed
+    evidence: tests/unit/application/flows/test_the_prompt_reset_is_dead.py
+    verdict_note: >-
+      VERIFIED-EXECUTED through the real run loop: PlanningState received
+      'THE ORIGINAL TASK' and ExecutingState, a different state type one
+      transition later, received ''. So the first state to yield an event
+      consumes the prompt and no later state ever sees it, against the stated
+      intent that "each FlowState gets one chance at the prompt".
+      `PlanningState:92-99` already carries a local workaround with a comment
+      naming this flag, which is corroborating evidence someone hit the
+      consequence and patched around it. The one writer that would trip the
+      reset, `AgentSessionManager.set_state` (`flow._state = state` with no
+      `_last_state_type`), is a near-duplicate transition implementation with
+      no callers at all.
+      NOT REPAIRED, and deliberately so: making the reset fire changes what
+      every state is handed — `ExecutingState` passes its prompt to the
+      executor as `user_input` — which is a change to the product's model
+      inputs across the board, not the repair of a stated contract, and it
+      cannot be validated by the test suite. Needs the owner's call. The
+      current behaviour is pinned by a tripwire that fails the day it changes.
 
   - id: D21
     wave: W3

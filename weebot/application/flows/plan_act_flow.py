@@ -708,6 +708,27 @@ class PlanActFlow(BaseFlow):
             # type changes (e.g. ProductGateState → PlanningState), reset
             # so the new state can receive the task prompt even if the
             # previous state yielded events that consumed it.
+            #
+            # KNOWN DEAD (D20). This condition never becomes true. `set_state`
+            # is the only live writer of `self._state`, and it assigns
+            # `self._last_state_type = type(state)` in the same call, so by the
+            # time control returns here the two are always equal. Measured on a
+            # real flow: PlanningState received 'THE ORIGINAL TASK' and
+            # ExecutingState — a different state type, one transition later —
+            # received ''. `PlanningState` already carries a local workaround
+            # for the consequence, with a comment naming this flag.
+            #
+            # NOT repaired here on purpose: making it fire changes what every
+            # state is handed, `ExecutingState`'s `user_input` among them, and
+            # that is a change to the product's model inputs rather than a
+            # repair of a stated contract. It needs the owner's call. The
+            # tripwire is
+            # tests/unit/application/flows/test_the_prompt_reset_is_dead.py,
+            # which fails the day the behaviour changes.
+            #
+            # (The one writer that would trip it, `AgentSessionManager.set_state`
+            # — `flow._state = state` with no `_last_state_type` — has no
+            # callers at all.)
             current_state_type = type(self._state)
             if current_state_type != self._last_state_type:
                 prompt_consumed = False
