@@ -60,9 +60,11 @@ unused_locals = 33
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
-# divergence had reached ten modules before anyone measured it. Four were
-# migrated by decision; the rest are an inventory to triage. Not every call is
-# a defect (tool-call arguments are a different payload), which is why this is
-# a ceiling and not a ban.
+# divergence had reached ten modules before anyone measured it. The migration
+# is now complete (P5-1) and the seven that remain were each triaged and kept:
+# `dreamer` and `planner` feed a validated model on the very next line,
+# `optimizer_agent` checks parseability only, and the four in `executor/` are
+# tool-call arguments — a different payload with its own repair path. That is
+# why this is a ceiling and not a ban: a count cannot tell those apart.
 # Measured by: scripts/lint_agent_json_parsing.py
-agent_json_parsing = 17
+agent_json_parsing = 7

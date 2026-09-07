@@ -244,6 +244,96 @@ class EditSelection(BaseModel):
     selected_indices: list[int] = Field(default_factory=list)
 
 
+class SubtaskSpec(BaseModel):
+    """One subtask from a DPPM decomposition."""
+
+    title: str
+    description: str
+
+
+class SubtaskDecomposition(BaseModel):
+    """`ParallelPlanner._decompose` — `{"subtasks": [...]}`."""
+
+    subtasks: list[SubtaskSpec] = Field(default_factory=list)
+
+
+class SubtaskPlan(BaseModel):
+    """`ParallelPlanner._plan_subtask` — `{"steps": [...]}`.
+
+    The declared return type there was `list[dict[str, str]] | None` and the
+    code returned `data.get("steps", [])` straight out. Measured: `{"steps":
+    "just do it"}` returned a **str**, `{"steps": {"1": "do"}}` a **dict**, and
+    `{"steps": [1, 2, 3]}` a list of ints — all three escaped into
+    `_assemble_candidates`, because `.get` substitutes its default only when
+    the key is absent.
+    """
+
+    steps: list[dict[str, str]] = Field(default_factory=list)
+
+
+class SkillEditSpec(BaseModel):
+    """One entry of `{"edits": [...]}` from OptimizerAgent.
+
+    Mirrors `weebot.domain.models.skill_edit.SkillEdit`'s wire shape rather
+    than importing it, so this module stays a leaf with no application or
+    domain imports. The caller builds the domain object from a validated spec.
+    """
+
+    op: Literal["append", "insert_after", "replace", "delete"]
+    target: str | None = None
+    content: str = ""
+    support_count: int = 1
+    source_type: str = "failure"
+
+
+class SkillEditList(BaseModel):
+    """`OptimizerAgent._parse_edits` — `{"edits": [...]}`."""
+
+    edits: list[SkillEditSpec] = Field(default_factory=list)
+
+
+class GuidanceContent(BaseModel):
+    """`OptimizerAgent._produce_guidance` — one of three content keys.
+
+    The old code did `data.get("slow_update_content") or ... or ""` and then
+    `str(field)`, so a dict or a list under any of those keys became its repr.
+    """
+
+    slow_update_content: str | None = None
+    meta_skill_content: str | None = None
+    content: str | None = None
+
+    def text(self) -> str:
+        return self.slow_update_content or self.meta_skill_content or self.content or ""
+
+
+class RetentionVerdictPayload(BaseModel):
+    """`RetentionAgent.review` — `{"verdict", "reasoning", "improvement_notes"}`.
+
+    `verdict` stays a plain string here: the domain's `RetentionVerdict` enum
+    is what the caller coerces it into, and a value outside the enum should
+    produce a named failure there rather than a validation error this module
+    cannot explain.
+    """
+
+    verdict: str = "park"
+    reasoning: str = ""
+    improvement_notes: list[str] = Field(default_factory=list)
+
+
+class SynthesisPayload(BaseModel):
+    """`SynthesizerAgent.synthesize` — `{"clusters", "synthesis"}`.
+
+    `SwarmResult` was constructed OUTSIDE the agent's try block from
+    `data.get(...)`, so a wrong-typed field raised ValidationError out of
+    `synthesize()` and lost the whole swarm's work — where the surrounding code
+    plainly intends a fallback. Measured for both `clusters` and `synthesis`.
+    """
+
+    clusters: list[dict] = Field(default_factory=list)
+    synthesis: str = ""
+
+
 def extract_json_text(text: str) -> str:
     """Pull the JSON payload out of a model response.
 
@@ -261,6 +351,25 @@ def extract_json_text(text: str) -> str:
     fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
     if fenced:
         return fenced.group(1).strip()
+
+    # Decode from the first delimiter and stop at the end of that value.
+    # `PlannerAgent._parse_json_content` had this step and this module did not,
+    # and it is the difference on real model output: measured, the greedy regex
+    # below fails on `{"a": 1} and also {"b": 2}` and on a nested object
+    # followed by a stray brace, while raw_decode returns the first complete
+    # value in both. The planner's copy was deleted in favour of this one, so
+    # the stronger behaviour had to move here first.
+    start = min(
+        (i for i in (text.find("{"), text.find("[")) if i != -1),
+        default=-1,
+    )
+    if start != -1:
+        try:
+            _, end = json.JSONDecoder().raw_decode(text[start:])
+            return text[start : start + end]
+        except json.JSONDecodeError:
+            pass
+
     braced = re.search(r"[\[{].*[\]}]", text, re.DOTALL)
     if braced:
         return braced.group(0)
@@ -676,6 +785,14 @@ __all__ = [
     "HarnessEditProposal",
     "EvaluatorPromptImprovement",
     "EditSelection",
+    "SubtaskSpec",
+    "SubtaskDecomposition",
+    "SubtaskPlan",
+    "SkillEditSpec",
+    "SkillEditList",
+    "GuidanceContent",
+    "RetentionVerdictPayload",
+    "SynthesisPayload",
     "parse_structured",
     "extract_json_text",
     "create_system_prompt",

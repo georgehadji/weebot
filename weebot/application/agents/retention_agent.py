@@ -7,7 +7,6 @@ PRUNE verdict is a recommendation only — never triggers deletion.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -15,6 +14,7 @@ from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.retention_agent_port import RetentionAgentPort
 from weebot.config.constants import MAX_TOKENS_CONCISE, TEMPERATURE_PRECISE
 from weebot.domain.models.retention_review import RetentionReview, RetentionVerdict
+from weebot.models.structured_output import RetentionVerdictPayload, parse_structured
 
 logger = logging.getLogger(__name__)
 
@@ -75,15 +75,28 @@ class RetentionAgent(RetentionAgentPort):
                 ),
                 timeout=self._timeout,
             )
-            raw = (response.content or "").strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[-1].rsplit("\n```", 1)[0]
-            data = json.loads(raw)
+            # Every malformed field used to land in the same bare `except`
+            # below and return a bare PARK — indistinguishable from a genuine
+            # PARK verdict, with no record of which field was wrong.
+            payload = parse_structured(
+                response.content, RetentionVerdictPayload, context=f"retention {session_id[:8]}"
+            )
+            if payload is None:
+                return RetentionReview(session_id=session_id, verdict=RetentionVerdict.PARK)
+            try:
+                verdict = RetentionVerdict(payload.verdict)
+            except ValueError:
+                logger.warning(
+                    "RetentionAgent got an unknown verdict %r for %s — parking",
+                    payload.verdict,
+                    session_id,
+                )
+                verdict = RetentionVerdict.PARK
             return RetentionReview(
                 session_id=session_id,
-                verdict=RetentionVerdict(data.get("verdict", "park")),
-                reasoning=data.get("reasoning", ""),
-                improvement_notes=data.get("improvement_notes", []),
+                verdict=verdict,
+                reasoning=payload.reasoning,
+                improvement_notes=payload.improvement_notes,
                 trust_band_at_review=trust_band,
             )
         except Exception as exc:

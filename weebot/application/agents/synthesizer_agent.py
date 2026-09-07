@@ -17,6 +17,7 @@ import time
 from weebot.application.ports.llm_port import LLMPort
 from weebot.config.constants import MAX_TOKENS_EXTENDED, TEMPERATURE_BALANCED
 from weebot.domain.models.swarm import SwarmResult
+from weebot.models.structured_output import SynthesisPayload, parse_structured
 
 logger = logging.getLogger(__name__)
 
@@ -97,36 +98,47 @@ class SynthesizerAgent:
                 max_tokens=MAX_TOKENS_EXTENDED,
             )
 
-            data = self._parse_json(response.content or "")
+            payload = self._parse_json(response.content or "")
+            fallback = SynthesisPayload(synthesis=self._fallback_synthesis(results))
         except Exception as exc:
             logger.warning("Synthesizer LLM call failed: %s — using raw merge", exc)
-            data = self._raw_merge(results)
+            payload = None
+            fallback = SynthesisPayload.model_validate(self._raw_merge(results))
 
         elapsed = time.monotonic() - t_start
 
+        # SwarmResult was built here from `data.get(...)` — OUTSIDE the try —
+        # so a wrong-typed `clusters` or `synthesis` raised ValidationError out
+        # of synthesize() and lost the whole swarm's work, in code that plainly
+        # intends a fallback. Both fields were measured raising. Validating the
+        # payload first means a bad field degrades to a fallback instead, and
+        # the two fallbacks stay distinct: the raw merge when the call itself
+        # failed, `_fallback_synthesis` when it returned something unusable.
+        # The two fields fall back independently, as they did before: the old
+        # code read them with separate `.get` calls and only `synthesis` had a
+        # default worth taking.
         return SwarmResult(
             prompt=prompt,
             sub_results=results,
-            clusters=data.get("clusters", []),
-            synthesis=data.get("synthesis", self._fallback_synthesis(results)),
+            clusters=payload.clusters if payload is not None else fallback.clusters,
+            synthesis=(
+                payload.synthesis
+                if payload is not None and payload.synthesis
+                else fallback.synthesis
+            ),
             elapsed_seconds=elapsed,
         )
 
     @staticmethod
-    def _parse_json(content: str) -> dict:
-        import json
+    def _parse_json(content: str) -> SynthesisPayload | None:
+        """Validate the synthesis payload, or return None for the fallback.
 
-        content = content.strip()
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-        if "```" in content:
-            start = content.find("{")
-            end = content.rfind("}") + 1
-            if start != -1 and end > start:
-                return json.loads(content[start:end])
-        return {}
+        This used to be a second local JSON extractor — strict parse, then a
+        brace scan whose `json.loads` sat outside any try, so a malformed slice
+        raised straight out of the helper. `parse_structured` handles both the
+        extraction and the validation.
+        """
+        return parse_structured(content, SynthesisPayload, context="swarm synthesis")
 
     @staticmethod
     def _raw_merge(results: list[dict]) -> dict:

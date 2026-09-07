@@ -23,11 +23,17 @@ ESCAPED the `except json.JSONDecodeError` written to absorb them:
 `.get(key, default)` substitutes the default only when a key is ABSENT, never
 when it is present and wrong. Pydantic validation is what closes that.
 
-NOT every call here is a defect. Tool-call arguments (`_tool_executor`,
-`_error_handler`) are a different payload with their own repair path, and
-`dreamer`'s remaining call feeds `IdeaProposalList` and IS validated. A count
-cannot tell those apart, which is why this is a ceiling rather than a ban: the
-seventeen that exist are an inventory to triage, and no new one may join them.
+NOT every call here is a defect, which is why this is a ceiling rather than a
+ban: a count cannot tell a raw parse from one whose next line validates. The
+seven that remain were each triaged and kept.
+
+    dreamer.py         feeds IdeaProposalList on the next line
+    planner.py         inside `_parse_json_content`, the one shared extractor
+    optimizer_agent.py checks parseability only; the caller validates
+    executor/ (x4)     tool-call arguments, a different payload with its own
+                       repair path
+
+No new one may join them.
 
 Enforced as a **bidirectional** ratchet. See tasks/quality/ceilings.toml.
 

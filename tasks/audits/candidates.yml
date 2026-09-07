@@ -1715,28 +1715,24 @@ candidates:
     wave: P5
     location: weebot/application/agents/, weebot/models/structured_output.py
     claim: "CLAUDE.md rule 2 mandates Pydantic-validated structured output; agents call bare json.loads instead"
-    status: deferred
-    evidence: null
-    verdict_note: >-
-      VERIFIED-STATIC, found while clearing S2. CLAUDE.md states agents "MUST
-      return structured JSON validated via Pydantic models in
-      weebot/models/structured_output.py". In practice `dreamer.py`,
-      `goal_agent.py`, `layer_editor_agent.py` and `optimizer_agent.py` parse
-      with bare `json.loads(...)`, and only three modules import from
-      structured_output at all -- for `VisionReflection` and the
-      verbalized-sampler models, never for `parse_agent_output`. So the
-      documented mandatory protocol is not the one in use, and the module that
-      defines it has an unused parser and an unconstructed error type (S2).
-      NOT FIXED: migrating every agent to the declared protocol is a
-      cross-cutting change, and the alternative -- amending the rule to match
-      reality -- is a decision about intent, not a repair. This is the same
-      shape as the three routing tables and the duplicate reaper: one rule,
-      two implementations, and nothing comparing them. Needs the owner's
-      direction on which of the two is the real one.
+    status: fixed
+    evidence: tests/unit/agents/test_agents_validate_their_json.py
+    verdict_note: null
+    correction: >-
+      The owner's direction was that the rule is real, so the agents were
+      migrated. Measured before each migration, with the sharpest first:
+      `ParallelPlanner._plan_subtask` is declared `list[dict[str, str]] | None`
+      and was observed returning a str, a dict and a list of ints, all three
+      escaping into `_assemble_candidates`. `SwarmResult` was constructed
+      outside the synthesizer's try block, so a wrong-typed `clusters` or
+      `synthesis` raised out of `synthesize()` and lost the whole swarm.
+      `OptimizerAgent._parse_edits` collapsed three different malformed shapes
+      to `[]` with one generic warning. `PlannerAgent` carried a fourth JSON
+      extractor that was measurably STRONGER than the shared one on two real
+      shapes, so `extract_json_text` gained its raw_decode step before the
+      planner's copy was deleted. Ceiling 17 -> 7; the seven that remain were
+      each triaged and kept.
 
-  # ── R6 remainder — the redactor that was declared and could not be wired ──
-
-  # ── Phase 0 / D13-D16 — the fail-open policy, decided ────────────────
   - id: PH0-1
     wave: Phase0
     location: weebot/application/agents/executor/_tool_executor.py:90
