@@ -196,7 +196,16 @@ class CompletedState(FlowState):
             yield completed
 
             # ── Save completed plan as template for reuse ────
-            if context._plan and getattr(context, "_state_repo", None) is not None:
+            # Gated: see PLAN_TEMPLATE_CACHE_ENABLED in config/feature_flags.py.
+            # `is_enabled` reads the flags module at call time, so a test can
+            # set the attribute rather than reload the module.
+            from weebot.config.feature_flags import is_enabled as _flag_enabled
+
+            if (
+                _flag_enabled("PLAN_TEMPLATE_CACHE_ENABLED")
+                and context._plan
+                and getattr(context, "_state_repo", None) is not None
+            ):
                 try:
                     from weebot.domain.services.plan_template_cache import compute_task_hash
                     from weebot.domain.models.plan_template import PlanTemplate
