@@ -82,7 +82,10 @@ class CreatePlanHandler(CommandHandler):
                         command.session_id[:8],
                     )
             except Exception as exc:
-                logger.debug("Template cache lookup skipped: %s", exc)
+                # WARNING, not DEBUG. Both calls in this block raised TypeError
+                # against the repository's real signatures, and at DEBUG that
+                # was indistinguishable from "no templates matched". (D76.)
+                logger.warning("Template cache lookup failed: %s", exc, exc_info=True)
 
             planner = PlannerAgent(llm=self._llm, event_bus=self._event_bus, **planner_cfg)
 

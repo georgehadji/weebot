@@ -589,18 +589,25 @@ class SQLiteStateRepository(StateRepositoryPort):
     # ── Plan templates ───────────────────────────────────────────
 
     async def save_plan_template(
-        self, template_id: str, task_hash: str, task_description: str, plan_json: str
+        self,
+        template_id: str,
+        task_hash: str,
+        task_description: str,
+        plan_json: str,
+        success_score: float = 1.0,
     ) -> None:
         await self._init_helpers()
-        await self._plan_templates.save(template_id, task_hash, task_description, plan_json)  # type: ignore[union-attr]
+        await self._plan_templates.save(  # type: ignore[union-attr]
+            template_id, task_hash, task_description, plan_json, success_score
+        )
 
-    async def find_plan_templates_by_hash(self, task_hash: str) -> dict | None:
+    async def find_plan_templates_by_hash(self, task_hash: str, limit: int = 3) -> list[dict]:
         await self._init_helpers()
-        return await self._plan_templates.find_by_hash(task_hash)  # type: ignore[union-attr]
+        return await self._plan_templates.find_by_hash(task_hash, limit)  # type: ignore[union-attr]
 
-    async def list_all_plan_templates(self) -> list[dict]:
+    async def list_all_plan_templates(self, limit: int = 200) -> list[dict]:
         await self._init_helpers()
-        return await self._plan_templates.list_all()  # type: ignore[union-attr]
+        return await self._plan_templates.list_all(limit)  # type: ignore[union-attr]
 
     async def increment_template_use(self, template_id: str) -> None:
         await self._init_helpers()

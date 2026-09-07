@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, StepStatus as EventStepStatus
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class MetaAnalysisState(FlowState):
         session = context._session
 
         # ── Gather trajectory data ──
-        task_description = session.context.original_task or prompt or "(no task)"
+        task_description = task_text(context, prompt) or "(no task)"
         plan_summary = f"{plan.title}: {plan.message}" if plan else "(no plan)"
 
         step_results: list[tuple[str, str]] = []

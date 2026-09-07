@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.application.services.plan_critic import PlanCriticService
 from weebot.domain.models.event import AgentEvent, ErrorEvent
 from weebot.domain.models.plan import PlanCritique
@@ -67,7 +67,7 @@ class CritiquingState(FlowState):
 
         # Build critique context
         critique_context = {
-            "task": prompt,
+            "task": task_text(context, prompt),
             "tools": (
                 [t.name for t in context._tools] if hasattr(context._tools, "__iter__") else []
             ),

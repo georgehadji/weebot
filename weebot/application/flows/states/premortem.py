@@ -15,7 +15,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, ThoughtEvent
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class PremortmState(FlowState):
             return
 
         analyzer = PremortmAnalyzer(llm=context._llm)
-        risks = await analyzer.analyze(plan, prompt)
+        risks = await analyzer.analyze(plan, task_text(context, prompt))
 
         if risks:
             # Inject risk notes into plan message so PlannerAgent / executor can see them

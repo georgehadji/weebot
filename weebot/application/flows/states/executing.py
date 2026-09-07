@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.audit import AuditVerdict
 from weebot.domain.models.event import (
     AgentEvent,
@@ -321,7 +321,7 @@ class ExecutingState(FlowState):
         _violations = (
             []
             if context._session.get_fact(_ack_key)
-            else self._constraint_violations(context, step, prompt)
+            else self._constraint_violations(context, step, task_text(context, prompt))
         )
         if _violations:
             _violation_text = "; ".join(c.text for c in _violations[:2])

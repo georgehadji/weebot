@@ -342,7 +342,7 @@ candidates:
     location: weebot/application/flows/plan_act_flow.py:712
     claim: "Terminate-with-next-step returns without `set_state`, so `prompt_consumed` is never reset"
     status: cleared
-    evidence: tests/unit/application/flows/test_the_prompt_reset_is_dead.py
+    evidence: tests/unit/application/flows/test_a_state_gets_the_value_it_asks_for.py
     verdict_note: >-
       Cleared as recorded and REPLACED by D74: the conclusion is right and the
       mechanism is backwards. `prompt_consumed` is indeed never reset, but not
@@ -354,26 +354,77 @@ candidates:
     wave: W3
     location: weebot/application/flows/plan_act_flow.py:712, weebot/application/flows/agent_session_manager.py:76
     claim: "The run loop's prompt_consumed reset is dead: set_state writes both sides of the comparison it depends on"
-    status: confirmed
-    evidence: tests/unit/application/flows/test_the_prompt_reset_is_dead.py
-    verdict_note: >-
-      VERIFIED-EXECUTED through the real run loop: PlanningState received
-      'THE ORIGINAL TASK' and ExecutingState, a different state type one
-      transition later, received ''. So the first state to yield an event
-      consumes the prompt and no later state ever sees it, against the stated
-      intent that "each FlowState gets one chance at the prompt".
-      `PlanningState:92-99` already carries a local workaround with a comment
-      naming this flag, which is corroborating evidence someone hit the
-      consequence and patched around it. The one writer that would trip the
-      reset, `AgentSessionManager.set_state` (`flow._state = state` with no
-      `_last_state_type`), is a near-duplicate transition implementation with
-      no callers at all.
-      NOT REPAIRED, and deliberately so: making the reset fire changes what
-      every state is handed — `ExecutingState` passes its prompt to the
-      executor as `user_input` — which is a change to the product's model
-      inputs across the board, not the repair of a stated contract, and it
-      cannot be validated by the test suite. Needs the owner's call. The
-      current behaviour is pinned by a tripwire that fails the day it changes.
+    status: fixed
+    evidence: tests/unit/application/flows/test_a_state_gets_the_value_it_asks_for.py
+    verdict_note: null
+    correction: >-
+      The mechanism was right and the repair was not the obvious one. Making the
+      reset fire would have been wrong: measured against the code that reads the
+      value, `prompt` carries two incompatible meanings. Two of the three uses in
+      `ExecutingState` want the TURN INPUT and are correct today — the executor
+      appends it as a user turn "so the LLM sees the answer instead of calling
+      ask_human again", and `learn_from_correction` mines it for behavioural
+      rules — so re-handing the original task on every re-entry would replay the
+      task to the model mid-plan and record it as a correction. Six other states
+      (Critiquing, Reviewing, Updating, Premortm, MetaAnalysis, Completed) want
+      the TASK and were reading ''.
+      Measured through the real run loop before the fix: 1 of 13 state
+      activations received anything at all. The dead reset and the
+      `_last_state_type` field that existed only to serve it are deleted; the six
+      task-wanting sites now call `task_text`, which is the fallback
+      `PlanningState` had already written inline with a comment naming the flag.
+      The turn-input contract is pinned by its own test, which fails if either
+      site is switched to `task_text`.
+
+  - id: D75
+    wave: W3
+    location: weebot/application/flows/states/completed.py:226
+    claim: "CompletedState calls save_plan_template(template) — one argument against a four-parameter method — so no plan template has ever been stored"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      Found while measuring D74, whose value at `CompletedState` this call is the
+      only consumer of. VERIFIED-EXECUTED: the call raises
+      "save_plan_template() missing 3 required positional arguments: 'task_hash',
+      'task_description', and 'plan_json'" into an `except Exception:
+      logger.debug(...)`, on every completed run, so the `plan_templates` table
+      has never held a row. The handler now logs at WARNING with a traceback.
+
+  - id: D76
+    wave: W3
+    location: weebot/domain/services/plan_template_cache.py:150, weebot/application/cqrs/handlers/create_plan_handler.py:69
+    claim: "find_matching_templates calls the repository with arguments it does not accept, then treats rows as PlanTemplate objects"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      Three defects in one function. VERIFIED-EXECUTED:
+      "find_plan_templates_by_hash() got an unexpected keyword argument 'limit'".
+      Past that, `find_by_hash` returned `dict | None` and its value was returned
+      straight out of a function annotated `list[PlanTemplate]`, and the Jaccard
+      path called `tpl.task_description` on dict rows. Both sides reach each
+      other through `repo: Any`, which is why nothing compared the call to the
+      signature; the new tests bind the AST call site against
+      `inspect.signature` so a future divergence fails at test time rather than
+      in a DEBUG log. The handler now logs at WARNING with a traceback.
+
+  - id: D77
+    wave: W3
+    location: weebot/infrastructure/persistence/_behavioral_rule_repo.py:116
+    claim: "PlanTemplateRepo.save never persisted success_score, against a column declared NOT NULL DEFAULT 1.0"
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_the_plan_template_cache_round_trips.py
+    verdict_note: null
+    correction: >-
+      The parameter was absent from the signature and the column from the INSERT.
+      Had the write in D75 ever run, every template would have been stored as a
+      perfect one — which is precisely the failure P3 fixed one layer up, where
+      `CompletedState` computes the score from the ratio of COMPLETED steps so a
+      mostly-failed plan is not retrieved as a model to copy. P3's fix was
+      correct and would have been discarded at the persistence boundary.
+      After: a plan with 2 of 3 steps COMPLETED persists 0.67, and the exact-hash
+      lookup orders by success_score DESC.
 
   - id: D21
     wave: W3

@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.flows.plan_act_flow import PlanActFlow
-from weebot.application.flows.states.base import AgentStatus, FlowState
+from weebot.application.flows.states.base import AgentStatus, FlowState, task_text
 from weebot.domain.models.event import AgentEvent, DoneEvent, PlanEvent
 from weebot.domain.models.plan import PlanStatus, StepStatus
 from weebot.domain.models.session import SessionStatus
@@ -216,14 +216,30 @@ class CompletedState(FlowState):
                         1 for s in context._plan.steps if s.status == StepStatus.COMPLETED
                     )
                     score = round(succeeded_steps / total_steps, 2) if total_steps > 0 else 0.5
+
+                    # `prompt` is "" here — CompletedState is never a run's
+                    # first state — so this keyed every template it ever tried
+                    # to write on `compute_task_hash("")`, with an empty
+                    # description for the Jaccard fallback to match on. (D74.)
+                    _task = task_text(context, prompt)
                     template = PlanTemplate(
                         template_id=str(_uuid.uuid4()),
-                        task_hash=compute_task_hash(prompt),
-                        task_description=prompt[:500],
+                        task_hash=compute_task_hash(_task),
+                        task_description=_task[:500],
                         plan_json=_json.dumps(context._plan.model_dump(), default=str),
                         success_score=score,
                     )
-                    await context._state_repo.save_plan_template(template)
+                    # One positional argument where the repository declares
+                    # four. Every call raised TypeError into the handler below,
+                    # which logged it at DEBUG — so the plan_templates table has
+                    # never held a row. (D75.)
+                    await context._state_repo.save_plan_template(
+                        template.template_id,
+                        template.task_hash,
+                        template.task_description,
+                        template.plan_json,
+                        template.success_score,
+                    )
                     logger.info(
                         "Saved plan template (hash=%s, score=%.2f) for session %s",
                         template.task_hash,
@@ -231,7 +247,10 @@ class CompletedState(FlowState):
                         context._session.id[:8],
                     )
                 except Exception as exc:
-                    logger.debug("Plan template save skipped: %s", exc)
+                    # WARNING, not DEBUG. A save that cannot happen is worth
+                    # one line in a normal log; at DEBUG this hid a TypeError
+                    # on every completed run for the life of the feature.
+                    logger.warning("Plan template save failed: %s", exc, exc_info=True)
 
         # A plan that ran out of runnable steps is not the same as one that
         # worked. `Plan.is_complete()` is `all(is_done())` and `is_done()`
