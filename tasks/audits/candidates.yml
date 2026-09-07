@@ -593,9 +593,9 @@ candidates:
     wave: W4
     location: weebot/infrastructure/persistence/connection_pool.py
     claim: "`close()` drains only the idle queue; a checked-out read connection leaks its worker thread"
-    status: deferred
-    evidence: null
-    verdict_note: "Generated and read; not triggered within W4's budget."
+    status: fixed
+    evidence: tests/unit/infrastructure/persistence/test_pool_close_reaches_every_connection.py
+    verdict_note: null
 
   - id: D37
     wave: W4

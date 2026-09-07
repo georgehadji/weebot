@@ -56,6 +56,7 @@ class SQLiteConnectionPool:
         max_read_connections: int = 5,
         timeout: float = 30.0,
         enable_wal: bool = True,
+        close_drain_timeout: float = 5.0,
     ):
         """
         Initialize connection pool.
@@ -65,6 +66,10 @@ class SQLiteConnectionPool:
             max_read_connections: Maximum number of concurrent read connections
             timeout: Maximum seconds to wait for connection from pool
             enable_wal: Enable WAL mode for better concurrency
+            close_drain_timeout: Seconds close() waits for in-flight users to
+                finish before force-closing their connections. Deliberately far
+                shorter than ``timeout``: a shutdown path must never inherit a
+                request path's patience.
         """
         if aiosqlite is None:
             raise ImportError(
@@ -76,15 +81,25 @@ class SQLiteConnectionPool:
         self.max_read = max(max_read_connections, 1)
         self.timeout = timeout
         self.enable_wal = enable_wal
+        self.close_drain_timeout = close_drain_timeout
 
         # Connections
         self._write_conn: aiosqlite.Connection | None = None
         self._read_pool: asyncio.Queue[aiosqlite.Connection] = asyncio.Queue()
         self._read_semaphore = asyncio.Semaphore(self.max_read)
+        # Every read connection this pool has ever opened, queued or checked
+        # out. close() used to work from the idle queue alone, which cannot see
+        # a connection a reader is currently holding.
+        self._read_conns: list[aiosqlite.Connection] = []
 
         # State
         self._initialized = False
         self._closed = False
+        # Set the moment close() starts, so no new caller is admitted while the
+        # pool drains. Distinct from _closed, which still means "close() has
+        # finished and every connection is shut": a second close() must block
+        # on _lock and wait rather than return early on a half-closed pool.
+        self._closing = False
         self._lock = asyncio.Lock()
         # Serialises concurrent writers so they don't share an uncommitted
         # transaction on the single write connection (which would cause one
@@ -135,6 +150,7 @@ class SQLiteConnectionPool:
             for i in range(self.max_read):
                 conn = await aiosqlite.connect(str(self.db_path), timeout=self.timeout)
                 conn.row_factory = aiosqlite.Row
+                self._read_conns.append(conn)
                 await self._read_pool.put(conn)
                 logger.debug(f"Created read connection {i+1}/{self.max_read}")
 
@@ -155,7 +171,7 @@ class SQLiteConnectionPool:
         Raises:
             RuntimeError: If pool is closed
         """
-        if self._closed:
+        if self._closed or self._closing:
             raise RuntimeError("Connection pool is closed")
 
         if not self._initialized:
@@ -194,7 +210,7 @@ class SQLiteConnectionPool:
             RuntimeError: If pool is closed
             asyncio.TimeoutError: If no connection available within timeout
         """
-        if self._closed:
+        if self._closed or self._closing:
             raise RuntimeError("Connection pool is closed")
 
         if not self._initialized:
@@ -210,8 +226,18 @@ class SQLiteConnectionPool:
             try:
                 yield conn
             finally:
-                # Return connection to pool
-                await self._read_pool.put(conn)
+                if self._closed:
+                    # close() ran while this reader held the connection. Putting
+                    # it back would park a live connection — and its non-daemon
+                    # aiosqlite worker thread — on a queue nothing will ever
+                    # drain again. close() force-closes what it could not reach,
+                    # so there is nothing left to return it to.
+                    logger.debug(
+                        "Read connection released after pool close; not re-queued"
+                    )
+                else:
+                    # Return connection to pool
+                    await self._read_pool.put(conn)
 
     async def execute_write(self, sql: str, parameters: tuple | None = None) -> None:
         """
@@ -268,6 +294,30 @@ class SQLiteConnectionPool:
 
             logger.debug("Closing SQLite connection pool")
 
+            # ── Stop admitting new users, then drain the ones in flight ──
+            #
+            # close() used to go straight to the idle queue, which by
+            # construction cannot see a connection a reader is currently
+            # holding. Measured on a 3-reader pool with one reader mid-request:
+            # close() reported success, one aiosqlite worker thread was still
+            # alive, the leaked connection still served queries, and the reader
+            # then returned it to a queue nothing would drain again. Those
+            # worker threads are plain non-daemon threads (aiosqlite 0.22.1
+            # `Thread(target=_connection_worker_thread)`), so a process holding
+            # any reference to the pool hung forever in `threading._shutdown()`
+            # — a 20s timeout had to kill it.
+            #
+            # Closing the gate first means the drain waits only for users
+            # already in flight. Acquiring every read slot then proves no
+            # reader holds a connection, and taking the write lock proves no
+            # writer is mid-transaction. Both waits are bounded by
+            # close_drain_timeout, not by self.timeout: a shutdown that waits
+            # 30s per connection is its own failure. Whatever the drain does
+            # not win is force-closed below, so close() never returns with a
+            # connection still open.
+            self._closing = True
+            drained = await self._drain(self.close_drain_timeout)
+
             # Close write connection
             if self._write_conn:
                 try:
@@ -288,21 +338,60 @@ class SQLiteConnectionPool:
                 finally:
                     self._write_conn = None
 
-            # Close all read connections in pool
+            # Close every read connection this pool opened — not merely the
+            # ones that happen to be sitting in the idle queue.
             closed_count = 0
-            while not self._read_pool.empty():
+            for conn in self._read_conns:
                 try:
-                    conn = await self._read_pool.get()
                     await conn.close()
                     closed_count += 1
                 except Exception as e:
                     logger.warning(f"Error closing read connection: {e}")
+            self._read_conns.clear()
+            while not self._read_pool.empty():
+                self._read_pool.get_nowait()
 
             logger.debug(f"Closed {closed_count} read connections")
 
             self._closed = True
             self._initialized = False
-            logger.info("SQLite connection pool closed")
+            if drained:
+                logger.info("SQLite connection pool closed")
+            else:
+                logger.warning(
+                    "SQLite connection pool closed after force-closing connections still "
+                    "in use — in-flight queries on %s were interrupted",
+                    self.db_path,
+                )
+
+    async def _drain(self, timeout: float) -> bool:
+        """Wait for in-flight readers and the writer to finish.
+
+        Returns True if every user finished within ``timeout``. A False return
+        is not a failure to handle — it is the signal that the connections
+        closed next are being taken from someone.
+        """
+        acquired: list[asyncio.Semaphore | asyncio.Lock] = []
+        try:
+            async with asyncio.timeout(timeout):
+                for _ in range(self.max_read):
+                    await self._read_semaphore.acquire()
+                    acquired.append(self._read_semaphore)
+                await self._write_lock.acquire()
+                acquired.append(self._write_lock)
+            return True
+        except TimeoutError:
+            logger.warning(
+                "Pool for %s still had users after %.1fs; closing their connections anyway",
+                self.db_path,
+                timeout,
+            )
+            return False
+        finally:
+            # Release whatever was taken. Holding these past close() would
+            # deadlock any caller that has not yet noticed the pool is gone.
+            for primitive in acquired:
+                primitive.release()
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -326,6 +415,7 @@ class SQLiteConnectionPool:
             "available_read_connections": self._read_pool.qsize(),
             "initialized": self._initialized,
             "closed": self._closed,
+            "closing": self._closing,
             "wal_enabled": self.enable_wal,
         }
 
