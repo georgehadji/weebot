@@ -1,6 +1,15 @@
-import { ModelInfo, Session } from "@/types/events";
+import { AgentEvent, ModelInfo, Session } from "@/types/events";
 
-const API_BASE = "/api";
+function getApiBase(): string {
+  if (typeof window === "undefined") return "/api";
+  try {
+    const configured = localStorage.getItem("weebot_backend_url")?.trim();
+    if (!configured) return "/api";
+    return `${configured.replace(/\/$/, "")}/api`;
+  } catch {
+    return "/api";
+  }
+}
 
 /** Read API key from sessionStorage (set via ConnectionStatus component). */
 function _getApiKey(): string | null {
@@ -23,7 +32,7 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   try {
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${getApiBase()}${path}`, {
       ...options,
       headers: {
         ...mergedHeaders,
@@ -95,6 +104,8 @@ export const api = {
     }) => fetchApi<Session>("/sessions", { method: "POST", body: JSON.stringify(data) }),
 
     get: (id: string) => fetchApi<Session>(`/sessions/${id}`),
+
+    events: (id: string) => fetchApi<AgentEvent[]>(`/sessions/${id}/events`),
 
     delete: (id: string) => fetchApi<void>(`/sessions/${id}`, { method: "DELETE" }),
 

@@ -54,7 +54,8 @@ export default function SettingsPage() {
                 placeholder="http://localhost:8000"
               />
               <p className="text-xs text-muted-foreground">
-                Used by the Next.js API proxy to forward REST requests.
+                Used by REST requests from this browser. Leave it blank only if
+                the Next.js proxy is configured for your backend.
               </p>
             </div>
 

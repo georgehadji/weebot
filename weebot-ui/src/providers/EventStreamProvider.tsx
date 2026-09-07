@@ -52,8 +52,6 @@ interface EventStreamContextValue {
   getSessionMode: (sessionId: string) => ConnectionMode;
 }
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY_MS = 1000;
 
@@ -65,6 +63,22 @@ function getWsToken(): string | null {
     return sessionStorage.getItem("weebot_api_key");
   } catch {
     return null;
+  }
+}
+
+function getStreamUrls(): { ws: string; api: string } {
+  const defaultWs = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+  const defaultApi = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+  if (typeof window === "undefined") return { ws: defaultWs, api: defaultApi };
+  try {
+    const configuredWs = localStorage.getItem("weebot_ws_url")?.trim();
+    const configuredBackend = localStorage.getItem("weebot_backend_url")?.trim();
+    return {
+      ws: configuredWs || defaultWs,
+      api: configuredBackend ? `${configuredBackend.replace(/\/$/, "")}/api` : defaultApi,
+    };
+  } catch {
+    return { ws: defaultWs, api: defaultApi };
   }
 }
 
@@ -99,7 +113,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
         const token = getWsToken();
         const headers: Record<string, string> = {};
         if (token) headers["X-API-Key"] = token;
-        const response = await fetch(`${API_BASE}/events/stream`, {
+        const response = await fetch(`${getStreamUrls().api}/events/stream`, {
           headers,
           signal: controller.signal,
         });
@@ -138,7 +152,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
     (sessionId: string, conn: SessionConnection) => {
       conn.mode = "connecting";
       const token = getWsToken();
-      const url = `${WS_BASE}/sessions/${sessionId}${token ? `?token=${token}` : ""}`;
+      const url = `${getStreamUrls().ws}/sessions/${sessionId}${token ? `?token=${token}` : ""}`;
       const ws = new WebSocket(url);
       conn.ws = ws;
 
@@ -212,7 +226,7 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
   const connectPresence = useCallback(() => {
     const token = getWsToken();
-    const url = `${WS_BASE}${token ? `?token=${token}` : ""}`;
+    const url = `${getStreamUrls().ws}${token ? `?token=${token}` : ""}`;
     const ws = new WebSocket(url);
     presenceWsRef.current = ws;
 

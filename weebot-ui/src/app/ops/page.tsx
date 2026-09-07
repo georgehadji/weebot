@@ -31,7 +31,11 @@ interface LogEntry {
   raw: string;
 }
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+function getWsBase(): string {
+  const fallback = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
+  if (typeof window === "undefined") return fallback;
+  return localStorage.getItem("weebot_ws_url")?.trim() || fallback;
+}
 
 const HEALTH_DOT: Record<string, string> = {
   healthy: "bg-status-live",
@@ -53,7 +57,7 @@ export default function OpsPage() {
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(WS_BASE);
+    const ws = new WebSocket(getWsBase());
     ws.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data);

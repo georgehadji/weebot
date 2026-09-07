@@ -8,6 +8,7 @@ import { ConversationPane } from "@/components/conversation/ConversationPane";
 import { MissionDock } from "@/components/dock/Dock";
 import { SessionLifecycleStatus } from "@/components/conversation/Composer";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
+import { useSessionPresence } from "@/hooks/useSessionPresence";
 import { api } from "@/lib/api";
 import { AgentEvent, Session } from "@/types/events";
 
@@ -25,6 +26,21 @@ export default function SessionPage() {
   const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const { isConnected } = useSessionEvents(sessionId);
+  const presence = useSessionPresence();
+
+  useEffect(() => {
+    const update = presence.get(sessionId);
+    if (!update) return;
+    setSession((current) =>
+      current
+        ? {
+            ...current,
+            status: update.status as Session["status"],
+            title: update.title || current.title,
+          }
+        : current
+    );
+  }, [presence, sessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,9 +49,8 @@ export default function SessionPage() {
         const data = await api.sessions.get(sessionId);
         if (cancelled) return;
         setSession(data);
-        if (data.context?.events) {
-          setInitialEvents(data.context.events as AgentEvent[]);
-        }
+        const events = await api.sessions.events(sessionId);
+        if (!cancelled) setInitialEvents(events);
       } catch (e) {
         console.error("Failed to load session:", e);
       } finally {

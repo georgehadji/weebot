@@ -19,6 +19,12 @@ export function ConnectionStatus() {
     }
   });
 
+  const healthUrl = () => {
+    if (typeof window === "undefined") return "/api/health";
+    const configured = localStorage.getItem("weebot_backend_url")?.trim();
+    return configured ? `${configured.replace(/\/$/, "")}/api/health` : "/api/health";
+  };
+
   const checkConnection = async () => {
     setStatus("checking");
     setError(null);
@@ -32,7 +38,7 @@ export function ConnectionStatus() {
     }
     
     try {
-      const response = await fetch("/api/health", { headers });
+      const response = await fetch(healthUrl(), { headers });
       if (response.ok) {
         setStatus("connected");
       } else if (response.status === 401) {

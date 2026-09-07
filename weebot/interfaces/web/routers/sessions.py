@@ -128,6 +128,21 @@ async def get_session(
     return _session_to_response(session)
 
 
+@router.get("/{session_id}/events")
+async def get_session_events(
+    session_id: str,
+    http_request: Request,
+    state_repo: StateRepositoryPort = Depends(get_state_repo),
+) -> list[dict[str, Any]]:
+    """Return persisted event history so the UI can hydrate before streaming."""
+    session = await state_repo.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    await verify_session_ownership(http_request, session.user_id)
+    return [event.model_dump(mode="json", by_alias=True) for event in session.events]
+
+
 @router.delete("/{session_id}")
 async def delete_session(
     session_id: str,
