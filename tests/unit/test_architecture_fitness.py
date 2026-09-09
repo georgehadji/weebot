@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -23,50 +24,92 @@ ROOT = Path(__file__).resolve().parent.parent.parent / "weebot"
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def _walk_py(path: Path) -> list[Path]:
-    """Recursively find all ``.py`` files under *path*."""
-    return sorted(path.rglob("*.py"))
+@lru_cache(maxsize=None)
+def _walk_py(path: Path) -> tuple[Path, ...]:
+    """Recursively find all ``.py`` files under *path*.
+
+    Cached: twenty-odd tests ask for the same handful of directories.
+    """
+    return tuple(sorted(path.rglob("*.py")))
 
 
+# Phase 0.3. Both caches exist for one reason: this module walks the same ~800
+# source files from ~13 separate tests, and re-parsing them each time cost 8.8s
+# a pass -- the whole reason the suite ran 116s and blew its 60s budget. The
+# files cannot change mid-session, so parse each one once.
+#
+# The cached `ast.Module` is shared across tests. Nothing here mutates a tree;
+# if a future test needs to, it must copy first.
+@lru_cache(maxsize=None)
+def _source(path: Path) -> str:
+    """Read a source file once per session."""
+    return path.read_text(encoding="utf-8")  # noqa: PTH123 - the one real read
+
+
+@lru_cache(maxsize=None)
 def _parse(path: Path) -> ast.Module:
-    with open(path, encoding="utf-8") as f:
-        return ast.parse(f.read(), filename=str(path))
+    return ast.parse(_source(path), filename=str(path))
 
 
-def _module_imports(tree: ast.Module) -> list[str]:
-    """Return all module-level import targets (``import X`` / ``from X import``)."""
+@lru_cache(maxsize=None)
+def _nodes(tree: ast.Module) -> tuple[ast.AST, ...]:
+    """Every node in *tree*, walked once.
+
+    Keyed on the tree's identity, which is stable because `_parse` is itself
+    cached and hands back the same object every time. `ast.walk` over this
+    repository costs 6.8s a pass and a dozen tests each wanted one.
+    """
+    return tuple(ast.walk(tree))
+
+
+@lru_cache(maxsize=None)
+def _type_checking_node_ids(tree: ast.Module) -> frozenset[int]:
+    """`id()` of every node nested under an `if TYPE_CHECKING:` guard.
+
+    Computed once per module instead of once per import statement. The
+    previous form re-walked the whole tree for each `ImportFrom`, and walked
+    it again inside the membership test -- quadratic in module size, and the
+    single largest cost in the suite.
+    """
+    guarded: set[int] = set()
+    for node in _nodes(tree):
+        if isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
+            for inner in ast.walk(node):
+                guarded.add(id(inner))
+    return frozenset(guarded)
+
+
+@lru_cache(maxsize=None)
+def _module_imports(tree: ast.Module) -> tuple[str, ...]:
+    """All import targets except those under a TYPE_CHECKING guard."""
+    guarded = _type_checking_node_ids(tree)
     imports: list[str] = []
-    for node in ast.walk(tree):
+    for node in _nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            # Skip TYPE_CHECKING blocks
             if node.level is not None and node.level > 0:
                 continue
-            # Check if inside TYPE_CHECKING guard
-            for parent in ast.walk(tree):
-                if isinstance(parent, ast.If):
-                    guard = ast.unparse(parent.test)
-                    if "TYPE_CHECKING" in guard and node in ast.walk(parent):
-                        break
-            else:
-                if node.module:
-                    imports.append(node.module)
-    return imports
+            if id(node) in guarded:
+                continue
+            if node.module:
+                imports.append(node.module)
+    return tuple(imports)
 
 
-def _module_imports_including_type_checking(tree: ast.Module) -> list[str]:
+@lru_cache(maxsize=None)
+def _module_imports_including_type_checking(tree: ast.Module) -> tuple[str, ...]:
     """Return all import targets including those under TYPE_CHECKING."""
     imports: list[str] = []
-    for node in ast.walk(tree):
+    for node in _nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 imports.append(node.module)
-    return imports
+    return tuple(imports)
 
 
 def _module_defines_class(tree: ast.Module, cls_name: str) -> bool:
@@ -346,7 +389,7 @@ def test_ports_have_adapters():
                     if not search_dir.exists():
                         continue
                     for adapter_path in _walk_py(search_dir):
-                        content = adapter_path.read_text(encoding="utf-8")
+                        content = _source(adapter_path)
                         if pc in content and (f"({pc})" in content or f"class {pc}" in content):
                             adapter_found = True
                             break
@@ -538,7 +581,7 @@ def test_no_dynamic_imports():
     pattern = re.compile(r"__import__\(")
 
     for path in _walk_py(ROOT / "application"):
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         if pattern.search(content):
             rel = path.relative_to(ROOT.parent)
             violations.append(str(rel))
@@ -573,7 +616,7 @@ def test_persistence_at_emit():
     for path in _walk_py(ROOT / "application" / "flows"):
         if path.name in read_only_files:
             continue
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         # Flows that accept state_repo in __init__
         if "state_repo" in content:
             # Must call save_session somewhere (possibly in EventPublisher)
@@ -607,7 +650,7 @@ def test_no_blocking_calls_in_async():
     for path in _walk_py(ROOT):
         if "test_" in path.name:
             continue
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         # Only check files that contain async functions
         if "async def" not in content:
             continue
@@ -646,7 +689,7 @@ def test_no_settings_import_in_tools():
     settings_imports = ("from weebot.config.settings import WeebotSettings",)
 
     for path in _walk_py(ROOT / "tools"):
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         for imp in settings_imports:
             if imp in content:
                 # Check if it's behind TYPE_CHECKING (acceptable)
@@ -690,7 +733,7 @@ def test_repository_constructed_only_in_di():
     for path in _walk_py(ROOT):
         if "test_" in path.name or path.name == "__init__.py":
             continue
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         if "SQLiteStateRepository(" in content and "SQLiteStateRepository()" in content:
             rel = path.relative_to(ROOT.parent)
             rel_str = str(rel).replace("\\", "/")
@@ -791,7 +834,7 @@ def test_application_services_no_infra_imports():
         if path.name in tracked_exceptions:
             continue
         tree = _parse(path)
-        for node in ast.walk(tree):
+        for node in _nodes(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("weebot.infrastructure"):
@@ -866,7 +909,7 @@ def test_core_no_global_singletons_outside_di():
     for path in _walk_py(ROOT / "core"):
         if path.name in allowlisted_global_files:
             continue
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         if "global " in content:
             violations.append(path.name)
 
@@ -905,7 +948,7 @@ def test_god_modules_under_800_lines():
 
     violations: list[str] = []
     for path in _walk_py(ROOT / "application"):
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         lines = content.count("\n") + 1
         limit = line_allowlist.get(path.name, 800)
         if lines > limit:
@@ -988,7 +1031,7 @@ def test_orphan_ports_flagged():
 
     # Check di/ for registrations
     for path in _walk_py(di_dir):
-        content = path.read_text(encoding="utf-8")
+        content = _source(path)
         for cls_name in port_classes:
             if cls_name in content:
                 implemented.add(cls_name)
@@ -996,7 +1039,7 @@ def test_orphan_ports_flagged():
     # Check infrastructure/ for ports
     for path in _walk_py(infra_dir):
         tree = _parse(path)
-        for node in ast.walk(tree):
+        for node in _nodes(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("weebot.application.ports"):
@@ -1022,7 +1065,7 @@ def test_orphan_ports_flagged():
 def test_executor_cascade_methods_extracted():
     """Verify cascade methods were extracted from _base.py to _cascade.py."""
     base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
-    content = base_path.read_text(encoding="utf-8")
+    content = _source(base_path)
 
     # These method names should NOT appear in _base.py anymore
     extracted = [
@@ -1040,7 +1083,7 @@ def test_executor_cascade_methods_extracted():
 def test_executor_tool_methods_extracted():
     """Verify tool execution methods were extracted from _base.py."""
     base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
-    content = base_path.read_text(encoding="utf-8")
+    content = _source(base_path)
 
     # These method names should NOT appear in _base.py anymore
     extracted = [
@@ -1058,7 +1101,7 @@ def test_executor_tool_methods_extracted():
 def test_executor_context_methods_extracted():
     """Verify context/compression methods were extracted from _base.py."""
     base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
-    content = base_path.read_text(encoding="utf-8")
+    content = _source(base_path)
 
     extracted = ["_track_usage_and_maybe_compress", "_maybe_compress", "_reflect_on_screenshot"]
     violations = [m for m in extracted if re.search(rf"def {m}|self\.{m}", content)]
@@ -1108,7 +1151,7 @@ def test_error_handler_file_exists():
 def test_container_get_static_not_called_outside_di():
     """Container.get_static() was removed from executor._base.py during extraction."""
     base_path = ROOT / "application" / "agents" / "executor" / "_base.py"
-    content = base_path.read_text(encoding="utf-8")
+    content = _source(base_path)
     assert (
         "get_static" not in content
     ), "get_static should not be referenced in executor._base.py after extraction"
@@ -1186,7 +1229,7 @@ def test_no_module_level_global_pool_outside_di():
     """Module-level _global_pool must not exist outside DI-managed files."""
     violations = []
     for path in sorted((ROOT / "infrastructure" / "browser").rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
+        text = _source(path)
         if "_global_pool" in text:
             rel = path.relative_to(ROOT.parent)
             violations.append(str(rel))
@@ -1205,7 +1248,7 @@ def test_query_handlers_split():
     for path in (ROOT / "application" / "cqrs" / "handlers").glob("*.py"):
         if path.name == "__init__.py":
             continue
-        lines = len(path.read_text(encoding="utf-8").splitlines())
+        lines = len(_source(path).splitlines())
         if lines > 350:
             violations.append(path.name + ": " + str(lines) + " lines")
     assert not violations, "Over 300 lines: " + str(violations)
@@ -1539,10 +1582,13 @@ def _shell_execution_sites() -> list[str]:
             if "__pycache__" in path.parts:
                 continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
+                tree = _parse(path)
             except (SyntaxError, UnicodeDecodeError):
                 continue
-            for node in ast.walk(tree):
+            # Once per file, not once per call node: this line inside the loop
+            # below cost 23s of the suite's 116s all by itself.
+            rel = path.relative_to(ROOT.parent)
+            for node in _nodes(tree):
                 if not isinstance(node, ast.Call):
                     continue
                 name = ""
@@ -1550,7 +1596,6 @@ def _shell_execution_sites() -> list[str]:
                     name = node.func.attr
                 elif isinstance(node.func, ast.Name):
                     name = node.func.id
-                rel = path.relative_to(ROOT.parent)
                 if name == "create_subprocess_shell":
                     found.append(f"{rel}:{node.lineno}: create_subprocess_shell")
                 elif (
@@ -1617,12 +1662,21 @@ def test_there_is_exactly_one_flow_routing_table():
         "flow_state_machine.py": "second transition table",
         "wire_stategraph.py": "script that swapped the live table for the dead one",
     }
+    # Phase 0.3. This used to rglob `ROOT.parent` -- the whole repository --
+    # which walked `node_modules`, `.git`, the vendored GitNexus tree and,
+    # decisively, `.claude/worktrees/`. Other worktrees are other checkouts of
+    # this same repository, so the test reported a deleted file as "back"
+    # because a different branch still had it: a red that no change to this
+    # branch could clear. Scan the source roots this branch actually owns.
     root = ROOT.parent
+    search_roots = [ROOT, root / "cli", root / "scripts"]
     found = [
         f"{path.relative_to(root)} ({why})"
         for name, why in banned.items()
-        for path in root.rglob(name)
-        if ".venv" not in path.parts and "__pycache__" not in path.parts
+        for search_root in search_roots
+        if search_root.is_dir()
+        for path in search_root.rglob(name)
+        if "__pycache__" not in path.parts
     ]
     assert found == [], "a deleted routing table is back:\n  " + "\n  ".join(found)
 
@@ -1671,10 +1725,10 @@ def _llm_client_construction_sites() -> dict[str, str]:
         if rel_parts[: len(_ADAPTER_PACKAGE)] == _ADAPTER_PACKAGE:
             continue  # the factory and the adapters themselves
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+            tree = _parse(path)
         except (SyntaxError, UnicodeDecodeError):
             continue
-        for node in ast.walk(tree):
+        for node in _nodes(tree):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
                 continue
             name = node.func.id
