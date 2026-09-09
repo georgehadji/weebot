@@ -14,6 +14,7 @@ Supports two auth modes (``WEEBOT_AUTH_MODE``):
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 
@@ -40,34 +41,66 @@ def _get_legacy_api_key() -> str | None:
     return os.environ.get("WEEBOT_API_KEY", "") or None
 
 
+def _derived_principal(api_key: str) -> str:
+    """The stable pseudo-anonymous principal for a *verified* key."""
+    return f"key-{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+
+
 def get_current_user_id(request: Request) -> str:
     """Extract or derive the authenticated user ID from the current request.
 
     In legacy mode (default), this is a synchronous FastAPI dependency:
-    derives a stable pseudo-anonymous user ID from the API key itself
-    via SHA-256 (as before).
+    derives a stable pseudo-anonymous user ID via SHA-256 from an API key
+    that matched the configured ``WEEBOT_API_KEY``.
 
     In store mode, callers should use :func:`get_current_user_id_async`
     instead, which resolves through the ``ApiKeyPort``.
 
-    When no API key is supplied, returns ``"anonymous"``.
+    Returns ``"anonymous"`` when no API key is supplied, when the supplied
+    key does not match, and when no key is configured at all.
     """
     if _is_legacy_mode():
+        # This branch used to derive a principal from ANY non-empty header
+        # value without ever calling _get_legacy_api_key() -- the store-mode
+        # branch six lines below always compared, this one never did. So the
+        # function named "get_current_user_id" authenticated nothing, and
+        # require_mutation_identity, whose whole job is to reject callers
+        # without an identity, was satisfied by an arbitrary string.
+        #
+        # In practice APIKeyMiddleware (interfaces/web/main.py:441-462) had
+        # already rejected such a request with 401 before any endpoint
+        # dependency ran, and _websocket_auth guards the socket path, so this
+        # was not reachable as an unauthenticated bypass on a default
+        # deployment -- verified by the tests below. It was reachable with
+        # WEEBOT_API_KEY unset and web_require_auth false, where the operator
+        # has opened reads deliberately and could still reasonably believe
+        # mutations stayed gated.
+        #
+        # Either way, a function whose safety comes entirely from a middleware
+        # installed somewhere else is one new call site away from being wrong:
+        # any endpoint on an exempt path, any new WebSocket handler, anything
+        # outside the app. It compares now.
         api_key = request.headers.get("X-API-Key", "")
-        if api_key:
-            return f"key-{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+        legacy_key = _get_legacy_api_key()
+        if not api_key or not legacy_key:
+            # No key configured means no principal can be minted. Fail closed:
+            # every caller is anonymous, and require_mutation_identity keeps
+            # mutations to loopback.
+            return "anonymous"
+        if hmac.compare_digest(api_key, legacy_key):
+            return _derived_principal(api_key)
         return "anonymous"
 
     # In store mode, the sync version falls back to legacy derivation.
     # Callers that need real principal resolution should use the async version.
     legacy_key = _get_legacy_api_key()
     api_key = request.headers.get("X-API-Key", "")
-    if api_key and legacy_key and api_key == legacy_key:
+    if api_key and legacy_key and hmac.compare_digest(api_key, legacy_key):
         logger.warning(
             "Auth via legacy WEEBOT_API_KEY (deprecated). "
             "Set WEEBOT_AUTH_MODE=store and issue per-principal keys."
         )
-        return f"key-{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+        return _derived_principal(api_key)
     return "anonymous"
 
 
@@ -110,7 +143,7 @@ async def get_current_user_id_async(
 
     # Fall back to legacy check for backward compat during migration
     legacy_key = _get_legacy_api_key()
-    if legacy_key and api_key == legacy_key:
+    if legacy_key and hmac.compare_digest(api_key, legacy_key):
         logger.warning(
             "Auth via legacy WEEBOT_API_KEY (deprecated) — store mode without matching key."
         )
@@ -209,7 +242,7 @@ async def _resolve_user(request: Request) -> str:
 
     # Fall back to legacy check for backward compat during migration
     legacy_key = _get_legacy_api_key()
-    if legacy_key and api_key == legacy_key:
+    if legacy_key and hmac.compare_digest(api_key, legacy_key):
         logger.warning(
             "Auth via legacy WEEBOT_API_KEY (deprecated). "
             "Set WEEBOT_AUTH_MODE=store and issue per-principal keys."

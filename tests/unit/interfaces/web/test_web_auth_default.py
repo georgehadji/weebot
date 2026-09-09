@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from weebot.interfaces.web.auth import require_mutation_identity
+from weebot.interfaces.web.auth import get_current_user_id, require_mutation_identity
 from weebot.interfaces.web.main import create_app
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -132,3 +132,60 @@ class TestRequireMutationIdentity:
         request.client.host = "127.0.0.1"
 
         await require_mutation_identity(request)
+
+
+class TestLegacyModeValidatesTheKey:
+    """Phase 1.1 — legacy mode derived a principal without ever comparing.
+
+    `get_current_user_id` read `X-API-Key`, hashed whatever was there and
+    returned it as an identity; `_get_legacy_api_key()` was never called on
+    that path. So `require_mutation_identity`, whose job is to reject callers
+    with no identity, accepted an arbitrary header value.
+
+    APIKeyMiddleware rejected such a request with 401 before any endpoint
+    dependency ran (`TestAPIKeyMiddleware.test_api_key_wrong_key` above), so
+    a default deployment was not open. That is a second control, not this
+    one, and it is only installed when `weebot_api_key` is set.
+    """
+
+    def _request(self, key: str | None):
+        request = MagicMock(spec=Request)
+        request.headers = {"X-API-Key": key} if key is not None else {}
+        request.client = MagicMock()
+        request.client.host = "10.0.0.5"
+        return request
+
+    @pytest.fixture(autouse=True)
+    def _legacy(self, monkeypatch):
+        monkeypatch.setenv("WEEBOT_AUTH_MODE", "legacy")
+
+    def test_the_configured_key_yields_a_stable_principal(self, monkeypatch):
+        monkeypatch.setenv("WEEBOT_API_KEY", "secret")
+        first = get_current_user_id(self._request("secret"))
+        second = get_current_user_id(self._request("secret"))
+        assert first != "anonymous"
+        assert first == second
+
+    def test_a_wrong_key_is_anonymous(self, monkeypatch):
+        monkeypatch.setenv("WEEBOT_API_KEY", "secret")
+        assert get_current_user_id(self._request("attacker-chosen")) == "anonymous"
+
+    def test_no_key_configured_is_anonymous(self, monkeypatch):
+        """Fail closed. Nothing to compare against means no principal."""
+        monkeypatch.delenv("WEEBOT_API_KEY", raising=False)
+        assert get_current_user_id(self._request("anything-at-all")) == "anonymous"
+
+    def test_no_header_is_anonymous(self, monkeypatch):
+        monkeypatch.setenv("WEEBOT_API_KEY", "secret")
+        assert get_current_user_id(self._request(None)) == "anonymous"
+
+    async def test_a_wrong_key_cannot_mutate_from_off_host(self, monkeypatch):
+        """The whole point of the gate, end to end."""
+        monkeypatch.setenv("WEEBOT_API_KEY", "secret")
+        with pytest.raises(HTTPException) as exc:
+            await require_mutation_identity(self._request("attacker-chosen"))
+        assert exc.value.status_code == 403
+
+    async def test_the_right_key_may_mutate_from_off_host(self, monkeypatch):
+        monkeypatch.setenv("WEEBOT_API_KEY", "secret")
+        await require_mutation_identity(self._request("secret"))
