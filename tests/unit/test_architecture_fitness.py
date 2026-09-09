@@ -1058,6 +1058,115 @@ def test_orphan_ports_flagged():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Registered is not wired
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Every container binding that nothing resolves, by name. The count alone
+# lives in tasks/quality/ceilings.toml and `scripts/lint_di_wiring.py` gates
+# it; this pins the membership, which the count cannot see. If one binding is
+# wired in the same commit that another goes dead, the count stays at 18 and
+# the ratchet passes -- a substitution, which is the exact failure class this
+# whole instrument exists to catch, one level up.
+#
+# Three of these are controls the system is documented as having:
+#
+#   llm_pool             the global LLM concurrency bound. `_base.py:283-290`
+#                        builds CascadeExecutor without `llm_pool=`, so the
+#                        bounded branch at `_cascade.py:292` has never run.
+#                        `tasks/audits/weebot_architecture_audit_v3.md:109`
+#                        certifies the opposite.
+#   trust_report_service ~40 lines guarded on it in `states/completed.py:379`
+#                        are unreachable.
+#   event_pipeline       WP-4 middleware, built at startup and discarded.
+#
+# Four more -- idea_gate, intent_review, main_review, skill_curator -- are
+# bypassed by consumers that kept a direct import, so the DI-configured
+# variant, with its retry policy and cost tracking, never applies.
+#
+# Phase 2.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md decides each
+# one: wire it or delete it. Remove a name here in the commit that does either,
+# and lower the ceiling with it.
+_UNRESOLVED_DI_KEYS = {
+    "ConfigAdapter",
+    "EventPublisher",
+    "SandboxBackendAdapter",
+    "TaskRouterPort",
+    "activity_stream",
+    "browser_inspector_tool",
+    "dispatch_agents_tool",
+    "event_pipeline",
+    "idea_gate",
+    "intent_review",
+    "llm_pool",
+    "main_review",
+    "plan_act",
+    "response_cache",
+    "skill_curator",
+    "skill_publisher",
+    "trust_report_service",
+    "workflow_orchestrator_tool",
+}
+
+
+def _di_wiring():
+    """Load the census from the ratchet script, by path.
+
+    Imported rather than reimplemented so the test and the CI gate cannot
+    disagree about what "resolved" means.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "lint_di_wiring", ROOT.parent / "scripts" / "lint_di_wiring.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_no_new_unresolved_di_bindings():
+    """The set of dead bindings is exact in both directions."""
+    module = _di_wiring()
+    actual = {key for key, _ in module.find_orphans()}
+    where = dict(module.find_orphans())
+
+    new = sorted(actual - _UNRESOLVED_DI_KEYS)
+    assert new == [], "a DI binding was registered and never resolved:\n  " + "\n  ".join(
+        f"{where[k]}: {k}" for k in new
+    )
+
+    wired = sorted(_UNRESOLVED_DI_KEYS - actual)
+    assert wired == [], (
+        "these bindings are resolved now — remove them from _UNRESOLVED_DI_KEYS "
+        "and lower `unresolved_di_keys` in tasks/quality/ceilings.toml:\n  " + "\n  ".join(wired)
+    )
+
+
+def test_the_di_ceiling_matches_the_named_set():
+    """The two records of the same debt may not drift apart."""
+    import tomllib
+
+    ceilings = tomllib.loads(
+        _source(ROOT.parent / "tasks" / "quality" / "ceilings.toml"),
+    )["ceilings"]
+    assert ceilings["unresolved_di_keys"] == len(_UNRESOLVED_DI_KEYS)
+
+
+def test_the_census_recognises_a_wired_binding():
+    """Guards the detector itself.
+
+    A resolver set that grew too permissive would report zero orphans and read
+    as a clean bill of health. `StateRepositoryPort` is resolved in several
+    places; if it ever shows up as an orphan, the census has broken rather
+    than the wiring.
+    """
+    module = _di_wiring()
+    registered, resolved = module.census()
+    assert "StateRepositoryPort" in registered
+    assert "StateRepositoryPort" in resolved
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # WP-1: Executor extraction verification
 # ═════════════════════════════════════════════════════════════════════════════
 

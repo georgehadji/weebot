@@ -74,3 +74,17 @@ unused_locals = 32
 # why this is a ceiling and not a ban: a count cannot tell those apart.
 # Measured by: scripts/lint_agent_json_parsing.py
 agent_json_parsing = 7
+
+# Container bindings that nothing ever resolves.
+# The other six ratchets count things that are visibly wrong in a file. This
+# one counts something that is invisible in every file: `register("llm_pool",
+# ...)` reads correctly, the factory it names reads correctly, and the guard
+# that would use it reads correctly -- and the bounded branch of that guard has
+# never executed, because no call site passes the pool. Import-linter and the
+# AST fitness suite both pass over the whole arrangement, because both answer
+# "may this module reference that one" and the answer is yes.
+# Three controls were in that state when this was first measured: `llm_pool`,
+# `trust_report_service` and `event_pipeline`. Phase 2.3 decides each of the 18
+# -- wire it or delete it -- and phase 2.4 takes this to 0.
+# Measured by: scripts/lint_di_wiring.py
+unresolved_di_keys = 18
