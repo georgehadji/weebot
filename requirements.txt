@@ -70,7 +70,7 @@ alembic>=1.14.0
 # CLI & UI
 click==8.4.2
 rich==14.3.3
-prompt-toolkit>=3.0.0
+prompt-toolkit>=3.0.52
 colorama==0.4.6
 
 # Async
