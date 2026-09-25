@@ -12,6 +12,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
+from weebot.core.mcp_naming import build_namespaced_name
+
 try:
     from mcp.client.streamable_http import streamablehttp_client
 
@@ -192,9 +194,13 @@ class MCPClientManager:
         """Return all MCP tools as OpenAI function specs."""
         all_tools: list[dict[str, Any]] = []
         for server_name, tools in self._tools_cache.items():
-            prefix = server_name if server_name.startswith("mcp_") else f"mcp_{server_name}"
             for tool in tools:
-                tool_name = f"{prefix}_{tool.name}"
+                # Was `mcp_{server}_{tool}`, single underscores. Nothing that
+                # consumed these names agreed with that spelling: the trust
+                # fence tests for `mcp__`, and MCPToolRegistryBridge parses
+                # for it and skipped every tool that failed -- so it
+                # registered nothing, from any server. See core/mcp_naming.py.
+                tool_name = build_namespaced_name(server_name, tool.name)
                 all_tools.append(
                     {
                         "type": "function",
@@ -211,12 +217,17 @@ class MCPClientManager:
         """Call an MCP tool by its prefixed name with health check."""
         server_name = None
         original_name = None
-        servers = self._config.get("mcpServers", {})
-        for srv_name in servers.keys():
-            expected_prefix = srv_name if srv_name.startswith("mcp_") else f"mcp_{srv_name}"
-            if tool_name.startswith(f"{expected_prefix}_"):
-                server_name = srv_name
-                original_name = tool_name[len(expected_prefix) + 1 :]
+        # Resolve through the same builder that produced the name, against the
+        # tools actually discovered. Reconstructing the prefix and slicing it
+        # off, as this used to, loses whatever build_namespaced_name sanitised:
+        # a server or tool spelled with a hyphen never round-trips. Matching
+        # built name to built name cannot drift from the producer.
+        for srv_name, tools in self._tools_cache.items():
+            for tool in tools:
+                if build_namespaced_name(srv_name, tool.name) == tool_name:
+                    server_name, original_name = srv_name, tool.name
+                    break
+            if server_name:
                 break
         if not server_name or not original_name:
             raise ValueError(f"Cannot parse MCP tool name: {tool_name}")

@@ -16,6 +16,11 @@ import logging
 import warnings
 from typing import Any
 
+from weebot.core.mcp_naming import (
+    MCP_NAMESPACE_PREFIX,
+    build_namespaced_name,
+    parse_namespaced_name,
+)
 from weebot.domain.models.mcp import MCPServerConfig, MCPToolInfo
 from weebot.tools.tool_registry import RoleBasedToolRegistry
 
@@ -23,34 +28,15 @@ logger = logging.getLogger(__name__)
 
 # Namespace prefix for MCP tools to avoid collision with native tools.
 # Pattern: mcp__<server_name>__<original_tool_name>
-MCP_TOOL_PREFIX = "mcp__"
-
-
-def _build_namespaced_name(server_name: str, original_name: str) -> str:
-    """Build a globally unique, namespaced tool name.
-
-    Pattern: ``mcp__<server>__<tool>``  (double underscore separators)
-    Example: ``mcp__stripe__create_payment_intent``
-    """
-    # Sanitize: replace dots and hyphens that could confuse parsing
-    safe_server = server_name.replace(".", "_").replace("-", "_")
-    safe_tool = original_name.replace(".", "_").replace("-", "_")
-    return f"{MCP_TOOL_PREFIX}{safe_server}__{safe_tool}"
-
-
-def _parse_namespaced_name(namespaced: str) -> tuple[str, str] | None:
-    """Reverse ``_build_namespaced_name``.
-
-    Returns ``(server_name, original_tool_name)`` or ``None`` if
-    the name doesn't follow the MCP naming convention.
-    """
-    if not namespaced.startswith(MCP_TOOL_PREFIX):
-        return None
-    rest = namespaced[len(MCP_TOOL_PREFIX) :]
-    parts = rest.split("__", 1)
-    if len(parts) != 2:
-        return None
-    return (parts[0], parts[1])
+#
+# These three were a private, correct copy of the convention. MCPClientManager
+# held a second, different one, and this parser silently dropped every tool
+# that came from it -- so `_register_all_tools` registered nothing, from any
+# server, and logged the zero it registered at INFO. Both sides read from
+# core/mcp_naming.py now. The aliases stay because callers import them.
+MCP_TOOL_PREFIX = MCP_NAMESPACE_PREFIX
+_build_namespaced_name = build_namespaced_name
+_parse_namespaced_name = parse_namespaced_name
 
 
 def _apply_tool_filters(

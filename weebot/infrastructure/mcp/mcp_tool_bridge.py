@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from weebot.application.ports.mcp_tool_port import MCPToolPort
+from weebot.core.mcp_naming import parse_namespaced_name
 from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
 from weebot.tools.base import BaseTool, ToolResult
 
@@ -95,12 +96,12 @@ class MCPToolBridge(MCPToolPort):
         name = func.get("name", "unknown")
         description = func.get("description", f"MCP tool: {name}")
 
-        mcp_tool_name = name
-        # Strip server prefix to get original tool name
-        if "_" in name:
-            parts = name.split("_", 1)
-            if len(parts) == 2:
-                mcp_tool_name = parts[1]
+        # Strip the namespace to recover the tool's own name. This used to be
+        # `name.split("_", 1)[1]`, which on `mcp_xapi_search` yielded
+        # `xapi_search` -- the server name still attached -- and on the
+        # namespaced form would yield `_xapi__search`. Neither is the tool.
+        parsed = parse_namespaced_name(name)
+        mcp_tool_name = parsed[1] if parsed else name
 
         parameters = func.get("parameters", {"type": "object", "properties": {}})
 
