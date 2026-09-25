@@ -1120,11 +1120,23 @@ def _di_wiring():
     return module
 
 
+@lru_cache(maxsize=None)
+def _di_census():
+    """``(registered, resolved)`` for the whole tree, computed once.
+
+    The census parses every source file. These tests used to run it four
+    times per session -- one of them twice, just to build an error message --
+    and on a cold Windows run a single pass could exceed the 60s per-test
+    budget. The source does not change mid-session, so neither does this.
+    """
+    return _di_wiring().census()
+
+
 def test_no_new_unresolved_di_bindings():
     """The set of dead bindings is exact in both directions."""
-    module = _di_wiring()
-    actual = {key for key, _ in module.find_orphans()}
-    where = dict(module.find_orphans())
+    registered, resolved = _di_census()
+    where = {key: at for key, at in registered.items() if key not in resolved}
+    actual = set(where)
 
     new = sorted(actual - _UNRESOLVED_DI_KEYS)
     assert new == [], "a DI binding was registered and never resolved:\n  " + "\n  ".join(
@@ -1156,8 +1168,7 @@ def test_the_census_recognises_a_wired_binding():
     places; if it ever shows up as an orphan, the census has broken rather
     than the wiring.
     """
-    module = _di_wiring()
-    registered, resolved = module.census()
+    registered, resolved = _di_census()
     assert "StateRepositoryPort" in registered
     assert "StateRepositoryPort" in resolved
 
