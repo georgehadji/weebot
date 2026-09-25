@@ -79,6 +79,27 @@ class AllModelsTrippedError(WeebotError):
         self.severity = ErrorSeverity.CRITICAL
 
 
+class LLMCapacityExhaustedError(WeebotError):
+    """Raised when no LLM concurrency slot frees up within the acquire timeout.
+
+    Deliberately NOT a subclass of ``TimeoutError``. The cascade catches
+    ``TimeoutError`` as "this model timed out" and records it against the
+    model; a saturated local pool is not a property of any model, and trying
+    the next model in the cascade would only queue for the same pool again.
+    Keeping the types apart is what stops local saturation from being
+    reported as provider failure -- and from poisoning the per-model
+    telemetry that adaptive routing learns from.
+
+    Transient, unlike ``AllModelsTrippedError``: it clears as soon as load
+    drops, so its severity is ERROR rather than CRITICAL.
+    """
+
+    def __init__(self, message: str = "No LLM capacity available", **kwargs):
+        super().__init__(message, **kwargs)
+        self.code = ErrorCode.RESOURCE_EXHAUSTED
+        self.severity = ErrorSeverity.ERROR
+
+
 class ProjectNotFoundError(WeebotError):
     """Raised when a project ID is not found in the repository."""
 

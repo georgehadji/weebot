@@ -1068,13 +1068,10 @@ def test_orphan_ports_flagged():
 # the ratchet passes -- a substitution, which is the exact failure class this
 # whole instrument exists to catch, one level up.
 #
-# Three of these are controls the system is documented as having:
+# Two of these are controls the system is documented as having. A third,
+# `llm_pool` -- the global LLM concurrency bound -- was on this list until
+# phase 1.3 wired it into the container's step executor factory:
 #
-#   llm_pool             the global LLM concurrency bound. `_base.py:283-290`
-#                        builds CascadeExecutor without `llm_pool=`, so the
-#                        bounded branch at `_cascade.py:292` has never run.
-#                        `tasks/audits/weebot_architecture_audit_v3.md:109`
-#                        certifies the opposite.
 #   trust_report_service ~40 lines guarded on it in `states/completed.py:379`
 #                        are unreachable.
 #   event_pipeline       WP-4 middleware, built at startup and discarded.
@@ -1097,7 +1094,6 @@ _UNRESOLVED_DI_KEYS = {
     "event_pipeline",
     "idea_gate",
     "intent_review",
-    "llm_pool",
     "main_review",
     "plan_act",
     "response_cache",

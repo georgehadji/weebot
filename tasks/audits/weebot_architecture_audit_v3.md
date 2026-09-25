@@ -108,6 +108,20 @@ Both are tracked exceptions. All other services are either TYPE_CHECKING-only or
 
 **Remaining exposure:** The parallel cascade dispatch fires 3 models concurrently inside the LLMPool-bound `_chat_with_pool()`. If all 3 are the same model, the pool bounds total calls. The 120s timeout prevents deadlock.
 
+> **CORRECTION (2026-09-25) — this was false when written.** `_chat_with_pool()`
+> had an LLMPool-bound branch that never executed: the only production
+> construction of `CascadeExecutor` (`_base.py:283-290`) passed no `llm_pool=`,
+> so `self._llm_pool` was always `None` and every call took the unbounded
+> branch. Nothing bounded total calls, and the 120s timeout had never run.
+> Found by ARCH-AUDIT-V2; see `tasks/specs/arch_audit_2026_09_remediation_plan.md`
+> §1. Wired in Phase 1.3 — and not where this line implies: steps run through
+> the mediator, so the pool had to go to the container's step-executor factory,
+> not to the executor `PlanActFlow` builds for itself. Two latent defects were
+> fixed before wiring, both invisible only because the semaphore had never been
+> contended: pool saturation raised `TimeoutError` and would have been recorded
+> as a model failure, and a single semaphore failed with `RuntimeError` on any
+> second event loop. The acquire timeout is now configurable, default 300s.
+
 ### STATE AND CONTEXT
 
 **Session state propagation:** Immutable `model_copy()` pattern. `SessionContext` has explicit fields + `extra` dict. `MemoryCompactor` provides summarization.
@@ -131,6 +145,13 @@ Both are tracked exceptions. All other services are either TYPE_CHECKING-only or
 **Bottleneck #2: SQLite WAL lock.** All session writes serialize via `_emit_lock`. With 10 concurrent sessions, WAL contention is the limit. This is a deployment-infrastructure concern (PostgreSQL migration would lift this).
 
 **New mitigation: `LLMPool`** bounds total concurrent LLM calls across all sessions. Default 12 concurrent, configurable 1-100. This prevents 90+ parallel API requests under 10× load.
+
+> **CORRECTION (2026-09-25) — this mitigation did not exist when written.**
+> `LLMPool` was registered in the container and resolved by nothing, so it
+> bounded nothing; see the correction under *Remaining exposure* above. It
+> bounds the step executor's cascade from Phase 1.3 on. Note also that it
+> bounds concurrent *model calls*, not sessions: running flows had no ceiling
+> of their own until Phase 1.3 added `max_concurrent_flows` to `TaskRunner`.
 
 ---
 
@@ -176,6 +197,10 @@ The 0.5 deduction from 9.5 reflects: (a) 6 allowlisted singletons that should ev
 1. **`_base.py` at 1,400 lines — cascade complexity** [VERIFIED]. While the god method was extracted, `execute_step()` at 500 lines is still a large state machine. High cognitive load for new contributors. Mitigation: extracted cascade helpers are independently testable; the remaining bulk is a structured FSM.
 
 2. **SQLite WAL as single-write bottleneck** [HYPOTHESIS]. All session persistence serializes through `_emit_lock`. Under 10 concurrent sessions, WAL contention may limit throughput. Mitigation: `LLMPool` bounds upstream concurrency; `PersistenceMiddleware` supports fire-and-forget. Full PostgreSQL migration would lift this but is a deployment concern.
+
+   > **CORRECTION (2026-09-25):** `LLMPool` bounded no concurrency at the time
+   > this was written — it was never passed to the code that calls models. See
+   > the correction in *Remaining exposure* above; wired in Phase 1.3.
 
 3. **Flow→Services broad dependency** [VERIFIED]. `_call_with_cascade()` → `get_model_cascade_for_role()` → `_model_for_step()` — the model selection chain threads through multiple services. Changes to model selection affect the cascade hot path. Mitigation: all model selection code lives in `model_registry/` with clear module boundaries.
 

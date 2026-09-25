@@ -258,7 +258,11 @@ class Container(
             from weebot.application.strategies.llm_pool import LLMPool
             from weebot.config.settings import WeebotSettings
 
-            return LLMPool(max_concurrent=WeebotSettings().llm_max_concurrent_requests)
+            _settings = WeebotSettings()
+            return LLMPool(
+                max_concurrent=_settings.llm_max_concurrent_requests,
+                acquire_timeout=_settings.llm_pool_acquire_timeout_s,
+            )
 
         self.register("llm_pool", _create_llm_pool)
 
@@ -412,6 +416,17 @@ class Container(
                 tracing_port=(
                     self._maybe_get(TracingAdapter) if self._is_tracing_enabled() else None
                 ),
+                # THE place the pool has to go. ExecutingState runs every step
+                # through the mediator ("CQRS: execute step through mediator
+                # (REQUIRED)"), and this factory builds the executor that
+                # ExecuteStepHandler uses. PlanActFlow's own `self._executor`
+                # only serves the summarize fallback. The remediation plan said
+                # to pass the pool at `_base.py:283` via the flow's constructor
+                # chain; doing that would have bounded an executor that never
+                # runs a step, and the DI census would have gone green anyway,
+                # because it proves a key is resolved -- not that it reaches the
+                # object doing the work.
+                llm_pool=self._maybe_get_str("llm_pool"),
             )
 
         register_default_handlers(
