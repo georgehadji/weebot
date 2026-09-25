@@ -188,6 +188,32 @@ class Container(
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)
+
+        # Live-session trajectory scoring. CompletedState sends
+        # ScoreTrajectoryCommand after every flow, and until now nothing in the
+        # main container could handle it: the scorer was looked up under a
+        # string nobody registered, the builder and repository were registered
+        # only inside configure_skillopt(), and the handler persisted to a
+        # store no learner reads. The scorer is PlanOutcomeScorer -- the other
+        # three ScoringPort implementations compare against an expected answer
+        # a live session does not have, so each would produce a constant,
+        # meaningless score. Cost per completed session: one trajectory-summary
+        # call, on the cheap verifier tier. The score itself is free.
+        from weebot.application.ports.scoring_port import ScoringPort
+
+        def _create_plan_outcome_scorer():
+            from weebot.infrastructure.scoring.plan_outcome_scorer import PlanOutcomeScorer
+
+            return PlanOutcomeScorer()
+
+        def _create_trajectory_builder():
+            from weebot.application.services.trajectory_builder import TrajectoryBuilder
+
+            return TrajectoryBuilder(llm=self.get("verifier_llm"))
+
+        self.register(ScoringPort, _create_plan_outcome_scorer)
+        self.register("trajectory_builder", _create_trajectory_builder)
+        self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
         from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
 
         self.register(SandboxBackendAdapter, self._create_backend)
@@ -422,8 +448,16 @@ class Container(
                     exc_info=True,
                 )
                 tools = None
-        scoring_port = self._maybe_get_str("scoring_port")
+        # Resolved by TYPE. This was `_maybe_get_str("scoring_port")`, a string
+        # nothing registered: _maybe_get_str swallowed the KeyError, returned
+        # None, and ScoreTrajectoryHandler was never registered -- so the
+        # ScoreTrajectoryCommand CompletedState sends after every flow failed
+        # and was logged as a warning, every time.
+        from weebot.application.ports.scoring_port import ScoringPort
+
+        scoring_port = self._maybe_get(ScoringPort)
         trajectory_builder = self._maybe_get_str("trajectory_builder")
+        trajectory_repo = self._maybe_get_str("trajectory_repo")
 
         # ExecuteStepCommand's executor was previously built with only
         # llm/tools/event_bus/model (4 of ExecutorAgent's 22 params) — see
@@ -474,6 +508,7 @@ class Container(
             scoring_port=scoring_port,
             trajectory_builder=trajectory_builder,
             executor_factory=_executor_factory,
+            trajectory_repo=trajectory_repo,
         )
         return mediator
 

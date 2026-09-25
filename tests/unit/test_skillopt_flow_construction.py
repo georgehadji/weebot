@@ -216,6 +216,30 @@ def test_build_skill_opt_flow_registers_skillopt_handlers(container: Container) 
     assert mediator.is_command_registered(ValidateTransferCommand)
 
 
+def test_skill_opt_scores_with_a_scorer_not_the_optimizer(container: Container) -> None:
+    """A fourth instance of the same drift, one layer down.
+
+    SkillOpt handed ScoreTrajectoryHandler `self.get("optimizer_port")` -- an
+    OptimizerAgent, which implements OptimizerPort and has no score() -- so
+    every trajectory scoring call failed. Registration succeeded, so nothing
+    above this line could see it.
+    """
+    from weebot.application.cqrs.commands.trajectory_commands import ScoreTrajectoryCommand
+    from weebot.application.ports.scoring_port import ScoringPort
+
+    flow = container.build_skill_opt_flow(
+        skill_name="demo", train_tasks=["task-1"], epochs=1, steps_per_epoch=1, batch_size=1
+    )
+    handler = flow._mediator._command_handlers[ScoreTrajectoryCommand]
+
+    assert isinstance(handler._scoring, ScoringPort)
+    assert hasattr(handler._scoring, "score")
+    # SkillOpt's variant, not the live-session default: it keeps the mediator
+    # so failed trajectories go on to failure-signature extraction.
+    assert handler._mediator is flow._mediator
+    assert handler._trajectory_repo is not None
+
+
 def test_build_skill_opt_flow_registers_harness_edit_handler(container: Container) -> None:
     """ApplyHarnessEditsCommand is registered once harness_optimization_target
     is resolvable — it was never registered with any mediator before."""
