@@ -152,10 +152,13 @@ class FactoriesMixin:
         from weebot.application.ports.state_repo_port import StateRepositoryPort
         from weebot.application.ports.event_bus_port import EventBusPort
 
+        from weebot.config.settings import WeebotSettings
+
         return TaskRunner(
             state_repo=self.get(StateRepositoryPort),
             event_bus=self.get(EventBusPort),
             task_queue=self.get(TaskQueuePort),
+            max_concurrent_flows=WeebotSettings().max_concurrent_flows,
         )
 
     @staticmethod

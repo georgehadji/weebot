@@ -11,6 +11,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
+    from weebot.application.strategies.llm_pool import LLMPool
     from weebot.models.structured_output import VisionReflection
 
 from weebot.application.agents.executor._iteration_guard import (
@@ -48,7 +49,7 @@ from weebot.domain.models.event import (
     ToolStatus,
     WaitForUserEvent,
 )
-from weebot.domain.exceptions import AllModelsTrippedError
+from weebot.domain.exceptions import AllModelsTrippedError, LLMCapacityExhaustedError
 from weebot.domain.models.plan import Plan, Step
 from weebot.domain.models.trajectory import TrajectoryHealth
 from weebot.application.models.tool_collection import ToolCollection
@@ -223,6 +224,7 @@ class ExecutorAgent:
             Any | None
         ) = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
         session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
+        llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
     ):
         self._llm = llm
         self._tools = tools
@@ -285,6 +287,12 @@ class ExecutorAgent:
             tools=tools,
             agent_role=agent_role,
             model_provider=self._resolve_model_for_step,
+            # This argument was missing from the only production construction
+            # of CascadeExecutor, so the pool's bounded branch never executed
+            # while an audit document recorded the bound as wired. Callers that
+            # pass nothing still get the old unbounded behaviour; the one that
+            # matters -- the container's step executor -- passes the pool.
+            llm_pool=llm_pool,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
         )
@@ -668,6 +676,22 @@ class ExecutorAgent:
                 response = await self._cascade.call_with_cascade(
                     messages, description=step.description
                 )
+            except LLMCapacityExhaustedError as exc:
+                # Not the branch below. That one tells the user to check their
+                # credits and API key, which is wrong advice here: nothing is
+                # wrong with any provider, this process is simply at its own
+                # concurrency limit.
+                yield ErrorEvent(error=str(exc))
+                yield MessageEvent(
+                    role="assistant",
+                    message=(
+                        "Weebot is at its limit for simultaneous AI requests, and no "
+                        "slot freed up in time. Nothing is wrong with your models or "
+                        "credits. Retry shortly, or raise llm_max_concurrent_requests "
+                        "if this persists."
+                    ),
+                )
+                break
             except AllModelsTrippedError as exc:
                 yield ErrorEvent(error=str(exc))
                 yield MessageEvent(

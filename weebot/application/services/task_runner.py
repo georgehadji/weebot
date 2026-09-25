@@ -43,7 +43,27 @@ class TaskRunner:
         max_pending: int = 100,
         max_session_retries: int = 3,
         task_queue: TaskQueuePort | None = None,
+        max_concurrent_flows: int = 8,
     ):
+        if max_concurrent_flows < 1:
+            raise ValueError(f"max_concurrent_flows must be >= 1, got {max_concurrent_flows}")
+        # Phase 1.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md.
+        #
+        # Every production entry point -- the sessions router and both
+        # dispatch_session_input paths -- calls start_session, which spawned a
+        # flow immediately with no ceiling at all. The queue below, its
+        # max_pending, the worker, and the Redis queue behind TaskQueuePort
+        # are reachable only through enqueue_session, which nothing in the
+        # product calls; the audit's "the worker drains the queue at memory
+        # speed" was wrong for that reason -- the worker never runs.
+        #
+        # So the bound is on the path that does run: a flow waits here for a
+        # slot before it starts executing. Acquired inside the task, not in
+        # _start_direct, because _run_flow's retry calls _start_direct from
+        # INSIDE a running flow: a slot taken at task creation would make that
+        # retry wait for a slot its own caller is holding.
+        self._max_concurrent_flows = max_concurrent_flows
+        self._flow_slots = asyncio.Semaphore(max_concurrent_flows)
         self._state_repo = state_repo
         self._event_bus = event_bus
         self._max_session_retries = max_session_retries
@@ -121,7 +141,8 @@ class TaskRunner:
             self._retry_counts[session_id] = self._max_session_retries
 
         task = asyncio.create_task(
-            self._run_flow(session_id, flow_factory(session)), name=f"weebot-session-{session_id}"
+            self._run_flow_bounded(session_id, flow_factory(session)),
+            name=f"weebot-session-{session_id}",
         )
         self._tasks[session_id] = task
 
@@ -171,6 +192,36 @@ class TaskRunner:
         else:
             await self._priority_queue.put(PrioritizedSession(priority, session, flow_factory))
         return session
+
+    @property
+    def max_concurrent_flows(self) -> int:
+        return self._max_concurrent_flows
+
+    async def _run_flow_bounded(self, session_id: str, flow: BaseFlow) -> None:
+        """Run *flow* once a flow slot is free.
+
+        The flow object is built before this is scheduled -- in _start_direct,
+        as it always was -- so a factory that raises still reaches the caller
+        as an error rather than leaving a session stuck in RUNNING.
+
+        ponytail: a session waiting here still holds its built flow, and the
+        number waiting is unbounded; each is a small coroutine plus plain
+        objects, no connections or LLM calls. If the waiting set ever shows up
+        in memory, build the flow after acquiring the slot and reject past a
+        waiting ceiling (HTTP 429) instead.
+
+        ponytail: a retrying flow sleeps its backoff (5-20s) while still holding
+        its slot. Correct and deadlock-free, but it idles one slot per retry;
+        release before the sleep if failure bursts ever starve healthy flows.
+        """
+        if self._flow_slots.locked():
+            logger.info(
+                "Session %s waiting for a flow slot (%d running)",
+                session_id,
+                self._max_concurrent_flows,
+            )
+        async with self._flow_slots:
+            await self._run_flow(session_id, flow)
 
     async def _run_flow(self, session_id: str, flow: BaseFlow) -> None:
         """Internal runner that persists events and handles completion."""

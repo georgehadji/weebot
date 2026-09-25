@@ -413,6 +413,25 @@ class WeebotSettings(BaseSettings):
     llm_max_concurrent_requests: int = Field(
         default=12, ge=1, le=100, description="Max concurrent LLM API requests across all sessions."
     )
+    llm_pool_acquire_timeout_s: float = Field(
+        default=300.0,
+        gt=0,
+        description=(
+            "Seconds a model call may queue for an LLM concurrency slot before it is "
+            "refused with LLMCapacityExhaustedError. Queue time does not count "
+            "against the model's own timeout."
+        ),
+    )
+    max_concurrent_flows: int = Field(
+        default=8,
+        ge=1,
+        le=200,
+        description=(
+            "Max agent flows running at once in one process. Further sessions wait "
+            "for a slot before their flow is built. Default is a starting value, "
+            "not a measured one -- tune it against real load."
+        ),
+    )
     financial_tools_always_ask: bool = Field(
         default=True, description="Financial/payment tools always require user approval."
     )

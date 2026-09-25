@@ -11,7 +11,10 @@ import asyncio
 import logging
 
 from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from weebot.application.strategies.llm_pool import LLMPool
 
 from weebot.application.di import Container
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
@@ -66,7 +69,7 @@ class CascadeExecutor:
         tools: ToolCollection,
         agent_role: str | None = None,
         model_provider=None,  # Callable[[str], str | list[str] | None] — resolves step model(s)
-        llm_pool: Any = None,  # Optional concurrency semaphore
+        llm_pool: LLMPool | None = None,  # Global LLM concurrency bound (see llm_pool.py)
         on_success=None,  # Optional callback after successful response
         tracker: ModelCascadeTracker | None = None,  # ACR telemetry sink (Phase P0)
         acr_router=None,  # Optional AdaptiveCapabilityRouter for outcome recording
@@ -254,6 +257,47 @@ class CascadeExecutor:
         tier: CascadeTier = CascadeTier.BUDGET,
         task_category: str = "general",
     ) -> LLMResponse | None:
+        """Hold an LLM concurrency slot around one model attempt.
+
+        The slot is acquired HERE, before the attempt's latency clock starts
+        and outside its ``wait_for``. Time spent queuing for a slot is not the
+        model's latency and must not count against the model's timeout --
+        otherwise, under load, a 15s fast-fail budget expires in the queue and
+        a healthy model is recorded as having timed out.
+
+        ``LLMCapacityExhaustedError`` from the pool propagates out of this
+        method on purpose. It never reaches the per-model handlers in
+        ``_cascade_try_chat_unpooled``, so saturation is not charged to any
+        model, and it stops the cascade rather than queuing every remaining
+        model behind the same full pool.
+
+        A tripped model skips the queue: it returns without calling anything,
+        so waiting for a slot to do nothing would only take one from a caller
+        that needs it.
+        """
+        kwargs = dict(
+            timeout=timeout,
+            fast_fail=fast_fail,
+            first_error=first_error,
+            tier=tier,
+            task_category=task_category,
+        )
+        if self._llm_pool is None or self.cascade_is_tripped(model_id):
+            return await self._cascade_try_chat_unpooled(messages, model_id, **kwargs)
+        async with self._llm_pool:
+            return await self._cascade_try_chat_unpooled(messages, model_id, **kwargs)
+
+    async def _cascade_try_chat_unpooled(
+        self,
+        messages: list[dict[str, Any]],
+        model_id: str,
+        timeout: float = 15.0,
+        fast_fail: bool = False,
+        first_error: dict[str, str] | None = None,
+        *,
+        tier: CascadeTier = CascadeTier.BUDGET,
+        task_category: str = "general",
+    ) -> LLMResponse | None:
         """Try a single model call with tiered timeout.
 
         Returns LLMResponse on success, None on transient failure,
@@ -273,23 +317,11 @@ class CascadeExecutor:
             )
             return None
         effective = min(timeout, 15.0) if fast_fail else timeout
+        # Starts only once the caller holds an LLM slot -- see _cascade_try_chat.
         start = _cascade_time.monotonic()
-        pool = self._llm_pool
 
-        async def _chat_with_pool():
-            if pool is not None:
-                async with pool:
-                    return await asyncio.wait_for(
-                        self._llm.chat(
-                            messages=messages,
-                            tools=self._tools.to_params(),
-                            tool_choice="auto",
-                            model=model_id,
-                            temperature=TEMPERATURE_BALANCED,
-                        ),
-                        timeout=effective,
-                    )
-            return await asyncio.wait_for(
+        try:
+            resp = await asyncio.wait_for(
                 self._llm.chat(
                     messages=messages,
                     tools=self._tools.to_params(),
@@ -299,9 +331,6 @@ class CascadeExecutor:
                 ),
                 timeout=effective,
             )
-
-        try:
-            resp = await _chat_with_pool()
             if resp and (resp.content or resp.tool_calls):
                 elapsed = (_cascade_time.monotonic() - start) * 1000
                 self._cascade_reset(model_id)
