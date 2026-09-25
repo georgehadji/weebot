@@ -73,6 +73,7 @@ lint-env-access:
 	    --exclude-dir=.venv \
 	    --exclude-dir=Output \
 	    --exclude-dir=config \
+	    --exclude-dir=GitNexus-main \
 	    weebot/ cli/ | wc -l); \
 	  python scripts/quality_ceilings.py --check bare_env_reads --actual "$$count" \
 	    || { echo "Use SecretAccessor instead of a bare os.environ/os.getenv."; exit 1; }

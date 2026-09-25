@@ -40,8 +40,15 @@ blocking_io_in_async = 29
 print_in_production = 143
 
 # Bare os.environ / os.getenv outside weebot/config/.
+# 73 -> 72, and not because any first-party read was fixed. One of the 73 was
+# in weebot/GitNexus-main/eval/run_eval.py -- vendored third-party code. The
+# Makefile header says the GitNexus exclusion was "corrected below"; in this
+# grep it had been dropped instead, so the ceiling counted a file this
+# repository does not own from the day it was first measured. Untracking the
+# vendored tree took it out of CI's checkout, and the target now excludes it
+# on disk too, so a local run and CI measure the same 72.
 # Measured by: the `lint-env-access` target in the Makefile.
-bare_env_reads = 73
+bare_env_reads = 72
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
