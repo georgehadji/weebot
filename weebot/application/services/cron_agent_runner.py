@@ -42,13 +42,16 @@ class CronAgentRunner:
         self._flow_factory = flow_factory
 
     async def run(self, job: CronJobRecord) -> str:
-        import os
-
-        # Set recursion guard before spawning the flow
-        # Set recursion guard — prevents infinite scheduling loops
-        os.environ["WEEBOT_CRON_CONTEXT"] = "1"
-        logger.debug("Cron context guard set")
         """Execute a cron job and return the result text.
+
+        Everything the job runs -- the flow, and every tool call inside it --
+        sees ``in_cron_job()`` as True, so the schedule tool refuses to
+        schedule and a job cannot schedule itself into a loop.
+
+        This used to set ``os.environ["WEEBOT_CRON_CONTEXT"] = "1"`` and never
+        unset it. The scheduler runs jobs inside the web server's process, so
+        after the first job, scheduling would have been disabled for every
+        user's session until a restart. See weebot/core/cron_context.py.
 
         Args:
             job: The cron job to execute.
@@ -56,6 +59,12 @@ class CronAgentRunner:
         Returns:
             The flow's final response text.
         """
+        from weebot.core.cron_context import cron_job_context
+
+        with cron_job_context():
+            return await self._run(job)
+
+    async def _run(self, job: CronJobRecord) -> str:
         import uuid
 
         session_id = f"cron-{job.id}-{uuid.uuid4().hex[:8]}"

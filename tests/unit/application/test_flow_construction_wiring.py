@@ -129,13 +129,12 @@ def _job(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_a_cron_job_returns_the_flows_answer_not_a_type_error(monkeypatch):
+async def test_a_cron_job_returns_the_flows_answer_not_a_type_error():
     """`async for ... in asyncio.wait_for(async_gen)` raised TypeError before
     the first event, and the handler turned it into the job's output -- which
     the delivery service then sent on as though it were a result."""
     from weebot.application.services.cron_agent_runner import CronAgentRunner
 
-    monkeypatch.delenv("WEEBOT_CRON_CONTEXT", raising=False)
     runner = CronAgentRunner(
         llm=MagicMock(), state_repo=AsyncMock(), flow_factory=lambda **kw: _AnsweringFlow()
     )
@@ -146,7 +145,7 @@ async def test_a_cron_job_returns_the_flows_answer_not_a_type_error(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_a_cron_job_still_times_out(monkeypatch):
+async def test_a_cron_job_still_times_out():
     from weebot.application.services.cron_agent_runner import CronAgentRunner
 
     class _SlowFlow:
@@ -154,7 +153,6 @@ async def test_a_cron_job_still_times_out(monkeypatch):
             await asyncio.sleep(10)
             yield MagicMock(type="message", message="too late")
 
-    monkeypatch.delenv("WEEBOT_CRON_CONTEXT", raising=False)
     runner = CronAgentRunner(
         llm=MagicMock(), state_repo=AsyncMock(), flow_factory=lambda **kw: _SlowFlow()
     )
@@ -164,6 +162,56 @@ async def test_a_cron_job_still_times_out(monkeypatch):
     result = await runner.run(job)
 
     assert "timed out" in result
+
+
+class _FlagReportingFlow:
+    """Reports what a tool running inside the job would see."""
+
+    async def run(self, prompt: str):
+        from weebot.core.cron_context import in_cron_job
+
+        yield MagicMock(type="message", message=f"in_cron_job={in_cron_job()}")
+
+
+@pytest.mark.asyncio
+async def test_the_cron_flag_covers_the_job_and_ends_with_it():
+    """The recursion guard's flag used to be os.environ["WEEBOT_CRON_CONTEXT"],
+    set by every job and never cleared. The scheduler runs jobs in the web
+    server's process, so after the first job scheduling would have been
+    disabled for every user until a restart. It surfaced as eight
+    ScheduleTool tests failing in CI after a cron test ran in the same
+    process."""
+    import os
+
+    from weebot.application.services.cron_agent_runner import CronAgentRunner
+    from weebot.core.cron_context import in_cron_job
+
+    runner = CronAgentRunner(
+        llm=MagicMock(), state_repo=AsyncMock(), flow_factory=lambda **kw: _FlagReportingFlow()
+    )
+
+    result = await runner.run(_job())
+
+    assert result == "in_cron_job=True", "the flag did not reach the job's own flow"
+    assert in_cron_job() is False, "the flag outlived the job"
+    assert "WEEBOT_CRON_CONTEXT" not in os.environ
+
+
+@pytest.mark.asyncio
+async def test_the_schedule_tool_refuses_only_inside_a_cron_job():
+    """The guard still works where it should, and nowhere else."""
+    from weebot.core.cron_context import cron_job_context
+    from weebot.tools.schedule_tool import ScheduleTool
+
+    tool = ScheduleTool()
+    with cron_job_context():
+        inside = await tool.execute(action="not_an_action")
+    outside = await tool.execute(action="not_an_action")
+
+    assert "disabled inside a cron agent session" in (inside.error or "")
+    assert "disabled inside a cron agent session" not in (outside.error or "") + (
+        outside.output or ""
+    )
 
 
 @pytest.mark.timeout(360)
