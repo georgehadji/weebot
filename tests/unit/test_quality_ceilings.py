@@ -45,6 +45,11 @@ _EXPECTED = {
     # Pydantic-validated output; four agents were migrated and the rest are
     # pinned so the divergence cannot grow back.
     "agent_json_parsing",
+    # Container bindings nothing resolves. The other ratchets count things
+    # visibly wrong in a file; this counts something invisible in every file --
+    # a registration, a factory and a guard that each read correctly while the
+    # guarded branch never runs. See scripts/lint_di_wiring.py.
+    "unresolved_di_keys",
 }
 
 

@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import re
 
+from weebot.core.mcp_naming import MCP_NAMESPACE_PREFIX
+
 _log = logging.getLogger(__name__)
 
 # Delimiter that cannot appear verbatim in legitimate content without being escaped.
@@ -78,9 +80,13 @@ UNTRUSTED_OUTPUT_TOOLS: frozenset[str] = frozenset(
         "telegram_tool",
         "whatsapp_tool",
         "atomic_mail",
-        # MCP passthrough — model has no visibility into what the server returns
-        "mcp_tool",
-        "mcp_call",
+        # MCP passthrough is NOT listed here. It is matched by namespace
+        # prefix below, because the names are generated per server at runtime
+        # and no fixed list can enumerate them. Two literals, "mcp_tool" and
+        # "mcp_call", used to sit here as a fallback; neither string occurred
+        # anywhere else in the repository, so the fallback covered two tools
+        # that did not exist while the ones that did were named
+        # mcp_<server>_<tool> and matched neither the list nor the prefix.
     }
 )
 
@@ -122,7 +128,10 @@ def wrap_untrusted(source: str, content: str) -> str:
 # default is to taint.
 FENCE_ONLY_TOOLS: frozenset[str] = frozenset({"weather"})
 
-_MCP_NAMESPACE_PREFIX = "mcp__"
+# Imported rather than restated. This constant and the code that builds the
+# names it must match were two independent spellings of one convention, and
+# they disagreed -- see weebot/core/mcp_naming.py.
+_MCP_NAMESPACE_PREFIX = MCP_NAMESPACE_PREFIX
 
 
 def is_untrusted_tool(tool_name: str) -> bool:

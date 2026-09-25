@@ -87,6 +87,17 @@ jobs:
         # not sent. Same bidirectional contract as the ratchets around it.
         run: python scripts/lint_unused_locals.py
 
+      - name: DI wiring ratchet
+        # BLOCKING. The two instruments above this line -- import-linter and
+        # the AST fitness suite -- both read the import graph, and both pass a
+        # collaborator that is imported, registered in the container, built at
+        # startup, and then never passed to the object that needs it. Three
+        # controls were in exactly that state, one of them the global LLM
+        # concurrency bound, and an audit document in this repository certifies
+        # that one as wired and verified. Nothing could have caught it until
+        # this step existed.
+        run: python scripts/lint_di_wiring.py
+
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that
         # exited 1, so `make check` was red on a clean checkout, and it appeared

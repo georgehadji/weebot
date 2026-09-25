@@ -185,8 +185,34 @@ class TestDriftAgainstTheLiveRepository:
     def test_no_error_status_is_ever_treated_as_a_pass(self, status, ruleset):
         """The whole point. "I could not check" must never read as "nothing is wrong"."""
         code, msg = protection.evaluate(status, {}, ruleset, "main")
-        assert code == 1, f"HTTP {status} was treated as a pass"
+        assert code != 0, f"HTTP {status} was treated as a pass"
         assert "DRIFT" in msg or "CANNOT VERIFY" in msg
+
+    @pytest.mark.parametrize(
+        ("status", "expected", "label"),
+        [
+            (401, protection.CANNOT_VERIFY, "CANNOT VERIFY"),
+            (403, protection.CANNOT_VERIFY, "CANNOT VERIFY"),
+            (500, protection.CANNOT_VERIFY, "CANNOT VERIFY"),
+            (404, protection.DRIFT, "DRIFT"),
+        ],
+    )
+    def test_the_exit_code_says_which_kind_of_red_it_is(self, status, expected, label, ruleset):
+        """Phase 0.1. A red that means "issue a token" and a red that means
+        "main is unprotected" want different people, so they get different
+        codes. 404 stays DRIFT: it cannot be told apart from unprotected."""
+        code, msg = protection.evaluate(status, {}, ruleset, "main")
+        assert code == expected
+        assert msg.startswith(label)
+
+    def test_measured_drift_is_code_one_not_two(self, ruleset, live):
+        live["enforcement"] = "evaluate"
+        assert protection.evaluate(200, [live], ruleset, "main")[0] == protection.DRIFT
+
+    def test_the_two_failure_codes_are_distinct_and_nonzero(self):
+        assert protection.OK == 0
+        assert protection.DRIFT != protection.CANNOT_VERIFY
+        assert protection.DRIFT and protection.CANNOT_VERIFY
 
     def test_a_permission_error_names_the_remedy(self, ruleset):
         _, msg = protection.evaluate(403, {}, ruleset, "main")

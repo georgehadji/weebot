@@ -29,6 +29,23 @@ services:
       retries: 3
 
   # ── API — FastAPI HTTP server (includes cron scheduler via lifespan) ──
+  #
+  # REPLICA COUNT MUST STAY 1. Do not add `deploy.replicas`, and do not run
+  # this service behind a scaler. Three separate things break at two:
+  #
+  #   1. State is a process-local SQLite file behind one write connection and
+  #      one asyncio.Lock (infrastructure/persistence/connection_pool.py:87,
+  #      109, 137, 187). A second instance is a second, divergent database.
+  #   2. The cron scheduler starts inside the FastAPI lifespan
+  #      (interfaces/web/main.py:203-208), so every replica runs every job.
+  #   3. There is no leader election anywhere -- no advisory lock, no SETNX,
+  #      not even an enable flag.
+  #
+  # Lifting this is phase 5 of tasks/specs/arch_audit_2026_09_remediation_plan.md
+  # and has a forced order: Postgres first, then extract or elect the
+  # scheduler, then remove the remaining process-local assumptions. Until
+  # 5.5 demonstrates two replicas with no duplicate cron execution and no
+  # state divergence, this stays at one.
   weebot-api:
     build:
       context: .

@@ -135,6 +135,7 @@ class TestRatchetsAreWiredIn:
             "scripts/lint_except_pass.py",
             "scripts/lint_async_io.py",
             "scripts/lint_bandit_b110.py",
+            "scripts/lint_di_wiring.py",
         ],
     )
     def test_ratchet_script_is_referenced(self, script):

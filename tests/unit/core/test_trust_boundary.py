@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 
 from weebot.core.trust_boundary import is_untrusted_tool, wrap_untrusted
 
@@ -19,8 +20,23 @@ class TestIsUntrustedTool:
     def test_atomic_mail_is_untrusted(self):
         assert is_untrusted_tool("atomic_mail")
 
-    def test_mcp_tool_is_untrusted(self):
-        assert is_untrusted_tool("mcp_tool")
+    def test_a_name_the_system_can_actually_produce_is_untrusted(self):
+        """Phase 1.2 — replaces an assertion about a tool that never existed.
+
+        This used to assert `is_untrusted_tool("mcp_tool")`, which passed
+        because "mcp_tool" was a literal in UNTRUSTED_OUTPUT_TOOLS. No tool
+        was ever registered under that name, or under "mcp_call" beside it.
+        The names the system really produced were built by
+        MCPClientManager.get_all_tools as `mcp_<server>_<tool>`, matched
+        neither the literals nor the `mcp__` prefix, and so were fenced by
+        nothing.
+
+        Asserting over a name that the builder produces is the form that
+        cannot come apart again.
+        """
+        from weebot.core.mcp_naming import build_namespaced_name
+
+        assert is_untrusted_tool(build_namespaced_name("xapi", "search_posts"))
 
     def test_slack_tool_is_untrusted(self):
         assert is_untrusted_tool("slack_tool")
@@ -61,6 +77,73 @@ class TestIsUntrustedTool:
     def test_mcp_prefix_alone_is_not_a_tool(self):
         """The bare prefix string is not a valid tool name."""
         assert not is_untrusted_tool("mcp__")
+
+    def test_the_old_single_underscore_form_is_still_not_matched(self):
+        """Deliberate. Do not widen the prefix test to `mcp_`.
+
+        The fix for the mismatch was to correct the producer, not to loosen
+        the check. Matching a single underscore would mark any future tool
+        whose name starts with those four characters as untrusted
+        passthrough -- the same class of accident pointing the other way, and
+        harder to spot because it fails toward over-suspicion.
+        """
+        assert not is_untrusted_tool("mcp_xapi_search_posts")
+
+
+class TestEveryMCPNameTheProducersEmitIsFenced:
+    """The invariant, not the instance.
+
+    The defect was two spellings of one convention in two modules, each
+    self-consistent, never compared. Asserting a fixed list of names would
+    not have caught it and would not catch a third naming site. This asserts
+    over the builders themselves.
+    """
+
+    @pytest.mark.parametrize(
+        ("server", "tool"),
+        [
+            ("xapi", "search_posts"),
+            ("stripe", "create_payment_intent"),
+            ("x-docs", "search-x"),  # sanitised to underscores
+            ("a.b", "c.d"),
+            ("mcp__already_prefixed", "thing"),
+        ],
+    )
+    def test_built_names_are_untrusted(self, server, tool):
+        from weebot.core.mcp_naming import build_namespaced_name
+
+        assert is_untrusted_tool(build_namespaced_name(server, tool))
+
+    def test_the_client_manager_emits_fenced_names(self):
+        """Reaches into the real producer rather than a restatement of it."""
+        import asyncio
+        from types import SimpleNamespace
+
+        from weebot.infrastructure.mcp.mcp_client_manager import MCPClientManager
+
+        manager = MCPClientManager(config={"mcpServers": {"xapi": {}}})
+        manager._tools_cache = {
+            "xapi": [
+                SimpleNamespace(name="search_posts", description="d", inputSchema={}),
+                SimpleNamespace(name="bookmark-tweet", description="d", inputSchema={}),
+            ]
+        }
+        specs = asyncio.run(manager.get_all_tools())
+
+        assert specs, "the producer emitted nothing to check"
+        for spec in specs:
+            name = spec["function"]["name"]
+            assert is_untrusted_tool(name), f"{name} reaches the model unfenced"
+
+    def test_a_built_name_round_trips_through_the_registry_parser(self):
+        """The bridge dropped every tool because its parser disagreed."""
+        from weebot.application.services.mcp_tool_registry_bridge import (
+            _parse_namespaced_name,
+        )
+        from weebot.core.mcp_naming import build_namespaced_name
+
+        parsed = _parse_namespaced_name(build_namespaced_name("xapi", "search_posts"))
+        assert parsed == ("xapi", "search_posts")
 
 
 class TestWrapUntrusted:

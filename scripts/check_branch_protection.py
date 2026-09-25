@@ -26,8 +26,13 @@ will:
    `secrets.PROTECTION_READ_TOKEN`. If that is missing the script fails loudly
    instead of skipping, because a skipped verification reads as "fine".
 
-Exit code: 0 only on a verified match; 1 on drift, or on any inability to
-verify.
+Exit codes: 0 only on a verified match; 1 on measured drift; 2 when the live
+configuration could not be read at all. Both non-zero codes are red, and the
+split exists so the red says which one it is. "main lost a required check"
+and "nobody has issued a token that can look" are the same colour on the
+Actions page and they call for opposite responses -- one is an incident, the
+other is a setup task. Collapsed into one code, a job red for days could not
+be triaged without opening the log.
 
 Usage:
     GITHUB_TOKEN=<token> python scripts/check_branch_protection.py
@@ -49,7 +54,12 @@ _DEFAULT_REPO = "georgehadji/weebot"
 _API = "https://api.github.com"
 
 OK = 0
-FAIL = 1
+# Measured divergence: the live configuration was read and it is wrong.
+DRIFT = 1
+# The live configuration could not be read. Never a pass -- see the module
+# docstring -- but a different failure from DRIFT and actionable by a
+# different person.
+CANNOT_VERIFY = 2
 
 
 def _contexts(ruleset: dict) -> set[str]:
@@ -119,30 +129,35 @@ def evaluate(status: int, body: object, intended: dict, name: str) -> tuple[int,
         )
         if match is None:
             found = [r.get("name") for r in rulesets if isinstance(r, dict)]
-            return FAIL, (
+            return DRIFT, (
                 f"DRIFT: no ruleset named {name!r} on this repository. Found: {found or 'none'}. "
                 "main is unprotected, or the ruleset was renamed."
             )
         diffs = compare(intended, match)
         if diffs:
-            return FAIL, "DRIFT: live protection no longer matches the file:\n  - " + "\n  - ".join(
-                diffs
+            return (
+                DRIFT,
+                "DRIFT: live protection no longer matches the file:\n  - " + "\n  - ".join(diffs),
             )
         return OK, f"Live ruleset {name!r} matches .github/rulesets/main.json."
 
     if status == 404:
-        return FAIL, (
+        # Deliberately DRIFT, not CANNOT_VERIFY. 404 on this endpoint is
+        # returned both for "no rulesets exist" and for "your token may not
+        # see them", and only the first is distinguishable from unprotected.
+        # The stricter reading is the safe one.
+        return DRIFT, (
             "DRIFT: the rulesets endpoint returned 404. Either the repository has no "
             "rulesets, or this token cannot see them. main is not verifiably protected."
         )
     if status in (401, 403):
-        return FAIL, (
+        return CANNOT_VERIFY, (
             f"CANNOT VERIFY: HTTP {status}. The token cannot read repository rulesets. "
             "The Actions GITHUB_TOKEN has no administration scope and cannot be granted "
             "one via `permissions:`; set secrets.PROTECTION_READ_TOKEN to a PAT with "
             "repository administration:read. Not treating this as a pass."
         )
-    return FAIL, f"CANNOT VERIFY: unexpected HTTP {status} from the rulesets endpoint."
+    return CANNOT_VERIFY, f"CANNOT VERIFY: unexpected HTTP {status} from the rulesets endpoint."
 
 
 def _fetch(repo: str, token: str) -> tuple[int, object]:
@@ -173,8 +188,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         intended = json.loads(_RULESET.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        print(f"cannot read {_RULESET}: {exc}", file=sys.stderr)
-        return FAIL
+        print(f"CANNOT VERIFY: cannot read {_RULESET}: {exc}", file=sys.stderr)
+        return CANNOT_VERIFY
 
     print("=== branch protection drift ===")
     print(f"repository: {args.repo}")
@@ -187,19 +202,28 @@ def main(argv: list[str] | None = None) -> int:
             "Refusing to report success without reading the live configuration.",
             file=sys.stderr,
         )
-        return FAIL
+        return CANNOT_VERIFY
 
     try:
         status, body = _fetch(args.repo, token)
     except (urllib.error.URLError, OSError, ValueError) as exc:
         print(f"CANNOT VERIFY: request to the rulesets endpoint failed: {exc}", file=sys.stderr)
-        return FAIL
+        return CANNOT_VERIFY
 
     code, message = evaluate(status, body, intended, intended.get("name", "main"))
     print(message, file=sys.stderr if code else sys.stdout)
-    if code:
+    if code == DRIFT:
         print(
             "\nTo restore protection, apply the checked-in ruleset:\n"
+            "  see .github/rulesets/README.md",
+            file=sys.stderr,
+        )
+    elif code == CANNOT_VERIFY:
+        print(
+            "\nThis is not a report about main. It is a report that nothing can "
+            "read main's protection:\n"
+            "  set secrets.PROTECTION_READ_TOKEN to a PAT with repository "
+            "administration:read\n"
             "  see .github/rulesets/README.md",
             file=sys.stderr,
         )

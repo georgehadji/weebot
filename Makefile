@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live lint-imports lint-env-access lint-unawaited lint-ruleset check-arch check
+.PHONY: help install test test-live lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -51,6 +51,10 @@ lint-bare-except-pass:
 	@echo "=== Silent except-handler check (AST, ratcheted) ==="
 	@python scripts/lint_except_pass.py
 
+lint-di-wiring:
+	@echo "=== DI bindings that nothing resolves (AST, ratcheted) ==="
+	@python scripts/lint_di_wiring.py
+
 lint-unawaited:
 	@echo "=== Un-awaited coroutine check (AST) ==="
 	@python scripts/lint_unawaited_coroutines.py
@@ -69,6 +73,7 @@ lint-env-access:
 	    --exclude-dir=.venv \
 	    --exclude-dir=Output \
 	    --exclude-dir=config \
+	    --exclude-dir=GitNexus-main \
 	    weebot/ cli/ | wc -l); \
 	  python scripts/quality_ceilings.py --check bare_env_reads --actual "$$count" \
 	    || { echo "Use SecretAccessor instead of a bare os.environ/os.getenv."; exit 1; }
@@ -98,5 +103,5 @@ lint-no-print:
 	  python scripts/quality_ceilings.py --check print_in_production --actual "$$count" \
 	    || { echo "Use logger instead of print() in production code."; exit 1; }
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring
 	@echo "=== All checks passed ==="
