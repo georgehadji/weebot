@@ -584,9 +584,20 @@ class SchedulingManager:
 
                         job = CronJobRecord(**data)
 
+                        from weebot.application.ports.llm_port import LLMPort
+                        from weebot.application.ports.state_repo_port import (
+                            StateRepositoryPort,
+                        )
+
+                        # These two were container.get("llm_port") and
+                        # container.get("state_repo_port"). Both ports are bound
+                        # by TYPE, and Container.get() does not cross-resolve
+                        # strings to types, so every cron agent job raised
+                        # KeyError here -- caught below and logged -- from
+                        # 813a840 (2026-06-18) on.
                         runner = CronAgentRunner(
-                            llm=container.get("llm_port"),
-                            state_repo=container.get("state_repo_port"),
+                            llm=container.get(LLMPort),
+                            state_repo=container.get(StateRepositoryPort),
                             flow_factory=container.get("create_flow"),
                         )
                         result = await runner.run(job)

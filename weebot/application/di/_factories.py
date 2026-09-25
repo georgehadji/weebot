@@ -159,6 +159,9 @@ class FactoriesMixin:
             event_bus=self.get(EventBusPort),
             task_queue=self.get(TaskQueuePort),
             max_concurrent_flows=WeebotSettings().max_concurrent_flows,
+            # Lazy: the Mediator's factory resolves TaskRunner, so resolving
+            # the builder's collaborators here, at construction, would recurse.
+            flow_builder=lambda **kwargs: self.get("create_flow")(**kwargs),
         )
 
     @staticmethod

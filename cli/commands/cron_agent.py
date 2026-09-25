@@ -255,9 +255,15 @@ def cron_run(job_id: str) -> None:
     container = Container()
     container.configure_defaults()
 
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
+
+    # Were the string keys "llm_port" / "state_repo_port", which nothing
+    # registers -- both ports are bound by type -- so this command raised
+    # KeyError before running anything.
     runner = CronAgentRunner(
-        llm=container.get("llm_port"),
-        state_repo=container.get("state_repo_port"),
+        llm=container.get(LLMPort),
+        state_repo=container.get(StateRepositoryPort),
         tool_registry=None,
         flow_factory=container.get("create_flow"),
     )

@@ -110,6 +110,17 @@ class Container(
         self._singletons[port_type] = instance
         return instance
 
+    def warm_up(self) -> None:
+        """Build now what the first flow would otherwise build mid-request.
+
+        The Mediator is required by every flow (PlanningState and
+        ExecutingState refuse to run without one) and constructing it builds
+        the role LLM adapters and the tool registry -- tens of seconds on a
+        cold start. The web server calls this at startup so that cost is not
+        paid inside the first user's request.
+        """
+        self.get(Mediator)
+
     # ── convenience binders ─────────────────────────────────────────
 
     def configure_defaults(self, *, db_path="./weebot_sessions.db", default_model=None) -> None:
@@ -198,10 +209,34 @@ class Container(
         # Flow factory callable — resolved here so application services can
         # receive it by injection instead of importing the interfaces layer.
         # The composition root owns cross-layer imports; services must not.
+        #
+        # It hands out a builder that fills in the collaborators every flow
+        # REQUIRES from this container, rather than the bare create_flow.
+        # Handing out the bare function left each caller to remember the
+        # mediator, and two did not: TaskRunner.create_plan_act_factory -- the
+        # only way the web API starts a task -- and CronAgentRunner. Since
+        # 2b6f679 (2026-06-06) PlanningState refuses to run without a
+        # mediator, so every web-started session and every cron agent job
+        # emitted "PlanningState requires a Mediator" and planned nothing,
+        # while the CLI, which passes one, worked. The tests mocked the factory
+        # on both web paths, which is how it stayed green.
+        #
+        # Resolved when a flow is BUILT, not when the builder is: the Mediator's
+        # own factory resolves TaskRunner, and TaskRunner holds this builder,
+        # so resolving the Mediator eagerly here would recurse. Explicit
+        # arguments still win; a None mediator is never kept, because no flow
+        # can run on one.
         def _create_flow_callable():
             from weebot.interfaces.factories import create_flow
 
-            return create_flow
+            def _build_flow(**kwargs):
+                if kwargs.get("mediator") is None:
+                    kwargs["mediator"] = self.get(Mediator)
+                if kwargs.get("state_repo") is None:
+                    kwargs["state_repo"] = self.get(StateRepositoryPort)
+                return create_flow(**kwargs)
+
+            return _build_flow
 
         self.register("create_flow", _create_flow_callable)
 

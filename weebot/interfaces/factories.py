@@ -48,6 +48,11 @@ def _build_ponytail_skill_prompt(existing: str | None) -> str | None:
     """
     from weebot.application.services.ponytail_skill_prompt import build_ponytail_skill_prompt
 
+    # A caller that already applied a mode -- TaskRunner.create_plan_act_factory
+    # applies the SESSION's mode -- must not get the global mode appended as a
+    # second block. The session's explicit choice wins.
+    if existing and "[Ponytail mode:" in existing:
+        return existing
     return build_ponytail_skill_prompt(existing)
 
 

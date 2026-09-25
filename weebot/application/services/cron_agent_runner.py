@@ -103,14 +103,25 @@ class CronAgentRunner:
 
         full_prompt = "\n".join(prompt_parts)
 
-        # Run with timeout
+        # Run with timeout.
+        #
+        # This was `async for event in asyncio.wait_for(flow.run(...), ...)`.
+        # flow.run() is an async generator, and wait_for accepts an awaitable,
+        # not an async iterable -- so it raised TypeError before producing an
+        # event, the handler below caught it, and the job "succeeded" with
+        # "Cron job failed: ..." as its output, which the delivery service then
+        # sent to the job's channel as though it were a result. The timeout has
+        # to wrap a coroutine that consumes the generator.
         response = ""
-        try:
-            async for event in asyncio.wait_for(
-                flow.run(full_prompt), timeout=job.max_runtime_seconds
-            ):
+
+        async def _consume() -> None:
+            nonlocal response
+            async for event in flow.run(full_prompt):
                 if getattr(event, "type", "") == "message":
                     response = getattr(event, "message", "") or response
+
+        try:
+            await asyncio.wait_for(_consume(), timeout=job.max_runtime_seconds)
         except TimeoutError:
             response = f"⚠️ Cron job timed out after {job.max_runtime_seconds} seconds."
             logger.warning("Cron job %s timed out", job.id)

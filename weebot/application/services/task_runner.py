@@ -44,7 +44,13 @@ class TaskRunner:
         max_session_retries: int = 3,
         task_queue: TaskQueuePort | None = None,
         max_concurrent_flows: int = 8,
+        flow_builder: Callable[..., BaseFlow] | None = None,
     ):
+        # The composition root's flow builder (the container's "create_flow"),
+        # which supplies the collaborators a flow cannot run without. This
+        # service used to import PlanActFlow and construct it itself, and it
+        # left the mediator out -- see create_plan_act_factory.
+        self._flow_builder = flow_builder
         if max_concurrent_flows < 1:
             raise ValueError(f"max_concurrent_flows must be >= 1, got {max_concurrent_flows}")
         # Phase 1.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md.
@@ -426,10 +432,25 @@ class TaskRunner:
         mid-execution feedback sent via ``SteeringPort.send()`` — see
         ``PlanActFlow``'s per-step ``steering.poll()`` call. Without it,
         the web ``/sessions/{id}/steer`` endpoint has nothing to deliver to.
+
+        This used to construct ``PlanActFlow`` directly and pass no mediator.
+        ``PlanningState`` has refused to run without one since 2b6f679, so
+        every session the web API started -- this is its only way to start a
+        task -- emitted "PlanningState requires a Mediator" and planned
+        nothing. Building through the composition root's builder fixes that
+        for every caller at once, gives web sessions the same wiring the CLI
+        gets (code reviewer, verifier, behavioral learner, ...), and removes
+        the last import of ``flows`` from ``services``.
         """
-        from weebot.application.flows.plan_act_flow import PlanActFlow
         from weebot.application.services.ponytail_skill_prompt import build_ponytail_skill_prompt
 
+        if self._flow_builder is None:
+            raise RuntimeError(
+                "TaskRunner has no flow builder, so it cannot construct a flow that "
+                "can run. Resolve TaskRunner from the container, or pass "
+                "flow_builder=container.get('create_flow')."
+            )
+        build = self._flow_builder
         state_repo = self._state_repo
         skill_prompt = build_ponytail_skill_prompt(existing=None, mode=ponytail_mode)
 
@@ -437,7 +458,8 @@ class TaskRunner:
             from weebot.application.services.session_scoped_event_bus import SessionScopedEventBus
 
             scoped_bus = SessionScopedEventBus(event_bus, session.id) if event_bus else None
-            return PlanActFlow(
+            return build(
+                flow_type="plan_act",
                 llm=llm,
                 tools=tools,
                 session=session,

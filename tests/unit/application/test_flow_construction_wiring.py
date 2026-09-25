@@ -1,0 +1,181 @@
+"""Every flow the product builds must have what a flow cannot run without.
+
+Phase 2.1 of ``tasks/specs/arch_audit_2026_09_remediation_plan.md``.
+
+Since 2b6f679 (2026-06-06) ``PlanningState`` refuses to run without a
+mediator. Two construction paths never passed one:
+
+* ``TaskRunner.create_plan_act_factory`` -- the only way the web API starts a
+  task, used by the sessions router and ``dispatch_session_input``. Every
+  web-started session emitted "PlanningState requires a Mediator" and planned
+  nothing.
+* ``CronAgentRunner`` -- every scheduled agent job, which also asked the
+  container for two string keys nothing registers, and wrapped an async
+  generator in ``asyncio.wait_for``.
+
+Both stayed green because the tests on those paths mocked the factory:
+``create_plan_act_factory = MagicMock(return_value=lambda s: MagicMock())``.
+A mocked factory proves the caller calls a factory. It cannot prove the
+factory builds something that runs. These tests build the real thing.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from weebot.application.cqrs.commands import CreatePlanCommand, ExecuteStepCommand
+from weebot.application.cqrs.mediator import Mediator
+from weebot.application.models.tool_collection import ToolCollection
+from weebot.domain.models.session import Session
+
+# Container construction imports the whole application -- 20-30s cold on
+# Windows, past the suite's 60s per-test default once configure_defaults runs.
+# Build it once for the module.
+
+
+@pytest.fixture(scope="module")
+def container():
+    from weebot.application.di import Container
+
+    c = Container()
+    c.configure_defaults()
+    return c
+
+
+def _assert_can_plan_and_execute(flow, container):
+    mediator = container.get(Mediator)
+    assert flow._mediator is mediator, (
+        "flow has no mediator -- PlanningState will refuse to run "
+        "('PlanningState requires a Mediator')"
+    )
+    # A mediator with no handlers for these is the same failure one step later.
+    for command in (CreatePlanCommand, ExecuteStepCommand):
+        assert command in mediator._command_handlers, f"no handler for {command.__name__}"
+    assert flow._state_repo is not None
+
+
+@pytest.mark.timeout(360)
+def test_a_web_started_session_gets_a_flow_that_can_plan(container):
+    """The path the sessions router and dispatch_session_input both take."""
+    from weebot.application.services.task_runner import TaskRunner
+
+    runner = container.get(TaskRunner)
+    factory = runner.create_plan_act_factory(llm=MagicMock(), tools=ToolCollection())
+
+    flow = factory(Session(id="web-1", user_id="u", agent_id="a"))
+
+    _assert_can_plan_and_execute(flow, container)
+
+
+@pytest.mark.timeout(360)
+def test_the_containers_flow_builder_supplies_the_mediator(container):
+    """What CronAgentRunner calls. It passes no mediator; the builder must."""
+    build = container.get("create_flow")
+
+    flow = build(
+        flow_type="plan_act",
+        session=Session(id="cron-1", user_id="cron-agent", agent_id="cron-agent"),
+        llm=MagicMock(),
+        tools=ToolCollection(),
+    )
+
+    _assert_can_plan_and_execute(flow, container)
+
+
+@pytest.mark.timeout(360)
+def test_an_explicit_mediator_still_wins(container):
+    build = container.get("create_flow")
+    mine = MagicMock()
+
+    flow = build(
+        flow_type="plan_act",
+        session=Session(id="x", user_id="u", agent_id="a"),
+        llm=MagicMock(),
+        tools=ToolCollection(),
+        mediator=mine,
+    )
+
+    assert flow._mediator is mine
+
+
+def test_a_task_runner_without_a_builder_refuses_rather_than_building_a_broken_flow():
+    from weebot.application.services.task_runner import TaskRunner
+
+    runner = TaskRunner(state_repo=AsyncMock())
+    with pytest.raises(RuntimeError, match="no flow builder"):
+        runner.create_plan_act_factory(llm=MagicMock(), tools=ToolCollection())
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Cron
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class _AnsweringFlow:
+    async def run(self, prompt: str):
+        await asyncio.sleep(0)
+        yield MagicMock(type="message", message="the answer")
+
+
+def _job(**overrides):
+    from weebot.domain.models.cron_job import CronJobRecord
+
+    fields = dict(id="job-1", name="t", schedule="* * * * *", prompt="do the thing")
+    fields.update(overrides)
+    return CronJobRecord(**fields)
+
+
+@pytest.mark.asyncio
+async def test_a_cron_job_returns_the_flows_answer_not_a_type_error(monkeypatch):
+    """`async for ... in asyncio.wait_for(async_gen)` raised TypeError before
+    the first event, and the handler turned it into the job's output -- which
+    the delivery service then sent on as though it were a result."""
+    from weebot.application.services.cron_agent_runner import CronAgentRunner
+
+    monkeypatch.delenv("WEEBOT_CRON_CONTEXT", raising=False)
+    runner = CronAgentRunner(
+        llm=MagicMock(), state_repo=AsyncMock(), flow_factory=lambda **kw: _AnsweringFlow()
+    )
+
+    result = await runner.run(_job())
+
+    assert result == "the answer", result
+
+
+@pytest.mark.asyncio
+async def test_a_cron_job_still_times_out(monkeypatch):
+    from weebot.application.services.cron_agent_runner import CronAgentRunner
+
+    class _SlowFlow:
+        async def run(self, prompt):
+            await asyncio.sleep(10)
+            yield MagicMock(type="message", message="too late")
+
+    monkeypatch.delenv("WEEBOT_CRON_CONTEXT", raising=False)
+    runner = CronAgentRunner(
+        llm=MagicMock(), state_repo=AsyncMock(), flow_factory=lambda **kw: _SlowFlow()
+    )
+    job = _job()
+    object.__setattr__(job, "max_runtime_seconds", 0.05)  # below the model's floor, on purpose
+
+    result = await runner.run(job)
+
+    assert "timed out" in result
+
+
+@pytest.mark.timeout(360)
+def test_the_keys_the_cron_paths_resolve_are_registered(container):
+    """scheduler.py and cli/commands/cron_agent.py resolved "llm_port" and
+    "state_repo_port". Both ports are bound by type; the strings resolve to
+    nothing, and Container.get() raised KeyError on every run."""
+    from weebot.application.ports.llm_port import LLMPort
+    from weebot.application.ports.state_repo_port import StateRepositoryPort
+
+    assert container.get(LLMPort) is not None
+    assert container.get(StateRepositoryPort) is not None
+    for missing in ("llm_port", "state_repo_port", "mediator"):
+        with pytest.raises(KeyError):
+            container.get(missing)
