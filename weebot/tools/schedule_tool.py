@@ -105,11 +105,13 @@ class ScheduleTool(BaseTool):
     ) -> ToolResult:
         """Execute scheduling action."""
         # ── Recursion guard: prevent cron agent sessions from scheduling ──
-        # Check for a sentinel env-var or module-level flag set when a cron
-        # agent runner is active.  This prevents infinite scheduling loops.
-        import os as _cron_guard_os
+        # Scoped to the cron job's own task (a ContextVar), not the process.
+        # This read os.environ["WEEBOT_CRON_CONTEXT"], which CronAgentRunner
+        # set process-wide and never cleared -- in the web server that would
+        # have disabled scheduling for every session after the first job.
+        from weebot.core.cron_context import in_cron_job
 
-        if _cron_guard_os.environ.get("WEEBOT_CRON_CONTEXT", "").lower() in ("1", "true", "yes"):
+        if in_cron_job():
             return ToolResult(
                 output="",
                 error="Scheduling is disabled inside a cron agent session to prevent recursion.",

@@ -194,6 +194,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     event_bus.subscribe(broadcaster.publish)
     app.state.event_broadcaster = broadcaster
 
+    # ── Build the Mediator now, not inside the first user's request ──
+    # Every web-started flow needs it: PlanningState refuses to run without
+    # one, and TaskRunner.create_plan_act_factory had been leaving it out
+    # (fixed in Phase 2.1). Building it constructs the role LLM adapters and
+    # the tool registry -- tens of seconds cold -- and until now the web path
+    # never resolved it at all, so that cost would land inside the first
+    # /sessions request after every boot. Paid here instead. Synchronous on
+    # purpose: Container.get() is not thread-safe, and a background warm-up
+    # racing a request could build two mediators. Asked of the container
+    # rather than done here: importing Mediator into this module opens import
+    # chains from interfaces into infrastructure that the
+    # interfaces-no-infra contract forbids.
+    import time as _time
+
+    _t0 = _time.monotonic()
+    container.warm_up()
+    logger.info("Flow dependencies ready in %.1fs", _time.monotonic() - _t0)
+
     # ── Database migration (Alembic) — run by docker-entrypoint.sh ──
     # In-app migration is intentionally removed: the entrypoint runs
     # alembic upgrade head with set -e, making migration failure fatal

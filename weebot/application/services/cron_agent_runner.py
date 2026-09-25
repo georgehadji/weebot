@@ -42,13 +42,16 @@ class CronAgentRunner:
         self._flow_factory = flow_factory
 
     async def run(self, job: CronJobRecord) -> str:
-        import os
-
-        # Set recursion guard before spawning the flow
-        # Set recursion guard — prevents infinite scheduling loops
-        os.environ["WEEBOT_CRON_CONTEXT"] = "1"
-        logger.debug("Cron context guard set")
         """Execute a cron job and return the result text.
+
+        Everything the job runs -- the flow, and every tool call inside it --
+        sees ``in_cron_job()`` as True, so the schedule tool refuses to
+        schedule and a job cannot schedule itself into a loop.
+
+        This used to set ``os.environ["WEEBOT_CRON_CONTEXT"] = "1"`` and never
+        unset it. The scheduler runs jobs inside the web server's process, so
+        after the first job, scheduling would have been disabled for every
+        user's session until a restart. See weebot/core/cron_context.py.
 
         Args:
             job: The cron job to execute.
@@ -56,6 +59,12 @@ class CronAgentRunner:
         Returns:
             The flow's final response text.
         """
+        from weebot.core.cron_context import cron_job_context
+
+        with cron_job_context():
+            return await self._run(job)
+
+    async def _run(self, job: CronJobRecord) -> str:
         import uuid
 
         session_id = f"cron-{job.id}-{uuid.uuid4().hex[:8]}"
@@ -103,14 +112,25 @@ class CronAgentRunner:
 
         full_prompt = "\n".join(prompt_parts)
 
-        # Run with timeout
+        # Run with timeout.
+        #
+        # This was `async for event in asyncio.wait_for(flow.run(...), ...)`.
+        # flow.run() is an async generator, and wait_for accepts an awaitable,
+        # not an async iterable -- so it raised TypeError before producing an
+        # event, the handler below caught it, and the job "succeeded" with
+        # "Cron job failed: ..." as its output, which the delivery service then
+        # sent to the job's channel as though it were a result. The timeout has
+        # to wrap a coroutine that consumes the generator.
         response = ""
-        try:
-            async for event in asyncio.wait_for(
-                flow.run(full_prompt), timeout=job.max_runtime_seconds
-            ):
+
+        async def _consume() -> None:
+            nonlocal response
+            async for event in flow.run(full_prompt):
                 if getattr(event, "type", "") == "message":
                     response = getattr(event, "message", "") or response
+
+        try:
+            await asyncio.wait_for(_consume(), timeout=job.max_runtime_seconds)
         except TimeoutError:
             response = f"⚠️ Cron job timed out after {job.max_runtime_seconds} seconds."
             logger.warning("Cron job %s timed out", job.id)

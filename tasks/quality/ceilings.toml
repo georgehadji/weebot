@@ -36,8 +36,12 @@ silent_except_handlers = 134
 blocking_io_in_async = 29
 
 # print() in production code (weebot/, cli/), excluding tests.
+# 143 -> 105 with phase 2.1: 38 of them were in three modules nothing imported
+# -- strategy_adaptation, workflow_planner and nlp_understanding, 1,570 lines
+# deleted rather than moved. Dead code does not only cost its own lines; it
+# holds debt the ratchets count, so it also hides how much debt is live.
 # Measured by: the `lint-no-print` target in the Makefile.
-print_in_production = 143
+print_in_production = 105
 
 # Bare os.environ / os.getenv outside weebot/config/.
 # 73 -> 72, and not because any first-party read was fixed. One of the 73 was

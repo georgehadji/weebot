@@ -169,8 +169,12 @@ def dream_build(contract_id: str) -> None:
         from weebot.interfaces.cli.event_logger import CLIEventSubscriber
         from weebot.domain.models.event import WaitForUserEvent
 
+        from weebot.application.cqrs.mediator import Mediator
+
+        # Was container.get("mediator"). Mediator is bound by type, not by that
+        # string, so building an idea raised KeyError before the runner existed.
         runner = AgentRunner(
-            llm=llm, state_repo=state_repo, mediator=container.get("mediator"), use_rich=False
+            llm=llm, state_repo=state_repo, mediator=container.get(Mediator), use_rich=False
         )
         subscriber = CLIEventSubscriber(use_rich=True)
 
