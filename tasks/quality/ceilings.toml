@@ -99,5 +99,23 @@ agent_json_parsing = 7
 # -- wire it or delete it -- and phase 2.4 takes this to 0.
 # 18 -> 17 with phase 1.3: `llm_pool` is resolved by the container's step
 # executor factory, the one ExecuteStepHandler actually runs steps with.
+# 17 -> 16 with phase 2.4, and not because anything was wired: the census was
+# wrong. Its resolver set had been derived from string keys only, so it never
+# counted `_maybe_get(SomeType)`, the resolver for type keys, and
+# EventPublisher was a false orphan.
 # Measured by: scripts/lint_di_wiring.py
-unresolved_di_keys = 17
+unresolved_di_keys = 16
+
+# The mirror image: keys a container is ASKED for that no register() defines.
+# The class behind four live failures found in phase 2.1 -- "llm_port" and
+# "state_repo_port" (every cron job), "mediator" (the dream command),
+# "scoring_port" (trajectory scoring, never registered) -- each bound by type,
+# asked for by string, and Container.get() does not cross-resolve. Each raised
+# KeyError, or through _maybe_get / _maybe_get_str quietly returned None.
+# The four still counted: interfaces/web/dependencies.py asks for two concrete
+# store classes nothing registers, so deleting a session never purged its
+# checkpoints or gateway sessions; and _build_plan_act_flow_for_session asks
+# for "state_repo" and "event_bus" -- dead code behind two orphan bindings,
+# removed in phase 2.3.
+# Measured by: scripts/lint_di_wiring.py
+unregistered_di_keys = 4

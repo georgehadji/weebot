@@ -613,7 +613,11 @@ class Container(
                 event_bus=None,
                 model=spec.model or _TIER_MODEL.get(spec.tier, MODEL_CASCADE_TIER2),
                 mediator=mediator,
-                state_repo=self._maybe_get("state_repo_port"),
+                # Was self._maybe_get("state_repo_port"), a string nothing
+                # registers -- StateRepositoryPort is bound by type -- so every
+                # sub-agent flow got None and never saved its session, which the
+                # mediator's handlers load by id to plan and execute it.
+                state_repo=self._maybe_get(StateRepositoryPort),
                 skill_prompt=None,
                 max_steps=spec.max_tool_calls,
             )

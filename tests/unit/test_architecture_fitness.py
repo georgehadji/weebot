@@ -1085,7 +1085,6 @@ def test_orphan_ports_flagged():
 # and lower the ceiling with it.
 _UNRESOLVED_DI_KEYS = {
     "ConfigAdapter",
-    "EventPublisher",
     "SandboxBackendAdapter",
     "TaskRouterPort",
     "activity_stream",
@@ -1158,6 +1157,48 @@ def test_the_di_ceiling_matches_the_named_set():
         _source(ROOT.parent / "tasks" / "quality" / "ceilings.toml"),
     )["ceilings"]
     assert ceilings["unresolved_di_keys"] == len(_UNRESOLVED_DI_KEYS)
+
+
+# Keys a container is asked for that nothing registers -- the mirror image of
+# the set above, pinned by name for the same reason: a count cannot see a
+# substitution. Phase 2.1 found four live failures of this shape; these are
+# what is left. The two store classes are the session-deletion gap (deleting a
+# session never purged its checkpoints or gateway sessions); "state_repo" and
+# "event_bus" sit in dead code behind two orphan bindings.
+_UNREGISTERED_DI_KEYS = {
+    "SQLiteCheckpointStore",
+    "SQLiteGatewaySessionStore",
+    "event_bus",
+    "state_repo",
+}
+
+
+@lru_cache(maxsize=None)
+def _di_unregistered():
+    return tuple(_di_wiring().find_unregistered())
+
+
+def test_no_new_lookups_of_unregistered_di_keys():
+    """Exact in both directions, like the orphan set."""
+    found = dict(_di_unregistered())
+    new = sorted(set(found) - _UNREGISTERED_DI_KEYS)
+    assert new == [], "a container is asked for a key nothing registers:\n  " + "\n  ".join(
+        f"{found[k]}: {k}" for k in new
+    )
+    fixed = sorted(_UNREGISTERED_DI_KEYS - set(found))
+    assert fixed == [], (
+        "these lookups resolve now -- remove them from _UNREGISTERED_DI_KEYS and "
+        "lower `unregistered_di_keys` in tasks/quality/ceilings.toml:\n  " + "\n  ".join(fixed)
+    )
+
+
+def test_the_unregistered_ceiling_matches_the_named_set():
+    import tomllib
+
+    ceilings = tomllib.loads(_source(ROOT.parent / "tasks" / "quality" / "ceilings.toml"))[
+        "ceilings"
+    ]
+    assert ceilings["unregistered_di_keys"] == len(_UNREGISTERED_DI_KEYS)
 
 
 def test_the_census_recognises_a_wired_binding():

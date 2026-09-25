@@ -50,6 +50,9 @@ _EXPECTED = {
     # a registration, a factory and a guard that each read correctly while the
     # guarded branch never runs. See scripts/lint_di_wiring.py.
     "unresolved_di_keys",
+    # The mirror image: keys asked for that nothing registers. Four live
+    # failures in phase 2.1 had this shape. See scripts/lint_di_wiring.py.
+    "unregistered_di_keys",
 }
 
 
