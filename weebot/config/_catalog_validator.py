@@ -16,6 +16,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from weebot.config.model_registry import strip_routing_suffix
+
 if TYPE_CHECKING:
     from weebot.domain.models.model_config import ModelConfig
 
@@ -140,20 +142,9 @@ class CatalogValidator:
         report.elapsed_ms = (_t.monotonic() - t0) * 1000
         return report
 
-    # Suffixes that are routing variants, not separate model IDs
-    _ROUTING_SUFFIXES = (":thinking", ":free", ":nitro")
-
-    @staticmethod
-    def _strip_routing_suffix(model_id: str) -> str:
-        """Strip routing variant suffixes to get the base model ID.
-
-        ``z-ai/glm-5.2:thinking`` → ``z-ai/glm-5.2``
-        ``qwen/qwen3-coder:free`` → ``qwen/qwen3-coder``
-        """
-        for suffix in CatalogValidator._ROUTING_SUFFIXES:
-            if model_id.endswith(suffix):
-                return model_id[: -len(suffix)]
-        return model_id
+    # Routing variants, not separate model ids -- one definition, shared with
+    # get_model_config.
+    _strip_routing_suffix = staticmethod(strip_routing_suffix)
 
     def _check_model(
         self, report: ValidationReport, model_id: str, role: str, catalog: dict[str, ModelConfig]

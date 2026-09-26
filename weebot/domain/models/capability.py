@@ -20,7 +20,7 @@ class CapabilityAxis(str, Enum):
     These are the axes used in the cosine-similarity match between a model's
     quality profile and a task's requirement vector.  Cost, latency, and
     context-window are NOT capabilities — they are penalties/constraints and
-    live in ModelInfo / the Constraint Checker.
+    live in ModelConfig (config/model_catalog.py) / the Constraint Checker.
     """
 
     REASONING = "reasoning"

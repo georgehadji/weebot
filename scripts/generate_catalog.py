@@ -61,8 +61,10 @@ mix but one. Two conventions are already in use in this repo and they disagree:
 
 ``--cost-model`` selects one and records the choice in the generated header.
 The default stays ``max`` so that regenerating does not silently change routing
-or budget behaviour. The real fix is for ``ModelConfig`` to carry both rates;
-until then, this flag at least makes the choice visible.
+or budget behaviour. Since phase 3.2 ``ModelConfig`` also carries both real
+rates (``prompt_cost_per_1k`` / ``completion_cost_per_1k``), and cost
+*estimates* use those; the blended number remains what the selection
+strategies compare.
 
 Requires: requests, and only when fetching live -- --from-file needs nothing.
 """
@@ -70,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime
 import difflib
 import json
 import math
@@ -319,6 +322,39 @@ def determine_strengths(
     return list(dict.fromkeys(strengths))
 
 
+# Fields added in phase 3.2 so this catalog can replace the hand-written
+# config/model_registry.py. All optional: None renders as nothing and means
+# "unknown", which is what a hand-added EXTRA_MODELS entry is.
+OPTIONAL_FLOATS = ("prompt_cost_per_1k", "completion_cost_per_1k")
+OPTIONAL_STR_LISTS = ("input_modalities", "supported_parameters", "reasoning_efforts")
+
+
+def api_fields(m: dict) -> dict:
+    """The phase 3.2 metadata, straight from one /api/v1/models entry."""
+    rates = parse_rates(m.get("pricing") or {})
+    top = m.get("top_provider") or {}
+    reasoning = m.get("reasoning") or {}
+    max_out = top.get("max_completion_tokens")
+    efforts = reasoning.get("supported_efforts")
+    return {
+        "prompt_cost_per_1k": None if rates is None else rates[0] * 1000,
+        "completion_cost_per_1k": None if rates is None else rates[1] * 1000,
+        "max_output_tokens": max_out if isinstance(max_out, int) and max_out > 0 else None,
+        "input_modalities": list((m.get("architecture") or {}).get("input_modalities") or [])
+        or None,
+        # Sorted: the API's order carries no meaning and would churn diffs.
+        "supported_parameters": sorted(m.get("supported_parameters") or []) or None,
+        # Kept in the API's order, which is documented as highest effort first.
+        "reasoning_efforts": list(efforts) if efforts else None,
+        "reasoning_mandatory": bool(reasoning["mandatory"]) if "mandatory" in reasoning else None,
+        # Recorded, not filtered on: the catalog must be a pure function of the
+        # payload, or the byte-for-byte test would start failing on the day a
+        # listed model's date passes. OpenRouter drops retired models from the
+        # list itself, so the next refresh removes them.
+        "expiration_date": m.get("expiration_date") or None,
+    }
+
+
 def fetch_models(from_file: Path | None = None) -> list[dict]:
     """Return the model list, from a saved payload or from the live API."""
     if from_file is not None:
@@ -401,6 +437,7 @@ def build_entries(models: list[dict], cost_model: str) -> dict[str, dict]:
             "tier": "FAST" if cost == 0 else "STANDARD",
             "api_key_env": PROVIDER_API_KEY.get(provider, "OPENROUTER_API_KEY"),
             "tool_use_score": TOOL_USE_SCORES.get(model_id, 5),
+            **api_fields(m),
         }
 
     # Extras first, then pins. The other order -- which this had -- made a pin
@@ -428,7 +465,10 @@ def build_entries(models: list[dict], cost_model: str) -> dict[str, dict]:
             file=sys.stderr,
         )
 
-    for label, ids in (("priced at routing time", variable_priced), ("not token-priced", unpriced)):
+    for label, ids in (
+        ("priced at routing time", variable_priced),
+        ("not token-priced", unpriced),
+    ):
         if ids:
             shown = ", ".join(sorted(ids)[:10])
             more = f" (+{len(ids) - 10} more)" if len(ids) > 10 else ""
@@ -575,6 +615,7 @@ def validate_entries(entries: dict[str, dict]) -> None:
                 )
             if value <= 0:
                 raise PayloadError(f"{model_id}: {field_name} must be positive, got {value!r}")
+        _validate_optional(model_id, cfg)
 
     if len(entries) < MIN_PLAUSIBLE_MODELS:
         raise PayloadError(
@@ -582,6 +623,32 @@ def validate_entries(entries: dict[str, dict]) -> None:
             f"floor of {MIN_PLAUSIBLE_MODELS}. Re-run when the API is healthy, or "
             f"pass --from-file with a payload you trust."
         )
+
+
+def _validate_optional(model_id: str, cfg: dict) -> None:
+    """The phase 3.2 fields: each is None or a well-formed value."""
+    for name in OPTIONAL_FLOATS:
+        v = cfg.get(name)
+        if v is None:
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+            raise PayloadError(f"{model_id}: {name} must be a finite number >= 0, got {v!r}")
+    v = cfg.get("max_output_tokens")
+    if v is not None and (isinstance(v, bool) or not isinstance(v, int) or v <= 0):
+        raise PayloadError(f"{model_id}: max_output_tokens must be a positive int, got {v!r}")
+    for name in OPTIONAL_STR_LISTS:
+        v = cfg.get(name)
+        if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) for x in v)):
+            raise PayloadError(f"{model_id}: {name} must be a list of strings, got {v!r}")
+    v = cfg.get("reasoning_mandatory")
+    if v is not None and not isinstance(v, bool):
+        raise PayloadError(f"{model_id}: reasoning_mandatory must be a bool, got {v!r}")
+    v = cfg.get("expiration_date")
+    if v is not None:
+        try:
+            datetime.date.fromisoformat(str(v)[:10])
+        except ValueError:
+            raise PayloadError(f"{model_id}: expiration_date is not an ISO date: {v!r}") from None
 
 
 def generate_catalog(models: list[dict], cost_model: str = "max") -> str:
@@ -638,12 +705,36 @@ def render_catalog(entries: dict[str, dict], cost_model: str = "max") -> str:
         strengths=[{strength_str}],
         tier=ModelTier.{cfg["tier"]},
         api_key_env={json.dumps(cfg["api_key_env"])},
-        tool_use_score={cfg["tool_use_score"]!r},
+        tool_use_score={cfg["tool_use_score"]!r},{_render_optional(cfg)}
     ),'''
         )
 
     lines.extend(["}", ""])
     return "\n".join(lines)
+
+
+def _render_optional(cfg: dict) -> str:
+    """The phase 3.2 fields that are known, one per line; unknown ones omitted.
+
+    Omitting None keeps a hand-added entry to the fields someone actually set,
+    and ModelConfig's own None default restores it on import.
+    """
+    out = []
+    for name in (
+        *OPTIONAL_FLOATS,
+        "max_output_tokens",
+        *OPTIONAL_STR_LISTS,
+        "reasoning_mandatory",
+        "expiration_date",
+    ):
+        value = cfg.get(name)
+        if value is None:
+            continue
+        # json.dumps for strings and lists of strings: API-sourced, and the
+        # rendered file is executed by verify_rendered.
+        literal = json.dumps(value) if isinstance(value, (str, list)) else repr(value)
+        out.append(f"\n        {name}={literal},")
+    return "".join(out)
 
 
 # Loads the rendered catalog with the *package chain stubbed out*, so verifying

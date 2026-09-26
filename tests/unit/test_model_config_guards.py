@@ -108,3 +108,27 @@ def test_every_shipped_model_survives_its_own_validation():
     for model_id, cfg in MODELS.items():
         assert cfg.cost_per_1k_tokens >= 0, model_id
         assert isinstance(cfg.context_window, int) and cfg.context_window > 0, model_id
+
+
+def _metadata_config(**kw) -> ModelConfig:
+    return ModelConfig(
+        name="m", provider="openrouter", cost_per_1k_tokens=0.01, context_window=1000,
+        strengths=[], tier=ModelTier.STANDARD, api_key_env="K", **kw,
+    )
+
+
+def test_capabilities_are_unknown_until_the_catalog_says_otherwise():
+    """None, not False: a hand-added model the API never described has not been
+    shown to lack tools. Callers decide whether unknown passes their gate."""
+    bare = _metadata_config()
+    assert bare.supports_tools is None and bare.supports_vision is None
+    described = _metadata_config(supported_parameters=["tools"], input_modalities=["text"])
+    assert described.supports_tools is True and described.supports_vision is False
+    assert described.supports_reasoning is False
+
+
+def test_estimate_cost_uses_the_split_rates_when_known():
+    split = _metadata_config(prompt_cost_per_1k=0.002, completion_cost_per_1k=0.01)
+    assert split.estimate_cost(1000, 1000) == pytest.approx(0.012)
+    # Falls back to the blended rate for both sides when the split is unknown.
+    assert _metadata_config().estimate_cost(1000, 1000) == pytest.approx(0.02)

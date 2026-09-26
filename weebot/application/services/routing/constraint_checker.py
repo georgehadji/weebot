@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from weebot.config.model_registry import get_model_info
+from weebot.config.model_registry import get_model_config
 from weebot.domain.models.capability import TaskRequirement
 
 logger = logging.getLogger(__name__)
@@ -54,23 +54,13 @@ class ConstraintChecker:
 
     @staticmethod
     def _resolve_model_info(model_id: str):
-        """Resolve model info, trying both prefixed and unprefixed names.
+        """Catalog metadata for *model_id*, or None when unknown.
 
-        The CATEGORY_MODEL map uses ``provider/name`` format (OpenRouter-style)
-        while the internal registry sometimes uses just ``name``.
+        The prefix-stripping fallbacks this had were for the hand-written
+        registry's bare names; the generated catalog is keyed by the same
+        ``vendor/name`` ids CATEGORY_MODEL uses.
         """
-        info = get_model_info(model_id)
-        if info is not None:
-            return info
-        # Try stripping the provider prefix
-        if "/" in model_id:
-            short_name = model_id.split("/", 1)[1]
-            info = get_model_info(short_name)
-            if info is not None:
-                return info
-        # Try prepending "openrouter/"
-        alt = f"openrouter/{model_id}"
-        return get_model_info(alt)
+        return get_model_config(model_id)
 
     def eligible(
         self, candidates: list[str], requirement: TaskRequirement, context_tokens: int = 0
@@ -92,9 +82,10 @@ class ConstraintChecker:
         for model_id in candidates:
             info = self._resolve_model_info(model_id)
             if info is None:
-                logger.debug("ConstraintChecker: no ModelInfo for %s — excluding", model_id)
+                logger.debug("ConstraintChecker: %s not in the model catalog — excluding", model_id)
                 continue
-            if requirement.requires_tools and not info.supports_function_calling:
+            # Unknown (None) fails a required capability, as an unknown model does.
+            if requirement.requires_tools and not info.supports_tools:
                 logger.debug("ConstraintChecker: %s lacks function_calling — excluding", model_id)
                 continue
             if requirement.requires_vision and not info.supports_vision:
@@ -110,11 +101,11 @@ class ConstraintChecker:
                 info = self._resolve_model_info(model_id)
                 if info is None:
                     continue  # already filtered above, but guard against race
-                if effective_ctx > info.max_input_tokens:
+                if effective_ctx > info.context_window:
                     logger.debug(
                         "ConstraintChecker: %s max_input=%d < required=%d — excluding",
                         model_id,
-                        info.max_input_tokens,
+                        info.context_window,
                         effective_ctx,
                     )
                     continue

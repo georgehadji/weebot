@@ -710,10 +710,14 @@ def test_the_fixture_carries_only_the_fields_the_generator_reads():
     """It is a test fixture, not an API archive: everything else is weight.
 
     ``pricing`` is kept whole so the caching and web-search rates ride along for
-    whenever they are wired up.
+    whenever they are wired up. The last four keys are what phase 3.2 reads:
+    output limit, supported parameters, the reasoning spec, and retirement date.
     """
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
-    allowed = {"id", "name", "context_length", "pricing", "architecture"}
+    allowed = {
+        "id", "name", "context_length", "pricing", "architecture",
+        "top_provider", "supported_parameters", "reasoning", "expiration_date",
+    }
     assert {k for m in payload for k in m} <= allowed
 
 
@@ -726,3 +730,43 @@ def test_a_dry_run_still_verifies_that_the_output_imports(
     catalog_at.write_text(catgen.render_catalog({}, "max"), encoding="utf-8")
     assert _run(monkeypatch, tmp_path, ["--bootstrap"]) == 0
     assert "Rendered and imported cleanly: 60 models" in capsys.readouterr().out
+
+
+def test_api_fields_carry_what_the_models_endpoint_says():
+    """Phase 3.2: the fields that let this catalog replace the hand-written
+    registry, read from one /api/v1/models entry as OpenRouter documents it."""
+    entry = {
+        "id": "v/m",
+        "pricing": {"prompt": "0.000002", "completion": "0.00001"},
+        "top_provider": {"max_completion_tokens": 128000},
+        "architecture": {"input_modalities": ["text", "image"]},
+        "supported_parameters": ["tools", "reasoning", "max_tokens"],
+        "reasoning": {"supported_efforts": ["high", "low"], "mandatory": True},
+        "expiration_date": "2026-10-09",
+    }
+    got = catgen.api_fields(entry)
+    assert got["prompt_cost_per_1k"] == pytest.approx(0.002)
+    assert got["completion_cost_per_1k"] == pytest.approx(0.01)
+    assert got["max_output_tokens"] == 128000
+    assert got["input_modalities"] == ["text", "image"]
+    assert got["supported_parameters"] == ["max_tokens", "reasoning", "tools"]  # sorted
+    assert got["reasoning_efforts"] == ["high", "low"]  # API order: highest first
+    assert got["reasoning_mandatory"] is True
+    assert got["expiration_date"] == "2026-10-09"
+
+
+def test_absent_api_fields_are_unknown_and_render_as_nothing():
+    """A model with no reasoning object has no effort selection -- None, not []
+    -- and None fields are omitted from the rendered entry."""
+    got = catgen.api_fields({"id": "v/m", "pricing": {"prompt": "0", "completion": "0"}})
+    assert got["reasoning_efforts"] is None and got["reasoning_mandatory"] is None
+    assert got["supported_parameters"] is None and got["max_output_tokens"] is None
+    rendered = catgen._render_optional(got)
+    assert "reasoning_efforts" not in rendered and "prompt_cost_per_1k=0.0" in rendered
+
+
+def test_a_malformed_optional_field_is_refused():
+    with pytest.raises(catgen.PayloadError, match="reasoning_mandatory"):
+        catgen._validate_optional("v/m", {"reasoning_mandatory": "yes"})
+    with pytest.raises(catgen.PayloadError, match="prompt_cost_per_1k"):
+        catgen._validate_optional("v/m", {"prompt_cost_per_1k": -1.0})
