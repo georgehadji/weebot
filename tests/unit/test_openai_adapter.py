@@ -42,8 +42,9 @@ async def test_openai_adapter_strips_thinking_suffix():
         assert called_kwargs["model"] == "z-ai/glm-5.2"
         # Deep thinking must be enabled
         assert called_kwargs["extra_body"]["thinking"] == {"type": "enabled"}
-        # Default reasoning_effort must be 'max'
-        assert called_kwargs["reasoning_effort"] == "max"
+        # The :thinking default asks for 'max', fitted to what the model accepts:
+        # glm-5.2 lists only xhigh and high, so the highest it takes is sent.
+        assert called_kwargs["reasoning_effort"] == "xhigh"
 
 
 @pytest.mark.asyncio

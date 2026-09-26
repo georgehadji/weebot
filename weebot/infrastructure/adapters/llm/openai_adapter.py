@@ -17,6 +17,33 @@ from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 
 logger = logging.getLogger(__name__)
 
+# OpenRouter's effort vocabulary, highest first.
+_EFFORT_ORDER = ("max", "xhigh", "high", "medium", "low", "minimal", "none")
+
+
+def _catalog_spec(model_id: str):
+    """The catalog entry for *model_id*, or None for a model OpenRouter does not
+    list (a bare id sent to a direct DeepSeek / Kimi endpoint, say)."""
+    from weebot.config.model_registry import get_model_config
+
+    return get_model_config(model_id)
+
+
+def _fit_effort(effort: str, spec) -> str:
+    """Fit *effort* to the efforts the model accepts, stepping down.
+
+    From the model's `reasoning` object in /api/v1/models. A mandatory-reasoning
+    model rejects "none", so it is never offered one. Unknown models, and
+    efforts outside the vocabulary, pass through unchanged.
+    """
+    if spec is None or not spec.reasoning_efforts or effort not in _EFFORT_ORDER:
+        return effort
+    allowed = [e for e in spec.reasoning_efforts if not (spec.reasoning_mandatory and e == "none")]
+    if not allowed or effort in allowed:
+        return effort
+    lower = [e for e in _EFFORT_ORDER[_EFFORT_ORDER.index(effort):] if e in allowed]
+    return lower[0] if lower else allowed[-1]
+
 
 class OpenAIAdapter(LLMPort):
     """Adapter for OpenAI-compatible APIs (OpenAI, DeepSeek, etc.)."""
@@ -100,11 +127,19 @@ class OpenAIAdapter(LLMPort):
         # the temperature parameter or use a fixed default of 1.
         # As per user instruction, GPT models do not accept temperature argument.
         model_id = kwargs["model"].lower()
-        is_gpt_or_reasoning = "gpt" in model_id or any(
-            x in model_id for x in ["o1-", "o3-", "/o1", "/o3"]
-        )
+        # The catalog says which parameters a model accepts. The name heuristic
+        # below is only the fallback for models it does not list: it dropped
+        # temperature for gpt-4.1 (which takes it) and sent it to Claude Sonnet 5
+        # (which does not list it).
+        spec = _catalog_spec(kwargs["model"])
+        if spec is not None and spec.supports_temperature is not None:
+            accepts_temperature = spec.supports_temperature
+        else:
+            accepts_temperature = not (
+                "gpt" in model_id or any(x in model_id for x in ["o1-", "o3-", "/o1", "/o3"])
+            )
 
-        if not is_gpt_or_reasoning and temperature is not None:
+        if accepts_temperature and temperature is not None:
             kwargs["temperature"] = temperature
 
         if max_tokens is not None:
@@ -157,6 +192,8 @@ class OpenAIAdapter(LLMPort):
             kwargs["extra_body"] = {**kwargs.get("extra_body", {}), **extra_body}
         if reasoning_effort is not None and "grok" not in model_id:
             kwargs["reasoning_effort"] = reasoning_effort
+        if "reasoning_effort" in kwargs:
+            kwargs["reasoning_effort"] = _fit_effort(kwargs["reasoning_effort"], spec)
 
         return kwargs
 
