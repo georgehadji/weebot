@@ -22,8 +22,6 @@ if TYPE_CHECKING:
     from weebot.application.agents.retention_agent import RetentionAgent
     from weebot.application.services.code_reviewer_service import CodeReviewerService
     from weebot.application.services.idea_gate import IdeaGate
-    from weebot.application.services.intent_review_service import IntentReviewService
-    from weebot.application.services.main_review_service import MainReviewService
     from weebot.application.services.mcp_tool_registry_bridge import MCPToolRegistryBridge
     from weebot.application.services.trust_report_service import TrustReportService
     from weebot.application.middleware.event_middleware import EventPipeline
@@ -232,19 +230,11 @@ class FactoriesMixin:
         model = models[0] if models else None
         return FactoriesMixin._create_llm(model)
 
-    @staticmethod
-    def _create_intent_review_service() -> IntentReviewService:
-        from weebot.application.services.intent_review_service import IntentReviewService
-
-        llm = FactoriesMixin._create_llm_for_role("critic")
-        return IntentReviewService(llm=llm)
-
-    @staticmethod
-    def _create_main_review_service() -> MainReviewService:
-        from weebot.application.services.main_review_service import MainReviewService
-
-        llm = FactoriesMixin._create_llm_for_role("verifier")
-        return MainReviewService(llm=llm)
+    # _create_intent_review_service() and _create_main_review_service() used to
+    # live here, behind the "intent_review" and "main_review" bindings. Neither
+    # binding was ever resolved: _create_idea_gate below builds its own
+    # reviewers on the same role tiers, and PlanningState's in-flow intent
+    # check deliberately uses the flow's own model. Removed in phase 2.3.
 
     @staticmethod
     def _create_idea_gate() -> IdeaGate:

@@ -1087,9 +1087,6 @@ _UNRESOLVED_DI_KEYS = {
     "SandboxBackendAdapter",
     "TaskRouterPort",
     "event_pipeline",
-    "idea_gate",
-    "intent_review",
-    "main_review",
     "trust_report_service",
 }
 

@@ -245,3 +245,49 @@ def test_the_keys_the_cron_paths_resolve_are_registered(container):
     for missing in ("llm_port", "state_repo_port", "mediator"):
         with pytest.raises(KeyError):
             container.get(missing)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# The idea gate
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.timeout(360)
+def test_the_containers_idea_gate_is_fully_built(container):
+    from weebot.application.services.idea_gate import IdeaGate
+
+    gate = container.get("idea_gate")
+
+    assert isinstance(gate, IdeaGate)
+    assert gate._intent_reviewer is not None
+    assert gate._main_reviewer is not None
+
+
+def test_the_idea_gate_is_built_only_by_the_container():
+    """The "idea_gate" binding gives the intent reviewer the critic tier and the
+    main reviewer the verifier tier. Three sites -- two in CompletedState, one
+    in the dream CLI -- assembled the gate by hand on the default LLMPort
+    instead, so the binding was never resolved. They take it from the
+    container now; this keeps a fourth from appearing.
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    builders = []
+    for base in ("weebot", "cli"):
+        for path in (root / base).rglob("*.py"):
+            if "__pycache__" in path.parts or "GitNexus-main" in path.parts:
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel.startswith("weebot/application/di/"):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "IdeaGate"
+                ):
+                    builders.append(f"{rel}:{node.lineno}")
+    assert builders == [], "IdeaGate built outside the container:\n  " + "\n  ".join(builders)

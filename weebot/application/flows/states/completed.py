@@ -52,15 +52,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
         return
     try:
         from weebot.application.di import Container
-        from weebot.application.ports.llm_port import LLMPort
-        from weebot.application.services.idea_gate import IdeaGate
-        from weebot.application.services.intent_review_service import IntentReviewService
-        from weebot.application.services.main_review_service import MainReviewService
         from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
 
         c = Container()
         c.configure_defaults()
-        llm = c.get(LLMPort)
 
         contracts = [
             IdeaContract(
@@ -79,9 +74,11 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
             for g in gaps
         ]
 
-        gate = IdeaGate(
-            intent_reviewer=IntentReviewService(llm=llm), main_reviewer=MainReviewService(llm=llm)
-        )
+        # From the container, not hand-assembled. The "idea_gate" binding gives
+        # each reviewer its intended role tier -- intent review on the critic
+        # model, main review on the verifier model -- and was never resolved:
+        # this site built both reviewers on the default LLMPort instead.
+        gate = c.get("idea_gate")
         approved = await gate.process(contracts)
         if approved:
             logger.info(
@@ -121,16 +118,9 @@ async def _run_dream_scan() -> None:
             session_id="post_completion_scan",
         )
         if contracts:
-            from weebot.application.services.intent_review_service import IntentReviewService
-            from weebot.application.services.main_review_service import MainReviewService
-            from weebot.application.services.idea_gate import IdeaGate
-            from weebot.application.ports.llm_port import LLMPort
-
-            llm = c.get(LLMPort)
-            gate = IdeaGate(
-                intent_reviewer=IntentReviewService(llm=llm),
-                main_reviewer=MainReviewService(llm=llm),
-            )
+            # The container's gate, with the critic and verifier role tiers --
+            # see _run_skill_gap_processing above.
+            gate = c.get("idea_gate")
             approved = await gate.process(contracts)
 
             high_heat = [a for a in approved if a.heat_score >= 0.8]

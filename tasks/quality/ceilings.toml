@@ -108,8 +108,13 @@ agent_json_parsing = 7
 # "plan_act" was a FlowRegistry entry the census counted as a binding --
 # and removing the dead SkillPublisher exposed EventPublisher, its only
 # consumer, as dead too.
+# 7 -> 4 with phase 2.3, group 2: "idea_gate" is resolved now -- three sites
+# hand-assembled the gate on the default model instead of taking the binding
+# that gives its reviewers the critic and verifier tiers -- and the
+# standalone "intent_review" / "main_review" bindings, which nothing used,
+# are gone.
 # Measured by: scripts/lint_di_wiring.py
-unresolved_di_keys = 7
+unresolved_di_keys = 4
 
 # The mirror image: keys a container is ASKED for that no register() defines.
 # The class behind four live failures found in phase 2.1 -- "llm_port" and

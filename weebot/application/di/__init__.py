@@ -165,8 +165,6 @@ class Container(
         self.register("skill_retriever", lambda: self._create_skill_retriever())
         self.register("code_reviewer", self._create_code_reviewer)
         self.register("dreamer_agent", self._create_dreamer_agent)
-        self.register("intent_review", self._create_intent_review_service)
-        self.register("main_review", self._create_main_review_service)
         self.register("idea_gate", self._create_idea_gate)
         self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
