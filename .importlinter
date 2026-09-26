@@ -230,3 +230,53 @@ ignore_imports =
     # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory for the
     # pattern.
     weebot.application.di -> weebot.interfaces.**
+
+[importlinter:contract:unassigned-no-infra]
+# Phase 3.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md -- the
+# default-deny contract. Every other contract is scoped to a layer directory,
+# so a package outside those directories was governed by nothing, and moving
+# code into one removed its governance with no gate firing. These nine held
+# about 19,000 lines and nine direct edges into infrastructure and tools.
+#
+# A fitness test (test_every_top_level_package_is_under_a_contract) fails on
+# any NEW top-level package until it is added here or to a layer contract, so
+# packages are governed by default rather than by omission. import-linter has
+# no "all other packages" wildcard; the test is what makes this default-deny.
+#
+# Direct imports only: these are entry points and tooling that legitimately
+# reach infrastructure THROUGH the container, and checking chains would flag
+# every such route rather than the edges that bypass it.
+name = Packages outside the layers must not import infrastructure or tools directly
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.agents
+    weebot.config
+    weebot.mcp
+    weebot.models
+    weebot.osworld
+    weebot.qmd_integration
+    weebot.scheduling
+    weebot.templates
+    weebot.utils
+forbidden_modules =
+    weebot.infrastructure
+    weebot.tools
+ignore_imports =
+    # mcp/server is an entry point (run_mcp.py) that builds and serves tools
+    # itself. The plan also moved weebot/mcp into interfaces/, for governance;
+    # this contract forbids it the same two packages interfaces-no-infra would,
+    # so the move would relocate these six lines and gain no check.
+    weebot.mcp.server -> weebot.infrastructure.adapters.composite_tool_executor
+    weebot.mcp.server -> weebot.infrastructure.observability.metrics
+    weebot.mcp.server -> weebot.tools.bash_tool
+    weebot.mcp.server -> weebot.tools.file_editor
+    weebot.mcp.server -> weebot.tools.python_tool
+    weebot.mcp.server -> weebot.tools.web_search
+    # osworld is a benchmark harness; it builds an OpenAI adapter directly and
+    # is already a grandfathered bypass in test_llm_clients_are_built_by_the_factory.
+    weebot.osworld.agent_adapter -> weebot.infrastructure.adapters.llm.openai_adapter
+    # default_jobs records scheduler metrics directly.
+    weebot.scheduling.default_jobs -> weebot.infrastructure.observability.metrics
+    # templates.integration builds tool collections from the tool registry.
+    weebot.templates.integration -> weebot.tools.tool_registry

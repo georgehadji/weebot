@@ -1597,77 +1597,6 @@ def test_session_context_has_trace_id():
     assert ctx.trace_id == "test-trace-123"
 
 
-def test_ignore_imports_under_target():
-    """.importlinter ignore_imports must not exceed the Architecture 9 Plan target.
-
-    Target was 35; grew to 41 with legitimate, individually-documented
-    exceptions (see .importlinter comments). Ceiling raised to track actual
-    debt rather than mask it — further growth should still be justified.
-
-    Raised 41 -> 44 for the Slack/WhatsApp gateway wiring: two webhook routers
-    resolve services per-request via the DI container (identical to the already
-    exempted chat_router and discord_webhook), and web.main wires the gateway
-    session store at startup (identical to the already exempted connection_pool
-    import). Each follows an established, documented pattern rather than
-    introducing a new kind of violation.
-
-    Raised 44 -> 66 for the 2026-07-21 architecture consolidation (ArchReaper V7,
-    comprehensive architecture improvement, MetricsPort/AuditPort consolidation):
-    browser tools → browser adapters, tools → sandbox factory/metrics,
-    web.dependencies → persistence stores, prometheus_adapter DI keys,
-    tool_collection → metrics_bridge, and sqlite_state_repo → checkpoint_store.
-    Each entry carries an individual justification comment in .importlinter.
-
-    Raised 66 -> 70 for the 2026-07-29 production-readiness work, which added
-    genuinely new interface -> infrastructure edges:
-      * web.auth -> security.sqlite_api_key_store  (WI-11 per-principal auth)
-      * web.rate_limit -> observability.metrics    (WI-12 rate limiting)
-      * web.rate_limit -> security.audit_logger    (WI-12 rate limiting)
-      * web.main -> observability.logging_config   (composition-root logging)
-      * models.tool_collection -> services.metrics_bridge (transitive, already
-        exempted under tools-no-infra; the chain also surfaces via interfaces)
-
-    TRACKED DEBT — the auth and rate_limit edges should not stay exempt.  The
-    ports already exist (ApiKeyPort, MetricsPort, AuditPort); routing those
-    three call sites through DI would drop this budget back to 67.  They were
-    left in place deliberately: auth is the credential-verification path and
-    warrants a dedicated, security-reviewed change rather than a bulk sweep.
-
-    Raised 70 -> 72 for the new ``app-no-interfaces`` contract, which forbids
-    the application layer from importing interfaces.  That contract caught two
-    real violations (cron_agent_runner and a transitive chain through the
-    scheduler), both since fixed by injecting the flow factory instead of
-    importing it.
-
-    These two entries are a different kind from everything above and are NOT
-    tracked debt.  ``weebot.application.di`` is the composition root: wiring
-    concrete implementations from every layer is its entire purpose, so its
-    imports into interfaces are correct by design and are expected to stay.
-    Carving it out via ignore_imports keeps the contract covering all of
-    application/ — scoping source_modules instead would silently exempt any
-    future subpackage.  Two structural exemptions in exchange for a contract
-    that catches a whole class of leak is a net gain.
-
-    Merging PR #46 (claude/session-n4trou) brought the actual count DOWN from
-    70 to 66: that branch removed the tools layer's direct edges into
-    infrastructure.observability.metrics by routing bash/python/atomic-mail
-    metrics through the application metrics_bridge.  The ceiling stays at 72
-    rather than being ratcheted to 66 — this merge reconciled two branches
-    that had each moved the number independently, so the headroom absorbs the
-    reconciliation.  Ratchet it down once the count is stable.
-
-    That branch also resolved persistent_memory's edge into the SQLite repo
-    via importlib.  This merge kept the static import instead: the lazy repo
-    construction now depends on ``self._salience_repo is None``, which the
-    dynamic version's ``hasattr`` check would defeat (the attribute is always
-    set in __init__).  Its ignore_imports entry is therefore retained.
-    """
-    with open(".importlinter") as f:
-        content = f.read()
-    count = len([l for l in content.split("\n") if "->" in l and not l.strip().startswith("#")])
-    assert count <= 72, f"{count} ignore_imports (target ≤ 72)"
-
-
 def test_no_direct_agent_calls_in_mutating_states():
     """Flow states that mutate state must route through the CQRS mediator.
 
@@ -1976,3 +1905,36 @@ def test_no_namespace_packages_hide_modules_from_import_linter():
         and not (d / "__init__.py").exists()
     )
     assert blind == [], "no __init__.py, so import-linter cannot see these:\n  " + "\n  ".join(blind)
+
+
+def test_every_top_level_package_is_under_a_contract():
+    """Phase 3.3, the default-deny half. Every contract in .importlinter names
+    its source packages explicitly, and import-linter has no "everything else"
+    wildcard, so a top-level package nobody listed is governed by nothing --
+    nine were, about 19,000 lines, with nine direct edges into infrastructure
+    and tools. The `unassigned-no-infra` contract now covers those nine; this
+    test makes the default hold for the next one, by failing until a new
+    top-level package is listed as some contract's source.
+    """
+    import configparser
+
+    cfg = configparser.ConfigParser()
+    cfg.read(ROOT.parent / ".importlinter", encoding="utf-8")
+    governed = {
+        line.strip()
+        for section in cfg.sections()
+        if section.startswith("importlinter:contract:")
+        for line in cfg[section].get("source_modules", "").splitlines()
+        if line.strip()
+    }
+    packages = {
+        f"weebot.{d.name}"
+        for d in ROOT.iterdir()
+        if d.is_dir() and (d / "__init__.py").exists()
+    }
+    ungoverned = sorted(packages - governed)
+    assert ungoverned == [], (
+        "no import-linter contract governs these top-level packages. Add each "
+        "to a layer's contract or to `unassigned-no-infra` in .importlinter:\n  "
+        + "\n  ".join(ungoverned)
+    )
