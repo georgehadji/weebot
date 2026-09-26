@@ -286,15 +286,23 @@ def get_model_cascade_for_role(role: str | None) -> list[str]:
 MODEL_DI_DEFAULT: str = "x-ai/grok-build-0.1"
 MODEL_DI_SKILLOPT: str = "x-ai/grok-4.3"
 
-MODEL_FACTORY_OPENAI: str = "moonshotai/kimi-k2.6"
-MODEL_FACTORY_ANTHROPIC: str = "qwen/qwen3.8-max"
+# Per-provider defaults: the model a provider's adapter asks for when the caller
+# names none. Each must be a model THAT provider's own API serves, as its bare
+# native ID -- the factory strips any `vendor/` prefix, and AnthropicAdapter and
+# BrowserTool's ChatOpenAI fallback send the value as-is to api.anthropic.com /
+# api.openai.com. The OPENAI and ANTHROPIC values had drifted to
+# "moonshotai/kimi-k2.6" and "qwen/qwen3.8-max" in two unrelated cascade
+# reorders, so both defaults requested a model their endpoint does not serve.
+# Pinned by tests/unit/test_provider_defaults.py.
+MODEL_FACTORY_OPENAI: str = "gpt-5.4-mini"
+MODEL_FACTORY_ANTHROPIC: str = "claude-sonnet-5"
 MODEL_FACTORY_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
 MODEL_FACTORY_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
+# OpenAIAdapter's own default when constructed directly. "OPENAI" here names the
+# OpenAI-compatible protocol, not the vendor: a `vendor/id` default makes the
+# adapter pick OpenRouter's base URL, which serves this ID.
 MODEL_DEFAULT_OPENAI: str = "moonshotai/kimi-k2.6"
-MODEL_DEFAULT_ANTHROPIC: str = "qwen/qwen3.8-max"
-MODEL_DEFAULT_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
-MODEL_DEFAULT_OPENROUTER: str = "moonshotai/kimi-k2.6"
 
 # ========================================================================
 # Fallback chain
