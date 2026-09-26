@@ -209,23 +209,60 @@ class TestCascadeOrchestration:
 # ── Live model rescue ─────────────────────────────────────────────
 
 
+class _Account:
+    """ProviderAccountPort stub: a fixed model list, or an error."""
+
+    def __init__(self, listings=None, error: Exception | None = None):
+        self._listings = listings or []
+        self._error = error
+
+    async def remaining_credits(self):
+        return None
+
+    async def list_models(self):
+        if self._error:
+            raise self._error
+        return self._listings
+
+
 class TestLiveModelRescue:
-    """Last-resort fallback to OpenRouter free models."""
+    """Last-resort fallback to a live-listed model."""
+
+    _MSG = [{"role": "user", "content": "hello"}]
 
     @pytest.mark.asyncio
     async def test_rescue_returns_none_on_network_error(self, executor: CascadeExecutor) -> None:
-        with patch("httpx.AsyncClient", side_effect=ValueError("network error")):
-            result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
-        assert result is None
+        executor._provider_account = _Account(error=ValueError("network error"))
+        assert await executor._live_model_rescue(self._MSG) is None
 
     @pytest.mark.asyncio
-    async def test_rescue_with_no_free_models(self, executor: CascadeExecutor) -> None:
-        with patch("httpx.AsyncClient.get") as mock_get:
-            mock_response = MagicMock()
-            mock_response.json.return_value = {"data": []}
-            mock_response.raise_for_status = MagicMock()
-            mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-            mock_response.__aexit__ = AsyncMock(return_value=None)
-            mock_get.return_value = mock_response
-            result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
-        assert result is None
+    async def test_rescue_with_no_tool_capable_models(self, executor: CascadeExecutor) -> None:
+        from weebot.application.ports.provider_account_port import ModelListing
+
+        executor._provider_account = _Account([ModelListing("a/b", 100_000, False)])
+        assert await executor._live_model_rescue(self._MSG) is None
+
+    @pytest.mark.asyncio
+    async def test_rescue_without_provider_account_is_off(self, executor: CascadeExecutor) -> None:
+        assert executor._provider_account is None
+        assert await executor._live_model_rescue(self._MSG) is None
+
+    @pytest.mark.asyncio
+    async def test_rescue_prefers_paid_widest_context_through_own_llm(
+        self, executor: CascadeExecutor
+    ) -> None:
+        """Through the executor's own LLM -- not a Container built per rescue."""
+        from weebot.application.ports.provider_account_port import ModelListing
+
+        executor._provider_account = _Account(
+            [
+                ModelListing("free/huge:free", 1_000_000, True),
+                ModelListing("paid/small", 8_000, True),
+                ModelListing("paid/wide", 200_000, True),
+                ModelListing("paid/no-tools", 900_000, False),
+            ]
+        )
+        executor._llm.chat = AsyncMock(return_value=LLMResponse(content="rescued"))
+        resp = await executor._live_model_rescue(self._MSG)
+        assert resp.content == "rescued"
+        assert executor._llm.chat.await_args.kwargs["model"] == "paid/wide"

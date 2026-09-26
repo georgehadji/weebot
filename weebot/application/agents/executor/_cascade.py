@@ -8,15 +8,16 @@ isolate LLM-calling logic from step orchestration.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 
 from weebot.core.model_cascade_config import estimate_cost as _estimate_cost
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from weebot.application.ports.provider_account_port import ProviderAccountPort
     from weebot.application.strategies.llm_pool import LLMPool
 
-from weebot.application.di import Container
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.application.models.tool_collection import ToolCollection
 from weebot.config.constants import TEMPERATURE_BALANCED
@@ -73,6 +74,8 @@ class CascadeExecutor:
         on_success=None,  # Optional callback after successful response
         tracker: ModelCascadeTracker | None = None,  # ACR telemetry sink (Phase P0)
         acr_router=None,  # Optional AdaptiveCapabilityRouter for outcome recording
+        # Credit balance + live model list. None: no credit filtering, no rescue.
+        provider_account: ProviderAccountPort | None = None,
     ) -> None:
         self._llm = llm
         self._tools = tools
@@ -82,6 +85,7 @@ class CascadeExecutor:
         self._on_success = on_success
         self._tracker = tracker or ModelCascadeTracker()
         self._acr_router = acr_router  # Optional ACR router for bandit outcome recording
+        self._provider_account = provider_account
         # Per-session circuit breaker state
         self._circuit_breaker_failures: dict[str, int] = {}
         # Per-run: models that returned 5xx are skipped in current cascade
@@ -127,36 +131,11 @@ class CascadeExecutor:
 
     # ── OpenRouter credit pre-check ────────────────────────────────
 
-    @staticmethod
-    async def _check_openrouter_credits() -> int | None:
-        """Query OpenRouter's auth key endpoint for remaining credits.
-
-        Returns:
-            Remaining credits in tokens, or 0 if the check fails.
-        """
-        import os
-
-        key = os.getenv("OPENROUTER_API_KEY")
-        if not key:
-            return 0
-        try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    "https://openrouter.ai/api/v1/auth/key",
-                    headers={"Authorization": f"Bearer {key}"},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return int(data.get("data", {}).get("credits", 0))
-                return None
-        except Exception:
-            # None means "unknown", NOT "zero". Returning 0 here was described as
-            # failing open but did the opposite: 0 >= threshold is false, so a
-            # transient error reaching openrouter.ai silently stripped every
-            # OpenRouter-only model from the cascade.
+    async def _remaining_credits(self) -> int | None:
+        """Remaining OpenRouter credit, or None when unknown or not wired."""
+        if self._provider_account is None:
             return None
+        return await self._provider_account.remaining_credits()
 
     @staticmethod
     def _is_openrouter_model(model_id: str) -> bool:
@@ -169,8 +148,7 @@ class CascadeExecutor:
         prefix = model_id.split("/")[0] if "/" in model_id else ""
         return prefix not in known_direct
 
-    @staticmethod
-    async def get_credits_and_filter_direct(model_ids: list[str]) -> list[str]:
+    async def get_credits_and_filter_direct(self, model_ids: list[str]) -> list[str]:
         """Filter ``model_ids`` to only include non-OpenRouter models if
         credits are below threshold.  Returns all models on success.
 
@@ -178,7 +156,7 @@ class CascadeExecutor:
         credits are too low to pay for a generation request.
         """
         threshold = CascadeExecutor._get_credit_threshold()
-        credits = await CascadeExecutor._check_openrouter_credits()
+        credits = await self._remaining_credits()
         if credits is None:
             # Unknown credits: try the models and let a real out-of-credits
             # response fall through to the next tier, which is what the cascade
@@ -578,27 +556,21 @@ class CascadeExecutor:
         Prefers paid models with tools support; falls back to free models only
         if no paid models are available.
         """
+        if self._provider_account is None:
+            return None
         try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get("https://openrouter.ai/api/v1/models")
-                resp.raise_for_status()
-                data = resp.json()
+            listings = await self._provider_account.list_models()
         except Exception as exc:
             logger.warning("Live model rescue: failed to fetch model list: %s", exc)
             return None
 
         paid_models: list[dict] = []
         free_models: list[dict] = []
-        for m in data.get("data", []):
-            mid = m.get("id", "")
-            params = m.get("supported_parameters", [])
-            if "tools" not in params:
+        for m in listings:
+            if not m.supports_tools:
                 continue
-            ctx = m.get("context_length", 0)
-            entry = {"id": mid, "ctx": ctx}
-            if ":free" in mid:
+            entry = {"id": m.id, "ctx": m.context_length}
+            if ":free" in m.id:
                 free_models.append(entry)
             else:
                 paid_models.append(entry)
@@ -619,18 +591,23 @@ class CascadeExecutor:
             len(free_models),
         )
 
-        try:
-            c = Container()
-            c.configure_defaults()
-            llm = c.get(LLMPort)
-            resp = await asyncio.wait_for(
-                llm.chat(messages=messages, model=rescue_id, temperature=TEMPERATURE_BALANCED),
-                timeout=30.0,
-            )
-            if resp and (resp.content or resp.tool_calls):
-                logger.info("Live model rescue SUCCESS with %s", rescue_id)
-                return resp
-        except Exception as exc:
-            logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)
+        # This used to build a whole new Container per rescue and call its
+        # LLMPort -- the same port as self._llm in the container's executor,
+        # but outside the LLM pool, so the one request made when everything
+        # else had failed was the one the concurrency bound never saw. Pool
+        # exhaustion propagates, as it does from _cascade_try_chat.
+        async with self._llm_pool or contextlib.nullcontext():
+            try:
+                resp = await asyncio.wait_for(
+                    self._llm.chat(
+                        messages=messages, model=rescue_id, temperature=TEMPERATURE_BALANCED
+                    ),
+                    timeout=30.0,
+                )
+                if resp and (resp.content or resp.tool_calls):
+                    logger.info("Live model rescue SUCCESS with %s", rescue_id)
+                    return resp
+            except Exception as exc:
+                logger.warning("Live model rescue failed with %s: %s", rescue_id, exc)
 
         return None

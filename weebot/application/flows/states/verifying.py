@@ -16,8 +16,6 @@ from __future__ import annotations
 import json
 import logging
 
-from openai import AuthenticationError
-
 from weebot.application.flows.states.base import FlowState, AgentStatus
 from weebot.config.constants import (
     MAX_TOKENS_BRIEF,
@@ -30,6 +28,7 @@ from weebot.config.constants import (
     VERIFICATION_MAX_REVISION_PASSES,
     VERIFICATION_SCORE_MIN,
 )
+from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.audit import VerificationStatus
 from weebot.domain.models.event import VerificationEvent
 
@@ -113,7 +112,7 @@ class VerifyingState(FlowState):
             # ── Step 1: Generate verification questions ─────────────────
             try:
                 questions = await self._generate_questions(flow, summary, num_questions)
-            except AuthenticationError:
+            except LLMAuthenticationError:
                 _log.warning(
                     "Verification skipped: authentication error on question generation. "
                     "Check OPENROUTER_API_KEY and XAI_API_KEY."
@@ -136,7 +135,7 @@ class VerifyingState(FlowState):
                 try:
                     answer = await self._answer_independently(flow, question)
                     consistent = await self._check_consistency(flow, question, answer, summary)
-                except AuthenticationError:
+                except LLMAuthenticationError:
                     _auth_error_count += 1
                     if _auth_error_count >= _MAX_AUTH_RETRIES:
                         _log.warning(
@@ -573,8 +572,8 @@ class VerifyingState(FlowState):
                 if line.strip() and "?" in line
             ]
             return questions[:n]
-        except AuthenticationError:
-            # Must reach execute()'s AuthenticationError handler, not be
+        except LLMAuthenticationError:
+            # Must reach execute()'s LLMAuthenticationError handler, not be
             # swallowed here as an empty result — an infra failure must
             # stamp NOT_RUN, not read as "the LLM found nothing to ask".
             raise
@@ -626,7 +625,7 @@ class VerifyingState(FlowState):
                 max_tokens=MAX_TOKENS_CRISP,
             )
             return (response.content or "").strip()
-        except AuthenticationError:
+        except LLMAuthenticationError:
             # Propagate — execute()'s auth-retry counter must see this,
             # not treat it as an ordinary answer failure (E6).
             raise
@@ -650,7 +649,7 @@ class VerifyingState(FlowState):
                 max_tokens=MAX_TOKENS_VERDICT,
             )
             return "yes" in (response.content or "").lower()
-        except AuthenticationError:
+        except LLMAuthenticationError:
             # Propagate (E6): an unreachable LLM is an infra problem for
             # execute()'s auth-retry counter to handle (→ NOT_RUN after
             # _MAX_AUTH_RETRIES), not an ordinary "check ran and disagreed".

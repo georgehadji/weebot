@@ -11,6 +11,7 @@ from collections.abc import AsyncGenerator
 
 if TYPE_CHECKING:
     from weebot.application.middleware.chain import MiddlewareChain
+    from weebot.application.ports.provider_account_port import ProviderAccountPort
     from weebot.application.strategies.llm_pool import LLMPool
     from weebot.models.structured_output import VisionReflection
 
@@ -225,6 +226,7 @@ class ExecutorAgent:
         ) = None,  # TrajectoryConfig — Trajectory Regulation Layer (Tier 1.3)
         session_constraints: str | None = None,  # Pre-rendered SessionConstraintRegistry.render()
         llm_pool: LLMPool | None = None,  # Global LLM concurrency bound -- see llm_pool.py
+        provider_account: ProviderAccountPort | None = None,  # Credit check + live rescue
     ):
         self._llm = llm
         self._tools = tools
@@ -293,6 +295,7 @@ class ExecutorAgent:
             # pass nothing still get the old unbounded behaviour; the one that
             # matters -- the container's step executor -- passes the pool.
             llm_pool=llm_pool,
+            provider_account=provider_account,
             on_success=self._context_compressor.track_usage_and_maybe_compress,
             tracker=ModelCascadeTracker(),
         )

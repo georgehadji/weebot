@@ -280,3 +280,31 @@ ignore_imports =
     weebot.scheduling.default_jobs -> weebot.infrastructure.observability.metrics
     # templates.integration builds tool collections from the tool registry.
     weebot.templates.integration -> weebot.tools.tool_registry
+
+[importlinter:contract:app-no-vendor-sdks]
+# Phase 3.1, the anti-corruption layer. Application and domain speak to
+# providers through ports; vendor SDKs and raw HTTP stay in infrastructure.
+# Two leaks were closed to make this hold: verifying.py caught
+# openai.AuthenticationError (so an Anthropic key failure slipped past it --
+# now the domain LLMAuthenticationError, translated in ResilientLLMAdapter),
+# and CascadeExecutor made raw httpx calls to openrouter.ai for credits and the
+# live model list (now ProviderAccountPort).
+# Direct imports only: the composition root reaches infrastructure by design.
+name = Application and domain must not import provider SDKs or raw HTTP clients
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.application
+    weebot.domain
+forbidden_modules =
+    openai
+    anthropic
+    httpx
+    aiohttp
+    requests
+ignore_imports =
+    # Pre-existing, and not provider traffic: webhook delivery and two web
+    # research fetchers. Each wants a port the way the cascade got one.
+    weebot.application.services.cron_delivery_service -> aiohttp
+    weebot.application.services.multi_source_research -> aiohttp
+    weebot.application.services.source_credibility_assessment -> aiohttp

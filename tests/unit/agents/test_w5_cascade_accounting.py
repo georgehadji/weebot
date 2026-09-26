@@ -115,45 +115,49 @@ class TestCostIsActuallyEstimated:
         assert tracker.summary()["total_cost_estimate"] >= 0.0
 
 
+class _Credits:
+    """ProviderAccountPort stub reporting a fixed balance."""
+
+    def __init__(self, credits):
+        self._credits = credits
+
+    async def remaining_credits(self):
+        return self._credits
+
+
+def _with_credits(credits, monkeypatch) -> CascadeExecutor:
+    monkeypatch.setattr(CascadeExecutor, "_get_credit_threshold", staticmethod(lambda: 10000))
+    return CascadeExecutor(llm=MagicMock(), tools=MagicMock(), provider_account=_Credits(credits))
+
+
 class TestCreditCheckFailsOpen:
     @pytest.mark.asyncio
     async def test_unknown_credits_do_not_filter_models(self, monkeypatch):
-        async def unavailable():
-            return None  # what the except branch now returns
-
-        monkeypatch.setattr(
-            CascadeExecutor, "_check_openrouter_credits", staticmethod(unavailable)
-        )
-        monkeypatch.setattr(CascadeExecutor, "_get_credit_threshold", staticmethod(lambda: 10000))
-
         models = ["openai/gpt-4", "anthropic/claude-3", "deepseek/chat"]
-        assert await CascadeExecutor.get_credits_and_filter_direct(models) == models
+        # None is what the adapter returns when the balance is unreachable.
+        cascade = _with_credits(None, monkeypatch)
+        assert await cascade.get_credits_and_filter_direct(models) == models
 
     @pytest.mark.asyncio
     async def test_genuinely_low_credits_still_filter(self, monkeypatch):
         """No-regression: a real low-credit reading must still skip OpenRouter models."""
-
-        async def low():
-            return 5
-
-        monkeypatch.setattr(CascadeExecutor, "_check_openrouter_credits", staticmethod(low))
-        monkeypatch.setattr(CascadeExecutor, "_get_credit_threshold", staticmethod(lambda: 10000))
-
         models = ["openai/gpt-4", "anthropic/claude-3", "deepseek/chat"]
-        kept = await CascadeExecutor.get_credits_and_filter_direct(models)
-
+        kept = await _with_credits(5, monkeypatch).get_credits_and_filter_direct(models)
         assert kept == ["deepseek/chat"]
 
     @pytest.mark.asyncio
     async def test_ample_credits_keep_everything(self, monkeypatch):
-        async def plenty():
-            return 999_999
-
-        monkeypatch.setattr(CascadeExecutor, "_check_openrouter_credits", staticmethod(plenty))
-        monkeypatch.setattr(CascadeExecutor, "_get_credit_threshold", staticmethod(lambda: 10000))
-
         models = ["openai/gpt-4", "deepseek/chat"]
-        assert await CascadeExecutor.get_credits_and_filter_direct(models) == models
+        cascade = _with_credits(999_999, monkeypatch)
+        assert await cascade.get_credits_and_filter_direct(models) == models
+
+    @pytest.mark.asyncio
+    async def test_no_provider_account_means_unknown_not_zero(self):
+        """A cascade built without the port (every construction outside the
+        container's step executor) must not strip models as if broke."""
+        models = ["openai/gpt-4", "deepseek/chat"]
+        cascade = CascadeExecutor(llm=MagicMock(), tools=MagicMock())
+        assert await cascade.get_credits_and_filter_direct(models) == models
 
 
 class TestAdapterCacheLookupCanHit:

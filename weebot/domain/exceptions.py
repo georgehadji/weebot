@@ -100,6 +100,23 @@ class LLMCapacityExhaustedError(WeebotError):
         self.severity = ErrorSeverity.ERROR
 
 
+class LLMAuthenticationError(WeebotError):
+    """Raised when an LLM provider rejects the credentials (HTTP 401).
+
+    The provider-neutral form of ``openai.AuthenticationError`` /
+    ``anthropic.AuthenticationError``. Adapters translate to it at the
+    infrastructure boundary, so application code can react to a rejected key
+    without importing any vendor SDK -- and without silently missing the
+    vendors it did not import. The original provider exception is kept as
+    ``__cause__``.
+    """
+
+    def __init__(self, message: str = "LLM provider rejected the credentials", **kwargs):
+        super().__init__(message, **kwargs)
+        self.code = ErrorCode.SECURITY_VIOLATION
+        self.severity = ErrorSeverity.CRITICAL
+
+
 class ProjectNotFoundError(WeebotError):
     """Raised when a project ID is not found in the repository."""
 

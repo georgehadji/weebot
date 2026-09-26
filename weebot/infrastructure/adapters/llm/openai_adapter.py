@@ -11,6 +11,7 @@ from openai import AsyncOpenAI, AuthenticationError, RateLimitError
 
 from weebot.application.ports.llm_port import LLMPort, LLMResponse
 from weebot.config.model_refs import MODEL_DEFAULT_OPENAI
+from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.llm_response import LLMChunk
 from weebot.infrastructure.adapters.llm._multimodal import convert_messages
 
@@ -186,7 +187,7 @@ class OpenAIAdapter(LLMPort):
         response = None
         try:
             response = await self._client.chat.completions.create(**kwargs)
-        except AuthenticationError:
+        except AuthenticationError as exc:
             # 401/403 — API key is invalid, expired, or lacks permissions.
             # Log clearly so the operator can rotate the key.
             key_prefix = (self._client.api_key or "")[:12]
@@ -197,7 +198,7 @@ class OpenAIAdapter(LLMPort):
                 key_prefix,
                 self._client.base_url,
             )
-            raise
+            raise LLMAuthenticationError(str(exc)) from exc
         except RateLimitError:
             # OpenRouter free models are often rate-limited upstream.
             # Use provider-safe fallbacks first.
@@ -289,7 +290,7 @@ class OpenAIAdapter(LLMPort):
 
         try:
             response_stream = await self._client.chat.completions.create(**kwargs)
-        except AuthenticationError:
+        except AuthenticationError as exc:
             key_prefix = (self._client.api_key or "")[:12]
             logger.error(
                 "AUTHENTICATION ERROR: The API key (prefix: %s...) was rejected "
@@ -297,7 +298,7 @@ class OpenAIAdapter(LLMPort):
                 key_prefix,
                 self._client.base_url,
             )
-            raise
+            raise LLMAuthenticationError(str(exc)) from exc
         except RateLimitError:
             if not self._enable_model_fallback:
                 raise

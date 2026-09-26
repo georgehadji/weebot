@@ -53,7 +53,23 @@ def sanitized_message(exc: BaseException) -> str:
     return sanitize(str(exc))
 
 
+def _is_rejected_credentials(exc: BaseException) -> bool:
+    """HTTP 401 from any provider SDK or raw httpx, by status, not by text.
+
+    Deliberately not ErrorClassifier's AUTH category: that matches `40[123]`
+    anywhere in the message, which is fine for "stop retrying" but too loose to
+    rename an exception's type -- application code branches on this type.
+    """
+    if isinstance(exc, LLMAuthenticationError):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+    return status == 401
+
+
 from weebot.core.credential_sanitizer import sanitize
+from weebot.domain.exceptions import LLMAuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +311,12 @@ class ResilientLLMAdapter(LLMPort):
                 except Exception:
                     pass
                 _sanitize_error(e)
+                if _is_rejected_credentials(e) and not isinstance(e, LLMAuthenticationError):
+                    # The anti-corruption boundary: callers above this adapter
+                    # catch the domain type, never a vendor SDK's. The message
+                    # is kept, so text-based classification downstream is
+                    # unchanged.
+                    raise LLMAuthenticationError(sanitized_message(e)) from e
                 raise
             # Record failure if retryable (per-model breaker key)
             if self._circuit and self._is_retryable_error(e):
