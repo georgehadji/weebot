@@ -82,8 +82,39 @@ def build_ponytail_skill_prompt(existing: str | None = None, mode: str | None = 
         return existing
 
     header = f"[Ponytail mode: {resolved_mode}]\n\n"
-    ponytail_text = header + skill.content
+    filtered_content = filter_skill_body_for_mode(skill.content, resolved_mode)
+    ponytail_text = header + filtered_content
 
     if existing:
         return f"{existing}\n\n{ponytail_text}"
     return ponytail_text
+
+
+def filter_skill_body_for_mode(body: str, mode: str) -> str:
+    """Filter out table rows and examples belonging to other ponytail modes."""
+    import re
+
+    # Strip YAML frontmatter if present
+    without_frontmatter = body
+    frontmatter_match = re.match(r"^---[\s\S]*?---\s*", body)
+    if frontmatter_match:
+        without_frontmatter = body[frontmatter_match.end() :]
+
+    lines = without_frontmatter.splitlines()
+    filtered_lines = []
+    for line in lines:
+        table_match = re.match(r"^\|\s*\*\*(.+?)\*\*\s*\|", line)
+        if table_match:
+            label_mode = table_match.group(1).strip().lower()
+            if label_mode in {"lite", "full", "ultra"} and label_mode != mode:
+                continue
+
+        example_match = re.match(r"^-\s*([^:]+):\s*\"", line)
+        if example_match:
+            label_mode = example_match.group(1).strip().lower()
+            if label_mode in {"lite", "full", "ultra"} and label_mode != mode:
+                continue
+
+        filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)

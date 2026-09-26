@@ -35,4 +35,18 @@ def static_ponytail_review(code: str) -> list[str]:
     if "import retrying" in code:
         findings.append("stdlib: use tenacity or functools.wraps retry instead of retrying")
 
+    # Check for missing tests on non-trivial code (classes/functions without checks)
+    if ("def " in code or "class " in code) and not any(
+        kw in code for kw in ("assert", "__main__", "unittest", "pytest", "test_", "self.assert")
+    ):
+        findings.append(
+            "test: non-trivial logic needs a runnable check (assert-based self-check or __main__ demo)"
+        )
+
+    # Check for shortcuts lacking a "ponytail:" comment explaining the ceiling
+    if any(pattern in code for pattern in ("global ", "while True:", "lock")) and "ponytail:" not in code:
+        findings.append(
+            "ponytail-comment: mark deliberate simplifications with a ponytail: comment detailing the ceiling and upgrade path"
+        )
+
     return findings
