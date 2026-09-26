@@ -1105,7 +1105,7 @@ candidates:
       still pass; none of them passed a relative candidate.
   - id: D57
     wave: P2
-    location: weebot/config/model_registry.py:1578-1594
+    location: weebot/config/model_registry.py (get_model_config)
     claim: >-
       `get_model_cost_info` returns a fabricated price for an unknown model,
       indistinguishable from a real one
@@ -1122,16 +1122,25 @@ candidates:
       widened to `dict[str, float] | None` so a type checker points at any future
       caller that forgets the case. A genuinely zero-priced model still returns
       an explicit {0.0, 0.0} rather than None, which is the distinction the old
-      code could not express.
+      code could not express. 2026-09-26 (phase 3.2): get_model_cost_info was
+      deleted with the hand-written registry it read; the invariant moved to
+      its replacement, get_model_config, which returns None for an unknown id,
+      and the evidence test was rewritten against it.
   - id: D58
     wave: P2
-    location: weebot/config/model_registry.py:1544-1562
+    location: weebot/config/model_registry.py (deleted)
     claim: >-
       `get_cheapest_model_for_task` silently accepts any capability name it does
       not recognise, so an unsupported or misspelled requirement filters nothing
-    status: fixed
-    evidence: tests/unit/test_latent_trap_fixes.py::test_an_unknown_capability_is_rejected_rather_than_ignored
+    status: cleared
     verdict_note: >-
+      Cleared 2026-09-26 as no longer applicable, after having been fixed:
+      phase 3.2 deleted get_cheapest_model_for_task, KNOWN_CAPABILITIES and the
+      hand-written registry they read (zero production callers). No code path
+      takes capability names any more -- capabilities are ModelConfig
+      properties read from the generated catalog -- so there is nothing left
+      for the defect to live in, and its proof test went with the function.
+      History of the fix, kept for the record:
       Verified: required_capabilities=["json_mode"] and ["funtcion_calling"] both
       returned a model, because the chained `cap == "x" and not model.supports_x`
       clauses all evaluate False for an unknown name and `has_all_caps` stayed
