@@ -134,7 +134,16 @@ def census() -> tuple[dict[str, str], set[str]]:
                 continue
             name = _called_name(node)
             if name in REGISTRARS:
-                if in_di:
+                # The CONTAINER's own register only. build_flow_registry()
+                # also calls registry.register("plan_act", ...) -- a
+                # FlowRegistry entry, not a container binding -- and counting
+                # it made "plan_act" a false orphan.
+                is_container = (
+                    isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"
+                )
+                if in_di and is_container:
                     registered.setdefault(key, f"{rel}:{node.lineno}")
             elif name in RESOLVERS:
                 resolved.add(key)

@@ -47,7 +47,6 @@ from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort 
 from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
 from weebot.application.services.task_runner import TaskRunner  # noqa: E402
 from weebot.config.harness.schema import HarnessConfig  # noqa: E402
-from weebot.domain.ports import EventPublisher  # noqa: E402
 
 from weebot.application.di._factories import FactoriesMixin  # noqa: E402
 from weebot.application.di._agent_tools import AgentToolsMixin  # noqa: E402
@@ -131,11 +130,8 @@ class Container(
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
 
         self.register(TracingAdapter, self._create_tracing)
-        self.register(EventPublisher, self._create_event_bridge)
         self.register(LLMPort, lambda: self._create_llm(default_model))
         self.register(SandboxPort, self._create_sandbox)
-        self.register("activity_stream", lambda: self._create_activity_stream())
-        self.register("response_cache", lambda: self._create_response_cache())
         self.register(Mediator, self._create_mediator)
         self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
@@ -157,9 +153,6 @@ class Container(
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 
         self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
-        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
-
-        self.register(ConfigAdapter, lambda: self._create_config_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())

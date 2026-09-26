@@ -69,18 +69,6 @@ class FactoriesMixin:
 
         return TracingAdapter()
 
-    def _create_event_bridge(self):
-        from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
-        from weebot.application.ports.event_bus_port import EventBusPort
-
-        return EventBrokerAdapter(event_bus=self.get(EventBusPort))
-
-    @staticmethod
-    def _create_activity_stream():
-        from weebot.core.activity_stream import ActivityStream
-
-        return ActivityStream()
-
     @staticmethod
     def _create_tool_repo():
         from weebot.infrastructure.persistence.sqlite_tool_repo import SQLiteToolRepository
@@ -92,12 +80,6 @@ class FactoriesMixin:
         from weebot.core.structured_logger import StructuredLogger
 
         return StructuredLogger("weebot")
-
-    @staticmethod
-    def _create_config_adapter():
-        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
-
-        return ConfigAdapter()
 
     @staticmethod
     def _create_audit_service():
@@ -122,12 +104,6 @@ class FactoriesMixin:
         from weebot.infrastructure.event_store import EventStore
 
         return EventStore()
-
-    @staticmethod
-    def _create_response_cache():
-        from weebot.infrastructure.persistence.response_cache import ResponseCache
-
-        return ResponseCache()
 
     @staticmethod
     def _create_sandbox() -> SandboxPort:

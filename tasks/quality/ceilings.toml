@@ -103,8 +103,13 @@ agent_json_parsing = 7
 # wrong. Its resolver set had been derived from string keys only, so it never
 # counted `_maybe_get(SomeType)`, the resolver for type keys, and
 # EventPublisher was a false orphan.
+# 16 -> 7 with phase 2.3, group 1. Nine bindings were redundant or dead --
+# configure_web_clone() and configure_skill_curator() had no callers, and
+# "plan_act" was a FlowRegistry entry the census counted as a binding --
+# and removing the dead SkillPublisher exposed EventPublisher, its only
+# consumer, as dead too.
 # Measured by: scripts/lint_di_wiring.py
-unresolved_di_keys = 16
+unresolved_di_keys = 7
 
 # The mirror image: keys a container is ASKED for that no register() defines.
 # The class behind four live failures found in phase 2.1 -- "llm_port" and
@@ -117,5 +122,8 @@ unresolved_di_keys = 16
 # checkpoints or gateway sessions; and _build_plan_act_flow_for_session asks
 # for "state_repo" and "event_bus" -- dead code behind two orphan bindings,
 # removed in phase 2.3.
+# 4 -> 2 with phase 2.3, group 1: the two in _build_plan_act_flow_for_session
+# were not dead after all -- the tool registry calls that method directly --
+# so they were fixed rather than deleted. See that method's docstring.
 # Measured by: scripts/lint_di_wiring.py
-unregistered_di_keys = 4
+unregistered_di_keys = 2

@@ -3,10 +3,13 @@
 Registers the AutonomousSkillDistiller, the SkillReviewGate that promotes a
 distilled skill from quarantined -> candidate, the SkillMaterializer that
 bridges a 'trusted' skill from SkillStore (SQLite) into SkillRegistry
-(filesystem, what the live retriever actually indexes), and a thin
-SkillPublisher that wraps the EventPublisher.  All live-learning paths are
-behind feature flags that default to OFF so this mixin is inert until a
-phase is explicitly enabled.
+(filesystem, what the live retriever actually indexes).  All live-learning
+paths are behind feature flags that default to OFF so this mixin is inert
+until a phase is explicitly enabled.
+
+A thin SkillPublisher wrapping the EventPublisher used to be registered here
+too. Nothing ever resolved it or called either of its publish methods, so it
+was removed in phase 2.3.
 """
 
 from __future__ import annotations
@@ -23,7 +26,6 @@ class LearningMixin:
     def configure_learning(self, *, db_path: str = "./weebot_sessions.db") -> None:
         """Register learning services.  Called from configure_defaults()."""
         self.register("skill_distiller", lambda: self._create_skill_distiller(db_path))
-        self.register("skill_publisher", self._create_skill_publisher)
         self.register("skill_materializer", self._create_skill_materializer)
         self.register("skill_review_gate", lambda: self._create_skill_review_gate(db_path))
         self.register("behavioral_learner", self._create_behavioral_learner)
@@ -156,13 +158,6 @@ class LearningMixin:
             registry = SkillRegistry()
         return SkillMaterializer(registry=registry, retriever=retriever)
 
-    def _create_skill_publisher(self):
-        """Wrap EventPublisher with a typed helper for learning events."""
-        from weebot.domain.ports import EventPublisher
-
-        publisher = self._maybe_get(EventPublisher)  # type: ignore[attr-defined]
-        return _SkillPublisher(publisher)
-
 
 # ── lightweight helpers ────────────────────────────────────────────────────────
 
@@ -182,42 +177,3 @@ class _NoOpReviewGate:
 
         name = getattr(skill, "name", "")
         return skill, SkillReview(skill_name=name, recommendation="reject", promoted=False)
-
-
-class _SkillPublisher:
-    """Thin typed wrapper around EventPublisher for skill lifecycle events."""
-
-    def __init__(self, publisher: Any) -> None:
-        self._publisher = publisher
-
-    async def publish_distilled(
-        self,
-        *,
-        session_id: str,
-        skill_name: str,
-        content_preview: str = "",
-        origin: str = "distilled",
-    ) -> None:
-        if self._publisher is None:
-            return
-        from weebot.domain.models.event import SkillDistilled
-
-        event = SkillDistilled(
-            session_id=session_id,
-            skill_name=skill_name,
-            content_preview=content_preview[:200],
-            origin=origin,
-        )
-        await self._publisher.publish(event)
-
-    async def publish_promoted(
-        self, *, skill_name: str, from_tier: str, to_tier: str, positive_uses: int = 0
-    ) -> None:
-        if self._publisher is None:
-            return
-        from weebot.domain.models.event import SkillPromoted
-
-        event = SkillPromoted(
-            skill_name=skill_name, from_tier=from_tier, to_tier=to_tier, positive_uses=positive_uses
-        )
-        await self._publisher.publish(event)

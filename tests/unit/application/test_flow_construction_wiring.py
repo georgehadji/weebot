@@ -101,6 +101,24 @@ def test_an_explicit_mediator_still_wins(container):
     assert flow._mediator is mine
 
 
+@pytest.mark.timeout(360)
+def test_a_sub_agent_flow_can_plan(container):
+    """The third construction site with the mediator defect.
+
+    The tool registry falls back to container._build_plan_act_flow_for_session
+    as the flow factory for debate, swarm, dispatch_parallel_tasks and
+    workflow_orchestrator. It built PlanActFlowConfig with no mediator and
+    asked for "state_repo" by string, so every sub-agent those tools spawned
+    was refused by PlanningState. The DI census could not see it: the tool
+    registry reaches the method by calling it, not by resolving a key.
+    """
+    flow = container._build_plan_act_flow_for_session(
+        Session(id="sub-1", user_id="dispatch_agents", agent_id="a")
+    )
+
+    _assert_can_plan_and_execute(flow, container)
+
+
 def test_a_task_runner_without_a_builder_refuses_rather_than_building_a_broken_flow():
     from weebot.application.services.task_runner import TaskRunner
 
