@@ -71,6 +71,31 @@ class TestStaticPonytailReview:
         findings = static_ponytail_review("import retrying\n")
         assert any("retrying" in f for f in findings)
 
+    def test_missing_tests_non_trivial_logic(self):
+        code = "def some_function():\n    return 42\n"
+        findings = static_ponytail_review(code)
+        assert any("non-trivial logic needs a runnable check" in f for f in findings)
+
+    def test_has_assert_not_flagged_for_missing_tests(self):
+        code = "def some_function():\n    return 42\nassert some_function() == 42\n"
+        findings = static_ponytail_review(code)
+        assert not any("non-trivial logic" in f for f in findings)
+
+    def test_has_main_not_flagged_for_missing_tests(self):
+        code = "def some_function():\n    return 42\nif __name__ == '__main__':\n    print('ok')\n"
+        findings = static_ponytail_review(code)
+        assert not any("non-trivial logic" in f for f in findings)
+
+    def test_missing_comment_for_shortcuts(self):
+        code = "global value\nvalue = 42\n"
+        findings = static_ponytail_review(code)
+        assert any("ponytail-comment: mark deliberate simplifications" in f for f in findings)
+
+    def test_has_ponytail_comment_for_shortcuts_not_flagged(self):
+        code = "# ponytail: simple global for config\nglobal value\nvalue = 42\n"
+        findings = static_ponytail_review(code)
+        assert not any("ponytail-comment" in f for f in findings)
+
 
 class TestCodeReviewerServicePonytail:
     """CodeReviewerService integration with Ponytail static hints."""
