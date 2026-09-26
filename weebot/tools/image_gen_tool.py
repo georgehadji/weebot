@@ -649,6 +649,13 @@ class ImageGenTool(BaseTool):
             ideogram_result = await _try_ideogram_direct(model)
             if ideogram_result is not None:
                 return ideogram_result
+            if model.startswith("ideogram/"):
+                # OpenRouter lists no Ideogram models (checked 2026-09), so
+                # the request below could only 404 -- and ideogram is first in
+                # the logo, text and brand cascades, so every such call without
+                # IDEOGRAM_API_KEY paid for that miss.
+                last_error = last_error or f"{model}: needs IDEOGRAM_API_KEY"
+                continue
 
             # ── Try xAI direct for x-ai/* models ────────────────────
             xai_result = await _try_xai_direct(model)

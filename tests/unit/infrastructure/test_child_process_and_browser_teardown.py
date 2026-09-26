@@ -45,10 +45,21 @@ from weebot.infrastructure.browser.playwright_adapter import PlaywrightAdapter
 
 
 def _sleeper(tmp_path) -> str:
-    """A stand-in for `qmd` that ignores its arguments and stays alive."""
-    script = tmp_path / "fake_qmd"
-    script.write_text("#!/bin/sh\nexec sleep 30\n")
-    script.chmod(0o755)
+    """A stand-in for `qmd` that ignores its arguments and stays alive.
+
+    It has to be something Popen can execute directly on both platforms.
+    Windows cannot run a `#!` script -- Popen failed with WinError 193, so the
+    two tests using this could never pass on a Windows checkout -- so there it
+    is a .cmd wrapper; both forms run the same Python sleep.
+    """
+    sleep = f'"{sys.executable}" -c "import time; time.sleep(30)"'
+    if sys.platform == "win32":
+        script = tmp_path / "fake_qmd.cmd"
+        script.write_text(f"@{sleep}\n")
+    else:
+        script = tmp_path / "fake_qmd"
+        script.write_text(f"#!/bin/sh\nexec {sleep}\n")
+        script.chmod(0o755)
     return str(script)
 
 

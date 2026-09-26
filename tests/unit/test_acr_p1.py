@@ -93,10 +93,16 @@ class TestConstraintChecker:
         from weebot.application.services.routing.constraint_checker import ConstraintChecker
         from weebot.domain.models.capability import TaskRequirement
 
+        from weebot.config.model_catalog import MODELS
+
         cc = ConstraintChecker()
         req = TaskRequirement(min_context=0)  # no requirement
-        eligible = cc.eligible(["deepseek/deepseek-v4-flash"], req, context_tokens=999_999)
-        assert eligible == []  # exceeds max_input_tokens
+        # One past the model's real context window. This was a literal 999_999,
+        # chosen against the hand-written registry's figure; the live window is
+        # 1,048,576, so the literal stopped exceeding anything.
+        too_big = MODELS["deepseek/deepseek-v4-flash"].context_window + 1
+        eligible = cc.eligible(["deepseek/deepseek-v4-flash"], req, context_tokens=too_big)
+        assert eligible == []
 
     def test_context_gate_skip_when_unknown(self):
         from weebot.application.services.routing.constraint_checker import ConstraintChecker
@@ -283,8 +289,8 @@ class TestQualityProfiles:
     def test_kwaipilot_kat_coder_profiles_and_catalog(self):
         """Verify KwaiPilot KAT-Coder model configurations are present and valid."""
         from weebot.config.capability_profiles import get_profile
-        from weebot.application.services.model_registry._catalog import MODELS
-        from weebot.application.services.model_registry._models import ModelTier
+        from weebot.config.model_catalog import MODELS
+        from weebot.domain.models.model_config import ModelTier
         from weebot.domain.models.task_type import TaskType
 
         # Check profiles

@@ -1,11 +1,11 @@
 """Hand-maintained corrections applied on top of the OpenRouter model list.
 
-``_catalog.py`` is generated wholesale from OpenRouter's ``/api/v1/models``
+``model_catalog.py`` is generated wholesale from OpenRouter's ``/api/v1/models``
 response, so anything a human knows that the API does not say is destroyed by
 the next regeneration. This module is where that knowledge lives instead.
 
 ``scripts/generate_catalog.py`` reads it and bakes the result into
-``_catalog.py``. **Nothing imports this module at runtime** -- the generated
+``model_catalog.py``. **Nothing imports this module at runtime** -- the generated
 catalog remains the single thing the application loads -- so the values here
 are plain primitives rather than ``ModelConfig``/``TaskType`` objects, and this
 file adds no import edge to the package.
@@ -36,11 +36,13 @@ from __future__ import annotations
 
 # ── Models absent from the OpenRouter response ───────────────────────────────
 #
-# Provenance: these nineteen were added to _catalog.py by hand -- nine after the
+# Provenance: nineteen were added to model_catalog.py by hand -- nine after the
 # last self-consistent generation (343 entries, commit 21e177e1), plus the ten
 # `~*-latest` aliases below, which predate it -- and would have been destroyed
 # by the next `--write`. They are reproduced here verbatim so that a
-# regeneration preserves them. Re-verify against the API when it is reachable:
+# regeneration preserves them. Seventeen remain: `qwen/qwen3.8-max` and
+# `~openai/gpt-latest` were deleted 2026-09-26 -- OpenRouter lists neither, so
+# keeping them kept dead models routable. Re-verify against the API when it is reachable:
 # any that OpenRouter now lists should be deleted from this dict and allowed to
 # come from the payload instead.
 EXTRA_MODELS: dict[str, dict] = {
@@ -119,18 +121,6 @@ EXTRA_MODELS: dict[str, dict] = {
         "context_window": 1000000,
         "strengths": ["CHAT", "REASONING", "CODE_REVIEW", "DOCUMENTATION"],
         "tier": "FAST",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "tool_use_score": 5,
-    },
-    "qwen/qwen3.8-max": {
-        "name": "Qwen: Qwen3.8 Max",
-        "provider": "openrouter",
-        "cost_per_1k_tokens": 0.0037500000000000003,
-        "context_window": 1000000,
-        "strengths": [
-            "CHAT", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
-        ],
-        "tier": "STANDARD",
         "api_key_env": "OPENROUTER_API_KEY",
         "tool_use_score": 5,
     },
@@ -252,18 +242,6 @@ EXTRA_MODELS: dict[str, dict] = {
         "api_key_env": "OPENROUTER_API_KEY",
         "tool_use_score": 5,
     },
-    "~openai/gpt-latest": {
-        "name": "OpenAI GPT Latest",
-        "provider": "openrouter",
-        "cost_per_1k_tokens": 0.030000000000000002,
-        "context_window": 1050000,
-        "strengths": [
-            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
-        ],
-        "tier": "STANDARD",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "tool_use_score": 5,
-    },
     "~openai/gpt-mini-latest": {
         "name": "OpenAI GPT Mini Latest",
         "provider": "openrouter",
@@ -349,11 +327,6 @@ PINNED_FIELDS: dict[str, dict] = {
         "tier": "FAST",
         "tool_use_score": 5,
     },
-    "qwen/qwen3.8-max": {
-        "strengths": ["CHAT", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE"],
-        "tier": "STANDARD",
-        "tool_use_score": 5,
-    },
     "thinkingmachines/inkling": {
         "strengths": [
             "CHAT", "CODE_REVIEW", "REASONING", "AGENTIC", "DOCUMENTATION", "ARCHITECTURE",
@@ -373,7 +346,7 @@ PINNED_FIELDS: dict[str, dict] = {
 # qwen/qwen3.7-max was present in the 343-entry generation and removed by hand
 # afterwards. Without this set, the next regeneration would bring it back, and
 # the removal would have to be discovered and repeated. If the reason it was
-# dropped no longer holds, delete it here -- do not delete it from _catalog.py.
+# dropped no longer holds, delete it here -- do not delete it from model_catalog.py.
 SUPPRESSED_MODELS: set[str] = {
     "qwen/qwen3.7-max",
     # model_refs.py's module docstring states plainly that openrouter/auto is

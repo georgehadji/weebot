@@ -105,11 +105,14 @@ class TestCascadeLiveModelRescue:
     async def test_live_model_rescue_returns_none_on_network_error(
         self, executor: CascadeExecutor
     ) -> None:
-        """OpenRouter API unavailable → rescue returns None."""
-        from unittest.mock import patch
+        """Model list unavailable → rescue returns None."""
 
-        with patch("httpx.AsyncClient", side_effect=ValueError("network error")):
-            result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
+        class _Unreachable:
+            async def list_models(self):
+                raise ValueError("network error")
+
+        executor._provider_account = _Unreachable()
+        result = await executor._live_model_rescue([{"role": "user", "content": "hello"}])
         assert result is None
 
 

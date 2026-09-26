@@ -53,6 +53,9 @@ _EXPECTED = {
     # The mirror image: keys asked for that nothing registers. Four live
     # failures in phase 2.1 had this shape. See scripts/lint_di_wiring.py.
     "unregistered_di_keys",
+    # Active .importlinter exemptions. Tracked only in prose before, where
+    # every target moved the wrong way. See scripts/lint_import_exemptions.py.
+    "import_exemptions",
 }
 
 

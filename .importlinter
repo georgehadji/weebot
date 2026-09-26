@@ -67,9 +67,15 @@ ignore_imports =
     # browser_inspector delegates to Playwright for DOM inspection.
     weebot.tools.browser_inspector -> weebot.infrastructure.browser.playwright_adapter
     weebot.tools.browser_inspector -> weebot.infrastructure.browser.som_renderer
-    # browser_tool lazily instantiates the LLM adapter for vision.
-    # (import is lazy inside a function — not detected by import-linter)
-    # weebot.tools.browser_tool -> weebot.infrastructure.llm.langchain_adapter
+    # browser_tool wraps the DI-injected LLMPort in a LangChain adapter for
+    # browser_use. This line was commented out, above a comment claiming the
+    # import went undetected because it is "lazy inside a function". That was
+    # the wrong reason: grimp sees function-level imports fine. It was
+    # undetected because weebot/infrastructure/llm/ had no __init__.py, and a
+    # namespace package is left out of grimp's graph entirely -- one of 11 such
+    # directories, 44 modules no contract could see (phase 3.3). With the
+    # package markers added, this is the only violation they were hiding.
+    weebot.tools.browser_tool -> weebot.infrastructure.llm.langchain_adapter
     # file_editor uses security validators directly (pre-audited, Phase C candidate).
     weebot.tools.file_editor -> weebot.infrastructure.security.security_validators
     # bash/powershell/python tools create sandbox instances via the factory.
@@ -224,3 +230,81 @@ ignore_imports =
     # CronAgentRunner.flow_factory and BenchmarkRunner.flow_factory for the
     # pattern.
     weebot.application.di -> weebot.interfaces.**
+
+[importlinter:contract:unassigned-no-infra]
+# Phase 3.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md -- the
+# default-deny contract. Every other contract is scoped to a layer directory,
+# so a package outside those directories was governed by nothing, and moving
+# code into one removed its governance with no gate firing. These nine held
+# about 19,000 lines and nine direct edges into infrastructure and tools.
+#
+# A fitness test (test_every_top_level_package_is_under_a_contract) fails on
+# any NEW top-level package until it is added here or to a layer contract, so
+# packages are governed by default rather than by omission. import-linter has
+# no "all other packages" wildcard; the test is what makes this default-deny.
+#
+# Direct imports only: these are entry points and tooling that legitimately
+# reach infrastructure THROUGH the container, and checking chains would flag
+# every such route rather than the edges that bypass it.
+name = Packages outside the layers must not import infrastructure or tools directly
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.agents
+    weebot.config
+    weebot.mcp
+    weebot.models
+    weebot.osworld
+    weebot.qmd_integration
+    weebot.scheduling
+    weebot.templates
+    weebot.utils
+forbidden_modules =
+    weebot.infrastructure
+    weebot.tools
+ignore_imports =
+    # mcp/server is an entry point (run_mcp.py) that builds and serves tools
+    # itself. The plan also moved weebot/mcp into interfaces/, for governance;
+    # this contract forbids it the same two packages interfaces-no-infra would,
+    # so the move would relocate these six lines and gain no check.
+    weebot.mcp.server -> weebot.infrastructure.adapters.composite_tool_executor
+    weebot.mcp.server -> weebot.infrastructure.observability.metrics
+    weebot.mcp.server -> weebot.tools.bash_tool
+    weebot.mcp.server -> weebot.tools.file_editor
+    weebot.mcp.server -> weebot.tools.python_tool
+    weebot.mcp.server -> weebot.tools.web_search
+    # osworld is a benchmark harness; it builds an OpenAI adapter directly and
+    # is already a grandfathered bypass in test_llm_clients_are_built_by_the_factory.
+    weebot.osworld.agent_adapter -> weebot.infrastructure.adapters.llm.openai_adapter
+    # default_jobs records scheduler metrics directly.
+    weebot.scheduling.default_jobs -> weebot.infrastructure.observability.metrics
+    # templates.integration builds tool collections from the tool registry.
+    weebot.templates.integration -> weebot.tools.tool_registry
+
+[importlinter:contract:app-no-vendor-sdks]
+# Phase 3.1, the anti-corruption layer. Application and domain speak to
+# providers through ports; vendor SDKs and raw HTTP stay in infrastructure.
+# Two leaks were closed to make this hold: verifying.py caught
+# openai.AuthenticationError (so an Anthropic key failure slipped past it --
+# now the domain LLMAuthenticationError, translated in ResilientLLMAdapter),
+# and CascadeExecutor made raw httpx calls to openrouter.ai for credits and the
+# live model list (now ProviderAccountPort).
+# Direct imports only: the composition root reaches infrastructure by design.
+name = Application and domain must not import provider SDKs or raw HTTP clients
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    weebot.application
+    weebot.domain
+forbidden_modules =
+    openai
+    anthropic
+    httpx
+    aiohttp
+    requests
+ignore_imports =
+    # Pre-existing, and not provider traffic: webhook delivery and two web
+    # research fetchers. Each wants a port the way the cascade got one.
+    weebot.application.services.cron_delivery_service -> aiohttp
+    weebot.application.services.multi_source_research -> aiohttp
+    weebot.application.services.source_credibility_assessment -> aiohttp

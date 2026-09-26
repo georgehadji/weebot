@@ -22,7 +22,7 @@ import math
 from dataclasses import dataclass
 
 from weebot.config.capability_profiles import get_profile, get_requirement
-from weebot.config.model_registry import get_model_info
+from weebot.config.model_registry import get_model_config
 from weebot.core.model_cascade_tracker import ModelCascadeTracker
 from weebot.domain.models.capability import TaskRequirement
 from weebot.application.services.task_model_router import TaskCategory
@@ -207,10 +207,10 @@ class UtilityScorer:
 
         Returns 0.0 if model info is not available.
         """
-        info = get_model_info(model_id)
+        info = get_model_config(model_id)
         if info is None:
             return 0.0
-        return info.calculate_cost_per_1k_tokens()
+        return sum(info.split_cost_per_1k())
 
     def _compute_latency(self, model_id: str, category: TaskCategory) -> float:
         """Mean latency from telemetry for (category, model), or 0.

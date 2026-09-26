@@ -385,4 +385,4 @@ class TestVSConstants:
 
         model = get_vs_model()
         assert model == MODEL_VS_CAPABLE
-        assert model == "qwen/qwen3.8-max"
+        assert model == "qwen/qwen3.8-max-0902"

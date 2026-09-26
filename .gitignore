@@ -40,8 +40,12 @@ coverage.xml
 *.sqlite3
 logs/
 
-# Cache
-cache/
+# Cache -- the runtime cache directories only. This was an unanchored `cache/`,
+# which also matched the source package weebot/infrastructure/cache/: its
+# llm_cache.py was never committed, so LLM_ENABLE_CACHING silently did nothing
+# on every checkout but one.
+/cache/
+/weebot/cache/
 *.cache
 
 # OS

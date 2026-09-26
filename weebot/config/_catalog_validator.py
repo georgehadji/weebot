@@ -16,8 +16,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from weebot.config.model_registry import strip_routing_suffix
+
 if TYPE_CHECKING:
-    from weebot.application.services.model_registry._models import ModelConfig
+    from weebot.domain.models.model_config import ModelConfig
 
 _log = logging.getLogger(__name__)
 
@@ -104,7 +106,7 @@ class CatalogValidator:
         startup and the ``doctor --validate-catalog`` CLI flag.
         """
         import weebot.config.model_refs as _mr
-        from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
+        from weebot.config.model_catalog import MODELS as _CATALOG
 
         _validator = CatalogValidator()
         return _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
@@ -118,7 +120,7 @@ class CatalogValidator:
             role_cascades: ``{role_name: [model_id, ...]}`` — the
                 ``_ROLE_MODEL_CASCADE`` from ``model_refs.py``.
             catalog: ``{model_id: ModelConfig}`` — the ``MODELS`` dict
-                from ``_catalog.py``.
+                from ``model_catalog.py``.
 
         Returns:
             ValidationReport with per-model warnings.
@@ -140,20 +142,9 @@ class CatalogValidator:
         report.elapsed_ms = (_t.monotonic() - t0) * 1000
         return report
 
-    # Suffixes that are routing variants, not separate model IDs
-    _ROUTING_SUFFIXES = (":thinking", ":free", ":nitro")
-
-    @staticmethod
-    def _strip_routing_suffix(model_id: str) -> str:
-        """Strip routing variant suffixes to get the base model ID.
-
-        ``z-ai/glm-5.2:thinking`` → ``z-ai/glm-5.2``
-        ``qwen/qwen3-coder:free`` → ``qwen/qwen3-coder``
-        """
-        for suffix in CatalogValidator._ROUTING_SUFFIXES:
-            if model_id.endswith(suffix):
-                return model_id[: -len(suffix)]
-        return model_id
+    # Routing variants, not separate model ids -- one definition, shared with
+    # get_model_config.
+    _strip_routing_suffix = staticmethod(strip_routing_suffix)
 
     def _check_model(
         self, report: ValidationReport, model_id: str, role: str, catalog: dict[str, ModelConfig]

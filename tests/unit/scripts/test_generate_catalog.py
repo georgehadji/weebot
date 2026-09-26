@@ -1,7 +1,7 @@
 """Proof tests for scripts/generate_catalog.py — the OpenRouter catalog generator.
 
 The generator had no tests. That mattered more than it usually would, because a
-run of it *replaces* ``_catalog.py`` wholesale: every way it can be wrong is a
+run of it *replaces* ``model_catalog.py`` wholesale: every way it can be wrong is a
 way to lose the catalog. These tests pin the interlocks that stand in the way,
 the install path that the interlocks protect, and the properties of the shipped
 catalog they are supposed to guarantee.
@@ -278,7 +278,7 @@ def test_rendered_catalog_imports_and_counts(no_overrides):
 
 
 def test_rendered_catalog_includes_the_real_overrides():
-    """generate_catalog always merges _catalog_overrides.py -- that is the
+    """generate_catalog always merges model_catalog_overrides.py -- that is the
     whole point of it, so the count is payload + hand-maintained extras."""
     extra, _, suppressed = catgen.load_overrides()
     expected = 60 + len([m for m in extra if m not in suppressed])
@@ -294,7 +294,7 @@ def test_verification_does_not_depend_on_the_installed_catalog(monkeypatch, tmp_
     """The probe used to import the package __init__, which imports the *current*
     _catalog -- so a half-written catalog could not be repaired by the tool that
     wrote it, and the error blamed the new content."""
-    broken = tmp_path / "_catalog.py"
+    broken = tmp_path / "model_catalog.py"
     broken.write_text("this is not valid python(", encoding="utf-8")
     monkeypatch.setattr(catgen, "CATALOG_PATH", broken)
     monkeypatch.setattr(catgen, "load_overrides", lambda: ({}, {}, set()))
@@ -418,7 +418,7 @@ def test_pinned_fields_override_the_derived_values(monkeypatch):
 def test_a_pin_applies_to_a_hand_added_model_too(monkeypatch):
     """Pins ran before extras were merged, and skipped ids not yet in `entries`,
     so a correction to a hand-added model was a silent no-op -- the reverse of
-    the order _catalog_overrides.py documents."""
+    the order model_catalog_overrides.py documents."""
     extra = {"vendor/hand-added": _full_override(tier="STANDARD", tool_use_score=5)}
     pinned = {"vendor/hand-added": {"tier": "PREMIUM", "tool_use_score": 9}}
     monkeypatch.setattr(catgen, "load_overrides", lambda: (extra, pinned, set()))
@@ -465,7 +465,7 @@ def test_the_shipped_overrides_pass_the_real_validator():
 
 
 def _live(model_id: str, key: str):
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
 
     value = getattr(MODELS[model_id], key)
     if key == "strengths":
@@ -484,7 +484,7 @@ def test_every_pinned_field_survives_into_the_shipped_catalog():
     hand-maintained entries: the fields nobody can derive (AGENTIC strengths, a
     PREMIUM tier, a measured tool_use_score) must be what the file says.
     """
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
 
     _, pinned, _ = catgen.load_overrides()
     assert pinned, "no pins to check -- has the overrides file been emptied?"
@@ -508,7 +508,7 @@ def test_cost_model_max_is_the_default_and_never_underestimates():
 
 
 def test_cost_model_mean_matches_the_hand_maintained_convention():
-    """_catalog_overrides.py records $0.03/1M in + $0.13/1M out as 0.00008 --
+    """model_catalog_overrides.py records $0.03/1M in + $0.13/1M out as 0.00008 --
     the mean of the two per-1k rates, not the max."""
     assert catgen.pricing_to_cost({"prompt": "0.00000003", "completion": "0.00000013"}, "mean") == (
         pytest.approx(0.00008)
@@ -541,7 +541,7 @@ def test_provider_and_key_mapping_follows_the_prefix_table():
 @pytest.fixture
 def catalog_at(tmp_path, monkeypatch):
     """Point the generator at a throwaway catalog and return its path."""
-    path = tmp_path / "_catalog.py"
+    path = tmp_path / "model_catalog.py"
     monkeypatch.setattr(catgen, "CATALOG_PATH", path)
     return path
 
@@ -627,7 +627,7 @@ def test_the_diff_needs_no_external_binary(monkeypatch, tmp_path, catalog_at, no
 
 
 def _catalog_text() -> str:
-    return (PROJECT_ROOT / "weebot/application/services/model_registry/_catalog.py").read_text(
+    return (PROJECT_ROOT / "weebot/config/model_catalog.py").read_text(
         encoding="utf-8"
     )
 
@@ -635,7 +635,7 @@ def _catalog_text() -> str:
 def test_shipped_catalog_has_no_negative_costs():
     """Regression guard for the four meta-routers priced at -1000.0, which won
     every cost-based selection in _strategies.py, past any budget filter."""
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
 
     assert {k: v.cost_per_1k_tokens for k, v in MODELS.items() if v.cost_per_1k_tokens < 0} == {}
 
@@ -656,14 +656,14 @@ def test_shipped_catalog_header_has_the_shape_the_generator_emits():
 def test_shipped_catalog_has_no_duplicate_strengths():
     """The dedup fix landed in determine_strengths; 28 shipped entries predated
     it, so the property the generator test asserts was untrue of the artifact."""
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
 
     assert [k for k, v in MODELS.items() if len(v.strengths) != len(set(v.strengths))] == []
 
 
 def test_cost_based_selection_does_not_return_a_forbidden_meta_router():
     """model_refs.py's docstring: ``openrouter/auto`` is FORBIDDEN."""
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
     from weebot.application.services.model_registry._strategies import CostOptimized, Fastest
     from weebot.domain.models.task_type import TaskType
 
@@ -675,7 +675,7 @@ def test_cost_based_selection_does_not_return_a_forbidden_meta_router():
 
 def test_a_zero_budget_cannot_select_a_paid_model():
     """A negative cost passed `cost <= budget` for every budget, including 0."""
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
     from weebot.application.services.model_registry._strategies import CostOptimized
     from weebot.domain.models.task_type import TaskType
 
@@ -695,7 +695,7 @@ def test_the_shipped_catalog_is_exactly_what_the_recorded_payload_renders():
 
     Rendering the recorded OpenRouter payload and comparing the whole file is a
     *provenance* check, not merely a format one: every value in the catalog must
-    be derivable from that payload plus _catalog_overrides.py. A cost edited by
+    be derivable from that payload plus model_catalog_overrides.py. A cost edited by
     hand fails here even though it is perfectly well-formed, which reconstructing
     the entries from the file itself could never catch.
 
@@ -710,10 +710,14 @@ def test_the_fixture_carries_only_the_fields_the_generator_reads():
     """It is a test fixture, not an API archive: everything else is weight.
 
     ``pricing`` is kept whole so the caching and web-search rates ride along for
-    whenever they are wired up.
+    whenever they are wired up. The last four keys are what phase 3.2 reads:
+    output limit, supported parameters, the reasoning spec, and retirement date.
     """
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
-    allowed = {"id", "name", "context_length", "pricing", "architecture"}
+    allowed = {
+        "id", "name", "context_length", "pricing", "architecture",
+        "top_provider", "supported_parameters", "reasoning", "expiration_date",
+    }
     assert {k for m in payload for k in m} <= allowed
 
 
@@ -726,3 +730,43 @@ def test_a_dry_run_still_verifies_that_the_output_imports(
     catalog_at.write_text(catgen.render_catalog({}, "max"), encoding="utf-8")
     assert _run(monkeypatch, tmp_path, ["--bootstrap"]) == 0
     assert "Rendered and imported cleanly: 60 models" in capsys.readouterr().out
+
+
+def test_api_fields_carry_what_the_models_endpoint_says():
+    """Phase 3.2: the fields that let this catalog replace the hand-written
+    registry, read from one /api/v1/models entry as OpenRouter documents it."""
+    entry = {
+        "id": "v/m",
+        "pricing": {"prompt": "0.000002", "completion": "0.00001"},
+        "top_provider": {"max_completion_tokens": 128000},
+        "architecture": {"input_modalities": ["text", "image"]},
+        "supported_parameters": ["tools", "reasoning", "max_tokens"],
+        "reasoning": {"supported_efforts": ["high", "low"], "mandatory": True},
+        "expiration_date": "2026-10-09",
+    }
+    got = catgen.api_fields(entry)
+    assert got["prompt_cost_per_1k"] == pytest.approx(0.002)
+    assert got["completion_cost_per_1k"] == pytest.approx(0.01)
+    assert got["max_output_tokens"] == 128000
+    assert got["input_modalities"] == ["text", "image"]
+    assert got["supported_parameters"] == ["max_tokens", "reasoning", "tools"]  # sorted
+    assert got["reasoning_efforts"] == ["high", "low"]  # API order: highest first
+    assert got["reasoning_mandatory"] is True
+    assert got["expiration_date"] == "2026-10-09"
+
+
+def test_absent_api_fields_are_unknown_and_render_as_nothing():
+    """A model with no reasoning object has no effort selection -- None, not []
+    -- and None fields are omitted from the rendered entry."""
+    got = catgen.api_fields({"id": "v/m", "pricing": {"prompt": "0", "completion": "0"}})
+    assert got["reasoning_efforts"] is None and got["reasoning_mandatory"] is None
+    assert got["supported_parameters"] is None and got["max_output_tokens"] is None
+    rendered = catgen._render_optional(got)
+    assert "reasoning_efforts" not in rendered and "prompt_cost_per_1k=0.0" in rendered
+
+
+def test_a_malformed_optional_field_is_refused():
+    with pytest.raises(catgen.PayloadError, match="reasoning_mandatory"):
+        catgen._validate_optional("v/m", {"reasoning_mandatory": "yes"})
+    with pytest.raises(catgen.PayloadError, match="prompt_cost_per_1k"):
+        catgen._validate_optional("v/m", {"prompt_cost_per_1k": -1.0})

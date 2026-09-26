@@ -16,22 +16,22 @@ and retroactively corrupted the audit trail.
 See tasks/specs/longhorizon_harness_implementation_plan.md (E4/E6/E7).
 """
 
-import httpx
 import pytest
-from openai import AuthenticationError
 from unittest.mock import AsyncMock, MagicMock
 
 from weebot.application.flows.states.completed import CompletedState
 from weebot.application.flows.states.verifying import VerifyingState
+from weebot.domain.exceptions import LLMAuthenticationError
 from weebot.domain.models.audit import AuditDimension, VerificationStatus
 from weebot.domain.models.plan import Plan, Step, StepStatus
 from weebot.domain.models.session import Session
 
 
-def _auth_error() -> AuthenticationError:
-    req = httpx.Request("POST", "https://example.invalid/v1/chat/completions")
-    resp = httpx.Response(401, request=req)
-    return AuthenticationError("invalid api key", response=resp, body=None)
+def _auth_error() -> LLMAuthenticationError:
+    # The domain type, as the adapters raise it -- the state no longer sees
+    # any vendor's exception (phase 3.1; the translation is pinned in
+    # tests/unit/infrastructure/test_llm_auth_translation.py).
+    return LLMAuthenticationError("invalid api key")
 
 
 def _flow_with_completed_step() -> MagicMock:
@@ -100,7 +100,7 @@ async def test_auth_error_mid_loop_stamps_not_run():
 @pytest.mark.asyncio
 async def test_non_auth_exception_in_consistency_check_fails_closed():
     """A regular (non-auth) failure must still fail closed as inconsistent
-    (E4) — this must NOT regress into propagating like AuthenticationError."""
+    (E4) — this must NOT regress into propagating like LLMAuthenticationError."""
     flow = MagicMock()
     flow._verifier_llm = None
     flow._llm = MagicMock()

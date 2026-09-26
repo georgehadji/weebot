@@ -25,7 +25,7 @@ import logging
 from typing import Any
 from collections.abc import Callable
 
-from weebot.config.model_registry import get_model_info
+from weebot.config.model_registry import get_model_config
 from weebot.domain.models.capability import CapabilityAxis, ModelQualityProfile
 from weebot.infrastructure.benchmark.suites import ALL_SUITES, BenchmarkItem, BenchmarkSuite
 
@@ -159,14 +159,14 @@ class BenchmarkRunner:
         Returns 0 if the model's cost info is unavailable (conservative —
         allows the run rather than blocking).
         """
-        info = get_model_info(model_id)
+        info = get_model_config(model_id)
         if info is None:
             return 0.0
 
         total_prompts = sum(len(s.items) for s in suites)
         input_tokens = total_prompts * _EST_TOKENS_PER_PROMPT
         output_tokens = total_prompts * _EST_TOKENS_PER_RESPONSE
-        return info.calculate_cost(input_tokens, output_tokens)
+        return info.estimate_cost(input_tokens, output_tokens)
 
     def get_total_items(self, suites: list[BenchmarkSuite] | None = None) -> int:
         """Return the total number of benchmark items across *suites*."""

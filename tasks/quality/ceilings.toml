@@ -52,8 +52,10 @@ print_in_production = 105
 # repository does not own from the day it was first measured. Untracking the
 # vendored tree took it out of CI's checkout, and the target now excludes it
 # on disk too, so a local run and CI measure the same 72.
+# 72 -> 71 with phase 3.1: CascadeExecutor read OPENROUTER_API_KEY itself to
+# make its own HTTP calls; the key now reaches the adapter from WeebotSettings.
 # Measured by: the `lint-env-access` target in the Makefile.
-bare_env_reads = 72
+bare_env_reads = 71
 
 # bandit's B110 (try/except/pass), all LOW severity.
 # NOT the same metric as silent_except_handlers: that one counts handlers whose
@@ -141,3 +143,26 @@ unresolved_di_keys = 0
 # so they were fixed rather than deleted. See that method's docstring.
 # Measured by: scripts/lint_di_wiring.py
 unregistered_di_keys = 2
+
+# Active ignore_imports entries in .importlinter -- edges a contract forbids
+# and a reviewer excused. Tracked only in prose before this, where every
+# target moved the wrong way: ADR-001 said 52, ARCHITECTURE.md D3 said 35
+# against a target of <=25, the file held 67.
+# 68, not 67, because phase 3.3 made one more exemption VISIBLE rather than
+# adding one: weebot/infrastructure/llm/ had no __init__.py, so grimp left it
+# out of the graph, and browser_tool's import of it was never checked. The
+# exemption for it existed, commented out, above a comment giving the wrong
+# reason. Eleven directories were in that state; this was the one real
+# violation they were hiding.
+# 68 -> 77 with the default-deny contract (`unassigned-no-infra`), and again
+# no edge is new: nine top-level packages sat outside every contract, so their
+# nine direct imports of infrastructure and tools were never checked. Six are
+# mcp/server building its own tools -- the planned move into interfaces/ does
+# not remove them, it only relocates them under interfaces-no-infra.
+# 77 -> 80 with phase 3.1's `app-no-vendor-sdks` contract, the same way: three
+# application services already imported aiohttp, and nothing forbade it.
+# The two provider leaks that contract exists for were fixed, not exempted.
+# This key replaces test_ignore_imports_under_target, a one-way `<= 72` on the
+# same count whose slack had already absorbed a drop from 70 to 66 unrecorded.
+# Measured by: scripts/lint_import_exemptions.py
+import_exemptions = 80

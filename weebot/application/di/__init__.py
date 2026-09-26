@@ -31,6 +31,7 @@ from weebot.application.cqrs.mediator import Mediator  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
+from weebot.application.ports.provider_account_port import ProviderAccountPort  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
 from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
@@ -308,6 +309,18 @@ class Container(
 
         self.register("llm_pool", _create_llm_pool)
 
+        # Credit balance + live model list for the cascade (phase 3.1). These
+        # were raw httpx calls to openrouter.ai inside CascadeExecutor.
+        def _create_provider_account():
+            from weebot.config.settings import WeebotSettings
+            from weebot.infrastructure.adapters.llm.openrouter_account import (
+                OpenRouterAccountAdapter,
+            )
+
+            return OpenRouterAccountAdapter(api_key=WeebotSettings().openrouter_api_key)
+
+        self.register(ProviderAccountPort, _create_provider_account)
+
         # Browser pool — DI-managed singleton replacing module-level _global_pool
         self.register("browser_pool", self._create_browser_pool)
         # MCP Client — connects to external MCP servers (Track 1)
@@ -477,6 +490,7 @@ class Container(
                 # because it proves a key is resolved -- not that it reaches the
                 # object doing the work.
                 llm_pool=self._maybe_get_str("llm_pool"),
+                provider_account=self._maybe_get(ProviderAccountPort),
             )
 
         register_default_handlers(
