@@ -49,3 +49,14 @@ class EventStorePort(ABC):
         Used by DreamerAgent to collect recent failure signals for ideation.
         """
         ...
+
+    @abstractmethod
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete a session's events and its session record.
+
+        Session-scoped purge, called by SessionDeletionOrchestrator when a
+        session is deleted. DurableEventBus journals every agent event here,
+        so without this a deleted session's full event history survives.
+        Returns True if a session record was deleted.
+        """
+        ...

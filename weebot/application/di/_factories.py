@@ -176,10 +176,12 @@ class FactoriesMixin:
         return OpenRouterRerankAdapter()
 
     @staticmethod
-    def _create_checkpoint_store(db_path: str = "sessions.db"):
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
+    def _create_gateway_session_store():
+        from weebot.infrastructure.persistence.gateway_session_store import (
+            SQLiteGatewaySessionStore,
+        )
 
-        return SQLiteCheckpointStore(db_path=db_path)
+        return SQLiteGatewaySessionStore()
 
     @staticmethod
     def _create_flow_serializer():

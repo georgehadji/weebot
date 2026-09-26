@@ -247,14 +247,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     telegram_adapter = None
     if _settings.telegram_bot_token:
         try:
-            from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
-            from weebot.infrastructure.persistence.gateway_session_store import (
-                SQLiteGatewaySessionStore,
+            from weebot.application.ports.gateway_session_store_port import (
+                IGatewaySessionStorePort,
             )
+            from weebot.application.services.gateway_flow_resolver import GatewayFlowResolver
             from weebot.interfaces.gateways.telegram import TelegramAdapter
 
             flow_resolver = GatewayFlowResolver(
-                store=SQLiteGatewaySessionStore(),
+                # From the container, so session deletion purges this store.
+                store=container.get(IGatewaySessionStorePort),
                 session_ttl_seconds=_settings.gateway_session_ttl_seconds,
                 max_sessions_per_platform=_settings.gateway_max_sessions_per_platform,
             )
