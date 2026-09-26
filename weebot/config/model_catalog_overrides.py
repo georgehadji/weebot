@@ -36,11 +36,13 @@ from __future__ import annotations
 
 # ── Models absent from the OpenRouter response ───────────────────────────────
 #
-# Provenance: these nineteen were added to model_catalog.py by hand -- nine after the
+# Provenance: nineteen were added to model_catalog.py by hand -- nine after the
 # last self-consistent generation (343 entries, commit 21e177e1), plus the ten
 # `~*-latest` aliases below, which predate it -- and would have been destroyed
 # by the next `--write`. They are reproduced here verbatim so that a
-# regeneration preserves them. Re-verify against the API when it is reachable:
+# regeneration preserves them. Seventeen remain: `qwen/qwen3.8-max` and
+# `~openai/gpt-latest` were deleted 2026-09-26 -- OpenRouter lists neither, so
+# keeping them kept dead models routable. Re-verify against the API when it is reachable:
 # any that OpenRouter now lists should be deleted from this dict and allowed to
 # come from the payload instead.
 EXTRA_MODELS: dict[str, dict] = {
@@ -119,18 +121,6 @@ EXTRA_MODELS: dict[str, dict] = {
         "context_window": 1000000,
         "strengths": ["CHAT", "REASONING", "CODE_REVIEW", "DOCUMENTATION"],
         "tier": "FAST",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "tool_use_score": 5,
-    },
-    "qwen/qwen3.8-max": {
-        "name": "Qwen: Qwen3.8 Max",
-        "provider": "openrouter",
-        "cost_per_1k_tokens": 0.0037500000000000003,
-        "context_window": 1000000,
-        "strengths": [
-            "CHAT", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
-        ],
-        "tier": "STANDARD",
         "api_key_env": "OPENROUTER_API_KEY",
         "tool_use_score": 5,
     },
@@ -252,18 +242,6 @@ EXTRA_MODELS: dict[str, dict] = {
         "api_key_env": "OPENROUTER_API_KEY",
         "tool_use_score": 5,
     },
-    "~openai/gpt-latest": {
-        "name": "OpenAI GPT Latest",
-        "provider": "openrouter",
-        "cost_per_1k_tokens": 0.030000000000000002,
-        "context_window": 1050000,
-        "strengths": [
-            "CHAT", "CREATIVE", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE",
-        ],
-        "tier": "STANDARD",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "tool_use_score": 5,
-    },
     "~openai/gpt-mini-latest": {
         "name": "OpenAI GPT Mini Latest",
         "provider": "openrouter",
@@ -347,11 +325,6 @@ PINNED_FIELDS: dict[str, dict] = {
     "qwen/qwen3.7-flash": {
         "strengths": ["CHAT", "REASONING", "CODE_REVIEW", "DOCUMENTATION"],
         "tier": "FAST",
-        "tool_use_score": 5,
-    },
-    "qwen/qwen3.8-max": {
-        "strengths": ["CHAT", "CODE_REVIEW", "REASONING", "DOCUMENTATION", "ARCHITECTURE"],
-        "tier": "STANDARD",
         "tool_use_score": 5,
     },
     "thinkingmachines/inkling": {

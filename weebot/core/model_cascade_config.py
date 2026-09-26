@@ -59,20 +59,8 @@ MODEL_CASCADE = {
     "coding": [
         # --- FREE tier ---
         ModelConfig(
-            id="qwen/qwen3-coder:free",
-            name="Qwen3 Coder 480B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1049000,
-            timeout_seconds=60,
-            max_retries=2,
-            use_for=["coding", "refactoring", "debugging", "analysis"],
-            description="Qwen3-Coder-480B MoE — purpose-built coding specialist, 1M context.",
-        ),
-        ModelConfig(
-            id="poolside/laguna-m.1:free",
-            name="Poolside Laguna M.1 (free)",
+            id="poolside/laguna-s-2.1:free",
+            name="Poolside Laguna S 2.1 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -83,20 +71,8 @@ MODEL_CASCADE = {
             description="Poolside flagship coding-agent model — optimised for complex SWE tasks.",
         ),
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "analysis", "chat", "planning"],
-            description="Kimi K2.6 free tier — long-horizon coding, planning, 256K context.",
-        ),
-        ModelConfig(
-            id="poolside/laguna-xs.2:free",
-            name="Poolside Laguna XS.2 (free)",
+            id="poolside/laguna-xs-2.1:free",
+            name="Poolside Laguna XS 2.1 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -161,30 +137,6 @@ MODEL_CASCADE = {
     "analysis": [
         # --- FREE tier ---
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "analysis", "chat", "planning"],
-            description="Kimi K2.6 free tier — long-horizon analysis fallback.",
-        ),
-        ModelConfig(
-            id="nex-agi/nex-n2-pro:free",
-            name="Nex N2 Pro (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["analysis", "chat", "planning"],
-            description="Nex N2 Pro — 397B MoE, agentic-tuned, cross-lab diversity.",
-        ),
-        ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",
             name="Nemotron 3 Ultra 550B (free)",
             tier="free",
@@ -213,42 +165,6 @@ MODEL_CASCADE = {
     ],
     "chat": [
         # --- FREE tier ---
-        ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "analysis", "chat"],
-            description="Kimi K2.6 free tier — chat fallback.",
-        ),
-        ModelConfig(
-            id="nex-agi/nex-n2-pro:free",
-            name="Nex N2 Pro (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["chat"],
-            description="Nex N2 Pro — cross-lab diversity for chat.",
-        ),
-        ModelConfig(
-            id="meta-llama/llama-3.3-70b-instruct:free",
-            name="Llama 3.3 70B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=131000,
-            timeout_seconds=30,
-            max_retries=2,
-            use_for=["chat", "summarization"],
-            description="Meta Llama 3.3 70B — battle-tested, reliable, multilingual.",
-        ),
         # --- BUDGET tier ---
         ModelConfig(
             id="deepseek/deepseek-v4-flash",
@@ -267,18 +183,6 @@ MODEL_CASCADE = {
     "planning": [
         # --- FREE tier ---
         ModelConfig(
-            id="moonshotai/kimi-k2.6:free",
-            name="Kimi K2.6 (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=262144,
-            timeout_seconds=45,
-            max_retries=2,
-            use_for=["coding", "analysis", "planning"],
-            description="Kimi K2.6 free tier — planning fallback.",
-        ),
-        ModelConfig(
             id="nvidia/nemotron-3-ultra-550b-a55b:free",
             name="Nemotron 3 Ultra 550B (free)",
             tier="free",
@@ -289,18 +193,6 @@ MODEL_CASCADE = {
             max_retries=2,
             use_for=["planning", "analysis", "long_context"],
             description="NVIDIA 550B frontier orchestration model — deep reasoning for plans.",
-        ),
-        ModelConfig(
-            id="nousresearch/hermes-3-llama-3.1-405b:free",
-            name="Hermes 3 405B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=131000,
-            timeout_seconds=60,
-            max_retries=2,
-            use_for=["planning", "analysis"],
-            description="Hermes 3 405B — advanced agentic capabilities, tool use, planning.",
         ),
         # --- STANDARD tier ---
         ModelConfig(
@@ -333,20 +225,8 @@ MODEL_CASCADE = {
     "subagent": [
         # Lightweight models for frequent, short-lived subagent calls
         ModelConfig(
-            id="openai/gpt-oss-20b:free",
-            name="GPT OSS 20B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=131000,
-            timeout_seconds=20,
-            max_retries=3,
-            use_for=["subagent", "chat", "analysis"],
-            description="OpenAI 21B MoE — fast, Apache 2.0, subagent dispatch fallback.",
-        ),
-        ModelConfig(
-            id="poolside/laguna-xs.2:free",
-            name="Poolside Laguna XS.2 (free)",
+            id="poolside/laguna-xs-2.1:free",
+            name="Poolside Laguna XS 2.1 (free)",
             tier="free",
             prompt_price=0.0,
             completion_price=0.0,
@@ -355,18 +235,6 @@ MODEL_CASCADE = {
             max_retries=3,
             use_for=["subagent", "coding"],
             description="Poolside efficient coding subagent — fast, 262K context.",
-        ),
-        ModelConfig(
-            id="meta-llama/llama-3.3-70b-instruct:free",
-            name="Llama 3.3 70B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=131000,
-            timeout_seconds=25,
-            max_retries=3,
-            use_for=["subagent", "chat"],
-            description="Meta Llama 3.3 70B — reliable, versatile subagent fallback.",
         ),
         # --- BUDGET tier ---
         ModelConfig(
@@ -409,18 +277,6 @@ MODEL_CASCADE = {
             max_retries=2,
             use_for=["long_context", "analysis", "planning"],
             description="NVIDIA 550B frontier model — 1M context, giant-input fallback.",
-        ),
-        ModelConfig(
-            id="qwen/qwen3-coder:free",
-            name="Qwen3 Coder 480B (free)",
-            tier="free",
-            prompt_price=0.0,
-            completion_price=0.0,
-            context_length=1049000,
-            timeout_seconds=90,
-            max_retries=2,
-            use_for=["long_context", "coding"],
-            description="Qwen3 Coder 480B — 1M context, ideal for large codebases.",
         ),
         ModelConfig(
             id="nvidia/nemotron-3-super-120b-a12b:free",
@@ -525,7 +381,19 @@ def get_cascade_for_task(task_type: str) -> list[ModelConfig]:
 
 
 def estimate_cost(model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """Estimate cost for using a model."""
+    """Estimate cost for using a model.
+
+    From the generated OpenRouter catalog first: this module's own list prices
+    about a dozen models, so the cascade tracker's cost accounting (published by
+    mcp/resources.py) read 0.0 for every other model it ran -- the residual risk
+    the W5 audit recorded. The catalog carries split prompt/completion rates for
+    every model OpenRouter lists; the list below remains the fallback.
+    """
+    from weebot.config.model_registry import get_model_config
+
+    config = get_model_config(model_id)
+    if config is not None:
+        return config.estimate_cost(prompt_tokens, completion_tokens)
     for task_models in MODEL_CASCADE.values():
         for model in task_models:
             if model.id == model_id:

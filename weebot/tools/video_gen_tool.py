@@ -89,7 +89,7 @@ class VideoGenTool(BaseTool):
             "use_case": {
                 "type": "string",
                 "enum": ["short", "cinematic", "product", "brand", "general"],
-                "description": "Use case for auto model selection. Cascade: short→seedance-fast, cinematic→sora/veo, product→wan/kling, brand→grok/veo, general→grok/kling/wan",
+                "description": "Use case for auto model selection. Cascade: short→seedance-fast, cinematic→sora/veo, product→wan/veo, brand→grok/veo, general→grok/wan/veo",
             },
             "output_path": {
                 "type": "string",

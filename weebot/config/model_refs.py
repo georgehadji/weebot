@@ -52,7 +52,7 @@ Native model ID: ``deepseek-v4-flash`` (stripped by DeepSeekAdapter)."""
 MODEL_CASCADE_TIER3: str = "moonshotai/kimi-k2.6"
 """Tier 3: Kimi K2.6 — structured output, broad knowledge, 256K context."""
 
-MODEL_CASCADE_TIER4: str = "qwen/qwen3.8-max"
+MODEL_CASCADE_TIER4: str = "qwen/qwen3.8-max-0902"
 """Tier 4: Qwen 3.8 Max — flagship agent-centric, coding strength, 1M context."""
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -183,7 +183,7 @@ _ROLE_MODEL_CASCADE: dict[str, list[str]] = {
     "researcher": [
         "moonshotai/kimi-k2.6:thinking",  # primary: Kimi K2.6 :thinking — multi-source CoT synthesis
         "deepseek/deepseek-v4-flash:thinking",  # fallback 1: DeepSeek V4 Flash :thinking — fast reasoning
-        "qwen/qwen3.8-max",  # fallback 2: Qwen Max — strong comprehension
+        "qwen/qwen3.8-max-0902",  # fallback 2: Qwen Max — strong comprehension
     ],
     "analyst": [
         "deepseek/deepseek-v4-flash:thinking",  # primary: DeepSeek V4 Flash :thinking — math/reasoning
@@ -312,7 +312,7 @@ MODEL_FALLBACK_OPENROUTER_CHAIN: list[str] = [
     "moonshotai/kimi-k2.6",
     "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
-    "qwen/qwen3.8-max",
+    "qwen/qwen3.8-max-0902",
     "x-ai/grok-4.3",
     "kwaipilot/kat-coder-pro-v2.5",
     "minimax/minimax-m3",
@@ -329,7 +329,7 @@ MODEL_DEPRECATED_AGENT: str = "minimax/minimax-m3"
 MODEL_DEPRECATED_TOOL_AGENT: str = "minimax/minimax-m3"
 MODEL_RTK_CHEAP: str = "minimax/minimax-m3"
 MODEL_RTK_PREMIUM: str = "x-ai/grok-4.3"
-MODEL_RTK_STANDARD: str = "qwen/qwen3.8-max"
+MODEL_RTK_STANDARD: str = "qwen/qwen3.8-max-0902"
 
 # ========================================================================
 # Image Generation Models (text → image via OpenRouter)
@@ -364,7 +364,10 @@ MODEL_IMAGE_KREA_MEDIUM: str = "krea/krea-2-medium"
 Illustration, anime, painting, expressive artistic styles. Stable, consistent."""
 
 MODEL_IMAGE_IDEOGRAM: str = "ideogram/ideogram-v3-turbo"
-"""Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img)."""
+"""Ideogram 3.0 Turbo — best text rendering, logos, branding, typography ($0.03/img).
+Direct Ideogram API only (IDEOGRAM_API_KEY): OpenRouter lists no Ideogram models
+as of 2026-09, so ImageGenTool skips ideogram/* in its cascade when that key is
+unset rather than spending an attempt on a guaranteed 404."""
 
 MODEL_IMAGE_QWEN: str = "qwen/qwen-image-3"
 """Qwen Image 3 — unified image generation and editing, $0.03/img (added 2026-08-05).
@@ -388,8 +391,6 @@ def get_image_models() -> list[str]:
         "bytedance-seed/seedream-4.5",
         "microsoft/mai-image-2.5",
         "ideogram/ideogram-v3-turbo",
-        "ideogram/ideogram-v3-default",
-        "ideogram/ideogram-v4-turbo",
         "qwen/qwen-image-3",
         "qwen/qwen-image-3-pro",
     ]
@@ -515,20 +516,11 @@ MODEL_VIDEO_XAI_15: str = "x-ai/grok-imagine-video-1.5"
 sound effects, ambience, dialogue. Animates starting image with text prompt."""
 """xAI Grok Imagine Video — from $0.05/video. Direct xAI API path available."""
 
-MODEL_VIDEO_KLING_PRO: str = "kling/video-v3-pro"
-"""Kling Video v3.0 Pro — from $0.168/video. High quality, Kwaivgi platform."""
-
-MODEL_VIDEO_KLING_STANDARD: str = "kling/video-v3-standard"
-"""Kling Video v3.0 Standard — from $0.126/video. Faster, lower cost."""
-
 MODEL_VIDEO_VEO_FAST: str = "google/veo-3.1-fast"
 """Google Veo 3.1 Fast — from $0.10/video. Fast inference."""
 
 MODEL_VIDEO_VEO_LITE: str = "google/veo-3.1-lite"
 """Google Veo 3.1 Lite — from $0.05/video. Budget option."""
-
-MODEL_VIDEO_KLING_O1: str = "kling/video-o1-pro"
-"""Kling Video O1 Pro — $0.112/video. Reasoning-enhanced quality."""
 
 MODEL_VIDEO_HAILUO: str = "minimax/hailuo-2.3"
 """MiniMax Hailuo 2.3 — $0.082/video. Strong cinematic output."""
@@ -545,7 +537,7 @@ MODEL_VIDEO_WAN_27: str = "alibaba/wan-2.7"
 MODEL_VIDEO_WAN_26: str = "alibaba/wan-2.6"
 """Alibaba Wan 2.6 — from $0.04/video. Budget option."""
 
-MODEL_VIDEO_SEEDANCE_15: str = "bytedance/seedance-1.5-pro"
+MODEL_VIDEO_SEEDANCE_15: str = "bytedance/seedance-1-5-pro"
 """ByteDance Seedance 1.5 Pro — from $0.023/video. Cheapest option."""
 
 MODEL_VIDEO_SORA_2: str = "openai/sora-2-pro"
@@ -559,17 +551,14 @@ def get_video_models() -> list[str]:
     """Return the canonical list of video generation model IDs."""
     return [
         "x-ai/grok-imagine-video",
-        "kling/video-v3-pro",
-        "kling/video-v3-standard",
         "google/veo-3.1-fast",
         "google/veo-3.1-lite",
-        "kling/video-o1-pro",
         "minimax/hailuo-2.3",
         "bytedance/seedance-2.0",
         "bytedance/seedance-2.0-fast",
         "alibaba/wan-2.7",
         "alibaba/wan-2.6",
-        "bytedance/seedance-1.5-pro",
+        "bytedance/seedance-1-5-pro",
         "openai/sora-2-pro",
         "google/veo-3.1",
     ]
@@ -584,19 +573,16 @@ VIDEO_CASCADE: dict[str, list[str]] = {
     "short": [
         "bytedance/seedance-2.0-fast",  # 1st: fast + cheap
         "bytedance/seedance-2.0",  # 2nd: better quality
-        "kling/video-v3-standard",  # 3rd: standard quality
     ],
     # ── Cinematic / narrative — quality first ───────────────────
     "cinematic": [
         "openai/sora-2-pro",  # 1st: premium
         "google/veo-3.1",  # 2nd: highest quality Google
         "minimax/hailuo-2.3",  # 3rd: strong cinematic
-        "kling/video-v3-pro",  # 4th: pro quality
     ],
     # ── Product demos / marketing ───────────────────────────────
     "product": [
         "alibaba/wan-2.7",  # 1st: good general
-        "kling/video-v3-pro",  # 2nd: pro quality
         "google/veo-3.1-fast",  # 3rd: fast
     ],
     # ── Brand / enterprise — safety, consistency ────────────────
@@ -604,13 +590,11 @@ VIDEO_CASCADE: dict[str, list[str]] = {
         "x-ai/grok-imagine-video-1.5",  # 1st: direct xAI — v1.5 with audio
         "x-ai/grok-imagine-video",  # 2nd: direct xAI — v1 fallback
         "google/veo-3.1",  # 3rd: professional
-        "kling/video-o1-pro",  # 4th: reasoning-enhanced
     ],
     # ── General / catch-all — free → cheap → best ──────────────
     "general": [
         "x-ai/grok-imagine-video-1.5",  # 1st: direct xAI — v1.5 with audio
         "x-ai/grok-imagine-video",  # 2nd: direct xAI — v1 fallback
-        "kling/video-v3-standard",  # 3rd: standard
         "alibaba/wan-2.6",  # 4th: budget
         "google/veo-3.1-lite",  # 5th: lite
     ],
@@ -643,16 +627,16 @@ MODEL_MOA_REFERENCE: list[str] = [
     "moonshotai/kimi-k2.6",
     "deepseek/deepseek-v4-flash",
     "x-ai/grok-build-0.1",
-    "qwen/qwen3.8-max",
+    "qwen/qwen3.8-max-0902",
 ]
 
 # ========================================================================
 # Pricing table
 # ========================================================================
-MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.8-max"
+MODEL_PRICE_CLAUDE_SONNET: str = "qwen/qwen3.8-max-0902"
 MODEL_PRICE_CLAUDE_OPUS: str = "x-ai/grok-4.3"
 MODEL_PRICE_CLAUDE_HAIKU: str = "minimax/minimax-m3"
-MODEL_PRICE_GPT4O: str = "qwen/qwen3.8-max"
+MODEL_PRICE_GPT4O: str = "qwen/qwen3.8-max-0902"
 MODEL_PRICE_GPT4O_MINI: str = "minimax/minimax-m3"
 MODEL_PRICE_KIMI: str = "minimax/minimax-m3"
 MODEL_PRICE_DEEPSEEK: str = "deepseek/deepseek-v4-flash"
@@ -712,7 +696,6 @@ def get_free_models() -> list[str]:
         "openai/gpt-4.1-nano",
         "minimax/minimax-m3",
         "meta-llama/llama-4-scout",
-        "nex-agi/nex-n2-pro",
     ]
 
 
@@ -846,7 +829,7 @@ ROLE_MODEL_CONFIG: dict[str, list[str]] = {
     "verifier": [
         "deepseek/deepseek-v4-flash:thinking",
         "x-ai/grok-4.3:thinking",
-        "qwen/qwen3.8-max",
+        "qwen/qwen3.8-max-0902",
     ],
     # DeepSeek Flash (fast, cheap — no thinking needed for summarization)
     "summarizer": ["deepseek/deepseek-v4-flash", "minimax/minimax-m3", "moonshotai/kimi-k2.6"],

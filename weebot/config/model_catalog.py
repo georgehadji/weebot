@@ -1,7 +1,7 @@
 """Auto-generated model catalog. DO NOT EDIT MANUALLY.
 
 Generated from https://openrouter.ai/api/v1/models
-Total models: 453
+Total models: 451
 Cost model: max(prompt, completion)
 Generated: See git history for timestamp.
 
@@ -5911,16 +5911,6 @@ MODELS: dict[str, ModelConfig] = {
         supported_parameters=["frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"],
         reasoning_mandatory=False,
     ),
-    "qwen/qwen3.8-max": ModelConfig(
-        name="Qwen: Qwen3.8 Max",
-        provider="openrouter",
-        cost_per_1k_tokens=0.0037500000000000003,
-        context_window=1000000,
-        strengths=[TaskType.CHAT, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
-        tier=ModelTier.STANDARD,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
-    ),
     "qwen/qwen3.8-max-0902": ModelConfig(
         name="Qwen: Qwen3.8 Max (0902)",
         provider="openrouter",
@@ -7211,16 +7201,6 @@ MODELS: dict[str, ModelConfig] = {
         supported_parameters=["include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "tool_choice", "tools"],
         reasoning_efforts=["max", "xhigh", "high", "medium", "low"],
         reasoning_mandatory=True,
-    ),
-    "~openai/gpt-latest": ModelConfig(
-        name="OpenAI GPT Latest",
-        provider="openrouter",
-        cost_per_1k_tokens=0.030000000000000002,
-        context_window=1050000,
-        strengths=[TaskType.CHAT, TaskType.CREATIVE, TaskType.CODE_REVIEW, TaskType.REASONING, TaskType.DOCUMENTATION, TaskType.ARCHITECTURE],
-        tier=ModelTier.STANDARD,
-        api_key_env="OPENROUTER_API_KEY",
-        tool_use_score=5,
     ),
     "~openai/gpt-luna-latest": ModelConfig(
         name="OpenAI: GPT Luna Latest",
