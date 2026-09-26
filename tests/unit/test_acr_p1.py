@@ -283,8 +283,8 @@ class TestQualityProfiles:
     def test_kwaipilot_kat_coder_profiles_and_catalog(self):
         """Verify KwaiPilot KAT-Coder model configurations are present and valid."""
         from weebot.config.capability_profiles import get_profile
-        from weebot.application.services.model_registry._catalog import MODELS
-        from weebot.application.services.model_registry._models import ModelTier
+        from weebot.config.model_catalog import MODELS
+        from weebot.domain.models.model_config import ModelTier
         from weebot.domain.models.task_type import TaskType
 
         # Check profiles

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from weebot.application.services.model_registry._models import ModelConfig, ModelTier
+from weebot.domain.models.model_config import ModelConfig, ModelTier
 from weebot.application.services.model_registry._strategies import (
     CostOptimized,
     Fastest,
@@ -102,7 +102,7 @@ def test_every_shipped_model_survives_its_own_validation():
     """The catalog is constructed at import, so this is really a statement that
     importing it did not raise -- made explicit so a future hand-edit that
     reintroduces a bad value fails here by name."""
-    from weebot.application.services.model_registry._catalog import MODELS
+    from weebot.config.model_catalog import MODELS
 
     assert MODELS
     for model_id, cfg in MODELS.items():

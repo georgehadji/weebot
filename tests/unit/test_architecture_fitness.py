@@ -930,7 +930,7 @@ def test_god_modules_under_800_lines():
     line_allowlist: dict[str, int] = {
         "model_selection.py": 100,  # re-export shim (was 3265)
         # data catalog: 426 model configs, pure data, grows with the model list
-        "_catalog.py": 4800,
+        "model_catalog.py": 4800,
         # Was 5900 while a one-off black run had wrapped every multi-item
         # strengths=[...] list one-entry-per-line. The generator emits them on a
         # single line, so restoring generated form brought the file back to 3491

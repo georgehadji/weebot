@@ -6,7 +6,7 @@ had become "moonshotai/kimi-k2.6", which BrowserTool's last-resort ChatOpenAI
 sent to api.openai.com. Both drifted in commits about cascade ordering.
 """
 
-from weebot.application.services.model_registry._catalog import MODELS
+from weebot.config.model_catalog import MODELS
 from weebot.config.model_refs import MODEL_FACTORY_ANTHROPIC, MODEL_FACTORY_OPENAI
 
 

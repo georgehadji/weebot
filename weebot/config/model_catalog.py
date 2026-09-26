@@ -5,7 +5,7 @@ Total models: 426
 Cost model: max(prompt, completion)
 Generated: See git history for timestamp.
 
-Corrections belong in _catalog_overrides.py, which survives regeneration.
+Corrections belong in model_catalog_overrides.py, which survives regeneration.
 Editing this file directly does not: the next --write discards it.
 """
 
@@ -14,7 +14,7 @@ Editing this file directly does not: the next --write discards it.
 
 from __future__ import annotations
 
-from weebot.application.services.model_registry._models import ModelConfig, ModelTier
+from weebot.domain.models.model_config import ModelConfig, ModelTier
 from weebot.domain.models.task_type import TaskType
 
 MODELS: dict[str, ModelConfig] = {

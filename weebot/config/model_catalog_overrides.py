@@ -1,11 +1,11 @@
 """Hand-maintained corrections applied on top of the OpenRouter model list.
 
-``_catalog.py`` is generated wholesale from OpenRouter's ``/api/v1/models``
+``model_catalog.py`` is generated wholesale from OpenRouter's ``/api/v1/models``
 response, so anything a human knows that the API does not say is destroyed by
 the next regeneration. This module is where that knowledge lives instead.
 
 ``scripts/generate_catalog.py`` reads it and bakes the result into
-``_catalog.py``. **Nothing imports this module at runtime** -- the generated
+``model_catalog.py``. **Nothing imports this module at runtime** -- the generated
 catalog remains the single thing the application loads -- so the values here
 are plain primitives rather than ``ModelConfig``/``TaskType`` objects, and this
 file adds no import edge to the package.
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 # ── Models absent from the OpenRouter response ───────────────────────────────
 #
-# Provenance: these nineteen were added to _catalog.py by hand -- nine after the
+# Provenance: these nineteen were added to model_catalog.py by hand -- nine after the
 # last self-consistent generation (343 entries, commit 21e177e1), plus the ten
 # `~*-latest` aliases below, which predate it -- and would have been destroyed
 # by the next `--write`. They are reproduced here verbatim so that a
@@ -373,7 +373,7 @@ PINNED_FIELDS: dict[str, dict] = {
 # qwen/qwen3.7-max was present in the 343-entry generation and removed by hand
 # afterwards. Without this set, the next regeneration would bring it back, and
 # the removal would have to be discovered and repeated. If the reason it was
-# dropped no longer holds, delete it here -- do not delete it from _catalog.py.
+# dropped no longer holds, delete it here -- do not delete it from model_catalog.py.
 SUPPRESSED_MODELS: set[str] = {
     "qwen/qwen3.7-max",
     # model_refs.py's module docstring states plainly that openrouter/auto is

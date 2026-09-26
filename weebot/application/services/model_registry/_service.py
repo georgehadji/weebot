@@ -1,7 +1,7 @@
 """Model selection service — strategy-based routing to optimal LLM.
 
 Extracted from ``model_selection.py`` during WP-2 god module decomposition.
-This module references the catalog data from ``_catalog.py`` and the
+This module references the catalog data from ``model_catalog.py`` and the
 selection strategies from ``_strategies.py``.
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 import os
 
 from weebot.application.ports.llm_port import LLMPort
-from weebot.application.services.model_registry._catalog import MODELS
-from weebot.application.services.model_registry._models import ModelConfig
+from weebot.config.model_catalog import MODELS
+from weebot.domain.models.model_config import ModelConfig
 from weebot.application.services.model_registry._strategies import ModelSelectionStrategy
 from weebot.domain.models.task_type import TaskType
 

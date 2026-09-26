@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from weebot.application.services.model_registry._models import ModelConfig, ModelTier
+from weebot.domain.models.model_config import ModelConfig, ModelTier
 from weebot.config._catalog_validator import CatalogValidator
 from weebot.domain.models.task_type import TaskType
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""generate_catalog.py — regenerate _catalog.py from OpenRouter's model list.
+"""generate_catalog.py — regenerate model_catalog.py from OpenRouter's model list.
 
 Usage:
     python scripts/generate_catalog.py                      # dry-run: stats + planned delta
@@ -19,7 +19,7 @@ data-loss failure mode. Five interlocks stand between a bad run and the file:
    floor is applied to what will actually be *rendered*, not to the raw list:
    filtering happens after the payload is read, so counting the input would let
    60 models become 5 entries without tripping anything.
-2. **Hand-maintained knowledge survives.** ``_catalog_overrides.py`` carries the
+2. **Hand-maintained knowledge survives.** ``model_catalog_overrides.py`` carries the
    models the API does not list, the fields it gets wrong, and the models
    deliberately dropped. Without it a regeneration silently deleted every
    hand-added entry and resurrected every hand-removed one.
@@ -56,7 +56,7 @@ mix but one. Two conventions are already in use in this repo and they disagree:
 * this script has always used ``max(prompt, completion)`` -- never
   underestimates, but overstates input-heavy work (a 1M-in/100k-out call on
   $3/$15-per-M pricing is costed at $16.50 against a true $4.50, 3.67x);
-* the hand-maintained entries in ``_catalog_overrides.py`` use the *mean* of the
+* the hand-maintained entries in ``model_catalog_overrides.py`` use the *mean* of the
   two rates, which is exact when input and output are balanced.
 
 ``--cost-model`` selects one and records the choice in the generated header.
@@ -92,9 +92,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 OPENROUTER_API = "https://openrouter.ai/api/v1/models"
 
-CATALOG_PATH = PROJECT_ROOT / "weebot/application/services/model_registry/_catalog.py"
-OVERRIDES_PATH = PROJECT_ROOT / "weebot/application/services/model_registry/_catalog_overrides.py"
-MODELS_PATH = PROJECT_ROOT / "weebot/application/services/model_registry/_models.py"
+CATALOG_PATH = PROJECT_ROOT / "weebot/config/model_catalog.py"
+OVERRIDES_PATH = PROJECT_ROOT / "weebot/config/model_catalog_overrides.py"
+MODELS_PATH = PROJECT_ROOT / "weebot/domain/models/model_config.py"
 TASK_TYPE_PATH = PROJECT_ROOT / "weebot/domain/models/task_type.py"
 
 # A catalog with fewer models than this is treated as a broken payload rather
@@ -163,7 +163,7 @@ class PayloadError(RuntimeError):
 
 
 def load_overrides() -> tuple[dict, dict, set]:
-    """Load _catalog_overrides.py without importing the weebot package."""
+    """Load model_catalog_overrides.py without importing the weebot package."""
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("_catalog_overrides", OVERRIDES_PATH)
@@ -440,11 +440,14 @@ def build_entries(models: list[dict], cost_model: str) -> dict[str, dict]:
 def load_registry_types() -> tuple[type, type, type]:
     """Return (ModelConfig, ModelTier, TaskType) without running the package __init__.
 
-    The ordinary import executes ``model_registry/__init__`` -> ``_service`` ->
-    the *currently installed* ``_catalog``, so validating a new catalog would
-    require the old one to import and the tool could not repair the file it had
-    itself half-written. Loading by path avoids that. The stubs are torn down
-    again so an in-process caller (pytest) keeps the real package it had.
+    Loading by path keeps the generator independent of every other module in
+    the package: when the types lived beside the catalog, the ordinary import
+    ran the currently installed catalog first, so a half-written file could not
+    be repaired by the tool that wrote it. The types now live in
+    ``weebot.domain.models`` and the catalog in ``weebot.config``, and the
+    by-path load is kept so that stays true whatever those packages' __init__
+    files import. The stubs are torn down again so an in-process caller
+    (pytest) keeps the real package it had.
 
     Only member names and dataclass fields are read from these, so it does not
     matter that they are not the same class objects the application uses.
@@ -452,7 +455,7 @@ def load_registry_types() -> tuple[type, type, type]:
     import importlib.util
     import types
 
-    live = sys.modules.get("weebot.application.services.model_registry._models")
+    live = sys.modules.get("weebot.domain.models.model_config")
     task_mod = sys.modules.get("weebot.domain.models.task_type")
     if live is not None and task_mod is not None:
         return live.ModelConfig, live.ModelTier, task_mod.TaskType
@@ -462,14 +465,7 @@ def load_registry_types() -> tuple[type, type, type]:
 
     saved = {k: sys.modules[k] for k in _weebot_keys()}
     try:
-        for pkg in (
-            "weebot",
-            "weebot.application",
-            "weebot.application.services",
-            "weebot.application.services.model_registry",
-            "weebot.domain",
-            "weebot.domain.models",
-        ):
+        for pkg in ("weebot", "weebot.domain", "weebot.domain.models"):
             stub = types.ModuleType(pkg)
             stub.__path__ = []  # type: ignore[attr-defined]
             sys.modules[pkg] = stub
@@ -486,7 +482,7 @@ def load_registry_types() -> tuple[type, type, type]:
             return mod
 
         task_type = _by_path("weebot.domain.models.task_type", TASK_TYPE_PATH)
-        models = _by_path("weebot.application.services.model_registry._models", MODELS_PATH)
+        models = _by_path("weebot.domain.models.model_config", MODELS_PATH)
         return models.ModelConfig, models.ModelTier, task_type.TaskType
     finally:
         for key in _weebot_keys():
@@ -589,7 +585,7 @@ def validate_entries(entries: dict[str, dict]) -> None:
 
 
 def generate_catalog(models: list[dict], cost_model: str = "max") -> str:
-    """Generate the full _catalog.py file content."""
+    """Generate the full model_catalog.py file content."""
     validate_payload(models)
     entries = build_entries(models, cost_model)
     fill_defaults(entries)
@@ -598,7 +594,7 @@ def generate_catalog(models: list[dict], cost_model: str = "max") -> str:
 
 
 def render_catalog(entries: dict[str, dict], cost_model: str = "max") -> str:
-    """Render validated entries to the text of _catalog.py.
+    """Render validated entries to the text of model_catalog.py.
 
     Split out from ``generate_catalog`` so the shipped catalog can be checked
     against it without a payload: a test that re-renders the installed entries
@@ -613,7 +609,7 @@ def render_catalog(entries: dict[str, dict], cost_model: str = "max") -> str:
         f"Cost model: {cost_model}(prompt, completion)",
         "Generated: See git history for timestamp.",
         "",
-        "Corrections belong in _catalog_overrides.py, which survives regeneration.",
+        "Corrections belong in model_catalog_overrides.py, which survives regeneration.",
         "Editing this file directly does not: the next --write discards it.",
         '"""',
         "",
@@ -622,7 +618,7 @@ def render_catalog(entries: dict[str, dict], cost_model: str = "max") -> str:
         "",
         "from __future__ import annotations",
         "",
-        "from weebot.application.services.model_registry._models import ModelConfig, ModelTier",
+        "from weebot.domain.models.model_config import ModelConfig, ModelTier",
         "from weebot.domain.models.task_type import TaskType",
         "",
         "MODELS: dict[str, ModelConfig] = {",
@@ -650,11 +646,10 @@ def render_catalog(entries: dict[str, dict], cost_model: str = "max") -> str:
     return "\n".join(lines)
 
 
-# Loads the rendered catalog with the *package chain stubbed out*. Importing
-# `weebot.application.services.model_registry._models` the ordinary way runs the
-# package __init__, which imports _service, which imports the currently
-# installed _catalog -- so verifying a new catalog would require the old one to
-# import, and a half-written file could not be repaired by the tool that wrote it.
+# Loads the rendered catalog with the *package chain stubbed out*, so verifying
+# a new catalog depends on nothing but the two type modules it imports -- not on
+# the currently installed catalog, and not on whatever the package __init__
+# files pull in. See load_registry_types.
 _PROBE_SOURCE = """
 import importlib.util, sys, types
 
@@ -670,10 +665,7 @@ def _load(name, path):
         setattr(sys.modules[parent], leaf, mod)
     return mod
 
-for pkg in (
-    "weebot", "weebot.application", "weebot.application.services",
-    "weebot.application.services.model_registry", "weebot.domain", "weebot.domain.models",
-):
+for pkg in ("weebot", "weebot.domain", "weebot.domain.models"):
     stub = types.ModuleType(pkg)
     stub.__path__ = []
     sys.modules[pkg] = stub
@@ -682,8 +674,8 @@ for pkg in (
         setattr(sys.modules[parent], leaf, stub)
 
 _load("weebot.domain.models.task_type", root + "/weebot/domain/models/task_type.py")
-_load("weebot.application.services.model_registry._models",
-      root + "/weebot/application/services/model_registry/_models.py")
+_load("weebot.domain.models.model_config",
+      root + "/weebot/domain/models/model_config.py")
 print(len(_load("_catalog_probe", target).MODELS))
 """
 
@@ -799,8 +791,8 @@ def install(content: str, diff: bool) -> None:
             difflib.unified_diff(
                 old_text.splitlines(),
                 content.splitlines(),
-                fromfile="_catalog.py (before)",
-                tofile="_catalog.py (after)",
+                fromfile="model_catalog.py (before)",
+                tofile="model_catalog.py (after)",
                 lineterm="",
                 n=1,
             )
@@ -816,9 +808,9 @@ def install(content: str, diff: bool) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate _catalog.py from OpenRouter API")
+    parser = argparse.ArgumentParser(description="Generate model_catalog.py from OpenRouter API")
     parser.add_argument(
-        "--write", action="store_true", help="Replace _catalog.py (default: dry-run)"
+        "--write", action="store_true", help="Replace model_catalog.py (default: dry-run)"
     )
     parser.add_argument("--diff", action="store_true", help="Show diff against the current catalog")
     parser.add_argument("--from-file", type=Path, help="Read the models payload from a JSON file")

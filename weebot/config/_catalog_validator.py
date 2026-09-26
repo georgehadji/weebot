@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from weebot.application.services.model_registry._models import ModelConfig
+    from weebot.domain.models.model_config import ModelConfig
 
 _log = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class CatalogValidator:
         startup and the ``doctor --validate-catalog`` CLI flag.
         """
         import weebot.config.model_refs as _mr
-        from weebot.application.services.model_registry._catalog import MODELS as _CATALOG
+        from weebot.config.model_catalog import MODELS as _CATALOG
 
         _validator = CatalogValidator()
         return _validator.validate(role_cascades=_mr._ROLE_MODEL_CASCADE, catalog=_CATALOG)
@@ -118,7 +118,7 @@ class CatalogValidator:
             role_cascades: ``{role_name: [model_id, ...]}`` — the
                 ``_ROLE_MODEL_CASCADE`` from ``model_refs.py``.
             catalog: ``{model_id: ModelConfig}`` — the ``MODELS`` dict
-                from ``_catalog.py``.
+                from ``model_catalog.py``.
 
         Returns:
             ValidationReport with per-model warnings.
