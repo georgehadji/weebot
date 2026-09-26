@@ -85,7 +85,6 @@ class PlanActFlow(BaseFlow):
         event_bus: EventBusPort | None = None,
         model: str | None = None,
         skill_prompt: str | None = None,
-        episodic_memory=None,
         mediator: Mediator | None = None,
         state_repo: StateRepositoryPort | None = None,
         steering=None,
@@ -122,7 +121,6 @@ class PlanActFlow(BaseFlow):
                 event_bus=event_bus,
                 model=model,
                 skill_prompt=skill_prompt,
-                episodic_memory=episodic_memory,
                 mediator=mediator,
                 state_repo=state_repo,
                 steering=steering,
@@ -172,7 +170,6 @@ class PlanActFlow(BaseFlow):
             cfg.workspace_snapshots
         )  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
-        self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
         self._knowledge_graph = cfg.knowledge_graph
@@ -197,7 +194,6 @@ class PlanActFlow(BaseFlow):
         self._plan_history = PlanHistory()
         self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
         self._awm = None  # AgentWorkflowMemory — lazy-init via _get_awm()
-        self._episodic_memory = cfg.episodic_memory
         self._max_step_repetitions = cfg.max_step_repetitions
         self._planning_mode = getattr(cfg, "planning_mode", "auto")
         self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
@@ -213,11 +209,6 @@ class PlanActFlow(BaseFlow):
         self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
         self._tracing_port = cfg.tracing_port
         self._persistence_adapter = None
-        # ── Event pipeline middleware (WP-4) ──────────────────────
-        # Built in ``configure_defaults`` and injected via config.
-        self._event_pipeline = getattr(cfg, "event_pipeline", None) or getattr(
-            cfg, "_event_pipeline", None
-        )
 
         # ── Enhancement H1: scoped MCP tool aggregation ─────────────
         self._tool_registry = cfg.tool_registry
@@ -255,7 +246,6 @@ class PlanActFlow(BaseFlow):
             model=self._model,
             skill_prompt=cfg.skill_prompt,
             facts=cfg.session.get_facts(),
-            episodic_memory=cfg.episodic_memory,
             skill_catalog=self._build_skill_catalog(cfg.skill_retriever),
         )
         executor_kwargs = dict(
@@ -450,29 +440,18 @@ class PlanActFlow(BaseFlow):
         return await pause_flow_for_user(self, question)
 
     async def _emit(self, event: AgentEvent) -> None:
-        """Emit an event through the middleware pipeline.
+        """Emit an event through EventPublisher.
 
-        Delegates to EventPublisher for the full pipeline:
-        truth binding, credential sanitization, session mutation,
-        event bus publishing, and DB persistence.
-        If a pipeline has been configured (via ``_event_pipeline``), use it.
+        EventPublisher runs truth binding, credential sanitization, session
+        mutation, event bus publishing and DB persistence, in that order.
+
+        There used to be a second implementation of the same five steps -- the
+        WP-4 EventPipeline -- taken instead whenever config.event_pipeline was
+        set. Nothing ever set it: the container built the pipeline at startup,
+        registered it, and discarded it. Deleted in phase 2.3. The only step it
+        had that this path lacks was an audit-log write, which therefore never
+        happened on any path.
         """
-        pipeline = getattr(self, "_event_pipeline", None)
-        if pipeline is not None:
-            context = {
-                "session": self._session,
-                "session_id": self._session.id if self._session else None,
-                "flow": self,
-                "event_bus": self._event_bus,
-                "state_repo": self._state_repo,
-                "emit_lock": self._emit_lock,
-            }
-            event = await pipeline.process(event, context)
-            new_session = context.get("session")
-            if new_session is not None:
-                self._session = new_session
-            return
-
         publisher = self._get_event_publisher()
         # Sync publisher's session ref — the flow may have mutated
         # self._session (e.g. PlanReviewState setting WAITING status)
@@ -878,7 +857,6 @@ class PlanActFlow(BaseFlow):
             model=model,
             skill_prompt=self._skill_prompt,
             facts=self._fact_resolver.resolve_for_session(self._session),
-            episodic_memory=self._episodic_memory,
         )
 
     # Maximum consecutive similar plans before raising PlanStuckError.

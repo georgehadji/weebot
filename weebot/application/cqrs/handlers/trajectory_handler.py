@@ -38,11 +38,20 @@ class ScoreTrajectoryHandler(CommandHandler):
         state_repo: StateRepositoryPort,
         trajectory_builder: TrajectoryBuilder,
         mediator: Any | None = None,
+        trajectory_repo: TrajectoryRepositoryPort | None = None,
     ):
         self._scoring = scoring_port
         self._state_repo = state_repo
         self._builder = trajectory_builder
         self._mediator = mediator
+        # Where the learners read trajectories from: SkillOpt, HarnessOpt, the
+        # failure-signature miner and the Thompson sampler all use this port.
+        # This handler used to persist through `self._event_store`, set only
+        # by a `set_event_store()` that nothing ever called -- and the event
+        # store port's own docstring says trajectories belong in the
+        # trajectory repository, not there. So every trajectory was built,
+        # with a paid summary call, and dropped.
+        self._trajectory_repo = trajectory_repo
 
     async def handle(self, command: ScoreTrajectoryCommand) -> CommandResult:
         try:
@@ -60,10 +69,17 @@ class ScoreTrajectoryHandler(CommandHandler):
             # Build a structured TrajectorySummary
             trajectory = await self._builder.build(session, scored_event)
 
-            # Persist via event store port
-            event_store = getattr(self, "_event_store", None)
-            if event_store is not None:
-                await event_store.save_trajectory(trajectory)
+            if self._trajectory_repo is not None:
+                await self._trajectory_repo.save(trajectory)
+            else:
+                # Not silent: a trajectory nobody stores is a summary call paid
+                # for nothing, which is the state this handler was in for its
+                # whole life without anyone seeing it.
+                logger.warning(
+                    "Trajectory for session %s scored but not stored: no trajectory "
+                    "repository is wired",
+                    command.session_id,
+                )
 
             # ── Self-Harness: emit failure signature command on failure ──
             if not trajectory.passed and self._mediator is not None:
@@ -98,10 +114,6 @@ class ScoreTrajectoryHandler(CommandHandler):
             )
         except Exception as exc:
             return CommandResult.fail(error=str(exc), error_code="TRAJECTORY_SCORE_ERROR")
-
-    # Setter for optional event store injection (avoids import at module level)
-    def set_event_store(self, store: Any) -> None:
-        self._event_store = store
 
 
 class BuildOptimizationBatchHandler(CommandHandler):

@@ -108,7 +108,8 @@ class WorkflowOrchestratorTool(BaseTool):
         if not self._flow_factory:
             return ToolResult.error_result(
                 "WorkflowOrchestratorTool has no flow_factory — "
-                "wire it via di.configure_web_clone() or configure_defaults()"
+                "build it through the tool registry, or pass "
+                "flow_factory=container._build_plan_act_flow_for_session"
             )
         if not tasks:
             return ToolResult.error_result("tasks list must not be empty")

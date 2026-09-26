@@ -999,8 +999,11 @@ def test_orphan_ports_flagged():
         "DreamerPort",  # → Dreamer in application/agents/
         "StepEvaluatorPort",  # → StepEvaluator in application/services/
         "StepAuditPort",  # → StepEvidenceAuditor in application/services/ (8cc7611)
-        "TrustReportPort",
         "SkillRetrieverPort",
+        # → KeywordTaskRouter in application/services/. Was detected only via
+        # the dead TaskRouterPort DI registration, removed in phase 2.3 --
+        # this heuristic scans infrastructure/ and di/, not application/.
+        "TaskRouterPort",
         "RetentionAgentPort",  # → RetentionAgent in application/agents/
         "PlanCriticPort",
         "SelfImprovementPort",
@@ -1068,40 +1071,16 @@ def test_orphan_ports_flagged():
 # the ratchet passes -- a substitution, which is the exact failure class this
 # whole instrument exists to catch, one level up.
 #
-# Two of these are controls the system is documented as having. A third,
-# `llm_pool` -- the global LLM concurrency bound -- was on this list until
-# phase 1.3 wired it into the container's step executor factory:
-#
-#   trust_report_service ~40 lines guarded on it in `states/completed.py:379`
-#                        are unreachable.
-#   event_pipeline       WP-4 middleware, built at startup and discarded.
-#
-# Four more -- idea_gate, intent_review, main_review, skill_curator -- are
-# bypassed by consumers that kept a direct import, so the DI-configured
-# variant, with its retry policy and cost tracking, never applies.
-#
-# Phase 2.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md decides each
-# one: wire it or delete it. Remove a name here in the commit that does either,
-# and lower the ceiling with it.
-_UNRESOLVED_DI_KEYS = {
-    "ConfigAdapter",
-    "EventPublisher",
-    "SandboxBackendAdapter",
-    "TaskRouterPort",
-    "activity_stream",
-    "browser_inspector_tool",
-    "dispatch_agents_tool",
-    "event_pipeline",
-    "idea_gate",
-    "intent_review",
-    "main_review",
-    "plan_act",
-    "response_cache",
-    "skill_curator",
-    "skill_publisher",
-    "trust_report_service",
-    "workflow_orchestrator_tool",
-}
+# Empty since phase 2.4 (tasks/specs/arch_audit_2026_09_remediation_plan.md).
+# It started at 18. Every one was decided -- wired or deleted -- and the
+# decisions are recorded in the commits that made them. Three of the 18 were
+# controls the system was documented as having: `llm_pool` (wired, phase 1.3),
+# `trust_report_service` and `event_pipeline` (deleted, phase 2.3 -- the
+# pipeline duplicated EventPublisher step for step). Two were not bindings at
+# all but census errors, since fixed: `EventPublisher` (a type key resolved
+# through _maybe_get, which the census did not count) and `plan_act` (a
+# FlowRegistry entry). Keep it empty: a new name here is a new dead binding.
+_UNRESOLVED_DI_KEYS: set[str] = set()
 
 
 def _di_wiring():
@@ -1158,6 +1137,46 @@ def test_the_di_ceiling_matches_the_named_set():
         _source(ROOT.parent / "tasks" / "quality" / "ceilings.toml"),
     )["ceilings"]
     assert ceilings["unresolved_di_keys"] == len(_UNRESOLVED_DI_KEYS)
+
+
+# Keys a container is asked for that nothing registers -- the mirror image of
+# the set above, pinned by name for the same reason: a count cannot see a
+# substitution. Phase 2.1 found four live failures of this shape and phase 2.3
+# fixed two more ("state_repo", "event_bus" in the sub-agent flow builder).
+# What is left is the session-deletion gap: deleting a session never purged
+# its checkpoints or gateway sessions, tracked as its own task.
+_UNREGISTERED_DI_KEYS = {
+    "SQLiteCheckpointStore",
+    "SQLiteGatewaySessionStore",
+}
+
+
+@lru_cache(maxsize=None)
+def _di_unregistered():
+    return tuple(_di_wiring().find_unregistered())
+
+
+def test_no_new_lookups_of_unregistered_di_keys():
+    """Exact in both directions, like the orphan set."""
+    found = dict(_di_unregistered())
+    new = sorted(set(found) - _UNREGISTERED_DI_KEYS)
+    assert new == [], "a container is asked for a key nothing registers:\n  " + "\n  ".join(
+        f"{found[k]}: {k}" for k in new
+    )
+    fixed = sorted(_UNREGISTERED_DI_KEYS - set(found))
+    assert fixed == [], (
+        "these lookups resolve now -- remove them from _UNREGISTERED_DI_KEYS and "
+        "lower `unregistered_di_keys` in tasks/quality/ceilings.toml:\n  " + "\n  ".join(fixed)
+    )
+
+
+def test_the_unregistered_ceiling_matches_the_named_set():
+    import tomllib
+
+    ceilings = tomllib.loads(_source(ROOT.parent / "tasks" / "quality" / "ceilings.toml"))[
+        "ceilings"
+    ]
+    assert ceilings["unregistered_di_keys"] == len(_UNREGISTERED_DI_KEYS)
 
 
 def test_the_census_recognises_a_wired_binding():
@@ -1891,3 +1910,35 @@ def test_the_known_bypasses_have_not_multiplied():
         "a grandfathered bypass is gone — remove it from _GRANDFATHERED_BYPASSES:\n  "
         + "\n  ".join(stale)
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PlanActFlowConfig carries real types
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_plan_act_flow_config_has_no_any_typed_field():
+    """Phase 2.2. The config had 28 collaborators typed ``Any``, one of them
+    "to avoid a circular import" -- which a TYPE_CHECKING import does anyway,
+    at no cost. Twenty-seven now carry the type their comment always named.
+    The 28th, ``episodic_memory``, was plumbing for a feature with no
+    implementation -- nothing defines get_few_shot_examples -- and was
+    deleted rather than given a port for something that does not exist.
+
+    Types do not catch a collaborator nobody assigns: ``X | None = None`` that
+    nothing sets type-checks fine. That is the DI census's job. What types
+    catch is the wrong thing being passed, and they document what each field
+    is. An ``Any`` here is a field that has stopped saying either.
+    """
+    tree = _parse(ROOT / "application" / "models" / "plan_act_flow_config.py")
+    cls = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PlanActFlowConfig"
+    )
+    untyped = [
+        n.target.id
+        for n in cls.body
+        if isinstance(n, ast.AnnAssign)
+        and isinstance(n.target, ast.Name)
+        and "Any" in ast.unparse(n.annotation)
+    ]
+    assert untyped == [], f"PlanActFlowConfig fields typed Any: {untyped}"

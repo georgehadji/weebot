@@ -69,16 +69,10 @@ def dream_scan(max_contracts: int) -> None:
 
         console.print(f"[green]Dreamer produced {len(contracts)} idea(s)[/green]")
 
-        # Gate
-        from weebot.application.services.intent_review_service import IntentReviewService
-        from weebot.application.services.main_review_service import MainReviewService
-        from weebot.application.services.idea_gate import IdeaGate
-        from weebot.application.ports.llm_port import LLMPort
-
-        llm = container.get(LLMPort)
-        gate = IdeaGate(
-            intent_reviewer=IntentReviewService(llm=llm), main_reviewer=MainReviewService(llm=llm)
-        )
+        # Gate -- the container's, with the critic and verifier role tiers. This
+        # used to hand-assemble both reviewers on the default LLMPort, so the
+        # "idea_gate" binding that configures them properly was never used.
+        gate = container.get("idea_gate")
         approved = await gate.process(contracts)
 
         # Store for later use

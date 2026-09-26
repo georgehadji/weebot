@@ -28,8 +28,9 @@
 # 137 -> 134 with the P5-1 agent migration: `parse_structured` replaced the
 # bare `except json.JSONDecodeError: pass` blocks that the hand-rolled JSON
 # extractors in planner.py and synthesizer_agent.py used to fall through.
+# 134 -> 133 with phase 2.3: one was in the dead code deleted there.
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 134
+silent_except_handlers = 133
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -72,8 +73,10 @@ bandit_b110 = 67
 # 33 -> 32 with PH0-5: `identity_verifier._determine_verification_level` built
 # `required_idx` from `level_order.index(required_level)` and then returned
 # `required_level` without ever reading it; the lookup is now an actual guard.
+# 32 -> 31 with phase 2.3: one was in the dead code deleted there (ruff
+# version unchanged at 0.15.20, so the move is the code, not the tool).
 # Measured by: scripts/lint_unused_locals.py
-unused_locals = 32
+unused_locals = 31
 
 # Bare `json.loads` / `json.load` under weebot/application/agents/.
 # CLAUDE.md rule 2 mandates Pydantic-validated structured output; the
@@ -99,5 +102,42 @@ agent_json_parsing = 7
 # -- wire it or delete it -- and phase 2.4 takes this to 0.
 # 18 -> 17 with phase 1.3: `llm_pool` is resolved by the container's step
 # executor factory, the one ExecuteStepHandler actually runs steps with.
+# 17 -> 16 with phase 2.4, and not because anything was wired: the census was
+# wrong. Its resolver set had been derived from string keys only, so it never
+# counted `_maybe_get(SomeType)`, the resolver for type keys, and
+# EventPublisher was a false orphan.
+# 16 -> 7 with phase 2.3, group 1. Nine bindings were redundant or dead --
+# configure_web_clone() and configure_skill_curator() had no callers, and
+# "plan_act" was a FlowRegistry entry the census counted as a binding --
+# and removing the dead SkillPublisher exposed EventPublisher, its only
+# consumer, as dead too.
+# 7 -> 4 with phase 2.3, group 2: "idea_gate" is resolved now -- three sites
+# hand-assembled the gate on the default model instead of taking the binding
+# that gives its reviewers the critic and verifier tiers -- and the
+# standalone "intent_review" / "main_review" bindings, which nothing used,
+# are gone.
+# 4 -> 0 with phase 2.3, group 3, and phase 2.4 holds it there. The last four
+# were dead features, deleted with their code: trust reports (service, port,
+# domain model, config field and the guarded block in CompletedState), the
+# WP-4 event pipeline (a duplicate of EventPublisher's five steps plus an
+# audit write that therefore never happened anywhere), the semantic task
+# router, and the sandbox backend with its port.
 # Measured by: scripts/lint_di_wiring.py
-unresolved_di_keys = 17
+unresolved_di_keys = 0
+
+# The mirror image: keys a container is ASKED for that no register() defines.
+# The class behind four live failures found in phase 2.1 -- "llm_port" and
+# "state_repo_port" (every cron job), "mediator" (the dream command),
+# "scoring_port" (trajectory scoring, never registered) -- each bound by type,
+# asked for by string, and Container.get() does not cross-resolve. Each raised
+# KeyError, or through _maybe_get / _maybe_get_str quietly returned None.
+# The four still counted: interfaces/web/dependencies.py asks for two concrete
+# store classes nothing registers, so deleting a session never purged its
+# checkpoints or gateway sessions; and _build_plan_act_flow_for_session asks
+# for "state_repo" and "event_bus" -- dead code behind two orphan bindings,
+# removed in phase 2.3.
+# 4 -> 2 with phase 2.3, group 1: the two in _build_plan_act_flow_for_session
+# were not dead after all -- the tool registry calls that method directly --
+# so they were fixed rather than deleted. See that method's docstring.
+# Measured by: scripts/lint_di_wiring.py
+unregistered_di_keys = 2

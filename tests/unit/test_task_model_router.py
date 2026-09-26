@@ -1,6 +1,6 @@
 """Regression test for task model router — 25-case benchmark.
 
-Any pattern change to task_model_router.py or semantic_task_router.py
+Any pattern change to task_model_router.py
 must maintain or improve this accuracy.
 """
 

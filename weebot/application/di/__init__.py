@@ -36,7 +36,6 @@ from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
 from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
 from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
-from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
 from weebot.application.ports.task_runner_port import TaskRunnerPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
@@ -47,7 +46,6 @@ from weebot.application.ports.sub_agent_factory_port import SubAgentFactoryPort 
 from weebot.application.ports.rerank_port import RerankPort  # noqa: E402
 from weebot.application.services.task_runner import TaskRunner  # noqa: E402
 from weebot.config.harness.schema import HarnessConfig  # noqa: E402
-from weebot.domain.ports import EventPublisher  # noqa: E402
 
 from weebot.application.di._factories import FactoriesMixin  # noqa: E402
 from weebot.application.di._agent_tools import AgentToolsMixin  # noqa: E402
@@ -131,11 +129,8 @@ class Container(
         from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
 
         self.register(TracingAdapter, self._create_tracing)
-        self.register(EventPublisher, self._create_event_bridge)
         self.register(LLMPort, lambda: self._create_llm(default_model))
         self.register(SandboxPort, self._create_sandbox)
-        self.register("activity_stream", lambda: self._create_activity_stream())
-        self.register("response_cache", lambda: self._create_response_cache())
         self.register(Mediator, self._create_mediator)
         self.register(TaskQueuePort, self._create_task_queue)
         self.register(TaskRunner, self._create_task_runner)
@@ -148,7 +143,6 @@ class Container(
         # port binding in this method.
         self.register(SteeringPort, self._create_steering)
         self.register(HarnessConfig, self._create_harness_config)
-        self.register(TaskRouterPort, self._create_task_router)
         self.register("personality", self._create_personality)
         self.register("structured_logger", lambda: self._create_structured_logger())
         from weebot.application.services.audit_service import AuditService
@@ -157,9 +151,6 @@ class Container(
         from weebot.infrastructure.persistence.filesystem_memory import FileSystemMemoryAdapter
 
         self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
-        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
-
-        self.register(ConfigAdapter, lambda: self._create_config_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
@@ -172,10 +163,7 @@ class Container(
         self.register("skill_retriever", lambda: self._create_skill_retriever())
         self.register("code_reviewer", self._create_code_reviewer)
         self.register("dreamer_agent", self._create_dreamer_agent)
-        self.register("intent_review", self._create_intent_review_service)
-        self.register("main_review", self._create_main_review_service)
         self.register("idea_gate", self._create_idea_gate)
-        self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         from weebot.application.ports.file_storage_port import FileStoragePort
 
@@ -188,9 +176,32 @@ class Container(
         # LongHorizon-Harness E7b: integrity axis — detect the verifier
         # writing to the workspace it is supposed to only observe.
         self.register("workspace_snapshots", self._create_workspace_snapshots)
-        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
 
-        self.register(SandboxBackendAdapter, self._create_backend)
+        # Live-session trajectory scoring. CompletedState sends
+        # ScoreTrajectoryCommand after every flow, and until now nothing in the
+        # main container could handle it: the scorer was looked up under a
+        # string nobody registered, the builder and repository were registered
+        # only inside configure_skillopt(), and the handler persisted to a
+        # store no learner reads. The scorer is PlanOutcomeScorer -- the other
+        # three ScoringPort implementations compare against an expected answer
+        # a live session does not have, so each would produce a constant,
+        # meaningless score. Cost per completed session: one trajectory-summary
+        # call, on the cheap verifier tier. The score itself is free.
+        from weebot.application.ports.scoring_port import ScoringPort
+
+        def _create_plan_outcome_scorer():
+            from weebot.infrastructure.scoring.plan_outcome_scorer import PlanOutcomeScorer
+
+            return PlanOutcomeScorer()
+
+        def _create_trajectory_builder():
+            from weebot.application.services.trajectory_builder import TrajectoryBuilder
+
+            return TrajectoryBuilder(llm=self.get("verifier_llm"))
+
+        self.register(ScoringPort, _create_plan_outcome_scorer)
+        self.register("trajectory_builder", _create_trajectory_builder)
+        self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
 
         self.register(PrometheusMetricsAdapter, self._create_metrics_port)
@@ -264,10 +275,6 @@ class Container(
             return ContractLoader(contracts_dir=contracts_dir)
 
         self.register("contract_loader", _create_contract_loader)
-
-        # Event pipeline middleware — composable _emit() processing
-        pipeline = self.build_event_pipeline()
-        self.register_instance("event_pipeline", pipeline)
 
         # ── Startup catalog validation (warnings only, never blocks) ──
         try:
@@ -422,8 +429,16 @@ class Container(
                     exc_info=True,
                 )
                 tools = None
-        scoring_port = self._maybe_get_str("scoring_port")
+        # Resolved by TYPE. This was `_maybe_get_str("scoring_port")`, a string
+        # nothing registered: _maybe_get_str swallowed the KeyError, returned
+        # None, and ScoreTrajectoryHandler was never registered -- so the
+        # ScoreTrajectoryCommand CompletedState sends after every flow failed
+        # and was logged as a warning, every time.
+        from weebot.application.ports.scoring_port import ScoringPort
+
+        scoring_port = self._maybe_get(ScoringPort)
         trajectory_builder = self._maybe_get_str("trajectory_builder")
+        trajectory_repo = self._maybe_get_str("trajectory_repo")
 
         # ExecuteStepCommand's executor was previously built with only
         # llm/tools/event_bus/model (4 of ExecutorAgent's 22 params) — see
@@ -474,6 +489,7 @@ class Container(
             scoring_port=scoring_port,
             trajectory_builder=trajectory_builder,
             executor_factory=_executor_factory,
+            trajectory_repo=trajectory_repo,
         )
         return mediator
 
@@ -578,7 +594,11 @@ class Container(
                 event_bus=None,
                 model=spec.model or _TIER_MODEL.get(spec.tier, MODEL_CASCADE_TIER2),
                 mediator=mediator,
-                state_repo=self._maybe_get("state_repo_port"),
+                # Was self._maybe_get("state_repo_port"), a string nothing
+                # registers -- StateRepositoryPort is bound by type -- so every
+                # sub-agent flow got None and never saved its session, which the
+                # mediator's handlers load by id to plan and execute it.
+                state_repo=self._maybe_get(StateRepositoryPort),
                 skill_prompt=None,
                 max_steps=spec.max_tool_calls,
             )

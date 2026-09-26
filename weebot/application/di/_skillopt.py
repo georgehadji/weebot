@@ -54,11 +54,16 @@ class SkillOptMixin:
         from weebot.application.ports.llm_port import LLMPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
 
-        # "optimizer_port" is registered under a string key (line ~19 above),
-        # not the OptimizerPort type — self.get(OptimizerPort) raised KeyError
-        # unconditionally, since Container.get() does not cross-resolve
-        # between type and string keys.
-        scoring_port = self.get("optimizer_port")
+        # The SCORER, not the optimizer. This used to be
+        # self.get("optimizer_port") -- an OptimizerAgent, which implements
+        # OptimizerPort and has no score() method. A KeyError on
+        # self.get(OptimizerPort) had been fixed by resolving the optimizer
+        # instead, which conflated the two ports: ScoreTrajectoryHandler then
+        # called .score() on it and failed on every trajectory. ScoringPort is
+        # bound in configure_defaults(), which configure_skillopt() calls.
+        from weebot.application.ports.scoring_port import ScoringPort
+
+        scoring_port = self.get(ScoringPort)
         llm = self._maybe_get(LLMPort)
         trajectory_builder = TrajectoryBuilder(llm=llm)
         self.register_instance("trajectory_builder", trajectory_builder)

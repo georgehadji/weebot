@@ -23,7 +23,7 @@ class CompositeToolExecutor:
     """Executes composite tool sub-calls through an async dispatcher.
 
     The dispatcher is a mapping of tool name to an async callable.  This keeps
-    the executor independent of ``weebot.tools`` and ``BackendPort`` internals;
+    the executor independent of ``weebot.tools`` internals;
     the MCP server supplies callables that invoke the registered tool handlers.
     """
 

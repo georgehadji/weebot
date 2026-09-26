@@ -88,6 +88,7 @@ def register_default_handlers(
     scoring_port=None,
     trajectory_builder=None,
     executor_factory=None,
+    trajectory_repo=None,
 ) -> None:
     """Register all default command and query handlers with a mediator.
 
@@ -141,10 +142,15 @@ def register_default_handlers(
         mediator.register_command_handler(SummarizeCommand, SummarizeHandler(llm, state_repo))
 
     # --- Optional: trajectory scoring (SkillOpt-aware) ---
+    # No mediator is passed, deliberately: on a low score the SkillOpt handler
+    # goes on to send ExtractFailureSignatureCommand, another paid call. Live
+    # sessions pay for the trajectory summary only.
     if scoring_port is not None and trajectory_builder is not None:
         mediator.register_command_handler(
             ScoreTrajectoryCommand,
-            ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder),
+            ScoreTrajectoryHandler(
+                scoring_port, state_repo, trajectory_builder, trajectory_repo=trajectory_repo
+            ),
         )
 
     # ── Operations Console queries (Enhancement 4) ──────────────────
@@ -191,13 +197,25 @@ def register_skillopt_handlers(
     if not isinstance(mediator, Mediator):
         raise ValueError("mediator must be a Mediator instance")
 
-    # ScoreTrajectoryCommand — also callable from register_default_handlers()
-    # when scoring deps are available; this ensures it's always registered
-    # when SkillOpt is configured.  The mediator is passed so the handler
-    # can emit ExtractFailureSignatureCommand on failed trajectories.
+    # ScoreTrajectoryCommand — also registered by register_default_handlers()
+    # when scoring deps are available, which they now always are:
+    # configure_defaults() binds the scorer, builder and repository, and
+    # build_skill_opt_flow() builds its mediator through build_mediator(). The
+    # SkillOpt variant REPLACES the default one on this mediator, because it
+    # differs deliberately -- the mediator is passed so the handler can emit
+    # ExtractFailureSignatureCommand on failed trajectories, a paid step the
+    # live-session handler skips. Registering both raised "Handler already
+    # registered" and took build_skill_opt_flow down.
+    mediator.unregister_command_handler(ScoreTrajectoryCommand)
     mediator.register_command_handler(
         ScoreTrajectoryCommand,
-        ScoreTrajectoryHandler(scoring_port, state_repo, trajectory_builder, mediator=mediator),
+        ScoreTrajectoryHandler(
+            scoring_port,
+            state_repo,
+            trajectory_builder,
+            mediator=mediator,
+            trajectory_repo=trajectory_repo,
+        ),
     )
 
     # Skill edits (from optimizer reflection → merge → rank pipeline)

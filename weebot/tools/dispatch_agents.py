@@ -102,7 +102,8 @@ class DispatchAgentsTool(BaseTool):
     ) -> ToolResult:
         if not self._flow_factory:
             return ToolResult.error_result(
-                "DispatchAgentsTool has no flow_factory — wire it via di.configure_web_clone()"
+                "DispatchAgentsTool has no flow_factory — build it through the tool registry, "
+                "or pass flow_factory=container._build_plan_act_flow_for_session"
             )
 
         if not tasks:

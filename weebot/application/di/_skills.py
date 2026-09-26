@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 class SkillsMixin:
     """SkillCurator + skill retriever + weekly cron job registration."""
 
-    def configure_skill_curator(self):
-        self.register("skill_curator", self._create_skill_curator)
+    # configure_skill_curator() and _create_skill_curator() used to live here.
+    # Nothing called configure_skill_curator(), so the "skill_curator" binding
+    # it registered was never resolved (phase 2.3). SkillCurator itself is
+    # live: scheduling/default_jobs.py builds it for "weebot_skill_curation".
 
     def _create_skill_retriever(self):
         """Create a skill retriever with optional reranking.
@@ -59,20 +61,6 @@ class SkillsMixin:
             return RerankingSkillRetriever(base, rerank)
         logger.info("Skill retriever: BM25 only (RerankPort not configured)")
         return base
-
-    def _create_skill_curator(self):
-        from weebot.application.skills.skill_registry import SkillRegistry
-        from weebot.application.services.skill_curator import SkillCurator
-        from weebot.application.ports.llm_port import LLMPort
-
-        registry = SkillRegistry()
-        llm = self._maybe_get(LLMPort)
-        if llm is None:
-            raise RuntimeError(
-                "LLMPort must be configured before SkillCurator. "
-                "Call configure_defaults() before configure_skill_curator()."
-            )
-        return SkillCurator(registry=registry, llm=llm)
 
     # NOTE: ``register_curator_job()`` used to live here.  It was never called,
     # built a second SchedulingManager next to the DI-managed one, and would

@@ -52,15 +52,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
         return
     try:
         from weebot.application.di import Container
-        from weebot.application.ports.llm_port import LLMPort
-        from weebot.application.services.idea_gate import IdeaGate
-        from weebot.application.services.intent_review_service import IntentReviewService
-        from weebot.application.services.main_review_service import MainReviewService
         from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
 
         c = Container()
         c.configure_defaults()
-        llm = c.get(LLMPort)
 
         contracts = [
             IdeaContract(
@@ -79,9 +74,11 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
             for g in gaps
         ]
 
-        gate = IdeaGate(
-            intent_reviewer=IntentReviewService(llm=llm), main_reviewer=MainReviewService(llm=llm)
-        )
+        # From the container, not hand-assembled. The "idea_gate" binding gives
+        # each reviewer its intended role tier -- intent review on the critic
+        # model, main review on the verifier model -- and was never resolved:
+        # this site built both reviewers on the default LLMPort instead.
+        gate = c.get("idea_gate")
         approved = await gate.process(contracts)
         if approved:
             logger.info(
@@ -121,16 +118,9 @@ async def _run_dream_scan() -> None:
             session_id="post_completion_scan",
         )
         if contracts:
-            from weebot.application.services.intent_review_service import IntentReviewService
-            from weebot.application.services.main_review_service import MainReviewService
-            from weebot.application.services.idea_gate import IdeaGate
-            from weebot.application.ports.llm_port import LLMPort
-
-            llm = c.get(LLMPort)
-            gate = IdeaGate(
-                intent_reviewer=IntentReviewService(llm=llm),
-                main_reviewer=MainReviewService(llm=llm),
-            )
+            # The container's gate, with the critic and verifier role tiers --
+            # see _run_skill_gap_processing above.
+            gate = c.get("idea_gate")
             approved = await gate.process(contracts)
 
             high_heat = [a for a in approved if a.heat_score >= 0.8]
@@ -370,35 +360,15 @@ class CompletedState(FlowState):
             "PlanActFlow completed for session %s in %.1fs", context._session.id, _total_elapsed
         )
 
-        # ── Collect extra dict for TrustReport + RetentionReview + ProductContext ──
+        # ── Collect extra dict for RetentionReview + ProductContext ──
         _extra: dict = {}
         if hasattr(context._session.context, "extra"):
             _extra = context._session.context.extra.copy() or {}
 
-        # ── TrustReport (Enhancement 4) ──────────────────────────────
-        if getattr(context, "_trust_report_service", None) is not None:
-            try:
-                trust_report = await context._trust_report_service.compute(
-                    session_id=context._session.id,
-                    plan_steps=context._plan.steps if context._plan else [],
-                    session_events=context._session.events,
-                )
-                _extra["trust_report"] = trust_report.model_dump()
-                context._session = context._session.model_copy(
-                    update={
-                        "context": context._session.context.model_copy(update={"extra": _extra})
-                    }
-                )
-                logger.info(
-                    "TrustReport session=%s band=%s confirmed=%d drift=%d regression=%d",
-                    context._session.id,
-                    trust_report.trust_band.value,
-                    trust_report.confirmed_count,
-                    trust_report.drift_count,
-                    trust_report.regression_count,
-                )
-            except Exception:
-                logger.debug("TrustReport failed — non-blocking", exc_info=True)
+        # A TrustReport block used to sit here, guarded on
+        # context._trust_report_service -- a config field nothing ever
+        # assigned, so it never ran. The service, its port and its domain
+        # model were deleted with it in phase 2.3.
 
         # ── ProductDecisionEvent (product-mode Principle 7) ─────────────
         from weebot.config.feature_flags import PRODUCT_DECISION_LOG_ENABLED
@@ -435,7 +405,6 @@ class CompletedState(FlowState):
         # ── RetentionReview (Enhancement 5 — background, non-blocking) ──
         if getattr(context, "_retention_agent", None) is not None:
             _plan_for_retention = context._plan
-            _trust_extra = _extra.get("trust_report", {})
             # Counts from events
             _tool_count_ret = sum(
                 1 for e in context._session.events if getattr(e, "type", "") == "tool"
@@ -459,7 +428,8 @@ class CompletedState(FlowState):
                     agent=context._retention_agent,
                     session_id=context._session.id,
                     session_summary=_session_summary,
-                    trust_report=_trust_extra,
+                    # No trust report exists to pass: see the note above.
+                    trust_report=None,
                     error_count=_error_count_ret,
                     tool_count=_tool_count_ret,
                 ),

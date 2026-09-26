@@ -22,11 +22,7 @@ if TYPE_CHECKING:
     from weebot.application.agents.retention_agent import RetentionAgent
     from weebot.application.services.code_reviewer_service import CodeReviewerService
     from weebot.application.services.idea_gate import IdeaGate
-    from weebot.application.services.intent_review_service import IntentReviewService
-    from weebot.application.services.main_review_service import MainReviewService
     from weebot.application.services.mcp_tool_registry_bridge import MCPToolRegistryBridge
-    from weebot.application.services.trust_report_service import TrustReportService
-    from weebot.application.middleware.event_middleware import EventPipeline
 
 logger = _logging.getLogger(__name__)
 
@@ -69,18 +65,6 @@ class FactoriesMixin:
 
         return TracingAdapter()
 
-    def _create_event_bridge(self):
-        from weebot.infrastructure.events.broker_adapter import EventBrokerAdapter
-        from weebot.application.ports.event_bus_port import EventBusPort
-
-        return EventBrokerAdapter(event_bus=self.get(EventBusPort))
-
-    @staticmethod
-    def _create_activity_stream():
-        from weebot.core.activity_stream import ActivityStream
-
-        return ActivityStream()
-
     @staticmethod
     def _create_tool_repo():
         from weebot.infrastructure.persistence.sqlite_tool_repo import SQLiteToolRepository
@@ -92,12 +76,6 @@ class FactoriesMixin:
         from weebot.core.structured_logger import StructuredLogger
 
         return StructuredLogger("weebot")
-
-    @staticmethod
-    def _create_config_adapter():
-        from weebot.infrastructure.adapters.config_adapter import ConfigAdapter
-
-        return ConfigAdapter()
 
     @staticmethod
     def _create_audit_service():
@@ -122,12 +100,6 @@ class FactoriesMixin:
         from weebot.infrastructure.event_store import EventStore
 
         return EventStore()
-
-    @staticmethod
-    def _create_response_cache():
-        from weebot.infrastructure.persistence.response_cache import ResponseCache
-
-        return ResponseCache()
 
     @staticmethod
     def _create_sandbox() -> SandboxPort:
@@ -186,22 +158,6 @@ class FactoriesMixin:
         return InMemorySteeringAdapter()
 
     @staticmethod
-    def _create_task_router():
-        """Create a task router — semantic when flag is enabled, keyword otherwise."""
-        from weebot.config.feature_flags import WEEBOT_SEMANTIC_TASK_ROUTER
-
-        if WEEBOT_SEMANTIC_TASK_ROUTER:
-            from weebot.application.services.semantic_task_router import SemanticTaskRouter
-
-            logger.info("Task router: semantic (all-MiniLM-L6-v2 centroids)")
-            return SemanticTaskRouter()
-
-        from weebot.application.services.keyword_task_router import KeywordTaskRouter
-
-        logger.info("Task router: keyword (YAML patterns)")
-        return KeywordTaskRouter()
-
-    @staticmethod
     def _create_tool_discovery():
         from weebot.infrastructure.adapters.tool_discovery import ToolDiscoveryAdapter
 
@@ -256,19 +212,11 @@ class FactoriesMixin:
         model = models[0] if models else None
         return FactoriesMixin._create_llm(model)
 
-    @staticmethod
-    def _create_intent_review_service() -> IntentReviewService:
-        from weebot.application.services.intent_review_service import IntentReviewService
-
-        llm = FactoriesMixin._create_llm_for_role("critic")
-        return IntentReviewService(llm=llm)
-
-    @staticmethod
-    def _create_main_review_service() -> MainReviewService:
-        from weebot.application.services.main_review_service import MainReviewService
-
-        llm = FactoriesMixin._create_llm_for_role("verifier")
-        return MainReviewService(llm=llm)
+    # _create_intent_review_service() and _create_main_review_service() used to
+    # live here, behind the "intent_review" and "main_review" bindings. Neither
+    # binding was ever resolved: _create_idea_gate below builds its own
+    # reviewers on the same role tiers, and PlanningState's in-flow intent
+    # check deliberately uses the flow's own model. Removed in phase 2.3.
 
     @staticmethod
     def _create_idea_gate() -> IdeaGate:
@@ -329,25 +277,6 @@ class FactoriesMixin:
 
         llm = FactoriesMixin._create_llm_for_role("subagent")
         return RetentionAgent(llm=llm)
-
-    @staticmethod
-    def _create_trust_report_service() -> TrustReportService:
-        from weebot.application.services.trust_report_service import TrustReportService
-
-        return TrustReportService()
-
-    @staticmethod
-    def _create_backend():
-        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
-        from weebot.application.di import Container
-
-        try:
-            c = Container()
-            c.configure_defaults()
-            sandbox = c.get(SandboxPort)
-            return SandboxBackendAdapter(sandbox=sandbox)
-        except Exception:
-            return SandboxBackendAdapter(sandbox=None)
 
     @staticmethod
     def _create_harness_config():
@@ -557,35 +486,6 @@ class FactoriesMixin:
             bridge = self._create_mcp_bridge()
             self.register_instance("mcp_bridge", bridge)
         return bridge
-
-    def build_event_pipeline(self) -> EventPipeline:
-        """Build the default event middleware pipeline.
-
-        Middlewares run in registration order — each feeds into the next.
-        """
-        from weebot.application.middleware.event_middleware import EventPipeline
-        from weebot.application.middleware.middlewares import (
-            CredentialSanitizerMiddleware,
-            EventBusPublishMiddleware,
-            PersistenceMiddleware,
-            SessionMutationMiddleware,
-            TruthBindingMiddleware,
-        )
-        from weebot.application.middleware.middlewares.audit import AuditMiddleware
-        from weebot.infrastructure.observability.audit_log import AuditLog
-
-        pipeline = EventPipeline(
-            [
-                TruthBindingMiddleware(),
-                CredentialSanitizerMiddleware(),
-                # Audit trail — record sanitized event before session mutation
-                AuditMiddleware(audit_log=AuditLog()),
-                SessionMutationMiddleware(),
-                EventBusPublishMiddleware(),
-                PersistenceMiddleware(),
-            ]
-        )
-        return pipeline
 
     def _create_browser_pool(self):
         """Create a BrowserSessionPool as a DI-managed singleton.
