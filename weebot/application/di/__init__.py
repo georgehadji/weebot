@@ -36,7 +36,6 @@ from weebot.application.ports.speech_port import SpeechPort  # noqa: E402
 from weebot.application.ports.state_repo_port import StateRepositoryPort  # noqa: E402
 from weebot.application.ports.steering_port import SteeringPort  # noqa: E402
 from weebot.application.ports.task_queue_port import TaskQueuePort  # noqa: E402
-from weebot.application.ports.task_router_port import TaskRouterPort  # noqa: E402
 from weebot.application.ports.task_runner_port import TaskRunnerPort  # noqa: E402
 from weebot.application.ports.tool_repository_port import ToolRepositoryPort  # noqa: E402
 from weebot.application.ports.swarm_event_bus_port import SwarmEventBusPort  # noqa: E402
@@ -144,7 +143,6 @@ class Container(
         # port binding in this method.
         self.register(SteeringPort, self._create_steering)
         self.register(HarnessConfig, self._create_harness_config)
-        self.register(TaskRouterPort, self._create_task_router)
         self.register("personality", self._create_personality)
         self.register("structured_logger", lambda: self._create_structured_logger())
         from weebot.application.services.audit_service import AuditService
@@ -166,7 +164,6 @@ class Container(
         self.register("code_reviewer", self._create_code_reviewer)
         self.register("dreamer_agent", self._create_dreamer_agent)
         self.register("idea_gate", self._create_idea_gate)
-        self.register("trust_report_service", self._create_trust_report_service)
         self.register("retention_agent", self._create_retention_agent)
         from weebot.application.ports.file_storage_port import FileStoragePort
 
@@ -205,9 +202,6 @@ class Container(
         self.register(ScoringPort, _create_plan_outcome_scorer)
         self.register("trajectory_builder", _create_trajectory_builder)
         self.register("trajectory_repo", lambda: self._create_trajectory_repo(db_path))
-        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
-
-        self.register(SandboxBackendAdapter, self._create_backend)
         from weebot.infrastructure.observability.prometheus_adapter import PrometheusMetricsAdapter
 
         self.register(PrometheusMetricsAdapter, self._create_metrics_port)
@@ -281,10 +275,6 @@ class Container(
             return ContractLoader(contracts_dir=contracts_dir)
 
         self.register("contract_loader", _create_contract_loader)
-
-        # Event pipeline middleware — composable _emit() processing
-        pipeline = self.build_event_pipeline()
-        self.register_instance("event_pipeline", pipeline)
 
         # ── Startup catalog validation (warnings only, never blocks) ──
         try:

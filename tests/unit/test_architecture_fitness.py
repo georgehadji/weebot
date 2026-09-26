@@ -999,8 +999,11 @@ def test_orphan_ports_flagged():
         "DreamerPort",  # → Dreamer in application/agents/
         "StepEvaluatorPort",  # → StepEvaluator in application/services/
         "StepAuditPort",  # → StepEvidenceAuditor in application/services/ (8cc7611)
-        "TrustReportPort",
         "SkillRetrieverPort",
+        # → KeywordTaskRouter in application/services/. Was detected only via
+        # the dead TaskRouterPort DI registration, removed in phase 2.3 --
+        # this heuristic scans infrastructure/ and di/, not application/.
+        "TaskRouterPort",
         "RetentionAgentPort",  # → RetentionAgent in application/agents/
         "PlanCriticPort",
         "SelfImprovementPort",
@@ -1068,27 +1071,16 @@ def test_orphan_ports_flagged():
 # the ratchet passes -- a substitution, which is the exact failure class this
 # whole instrument exists to catch, one level up.
 #
-# Two of these are controls the system is documented as having. A third,
-# `llm_pool` -- the global LLM concurrency bound -- was on this list until
-# phase 1.3 wired it into the container's step executor factory:
-#
-#   trust_report_service ~40 lines guarded on it in `states/completed.py:379`
-#                        are unreachable.
-#   event_pipeline       WP-4 middleware, built at startup and discarded.
-#
-# Four more -- idea_gate, intent_review, main_review, skill_curator -- are
-# bypassed by consumers that kept a direct import, so the DI-configured
-# variant, with its retry policy and cost tracking, never applies.
-#
-# Phase 2.3 of tasks/specs/arch_audit_2026_09_remediation_plan.md decides each
-# one: wire it or delete it. Remove a name here in the commit that does either,
-# and lower the ceiling with it.
-_UNRESOLVED_DI_KEYS = {
-    "SandboxBackendAdapter",
-    "TaskRouterPort",
-    "event_pipeline",
-    "trust_report_service",
-}
+# Empty since phase 2.4 (tasks/specs/arch_audit_2026_09_remediation_plan.md).
+# It started at 18. Every one was decided -- wired or deleted -- and the
+# decisions are recorded in the commits that made them. Three of the 18 were
+# controls the system was documented as having: `llm_pool` (wired, phase 1.3),
+# `trust_report_service` and `event_pipeline` (deleted, phase 2.3 -- the
+# pipeline duplicated EventPublisher step for step). Two were not bindings at
+# all but census errors, since fixed: `EventPublisher` (a type key resolved
+# through _maybe_get, which the census did not count) and `plan_act` (a
+# FlowRegistry entry). Keep it empty: a new name here is a new dead binding.
+_UNRESOLVED_DI_KEYS: set[str] = set()
 
 
 def _di_wiring():

@@ -172,7 +172,6 @@ class PlanActFlow(BaseFlow):
             cfg.workspace_snapshots
         )  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
-        self._trust_report_service = cfg.trust_report_service  # TrustReportPort — enhancement 4
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
         self._knowledge_graph = cfg.knowledge_graph
@@ -213,11 +212,6 @@ class PlanActFlow(BaseFlow):
         self._skill_review_gate = cfg.skill_review_gate  # None when flag is off
         self._tracing_port = cfg.tracing_port
         self._persistence_adapter = None
-        # ── Event pipeline middleware (WP-4) ──────────────────────
-        # Built in ``configure_defaults`` and injected via config.
-        self._event_pipeline = getattr(cfg, "event_pipeline", None) or getattr(
-            cfg, "_event_pipeline", None
-        )
 
         # ── Enhancement H1: scoped MCP tool aggregation ─────────────
         self._tool_registry = cfg.tool_registry
@@ -450,29 +444,18 @@ class PlanActFlow(BaseFlow):
         return await pause_flow_for_user(self, question)
 
     async def _emit(self, event: AgentEvent) -> None:
-        """Emit an event through the middleware pipeline.
+        """Emit an event through EventPublisher.
 
-        Delegates to EventPublisher for the full pipeline:
-        truth binding, credential sanitization, session mutation,
-        event bus publishing, and DB persistence.
-        If a pipeline has been configured (via ``_event_pipeline``), use it.
+        EventPublisher runs truth binding, credential sanitization, session
+        mutation, event bus publishing and DB persistence, in that order.
+
+        There used to be a second implementation of the same five steps -- the
+        WP-4 EventPipeline -- taken instead whenever config.event_pipeline was
+        set. Nothing ever set it: the container built the pipeline at startup,
+        registered it, and discarded it. Deleted in phase 2.3. The only step it
+        had that this path lacks was an audit-log write, which therefore never
+        happened on any path.
         """
-        pipeline = getattr(self, "_event_pipeline", None)
-        if pipeline is not None:
-            context = {
-                "session": self._session,
-                "session_id": self._session.id if self._session else None,
-                "flow": self,
-                "event_bus": self._event_bus,
-                "state_repo": self._state_repo,
-                "emit_lock": self._emit_lock,
-            }
-            event = await pipeline.process(event, context)
-            new_session = context.get("session")
-            if new_session is not None:
-                self._session = new_session
-            return
-
         publisher = self._get_event_publisher()
         # Sync publisher's session ref — the flow may have mutated
         # self._session (e.g. PlanReviewState setting WAITING status)

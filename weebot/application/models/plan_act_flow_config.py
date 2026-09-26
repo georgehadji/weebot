@@ -107,15 +107,11 @@ class PlanActFlowConfig:
     episode. Catches verification writing to the workspace it audits. If
     None, the guard records NOT_RUN — never a pass (backward-compatible)."""
 
-    # ── Enhancement 4: Trust report ─────────────────────────────────
-    trust_report_service: Any | None = None  # TrustReportPort
-
     # ── Enhancement 5: Retention agent ─────────────────────────────
     retention_agent: Any | None = None  # RetentionAgentPort
 
     # ── Misalignment journal ─────────────────────────────────────────
     misalignment_journal: Any | None = None  # MisalignmentJournalPort
-    """Service computing TrustReport from code review + CoVe evidence."""
 
     # ── ICM edit-source tracking ─────────────────────────────────────
     correction_tracker: Any | None = None  # CorrectionTracker
@@ -151,11 +147,6 @@ class PlanActFlowConfig:
 
     middleware_chain: Any | None = None  # MiddlewareChain — interceptor pipeline for LLM calls
     """Optional middleware chain wrapping every executor LLM request."""
-
-    event_pipeline: Any | None = None  # EventPipeline — processes events in _emit()
-    """Optional event middleware pipeline (EventPipeline).
-    When set, ``_emit()`` delegates to the pipeline; when None,
-    the legacy inline implementation is used (backward-compatible)."""
 
     # ── Enhancement H1: Scoped MCP tool aggregation ─────────────────
     tool_registry: Any | None = None  # RoleBasedToolRegistry

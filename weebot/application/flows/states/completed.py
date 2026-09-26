@@ -360,35 +360,15 @@ class CompletedState(FlowState):
             "PlanActFlow completed for session %s in %.1fs", context._session.id, _total_elapsed
         )
 
-        # ── Collect extra dict for TrustReport + RetentionReview + ProductContext ──
+        # ── Collect extra dict for RetentionReview + ProductContext ──
         _extra: dict = {}
         if hasattr(context._session.context, "extra"):
             _extra = context._session.context.extra.copy() or {}
 
-        # ── TrustReport (Enhancement 4) ──────────────────────────────
-        if getattr(context, "_trust_report_service", None) is not None:
-            try:
-                trust_report = await context._trust_report_service.compute(
-                    session_id=context._session.id,
-                    plan_steps=context._plan.steps if context._plan else [],
-                    session_events=context._session.events,
-                )
-                _extra["trust_report"] = trust_report.model_dump()
-                context._session = context._session.model_copy(
-                    update={
-                        "context": context._session.context.model_copy(update={"extra": _extra})
-                    }
-                )
-                logger.info(
-                    "TrustReport session=%s band=%s confirmed=%d drift=%d regression=%d",
-                    context._session.id,
-                    trust_report.trust_band.value,
-                    trust_report.confirmed_count,
-                    trust_report.drift_count,
-                    trust_report.regression_count,
-                )
-            except Exception:
-                logger.debug("TrustReport failed — non-blocking", exc_info=True)
+        # A TrustReport block used to sit here, guarded on
+        # context._trust_report_service -- a config field nothing ever
+        # assigned, so it never ran. The service, its port and its domain
+        # model were deleted with it in phase 2.3.
 
         # ── ProductDecisionEvent (product-mode Principle 7) ─────────────
         from weebot.config.feature_flags import PRODUCT_DECISION_LOG_ENABLED
@@ -425,7 +405,6 @@ class CompletedState(FlowState):
         # ── RetentionReview (Enhancement 5 — background, non-blocking) ──
         if getattr(context, "_retention_agent", None) is not None:
             _plan_for_retention = context._plan
-            _trust_extra = _extra.get("trust_report", {})
             # Counts from events
             _tool_count_ret = sum(
                 1 for e in context._session.events if getattr(e, "type", "") == "tool"
@@ -449,7 +428,8 @@ class CompletedState(FlowState):
                     agent=context._retention_agent,
                     session_id=context._session.id,
                     session_summary=_session_summary,
-                    trust_report=_trust_extra,
+                    # No trust report exists to pass: see the note above.
+                    trust_report=None,
                     error_count=_error_count_ret,
                     tool_count=_tool_count_ret,
                 ),

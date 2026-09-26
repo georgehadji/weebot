@@ -23,8 +23,6 @@ if TYPE_CHECKING:
     from weebot.application.services.code_reviewer_service import CodeReviewerService
     from weebot.application.services.idea_gate import IdeaGate
     from weebot.application.services.mcp_tool_registry_bridge import MCPToolRegistryBridge
-    from weebot.application.services.trust_report_service import TrustReportService
-    from weebot.application.middleware.event_middleware import EventPipeline
 
 logger = _logging.getLogger(__name__)
 
@@ -160,22 +158,6 @@ class FactoriesMixin:
         return InMemorySteeringAdapter()
 
     @staticmethod
-    def _create_task_router():
-        """Create a task router — semantic when flag is enabled, keyword otherwise."""
-        from weebot.config.feature_flags import WEEBOT_SEMANTIC_TASK_ROUTER
-
-        if WEEBOT_SEMANTIC_TASK_ROUTER:
-            from weebot.application.services.semantic_task_router import SemanticTaskRouter
-
-            logger.info("Task router: semantic (all-MiniLM-L6-v2 centroids)")
-            return SemanticTaskRouter()
-
-        from weebot.application.services.keyword_task_router import KeywordTaskRouter
-
-        logger.info("Task router: keyword (YAML patterns)")
-        return KeywordTaskRouter()
-
-    @staticmethod
     def _create_tool_discovery():
         from weebot.infrastructure.adapters.tool_discovery import ToolDiscoveryAdapter
 
@@ -295,25 +277,6 @@ class FactoriesMixin:
 
         llm = FactoriesMixin._create_llm_for_role("subagent")
         return RetentionAgent(llm=llm)
-
-    @staticmethod
-    def _create_trust_report_service() -> TrustReportService:
-        from weebot.application.services.trust_report_service import TrustReportService
-
-        return TrustReportService()
-
-    @staticmethod
-    def _create_backend():
-        from weebot.infrastructure.adapters.sandbox_backend_adapter import SandboxBackendAdapter
-        from weebot.application.di import Container
-
-        try:
-            c = Container()
-            c.configure_defaults()
-            sandbox = c.get(SandboxPort)
-            return SandboxBackendAdapter(sandbox=sandbox)
-        except Exception:
-            return SandboxBackendAdapter(sandbox=None)
 
     @staticmethod
     def _create_harness_config():
@@ -523,35 +486,6 @@ class FactoriesMixin:
             bridge = self._create_mcp_bridge()
             self.register_instance("mcp_bridge", bridge)
         return bridge
-
-    def build_event_pipeline(self) -> EventPipeline:
-        """Build the default event middleware pipeline.
-
-        Middlewares run in registration order — each feeds into the next.
-        """
-        from weebot.application.middleware.event_middleware import EventPipeline
-        from weebot.application.middleware.middlewares import (
-            CredentialSanitizerMiddleware,
-            EventBusPublishMiddleware,
-            PersistenceMiddleware,
-            SessionMutationMiddleware,
-            TruthBindingMiddleware,
-        )
-        from weebot.application.middleware.middlewares.audit import AuditMiddleware
-        from weebot.infrastructure.observability.audit_log import AuditLog
-
-        pipeline = EventPipeline(
-            [
-                TruthBindingMiddleware(),
-                CredentialSanitizerMiddleware(),
-                # Audit trail — record sanitized event before session mutation
-                AuditMiddleware(audit_log=AuditLog()),
-                SessionMutationMiddleware(),
-                EventBusPublishMiddleware(),
-                PersistenceMiddleware(),
-            ]
-        )
-        return pipeline
 
     def _create_browser_pool(self):
         """Create a BrowserSessionPool as a DI-managed singleton.
