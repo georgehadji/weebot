@@ -1942,3 +1942,37 @@ def test_plan_act_flow_config_has_no_any_typed_field():
         and "Any" in ast.unparse(n.annotation)
     ]
     assert untyped == [], f"PlanActFlowConfig fields typed Any: {untyped}"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Nothing is invisible to import-linter
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_no_namespace_packages_hide_modules_from_import_linter():
+    """Phase 3.3. A directory of .py files without __init__.py is a namespace
+    package, and grimp -- the graph import-linter checks -- leaves it out
+    entirely. Every import into or out of such a directory is then unchecked
+    by every contract, and "7 kept, 0 broken" says nothing about it.
+
+    Eleven directories were in that state, 44 modules: domain/services (so the
+    domain-purity contract never saw them), all 15 flow states,
+    cqrs/behaviors, strategies (where LLMPool lives), and five infrastructure
+    packages. .importlinter even had a commented-out exemption for one of the
+    hidden edges, above a comment blaming the import for being "lazy". With
+    the package markers in place the contracts found exactly one violation
+    they had been missing, now a counted exemption.
+    """
+    root = ROOT.parent
+    # weebot/ only: .importlinter's root_package is `weebot`, so cli/ is outside
+    # import-linter's graph whether or not its directories carry markers.
+    blind = sorted(
+        d.relative_to(root).as_posix()
+        for d in ROOT.rglob("*")
+        if d.is_dir()
+        and "__pycache__" not in d.parts
+        and "GitNexus-main" not in d.parts
+        and any(d.glob("*.py"))
+        and not (d / "__init__.py").exists()
+    )
+    assert blind == [], "no __init__.py, so import-linter cannot see these:\n  " + "\n  ".join(blind)

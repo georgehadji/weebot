@@ -98,6 +98,12 @@ jobs:
         # this step existed.
         run: python scripts/lint_di_wiring.py
 
+      - name: Import-exemption ratchet
+        # BLOCKING. Each .importlinter exemption is an edge a contract forbids
+        # and a reviewer excused. The count lived only in prose, where every
+        # target moved the wrong way (52 -> 35 target -> 67 actual).
+        run: python scripts/lint_import_exemptions.py
+
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that
         # exited 1, so `make check` was red on a clean checkout, and it appeared

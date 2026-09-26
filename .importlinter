@@ -67,9 +67,15 @@ ignore_imports =
     # browser_inspector delegates to Playwright for DOM inspection.
     weebot.tools.browser_inspector -> weebot.infrastructure.browser.playwright_adapter
     weebot.tools.browser_inspector -> weebot.infrastructure.browser.som_renderer
-    # browser_tool lazily instantiates the LLM adapter for vision.
-    # (import is lazy inside a function — not detected by import-linter)
-    # weebot.tools.browser_tool -> weebot.infrastructure.llm.langchain_adapter
+    # browser_tool wraps the DI-injected LLMPort in a LangChain adapter for
+    # browser_use. This line was commented out, above a comment claiming the
+    # import went undetected because it is "lazy inside a function". That was
+    # the wrong reason: grimp sees function-level imports fine. It was
+    # undetected because weebot/infrastructure/llm/ had no __init__.py, and a
+    # namespace package is left out of grimp's graph entirely -- one of 11 such
+    # directories, 44 modules no contract could see (phase 3.3). With the
+    # package markers added, this is the only violation they were hiding.
+    weebot.tools.browser_tool -> weebot.infrastructure.llm.langchain_adapter
     # file_editor uses security validators directly (pre-audited, Phase C candidate).
     weebot.tools.file_editor -> weebot.infrastructure.security.security_validators
     # bash/powershell/python tools create sandbox instances via the factory.

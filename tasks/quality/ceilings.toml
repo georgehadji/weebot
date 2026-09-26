@@ -141,3 +141,16 @@ unresolved_di_keys = 0
 # so they were fixed rather than deleted. See that method's docstring.
 # Measured by: scripts/lint_di_wiring.py
 unregistered_di_keys = 2
+
+# Active ignore_imports entries in .importlinter -- edges a contract forbids
+# and a reviewer excused. Tracked only in prose before this, where every
+# target moved the wrong way: ADR-001 said 52, ARCHITECTURE.md D3 said 35
+# against a target of <=25, the file held 67.
+# 68, not 67, because phase 3.3 made one more exemption VISIBLE rather than
+# adding one: weebot/infrastructure/llm/ had no __init__.py, so grimp left it
+# out of the graph, and browser_tool's import of it was never checked. The
+# exemption for it existed, commented out, above a comment giving the wrong
+# reason. Eleven directories were in that state; this was the one real
+# violation they were hiding.
+# Measured by: scripts/lint_import_exemptions.py
+import_exemptions = 68
