@@ -84,7 +84,6 @@ class PlannerAgent:
         model: str | None = None,
         skill_prompt: str | None = None,
         facts: dict[str, Any] | None = None,
-        episodic_memory=None,
         prompt_variant_id: str | None = None,  # PromptRegistry variant (HyperAgents Enhancement 5)
         skill_catalog: str | None = None,  # Compact skill summary for step-boundary awareness
         awm_hints: list[str] | None = None,  # Agent Workflow Memory hints
@@ -92,7 +91,6 @@ class PlannerAgent:
         self._llm = llm
         self._event_bus = event_bus
         self._model = model
-        self._episodic_memory = episodic_memory
         self._prompt_variant_id = prompt_variant_id
         system_prompt = self._get_system_prompt()
         # Only inject the spec-file rule for complex multi-section UI tasks
@@ -235,11 +233,6 @@ class PlannerAgent:
         user_msg = prompt
         if attachments:
             user_msg += "\n\nAttachments:\n" + "\n".join(attachments)
-
-        if self._episodic_memory is not None:
-            examples = await self._episodic_memory.get_few_shot_examples(prompt, k=3)
-            if examples:
-                user_msg = f"{examples}\n\n{user_msg}"
 
         # ── HyperAgents Enhancement 1: inject meta-notes from prior runs ──
         if meta_notes:

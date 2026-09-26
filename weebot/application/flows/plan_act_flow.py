@@ -85,7 +85,6 @@ class PlanActFlow(BaseFlow):
         event_bus: EventBusPort | None = None,
         model: str | None = None,
         skill_prompt: str | None = None,
-        episodic_memory=None,
         mediator: Mediator | None = None,
         state_repo: StateRepositoryPort | None = None,
         steering=None,
@@ -122,7 +121,6 @@ class PlanActFlow(BaseFlow):
                 event_bus=event_bus,
                 model=model,
                 skill_prompt=skill_prompt,
-                episodic_memory=episodic_memory,
                 mediator=mediator,
                 state_repo=state_repo,
                 steering=steering,
@@ -196,7 +194,6 @@ class PlanActFlow(BaseFlow):
         self._plan_history = PlanHistory()
         self._context_switcher = ContextSwitcher(llm=self._llm, event_bus=self._event_bus)
         self._awm = None  # AgentWorkflowMemory — lazy-init via _get_awm()
-        self._episodic_memory = cfg.episodic_memory
         self._max_step_repetitions = cfg.max_step_repetitions
         self._planning_mode = getattr(cfg, "planning_mode", "auto")
         self._auto_terminate_on_plan_complete = cfg.auto_terminate_on_plan_complete
@@ -249,7 +246,6 @@ class PlanActFlow(BaseFlow):
             model=self._model,
             skill_prompt=cfg.skill_prompt,
             facts=cfg.session.get_facts(),
-            episodic_memory=cfg.episodic_memory,
             skill_catalog=self._build_skill_catalog(cfg.skill_retriever),
         )
         executor_kwargs = dict(
@@ -861,7 +857,6 @@ class PlanActFlow(BaseFlow):
             model=model,
             skill_prompt=self._skill_prompt,
             facts=self._fact_resolver.resolve_for_session(self._session),
-            episodic_memory=self._episodic_memory,
         )
 
     # Maximum consecutive similar plans before raising PlanStuckError.

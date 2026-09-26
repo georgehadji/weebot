@@ -289,7 +289,6 @@ class PlanningState(FlowState):
                 model=context._model,
                 skill_prompt=context._skill_prompt,
                 facts=context._session.get_facts(),
-                episodic_memory=context._episodic_memory,
                 awm_hints=awm_hints,
             )
             # Transition to CritiquingState if a critic is available

@@ -31,7 +31,7 @@ class ModelSelector:
             context_aware_enabled=context_aware_enabled,
         )
 
-    def update_agents(self, model: str, skill_prompt, facts, episodic_memory) -> tuple:
+    def update_agents(self, model: str, skill_prompt, facts) -> tuple:
         """Create updated agent instances for a new model.
 
         Returns:
@@ -45,6 +45,5 @@ class ModelSelector:
             model=model,
             skill_prompt=skill_prompt,
             facts=facts,
-            episodic_memory=episodic_memory,
         )
         return planner

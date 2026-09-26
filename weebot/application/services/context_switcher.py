@@ -75,7 +75,6 @@ class ContextSwitcher:
         model: str,
         skill_prompt: str | None = None,
         facts: list[str] | None = None,
-        episodic_memory=None,
     ) -> PlannerAgent:
         """Rebuild the PlannerAgent with a new model.
 
@@ -83,7 +82,6 @@ class ContextSwitcher:
             model: The new model ID to use.
             skill_prompt: Optional skill prompt for the planner.
             facts: Session facts to inject.
-            episodic_memory: Optional episodic memory instance.
 
         Returns:
             A new PlannerAgent configured with the given model.
@@ -94,5 +92,4 @@ class ContextSwitcher:
             model=model,
             skill_prompt=skill_prompt,
             facts=facts or [],
-            episodic_memory=episodic_memory,
         )

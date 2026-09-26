@@ -1910,3 +1910,35 @@ def test_the_known_bypasses_have_not_multiplied():
         "a grandfathered bypass is gone — remove it from _GRANDFATHERED_BYPASSES:\n  "
         + "\n  ".join(stale)
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PlanActFlowConfig carries real types
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_plan_act_flow_config_has_no_any_typed_field():
+    """Phase 2.2. The config had 28 collaborators typed ``Any``, one of them
+    "to avoid a circular import" -- which a TYPE_CHECKING import does anyway,
+    at no cost. Twenty-seven now carry the type their comment always named.
+    The 28th, ``episodic_memory``, was plumbing for a feature with no
+    implementation -- nothing defines get_few_shot_examples -- and was
+    deleted rather than given a port for something that does not exist.
+
+    Types do not catch a collaborator nobody assigns: ``X | None = None`` that
+    nothing sets type-checks fine. That is the DI census's job. What types
+    catch is the wrong thing being passed, and they document what each field
+    is. An ``Any`` here is a field that has stopped saying either.
+    """
+    tree = _parse(ROOT / "application" / "models" / "plan_act_flow_config.py")
+    cls = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PlanActFlowConfig"
+    )
+    untyped = [
+        n.target.id
+        for n in cls.body
+        if isinstance(n, ast.AnnAssign)
+        and isinstance(n.target, ast.Name)
+        and "Any" in ast.unparse(n.annotation)
+    ]
+    assert untyped == [], f"PlanActFlowConfig fields typed Any: {untyped}"
