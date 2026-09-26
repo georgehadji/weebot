@@ -33,8 +33,20 @@ class SessionDeletionOrchestrator:
             name: Human-readable store name (for logging).
             instance: The store object.
             method: Async method name on *instance* that accepts ``session_id``.
+
+        Raises:
+            TypeError: *instance* has no such method. Checked here, at wiring
+                time, because checking at deletion time used to report the
+                store as purged ("ok") when there was nothing to call.
         """
+        if not callable(getattr(instance, method, None)):
+            raise TypeError(f"{name}: {type(instance).__name__} has no {method}()")
         self._extras.append((name, instance, method))
+
+    @property
+    def store_names(self) -> list[str]:
+        """Names of the stores a deletion will purge, besides the state repo."""
+        return [name for name, _, _ in self._extras]
 
     async def delete_session(self, session_id: str) -> dict[str, str]:
         """Delete *session_id* data from all known stores.
@@ -55,9 +67,7 @@ class SessionDeletionOrchestrator:
         # 2. Extra stores (event store, checkpoint store, etc.)
         for name, instance, method_name in self._extras:
             try:
-                method = getattr(instance, method_name, None)
-                if method is not None:
-                    await method(session_id)
+                await getattr(instance, method_name)(session_id)
                 results[name] = "ok"
             except Exception:
                 logger.exception("%s.%s failed for %s", name, method_name, session_id)

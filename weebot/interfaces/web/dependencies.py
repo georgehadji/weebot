@@ -1,8 +1,7 @@
-"""Web interface dependency helpers — composition-root infrastructure wiring.
+"""Web interface dependency helpers — composition-root wiring.
 
-Functions here may import from ``weebot.infrastructure`` because they are
-part of the composition root (the outermost layer of the application).
-The ``interfaces-no-infra`` import-linter contract exempts this file.
+Stores are resolved from the DI container by port, so this module imports no
+infrastructure.
 """
 
 from __future__ import annotations
@@ -17,11 +16,35 @@ from weebot.application.ports.state_repo_port import StateRepositoryPort
 logger = logging.getLogger(__name__)
 
 
-def build_deletion_orchestrator(request: Request, state_repo: StateRepositoryPort) -> Any:
-    """Build a SessionDeletionOrchestrator with all available stores.
+# Every store that holds a web session's data, as (name, container key,
+# purge method). Container keys, not concrete classes: a lookup by concrete
+# class that nothing registered raised KeyError into a bare `except: pass`,
+# which is how the checkpoint and gateway purges never ran.
+#
+# Deliberately absent: the flow checkpoint store (SQLiteCheckpointStore).
+# Nothing in production writes it -- no PlanActFlowConfig is built with a
+# checkpoint_port, so CheckpointScheduler returns early and flow_checkpoints
+# stays empty. test_session_deletion_wiring fails if CheckpointPort is ever
+# registered without a purge being added here.
+def _session_stores() -> list[tuple[str, Any, str]]:
+    from weebot.application.ports.event_store_port import EventStorePort
+    from weebot.application.ports.gateway_session_store_port import IGatewaySessionStorePort
 
-    May import from infrastructure — this is a composition-root function
-    that wires up concrete adapters at the outermost layer.
+    return [
+        # DurableEventBus journals every agent event of the session here.
+        ("event_store", EventStorePort, "delete_session"),
+        # The Telegram gateway's chat -> session mapping.
+        ("gateway_session_store", IGatewaySessionStorePort, "delete_by_session_id"),
+        # Entities and relations extracted during the session.
+        ("knowledge_graph", "kg_adapter", "delete_by_session_id"),
+    ]
+
+
+def build_deletion_orchestrator(request: Request, state_repo: StateRepositoryPort) -> Any:
+    """Build a SessionDeletionOrchestrator over every store holding session data.
+
+    A store that cannot be resolved is logged, not skipped silently: the
+    deletion still runs for the others, and the log names what was left.
     """
     from weebot.application.services.session_deletion_orchestrator import (
         SessionDeletionOrchestrator,
@@ -30,48 +53,15 @@ def build_deletion_orchestrator(request: Request, state_repo: StateRepositoryPor
     orch = SessionDeletionOrchestrator(state_repo=state_repo)
     container = request.app.state.container
 
-    # Event store
-    try:
-        from weebot.application.ports.event_bus_port import EventStorePort
-
-        event_store = container.get(EventStorePort)
-        if hasattr(event_store, "delete_session"):
-            orch.add_store("event_store", event_store, "delete_session")
-    except (KeyError, Exception):
-        pass
-
-    # Checkpoint store
-    try:
-        from weebot.infrastructure.persistence.checkpoint_store import SQLiteCheckpointStore
-
-        checkpoint_store = container.get(SQLiteCheckpointStore)
-        if hasattr(checkpoint_store, "delete"):
-            orch.add_store("checkpoint_store", checkpoint_store, "delete")
-    except (KeyError, Exception):
-        pass
-
-    # Gateway session store
-    try:
-        from weebot.infrastructure.persistence.gateway_session_store import (
-            SQLiteGatewaySessionStore,
-        )
-
-        gateway_store = container.get(SQLiteGatewaySessionStore)
-        orch.add_store("gateway_session_store", gateway_store, "delete_by_session_id")
-    except (KeyError, Exception):
-        pass
-
-    # Knowledge graph
-    try:
-        import importlib as _kg_il
-
-        _kg_mod = _kg_il.import_module("weebot.infrastructure.persistence.sqlite_knowledge_graph")
-        _kg_cls = getattr(_kg_mod, "SQLiteKnowledgeGraph", None)
-        if _kg_cls is not None:
-            kg = container.get(_kg_cls)
-            if hasattr(kg, "delete_by_session_id"):
-                orch.add_store("knowledge_graph", kg, "delete_by_session_id")
-    except (KeyError, Exception):
-        pass
+    for name, key, method in _session_stores():
+        try:
+            orch.add_store(name, container.get(key), method)
+        except Exception:
+            # Unresolvable, or resolved to something without the purge method.
+            logger.warning(
+                "Session deletion will not purge %s: it could not be wired",
+                name,
+                exc_info=True,
+            )
 
     return orch

@@ -29,8 +29,12 @@
 # bare `except json.JSONDecodeError: pass` blocks that the hand-rolled JSON
 # extractors in planner.py and synthesizer_agent.py used to fall through.
 # 134 -> 133 with phase 2.3: one was in the dead code deleted there.
+# 133 -> 129 with the session-deletion fix: build_deletion_orchestrator wrapped
+# each of its four store lookups in `except (KeyError, Exception): pass`, which
+# is how three of the four purges failed unnoticed. Each failure is logged now.
+# (bandit_b110 does not move: bandit's B110 does not match the tuple form.)
 # Measured by: scripts/lint_except_pass.py
-silent_except_handlers = 133
+silent_except_handlers = 129
 
 # Blocking calls inside `async def`.
 # Measured by: scripts/lint_async_io.py
@@ -141,8 +145,14 @@ unresolved_di_keys = 0
 # 4 -> 2 with phase 2.3, group 1: the two in _build_plan_act_flow_for_session
 # were not dead after all -- the tool registry calls that method directly --
 # so they were fixed rather than deleted. See that method's docstring.
+# 2 -> 0 with the session-deletion fix: dependencies.py now resolves every
+# store it purges by port (EventStorePort, IGatewaySessionStorePort,
+# "kg_adapter"). The two concrete-class lookups are gone, and the stores they
+# named are purged for the first time -- the event store's journal of every
+# agent event and the Telegram gateway's session map had survived every
+# deletion. The checkpoint store is not purged because nothing writes it.
 # Measured by: scripts/lint_di_wiring.py
-unregistered_di_keys = 2
+unregistered_di_keys = 0
 
 # Active ignore_imports entries in .importlinter -- edges a contract forbids
 # and a reviewer excused. Tracked only in prose before this, where every
@@ -164,5 +174,8 @@ unregistered_di_keys = 2
 # The two provider leaks that contract exists for were fixed, not exempted.
 # This key replaces test_ignore_imports_under_target, a one-way `<= 72` on the
 # same count whose slack had already absorbed a drop from 70 to 66 unrecorded.
+# 80 -> 77 with the same fix: web/main.py takes the gateway store from the
+# container, and dependencies.py resolves stores by port, so neither imports
+# a persistence adapter any more.
 # Measured by: scripts/lint_import_exemptions.py
-import_exemptions = 80
+import_exemptions = 77

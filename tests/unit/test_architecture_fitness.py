@@ -1135,12 +1135,9 @@ def test_the_di_ceiling_matches_the_named_set():
 # the set above, pinned by name for the same reason: a count cannot see a
 # substitution. Phase 2.1 found four live failures of this shape and phase 2.3
 # fixed two more ("state_repo", "event_bus" in the sub-agent flow builder).
-# What is left is the session-deletion gap: deleting a session never purged
-# its checkpoints or gateway sessions, tracked as its own task.
-_UNREGISTERED_DI_KEYS = {
-    "SQLiteCheckpointStore",
-    "SQLiteGatewaySessionStore",
-}
+# The last two were the session-deletion lookups (SQLiteCheckpointStore,
+# SQLiteGatewaySessionStore), fixed by resolving every purged store by port.
+_UNREGISTERED_DI_KEYS: set[str] = set()
 
 
 @lru_cache(maxsize=None)

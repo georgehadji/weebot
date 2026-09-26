@@ -172,13 +172,6 @@ ignore_imports =
     weebot.interfaces.windows_toast_subscriber -> weebot.infrastructure.notifications.notifications
     # Shutdown handler closes all DB connection pools to prevent leaks.
     weebot.interfaces.web.main -> weebot.infrastructure.persistence.connection_pool
-    # Web server wires the Telegram gateway's session store at startup.
-    weebot.interfaces.web.main -> weebot.infrastructure.persistence.gateway_session_store
-    # Web dependencies (composition root) — builds session deletion orchestrator
-    # with all adapter stores; this file is the dedicated composition-root
-    # dependency helper for the web interface layer.
-    weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.checkpoint_store
-    weebot.interfaces.web.dependencies -> weebot.infrastructure.persistence.gateway_session_store
     # Web server wires PrometheusMetricsAdapter as a DI lookup key for /metrics.
     # (PrometheusMetricsAdapter is registered as the concrete key in DI.)
     weebot.interfaces.web.main -> weebot.infrastructure.observability.prometheus_adapter

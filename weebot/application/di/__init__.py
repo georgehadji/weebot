@@ -30,6 +30,9 @@ from weebot.application.cqrs.behaviors.telemetry import TelemetryBehavior  # noq
 from weebot.application.cqrs.mediator import Mediator  # noqa: E402
 from weebot.application.ports.event_bus_port import EventBusPort  # noqa: E402
 from weebot.application.ports.event_store_port import EventStorePort  # noqa: E402
+from weebot.application.ports.gateway_session_store_port import (  # noqa: E402
+    IGatewaySessionStorePort,
+)
 from weebot.application.ports.llm_port import LLMPort  # noqa: E402
 from weebot.application.ports.provider_account_port import ProviderAccountPort  # noqa: E402
 from weebot.application.ports.sandbox_port import SandboxPort  # noqa: E402
@@ -154,6 +157,9 @@ class Container(
         self.register(FileSystemMemoryAdapter, lambda: self._create_memory_adapter())
         self.register(SpeechPort, lambda: self._create_speech())
         self.register(EventStorePort, lambda: self._create_event_store())
+        # The Telegram gateway's session store. Resolved here -- not built by
+        # web/main.py -- so session deletion purges the same store it writes.
+        self.register(IGatewaySessionStorePort, self._create_gateway_session_store)
         self.register(ToolRepositoryPort, lambda: self._create_tool_repo())
         self.register(SwarmEventBusPort, self._create_swarm_bus)
         self.register(SubAgentFactoryPort, self._create_sub_agent_factory)

@@ -55,6 +55,14 @@ class IGatewaySessionStorePort(Protocol):
         """
         ...
 
+    async def delete_by_session_id(self, session_id: str) -> int:
+        """Delete every gateway session linked to flow session *session_id*.
+
+        Session-scoped purge, called by SessionDeletionOrchestrator. Returns
+        the number of gateway sessions removed.
+        """
+        ...
+
 
 class AbstractGatewaySessionStore(ABC):
     """Abstract base class for gateway session stores.
