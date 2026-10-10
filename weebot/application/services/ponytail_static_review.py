@@ -53,13 +53,15 @@ def static_ponytail_review(code: str) -> list[str]:
         and not _HAS_CHECK.search(code)
     ):
         findings.append(
-            "test: non-trivial logic needs a runnable check (assert-based self-check or __main__ demo)"
+            "test: non-trivial logic needs a runnable check "
+            "(assert-based self-check or __main__ demo)"
         )
 
     # Check for shortcuts lacking a "ponytail:" comment explaining the ceiling
     if _SHORTCUT.search(code) and "ponytail:" not in code:
         findings.append(
-            "ponytail-comment: mark deliberate simplifications with a ponytail: comment detailing the ceiling and upgrade path"
+            "ponytail-comment: mark deliberate simplifications with a ponytail: "
+            "comment detailing the ceiling and upgrade path"
         )
 
     return findings
