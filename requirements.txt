@@ -119,7 +119,7 @@ jinja2>=3.1.6
 valkey==6.1.1  # Drop-in redis replacement (BSD-3-Clause, Linux Foundation)
 
 # Scheduling
-apscheduler>=3.10.0
+apscheduler>=3.11.3
 
 # Testing
 pytest==8.4.2
