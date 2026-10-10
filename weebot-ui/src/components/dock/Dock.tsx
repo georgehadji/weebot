@@ -29,10 +29,12 @@ export function MissionDock({ sessionId }: MissionDockProps) {
       </TabsList>
       <div className="flex-1 overflow-y-auto">
         <TabsContent value="plan" className="m-0">
-          <PlanTab sessionId={sessionId} />
+          {/* Keyed so switching sessions remounts with fresh state instead
+              of carrying the previous session's plan or tool calls. */}
+          <PlanTab key={sessionId} sessionId={sessionId} />
         </TabsContent>
         <TabsContent value="tools" className="m-0">
-          <ToolsTab sessionId={sessionId} />
+          <ToolsTab key={sessionId} sessionId={sessionId} />
         </TabsContent>
         <TabsContent value="cost" className="m-0">
           <CostTab />

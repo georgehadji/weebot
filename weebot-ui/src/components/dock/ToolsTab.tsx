@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
@@ -11,15 +11,12 @@ interface ToolsTabProps {
 }
 
 export function ToolsTab({ sessionId }: ToolsTabProps) {
-  const { lastMessage } = useSessionEvents(sessionId);
   const [calls, setCalls] = useState<Map<string, ToolEvent>>(new Map());
-
-  useEffect(() => {
-    if (lastMessage?.type === "tool") {
-      const event = lastMessage as ToolEvent;
-      setCalls((prev) => new Map(prev).set(event.tool_call_id, event));
-    }
-  }, [lastMessage]);
+  useSessionEvents(sessionId, (event) => {
+    if (event.type !== "tool") return;
+    const toolEvent = event as ToolEvent;
+    setCalls((prev) => new Map(prev).set(toolEvent.tool_call_id, toolEvent));
+  });
 
   const entries = Array.from(calls.values()).reverse();
 

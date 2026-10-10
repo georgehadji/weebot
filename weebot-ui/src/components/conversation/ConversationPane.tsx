@@ -40,15 +40,11 @@ export function ConversationPane({
   const [state, setState] = useState<SessionViewState>(() =>
     (initialEvents ?? []).reduce(sessionReducer, initialSessionViewState)
   );
-  const { lastMessage } = useSessionEvents(sessionId ?? undefined);
+  useSessionEvents(sessionId ?? undefined, (event) => {
+    setState((prev) => sessionReducer(prev, event));
+  });
   const viewportRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
-
-  useEffect(() => {
-    if (lastMessage) {
-      setState((prev) => sessionReducer(prev, lastMessage));
-    }
-  }, [lastMessage]);
 
   const addOptimisticMessage = (event: MessageEvent) => {
     setState((prev) => sessionReducer(prev, event));

@@ -7,26 +7,36 @@
  * components watching the same sessionId share one underlying
  * WebSocket/SSE connection instead of each opening their own (which is
  * what the old per-component `useWebSocket` did).
+ *
+ * Events are delivered through `onEvent`, once per event. This used to
+ * expose only `lastMessage` state, which dropped events: two frames that
+ * arrived before React rendered were batched into one update, and the
+ * consumer's effect only ever saw the second.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { AgentEvent } from "@/types/events";
 import { useEventStreamContext } from "@/providers/EventStreamProvider";
 
 interface SessionEventsHook {
   isConnected: boolean;
-  lastMessage: AgentEvent | null;
 }
 
-export function useSessionEvents(sessionId?: string): SessionEventsHook {
+export function useSessionEvents(
+  sessionId?: string,
+  onEvent?: (event: AgentEvent) => void
+): SessionEventsHook {
   const { subscribeSession, getSessionMode } = useEventStreamContext();
-  const [lastMessage, setLastMessage] = useState<AgentEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  const handleEvent = useEffectEvent((event: AgentEvent) => {
+    onEvent?.(event);
+  });
 
   useEffect(() => {
     if (!sessionId) return;
     const unsubscribe = subscribeSession(sessionId, (event) => {
-      setLastMessage(event);
+      handleEvent(event);
       setIsConnected(true);
     });
 
@@ -43,5 +53,5 @@ export function useSessionEvents(sessionId?: string): SessionEventsHook {
     };
   }, [sessionId, subscribeSession, getSessionMode]);
 
-  return { isConnected, lastMessage };
+  return { isConnected };
 }
