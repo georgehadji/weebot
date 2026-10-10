@@ -61,7 +61,7 @@ function StepNode({ data }: NodeProps<{ step: PlanStep; index: number }>) {
 
   return (
     <div
-      className={`px-4 py-3 rounded-lg border-2 bg-white shadow-sm min-w-[200px] ${getBorderColor()}`}
+      className={`px-4 py-3 rounded-lg border-2 bg-white shadow-xs min-w-[200px] ${getBorderColor()}`}
     >
       <div className="flex items-center gap-2">
         {getIcon()}

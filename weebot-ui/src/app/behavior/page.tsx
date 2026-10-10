@@ -30,7 +30,7 @@ function MonitorTab() {
               type="text"
               value={sessionId}
               onChange={(e) => setSessionId(e.target.value)}
-              className="flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
             />
             <Button variant="outline" onClick={() => setSessionId(`demo-${Date.now().toString(36)}`)}>
               New Session
