@@ -9,6 +9,16 @@ from __future__ import annotations
 
 import re
 
+_DEFINITION = re.compile(r"^\s*(?:async\s+)?(?:def|class)\s", re.MULTILINE)
+# Indented, so it sits inside a body rather than at module level.
+_CONTROL_FLOW = re.compile(r"^\s+(?:if|elif|for|while|try|match)\b", re.MULTILINE)
+# `\bassert` also covers self.assertEqual and friends.
+_HAS_CHECK = re.compile(r"\bassert|__main__|\bunittest\b|\bpytest\b|\bdef test_")
+# Statements only, not words in prose: `global` and `while True:` at line
+# start, and a lock constructor (Lock(, RLock(, asyncio.Lock() -- never
+# `block` or `clock`, which are lowercase.
+_SHORTCUT = re.compile(r"^\s*global\s+\w|^\s*while True:|\b\w*Lock\(", re.MULTILINE)
+
 
 def static_ponytail_review(code: str) -> list[str]:
     """Return Ponytail-style findings for *code*.
@@ -35,16 +45,19 @@ def static_ponytail_review(code: str) -> list[str]:
     if "import retrying" in code:
         findings.append("stdlib: use tenacity or functools.wraps retry instead of retrying")
 
-    # Check for missing tests on non-trivial code (classes/functions without checks)
-    if ("def " in code or "class " in code) and not any(
-        kw in code for kw in ("assert", "__main__", "unittest", "pytest", "test_", "self.assert")
+    # Non-trivial = a def/class with branching or looping in its body; a
+    # one-line function needs no test.
+    if (
+        _DEFINITION.search(code)
+        and _CONTROL_FLOW.search(code)
+        and not _HAS_CHECK.search(code)
     ):
         findings.append(
             "test: non-trivial logic needs a runnable check (assert-based self-check or __main__ demo)"
         )
 
     # Check for shortcuts lacking a "ponytail:" comment explaining the ceiling
-    if any(pattern in code for pattern in ("global ", "while True:", "lock")) and "ponytail:" not in code:
+    if _SHORTCUT.search(code) and "ponytail:" not in code:
         findings.append(
             "ponytail-comment: mark deliberate simplifications with a ponytail: comment detailing the ceiling and upgrade path"
         )

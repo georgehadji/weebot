@@ -71,20 +71,43 @@ class TestStaticPonytailReview:
         findings = static_ponytail_review("import retrying\n")
         assert any("retrying" in f for f in findings)
 
+    _BRANCHY = "def sign(x):\n    if x < 0:\n        return -1\n    return 1\n"
+
     def test_missing_tests_non_trivial_logic(self):
-        code = "def some_function():\n    return 42\n"
-        findings = static_ponytail_review(code)
+        findings = static_ponytail_review(self._BRANCHY)
         assert any("non-trivial logic needs a runnable check" in f for f in findings)
 
+    def test_trivial_function_not_flagged_for_missing_tests(self):
+        findings = static_ponytail_review("def some_function():\n    return 42\n")
+        assert not any("non-trivial logic" in f for f in findings)
+
+    def test_latest_is_not_mistaken_for_a_test(self):
+        code = self._BRANCHY + "latest_value = sign(3)\n"
+        findings = static_ponytail_review(code)
+        assert any("non-trivial logic" in f for f in findings)
+
     def test_has_assert_not_flagged_for_missing_tests(self):
-        code = "def some_function():\n    return 42\nassert some_function() == 42\n"
+        code = self._BRANCHY + "assert sign(-2) == -1\n"
         findings = static_ponytail_review(code)
         assert not any("non-trivial logic" in f for f in findings)
 
     def test_has_main_not_flagged_for_missing_tests(self):
-        code = "def some_function():\n    return 42\nif __name__ == '__main__':\n    print('ok')\n"
+        code = self._BRANCHY + "if __name__ == '__main__':\n    print(sign(1))\n"
         findings = static_ponytail_review(code)
         assert not any("non-trivial logic" in f for f in findings)
+
+    def test_lock_constructor_flagged(self):
+        findings = static_ponytail_review("_guard = threading.Lock()\n")
+        assert any("ponytail-comment" in f for f in findings)
+
+    def test_block_clock_and_prose_not_flagged(self):
+        code = (
+            "# global state lives elsewhere\n"
+            "code_block = render(clock.now())\n"
+            "msg = 'while True: is a loop'\n"
+        )
+        findings = static_ponytail_review(code)
+        assert not any("ponytail-comment" in f for f in findings)
 
     def test_missing_comment_for_shortcuts(self):
         code = "global value\nvalue = 42\n"
