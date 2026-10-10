@@ -50,7 +50,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div className="fixed inset-0 z-60 flex items-start justify-center pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full max-w-lg rounded-lg border bg-surface-2 shadow-2xl">
         <div className="flex items-center gap-2 border-b px-3 py-2.5">
@@ -73,7 +73,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               }
             }}
             placeholder="Type a command…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
             aria-label="Search commands"
           />
         </div>

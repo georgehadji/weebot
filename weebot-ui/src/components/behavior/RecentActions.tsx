@@ -119,7 +119,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
       </div>
 
       {selectedAction && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-1000 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-xl bg-surface-2 p-6">
             <h4 className="mb-4 text-base font-semibold">Mark as Override</h4>
 
@@ -136,7 +136,7 @@ export function RecentActions({ actions, onRefresh }: RecentActionsProps) {
                 value={overrideReason}
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder="Why was this action incorrect?"
-                className="min-h-[80px] w-full resize-y rounded border border-border bg-surface-1 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="min-h-[80px] w-full resize-y rounded border border-border bg-surface-1 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
 
