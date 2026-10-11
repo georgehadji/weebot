@@ -94,6 +94,7 @@ export function useWebSocketDebug(sessionId?: string): WebSocketDebugHook {
 
   // Auto-connect on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dev-only debug tool; logging the connect attempt is the point
     connect();
     return () => {
       disconnect();

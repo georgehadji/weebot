@@ -1,14 +1,99 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+/* animate-in / fade-in / slide-in-from-* / zoom-* for dialog, dropdown,
+   select, tooltip and toast. These once silently never existed and broke
+   the production build -- check the built CSS if they go missing again. */
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+/* inline: utilities read the token itself, so .dark overrides apply. */
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-surface-1: hsl(var(--surface-1));
+  --color-surface-2: hsl(var(--surface-2));
+  --color-surface-3: hsl(var(--surface-3));
+
+  --color-agent: hsl(var(--agent));
+  --color-agent-foreground: hsl(var(--agent-foreground));
+
+  --color-user: hsl(var(--user-bubble));
+  --color-user-foreground: hsl(var(--user-bubble-foreground));
+
+  --color-status-live: hsl(var(--status-live));
+  --color-status-waiting: hsl(var(--status-waiting));
+  --color-status-error: hsl(var(--status-error));
+  --color-status-idle: hsl(var(--status-idle));
+
+  --border-color-strong: hsl(var(--border-strong));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --spacing-topbar: var(--topbar-h);
+  --spacing-rail: var(--rail-w);
+  --spacing-dock: var(--dock-w);
+
+  --transition-duration-fast: 150ms;
+  --transition-duration-base: 220ms;
+
+  --ease-console: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
   }
-  .font-mono-console {
-    font-family: var(--font-mono);
-  }
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility font-mono-console {
+  font-family: var(--font-mono);
 }
 
 /* ────────────────────────────────────────────────────────────────

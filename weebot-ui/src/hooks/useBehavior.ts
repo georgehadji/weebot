@@ -51,75 +51,92 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const connect = useCallback(() => {
-    const wsUrl = sessionId 
-      ? `${WS_URL}/behavior/ws/session/${sessionId}`
-      : `${WS_URL}/behavior/ws`;
+  useEffect(() => {
+    // Set by cleanup. Closing the socket on unmount fires onclose, which
+    // used to schedule a reconnect for a component that no longer existed.
+    let disposed = false;
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    function connect() {
+      const wsUrl = sessionId
+        ? `${WS_URL}/behavior/ws/session/${sessionId}`
+        : `${WS_URL}/behavior/ws`;
 
-    ws.onopen = () => {
-      console.log("[Behavior] WebSocket connected");
-      setIsConnected(true);
-      
-      // Request recent actions
-      ws.send(JSON.stringify({ action: "get_recent", count: 20 }));
-    };
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
+      ws.onopen = () => {
+        console.log("[Behavior] WebSocket connected");
+        setIsConnected(true);
         
-        switch (data.type) {
-          case "file.created":
-          case "file.modified":
-          case "file.deleted":
-          case "file.moved":
-            setEvents((prev) => [data, ...prev].slice(0, 100));
-            break;
-            
-          case "trust.update":
-            setTrustScore({
-              score_percentage: data.score_percentage || data.score,
-              score: data.score,
-              total_actions: data.total_actions,
-              overrides: data.overrides,
-              last_updated: data.last_updated,
-              status: data.status
-            });
-            break;
-            
-          case "recent.actions":
-            setRecentActions(data.actions || []);
-            break;
-            
-          case "connected":
-            console.log("[Behavior] Server confirmed connection");
-            break;
-            
-          case "keepalive":
-            // Just a keepalive, ignore
-            break;
+        // Request recent actions
+        ws.send(JSON.stringify({ action: "get_recent", count: 20 }));
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          
+          switch (data.type) {
+            case "file.created":
+            case "file.modified":
+            case "file.deleted":
+            case "file.moved":
+              setEvents((prev) => [data, ...prev].slice(0, 100));
+              break;
+              
+            case "trust.update":
+              setTrustScore({
+                score_percentage: data.score_percentage || data.score,
+                score: data.score,
+                total_actions: data.total_actions,
+                overrides: data.overrides,
+                last_updated: data.last_updated,
+                status: data.status
+              });
+              break;
+              
+            case "recent.actions":
+              setRecentActions(data.actions || []);
+              break;
+              
+            case "connected":
+              console.log("[Behavior] Server confirmed connection");
+              break;
+              
+            case "keepalive":
+              // Just a keepalive, ignore
+              break;
+          }
+        } catch (err) {
+          console.error("[Behavior] Failed to parse message:", err);
         }
-      } catch (err) {
-        console.error("[Behavior] Failed to parse message:", err);
+      };
+
+      ws.onerror = (e) => {
+        console.error("[Behavior] WebSocket error:", e);
+      };
+
+      ws.onclose = () => {
+        console.log("[Behavior] WebSocket disconnected");
+        setIsConnected(false);
+        wsRef.current = null;
+
+        // Auto reconnect
+        if (disposed) return;
+        reconnectTimeoutRef.current = setTimeout(connect, 5000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
       }
-    };
-
-    ws.onerror = (e) => {
-      console.error("[Behavior] WebSocket error:", e);
-    };
-
-    ws.onclose = () => {
-      console.log("[Behavior] WebSocket disconnected");
-      setIsConnected(false);
-      wsRef.current = null;
-      
-      // Auto reconnect
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
-      }, 5000);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, [sessionId]);
 
@@ -134,19 +151,6 @@ export function useBehavior(sessionId?: string): UseBehaviorReturn {
       wsRef.current.send(JSON.stringify({ action: "get_trust" }));
     }
   }, []);
-
-  useEffect(() => {
-    connect();
-
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [connect]);
 
   return {
     events,
@@ -164,7 +168,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 export function useBehaviorREST(sessionId?: string) {
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recentActions, setRecentActions] = useState<RecentAction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchTrust = useCallback(async () => {
     try {
@@ -216,13 +220,24 @@ export function useBehaviorREST(sessionId?: string) {
     setIsLoading(false);
   }, [fetchTrust, fetchRecent]);
 
+  // Background polls leave isLoading alone after the first one, so the panel
+  // doesn't flip to "Loading..." every 5s; refreshAll (the manual button)
+  // still shows it.
   useEffect(() => {
-    refreshAll();
-    
+    let cancelled = false;
+    const poll = async () => {
+      await Promise.all([fetchTrust(), fetchRecent(20)]);
+      if (!cancelled) setIsLoading(false);
+    };
+    poll();
+
     // Poll every 5 seconds as fallback
-    const interval = setInterval(refreshAll, 5000);
-    return () => clearInterval(interval);
-  }, [refreshAll]);
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [fetchTrust, fetchRecent]);
 
   return {
     trustScore,

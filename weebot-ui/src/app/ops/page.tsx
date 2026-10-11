@@ -398,7 +398,7 @@ function PlanVizTab() {
       <CardContent className="space-y-4">
         <div className="flex gap-2">
           <input
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
             placeholder="Enter session ID to visualize its plan…"
             value={sessionId}
             onChange={(e) => setSessionId(e.target.value)}

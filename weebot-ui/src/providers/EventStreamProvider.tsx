@@ -150,41 +150,47 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
 
   const connectSessionWs = useCallback(
     (sessionId: string, conn: SessionConnection) => {
-      conn.mode = "connecting";
-      const token = getWsToken();
-      const url = `${getStreamUrls().ws}/sessions/${sessionId}${token ? `?token=${token}` : ""}`;
-      const ws = new WebSocket(url);
-      conn.ws = ws;
+      // Reconnects call `open` rather than `connectSessionWs`, so the
+      // callback never references itself before its declaration completes.
+      function open() {
+        conn.mode = "connecting";
+        const token = getWsToken();
+        const url = `${getStreamUrls().ws}/sessions/${sessionId}${token ? `?token=${token}` : ""}`;
+        const ws = new WebSocket(url);
+        conn.ws = ws;
 
-      ws.onopen = () => {
-        conn.reconnectAttempts = 0;
-        conn.mode = "websocket";
-        forceRender((n) => n + 1);
-      };
+        ws.onopen = () => {
+          conn.reconnectAttempts = 0;
+          conn.mode = "websocket";
+          forceRender((n) => n + 1);
+        };
 
-      ws.onmessage = (evt) => {
-        try {
-          const event = JSON.parse(evt.data) as AgentEvent;
-          conn.listeners.forEach((l) => l(event));
-        } catch {
-          // ignore malformed frame
-        }
-      };
+        ws.onmessage = (evt) => {
+          try {
+            const event = JSON.parse(evt.data) as AgentEvent;
+            conn.listeners.forEach((l) => l(event));
+          } catch {
+            // ignore malformed frame
+          }
+        };
 
-      ws.onclose = () => {
-        if (conn.listeners.size === 0) return; // intentionally torn down
-        if (conn.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          conn.reconnectAttempts += 1;
-          const delay = BASE_RECONNECT_DELAY_MS * 2 ** (conn.reconnectAttempts - 1);
-          conn.reconnectTimer = setTimeout(() => connectSessionWs(sessionId, conn), delay);
-        } else {
-          startSessionSSE(sessionId, conn);
-        }
-      };
+        ws.onclose = () => {
+          if (conn.listeners.size === 0) return; // intentionally torn down
+          if (conn.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            conn.reconnectAttempts += 1;
+            const delay = BASE_RECONNECT_DELAY_MS * 2 ** (conn.reconnectAttempts - 1);
+            conn.reconnectTimer = setTimeout(open, delay);
+          } else {
+            startSessionSSE(sessionId, conn);
+          }
+        };
 
-      ws.onerror = () => {
-        // onclose fires next and drives reconnect/fallback — nothing to do here.
-      };
+        ws.onerror = () => {
+          // onclose fires next and drives reconnect/fallback — nothing to do here.
+        };
+      }
+
+      open();
     },
     [startSessionSSE]
   );
@@ -225,33 +231,38 @@ export function EventStreamProvider({ children }: { children: React.ReactNode })
   // ── global presence connection ───────────────────────────────────
 
   const connectPresence = useCallback(() => {
-    const token = getWsToken();
-    const url = `${getStreamUrls().ws}${token ? `?token=${token}` : ""}`;
-    const ws = new WebSocket(url);
-    presenceWsRef.current = ws;
+    // Same shape as connectSessionWs: reconnects re-enter `open`.
+    function open() {
+      const token = getWsToken();
+      const url = `${getStreamUrls().ws}${token ? `?token=${token}` : ""}`;
+      const ws = new WebSocket(url);
+      presenceWsRef.current = ws;
 
-    ws.onopen = () => {
-      presenceReconnectRef.current = 0;
-    };
-    ws.onmessage = (evt) => {
-      try {
-        const event = JSON.parse(evt.data) as AgentEvent;
-        if (event.type === "session_presence") {
-          presenceListeners.current.forEach((l) => l(event as SessionPresenceEvent));
+      ws.onopen = () => {
+        presenceReconnectRef.current = 0;
+      };
+      ws.onmessage = (evt) => {
+        try {
+          const event = JSON.parse(evt.data) as AgentEvent;
+          if (event.type === "session_presence") {
+            presenceListeners.current.forEach((l) => l(event as SessionPresenceEvent));
+          }
+        } catch {
+          // ignore malformed frame
         }
-      } catch {
-        // ignore malformed frame
-      }
-    };
-    ws.onclose = () => {
-      if (presenceListeners.current.size === 0) return;
-      if (presenceReconnectRef.current < MAX_RECONNECT_ATTEMPTS) {
-        const attempt = presenceReconnectRef.current;
-        presenceReconnectRef.current += 1;
-        const delay = BASE_RECONNECT_DELAY_MS * 2 ** attempt;
-        presenceTimerRef.current = setTimeout(connectPresence, delay);
-      }
-    };
+      };
+      ws.onclose = () => {
+        if (presenceListeners.current.size === 0) return;
+        if (presenceReconnectRef.current < MAX_RECONNECT_ATTEMPTS) {
+          const attempt = presenceReconnectRef.current;
+          presenceReconnectRef.current += 1;
+          const delay = BASE_RECONNECT_DELAY_MS * 2 ** attempt;
+          presenceTimerRef.current = setTimeout(open, delay);
+        }
+      };
+    }
+
+    open();
   }, []);
 
   const subscribePresence = useCallback(

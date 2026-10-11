@@ -18,6 +18,13 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  // Mounting the dialog only while open gives every open a fresh query and
+  // selection, with no effect needed to reset them.
+  if (!open) return null;
+  return <CommandPaletteDialog onClose={onClose} />;
+}
+
+function CommandPaletteDialog({ onClose }: Pick<CommandPaletteProps, "onClose">) {
   const commands = useCommandList();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -30,14 +37,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   }, [commands, query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActiveIndex(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
-
-  useEffect(() => setActiveIndex(0), [query]);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   const runActive = () => {
     const command = filtered[activeIndex];
@@ -47,10 +48,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div className="fixed inset-0 z-60 flex items-start justify-center pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full max-w-lg rounded-lg border bg-surface-2 shadow-2xl">
         <div className="flex items-center gap-2 border-b px-3 py-2.5">
@@ -58,7 +57,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
               else if (e.key === "ArrowDown") {
@@ -73,7 +75,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               }
             }}
             placeholder="Type a command…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
             aria-label="Search commands"
           />
         </div>

@@ -13,7 +13,7 @@ structlog==26.1.0
 prometheus-client>=0.25.0
 
 # Discord Integration
-pynacl>=1.5.0
+pynacl>=1.6.2
 
 # Web Navigation
 # Held at 0.11.13: browser-use 0.13.6 (dependabot #18) hard-pins
@@ -27,7 +27,7 @@ playwright==1.61.0
 mss==10.2.0
 pystray>=0.19.0; platform_system=="Windows"
 keyboard>=0.13.5; platform_system=="Windows"
-pywin32==311; platform_system=="Windows"
+pywin32==312; platform_system=="Windows"
 wmi>=1.5.1; platform_system=="Windows"
 winotify==1.1.0; platform_system=="Windows"
 
@@ -53,7 +53,7 @@ tiktoken==0.13.0
 
 # Data Validation & Types
 marshmallow==4.3.0
-cerberus>=1.3.4
+cerberus>=1.3.8
 
 # HTTP & Networking
 aiohttp==3.14.1
@@ -65,12 +65,12 @@ httpx==0.28.1
 # Database & Storage
 aiosqlite==0.22.1
 asyncpg==0.31.0
-alembic>=1.14.0
+alembic>=1.20.0
 
 # CLI & UI
 click==8.4.2
-rich==14.3.3
-prompt-toolkit>=3.0.0
+rich==15.0.0
+prompt-toolkit>=3.0.53
 colorama==0.4.6
 
 # Async
@@ -107,7 +107,7 @@ mcp==1.28.1
 
 # Video ingestion
 youtube-transcript-api>=1.2.4
-yt-dlp>=2024.12.0  # YouTube video download
+yt-dlp>=2026.8.19  # YouTube video download
 
 # Security
 cryptography==49.0.0
@@ -119,7 +119,7 @@ jinja2>=3.1.6
 valkey==6.1.1  # Drop-in redis replacement (BSD-3-Clause, Linux Foundation)
 
 # Scheduling
-apscheduler>=3.10.0
+apscheduler>=3.11.3
 
 # Testing
 pytest==9.1.1

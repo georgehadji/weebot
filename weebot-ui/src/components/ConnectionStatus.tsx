@@ -6,6 +6,39 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+const POLL_INTERVAL_MS = 10_000;
+
+type ProbeResult = { status: "connected"; error: null } | { status: "error"; error: string };
+
+function healthUrl(): string {
+  if (typeof window === "undefined") return "/api/health";
+  const configured = localStorage.getItem("weebot_backend_url")?.trim();
+  return configured ? `${configured.replace(/\/$/, "")}/api/health` : "/api/health";
+}
+
+// Reads the key from storage on every call. The previous version gated on
+// `hasApiKey` state, which the 10s poll captured at mount, so after a key
+// was saved the poll kept probing without it.
+async function probeBackend(): Promise<ProbeResult> {
+  const headers: Record<string, string> = {};
+  try {
+    const stored = sessionStorage.getItem("weebot_api_key");
+    if (stored) headers["X-API-Key"] = stored;
+  } catch { /* ignore */ }
+
+  try {
+    const response = await fetch(healthUrl(), { headers });
+    if (response.ok) return { status: "connected", error: null };
+    if (response.status === 401) {
+      return { status: "error", error: "API key required — set WEEBOT_API_KEY on backend" };
+    }
+    const data = await response.json().catch(() => ({}));
+    return { status: "error", error: data.error || `HTTP ${response.status}` };
+  } catch {
+    return { status: "error", error: "Cannot connect to backend" };
+  }
+}
+
 export function ConnectionStatus() {
   const [status, setStatus] = useState<"checking" | "connected" | "error">("checking");
   const [error, setError] = useState<string | null>(null);
@@ -19,40 +52,15 @@ export function ConnectionStatus() {
     }
   });
 
-  const healthUrl = () => {
-    if (typeof window === "undefined") return "/api/health";
-    const configured = localStorage.getItem("weebot_backend_url")?.trim();
-    return configured ? `${configured.replace(/\/$/, "")}/api/health` : "/api/health";
+  const applyProbe = (result: ProbeResult) => {
+    setStatus(result.status);
+    setError(result.error);
   };
 
   const checkConnection = async () => {
     setStatus("checking");
     setError(null);
-
-    const headers: Record<string, string> = {};
-    if (hasApiKey) {
-      try {
-        const stored = sessionStorage.getItem("weebot_api_key");
-        if (stored) headers["X-API-Key"] = stored;
-      } catch { /* ignore */ }
-    }
-    
-    try {
-      const response = await fetch(healthUrl(), { headers });
-      if (response.ok) {
-        setStatus("connected");
-      } else if (response.status === 401) {
-        setError("API key required — set WEEBOT_API_KEY on backend");
-        setStatus("error");
-      } else {
-        const data = await response.json().catch(() => ({}));
-        setError(data.error || `HTTP ${response.status}`);
-        setStatus("error");
-      }
-    } catch {
-      setError("Cannot connect to backend");
-      setStatus("error");
-    }
+    applyProbe(await probeBackend());
   };
 
   const handleSaveApiKey = () => {
@@ -75,11 +83,22 @@ export function ConnectionStatus() {
     checkConnection();
   };
 
+  // Background polls update in place; only a user-triggered retry shows the
+  // "Connecting..." state, so the panel no longer flashes every 10s.
   useEffect(() => {
-    checkConnection();
-    // Check every 10 seconds
-    const interval = setInterval(checkConnection, 10000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const poll = async () => {
+      const result = await probeBackend();
+      if (cancelled) return;
+      setStatus(result.status);
+      setError(result.error);
+    };
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   if (status === "checking") {

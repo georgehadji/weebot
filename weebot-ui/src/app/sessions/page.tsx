@@ -31,30 +31,55 @@ function getStatusColor(status: string) {
   }
 }
 
+type SessionsResult = { ok: true; sessions: Session[] } | { ok: false; error: string };
+
+async function fetchSessions(): Promise<SessionsResult> {
+  try {
+    const data = await api.sessions.list({ limit: "100" });
+    return { ok: true, sessions: data.sessions };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to load sessions" };
+  }
+}
+
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const loadSessions = async () => {
-    try {
-      setLoading(true);
-      const data = await api.sessions.list({ limit: "100" });
-      setSessions(data.sessions);
+  const applyResult = (result: SessionsResult) => {
+    if (result.ok) {
+      setSessions(result.sessions);
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
-    } finally {
-      setLoading(false);
+    } else {
+      setError(result.error);
     }
+    setLoading(false);
   };
 
+  const loadSessions = async () => applyResult(await fetchSessions());
+
   useEffect(() => {
-    loadSessions();
+    let cancelled = false;
+    const poll = async () => {
+      const result = await fetchSessions();
+      if (cancelled) return;
+      if (result.ok) {
+        setSessions(result.sessions);
+        setError(null);
+      } else {
+        setError(result.error);
+      }
+      setLoading(false);
+    };
+    poll();
     // Refresh every 5 seconds
-    const interval = setInterval(loadSessions, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleDelete = async (id: string) => {

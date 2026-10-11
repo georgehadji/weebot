@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { BehaviorPanel } from "@/components/behavior";
 
 function MonitorTab() {
-  const [sessionId, setSessionId] = useState(`demo-${Date.now().toString(36)}`);
+  const [sessionId, setSessionId] = useState(() => `demo-${Date.now().toString(36)}`);
 
   return (
     <div className="space-y-6">
@@ -30,7 +30,7 @@ function MonitorTab() {
               type="text"
               value={sessionId}
               onChange={(e) => setSessionId(e.target.value)}
-              className="flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 font-mono text-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
             />
             <Button variant="outline" onClick={() => setSessionId(`demo-${Date.now().toString(36)}`)}>
               New Session
