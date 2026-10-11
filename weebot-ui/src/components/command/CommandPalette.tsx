@@ -18,6 +18,13 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  // Mounting the dialog only while open gives every open a fresh query and
+  // selection, with no effect needed to reset them.
+  if (!open) return null;
+  return <CommandPaletteDialog onClose={onClose} />;
+}
+
+function CommandPaletteDialog({ onClose }: Pick<CommandPaletteProps, "onClose">) {
   const commands = useCommandList();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -30,14 +37,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   }, [commands, query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setActiveIndex(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
-
-  useEffect(() => setActiveIndex(0), [query]);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   const runActive = () => {
     const command = filtered[activeIndex];
@@ -46,8 +47,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       onClose();
     }
   };
-
-  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-60 flex items-start justify-center pt-[15vh]" role="dialog" aria-modal="true" aria-label="Command palette">
@@ -58,7 +57,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           <input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();
               else if (e.key === "ArrowDown") {

@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { BehaviorPanel } from "@/components/behavior";
 
 function MonitorTab() {
-  const [sessionId, setSessionId] = useState(`demo-${Date.now().toString(36)}`);
+  const [sessionId, setSessionId] = useState(() => `demo-${Date.now().toString(36)}`);
 
   return (
     <div className="space-y-6">

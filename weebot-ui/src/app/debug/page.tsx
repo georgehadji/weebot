@@ -10,7 +10,7 @@ export default function DebugPage() {
     notFound();
   }
 
-  const [sessionId, setSessionId] = useState("test-session-" + Date.now());
+  const [sessionId, setSessionId] = useState(() => "test-session-" + Date.now());
   const { isConnected, error, logs, connect, disconnect, send, clearLogs } = useWebSocketDebug(sessionId);
 
   return (

@@ -9,6 +9,7 @@ import { MissionDock } from "@/components/dock/Dock";
 import { SessionLifecycleStatus } from "@/components/conversation/Composer";
 import { useSessionEvents } from "@/hooks/useSessionEvents";
 import { useSessionPresence } from "@/hooks/useSessionPresence";
+import { applyPresence } from "@/hooks/useSessionList";
 import { api } from "@/lib/api";
 import { AgentEvent, Session } from "@/types/events";
 
@@ -22,25 +23,14 @@ export default function SessionPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.id as string;
-  const [session, setSession] = useState<Session | null>(null);
+  const [loadedSession, setLoadedSession] = useState<Session | null>(null);
   const [initialEvents, setInitialEvents] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const { isConnected } = useSessionEvents(sessionId);
   const presence = useSessionPresence();
-
-  useEffect(() => {
-    const update = presence.get(sessionId);
-    if (!update) return;
-    setSession((current) =>
-      current
-        ? {
-            ...current,
-            status: update.status as Session["status"],
-            title: update.title || current.title,
-          }
-        : current
-    );
-  }, [presence, sessionId]);
+  // Applied at read time, so a status change that arrives before the REST
+  // load finishes still shows once the session is in.
+  const session = loadedSession && applyPresence(loadedSession, presence.get(sessionId));
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +38,7 @@ export default function SessionPage() {
       try {
         const data = await api.sessions.get(sessionId);
         if (cancelled) return;
-        setSession(data);
+        setLoadedSession(data);
         const events = await api.sessions.events(sessionId);
         if (!cancelled) setInitialEvents(events);
       } catch (e) {

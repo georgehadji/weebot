@@ -25,7 +25,6 @@ export function PlanTab({ sessionId }: PlanTabProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     api.ops
       .planViz(sessionId)
       .then((result) => {
