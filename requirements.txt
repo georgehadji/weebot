@@ -90,7 +90,7 @@ duckduckgo-search>=7.0
 pyyaml>=6.0.3
 toml==0.10.2
 python-dateutil==2.9.0.post0
-uuid-utils>=0.0.0
+uuid-utils>=1.0.0
 
 # Optional: For Jupyter integration
 # ipywidgets>=8.0.0
