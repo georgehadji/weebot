@@ -110,7 +110,7 @@ youtube-transcript-api>=1.2.4
 yt-dlp>=2026.8.19  # YouTube video download
 
 # Security
-cryptography==49.0.0
+cryptography==50.0.2
 
 # Templating
 jinja2>=3.1.6
