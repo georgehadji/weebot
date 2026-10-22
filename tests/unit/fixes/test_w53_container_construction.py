@@ -56,3 +56,21 @@ def test_the_di_package_is_exempt():
 def test_factories_builds_one_shared_container():
     hits = _lint().find_violations(("weebot/interfaces/factories.py",))
     assert len(hits) == 1, hits
+
+
+def test_tool_executor_finds_its_egress_guard_without_a_container(monkeypatch):
+    """The DI factory is `EgressGuard()`, and a fresh container never shares it,
+    so building one per ToolExecutor bought nothing but start-up cost."""
+    from weebot.application.agents.executor._tool_executor import ToolExecutor
+    from weebot.application.models.tool_collection import ToolCollection
+    from weebot.core.egress_guard import EgressGuard
+
+    built: list[bool] = []
+
+    def _record(*a, **k):
+        built.append(True)
+        raise AssertionError("ToolExecutor built a Container")
+
+    monkeypatch.setattr("weebot.application.di.Container", _record)
+    guard = ToolExecutor(tools=ToolCollection())._get_egress_guard()
+    assert isinstance(guard, EgressGuard) and built == []

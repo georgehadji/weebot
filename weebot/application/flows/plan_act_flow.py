@@ -101,6 +101,9 @@ class PlanActFlow(BaseFlow):
         verifier_llm: LLMPort | None = None,
         workspace_snapshots: Any | None = None,  # WorkspaceSnapshotPort
         knowledge_graph: Any | None = None,
+        idea_gate: Any | None = None,  # IdeaGate, for the post-completion jobs
+        dreamer_agent: Any | None = None,  # DreamerPort
+        event_store: Any | None = None,  # EventStorePort
         behavioral_learner: Any | None = None,
         logger: StructuredLogger | None = None,
         checkpoint_port: CheckpointPort | None = None,
@@ -137,6 +140,9 @@ class PlanActFlow(BaseFlow):
                 verifier_llm=verifier_llm,
                 workspace_snapshots=workspace_snapshots,
                 knowledge_graph=knowledge_graph,
+                idea_gate=idea_gate,
+                dreamer_agent=dreamer_agent,
+                event_store=event_store,
                 behavioral_learner=behavioral_learner,
                 logger=logger,
                 checkpoint_port=checkpoint_port,
@@ -171,6 +177,10 @@ class PlanActFlow(BaseFlow):
         )  # WorkspaceSnapshotPort — integrity axis (E7b)
         self._step_evaluator = cfg.step_evaluator  # StepEvaluatorPort — per-step progress
         self._retention_agent = cfg.retention_agent  # RetentionAgentPort — enhancement 5
+        # Post-completion jobs (CompletedState): skill-gap review, dream scan.
+        self._idea_gate = cfg.idea_gate
+        self._dreamer_agent = cfg.dreamer_agent
+        self._event_store = cfg.event_store
         self._task_preset = cfg.task_preset  # Phase 5: cost/quality tier presets
         self._knowledge_graph = cfg.knowledge_graph
         self._behavioral_learner = cfg.behavioral_learner

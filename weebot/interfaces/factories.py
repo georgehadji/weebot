@@ -17,6 +17,7 @@ from typing import Any
 from weebot.application.flows.base_flow import BaseFlow
 from weebot.application.flows.plan_act_flow import PlanActFlow
 from weebot.application.ports.event_bus_port import EventBusPort
+from weebot.application.ports.event_store_port import EventStorePort
 from weebot.application.ports.llm_port import LLMPort
 from weebot.application.ports.state_repo_port import StateRepositoryPort
 from weebot.application.ports.task_router_port import TaskRouterPort
@@ -259,6 +260,11 @@ def create_flow(
             behavioral_learner=_cached("behavioral_learner"),
             correction_tracker=_cached("correction_tracker"),
             session_constraint_extractor=_cached("session_constraint_extractor"),
+            # For CompletedState's background jobs, which built a whole
+            # Container per completion to find these (W5.3, F28).
+            idea_gate=_cached("idea_gate"),
+            dreamer_agent=_cached("dreamer_agent"),
+            event_store=_cached(EventStorePort),
         )
     if flow_type == "chat":
         import importlib as _il

@@ -310,10 +310,9 @@ class Container(
             )
         # ─────────────────────────────────────────────────────────────
 
-        # Egress guard — migrated from global singleton to DI
-        from weebot.core.egress_guard import EgressGuard
-
-        self.register(EgressGuard, self._create_egress_guard)
+        # No EgressGuard binding: ToolExecutor, its only user, constructs one
+        # directly. The binding's factory was `EgressGuard()` and only a
+        # throwaway container ever resolved it (W5.3).
 
         # Global LLM concurrency pool — bounds parallel API calls (WP-8)
         def _create_llm_pool():

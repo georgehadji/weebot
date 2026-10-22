@@ -463,7 +463,6 @@ class EgressGuard:
 
 
 # ---------------------------------------------------------------------------
-# Note: singleton is managed by the DI container.
-# See `weebot.application.di._factories._create_egress_guard`.
-# Direct `EgressGuard()` construction is supported for testing.
+# Constructed directly by ToolExecutor (`_get_egress_guard`), one per executor.
+# The instance holds only its recipient allowlist; there is no DI binding.
 # ---------------------------------------------------------------------------

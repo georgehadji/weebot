@@ -181,26 +181,19 @@ class ToolExecutor:
             return self._egress_guard
         from weebot.core.egress_guard import EgressGuard
 
+        # Constructed directly. This used to build and configure a whole
+        # Container() first, but its EgressGuard factory is `EgressGuard()` and
+        # a fresh container shares nothing, so the result was the same (W5.3).
         try:
-            from weebot.application.di import Container
-
-            container = Container()
-            container.configure_defaults()
-            self._egress_guard = container.get(EgressGuard)
+            self._egress_guard = EgressGuard()
         except Exception:
-            logger.warning(
-                "egress_guard: DI resolution failed — constructing directly", exc_info=True
+            logger.error(
+                "egress_guard: unavailable — outbound tool calls will be BLOCKED "
+                "while enforcement is on",
+                exc_info=True,
             )
-            try:
-                self._egress_guard = EgressGuard()
-            except Exception:
-                logger.error(
-                    "egress_guard: unavailable — outbound tool calls will be BLOCKED "
-                    "while enforcement is on",
-                    exc_info=True,
-                )
-                self._egress_guard = None
-                return None
+            self._egress_guard = None
+            return None
         self._egress_guard_resolved = True
         return self._egress_guard
 

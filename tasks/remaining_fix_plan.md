@@ -203,7 +203,14 @@ After W4.2. Turns the F22 xfail into a plain test.
     - Deleted `flows/collaborators/event_emitter.py` (`EventEmitter`) and `flow_persistence.py` (`FlowPersistence`): extracted from `PlanActFlow`, never constructed.
     - Tests: `tests/unit/fixes/test_w53_chat_flow_persistence.py` (3), failing first.
     - **Seen, not fixed:** `PlanActFlow._persistence_adapter` is also never set, so plan-act saves skip the retrying adapter too. `interfaces/factories.create_flow("chat", ...)` passes no `state_repo`, so those chat flows do not persist at all.
-  - **Left (was 41):** 38 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
+  - **Batch 3 (2026-10-22), 39 -> 36:**
+    - `CompletedState`'s skill-gap job and dream scan built a whole `Container()` on every flow completion to fetch `idea_gate`, `dreamer_agent` and `EventStorePort`. They now take them as arguments; `PlanActFlow` and `PlanActFlowConfig` carry `idea_gate`, `dreamer_agent`, `event_store`, and `factories.create_flow` fills them from its cached container. A missing one skips the job.
+    - `ToolExecutor._get_egress_guard` constructs `EgressGuard()` directly. The DI factory is the same `EgressGuard()`, and a fresh container shares nothing.
+    - With that, nothing resolved the `EgressGuard` DI binding (`lint_di_wiring`: unresolved). Deleted the binding and `FactoriesMixin._create_egress_guard`; the EgressGuard card and the module note now say who builds it.
+    - Tests: `tests/unit/fixes/test_w53_completion_jobs.py` (4) and one more in `test_w53_container_construction.py`, all failing first.
+    - **Not migrated, on purpose:** `core/agent.py` (`RecursiveWeebotAgent`, LangChain, sunset 2027-03-01 per ADR-009).
+    - **Other PlanActFlow builders** (`_agent_tools`, `_skillopt`, `harness_opt_flow`, the DI `"plan_act"` registry entry) do not pass the three, so their completions skip the two jobs. Before, they ran them through a new container.
+  - **Left (was 41):** 35 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
 
 ### Wave F: model config (W6.1; F20, F18 rest)
 Independent of C-E; it can go anywhere after A.

@@ -40,7 +40,7 @@ async def _run_retention_review(
     )
 
 
-async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
+async def _run_skill_gap_processing(gaps: list[dict], session_id: str, idea_gate=None) -> None:
     """Submit skill-gap signals as IdeaContracts through the IdeaGate (Phase 2).
 
     Background task — never blocks CompletedState.  Runs after the flow
@@ -48,14 +48,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
     """
     from weebot.config.feature_flags import SKILL_GAP_TRIGGER_ENABLED
 
-    if not SKILL_GAP_TRIGGER_ENABLED or not gaps:
+    if not SKILL_GAP_TRIGGER_ENABLED or not gaps or idea_gate is None:
         return
     try:
-        from weebot.application.di import Container
         from weebot.domain.models.idea_contract import IdeaContract, IdeaSource
-
-        c = Container()
-        c.configure_defaults()
 
         contracts = [
             IdeaContract(
@@ -74,12 +70,10 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
             for g in gaps
         ]
 
-        # From the container, not hand-assembled. The "idea_gate" binding gives
-        # each reviewer its intended role tier -- intent review on the critic
-        # model, main review on the verifier model -- and was never resolved:
-        # this site built both reviewers on the default LLMPort instead.
-        gate = c.get("idea_gate")
-        approved = await gate.process(contracts)
+        # The container's "idea_gate", passed in through the flow (W5.3). It
+        # gives each reviewer its intended role tier -- intent review on the
+        # critic model, main review on the verifier model.
+        approved = await idea_gate.process(contracts)
         if approved:
             logger.info(
                 "Phase 2: %d/%d skill-gap contracts approved for session %s",
@@ -97,18 +91,15 @@ async def _run_skill_gap_processing(gaps: list[dict], session_id: str) -> None:
         logger.debug("Phase 2 skill-gap background processing failed", exc_info=True)
 
 
-async def _run_dream_scan() -> None:
-    """Run DreamerAgent + IdeaGate as background task after completion."""
-    try:
-        from weebot.application.di import Container
-        from weebot.application.ports.event_store_port import EventStorePort
+async def _run_dream_scan(dreamer=None, event_store=None, idea_gate=None) -> None:
+    """Run DreamerAgent + IdeaGate as background task after completion.
 
-        c = Container()
-        c.configure_defaults()
-        dreamer = c.get("dreamer_agent")
-        event_store = c.get(EventStorePort)
-        if dreamer is None or event_store is None:
-            return
+    The collaborators come from the flow. Each used to be fetched from a new
+    Container() built on every completion (W5.3, F28).
+    """
+    if dreamer is None or event_store is None:
+        return
+    try:
 
         failed_events = await event_store.query_recent_events(event_type="error", limit=30)
         contracts = await dreamer.dream(
@@ -117,11 +108,10 @@ async def _run_dream_scan() -> None:
             audit_violations=[],
             session_id="post_completion_scan",
         )
-        if contracts:
+        if contracts and idea_gate is not None:
             # The container's gate, with the critic and verifier role tiers --
             # see _run_skill_gap_processing above.
-            gate = c.get("idea_gate")
-            approved = await gate.process(contracts)
+            approved = await idea_gate.process(contracts)
 
             high_heat = [a for a in approved if a.heat_score >= 0.8]
             if high_heat:
@@ -440,12 +430,21 @@ class CompletedState(FlowState):
         _gaps = getattr(getattr(context, "_executor", None), "_skill_gaps", [])
         if _gaps:
             _background().spawn(
-                _run_skill_gap_processing(list(_gaps), context._session.id),
+                _run_skill_gap_processing(
+                    list(_gaps), context._session.id, idea_gate=context._idea_gate
+                ),
                 name=f"skill-gaps:{context._session.id[:8]}",
             )
 
         # ── Dream scan background (Enhancement 8) ─────────────────────
-        _background().spawn(_run_dream_scan(), name="dream-scan")
+        _background().spawn(
+            _run_dream_scan(
+                dreamer=context._dreamer_agent,
+                event_store=context._event_store,
+                idea_gate=context._idea_gate,
+            ),
+            name="dream-scan",
+        )
 
         # ── Hook: post_complete ────────────────────────────────────
         if getattr(context, "_hooks", None) is not None:

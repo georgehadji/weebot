@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from weebot.application.ports.behavioral_learner_port import BehavioralLearnerPort
     from weebot.application.ports.checkpoint_port import CheckpointPort
     from weebot.application.ports.code_reviewer_port import CodeReviewerPort
+    from weebot.application.ports.dreamer_port import DreamerPort
+    from weebot.application.ports.event_store_port import EventStorePort
     from weebot.application.ports.hook_registry_port import HookRegistryPort
     from weebot.application.ports.misalignment_journal_port import MisalignmentJournalPort
     from weebot.application.ports.retention_agent_port import RetentionAgentPort
@@ -52,6 +54,7 @@ if TYPE_CHECKING:
     from weebot.application.ports.workspace_snapshot_port import WorkspaceSnapshotPort
     from weebot.application.services.autonomous_learning import AutonomousSkillCreator
     from weebot.application.services.correction_tracker import CorrectionTracker
+    from weebot.application.services.idea_gate import IdeaGate
     from weebot.application.services.knowledge_graph import KnowledgeGraphService
     from weebot.application.services.mcp_tool_registry_bridge import MCPToolRegistryBridge
     from weebot.application.services.native_tool_retrieval_service import NativeToolRetrievalService
@@ -140,6 +143,11 @@ class PlanActFlowConfig:
 
     # ── Enhancement 5: Retention agent ─────────────────────────────
     retention_agent: RetentionAgentPort | None = None  # RetentionAgentPort
+    # Post-completion jobs in CompletedState (skill-gap review, dream scan).
+    # They built a Container per completion to find these (W5.3, F28).
+    idea_gate: IdeaGate | None = None
+    dreamer_agent: DreamerPort | None = None
+    event_store: EventStorePort | None = None
 
     # ── Misalignment journal ─────────────────────────────────────────
     misalignment_journal: MisalignmentJournalPort | None = None  # MisalignmentJournalPort

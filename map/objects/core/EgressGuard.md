@@ -36,7 +36,7 @@ Consequences (read from source, not run):
 - The host is extracted from the first `http(s)://` URL in the command; a command with no URL is a "first-time recipient" (`:375-378`).
 
 ## Connected to
-- **Built by** `FactoriesMixin._create_egress_guard` and registered in `configure_defaults` (`application/di/_factories.py:303-307`, `di/__init__.py:301-303`); resolved lazily by `ToolExecutor` with a direct-construction fallback (`_tool_executor.py:86-125`).
+- **Built by** `ToolExecutor._get_egress_guard`, which constructs `EgressGuard()` directly, one per executor (`application/agents/executor/_tool_executor.py`). The DI binding and `FactoriesMixin._create_egress_guard` were deleted in W5.3: only a throwaway container ever resolved them.
 - **Related:** `core/trust_boundary.py` (`is_untrusted_tool`, `taints_egress_context`, fencing of untrusted output), the inbound-mail gate in `ExecutingState` (uses `ExecApprovalPolicy`, not this guard), `services/constraint_compilers.py` (mentions the outbound-mail branch).
 - **Looks like but is not:** `BashGuard` (rates what a command *does locally*); `ExecApprovalPolicy` (asks before destructive commands); this guard concerns data leaving the machine.
 

@@ -233,5 +233,8 @@ settings_construction = 0
 # Container() never ran configure_defaults, so the adapter was always
 # missing), and the unwired EventEmitter / FlowPersistence collaborators were
 # deleted.
+# 39 -> 36: CompletedState's skill-gap job and dream scan take idea_gate,
+# dreamer_agent and event_store from the flow (factories.create_flow fills
+# them), and ToolExecutor constructs its EgressGuard directly.
 # Measured by: scripts/lint_container_construction.py
-container_construction = 39
+container_construction = 36
