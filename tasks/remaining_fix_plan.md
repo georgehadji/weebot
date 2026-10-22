@@ -187,6 +187,13 @@ After W4.2. Turns the F22 xfail into a plain test.
   5. W5.4 last, which needs its ADR
 - **Extra acceptance check from the real run:** one `CatalogValidator` line per process, not about 25. That shows F28/F35 are gone at runtime, not only in the ratchet count.
 - Turns the F32 and F33 xfails into plain tests.
+- **W5.2 DONE (2026-10-22).**
+  - **Dispatch kind:** `Mediator.send` raises `TypeError` for a `Query` and `query` for a `Command`, naming the right method. Before, the wrong kind failed as "no handler registered" (how F22 hid).
+  - **Tracer:** constructor argument (`Mediator(tracer=...)`); `build_mediator` passes the container's `TracingAdapter`. No tracer means no spans. The Mediator no longer builds and configures a `Container()` on first use.
+  - **Tool-less fallback:** when the admin tool set fails to build, `build_mediator` still logs the warning and now also sets `mediator.degraded["tools"]`. `/health` has an `agent_tools` component that reads it and turns the overall status degraded.
+  - **Found on the way:** `/health/status` called `health_check()` with no arguments, so its state repo was FastAPI's `Depends` marker and the database always read unhealthy. It now passes its request and state repo.
+  - **Tests:** `tests/unit/fixes/test_w52_mediator_dispatch.py` (7), all failing first.
+  - **Left to W5.3:** `_maybe_get_str` swallowing `KeyError`, and the hand-built `Container()` sites.
 
 ### Wave F: model config (W6.1; F20, F18 rest)
 Independent of C-E; it can go anywhere after A.

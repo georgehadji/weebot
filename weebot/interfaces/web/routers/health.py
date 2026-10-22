@@ -34,7 +34,9 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.get("", response_model=HealthResponse)
-async def health_check(state_repo: StateRepositoryPort = Depends(get_state_repo)) -> HealthResponse:
+async def health_check(
+    request: Request, state_repo: StateRepositoryPort = Depends(get_state_repo)
+) -> HealthResponse:
     """
 
     Comprehensive health check including all system components.
@@ -211,6 +213,27 @@ async def health_check(state_repo: StateRepositoryPort = Depends(get_state_repo)
             HealthComponent(
                 name="browser_pool", status="degraded", message="Browser pool check failed"
             )
+        )
+
+    # Agent tools: build_mediator falls back to tool-less steps if the admin
+    # tool set fails to build (F28). Say so here, not only in a log line.
+    try:
+        from weebot.application.cqrs.mediator import Mediator
+
+        degraded = request.app.state.container.get(Mediator).degraded
+        # Not `.get("tools")`: the DI-key lint reads that as a container key.
+        tools_error = degraded["tools"] if "tools" in degraded else None  # noqa: SIM401
+        components.append(
+            HealthComponent(
+                name="agent_tools",
+                status="degraded" if tools_error else "healthy",
+                message=f"Steps run with no tools: {tools_error}" if tools_error else "Loaded",
+            )
+        )
+    except Exception:
+        logger.exception("Agent tools health check failed")
+        components.append(
+            HealthComponent(name="agent_tools", status="unknown", message="Mediator check failed")
         )
 
     # Check if any component is degraded
@@ -464,7 +487,9 @@ async def metrics_check(
 
 
 @router.get("/status")
-async def detailed_status() -> dict[str, Any]:
+async def detailed_status(
+    request: Request, state_repo: StateRepositoryPort = Depends(get_state_repo)
+) -> dict[str, Any]:
     """
 
     Human-readable system status.
@@ -494,7 +519,7 @@ async def detailed_status() -> dict[str, Any]:
 
     try:
 
-        health = await health_check()
+        health = await health_check(request, state_repo)
 
         status["health"] = health.status
 

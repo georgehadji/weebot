@@ -36,7 +36,10 @@ What exists (2026-10-21):
 - **Looks like but is not:** the event bus (`EventBusPort`, publishes events, no handlers per type); `MiddlewareChain` inside `ExecutorAgent` (wraps LLM requests, not commands).
 
 ## Fixed defect: F22 (W7.1, 2026-10-22)
-`ops_router` passed its three queries to `mediator.send`, which looks only in `_command_handlers`, so every endpoint answered HTTP 500 (the Plan panel's "Internal server error"). It also built and configured a new `Container()` per request. Now each endpoint calls `mediator.query` and takes the mediator and state repo from the lifespan container on `app.state` through `Depends` (`ops_router.get_mediator`, `get_state_repo`). Test: `tests/unit/fixes/test_f22_ops_router_dispatch.py` (4). Still open: `send` does not reject a `Query` (type-safe dispatch, F28 in Wave E).
+`ops_router` passed its three queries to `mediator.send`, which looks only in `_command_handlers`, so every endpoint answered HTTP 500 (the Plan panel's "Internal server error"). It also built and configured a new `Container()` per request. Now each endpoint calls `mediator.query` and takes the mediator and state repo from the lifespan container on `app.state` through `Depends` (`ops_router.get_mediator`, `get_state_repo`). Test: `tests/unit/fixes/test_f22_ops_router_dispatch.py` (4). Since W5.2, `send` raises `TypeError` for a `Query` and `query` for a `Command`.
+
+## Construction (W5.2)
+`Mediator(tracer=None)`: `build_mediator` (`application/di/__init__.py`) passes the container's `TracingAdapter`; with none, requests run without spans. `mediator.degraded` maps a part that failed to build to the error; today only `"tools"` (the admin tool set), which `/health` reports as `agent_tools` (`interfaces/web/routers/health.py`).
 
 ## If you change this
 **Hits:** every state that sends a command; all handler registrations; the pipeline behaviors (they see every request); the error contract (`error_code` is the exception class name, callers may match on it); tests `tests/unit/test_cqrs_persistence.py`, `tests/unit/test_planning.py`, `tests/unit/application/flows/test_a_failed_plan_is_not_a_success.py`, `tests/unit/application/flows/test_a_failed_plan_update_is_not_progress.py`, `tests/unit/application/test_flow_construction_wiring.py`.

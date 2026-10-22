@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any, TypeVar
 from collections.abc import Callable
 
@@ -17,9 +18,24 @@ from weebot.application.cqrs.base import (
     QueryResult,
 )
 
+from weebot.application.ports.tracing_port import TracingPort
+
 logger = logging.getLogger(__name__)
 
 TResult = TypeVar("TResult")
+
+
+class _NoTracer:
+    def start_as_current_span(self, name: str):
+        return nullcontext(_NoSpan())
+
+
+class _NoSpan:
+    def set_attribute(self, key: str, value: Any) -> None:
+        pass
+
+
+_NO_TRACER = _NoTracer()
 
 
 class MediatorError(Exception):
@@ -62,23 +78,24 @@ class Mediator:
             print(plan_result.data)
     """
 
-    def __init__(self):
-        """Initialize the mediator."""
+    def __init__(self, tracer: TracingPort | None = None):
+        """Initialize the mediator.
+
+        Args:
+            tracer: Wraps each request in a span. The container passes its
+                TracingAdapter; without one, requests are not traced. This
+                used to build and configure a whole Container on first use.
+        """
         self._command_handlers: dict[type[Command], CommandHandler] = {}
         self._query_handlers: dict[type[Query], QueryHandler] = {}
         self._behaviors: list[IPipelineBehavior] = []
-        self._tracer = None  # lazily resolved via DI
+        self._tracer = tracer
+        # Parts that failed to build and what the mediator runs without, e.g.
+        # {"tools": "..."} when steps run tool-less. /health reports these.
+        self.degraded: dict[str, str] = {}
 
     def _get_tracer(self):
-        """Resolve tracing port lazily from DI container."""
-        if self._tracer is None:
-            from weebot.application.di import Container
-            from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
-
-            c = Container()
-            c.configure_defaults()
-            self._tracer = c.get(TracingAdapter)
-        return self._tracer
+        return self._tracer if self._tracer is not None else _NO_TRACER
 
     def register_command_handler(
         self, command_type: type[Command], handler: CommandHandler
@@ -178,6 +195,10 @@ class Mediator:
 
     async def send(self, command: Command) -> CommandResult:
         """Send a command to its handler. Wraps execution in a trace span."""
+        if isinstance(command, Query):
+            # Looked up as a command it would fail as "no handler registered",
+            # which is how F22's ops endpoints hid as plain HTTP 500s.
+            raise TypeError(f"{type(command).__name__} is a Query: use mediator.query()")
         cmd_name = type(command).__name__
         with self._get_tracer().start_as_current_span(f"command.{cmd_name}") as span:
             span.set_attribute("command.type", cmd_name)
@@ -230,6 +251,8 @@ class Mediator:
 
     async def query(self, query: Query) -> QueryResult:
         """Send a query to its handler. Wraps execution in a trace span."""
+        if isinstance(query, Command):
+            raise TypeError(f"{type(query).__name__} is a Command: use mediator.send()")
         qry_name = type(query).__name__
         with self._get_tracer().start_as_current_span(f"query.{qry_name}") as span:
             span.set_attribute("query.type", qry_name)

@@ -423,8 +423,9 @@ class Container(
     def build_mediator(self) -> Mediator:
         """Build a configured Mediator with default handlers registered."""
         from weebot.application.cqrs.behaviors.validation import ValidationBehavior
+        from weebot.infrastructure.observability.tracing_adapter import TracingAdapter
 
-        mediator = Mediator()
+        mediator = Mediator(tracer=self.get(TracingAdapter))
         mediator.add_pipeline_behavior(ValidationBehavior())
         mediator.add_pipeline_behavior(LoggingBehavior())
         mediator.add_pipeline_behavior(TelemetryBehavior())
@@ -458,6 +459,7 @@ class Container(
                     exc,
                     exc_info=True,
                 )
+                mediator.degraded["tools"] = f"{type(exc).__name__}: {exc}"
                 tools = None
         # Resolved by TYPE. This was `_maybe_get_str("scoring_port")`, a string
         # nothing registered: _maybe_get_str swallowed the KeyError, returned
