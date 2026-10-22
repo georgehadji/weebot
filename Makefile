@@ -1,5 +1,5 @@
 # Weebot — development convenience targets
-.PHONY: help install test test-live gen-entry-twins lint-entry-twins lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction check-arch check
+.PHONY: help install test test-live gen-entry-twins lint-entry-twins lint-imports lint-env-access lint-unawaited lint-ruleset lint-di-wiring lint-settings-construction lint-container-construction check-arch check
 
 # Ratchet ceilings for gates with pre-existing debt. Each blocks only ABOVE its
 # ceiling, so existing debt does not fail the build but nothing new can be added.
@@ -114,5 +114,9 @@ lint-settings-construction:
 	@echo "=== Direct WeebotSettings() construction (AST, ratcheted) ==="
 	@python scripts/lint_settings_construction.py
 
-check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-settings-construction
+lint-container-construction:
+	@echo "=== Hand-built Container() outside application/di (AST, ratcheted) ==="
+	@python scripts/lint_container_construction.py
+
+check: test check-arch lint-imports lint-bare-except-pass lint-async-io lint-unawaited lint-env-access lint-no-print lint-ruleset lint-di-wiring lint-entry-twins lint-settings-construction lint-container-construction
 	@echo "=== All checks passed ==="

@@ -169,16 +169,11 @@ async def route_and_create_flow(
 
 
 def _resolve_personality():
-    """Resolve PersonalityManager from the DI container, or None."""
-    try:
-        from weebot.application.di import Container
-
-        c = Container()
-        c.configure_defaults()
-        return c.get("personality")
-    except Exception:
-        _log.debug("PersonalityManager not available in DI", exc_info=True)
-        return None
+    """Resolve PersonalityManager from the shared DI container, or None."""
+    personality = _cached("personality")
+    if personality is None:
+        _log.debug("PersonalityManager not available in DI")
+    return personality
 
 
 def create_flow(
@@ -284,16 +279,15 @@ def _get_flow_factory(llm_port: LLMPort | None) -> Any | None:
     if llm_port is None:
         return None
     try:
-        from weebot.application.di import Container
-
-        c = Container()
-        c.configure_defaults()
+        from weebot.application.ports.event_bus_port import EventBusPort
         from weebot.application.ports.state_repo_port import StateRepositoryPort
 
-        state_repo = c.get(StateRepositoryPort)
-        from weebot.application.ports.event_bus_port import EventBusPort
-
-        event_bus = c.get(EventBusPort)
+        # The shared container: a container built here had its own event bus,
+        # so sub-agent flows published where nobody listened (F28).
+        state_repo = _cached(StateRepositoryPort)
+        event_bus = _cached(EventBusPort)
+        if state_repo is None or event_bus is None:
+            return None
 
         def _factory(session):
             from weebot.application.flows.plan_act_flow import PlanActFlow

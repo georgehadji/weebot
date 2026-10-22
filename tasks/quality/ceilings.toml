@@ -221,3 +221,13 @@ import_exemptions = 75
 # config/settings.py fails it.
 # Measured by: scripts/lint_settings_construction.py
 settings_construction = 0
+
+# Hand-built Container() calls outside weebot/application/di. Each builds a
+# second object graph (its own event bus, state repo, LLM adapters); a flow
+# built that way publishes where nobody listens. ICM fix plan W5.3 (F28).
+# 44 when this key was added; 44 -> 42 in the same change, because
+# interfaces/factories.py's _resolve_personality and _get_flow_factory now use
+# its one cached container. Composition roots (web lifespan, CLI entry points)
+# count too: the target is one per entry point, not zero.
+# Measured by: scripts/lint_container_construction.py
+container_construction = 42

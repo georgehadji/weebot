@@ -115,6 +115,12 @@ jobs:
         # reads get_settings(). ICM fix plan W2.2 (F16).
         run: python scripts/lint_settings_construction.py
 
+      - name: Container-construction ratchet
+        # BLOCKING. Each hand-built Container() outside application/di is a
+        # second object graph with its own event bus and state repo. ICM fix
+        # plan W5.3 (F28).
+        run: python scripts/lint_container_construction.py
+
       - name: Blocking-I/O-in-async ratchet
         # Same ratchet contract. This gate was a `make check` prerequisite that
         # exited 1, so `make check` was red on a clean checkout, and it appeared
