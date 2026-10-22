@@ -229,5 +229,9 @@ settings_construction = 0
 # interfaces/factories.py's _resolve_personality and _get_flow_factory now use
 # its one cached container. Composition roots (web lifespan, CLI entry points)
 # count too: the target is one per entry point, not zero.
+# 42 -> 39: ChatFlow takes the persistence adapter as an argument (its bare
+# Container() never ran configure_defaults, so the adapter was always
+# missing), and the unwired EventEmitter / FlowPersistence collaborators were
+# deleted.
 # Measured by: scripts/lint_container_construction.py
-container_construction = 42
+container_construction = 39

@@ -394,6 +394,7 @@ class Container(
                 model=kw.get("model") or self._maybe_get_model(),
                 mediator=self._maybe_get(Mediator),
                 state_repo=self.get(StateRepositoryPort),
+                persistence_adapter=self._maybe_get_str("session_persistence"),
             ),
         )
 
@@ -539,6 +540,7 @@ class Container(
             model=model,
             mediator=self._maybe_get(Mediator),
             state_repo=self.get(StateRepositoryPort),
+            persistence_adapter=self._maybe_get_str("session_persistence"),
         )
 
     # ── internal helpers ───────────────────────────────────────────

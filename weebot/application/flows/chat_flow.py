@@ -41,6 +41,7 @@ class ChatFlow(BaseFlow):
         model: str | None = None,
         mediator: Mediator | None = None,
         state_repo: StateRepositoryPort | None = None,
+        persistence_adapter=None,
     ):
         self._llm = llm
         self._session = session
@@ -53,7 +54,10 @@ class ChatFlow(BaseFlow):
         self._current_state = None
         self._next_state = None
         self._emit_lock = asyncio.Lock()
-        self._persistence_adapter = None  # lazily resolved
+        # Retrying session saver (the container's "session_persistence"). It was
+        # looked up from a bare Container() that never ran configure_defaults,
+        # so it was always missing (F28). Without one, saves go to state_repo.
+        self._persistence_adapter = persistence_adapter
 
     def is_done(self) -> bool:
         return self._done
@@ -62,15 +66,6 @@ class ChatFlow(BaseFlow):
         self._next_state = state
 
     def _get_persistence_adapter(self):
-        """Resolve session persistence adapter lazily."""
-        if self._persistence_adapter is None:
-            from weebot.application.di import Container
-
-            c = Container()
-            try:
-                self._persistence_adapter = c.get("session_persistence")
-            except KeyError:
-                return None
         return self._persistence_adapter
 
     async def _emit(self, event: AgentEvent) -> None:

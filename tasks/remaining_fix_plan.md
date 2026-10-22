@@ -198,7 +198,12 @@ After W4.2. Turns the F22 xfail into a plain test.
   - **Ratchet:** `scripts/lint_container_construction.py` counts `Container()`, `<module>.Container()` and `import_module(...).Container()` calls in `weebot`, `cli`, `run.py`, `run_mcp.py`, outside `weebot/application/di/`. Ceiling `container_construction` in `tasks/quality/ceilings.toml`, wired into `make check` (`lint-container-construction`) and CI (`architecture.yml`, blocking).
   - **Count:** 44 when added, 42 now. `interfaces/factories.py` `_resolve_personality` and `_get_flow_factory` use the module's one cached container (`_cached`), so sub-agent flows share the process event bus and state repo.
   - **Tests:** `tests/unit/fixes/test_w53_container_construction.py` (3) and the ceilings key list, all failing first.
-  - **Left:** 41 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
+  - **Batch 2 (2026-10-22), 42 -> 39:**
+    - `ChatFlow` takes `persistence_adapter`; `Container.build_chat_flow` and the `"chat"` flow registry entry pass `"session_persistence"`. Its old lookup used a bare `Container()` that never ran `configure_defaults`, so the adapter was always missing and chat saves skipped the retrying `SessionPersistenceAdapter`.
+    - Deleted `flows/collaborators/event_emitter.py` (`EventEmitter`) and `flow_persistence.py` (`FlowPersistence`): extracted from `PlanActFlow`, never constructed.
+    - Tests: `tests/unit/fixes/test_w53_chat_flow_persistence.py` (3), failing first.
+    - **Seen, not fixed:** `PlanActFlow._persistence_adapter` is also never set, so plan-act saves skip the retrying adapter too. `interfaces/factories.create_flow("chat", ...)` passes no `state_repo`, so those chat flows do not persist at all.
+  - **Left (was 41):** 38 sites outside `factories.py`. Composition roots (web lifespan, CLI commands, `run.py`) are expected to stay at one per entry point; the rest (flow states, collaborators, tools, `tool_registry.py`, `scheduler.py`, `mcp/server.py`, gateways) take collaborators as arguments, which overlaps W5.5 for the tools. `_maybe_get_str` still swallows `KeyError`.
 
 ### Wave F: model config (W6.1; F20, F18 rest)
 Independent of C-E; it can go anywhere after A.
